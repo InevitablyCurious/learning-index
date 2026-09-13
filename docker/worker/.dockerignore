@@ -1,7 +1,0 @@
-# keep worker image build context minimal
-*
-!Dockerfile
-!.dockerignore
-!egress-sidecar.js
-!loop-kill-scanner.cjs
-!supervised-shell.js

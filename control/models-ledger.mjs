@@ -345,7 +345,7 @@ function startableModels({ eligible, baselines, cloud, serialBlock }) {
 // panel had to explain in a sentence.
 //
 // None of that is necessary, and none of it ever was. A campaign IS the
-// experiment: `bench/cumulative/ordering.py` schedules ONE model per campaign,
+// experiment: `harness/cumulative/ordering.py` schedules ONE model per campaign,
 // slot 0 as the OFF floor and every later slot an ON repetition of that same
 // model. So the runs measured against a floor are simply the ON cells in the
 // floor's OWN campaign directory, in schedule order, and `collectCells` already

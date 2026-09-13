@@ -1,0 +1,1713 @@
+"""Docker worker isolation primitives for backgammon benchmark cells."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+import hashlib
+import json
+import logging
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import time
+from typing import Callable
+import urllib.error
+import urllib.request
+
+from harness.config import RunConfig
+from harness.egress import (
+    EGRESS_HUB_PORT,
+    EGRESS_INGRESS_CELL_HOST_ENV,
+    EGRESS_INGRESS_PORT_ENV,
+    EGRESS_MCP_PORT,
+    EGRESS_NETWORK,
+)
+from harness.spend_key import resolve_cloud_api_key
+
+
+WORKER_IMAGE = "okp-bench-worker:v1"
+
+# ── CELL RESOURCE BOUNDS ────────────────────────────────────────────────────
+#
+# The cell had strong SECURITY isolation (cap-drop ALL, read-only root,
+# no-new-privileges, non-root uid) and NO resource bounds whatsoever. Measured
+# on a real cell (2026-08-24): 27 zombie processes accumulated in 49 minutes
+# because PID 1 was `sleep infinity`, which never reaps an orphan.
+#
+# These bounds exist for MEASUREMENT INTEGRITY, not just tidiness. Docker's VM
+# holds ~7.7 GiB for EVERY container including the okp stack (~1.2 GiB in
+# steady state). An unbounded worker that runs away does not merely fail its
+# own cell — it can starve postgres/qdrant/chain and corrupt the run around it.
+# Bounding the cell keeps the blast radius inside the cell, where a failure is
+# recorded honestly instead of silently damaging its neighbours.
+#
+# Sized against observation, not taste: the cell peaked at ~30 processes, so
+# 512 PIDs is ~17x headroom and only a genuine runaway reaches it.
+WORKER_PIDS_LIMIT = int(os.environ.get("OKP_BENCH_WORKER_PIDS_LIMIT", "512"))
+WORKER_MEMORY = os.environ.get("OKP_BENCH_WORKER_MEMORY", "4g")
+WORKER_CPUS = os.environ.get("OKP_BENCH_WORKER_CPUS", "8")
+WORKER_NETWORK = "okp-bench-net"
+
+# Loop-kill marker exchange: the egress sidecar (a SEPARATE container) writes
+# marker files here when it observes a loop-kill trip on the wire; the host
+# harness reads them from the run_dir. Bind-mounted into the sidecar only
+# (writable despite --read-only: the mount is not part of the container root).
+LOOP_KILL_MARKER_DIRNAME = "loop-kill-markers"
+
+_LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ImageFingerprint:
+    """Auditable identity of the Docker worker image used by a run."""
+
+    image_id: str
+    created: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"image_id": self.image_id, "created": self.created}
+
+
+def _default_primary_recall_mode() -> str:
+    return str(RunConfig().primary_recall_mode)
+
+
+def _default_primary_recall_relevance_floor() -> float:
+    return float(RunConfig().primary_recall_relevance_floor)
+
+
+def _default_primary_recall_max_injected() -> int:
+    return int(RunConfig().primary_recall_max_injected)
+
+
+def _default_served_memories_host_path() -> str:
+    return str(RunConfig().served_memories_host_path)
+
+
+def _default_served_memories_container_path() -> str:
+    return str(RunConfig().served_memories_container_path)
+
+
+def _default_recall_url() -> str:
+    return (
+        os.environ.get("OKP_BENCH_MCP_RECALL_URL") or "http://host.docker.internal:4550"
+    )
+
+
+def _ingress_cell_alias(container_name: str) -> str:
+    """Short (<=63-char) DNS-resolvable alias for the cell's :4096 ingress forward.
+
+    Docker's embedded DNS cannot resolve container NAMES longer than the 63-char
+    DNS label limit (RFC 1035). A cloud run_label yields a 71-char container name,
+    which the egress sidecar fails to resolve (ENOTFOUND), so its ingress forward
+    to the cell's live-view serve returns 502 and the TUI/live view never connects.
+    The cell keeps its full name for logs/reaper, but is also attached to the
+    --internal network under this short deterministic alias, which the sidecar's
+    OKP_INGRESS_CELL_HOST resolves instead.
+    """
+    return "cell-" + hashlib.sha256(container_name.encode("utf-8")).hexdigest()[:12]
+
+
+def docker_available() -> tuple[bool, str]:
+    """Return Docker daemon availability and detail, never raising."""
+    cmd = ["docker", "version", "--format", "{{.Server.Version}}"]
+    try:
+        completed = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return False, "docker CLI not found in PATH"
+    except Exception as exc:  # noqa: BLE001 - contract requires never raising.
+        return False, f"docker availability probe failed: {exc}"
+
+    if completed.returncode != 0:
+        detail = _result_detail(completed)
+        return False, detail or "docker daemon unavailable"
+
+    version = completed.stdout.strip()
+    if not version:
+        return False, "docker daemon reported empty version"
+    return True, version
+
+
+def worker_image_fingerprint(tag: str = WORKER_IMAGE) -> ImageFingerprint | None:
+    """Return the local worker image identity, or None with an explicit log reason."""
+
+    cmd = ["docker", "image", "inspect", tag, "--format", "{{.Id}}\n{{.Created}}"]
+    try:
+        completed = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        _LOG.error(
+            "docker_worker.image_fingerprint_failed tag=%s err=docker CLI not found in PATH",
+            tag,
+        )
+        return None
+    except Exception as exc:  # noqa: BLE001 - provenance probe must not raise.
+        _LOG.error("docker_worker.image_fingerprint_failed tag=%s err=%s", tag, exc)
+        return None
+
+    if completed.returncode != 0:
+        detail = _result_detail(completed) or f"exit={completed.returncode}"
+        _LOG.warning(
+            "docker_worker.image_fingerprint_absent tag=%s detail=%s", tag, detail
+        )
+        return None
+
+    lines = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+    if len(lines) < 2:
+        _LOG.error(
+            "docker_worker.image_fingerprint_invalid tag=%s stdout_lines=%s stderr=%s",
+            tag,
+            len(lines),
+            (completed.stderr or "").strip(),
+        )
+        return None
+
+    fingerprint = ImageFingerprint(image_id=lines[0], created=lines[1])
+    _LOG.info(
+        "docker_worker.image_fingerprint tag=%s image_id=%s created=%s",
+        tag,
+        fingerprint.image_id,
+        fingerprint.created,
+    )
+    return fingerprint
+
+
+def image_exists(tag: str = WORKER_IMAGE) -> bool:
+    """Return true when the requested worker image tag exists locally."""
+
+    return worker_image_fingerprint(tag) is not None
+
+
+PLUGIN_PRESENT_LABEL = "okp.worker.plugin_present"
+
+
+def image_plugin_present(tag: str = WORKER_IMAGE) -> bool:
+    """True when the image's ``okp.worker.plugin_present`` label is exactly "1".
+
+    The worker Dockerfile bakes this label when the OKP opencode plugin is
+    injected into the image (dev build); a vanilla image carries "0" or no
+    label at all. Missing docker CLI, a failed probe, or an absent label all
+    read as False: a per-cell config that omits the plugin paths is a healthy
+    vanilla outcome, while one pointing at plugin files the image never baked
+    kills the worker at opencode boot.
+    """
+
+    cmd = [
+        "docker",
+        "image",
+        "inspect",
+        tag,
+        "--format",
+        f'{{{{index .Config.Labels "{PLUGIN_PRESENT_LABEL}"}}}}',
+    ]
+    try:
+        completed = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        _LOG.error(
+            "docker_worker.image_plugin_present_failed tag=%s err=docker CLI not found in PATH",
+            tag,
+        )
+        return False
+    except Exception as exc:  # noqa: BLE001 - label probe must not raise.
+        _LOG.error(
+            "docker_worker.image_plugin_present_failed tag=%s err=%s", tag, exc
+        )
+        return False
+
+    if completed.returncode != 0:
+        detail = _result_detail(completed) or f"exit={completed.returncode}"
+        _LOG.warning(
+            "docker_worker.image_plugin_present_absent tag=%s detail=%s", tag, detail
+        )
+        return False
+
+    present = completed.stdout.strip() == "1"
+    _LOG.info(
+        "docker_worker.image_plugin_present tag=%s present=%s",
+        tag,
+        str(present).lower(),
+    )
+    return present
+
+
+def ensure_network(name: str = WORKER_NETWORK, *, internal: bool = False) -> None:
+    """Ensure the benchmark network exists (idempotent).
+
+    ``internal=True`` creates the network with ``docker network create
+    --internal``: zero internet route and no host gateway — the egress
+    contract's worker-side network (see harness/egress.py).
+    """
+    inspect_cmd = ["docker", "network", "inspect", name]
+    create_cmd = ["docker", "network", "create"]
+    if internal:
+        create_cmd.append("--internal")
+    create_cmd.append(name)
+
+    try:
+        inspected = subprocess.run(
+            inspect_cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("docker CLI not found in PATH") from exc
+    except Exception as exc:  # noqa: BLE001 - include full failure detail.
+        raise RuntimeError(f"docker network inspect failed for {name}: {exc}") from exc
+
+    if inspected.returncode == 0:
+        return
+
+    created = subprocess.run(
+        create_cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if created.returncode == 0:
+        return
+
+    detail = _result_detail(created).lower()
+    if "already exists" in detail:
+        return
+    raise RuntimeError(
+        f"docker network create failed for {name}: {_result_detail(created)}"
+    )
+
+
+@dataclass
+class DockerCellConfig:
+    worktree: Path
+    memory_mode: str
+    container_name: str
+    image: str = WORKER_IMAGE
+    network: str = WORKER_NETWORK
+    # Must be container-reachable (host.docker.internal form) when workers are used; defaults to the bench MCP port :4550.
+    recall_url: str = field(default_factory=_default_recall_url)
+    hub_url: str = "http://host.docker.internal:4440"
+    # When set, the worker runs on the --internal egress network and reaches
+    # model/MCP/hub only via the sidecar container of this name. Empty (default)
+    # keeps the legacy bridge-network path with direct host.docker.internal reach.
+    egress_host: str = ""
+    # Primary scored path defaults to RunConfig.primary_recall_mode (prod).
+    # Diagnostic/non-primary paths can still override this field (for example, test mode).
+    recall_mode: str = field(default_factory=_default_primary_recall_mode)
+    primary_recall_relevance_floor: float = field(
+        default_factory=_default_primary_recall_relevance_floor
+    )
+    primary_recall_max_injected: int = field(
+        default_factory=_default_primary_recall_max_injected
+    )
+    served_memories_host_path: str = field(
+        default_factory=_default_served_memories_host_path
+    )
+    served_memories_container_path: str = field(
+        default_factory=_default_served_memories_container_path
+    )
+    plugin_state_host_path: str = "~/.okp/state"
+    plugin_state_container_path: str = "/work/.okp/state"
+    plugin_config_host_path: str = "~/.okp/plugin-config.json"
+    proxy_base_url: str | None = None
+    proxy_token: str | None = None
+    # Cloud mode (derived by BackgammonRunner from the model slug's provider id;
+    # never set independently): True swaps the cell's key path from the spend-proxy
+    # token to the OrcaRouter API key resolved on the host.
+    cloud: bool = False
+    # SELF-COMPACTION, declared per cell. Exported as OKP_SELF_COMPACT=1; the
+    # worker plugin self-gates on that env and resolves the model to compact
+    # with from the session itself — the harness passes no model ids.
+    self_compact: bool = False
+    # PLAN BEFORE WORK, declared per cell. Exported as REQUIRE_TODOS=1.
+    #
+    # UNPREFIXED on purpose: this is a benchmark run-condition, not an Okp
+    # feature, so any memory plugin can honour it. The harness only DECLARES the
+    # condition — enforcement needs a tool-call hook, which only a plugin has, so
+    # a vanilla cell with no plugin sets the variable and nothing happens. That
+    # is the same split as the rest of the memory seam (the harness says WHEN,
+    # the plugin says HOW), and it is stated here so the flag does not read as
+    # broken when nothing enforces it.
+    require_todos: bool = False
+    # A2 PHASE SENTINEL. A host directory bind-mounted READ-ONLY into the cell,
+    # holding one file (`phase`) that names the drive phase currently in
+    # flight. The harness rewrites it before every prompt; the worker plugin
+    # reads it on every session.idle and refuses to compact outside `build`.
+    #
+    # WHY A MOUNT AND NOT AN ENV VAR. The cell env is fixed at `docker run` and
+    # cannot change between phases, but the arm has to distinguish build
+    # boundaries from repair rounds INSIDE one cell — the leak this closes is a
+    # compaction that fired during `feedback-2` (run 1788462647).
+    #
+    # WHY OUTSIDE /work, LIKE /okp-state. Anything under the worktree is inside
+    # the surface the model works in and the gates score. The phase is
+    # instrument state, not task state, and the model must never see it.
+    #
+    # WHY READ-ONLY. The harness is the only writer by construction, so a cell
+    # cannot forge its own phase.
+    compact_phase_host_path: Path | None = None
+    compact_phase_container_dir: str = "/okp-compact"
+    compact_phase_container_file: str = "/okp-compact/phase"
+    home_dir: str = "/home/worker"
+    output_token_max: int | None = None
+    worker_logs_dir: Path | None = None
+    session_db_host_path: Path | None = None
+    # OFF-arm extraction state: a dedicated host bind-mount OUTSIDE /work, so the
+    # OFF (blinded) cell's in-session extraction state never lands inside the
+    # worktree its model works in. Container side: /okp-state.
+    extraction_state_host_path: Path | None = None
+    # Gate-answerer policy driven into the worker env per cell. None derives from
+    # memory_mode (auto-accept for "on", "off" otherwise); an explicit value wins.
+    answerer_policy: str | None = None
+    # Live-view topology: persistent `opencode serve` ports. Fixed host:4096 ->
+    # container:4096 (opencode serve default). Wired from RunConfig by the harness.
+    # Publisher depends on the path: the cell publishes it directly in the legacy
+    # (non-egress) path; in egress mode the SIDECAR publishes it (WO-25) because
+    # the cell is on the --internal network where -p is silently dropped.
+    serve_host_port: int = 4096
+    serve_container_port: int = 4096
+
+
+class DockerCell:
+    """Context-managed Docker cell lifecycle for isolated benchmark workers."""
+
+    def __init__(
+        self,
+        config: DockerCellConfig,
+        *,
+        progress: Callable[[str], None] | None = None,
+    ) -> None:
+        self.config = config
+        self.container_name = config.container_name
+        self.container_id: str | None = None
+        self.egress_container: str | None = (
+            None  # sidecar name, set only when egress is enabled
+        )
+        self.serve_pid: int | None = (
+            None  # container-side PID of the persistent opencode serve
+        )
+        self._progress_cb = progress
+
+    def __enter__(self) -> DockerCell:
+        mode = self.config.memory_mode.strip().lower()
+        if mode not in {"off", "on"}:
+            raise ValueError("DockerCellConfig.memory_mode must be 'off' or 'on'")
+
+        worktree = Path(self.config.worktree).expanduser().resolve()
+        worktree.mkdir(parents=True, exist_ok=True)
+        if self.config.session_db_host_path is not None:
+            self.config.session_db_host_path.mkdir(parents=True, exist_ok=True)
+
+        # Mode-aware key gate: LOCAL cells forward the spend-proxy token exactly
+        # as before (path byte-identical); CLOUD cells resolve the OrcaRouter API
+        # key on the host (env export wins over the key file) and fail loud when
+        # absent. Only the key NAME changes per mode — the value never does here
+        # (sizes only in PROGRESS, never the key itself).
+        if self.config.cloud:
+            cloud_key = resolve_cloud_api_key()
+            key_present = True
+            key_len = len(cloud_key)
+        else:
+            proxy_token = (self.config.proxy_token or "").strip()
+            if not proxy_token:
+                raise ValueError(
+                    "proxy token required; direct OrcaRouter key forwarding is removed "
+                    "(worker uses spend-proxy token path only; R-13 one path, no fallback)"
+                )
+            key_present = True
+            key_len = len(proxy_token)
+
+        self._progress(f"PROGRESS docker-network ensure name={self.config.network}")
+        ensure_network(self.config.network)
+        self._progress(f"PROGRESS docker-network ready name={self.config.network}")
+
+        if self.config.egress_host:
+            # Egress contract (harness/egress.py): the worker cell will run on
+            # the --internal network (zero internet route, no host gateway) and reach
+            # model/MCP/hub ONLY through this sidecar, which is attached to BOTH the
+            # internal network and the routable bench network.
+            self._progress(f"PROGRESS egress-network ensure name={EGRESS_NETWORK}")
+            ensure_network(EGRESS_NETWORK, internal=True)
+            self._progress(f"PROGRESS egress-network ready name={EGRESS_NETWORK}")
+
+            # Loop-kill marker dir: created in the run_dir (worktree parent) and
+            # bind-mounted into the sidecar so it can write markers the host
+            # harness reads. The mount stays writable under --read-only (only
+            # the container root is read-only).
+            loop_kill_marker_dir = worktree.parent / LOOP_KILL_MARKER_DIRNAME
+            loop_kill_marker_dir.mkdir(parents=True, exist_ok=True)
+
+            sidecar_cmd = [
+                "docker",
+                "run",
+                "-d",
+                "--name",
+                self.config.egress_host,
+                "--network",
+                EGRESS_NETWORK,
+                "--network",
+                self.config.network,
+                "--add-host",
+                "host.docker.internal:host-gateway",
+                "--init",
+                "--cap-drop",
+                "ALL",
+                "--security-opt",
+                "no-new-privileges",
+                "--read-only",
+                "--tmpfs",
+                "/tmp:mode=1777",
+                "--restart",
+                "unless-stopped",
+                # Ingress forward (WO-25): the sidecar publishes host serve_host_port
+                # and forwards to the cell container's serve port over the shared
+                # --internal network. The cell itself publishes nothing (it is on a
+                # network with no gateway — a -p there is silently dropped); the
+                # env names/semantics are the contract in harness/egress.py.
+                "-p",
+                f"127.0.0.1:{self.config.serve_host_port}:{self.config.serve_container_port}",
+                "-e",
+                f"{EGRESS_INGRESS_CELL_HOST_ENV}={_ingress_cell_alias(self.config.container_name)}",
+                "-e",
+                f"{EGRESS_INGRESS_PORT_ENV}={self.config.serve_container_port}",
+                "-v",
+                f"{loop_kill_marker_dir}:/okp-markers",
+                "-e",
+                "OKP_LOOP_KILL_MARKER_DIR=/okp-markers",
+            ]
+            # A2 phase sentinel, SIDECAR WRITE SIDE. The cell mounts this same
+            # host dir READ-ONLY (see _build_run_argv); the sidecar gets it RW so
+            # it can write the `repair` phase the cell-side plugin reads. The
+            # cell still cannot forge its own phase — only the host side of the
+            # mount is writable, and the cell's copy stays :ro.
+            #
+            # GUARD: exactly when the worker cell also mounts the sentinel —
+            # compacting runs only. self_compact alone is the worker's gate
+            # (_build_run_argv raises when it is armed with no host path); the
+            # `is not None` check keeps an unset path from ever interpolating
+            # the literal "None" into a mount string.
+            if (
+                self.config.self_compact
+                and self.config.compact_phase_host_path is not None
+            ):
+                host_compact_phase = (
+                    Path(self.config.compact_phase_host_path).expanduser().resolve()
+                )
+                host_compact_phase.mkdir(parents=True, exist_ok=True)
+                sidecar_cmd.extend(
+                    [
+                        "-v",
+                        f"{host_compact_phase}:{self.config.compact_phase_container_dir}",
+                        "-e",
+                        f"OKP_COMPACT_PHASE_FILE={self.config.compact_phase_container_file}",
+                    ]
+                )
+            sidecar_cmd.extend(
+                [
+                    self.config.image,
+                    "node",
+                    "/opt/okp/egress-sidecar.js",
+                ]
+            )
+            self._progress(
+                f"PROGRESS egress-sidecar start name={self.config.egress_host} image={self.config.image}"
+            )
+            try:
+                started_sidecar = subprocess.run(
+                    sidecar_cmd,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            except FileNotFoundError as exc:
+                raise RuntimeError("docker CLI not found in PATH") from exc
+            except Exception as exc:  # noqa: BLE001 - include full failure detail.
+                raise RuntimeError(
+                    f"docker run failed to launch egress sidecar {self.config.egress_host}: {exc}"
+                ) from exc
+
+            if started_sidecar.returncode != 0:
+                detail = _result_detail(started_sidecar)
+                self._progress(
+                    f"PROGRESS egress-sidecar fail name={self.config.egress_host} "
+                    f"rc={started_sidecar.returncode} detail={detail}"
+                )
+                raise RuntimeError(
+                    f"docker run failed name={self.config.egress_host} image={self.config.image} "
+                    f"rc={started_sidecar.returncode} detail={detail}"
+                )
+
+            self.egress_container = self.config.egress_host
+            self._progress(
+                f"PROGRESS egress-sidecar ready name={self.config.egress_host} "
+                f"networks={EGRESS_NETWORK},{self.config.network}"
+            )
+
+        uid = _host_uid()
+        gid = _host_gid()
+        if self.config.session_db_host_path is not None:
+            self._ensure_session_db_volume(uid=uid, gid=gid)
+        mount = f"{worktree}:/work"
+        run_cmd = _build_run_argv(
+            config=self.config,
+            worktree=worktree,
+            uid=uid,
+            gid=gid,
+            memory_mode=mode,
+        )
+
+        if mode == "on":
+            self._progress(
+                "PROGRESS recall-primary-config "
+                f"mode={str(self.config.recall_mode).strip().lower()} "
+                f"served_store_host={_resolve_host_path(self.config.served_memories_host_path)} "
+                f"served_store_container={self.config.served_memories_container_path} "
+                f"plugin_state_host={_resolve_host_path(self.config.plugin_state_host_path)} "
+                f"plugin_state_container={self.config.plugin_state_container_path} "
+                f"recall_relevance_floor={float(self.config.primary_recall_relevance_floor):.6g} "
+                f"recall_max_injected={int(self.config.primary_recall_max_injected)}"
+            )
+
+        run_env = os.environ.copy()
+        if self.config.cloud:
+            run_env["ORCAROUTER_API_KEY"] = cloud_key
+        else:
+            run_env["LOCAL_LLM_PROXY_API_KEY"] = proxy_token
+
+        self._progress(
+            "PROGRESS docker-run start "
+            f"name={self.container_name} image={self.config.image} mount={mount} "
+            f"memory_mode={mode} key_present={str(key_present).lower()} key_len={key_len} uid_gid={uid}:{gid}"
+        )
+
+        try:
+            started = subprocess.run(
+                run_cmd,
+                env=run_env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError("docker CLI not found in PATH") from exc
+        except Exception as exc:  # noqa: BLE001 - include full failure detail.
+            raise RuntimeError(
+                f"docker run failed to launch container {self.container_name}: {exc}"
+            ) from exc
+
+        if started.returncode != 0:
+            detail = _result_detail(started)
+            self._progress(
+                f"PROGRESS docker-run fail name={self.container_name} rc={started.returncode} detail={detail}"
+            )
+            raise RuntimeError(
+                f"docker run failed name={self.container_name} image={self.config.image} "
+                f"rc={started.returncode} detail={detail}"
+            )
+
+        container_id = started.stdout.strip()
+        if not container_id:
+            raise RuntimeError(
+                f"docker run returned empty container id for name={self.container_name} image={self.config.image}"
+            )
+
+        self.container_id = container_id
+        self._progress(
+            "PROGRESS docker-run ready "
+            f"name={self.container_name} container_id={container_id[:12]} image={self.config.image} memory_mode={mode}"
+        )
+        return self
+
+    def exec_argv(self, inner_argv: list[str]) -> list[str]:
+        return ["docker", "exec", "-i", "-w", "/work", self.container_name, *inner_argv]
+
+    def kill_worker_processes(self) -> None:
+        if not self.container_name:
+            return
+
+        if self.serve_pid is not None:
+            # Reaper A (ABORT-path kill hook): kill every opencode process EXCEPT the
+            # persistent live-view serve (container-side PID). The per-attempt
+            # `docker exec opencode run` clients are killed; the serve survives.
+            serve_pid = int(self.serve_pid)
+            kill_script = (
+                "pids=$(pgrep -f '[o]pencode' || true); "
+                f'for p in $pids; do if [ "$p" != "{serve_pid}" ]; then '
+                'kill -9 "$p" 2>/dev/null || true; fi; done'
+            )
+            kill_cmd = self.exec_argv(["sh", "-lc", kill_script])
+            self._progress(
+                f"PROGRESS worker-process-kill start name={self.container_name} "
+                f"preserve_serve_pid={serve_pid}"
+            )
+        else:
+            kill_cmd = self.exec_argv(["sh", "-lc", "pkill -9 -f '[o]pencode' || true"])
+            self._progress(
+                f"PROGRESS worker-process-kill start name={self.container_name}"
+            )
+
+        try:
+            killed = subprocess.run(
+                kill_cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            self._progress(
+                f"PROGRESS worker-process-kill fail name={self.container_name} reason=docker_cli_missing"
+            )
+            raise RuntimeError("docker CLI not found in PATH") from exc
+        except Exception as exc:  # noqa: BLE001 - kill hook reports full detail upstream.
+            self._progress(
+                f"PROGRESS worker-process-kill fail name={self.container_name} reason=exception detail={exc}"
+            )
+            raise RuntimeError(
+                f"docker exec process-kill failed for name={self.container_name}: {exc}"
+            ) from exc
+
+        detail = _result_detail(killed)
+        if killed.returncode != 0:
+            self._progress(
+                f"PROGRESS worker-process-kill fail name={self.container_name} rc={killed.returncode} detail={detail}"
+            )
+            raise RuntimeError(
+                f"docker exec process-kill failed name={self.container_name} "
+                f"rc={killed.returncode} detail={detail}"
+            )
+
+        self._progress(
+            f"PROGRESS worker-process-kill done name={self.container_name} detail={detail or 'pkill-ok'}"
+        )
+
+    def start_serve(self) -> None:
+        """Start the persistent live-view `opencode serve` inside the container.
+
+        Launches a backgrounded `opencode serve` (nohup, inside the container) and
+        records its container-side PID. Survives the per-attempt `docker exec opencode
+        run` subprocess AND the per-attempt process-group SIGKILL: the serve is a
+        sibling `docker exec` (its own PID/group), not a descendant of the killed
+        `docker exec` PID. Reachability timeout is non-fatal by design.
+        """
+        if self.serve_pid is not None:
+            self._progress(
+                f"PROGRESS serve start skip reason=already pid={self.serve_pid}"
+            )
+            return
+
+        host_port = int(self.config.serve_host_port)
+        container_port = int(self.config.serve_container_port)
+        script = (
+            f"OPENCODE_CONFIG=/work/opencode.json nohup opencode serve "
+            f"--hostname 0.0.0.0 --port {container_port} "
+            "--print-logs >/tmp/opencode-serve.log 2>&1 & echo $!"
+        )
+        try:
+            started = subprocess.run(
+                self.exec_argv(["sh", "-lc", script]),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            self._progress(
+                f"PROGRESS serve start fail name={self.container_name} reason=docker_cli_missing"
+            )
+            raise RuntimeError("docker CLI not found in PATH") from None
+        except Exception as exc:  # noqa: BLE001 - surface full failure detail.
+            self._progress(
+                f"PROGRESS serve start fail name={self.container_name} reason=exception detail={exc}"
+            )
+            raise RuntimeError(
+                f"docker exec serve-start failed for name={self.container_name}: {exc}"
+            ) from exc
+
+        serve_pid_raw = (started.stdout or "").strip()
+        if started.returncode != 0 or not serve_pid_raw.isdigit():
+            self._progress(
+                f"PROGRESS serve start fail name={self.container_name} rc={started.returncode} "
+                f"detail={_result_detail(started)}"
+            )
+            raise RuntimeError(
+                f"docker exec serve-start failed name={self.container_name} "
+                f"rc={started.returncode} detail={_result_detail(started)}"
+            )
+
+        self.serve_pid = int(serve_pid_raw)
+
+        # Reachability wait on the host-published port. Timeout is NON-FATAL: the
+        # harness surfaces it later; we never raise on unreachable.
+        # 120s (not 30s): a cloud cell's first serve request triggers opencode to
+        # attempt a background install of the provider's npm SDK (@ai-sdk/
+        # openai-compatible, absent from the image and unreachable with no
+        # internet), which blocks the serve for ~70s before it fails. 30s was too
+        # short, so the harness fell back to the deadlock-prone stdout drive.
+        deadline = time.monotonic() + 120.0
+        reachable = False
+        while time.monotonic() < deadline:
+            if self._serve_reachable(host_port):
+                reachable = True
+                break
+            time.sleep(0.5)
+        status = "ok" if reachable else "unreachable"
+        self._progress(
+            f"PROGRESS serve start {status} host=127.0.0.1 host_port={host_port} "
+            f"container_port={container_port} pid={self.serve_pid}"
+        )
+
+    @staticmethod
+    def _serve_reachable(host_port: int) -> bool:
+        """Probe the host-published serve endpoint; True on HTTP 200, else False."""
+        url = f"http://127.0.0.1:{host_port}/session"
+        try:
+            with urllib.request.urlopen(url, timeout=3.0) as resp:
+                return resp.status == 200
+        except (urllib.error.URLError, OSError):
+            return False
+
+    def stop_serve(self) -> None:
+        """Kill ONLY the persistent serve inside the container (by recorded PID).
+
+        Guarded by serve_pid set. Never raises; teardown must remain clean.
+        """
+        if self.serve_pid is None:
+            return
+        serve_pid = int(self.serve_pid)
+        try:
+            subprocess.run(
+                self.exec_argv(
+                    ["sh", "-lc", f"kill -9 {serve_pid} 2>/dev/null || true"]
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self._progress(
+                f"PROGRESS serve stop ok name={self.container_name} pid={serve_pid}"
+            )
+        except Exception as exc:  # noqa: BLE001 - stop_serve must never raise.
+            self._progress(
+                f"PROGRESS serve stop fail name={self.container_name} pid={serve_pid} detail={exc}"
+            )
+        finally:
+            self.serve_pid = None
+
+    def session_db_volume_name(self) -> str:
+        """Name of the per-cell named volume backing the opencode session DB."""
+        return f"{self.container_name}-session-db"
+
+    def _ensure_session_db_volume(self, *, uid: int, gid: int) -> None:
+        """Create the session-DB volume and hand it to the worker uid.
+
+        WO-DBVOL-1: a FRESH named volume is created root:root 0755, but the
+        worker runs under ``--user <uid>:<gid>``, so opencode's first write
+        fails EACCES (verified empirically: ``touch`` -> Permission denied on a
+        default volume, ``WRITE OK`` after this chown). The chown runs in a
+        throwaway root container because the worker container itself is
+        ``--user`` + ``cap-drop ALL`` and cannot chown its own mount.
+
+        A stale volume from a prior cell of the same name is removed first: a
+        session DB must never inherit another cell's transcript.
+        """
+        volume = self.session_db_volume_name()
+        subprocess.run(
+            ["docker", "volume", "rm", "-f", volume],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        created = subprocess.run(
+            ["docker", "volume", "create", volume],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if created.returncode != 0:
+            raise RuntimeError(
+                f"docker volume create failed name={volume} "
+                f"rc={created.returncode} detail={_result_detail(created)}"
+            )
+        chowned = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                # --user 0:0 is REQUIRED and must not be dropped: the worker
+                # image bakes `USER worker` (uid 1000), and a non-root user
+                # cannot chown the volume root — verified: "chown: changing
+                # ownership of '/vol': Operation not permitted", after which
+                # opencode cannot create its DB and the cell dies at startup.
+                "--user",
+                "0:0",
+                "-v",
+                f"{volume}:/vol",
+                self.config.image,
+                "sh",
+                "-lc",
+                f"chown {uid}:{gid} /vol && chmod 0700 /vol",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if chowned.returncode != 0:
+            raise RuntimeError(
+                f"session-db volume chown failed name={volume} "
+                f"rc={chowned.returncode} detail={_result_detail(chowned)}"
+            )
+        self._progress(
+            f"PROGRESS session-db-volume ready name={volume} owner={uid}:{gid} "
+            "backing=docker-volume reason=sqlite-safe-fs"
+        )
+
+    def _remove_session_db_volume(self) -> None:
+        """Drop the per-cell volume AFTER its contents have been exported."""
+        volume = self.session_db_volume_name()
+        removed = subprocess.run(
+            ["docker", "volume", "rm", "-f", volume],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        status = "ok" if removed.returncode == 0 else "failed"
+        self._progress(f"PROGRESS session-db-volume rm name={volume} status={status}")
+
+    def _export_session_db_pre_teardown(self) -> None:
+        """Copy the session DB out of its volume to the published host path.
+
+        WO-DBVOL-1: the DB now LIVES in a Docker volume (SQLite-safe ext4), so
+        it must be exported before the container is removed. Everything
+        downstream — extraction (via the exported ``session_db_path``),
+        forensics, the dashboard — keeps reading the same host path as before.
+
+        Ordering matters: ``teardown`` calls ``stop_serve`` FIRST, so opencode
+        is dead before this copy and the DB is quiescent. The WAL and SHM
+        sidecars are copied with it — omitting the WAL would silently drop the
+        most recent turns, which is precisely the kind of quiet data loss this
+        work exists to eliminate.
+
+        Never raises: teardown must stay clean. A failed export is reported
+        loudly and leaves the integrity check (run by the caller) to void the
+        cell rather than letting a missing DB read as an empty one.
+        """
+        if self.config.session_db_host_path is None:
+            return
+        destination = Path(self.config.session_db_host_path).expanduser().resolve()
+        try:
+            destination.mkdir(parents=True, exist_ok=True)
+            copied = subprocess.run(
+                [
+                    "docker",
+                    "cp",
+                    f"{self.container_name}:{self.config.home_dir}/.local/share/opencode/.",
+                    str(destination),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except Exception as exc:  # noqa: BLE001 - teardown must never raise.
+            self._progress(
+                f"PROGRESS session-db-export status=failed path={destination} "
+                f"reason=exception detail={exc}"
+            )
+            return
+
+        if copied.returncode != 0:
+            self._progress(
+                f"PROGRESS session-db-export status=failed path={destination} "
+                f"rc={copied.returncode} detail={_result_detail(copied)}"
+            )
+            return
+
+        db_path = destination / "opencode.db"
+        size = db_path.stat().st_size if db_path.is_file() else 0
+        self._progress(
+            f"PROGRESS session-db-export status=ok path={destination} db_bytes={size}"
+        )
+
+    def teardown(self) -> None:
+        if not self.container_name:
+            return
+
+        # Stop the persistent live-view serve BEFORE removing the container (a
+        # running serve inside the container cannot survive `docker rm -f`'s own
+        # teardown, and we must not orphan the published host port).
+        self.stop_serve()
+
+        self._capture_worker_logs_pre_teardown()
+        self._export_session_db_pre_teardown()
+
+        self._progress(f"PROGRESS docker-rm start name={self.container_name}")
+
+        # try/finally: the two early returns below (docker CLI missing, docker
+        # rm raising) must still drop the per-cell volume. Without this a failed
+        # teardown leaks one named volume per cell, and a long campaign silently
+        # fills the Docker VM's disk — a slow way to break every later run.
+        try:
+            try:
+                removed = subprocess.run(
+                    ["docker", "rm", "-f", self.container_name],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            except FileNotFoundError:
+                self._progress(
+                    f"PROGRESS docker-rm fail name={self.container_name} reason=docker_cli_missing"
+                )
+                self.container_id = None
+                return
+            except Exception as exc:  # noqa: BLE001 - teardown must not raise.
+                self._progress(
+                    f"PROGRESS docker-rm fail name={self.container_name} reason=exception detail={exc}"
+                )
+                self.container_id = None
+                return
+
+            detail = _result_detail(removed)
+            if removed.returncode == 0:
+                self._progress(
+                    f"PROGRESS docker-rm done name={self.container_name} detail={detail or 'removed'}"
+                )
+            elif "No such container" in detail:
+                self._progress(
+                    f"PROGRESS docker-rm done name={self.container_name} detail=already-absent"
+                )
+            else:
+                self._progress(
+                    f"PROGRESS docker-rm fail name={self.container_name} rc={removed.returncode} detail={detail}"
+                )
+
+            self.container_id = None
+
+            # The sidecar exists only to serve THIS cell; remove it after the cell
+            # container so a torn-down cell never leaves a routable proxy behind.
+            if self.egress_container:
+                self._remove_egress_sidecar()
+        finally:
+            if self.config.session_db_host_path is not None:
+                self._remove_session_db_volume()
+
+    def _remove_egress_sidecar(self) -> None:
+        """Remove the per-cell egress sidecar container (tolerates already-absent)."""
+        sidecar_name = self.egress_container or ""
+        try:
+            removed = subprocess.run(
+                ["docker", "rm", "-f", sidecar_name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            self._progress(
+                f"PROGRESS egress-sidecar rm fail name={sidecar_name} reason=docker_cli_missing"
+            )
+            self.egress_container = None
+            return
+        except Exception as exc:  # noqa: BLE001 - teardown must not raise.
+            self._progress(
+                f"PROGRESS egress-sidecar rm fail name={sidecar_name} reason=exception detail={exc}"
+            )
+            self.egress_container = None
+            return
+
+        detail = _result_detail(removed)
+        if removed.returncode == 0:
+            self._progress(
+                f"PROGRESS egress-sidecar rm done name={sidecar_name} detail={detail or 'removed'}"
+            )
+        elif "No such container" in detail:
+            self._progress(
+                f"PROGRESS egress-sidecar rm done name={sidecar_name} detail=already-absent"
+            )
+        else:
+            self._progress(
+                f"PROGRESS egress-sidecar rm fail name={sidecar_name} rc={removed.returncode} detail={detail}"
+            )
+        self.egress_container = None
+
+    def _capture_worker_logs_pre_teardown(self) -> None:
+        if self.config.worker_logs_dir is None:
+            self._progress(
+                "INFO op=worker_logs.capture step=skip path=none bytes=0 "
+                "status=skipped reason=worker_logs_dir_none"
+            )
+            return
+
+        destination = Path(self.config.worker_logs_dir).expanduser().resolve()
+        inspect_path = destination / "container-inspect.json"
+        docker_logs_path = destination / "container-docker.log"
+        opencode_path = destination / "opencode"
+
+        try:
+            destination.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:  # noqa: BLE001 - teardown must never raise.
+            reason = self._capture_reason(f"destination_mkdir_failed detail={exc}")
+            self._log_worker_capture(
+                step="inspect",
+                path=inspect_path,
+                bytes_count=0,
+                status="failed",
+                reason=reason,
+            )
+            self._log_worker_capture(
+                step="docker_logs",
+                path=docker_logs_path,
+                bytes_count=0,
+                status="failed",
+                reason=reason,
+            )
+            self._log_worker_capture(
+                step="cp",
+                path=opencode_path,
+                bytes_count=0,
+                status="failed",
+                reason=reason,
+            )
+            return
+
+        try:
+            inspected = subprocess.run(
+                ["docker", "inspect", self.container_name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if inspected.returncode != 0:
+                self._log_worker_capture(
+                    step="inspect",
+                    path=inspect_path,
+                    bytes_count=0,
+                    status="failed",
+                    reason=f"rc={inspected.returncode} detail={_result_detail(inspected)}",
+                )
+            else:
+                inspect_path.write_text(inspected.stdout or "", encoding="utf-8")
+                self._log_worker_capture(
+                    step="inspect",
+                    path=inspect_path,
+                    bytes_count=self._path_bytes(inspect_path),
+                    status="ok",
+                    reason="none",
+                )
+        except Exception as exc:  # noqa: BLE001 - teardown must never raise.
+            self._log_worker_capture(
+                step="inspect",
+                path=inspect_path,
+                bytes_count=0,
+                status="failed",
+                reason=f"exception detail={exc}",
+            )
+
+        try:
+            docker_logs = subprocess.run(
+                ["docker", "logs", "--timestamps", self.container_name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=False,
+            )
+            docker_logs_path.write_text(docker_logs.stdout or "", encoding="utf-8")
+            bytes_count = self._path_bytes(docker_logs_path)
+            if docker_logs.returncode != 0:
+                self._log_worker_capture(
+                    step="docker_logs",
+                    path=docker_logs_path,
+                    bytes_count=bytes_count,
+                    status="failed",
+                    reason=f"rc={docker_logs.returncode} detail={_result_detail(docker_logs)}",
+                )
+            else:
+                self._log_worker_capture(
+                    step="docker_logs",
+                    path=docker_logs_path,
+                    bytes_count=bytes_count,
+                    status="ok",
+                    reason="none",
+                )
+        except Exception as exc:  # noqa: BLE001 - teardown must never raise.
+            self._log_worker_capture(
+                step="docker_logs",
+                path=docker_logs_path,
+                bytes_count=0,
+                status="failed",
+                reason=f"exception detail={exc}",
+            )
+
+        try:
+            opencode_path.mkdir(parents=True, exist_ok=True)
+
+            staging_host_path = (
+                Path(self.config.worktree).expanduser().resolve()
+                / ".okp-worker-log-export"
+            )
+            try:
+                shutil.rmtree(staging_host_path)
+            except FileNotFoundError:
+                pass
+
+            staged = subprocess.run(
+                self.exec_argv(
+                    [
+                        "sh",
+                        "-lc",
+                        (
+                            "mkdir -p /work/.okp-worker-log-export/opencode "
+                            f"&& cp -a {self.config.home_dir}/.local/share/opencode/. "
+                            "/work/.okp-worker-log-export/opencode/"
+                        ),
+                    ]
+                ),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if staged.returncode != 0:
+                self._log_worker_capture(
+                    step="cp",
+                    path=opencode_path,
+                    bytes_count=self._path_bytes(opencode_path),
+                    status="failed",
+                    reason=f"stage_rc={staged.returncode} detail={_result_detail(staged)}",
+                )
+            else:
+                copied = subprocess.run(
+                    [
+                        "docker",
+                        "cp",
+                        f"{self.container_name}:/work/.okp-worker-log-export/opencode/.",
+                        str(opencode_path),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if copied.returncode != 0:
+                    self._log_worker_capture(
+                        step="cp",
+                        path=opencode_path,
+                        bytes_count=self._path_bytes(opencode_path),
+                        status="failed",
+                        reason=f"rc={copied.returncode} detail={_result_detail(copied)}",
+                    )
+                else:
+                    self._log_worker_capture(
+                        step="cp",
+                        path=opencode_path,
+                        bytes_count=self._path_bytes(opencode_path),
+                        status="ok",
+                        reason="none",
+                    )
+
+            try:
+                shutil.rmtree(staging_host_path)
+            except FileNotFoundError:
+                pass
+        except Exception as exc:  # noqa: BLE001 - teardown must never raise.
+            self._log_worker_capture(
+                step="cp",
+                path=opencode_path,
+                bytes_count=0,
+                status="failed",
+                reason=f"exception detail={exc}",
+            )
+
+    def _log_worker_capture(
+        self,
+        *,
+        step: str,
+        path: Path,
+        bytes_count: int,
+        status: str,
+        reason: str,
+    ) -> None:
+        self._progress(
+            "PROGRESS op=worker_logs.capture "
+            f"step={step} path={path} bytes={max(0, int(bytes_count))} "
+            f"status={status} reason={self._capture_reason(reason)}"
+        )
+
+    @staticmethod
+    def _capture_reason(reason: str) -> str:
+        normalized = " ".join(str(reason).split())
+        if not normalized:
+            return "none"
+        if len(normalized) > 512:
+            return f"{normalized[:509]}..."
+        return normalized
+
+    @staticmethod
+    def _path_bytes(path: Path) -> int:
+        candidate = Path(path)
+        if not candidate.exists():
+            return 0
+        if candidate.is_file():
+            return max(0, int(candidate.stat().st_size))
+        total = 0
+        for child in candidate.rglob("*"):
+            if child.is_file():
+                total += max(0, int(child.stat().st_size))
+        return total
+
+    def force_kill(self) -> None:
+        self.teardown()
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: object | None,
+    ) -> None:
+        self.teardown()
+
+    def _progress(self, message: str) -> None:
+        _emit(self._progress_cb, message)
+
+
+def _emit(progress: Callable[[str], None] | None, message: str) -> None:
+    if progress is None:
+        return
+    progress(message)
+
+
+def _build_run_argv(
+    *,
+    config: DockerCellConfig,
+    worktree: Path,
+    uid: int,
+    gid: int,
+    memory_mode: str,
+) -> list[str]:
+    """Build the docker run argv for a worker cell without touching process env."""
+    mount = f"{Path(worktree).expanduser().resolve()}:/work"
+    run_cmd: list[str] = [
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        config.container_name,
+    ]
+    if config.egress_host:
+        # Egress contract: the cell runs on the --internal network, which has ZERO
+        # internet route and no host gateway — host.docker.internal is dead here,
+        # so no --add-host pair. Model/MCP/hub are reachable only via the sidecar
+        # container (launched in DockerCell.__enter__) on this same network.
+        # The --network-alias gives the sidecar a <=63-char name to resolve: the
+        # full container name can exceed the DNS label limit and become ENOTFOUND
+        # (the sidecar's ingress forward then 502s and the live view never connects).
+        run_cmd.extend(
+            [
+                "--network",
+                EGRESS_NETWORK,
+                "--network-alias",
+                _ingress_cell_alias(config.container_name),
+            ]
+        )
+    else:
+        run_cmd.extend(
+            [
+                "--network",
+                config.network,
+                "--add-host",
+                "host.docker.internal:host-gateway",
+            ]
+        )
+    run_cmd.extend(
+        [
+            "--user",
+            f"{uid}:{gid}",
+            # PID 1 must REAP. Without an init, an orphan reparents to
+            # `sleep infinity`, which never calls wait(), so every process whose
+            # parent exited first becomes a permanent zombie and the cell leaks PIDs
+            # for as long as it runs.
+            "--init",
+            "--pids-limit",
+            str(WORKER_PIDS_LIMIT),
+            "--memory",
+            WORKER_MEMORY,
+            # Without this, the cgroup can spill into swap and evade the memory
+            # bound entirely — the limit has to cover memory+swap to mean anything.
+            "--memory-swap",
+            WORKER_MEMORY,
+            "--cpus",
+            WORKER_CPUS,
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--read-only",
+            # tmpfs mounts default to root:root 0755; the worker runs as the host
+            # (non-root) uid via --user, so HOME/tmp must be world-writable (1777,
+            # standard /tmp semantics) or opencode's ~/.local/share mkdir fails with
+            # EACCES. Isolation is preserved by --read-only + cap-drop ALL +
+            # no-new-privileges + external_directory deny, not by tmpfs ownership.
+            # Size caps (disk-clip): tmpfs mounts otherwise grow until the Docker VM
+            # disk is full; an unbounded tmpfs is an unbounded write surface.
+            "--tmpfs",
+            "/tmp:mode=1777,size=512m",
+            "--tmpfs",
+            f"{config.home_dir}:mode=1777,size=1g",
+            "-e",
+            f"HOME={config.home_dir}",
+            # The image pins XDG_CONFIG_HOME/OPENCODE_CONFIG_DIR under /etc/xdg on the
+            # --read-only root, but opencode must WRITE state (e.g. its config-dir
+            # .gitignore) or it aborts with "FileSystem.writeFile". Redirect the XDG +
+            # opencode state dirs into the writable HOME tmpfs. OPENCODE_CONFIG points
+            # at the per-cell /work/opencode.json (bind-mounted from the host worktree),
+            # loaded container-wide so every `docker exec opencode run` process and the
+            # serve use it without the --config flag; the baked /etc/xdg config remains
+            # the image-level fallback for any unconfigured process.
+            "-e",
+            f"XDG_CONFIG_HOME={config.home_dir}/.config",
+            "-e",
+            f"XDG_DATA_HOME={config.home_dir}/.local/share",
+            "-e",
+            f"XDG_CACHE_HOME={config.home_dir}/.cache",
+            "-e",
+            f"OPENCODE_CONFIG_DIR={config.home_dir}/.config/opencode",
+            "-e",
+            "OPENCODE_CONFIG=/work/opencode.json",
+            "-e",
+            "LOCAL_LLM_PROXY_API_KEY",
+            "-v",
+            mount,
+        ]
+    )
+
+    # Cloud cells additionally forward ORCAROUTER_API_KEY. The BARE `-e VAR` form
+    # makes docker read the value from the docker CLI process env (set by
+    # DockerCell.__enter__), so the key never appears literally in argv and cannot
+    # leak via `docker inspect` or run-failure detail.
+    if config.cloud:
+        run_cmd.extend(["-e", "ORCAROUTER_API_KEY"])
+
+    if config.session_db_host_path is not None:
+        host_session_db = Path(config.session_db_host_path).expanduser().resolve()
+        # WO-DBVOL-1 (2026-08-11): the session DB is served from a NAMED DOCKER
+        # VOLUME, never a macOS bind mount.
+        #
+        # A bind mount puts SQLite on osxfs/gRPC-FUSE, whose locking and fsync
+        # semantics SQLite does not trust — and the corruption was real, not
+        # theoretical: `PRAGMA integrity_check` on the preserved DBs of BOTH
+        # 500-failing cells reports "database disk image is malformed", with
+        # the damaged pages in tree 27 = the `part` table, exactly the table in
+        # the failing `select ... from "part" where "message_id" in (?...)`.
+        # The 11:14 cell that never 500'd is clean. The IN-list size was a red
+        # herring: a larger list touches more pages, so it meets a corrupt page
+        # sooner. A named volume lives on ext4 inside the Linux VM, where
+        # SQLite's guarantees actually hold.
+        #
+        # The host directory remains the published artifact location; the DB is
+        # copied out of the volume at teardown (_export_session_db). Reads of
+        # the exported copy (extraction, forensics) are unchanged.
+        volume_name = f"{config.container_name}-session-db"
+        run_cmd.extend(
+            [
+                "--tmpfs",
+                f"{config.home_dir}/.local:mode=1777,size=1g",
+                "-v",
+                f"{volume_name}:{config.home_dir}/.local/share/opencode:rw",
+            ]
+        )
+        host_session_db.mkdir(parents=True, exist_ok=True)
+
+    if config.output_token_max is not None:
+        # Enforced output-cap lever for opencode workers: this EXPERIMENTAL env flag
+        # maps to AI-SDK `maxOutputTokens`, which then serializes to request-body
+        # `max_tokens`. It only constrains completions when the configured value is
+        # <= the selected model's own output-token limit. For the worker image's
+        # exact pinned opencode version, honoring is still a live assertion pending
+        # request-body capture.
+        run_cmd.extend(
+            [
+                "-e",
+                f"OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX={config.output_token_max}",
+            ]
+        )
+
+    if memory_mode == "on":
+        host_token = _resolve_host_path("~/.okp/mcp-session-token")
+        if not host_token.is_file():
+            raise FileNotFoundError(
+                "memory_mode='on' requires host token ~/.okp/mcp-session-token; "
+                "start the bench MCP or run bench preflight to mint it"
+            )
+
+        recall_mode = str(config.recall_mode).strip().lower()
+        if not recall_mode:
+            raise ValueError(
+                "DockerCellConfig.recall_mode must be non-empty when memory_mode='on'"
+            )
+
+        host_served_memories = _resolve_host_path(config.served_memories_host_path)
+        _ensure_served_memories_store(host_served_memories)
+
+        host_plugin_state = _resolve_host_path(config.plugin_state_host_path)
+        _ensure_plugin_state_dir(host_plugin_state)
+
+        host_plugin_config = _resolve_host_path(config.plugin_config_host_path)
+        _merge_plugin_config(
+            host_plugin_config,
+            recall_relevance_floor=config.primary_recall_relevance_floor,
+            recall_max_injected=config.primary_recall_max_injected,
+        )
+
+        token_dest = f"{config.home_dir}/.okp/mcp-session-token"
+        plugin_config_dest = f"{config.home_dir}/.okp/plugin-config.json"
+
+        if config.egress_host:
+            # Egress contract: on the --internal network the host.docker.internal
+            # URLs are unreachable; MCP/hub resolve to the sidecar container by
+            # name on the contract ports (harness/egress.py).
+            mcp_http_url = f"http://{config.egress_host}:{EGRESS_MCP_PORT}"
+            hub_url = f"http://{config.egress_host}:{EGRESS_HUB_PORT}"
+        else:
+            mcp_http_url = config.recall_url
+            hub_url = config.hub_url
+
+        run_cmd.extend(
+            [
+                # ── THE CELL HAS NO IDENTITY, AND THAT IS THE DESIGN ──────────
+                #
+                # A cell is a measurement SUBJECT, not a contributor. It never
+                # mints a keypair, never signs and never attributes: the leader
+                # identity behind the commissioned MCP on :4550 does all three,
+                # and the cell reaches it with the mounted session token.
+                #
+                # DECLARED, NOT INFERRED. The plugin could have guessed this
+                # from OKP_MCP_HTTP_URL being set, but an MCP URL says where a
+                # service IS, not whose identity it carries. That inference is
+                # how a contributor silently served the LEADER's identity for
+                # four days (AGENTS.md 2.1 — "liveness is not identity"), so the
+                # bench states it in its own words instead.
+                #
+                # Without this the plugin's first-run TUI raises a modal asking
+                # the operator to create an identity — over a running cell, in a
+                # container that is destroyed at teardown, so the keypair it
+                # would create is discarded seconds later. Suppressing the
+                # prompt is the whole fix; supplying an identity would be wrong.
+                "-e",
+                "OKP_MANAGED_IDENTITY=1",
+                "-e",
+                f"OKP_MCP_HTTP_URL={mcp_http_url}",
+                "-e",
+                f"OKP_RECALL_MODE={recall_mode}",
+                "-e",
+                f"OKP_HUB_URL={hub_url}",
+                "-e",
+                f"OKP_SERVED_MEMORIES_PATH={config.served_memories_container_path}",
+                # Vendored okp plugin hardcodes ~/.okp/mcp-session-token and
+                # the bench MCP API is bearer-gated; mount that token only, read-only.
+                "-v",
+                f"{host_token}:{token_dest}:ro",
+                # The plugin reads ~/.okp/plugin-config.json from homedir(); mount
+                # a host-authored config so primary governor values are explicit.
+                "-v",
+                f"{host_plugin_config}:{plugin_config_dest}:ro",
+                # Shared served-store file bridges container writes back to the host.
+                "-v",
+                f"{host_served_memories}:{config.served_memories_container_path}:rw",
+                # Shared plugin-state directory bridges queue/decisions/heartbeat.
+                "-v",
+                f"{host_plugin_state}:{config.plugin_state_container_path}:rw",
+            ]
+        )
+
+    # Gate-answerer policy: derived per cell unless explicitly overridden. ON cells
+    # auto-accept so the recall gate completes without a human (D3 goal); OFF cells
+    # are explicitly `off` so any future regression that fires the gate in OFF still
+    # cannot hang on a human (RC-4 comparability). Injected for BOTH arms so the
+    # worker env is deterministic regardless of memory_mode.
+    if config.answerer_policy is not None:
+        answerer_policy = config.answerer_policy
+    elif memory_mode == "on":
+        answerer_policy = "auto-accept"
+    else:
+        answerer_policy = "off"
+    run_cmd.extend(["-e", f"OKP_ANSWERER_POLICY={answerer_policy}"])
+
+    # In-session extraction capture: the vendored plugin gates its capture pipeline on
+    # OKP_INSESSION_EXTRACTION === "1" (plugin.ts:710). Arm it unconditionally,
+    # like OKP_ANSWERER_POLICY, so the worker env is deterministic regardless of memory_mode.
+    run_cmd.extend(["-e", "OKP_INSESSION_EXTRACTION=1"])
+
+    # PLAN BEFORE WORK. A plugin that honours REQUIRE_TODOS refuses mutating
+    # tools until the agent has written a todo list. Set only when asked for:
+    # it CHANGES WHAT THE AGENT DOES, so a run with it and a run without it are
+    # not measuring the same thing.
+    if config.require_todos:
+        run_cmd.extend(["-e", "REQUIRE_TODOS=1"])
+
+    # SELF-COMPACTION. The worker plugin self-gates on OKP_SELF_COMPACT=1 and
+    # resolves the model to compact with from the session itself.
+    if config.self_compact:
+        run_cmd.extend(["-e", "OKP_SELF_COMPACT=1"])
+
+        # A2 phase sentinel. Mounted for BOTH arms whenever compaction is armed
+        # — the leak was never memory-mode-specific, and an OFF cell that could
+        # still compact during repair would break the very comparability the
+        # OFF arm exists to provide.
+        #
+        # NO SENTINEL, NO COMPACTION: the plugin is fail-closed on this file, so
+        # a cell launched without the mount simply never compacts and the first
+        # chunk boundary aborts it on no_compaction_evidence. That is the
+        # intended failure — loud and at the boundary — rather than a cell that
+        # quietly compacts on the model's say-so.
+        if config.compact_phase_host_path is None:
+            raise RuntimeError(
+                "self_compact is armed but compact_phase_host_path is unset — "
+                "the worker plugin is fail-closed on the phase sentinel and "
+                "would never compact; refusing to launch a cell that cannot "
+                "honour --compact"
+            )
+        host_compact_phase = (
+            Path(config.compact_phase_host_path).expanduser().resolve()
+        )
+        host_compact_phase.mkdir(parents=True, exist_ok=True)
+        run_cmd.extend(
+            [
+                "-e",
+                f"OKP_COMPACT_PHASE_FILE={config.compact_phase_container_file}",
+                "-v",
+                f"{host_compact_phase}:{config.compact_phase_container_dir}:ro",
+            ]
+        )
+
+    # OFF-arm extraction state: route the in-session extraction state to a dedicated
+    # bind-mount OUTSIDE /work so the OFF (blinded) cell's capture never lands inside
+    # the worktree. ON cells already write to the mounted /work/.okp/state, so they
+    # get no OKP_STATE_DIR and no /okp-state mount.
+    if memory_mode == "off" and config.extraction_state_host_path is not None:
+        host_extraction_state = (
+            Path(config.extraction_state_host_path).expanduser().resolve()
+        )
+        host_extraction_state.mkdir(parents=True, exist_ok=True)
+        run_cmd.extend(
+            [
+                "-e",
+                "OKP_STATE_DIR=/okp-state",
+                "-v",
+                f"{host_extraction_state}:/okp-state:rw",
+            ]
+        )
+
+    # Live-view topology: in the LEGACY (non-egress) path the cell itself
+    # publishes host:serve_host_port -> container:serve_container_port. In
+    # egress mode the cell runs on the --internal network (no gateway), where a
+    # `-p` publish is silently dropped (WO-24) — instead the SIDECAR publishes
+    # host :serve_host_port and forwards to the cell over the shared internal
+    # network (WO-25, harness/egress.py). So here: publish only when there
+    # is no egress sidecar. MUST land before the container command.
+    #
+    # The 127.0.0.1 host prefix is a SECURITY BOUNDARY, not decoration. `-p 4096:4096`
+    # binds 0.0.0.0 (verified: "0.0.0.0:4096->4096/tcp, [::]:4096->4096/tcp"), which
+    # publishes the worker's opencode serve — full session transcript, and an API that
+    # can drive the agent — to every device on the operator's network. Binding the host
+    # side to loopback keeps the live view reachable only from this machine. The
+    # container side still listens on 0.0.0.0 INSIDE its own namespace, which is correct
+    # and required: docker's proxy is the only thing that can reach it.
+    if not config.egress_host:
+        run_cmd.extend(
+            ["-p", f"127.0.0.1:{config.serve_host_port}:{config.serve_container_port}"]
+        )
+    run_cmd.extend([config.image, "sleep", "infinity"])
+    return run_cmd
+
+
+def _result_detail(completed: subprocess.CompletedProcess[str]) -> str:
+    stderr = completed.stderr.strip() if completed.stderr else ""
+    stdout = completed.stdout.strip() if completed.stdout else ""
+    detail = stderr or stdout
+    return detail or f"exit={completed.returncode}"
+
+
+def _resolve_host_path(raw_path: str) -> Path:
+    return Path(str(raw_path)).expanduser().resolve()
+
+
+def _ensure_served_memories_store(path: Path) -> None:
+    resolved = Path(path).expanduser().resolve()
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+
+    if resolved.exists() and not resolved.is_file():
+        raise RuntimeError(f"served-memories path must be a file: {resolved}")
+
+    if not resolved.exists():
+        resolved.write_text('{"version":1,"memories":{}}', encoding="utf-8")
+
+    resolved.chmod(0o600)
+
+
+def _ensure_plugin_state_dir(path: Path) -> None:
+    resolved = Path(path).expanduser().resolve()
+
+    if resolved.exists() and not resolved.is_dir():
+        raise RuntimeError(f"plugin-state path must be a directory: {resolved}")
+
+    resolved.mkdir(parents=True, exist_ok=True)
+    resolved.chmod(0o700)
+
+
+def _merge_plugin_config(
+    path: Path,
+    *,
+    recall_relevance_floor: float,
+    recall_max_injected: int,
+) -> None:
+    resolved = Path(path).expanduser().resolve()
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+
+    payload: dict[str, object] = {}
+    if resolved.exists():
+        if not resolved.is_file():
+            raise RuntimeError(f"plugin-config path must be a file: {resolved}")
+        raw = resolved.read_text(encoding="utf-8").strip()
+        if raw:
+            try:
+                decoded = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError(
+                    f"plugin-config at {resolved} is invalid JSON: {exc}"
+                ) from exc
+            if not isinstance(decoded, dict):
+                raise RuntimeError(
+                    f"plugin-config at {resolved} must decode to a JSON object"
+                )
+            payload = dict(decoded)
+
+    payload["recall_relevance_floor"] = float(recall_relevance_floor)
+    payload["recall_max_injected"] = int(recall_max_injected)
+
+    resolved.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    resolved.chmod(0o600)
+
+
+def _host_uid() -> int:
+    getter = getattr(os, "getuid", None)
+    if callable(getter):
+        return int(getter())
+    return 0
+
+
+def _host_gid() -> int:
+    getter = getattr(os, "getgid", None)
+    if callable(getter):
+        return int(getter())
+    return 0

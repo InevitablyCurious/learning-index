@@ -388,7 +388,7 @@ export async function collectCells(runsRoot) {
       //
       // ── `unrecovered_anomaly_turns`, NOT `truncated_turns` (2026-09-05) ───
       //
-      // Same correction as `bench/cumulative/run_artifacts.py` and
+      // Same correction as `harness/cumulative/run_artifacts.py` and
       // `dashboard/sources/stack-ledger.mjs`. `truncated_turns` is
       // `len(turn_anomalies)` — EVERY anomaly, loop-guard aborts included — and
       // reading it here voided a cell that had completed five graded attempts

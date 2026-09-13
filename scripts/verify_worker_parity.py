@@ -30,10 +30,10 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from bench.grader_image import IMAGE  # noqa: E402
+from harness.grader_image import IMAGE  # noqa: E402
 
-GOLDEN = REPO / "tasks" / "backgammon" / "golden"
-GATES = REPO / "tasks" / "backgammon" / "gates"
+GOLDEN = REPO / "task" / "backgammon" / "golden"
+GATES = REPO / "grader"
 
 
 def grade(workers: int, out_dir: Path, roster: Path) -> dict:

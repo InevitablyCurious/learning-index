@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.adapters.docker_worker import DockerCell, DockerCellConfig, _build_run_argv
+from harness.adapters.docker_worker import DockerCell, DockerCellConfig, _build_run_argv
 
 
 TEST_PROXY_BASE_URL = "http://host.docker.internal:8789/api/v1"
@@ -180,11 +180,11 @@ def _enter_cell_capturing_argv(
         raise AssertionError(f"unexpected docker invocation: {argv!r}")
 
     monkeypatch.setattr(
-        "bench.adapters.docker_worker.ensure_network", lambda *_, **__: None
+        "harness.adapters.docker_worker.ensure_network", lambda *_, **__: None
     )
-    monkeypatch.setattr("bench.adapters.docker_worker._host_uid", lambda: 501)
-    monkeypatch.setattr("bench.adapters.docker_worker._host_gid", lambda: 20)
-    monkeypatch.setattr("bench.adapters.docker_worker.subprocess.run", _fake_run)
+    monkeypatch.setattr("harness.adapters.docker_worker._host_uid", lambda: 501)
+    monkeypatch.setattr("harness.adapters.docker_worker._host_gid", lambda: 20)
+    monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
     cell = DockerCell(cfg)
     try:

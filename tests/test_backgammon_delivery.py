@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from bench.adapters.backgammon import (
+from harness.adapters.backgammon import (
     BackgammonRunner,
     _scan_cell_delivery,
     _scan_injected_block_chars,
 )
 
 
-TASK_DIR = (Path(__file__).resolve().parents[1] / "tasks" / "backgammon").resolve()
+TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
 
 def _write_plugin_log(worktree: Path, contents: str) -> None:

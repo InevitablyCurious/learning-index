@@ -170,7 +170,7 @@ board stops being trusted. Concretely, all of these are on the board:
 
 Every baseline run **automatically captures** its finished worktree as a build
 snapshot the moment attempt 1's grade lands (`capture_snapshot`,
-`bench/snapshot.py`; boundary at `bench/adapters/backgammon.py:3079-3080`). The
+`harness/snapshot.py`; boundary at `harness/adapters/backgammon.py:3079-3080`). The
 snapshot is the whole worktree, verdict-blind — the gate tally rides along as
 identity metadata, never a selection filter.
 
@@ -193,7 +193,7 @@ fast-iteration tool, not a measurement.
 
 Dev-mode validity exception: a snapshot whose `source_commit` / corpus identity
 drifted from the running corpus **seeds anyway**, the drift reported as a warning
-rather than a refusal (`bench/snapshot.py:192-208`). Absent, unreadable, or
+rather than a refusal (`harness/snapshot.py:192-208`). Absent, unreadable, or
 model-mismatched snapshots still refuse loudly and never fall back to a scaffold
 build.
 

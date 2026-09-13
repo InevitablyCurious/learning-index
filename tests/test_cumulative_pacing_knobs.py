@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from bench.config import RunConfig
-from bench.cumulative.types import PhaseGroup, SessionRecord
+from harness.config import RunConfig
+from harness.cumulative.types import PhaseGroup, SessionRecord
 
 
 def _load_run_cumulative_module() -> Any:
@@ -21,7 +21,7 @@ def _load_run_cumulative_module() -> Any:
 
 def _build_real_session_runner(module: Any, tmp_path: Path) -> Any:
     repo_root = tmp_path / "repo"
-    (repo_root / "tasks" / "backgammon").mkdir(parents=True, exist_ok=True)
+    (repo_root / "task" / "backgammon").mkdir(parents=True, exist_ok=True)
 
     return module.RealSessionRunner(
         task="backgammon",

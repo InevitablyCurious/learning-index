@@ -11,7 +11,7 @@ the whole Playwright suite. It was penalised for following its instructions,
 which is a measurement error, not a capability signal.
 
 The contradiction survived because the appended text was never covered by
-`chunk_plan_hash` (which hashes only `tasks/backgammon/prompts/`), so drift
+`chunk_plan_hash` (which hashes only `task/backgammon/prompts/`), so drift
 detection could not see it. These tests are the replacement for that blind
 spot: they read the real files and fail if the names diverge again.
 """
@@ -21,7 +21,8 @@ from pathlib import Path
 
 import pytest
 
-TASK = Path(__file__).resolve().parents[1] / "tasks" / "backgammon"
+REPO = Path(__file__).resolve().parents[1]
+TASK = REPO / "task" / "backgammon"
 
 # The one true name. It is what the gate harness exports when it spawns the
 # server, so it is the only name that can possibly work.
@@ -35,8 +36,8 @@ SOURCES = [
     TASK / "prompts" / "chunk-06.md",
     TASK / "scaffold" / "src" / "server.ts",
     TASK / "golden" / "src" / "server.ts",
-    TASK / "gates" / "lib" / "harness.ts",
-    TASK / "gates" / "playwright.config.ts",
+    REPO / "grader" / "lib" / "harness.ts",
+    REPO / "grader" / "playwright.config.ts",
 ]
 
 
@@ -52,7 +53,7 @@ def test_debug_seam_env_var_name_is_never_contradicted(path: Path) -> None:
 
 def test_the_gate_harness_is_the_authority_and_exports_debug_api() -> None:
     """If this ever changes, the constant above changes with it — not the prompts."""
-    harness = (TASK / "gates" / "lib" / "harness.ts").read_text(encoding="utf-8")
+    harness = (REPO / "grader" / "lib" / "harness.ts").read_text(encoding="utf-8")
     assert f"{DEBUG_ENV}:" in harness
 
 
@@ -102,11 +103,11 @@ def test_the_orphaned_sxe_candidate_pair_stays_deleted() -> None:
 # publishing assertions would hand over the answer key.
 # ─────────────────────────────────────────────────────────────────────────────
 
-GATES = TASK / "gates"
+GATES = REPO / "grader"
 
 # Directories holding tests that grade the CANDIDATE. `meta/` is excluded on
 # purpose: those files test the grader itself and reach the golden, never the
-# target (see gates/meta/README.md).
+# target (see grader/meta/README.md).
 _GRADED_GATE_DIRS = ["backend", "conformance", "frontend", "lib"]
 
 # `loadEngine()` hands the gates the candidate's two modules under these names.

@@ -70,7 +70,7 @@ Consequences that are enforced in code, not by convention:
   contribute 0 to the numerator and their full gate count to the denominator,
   which manufactured apparent lift for the memory arm the moment the threshold
   unlocked. `contract.mjs::cellValidity` MIRRORS the scorecard's canonical rule
-  in `bench/cumulative/run_artifacts.py` — if that rule moves, this moves
+  in `harness/cumulative/run_artifacts.py` — if that rule moves, this moves
   with it. Pinned by `arm-delta-validity.test.mjs`.
 - **No confidence interval over gate counts, ever.** Gates cluster within cell —
   68 gates from one cell are not 68 independent samples. The standing note says

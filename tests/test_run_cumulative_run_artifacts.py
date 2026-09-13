@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from bench.cumulative.types import PhaseGroup, SessionRecord
-from bench.snapshot import (
+from harness.cumulative.types import PhaseGroup, SessionRecord
+from harness.snapshot import (
     SnapshotModelMismatchError,
     SnapshotNotFoundError,
     capture_snapshot,
@@ -112,7 +112,7 @@ class _FakeSpendMeter:
         return self.identities
 
     def contention_covariates(self, *args: Any, **kwargs: Any) -> Any:
-        from bench.contention import ContentionCovariates
+        from harness.contention import ContentionCovariates
 
         return ContentionCovariates.empty()
 
@@ -549,7 +549,7 @@ def _seed_fixture(
     repo_root = Path(module.__file__).resolve().parents[1]
     provenance: dict[str, Any] = {
         "chunk_plan_hash": module.compute_task_template_hash(
-            repo_root / "tasks" / "backgammon" / "prompts"
+            repo_root / "task" / "backgammon" / "prompts"
         ),
         "template_hash": (
             module.compute_task_template_hash(scaffold)

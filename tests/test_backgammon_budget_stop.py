@@ -10,17 +10,17 @@ from typing import Any
 
 import pytest
 
-import bench.adapters.backgammon as backgammon_mod
-from bench.adapters.backgammon import (
+import harness.adapters.backgammon as backgammon_mod
+from harness.adapters.backgammon import (
     REASON_TOOL_CALL_TIMEOUT,
     TURN_TERMINAL_STALLED,
     BackgammonRunner,
     _OpencodeRunStats,
 )
-from bench.adapters.docker_worker import ImageFingerprint
+from harness.adapters.docker_worker import ImageFingerprint
 
 
-TASK_DIR = (Path(__file__).resolve().parents[1] / "tasks" / "backgammon").resolve()
+TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
 # A real graded gate check (a bracket token that HAS a feedback override). The
 # single-system feedback contract hard-fails on synthetic labels, so loop

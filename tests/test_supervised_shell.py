@@ -4,12 +4,12 @@ THE MEASURED DEFECT. opencode's bash tool runs ``shell -c "<command>"`` and
 waits for EOF on the stdout pipe. A command that backgrounds a child
 (``node … &``) leaves that child holding the pipe open after the command
 exits, so EOF never arrives and the turn stalls until the ~600s watchdog
-aborts it. ``docker/worker/supervised-shell.js`` is the fix: it runs the
+aborts it. ``images/sidecar/supervised-shell.js`` is the fix: it runs the
 command in its own process group (detached spawn → setsid) and SIGKILLs the
 ENTIRE group when the command exits — on NORMAL exit as well as on timeout.
 
 These tests spawn the wrapper as a real subprocess (via ``node``, matching
-``bench/adapters/docker_worker.py``'s sidecar invocation) and assert the
+``harness/adapters/docker_worker.py``'s sidecar invocation) and assert the
 observable contract: pass-through output/exit codes, the group reap on
 normal exit (the essential fix — ``subprocess.run`` itself only returns once
 the orphan releases the pipe), and the 124 + marker-file timeout path. They
@@ -25,7 +25,7 @@ from pathlib import Path
 
 #: The real wrapper, not a fixture — these tests exercise the shipped file.
 WRAPPER = (
-    Path(__file__).resolve().parent.parent / "docker" / "worker" / "supervised-shell.js"
+    Path(__file__).resolve().parent.parent / "images" / "sidecar" / "supervised-shell.js"
 )
 
 

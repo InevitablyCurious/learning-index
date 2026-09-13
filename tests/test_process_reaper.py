@@ -17,7 +17,7 @@ import time
 
 import pytest
 
-from bench.process_reaper import (
+from harness.process_reaper import (
     ProcessReaper,
     ReapReport,
     _default_process_provider,
@@ -185,7 +185,7 @@ def test_probe_error_is_recorded_error_not_clear(monkeypatch):
     the reaper must surface "error" for that port and must NOT mask it as a
     false "clear".
     """
-    import bench.process_reaper as pr
+    import harness.process_reaper as pr
 
     port = 59998
 
@@ -208,7 +208,7 @@ def test_transient_probe_error_retries_to_clear(monkeypatch):
     clear. Proves bounded retry on a transient probe error never produces a
     false error — it settles on the correct final state.
     """
-    import bench.process_reaper as pr
+    import harness.process_reaper as pr
 
     calls = {"n": 0}
 
@@ -229,7 +229,7 @@ def test_cell_container_sweep_is_scoped_to_run_label(monkeypatch):
     ``okp-bench-cell-`` prefix. Regression: an unscoped sweep force-removed
     other xdist workers' live docker-isolation cells mid-test (the recurring
     'container is not running' flake class)."""
-    import bench.process_reaper as pr
+    import harness.process_reaper as pr
 
     calls: list[list[str]] = []
 
@@ -348,7 +348,7 @@ def test_default_provider_finds_an_orphaned_worker_by_absolute_path(monkeypatch)
         stdout = ps_out
 
     monkeypatch.setattr(
-        "bench.process_reaper.subprocess.run",
+        "harness.process_reaper.subprocess.run",
         lambda *a, **k: _Result(),
     )
     pids = set(_default_process_provider())

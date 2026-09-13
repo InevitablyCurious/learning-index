@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from bench import config
-from bench.adapters.backgammon import build_worker_opencode_config
+from harness import config
+from harness.adapters.backgammon import build_worker_opencode_config
 
 
 def _load_run_cumulative_module() -> Any:

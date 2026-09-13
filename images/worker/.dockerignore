@@ -1,0 +1,4 @@
+# keep worker image build context minimal
+*
+!Dockerfile
+!.dockerignore

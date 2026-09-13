@@ -17,8 +17,8 @@ from typing import Any
 
 import pytest
 
-from bench.cumulative.sequencer import CumulativeSequencer, SessionRunner
-from bench.cumulative.types import (
+from harness.cumulative.sequencer import CumulativeSequencer, SessionRunner
+from harness.cumulative.types import (
     RosterEntry,
     SessionPhase,
     SessionRecord,

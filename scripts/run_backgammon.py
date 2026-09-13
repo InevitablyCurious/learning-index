@@ -9,19 +9,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from bench.adapters.backgammon import (
+from harness.adapters.backgammon import (
     DEFAULT_MAX_STEPS_PER_ATTEMPT,
     DEFAULT_RUN_TIMEOUT_S,
     BackgammonCellResult,
     BackgammonRunner,
 )
-from bench.benv import load_bench_env
-from bench.config import RunConfig, BenchmarkSchedule, BenchmarkWave
-from bench.lifecycle.logging_util import run_logger
-from bench.preflight import preflight
-from bench.proxy_meter import SpendMeter
-from bench.scorecard import Cell, Scorecard
-from bench.spend_key import resolve_spend_db_dsn
+from harness.benv import load_bench_env
+from harness.config import RunConfig, BenchmarkSchedule, BenchmarkWave
+from harness.lifecycle.logging_util import run_logger
+from harness.preflight import preflight
+from harness.proxy_meter import SpendMeter
+from harness.scorecard import Cell, Scorecard
+from harness.spend_key import resolve_spend_db_dsn
 
 
 DEFAULT_MODEL = "google/gemini-3.1-pro-preview"
@@ -347,7 +347,7 @@ def main() -> int:
     if not isinstance(checkpoint.get("cells"), list):
         checkpoint["cells"] = []
 
-    task_dir = _repo_dir() / "tasks" / "backgammon"
+    task_dir = _repo_dir() / "task" / "backgammon"
     executed: dict[str, BackgammonCellResult] = {}
 
     for mode in memory_modes:

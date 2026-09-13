@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.spend_key import (
+from harness.spend_key import (
     SpendKeyError,
     _read_dotenv,
     key_fingerprint,

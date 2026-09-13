@@ -1,4 +1,4 @@
-# Pip fallback for the bench harness. Prefer the packaged install:
+# Pip fallback for the harness. Prefer the packaged install:
 #   python -m venv .venv && . .venv/bin/activate && pip install -e '.[test]'
 # This file mirrors pyproject.toml [project.dependencies] + [test] and is kept
 # only for environments that cannot install the editable package.

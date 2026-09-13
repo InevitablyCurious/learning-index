@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.adapters.backgammon import (
+from harness.adapters.backgammon import (
     _EXCUSE_ELIMINATOR,
     BackgammonRunner,
     MissingFeedbackOverrideError,
@@ -13,9 +13,7 @@ from bench.adapters.backgammon import (
 
 FEEDBACK = (
     Path(__file__).resolve().parents[1]
-    / "tasks"
-    / "backgammon"
-    / "gates"
+    / "grader"
     / "feedback.json"
 )
 
@@ -67,7 +65,7 @@ def test_build_pass_verdict_bounds_a_mass_pass() -> None:
     """Naming what got fixed is the signal that stops the model undoing it, so
     the list is generous — but a mass pass must not turn one message into a
     wall of text."""
-    from bench.adapters.backgammon import _PASS_VERDICT_MAX_LISTED
+    from harness.adapters.backgammon import _PASS_VERDICT_MAX_LISTED
 
     gates = [f"[F{i:02d}] REQ-X — frontend gate {i}" for i in range(1, 15)]
     assert len(gates) > _PASS_VERDICT_MAX_LISTED

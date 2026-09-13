@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bench.worker_image import ENV_PLUGIN_DIR, configured_plugin_dir, source_digest
+from harness.worker_image import ENV_PLUGIN_DIR, configured_plugin_dir, source_digest
 
 
 def _plugin_tree(root: Path) -> Path:

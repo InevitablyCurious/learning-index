@@ -123,11 +123,11 @@ function builtinTools(benchRoot) {
       name: "Rebuild worker",
       blurb:
         "Press when preflight says the worker image is stale, and after any edit under " +
-        "docker/worker. The agent plugin is baked into the image at build time, so until you " +
+        "images/worker. The agent plugin is baked into the image at build time, so until you " +
         "rebuild, every cell runs the old plugin without saying so.",
       seams: [
-        "computes a digest of everything docker/worker bakes in",
-        "docker build -t okp-bench-worker:v1 docker/worker, with that digest as a label",
+        "computes a digest of everything images/worker bakes in",
+        "docker build -t okp-bench-worker:v1 images/worker, with that digest as a label",
         "preflight reads the label back and compares it to the source — a content check, not a timestamp",
       ],
       args: [],
@@ -145,8 +145,8 @@ function builtinTools(benchRoot) {
       },
       preconditions: [
         {
-          ok: existsSync(join(benchRoot, "docker", "worker", "Dockerfile")),
-          reason: `no worker Dockerfile at ${join(benchRoot, "docker", "worker", "Dockerfile")}`,
+          ok: existsSync(join(benchRoot, "images", "worker", "Dockerfile")),
+          reason: `no worker Dockerfile at ${join(benchRoot, "images", "worker", "Dockerfile")}`,
         },
         {
           ok: existsSync(join(benchRoot, "scripts", "rebuild_worker_image.py")),

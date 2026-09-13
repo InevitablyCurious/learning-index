@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bench.live_stream import (
+from harness.live_stream import (
     CORE_KINDS,
     ENV_NOTICES,
     NOTICE_LEVELS,

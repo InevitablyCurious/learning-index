@@ -4,15 +4,15 @@ from typing import Any
 
 import pytest
 
-import bench.adapters.backgammon as backgammon_mod
-from bench.adapters.backgammon import (
+import harness.adapters.backgammon as backgammon_mod
+from harness.adapters.backgammon import (
     BackgammonCellResult,
     BackgammonRunner,
 )
-from bench.backends.base import RecalledMemory
+from harness.backends.base import RecalledMemory
 
 
-TASK_DIR = (Path(__file__).resolve().parents[1] / "tasks" / "backgammon").resolve()
+TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
 
 def _make_runner(tmp_path: Path, *, memory_mode: str = "on") -> BackgammonRunner:

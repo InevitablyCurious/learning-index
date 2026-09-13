@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from bench.backends.base import NeedCard
-from bench.config import BenchmarkSchedule, BenchmarkWave, RunConfig
+from harness.backends.base import NeedCard
+from harness.config import BenchmarkSchedule, BenchmarkWave, RunConfig
 
 
 def _cfg_seeded(seed: int) -> RunConfig:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bench.adapters.backgammon import _scan_funnel_snapshot
+from harness.adapters.backgammon import _scan_funnel_snapshot
 
 
 def _write_snapshot(worktree: Path, contents: str) -> None:

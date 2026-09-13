@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bench.adapters.backgammon import BackgammonRunner
-from bench.adapters.bench_report import parse_failing_ids
+from harness.adapters.backgammon import BackgammonRunner
+from harness.adapters.bench_report import parse_failing_ids
 
 
 def _make_runner(

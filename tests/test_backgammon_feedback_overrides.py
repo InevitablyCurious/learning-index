@@ -1,4 +1,4 @@
-"""`gates/feedback.json` — the human-written symptom lines the model is told.
+"""`grader/feedback.json` — the human-written symptom lines the model is told.
 
 WHY THESE TESTS. The repair-loop message used to be derived from the test
 title, and a test title states the RULE. Gate E08 was reported to the model as
@@ -21,10 +21,11 @@ from pathlib import Path
 
 import pytest
 
-from bench.adapters.backgammon import BackgammonRunner, load_feedback_overrides
+from harness.adapters.backgammon import BackgammonRunner, load_feedback_overrides
 
-TASK = Path(__file__).resolve().parents[1] / "tasks" / "backgammon"
-GATES = TASK / "gates"
+REPO = Path(__file__).resolve().parents[1]
+TASK = REPO / "task" / "backgammon"
+GATES = REPO / "grader"
 FEEDBACK = GATES / "feedback.json"
 
 # Identifiers from the published function surface. A user reporting a symptom
@@ -91,7 +92,7 @@ def _channel(key: str) -> str:
     on this exact function, and a second copy here would let a line be judged by
     one bar and delivered under the other.
     """
-    from bench.adapters.backgammon import BackgammonRunner
+    from harness.adapters.backgammon import BackgammonRunner
 
     return BackgammonRunner.feedback_channel(key)
 
@@ -157,7 +158,7 @@ def _line_ids() -> list[str]:
 
 
 def test_the_file_parses_and_the_loader_reads_it() -> None:
-    assert FEEDBACK.is_file(), "gates/feedback.json is missing"
+    assert FEEDBACK.is_file(), "grader/feedback.json is missing"
     json.loads(FEEDBACK.read_text(encoding="utf-8"))
     assert _overrides(), "the loader read no entries from a file that exists"
 
@@ -206,7 +207,7 @@ def test_every_gate_token_has_an_override() -> None:
         f"these gates have NO feedback override: {missing}. The feedback voice "
         "is single-system — a gate with no human-written symptom line cannot be "
         "reported to the model, and `_humanize_check` will hard-fail on it. "
-        "Write a symptom sentence for each in gates/feedback.json."
+        "Write a symptom sentence for each in grader/feedback.json."
     )
 
 

@@ -768,7 +768,7 @@ async function stopRun() {
       execFile("docker", args, { timeout: 30000 }, (_err, stdout) => resolve(stdout ?? ""));
     });
   const cells = await run(["ps", "-aq", "--filter", "name=okp-bench-cell-"]);
-  // Must track bench/egress.py:egress_container_name. A stale prefix here does
+  // Must track harness/egress.py:egress_container_name. A stale prefix here does
   // not fail loudly — it silently leaves the sidecar running after a stop, and
   // the next cell then contends with a live egress container from the last one.
   const sidecars = await run(["ps", "-aq", "--filter", "name=okp-egress-"]);

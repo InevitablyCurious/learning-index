@@ -1,4 +1,4 @@
-"""Unit tests for bench.cumulative.run_artifacts (WO-RUNSTATUS-1 chunk A)."""
+"""Unit tests for harness.cumulative.run_artifacts (WO-RUNSTATUS-1 chunk A)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from bench.cumulative.run_artifacts import (
+from harness.cumulative.run_artifacts import (
     RUN_ARTIFACTS_SCHEMA_VERSION,
     RunManifest,
     StatusStream,
@@ -408,7 +408,7 @@ def test_build_scorecard_aggregates_error_totals_over_best_by_cell(tmp_path) -> 
 
 
 def test_total_tokens_counts_the_cache_not_just_input_and_output() -> None:
-    from bench.cumulative.progress import progress_from_cell_result
+    from harness.cumulative.progress import progress_from_cell_result
 
     class _Result:
         input_tokens = 70_634
@@ -431,7 +431,7 @@ def test_reasoning_is_not_added_twice() -> None:
     # `output_tokens` has ALWAYS carried reasoning folded inside it, so
     # `reasoning_tokens` is the recoverable SHARE of output, never a fifth
     # addend. Adding it again would inflate every reasoning model's total.
-    from bench.cumulative.progress import progress_from_cell_result
+    from harness.cumulative.progress import progress_from_cell_result
 
     class _Result:
         input_tokens = 100
@@ -446,7 +446,7 @@ def test_reasoning_is_not_added_twice() -> None:
 def test_a_provider_without_caching_totals_exactly_as_before() -> None:
     # The change must not move the number for a provider that reports no cache
     # — otherwise it would look like a measurement shift where none happened.
-    from bench.cumulative.progress import progress_from_cell_result
+    from harness.cumulative.progress import progress_from_cell_result
 
     class _Result:
         input_tokens = 1_000
@@ -462,7 +462,7 @@ def test_a_missing_half_still_yields_no_total() -> None:
     # Unchanged discipline: a sum built from a half-measured cell is a guess
     # dressed as a measurement, and on a lower-is-better axis it would read as
     # an excellent result.
-    from bench.cumulative.progress import progress_from_cell_result
+    from harness.cumulative.progress import progress_from_cell_result
 
     class _Result:
         input_tokens = 1_000

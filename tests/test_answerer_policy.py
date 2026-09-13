@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.adapters.docker_worker import DockerCellConfig, _build_run_argv
+from harness.adapters.docker_worker import DockerCellConfig, _build_run_argv
 
 
 TEST_PROXY_BASE_URL = "http://host.docker.internal:8789/api/v1"

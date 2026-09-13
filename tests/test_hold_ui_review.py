@@ -18,8 +18,8 @@ import urllib.request
 
 import pytest
 
-from bench.adapters import backgammon as backgammon_mod
-from bench.adapters.backgammon import (
+from harness.adapters import backgammon as backgammon_mod
+from harness.adapters.backgammon import (
     _HOLD_UI_ENV,
     _HOLD_UI_RELEASE_FILE,
     _HOLD_UI_STATE_FILE,

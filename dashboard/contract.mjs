@@ -424,7 +424,7 @@ export function median(xs) {
  * Decide whether a cell may enter the arm delta at all, and why not if not.
  *
  * This MIRRORS the scorecard's canonical rule — it does not invent a second
- * one. The authority is `bench/cumulative/run_artifacts.py` (the
+ * one. The authority is `harness/cumulative/run_artifacts.py` (the
  * VOID-INSTRUMENT gate, WO-NIGHT2-1b) implementing RUNBOOK rule 5.10. If that
  * rule changes, this changes with it; two divergent definitions of "does this
  * cell count" is precisely the class of drift the board exists to expose.

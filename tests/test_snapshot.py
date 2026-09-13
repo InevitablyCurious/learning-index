@@ -1,4 +1,4 @@
-"""Tests for the snapshot capture + seed-loading contract (bench.snapshot).
+"""Tests for the snapshot capture + seed-loading contract (harness.snapshot).
 
 The contract under test: a snapshot binds graded outcomes to the exact code
 state they ran against. That binding is only trustworthy if the capture
@@ -21,8 +21,8 @@ from typing import Any
 
 import pytest
 
-from bench.outcomes.predicate_emitter import walk_manifest
-from bench.snapshot import (
+from harness.outcomes.predicate_emitter import walk_manifest
+from harness.snapshot import (
     SNAPSHOT_EXCLUDED,
     LoadedSnapshot,
     SnapshotModelMismatchError,

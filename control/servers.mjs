@@ -55,7 +55,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-/** `bench/` — this module lives at `bench/control/servers.mjs`. */
+/** `bench/` — this module lives at `control/servers.mjs`. */
 const BENCH_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /**

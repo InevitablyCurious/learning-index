@@ -1,4 +1,4 @@
-"""Session mapping (bench.adapters.mapping).
+"""Session mapping (harness.adapters.mapping).
 
 Contract under test:
   - (a) phase entry ranges agree with the transcript: for a synthetic
@@ -21,8 +21,8 @@ import re
 import sqlite3
 from pathlib import Path
 
-from bench.adapters.mapping import write_session_mapping
-from bench.adapters.transcript import write_session_transcript
+from harness.adapters.mapping import write_session_mapping
+from harness.adapters.transcript import write_session_transcript
 
 _HEADING = re.compile(r"^## (\d+)\. (.+)$")
 

@@ -86,13 +86,13 @@ import {
   parseVitestList,
   suiteFingerprint,
   tierOf,
-} from "../tasks/backgammon/gates/roster.mjs";
+} from "../grader/roster.mjs";
 import {
   firstMeaningfulLine,
   foldGateResults,
   normalizeStatus,
   runnerFailureObserved,
-} from "../tasks/backgammon/gates/gate-results.mjs";
+} from "../grader/gate-results.mjs";
 import {
   FEEDBACK_CONTRACT_VERSION,
   feedbackRows,
@@ -107,7 +107,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const BENCH = join(HERE, "..");
 
 test("DRIFT: declared context matches WORKER_MODEL_REGISTRY in config.py", () => {
-  const src = readFileSync(join(BENCH, "bench", "config.py"), "utf8");
+  const src = readFileSync(join(BENCH, "harness", "config.py"), "utf8");
   for (const [alias, ctx] of Object.entries(DECLARED_CONTEXT)) {
     const idx = src.indexOf(`"${alias}"`);
     assert.ok(idx > -1, `alias '${alias}' is not present in config.py WORKER_MODEL_REGISTRY`);
@@ -171,7 +171,7 @@ test("DRIFT: retired aliases match RETIRED_MODEL_ALIASES in config.py", () => {
   // so they are pinned. A retirement declared on ONE side only is the dangerous
   // case: the CLI would refuse the alias while the board still offered it a
   // [+ baseline] button, or the reverse.
-  const src = readFileSync(join(BENCH, "bench", "config.py"), "utf8");
+  const src = readFileSync(join(BENCH, "harness", "config.py"), "utf8");
   const block = /RETIRED_MODEL_ALIASES: dict\[str, str\] = \{([\s\S]*?)\n\}/.exec(src);
   assert.ok(block, "RETIRED_MODEL_ALIASES not found in config.py");
   const pythonIds = [...block[1].matchAll(/^\s{4}"([^"]+)":/gm)].map((m) => m[1]);
@@ -760,7 +760,7 @@ test("DRIFT: the terminal vocabulary matches the sequencer's TypedDict literals"
   // This is the SMALLEST instance of the drift class the instrumentation plan
   // is built to remove, and it is deliberately the first one pinned: the
   // pattern here is what every later vocabulary reuses.
-  const src = readFileSync(join(BENCH, "bench", "cumulative", "sequencer.py"), "utf8");
+  const src = readFileSync(join(BENCH, "harness", "cumulative", "sequencer.py"), "utf8");
   const pyStatuses = [...src.matchAll(/^\s{4}status:\s*Literal\["([^"]+)"\]/gm)].map((m) => m[1]);
   assert.ok(pyStatuses.length > 0, "no `status: Literal[...]` declarations parsed out of sequencer.py");
 
@@ -1057,13 +1057,13 @@ test("BACKEND FEED: a missing stream is stated, never rendered as silence", asyn
   }
 });
 
-test("DRIFT: the notice vocabulary matches bench/live_stream.py", () => {
+test("DRIFT: the notice vocabulary matches harness/live_stream.py", () => {
   // THE SAME PIN AS THE TERMINAL STATUSES, on the vocabulary the backend feed's
   // filter chips are built from. A source that exists in Python and not here has
   // no chip, so its rows are unfilterable; one that exists here and not in
   // Python is a chip that can never light. Both directions, and the counts, so a
   // duplicate on either side cannot hide behind two passing membership loops.
-  const src = readFileSync(join(BENCH, "bench", "live_stream.py"), "utf8");
+  const src = readFileSync(join(BENCH, "harness", "live_stream.py"), "utf8");
 
   const parseTuple = (name) => {
     const at = src.indexOf(`${name} = (`);
@@ -1091,7 +1091,7 @@ test("NOTICE: `notice` is a core kind, and external services are not sources", (
   // its observer, under `control`. Attributing a row to a service that never
   // reported it is fabrication however accurate the number is, and this is the
   // assertion that keeps someone from adding the convenient chip later.
-  const src = readFileSync(join(BENCH, "bench", "live_stream.py"), "utf8");
+  const src = readFileSync(join(BENCH, "harness", "live_stream.py"), "utf8");
   assert.match(src, /"notice",\s*#/, "notice must be declared a core kind");
 
   for (const forbidden of ["relay", "proxy", "opencode", "okp", "hub", "mcp"]) {
@@ -1238,7 +1238,7 @@ test("start still requires the confirmation token", () => {
 });
 
 test("completed sessions stamp complete_gate and never extracted_from", () => {
-  const src = readFileSync(join(BENCH, "bench", "cumulative", "sequencer.py"), "utf8");
+  const src = readFileSync(join(BENCH, "harness", "cumulative", "sequencer.py"), "utf8");
   assert.match(src, /session\.complete_gate = True/);
   assert.doesNotMatch(src, /session\.extracted_from/);
 });
@@ -1364,7 +1364,7 @@ test("the stall ALARM fires well before the harness's destructive timeout", () =
   // early so a human can look; the timeout is a kill that must fire late so it
   // never truncates a slow-but-working grade. If these ever cross, the gate is
   // killed before the operator is ever told anything was wrong.
-  const py = readFileSync(join(BENCH, "bench", "adapters", "backgammon.py"), "utf8");
+  const py = readFileSync(join(BENCH, "harness", "adapters", "backgammon.py"), "utf8");
   const m = /DEFAULT_GATE_TIMEOUT_S\s*=\s*(\d+)/.exec(py);
   assert.ok(m, "DEFAULT_GATE_TIMEOUT_S vanished from backgammon.py");
   const timeout = Number(m[1]);
@@ -1378,7 +1378,7 @@ test("the harness streams gate output instead of buffering it", () => {
   // DRIFT TEST against the Python. A buffered gate writes ZERO bytes until it
   // exits, which is what made a 32-minute grade invisible. If this regresses to
   // capture_output the entire feature is silently dead while still "passing".
-  const py = readFileSync(join(BENCH, "bench", "adapters", "backgammon.py"), "utf8");
+  const py = readFileSync(join(BENCH, "harness", "adapters", "backgammon.py"), "utf8");
   const fn = py.slice(py.indexOf("def _run_gate_report"), py.indexOf("def _kill_process_group"));
   assert.ok(fn.length > 0, "_run_gate_report vanished");
   // Strip the docstring before asserting: it deliberately NAMES the old
@@ -2153,7 +2153,7 @@ function writeRun(root, dir, { seq = 0, model = "m-a", arm = "off", status = nul
 /**
  * A MULTI-SLOT campaign: one schedule, both arms, one status record per slot.
  *
- * This is the shape a real campaign has — `bench/cumulative/ordering.py`
+ * This is the shape a real campaign has — `harness/cumulative/ordering.py`
  * schedules ONE model per directory, slot 0 as the OFF floor and every later
  * slot an ON repetition of it — and it is what the runs of a baseline are read
  * from. `writeRun` above is the single-slot case kept for the gate tests.
@@ -2490,7 +2490,7 @@ test("DRIFT: the cloud catalogue matches CLOUD_ORCAROUTER_PROVIDER in config.py"
   // worker context registry. This is the test that makes the mirror safe: a
   // model added on one side and not the other fails here rather than presenting
   // to the operator as "that model does not exist".
-  const src = readFileSync(join(BENCH, "bench", "config.py"), "utf8");
+  const src = readFileSync(join(BENCH, "harness", "config.py"), "utf8");
   const start = src.indexOf("CLOUD_ORCAROUTER_PROVIDER");
   assert.ok(start > -1, "CLOUD_ORCAROUTER_PROVIDER not found in config.py");
 
@@ -3109,7 +3109,7 @@ test("WALL: a completed run is gradable and carries no reason", async () => {
 // ── PER-FILE BACKEND INVOCATION ─────────────────────────────────────────────
 
 test("REPORT: the backend phase spawns one runner PER FILE, under one phase marker", () => {
-  const src = readFileSync(join(BENCH, "tasks", "backgammon", "gates", "report.mjs"), "utf8");
+  const src = readFileSync(join(BENCH, "grader", "report.mjs"), "utf8");
   const body = src.slice(src.indexOf("function runBackendPhase()"), src.indexOf("function firstFrontendFailureMessage"));
 
   assert.match(body, /for \(const file of backendTestFiles\(\)\)/, "the suite is invoked file by file");
@@ -3876,7 +3876,7 @@ test("LIVENESS: heartbeatAge reads the real stream through the designated resolv
 
 test("DRIFT: the harness's heartbeat is the one this control plane reads", async () => {
   // A CROSS-LANGUAGE DRIFT TEST, and the most valuable one here. The producer
-  // is Python (bench/live_stream.py) and the consumer is this JS; nothing but
+  // is Python (harness/live_stream.py) and the consumer is this JS; nothing but
   // this test makes them agree on the record shape OR on where the file lives.
   //
   // Both halves have already been wrong about the location once: the spec said
@@ -3899,7 +3899,7 @@ test("DRIFT: the harness's heartbeat is the one this control plane reads", async
     const script = [
       "import sys, time",
       `sys.path.insert(0, ${JSON.stringify(BENCH)})`,
-      "from bench.live_stream import LiveStream, Heartbeat",
+      "from harness.live_stream import LiveStream, Heartbeat",
       `st = LiveStream.for_run(${JSON.stringify(cell)}, run_id="r1")`,
       'st.emit("cell.start", session_id="ses_x")',
       "hb = Heartbeat(st, cell_seq=0, interval_s=0.02)",
@@ -4135,7 +4135,7 @@ test("VOID-INSTRUMENT: a cell with truncated turns must fold as void, matching t
     assert.equal(
       cells[0].void_instrument,
       true,
-      "35 truncated turns must void the cell here exactly as bench/cumulative/run_artifacts.py voids it — a disagreement lets a corrupted cell stand as a model's floor",
+      "35 truncated turns must void the cell here exactly as harness/cumulative/run_artifacts.py voids it — a disagreement lets a corrupted cell stand as a model's floor",
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -4318,7 +4318,7 @@ test("RUNSTATE: `running` is published and agrees with `state`", async () => {
 // sidecar running, and the next cell contends with it.
 test("STOP sweeps the egress sidecar the harness actually names", async () => {
   const src = readFileSync(join(HERE, "server.mjs"), "utf8");
-  const py = readFileSync(join(HERE, "..", "bench", "egress.py"), "utf8");
+  const py = readFileSync(join(HERE, "..", "harness", "egress.py"), "utf8");
   const prefix = /f"([a-z0-9-]+-)\{hashlib/.exec(py);
   assert.ok(prefix, "egress.py must still build the sidecar name from a literal prefix");
   assert.ok(
@@ -5652,7 +5652,7 @@ test("STATS: every counter a slot reads is one the scorecard actually writes", (
   // `instrument_anomaly_turns` went unnoticed.
   const src = readFileSync(join(HERE, "runstats.mjs"), "utf-8");
   const py = readFileSync(
-    join(HERE, "..", "bench", "cumulative", "run_artifacts.py"),
+    join(HERE, "..", "harness", "cumulative", "run_artifacts.py"),
     "utf-8",
   );
   const emitted = /error_totals = \{([\s\S]*?)\n    \}/.exec(py);

@@ -1,7 +1,7 @@
 """Worker-image freshness is a CONTENT question, not a timestamp one.
 
 THE MEASURED DEFECT (2026-09-03). Preflight compared the newest mtime under
-docker/worker against the image's ``.Created`` and blocked when the source was
+images/worker against the image's ``.Created`` and blocked when the source was
 newer. Docker is content-addressed: re-saving a file without changing a byte
 bumps its mtime, the rebuild is a full cache hit, the image id and its creation
 time never move — so the check stayed red through every successful rebuild.
@@ -25,6 +25,15 @@ the image by WO-SEAM-FIX, but never added to ``BAKED_FILES`` — so editing the
 loop-kill scanner alone left the digest unmoved and preflight waved a stale
 image through without a word. The last test below is the standing guard: the
 baked set and the real .dockerignore whitelist must agree.
+
+THE SIDECAR SPLIT (WO-LI2). The sidecar files (egress-sidecar.js,
+loop-kill-scanner.cjs, supervised-shell.js) moved out of the worker context
+into ``images/sidecar/`` and ride into the build as the named ``okp-sidecar``
+build context — the same seam shape as the plugin. The worker context bakes
+only its root whitelist (Dockerfile + .dockerignore); the sidecar tree is
+hashed INTERNALLY from ``worker_dir.parent / "sidecar"`` (the ``images/sidecar/``
+dir) whenever it exists — there is no explicit parameter — so the digest
+covers the sidecar exactly when the build will see it.
 """
 
 from __future__ import annotations
@@ -35,7 +44,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from bench.worker_image import (  # noqa: E402
+from harness.worker_image import (  # noqa: E402
     BAKED_FILES,
     baked_paths,
     build_argv,
@@ -43,19 +52,35 @@ from bench.worker_image import (  # noqa: E402
 )
 
 #: The real worker context, not a fixture — the coupling guard reads it.
-REPO_WORKER_DIR = Path(__file__).resolve().parent.parent / "docker" / "worker"
+REPO_WORKER_DIR = Path(__file__).resolve().parent.parent / "images" / "worker"
 
 
 def _worker_tree(root: Path) -> Path:
-    """The baked worker context: exactly the whitelisted root files, nothing else."""
-    worker = root / "docker" / "worker"
+    """The baked worker context: exactly the whitelisted root files, nothing else.
+
+    Since the sidecar split the worker context bakes ONLY Dockerfile and
+    .dockerignore — the sidecar files live in images/sidecar/ and are hashed
+    internally from ``worker_dir.parent / "sidecar"`` (see _sidecar_tree).
+    """
+    worker = root / "images" / "worker"
     worker.mkdir(parents=True)
     (worker / "Dockerfile").write_text("FROM scratch\n")
-    (worker / ".dockerignore").write_text("*\n!Dockerfile\n")
-    (worker / "egress-sidecar.js").write_text("// sidecar\n")
-    (worker / "loop-kill-scanner.cjs").write_text("// scanner\n")
-    (worker / "supervised-shell.js").write_text("#!/usr/bin/env node\n")
+    (worker / ".dockerignore").write_text("*\n!Dockerfile\n!.dockerignore\n")
     return worker
+
+
+def _sidecar_tree(root: Path) -> Path:
+    """The sidecar context: files that ride in via the ``okp-sidecar`` build context.
+
+    Created as a SIBLING of the worker tree (``root/images/sidecar``) — exactly
+    where ``source_digest`` looks for it: ``worker_dir.parent / "sidecar"``.
+    """
+    sidecar = root / "images" / "sidecar"
+    sidecar.mkdir(parents=True)
+    (sidecar / "egress-sidecar.js").write_text("// sidecar\n")
+    (sidecar / "loop-kill-scanner.cjs").write_text("// scanner\n")
+    (sidecar / "supervised-shell.js").write_text("#!/usr/bin/env node\n")
+    return sidecar
 
 
 def _plugin_tree(root: Path) -> Path:
@@ -69,9 +94,10 @@ def _plugin_tree(root: Path) -> Path:
 def test_a_touched_but_unchanged_file_does_not_read_as_stale(tmp_path: Path) -> None:
     """The deadlock, reproduced. Same bytes, newer mtime -> same digest."""
     worker = _worker_tree(tmp_path)
+    sidecar_dir = _sidecar_tree(tmp_path)
     before = source_digest(worker)
 
-    sidecar = worker / "egress-sidecar.js"
+    sidecar = sidecar_dir / "egress-sidecar.js"
     content = sidecar.read_text()
     sidecar.write_text(content)  # re-saved, identical
     os.utime(sidecar, (2_000_000_000, 2_000_000_000))  # far in the future
@@ -105,19 +131,26 @@ def test_an_edited_loop_kill_scanner_reads_as_stale(tmp_path: Path) -> None:
 
     It was whitelisted in .dockerignore and cp'd to /opt/okp/ by WO-SEAM-FIX but
     left out of BAKED_FILES, so a scanner-only change shipped an image whose
-    scanner was the old one, with preflight reporting the image current.
+    scanner was the old one, with preflight reporting the image current. Since
+    the sidecar split the scanner rides via the ``okp-sidecar`` build context,
+    and the digest covers it internally from ``worker_dir.parent / "sidecar"``.
     """
     worker = _worker_tree(tmp_path)
+    sidecar_dir = _sidecar_tree(tmp_path)
     before = source_digest(worker)
-    (worker / "loop-kill-scanner.cjs").write_text("// scanner, edited\n")
+    (sidecar_dir / "loop-kill-scanner.cjs").write_text("// scanner, edited\n")
     assert source_digest(worker) != before, (
         "loop-kill-scanner.cjs bakes into the image — an edit to it must read as stale"
     )
 
 
 def test_the_digest_covers_the_files_the_image_actually_bakes(tmp_path: Path) -> None:
-    """The worker arm is the whitelisted root files; the plugin arm adds the tree.
+    """The worker arm is the whitelisted root files; sidecar and plugin ride via their dirs.
 
+    Since the sidecar split the worker context bakes ONLY Dockerfile and
+    .dockerignore; the sidecar tree is hashed INTERNALLY from
+    ``worker_dir.parent / "sidecar"`` (the ``images/sidecar/`` dir, injected as
+    the named ``okp-sidecar`` build context) — there is no explicit parameter.
     Nothing under ``vendor/`` bakes from the worker context anymore — the
     plugin dir is covered only via ``plugin_dir``, and its excluded entries
     (``node_modules/``, ``.git/``, ``.DS_Store``) are invisible to the digest,
@@ -130,14 +163,25 @@ def test_the_digest_covers_the_files_the_image_actually_bakes(tmp_path: Path) ->
     assert baked == {
         "Dockerfile",
         ".dockerignore",
-        "egress-sidecar.js",
-        "loop-kill-scanner.cjs",
-        "supervised-shell.js",
     }, f"unexpected baked set: {sorted(baked)}"
 
-    vanilla = source_digest(worker)
+    # Worker-ONLY digest, computed BEFORE the sidecar tree exists: the internal
+    # derivation (worker.parent / "sidecar") has nothing to hash yet.
+    worker_only = source_digest(worker)
+
+    sidecar_dir = _sidecar_tree(tmp_path)  # now worker.parent/"sidecar" exists
+    with_sidecar = source_digest(worker)
+    assert with_sidecar != worker_only, (
+        "the sidecar-inclusive digest must differ from the worker-only digest — "
+        "otherwise the sidecar dir is not covered at all"
+    )
+    (sidecar_dir / "supervised-shell.js").write_text("#!/usr/bin/env node\n# edited\n")
+    assert source_digest(worker) != with_sidecar, (
+        "an edited sidecar file must read as stale in the sidecar-inclusive digest"
+    )
+
     with_plugin = source_digest(worker, plugin_dir=plugin)
-    assert with_plugin != vanilla, (
+    assert with_plugin != worker_only, (
         "the plugin-inclusive digest must differ from the worker-only digest — "
         "otherwise the plugin dir is not covered at all"
     )
@@ -153,11 +197,20 @@ def test_the_digest_covers_the_files_the_image_actually_bakes(tmp_path: Path) ->
 
 
 def test_the_build_carries_the_digest_it_will_be_checked_against(tmp_path: Path) -> None:
-    """Write and read are the same value, or the check can never pass."""
+    """Write and read are the same value, or the check can never pass.
+
+    Order-independent by design: ``build_argv`` prepends the ALWAYS-present
+    ``okp-sidecar`` build context before any plugin context, so both seams are
+    pinned by VALUE, never by position (``index("--build-context")+1`` found
+    the sidecar first and misread the plugin seam as absent).
+    """
     worker = _worker_tree(tmp_path)
     argv = build_argv(worker)
     assert f"OKP_WORKER_SOURCE_DIGEST={source_digest(worker)}" in argv
     assert "-t" in argv and "okp-bench-worker:v1" in argv
+    # The sidecar seam rides in EVERY build, vanilla included.
+    assert f"okp-sidecar={worker.parent / 'sidecar'}" in argv
+    assert "OKP_SIDECAR_CONTEXT=okp-sidecar" in argv
 
     # Dev-side arm: the plugin tree rides as the named okp-plugin build
     # context, and the digest baked in is the plugin-inclusive one preflight
@@ -165,9 +218,11 @@ def test_the_build_carries_the_digest_it_will_be_checked_against(tmp_path: Path)
     plugin = _plugin_tree(tmp_path)
     dev_argv = build_argv(worker, plugin_dir=plugin)
     assert "--build-context" in dev_argv
-    assert dev_argv[dev_argv.index("--build-context") + 1] == f"okp-plugin={plugin}"
+    assert f"okp-plugin={plugin}" in dev_argv
     assert "OKP_PLUGIN_CONTEXT=okp-plugin" in dev_argv
     assert "OKP_PLUGIN_PRESENT=1" in dev_argv
+    # The sidecar seam survives alongside the plugin seam in the dev build.
+    assert f"okp-sidecar={worker.parent / 'sidecar'}" in dev_argv
     assert f"OKP_WORKER_SOURCE_DIGEST={source_digest(worker, plugin_dir=plugin)}" in dev_argv
 
 
@@ -199,14 +254,14 @@ def _dockerignore_whitelist(path: Path) -> set[str]:
 def test_baked_files_mirrors_the_real_dockerignore() -> None:
     """The digest's file set and the build context's must not drift apart.
 
-    BAKED_FILES is hand-maintained against docker/worker/.dockerignore. When a
+    BAKED_FILES is hand-maintained against images/worker/.dockerignore. When a
     file is whitelisted there but missed here, the image bakes it and the digest
     does not cover it — a stale image that preflight calls current, which is
     exactly how the loop-kill scanner shipped uncovered. Add to BOTH or neither.
     """
     whitelist = _dockerignore_whitelist(REPO_WORKER_DIR / ".dockerignore")
     assert set(BAKED_FILES) == whitelist, (
-        "BAKED_FILES and docker/worker/.dockerignore disagree — "
+        "BAKED_FILES and images/worker/.dockerignore disagree — "
         f"only in .dockerignore: {sorted(whitelist - set(BAKED_FILES))}; "
         f"only in BAKED_FILES: {sorted(set(BAKED_FILES) - whitelist)}"
     )

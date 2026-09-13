@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from bench.adapters.backgammon import BackgammonRunner
-from bench.adapters.docker_worker import DockerCellConfig, _build_run_argv
+from harness.adapters.backgammon import BackgammonRunner
+from harness.adapters.docker_worker import DockerCellConfig, _build_run_argv
 
 
-TASK_DIR = (Path(__file__).resolve().parents[1] / "tasks" / "backgammon").resolve()
+TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 TEST_PROXY_BASE_URL = "http://host.docker.internal:8789/api/v1"
 TEST_PROXY_TOKEN = "test-ephemeral-token"
 

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-GATES_DIR = Path(__file__).resolve().parents[1] / "tasks" / "backgammon" / "gates"
+GATES_DIR = Path(__file__).resolve().parents[1] / "grader"
 GATE_RESULTS = GATES_DIR / "gate-results.mjs"
 
 
@@ -39,7 +39,7 @@ def _is_runner_crash(run: dict) -> bool:
 
 
 @pytest.mark.skipif(
-    not GATE_RESULTS.exists(), reason="gates/gate-results.mjs not present"
+    not GATE_RESULTS.exists(), reason="grader/gate-results.mjs not present"
 )
 class TestIsRunnerCrash:
     def test_clean_exit_is_not_a_crash(self):
@@ -67,7 +67,7 @@ class TestIsRunnerCrash:
 
 
 @pytest.mark.skipif(
-    not GATE_RESULTS.exists(), reason="gates/gate-results.mjs not present"
+    not GATE_RESULTS.exists(), reason="grader/gate-results.mjs not present"
 )
 def test_oom_really_does_report_sigabrt(tmp_path):
     """Ground the SIGABRT assumption in the actual runtime, not in folklore.

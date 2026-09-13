@@ -22,7 +22,7 @@ survives teardown and disk stays bounded.
 At cell end the harness copies the cell's `funnel-snapshot.json` and the
 worktree's `.okp/logs/okp-plugin-errors.log` into
 `data/cells/<unix_ts>-<run_label>/` (`_export_cell_telemetry` in
-`bench/adapters/backgammon.py`), before the container is torn down. The
+`harness/adapters/backgammon.py`), before the container is torn down. The
 funnel snapshot is read from the worktree's `.okp/state` for ON cells and
 from the blind mount (`<cell>/extraction-state`) for OFF cells. It runs
 for BOTH arms — OFF is the baseline ON is compared against. Fail-open: a missing

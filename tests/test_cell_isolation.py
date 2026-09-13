@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.cell_isolation import (
+from harness.cell_isolation import (
     CellIsolationError,
     assert_clean_worktree,
     assert_seeded_from_snapshot,
@@ -118,7 +118,7 @@ def test_docker_residue_never_looks_beyond_this_cells_two_names(monkeypatch) -> 
         seen.append(args)
         return ""
 
-    monkeypatch.setattr("bench.cell_isolation._docker_stdout", fake)
+    monkeypatch.setattr("harness.cell_isolation._docker_stdout", fake)
     docker_residue(container_name="okp-bench-cell-x")
 
     flat = " ".join(" ".join(a) for a in seen)
@@ -140,7 +140,7 @@ def test_docker_residue_never_looks_beyond_this_cells_two_names(monkeypatch) -> 
 def test_an_unavailable_docker_daemon_is_not_reported_as_residue(monkeypatch) -> None:
     """Docker being unreachable is its own loud failure moments later; calling
     it an isolation error would misname it."""
-    monkeypatch.setattr("bench.cell_isolation._docker_stdout", lambda args: None)
+    monkeypatch.setattr("harness.cell_isolation._docker_stdout", lambda args: None)
     assert docker_residue(container_name="okp-bench-cell-x") == []
 
 

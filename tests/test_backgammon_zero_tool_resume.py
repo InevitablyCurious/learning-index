@@ -15,7 +15,7 @@ from pathlib import Path
 def test_tool_choice_required_guard_absent_in_harness_llm_sources() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     llm_call_sources = [
-        repo_root / "bench" / "adapters" / "backgammon.py",
+        repo_root / "harness" / "adapters" / "backgammon.py",
     ]
     pattern = re.compile(r"[\"']tool_choice[\"']\s*:\s*[\"']required[\"']")
 
@@ -43,7 +43,7 @@ def test_serve_launch_carries_per_cell_config_env() -> None:
     -> cell VOID. The inline env override is the only delivery vector.
     """
     repo_root = Path(__file__).resolve().parents[1]
-    adapter_path = repo_root / "bench" / "adapters" / "docker_worker.py"
+    adapter_path = repo_root / "harness" / "adapters" / "docker_worker.py"
     payload = adapter_path.read_text(encoding="utf-8")
     assert "OPENCODE_CONFIG=/work/opencode.json" in payload, (
         "the serve launch script must set OPENCODE_CONFIG=/work/opencode.json "
@@ -62,7 +62,7 @@ def test_serve_config_written_before_serve_boots() -> None:
     precede the first `active_cell.start_serve()` occurrence in backgammon.py.
     """
     repo_root = Path(__file__).resolve().parents[1]
-    adapter_path = repo_root / "bench" / "adapters" / "backgammon.py"
+    adapter_path = repo_root / "harness" / "adapters" / "backgammon.py"
     payload = adapter_path.read_text(encoding="utf-8")
 
     config_write = payload.index("_write_worker_permission_config(worktree=worktree)")
@@ -85,7 +85,7 @@ def test_agents_md_written_after_seed() -> None:
     model line so the worker knows what it is running as.
     """
     repo_root = Path(__file__).resolve().parents[1]
-    adapter_path = repo_root / "bench" / "adapters" / "backgammon.py"
+    adapter_path = repo_root / "harness" / "adapters" / "backgammon.py"
     payload = adapter_path.read_text(encoding="utf-8")
     seed = payload.index(
         'self._copy_tree_contents(self.task_dir / "scaffold", worktree)'

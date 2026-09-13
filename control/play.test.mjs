@@ -16,7 +16,7 @@ import { freePort, playStatus, startPlay, stopPlay } from "./play.mjs";
 import { listServers } from "./servers.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const GOLDEN = path.join(HERE, "..", "tasks", "backgammon", "golden");
+const GOLDEN = path.join(HERE, "..", "task", "backgammon", "golden");
 const CELL = "local/prov/campaign/memoryOFF/cell-0000";
 
 /** A runs root holding one cell whose worktree is `build`. */
@@ -140,7 +140,7 @@ test("a seeded-but-unbuilt cell boots, and the page it serves is REPORTED", asyn
   // The scaffold's serveStatic throws "not implemented" while /health works,
   // so this cell answers health and serves a 500. It must still play — seeing a
   // broken board is the point — but the caller has to be told what it served.
-  const SCAFFOLD = path.join(HERE, "..", "tasks", "backgammon", "scaffold");
+  const SCAFFOLD = path.join(HERE, "..", "task", "backgammon", "scaffold");
   const f = fixture(SCAFFOLD);
   const r = await startPlay(args(f));
   t.after(() => stopPlay(f.root));

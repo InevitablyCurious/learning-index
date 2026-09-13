@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from bench.adapters.backgammon import (
+from harness.adapters.backgammon import (
     TRUNCATED_STEP_FINISH_REASONS,
     TURN_TERMINAL_GUARD_ABORT,
     TURN_TERMINAL_TRANSPORT_ERROR,
@@ -16,15 +16,15 @@ from bench.adapters.backgammon import (
     BackgammonRunner,
     _OpencodeRunStats,
 )
-from bench.adapters.docker_worker import ImageFingerprint
-from bench.cumulative.convergence import (
+from harness.adapters.docker_worker import ImageFingerprint
+from harness.cumulative.convergence import (
     CONVERGENCE_SCHEMA_VERSION,
     ConvergencePoint,
     build_convergence_trend,
 )
-from bench.cumulative.manifest import CumulativeManifest, roster_hash
-from bench.cumulative.progress import progress_from_cell_result
-from bench.cumulative.types import (
+from harness.cumulative.manifest import CumulativeManifest, roster_hash
+from harness.cumulative.progress import progress_from_cell_result
+from harness.cumulative.types import (
     ProgressVector,
     RosterEntry,
     ScheduledSession,
@@ -32,7 +32,7 @@ from bench.cumulative.types import (
 )
 
 
-TASK_DIR = (Path(__file__).resolve().parents[1] / "tasks" / "backgammon").resolve()
+TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
 
 def _make_runner(tmp_path: Path) -> BackgammonRunner:

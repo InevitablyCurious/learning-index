@@ -17,13 +17,14 @@ from typing import Any
 
 import pytest
 
-import bench.adapters.backgammon as backgammon_mod
-from bench.adapters.backgammon import BackgammonRunner, _OpencodeRunStats
-from bench.adapters.docker_worker import ImageFingerprint
-from bench.live_stream import LiveStream
-from bench.snapshot import compute_grader_hash
+import harness.adapters.backgammon as backgammon_mod
+from harness.adapters.backgammon import BackgammonRunner, _OpencodeRunStats
+from harness.adapters.docker_worker import ImageFingerprint
+from harness.live_stream import LiveStream
+from harness.snapshot import compute_grader_hash
 
-TASK_DIR = (Path(__file__).resolve().parents[1] / "tasks" / "backgammon").resolve()
+REPO = Path(__file__).resolve().parents[1]
+TASK_DIR = (REPO / "task" / "backgammon").resolve()
 
 PASS_REPORT: dict[str, Any] = {
     "verdict": "PASS",
@@ -191,7 +192,7 @@ def test_forced_capture_failure_writes_nothing_and_one_notice(
     runner = _make_runner(tmp_path, mock="scaffold")
     runner._live = LiveStream(tmp_path / "live.jsonl", run_id="lbl")
     monkeypatch.setattr(
-        "bench.adapters.backgammon.capture_snapshot", lambda **kwargs: None
+        "harness.adapters.backgammon.capture_snapshot", lambda **kwargs: None
     )
 
     result = _drive(runner, tmp_path, monkeypatch, lambda **kwargs: dict(PASS_REPORT))
@@ -290,9 +291,9 @@ def test_capture_writes_grade_report_and_grader_hash(
     assert grade["gate_totals"] == PASS_REPORT["gate_totals"]
 
     payload = _read_snapshot(tmp_path)
-    # The SAME gates dir the grader runs against (task_dir/gates), hashed by
+    # The SAME grader dir the grader runs against (repo-root grader/), hashed by
     # the same function — one derivation, never two numbers that disagree.
-    assert payload["grader_hash"] == compute_grader_hash(TASK_DIR / "gates")
+    assert payload["grader_hash"] == compute_grader_hash(REPO / "grader")
 
 
 # ── WO-SNAP-04: THE SEED BRANCH ─────────────────────────────────────────────

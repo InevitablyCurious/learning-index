@@ -21,13 +21,13 @@ import subprocess
 import sys
 from typing import Any, Callable, Mapping, NamedTuple
 
-from bench import config
-from bench.benv import load_bench_env
-from bench.live_stream import run_notice
-from bench.cumulative.manifest import roster_hash as cumulative_roster_hash
-from bench.cumulative.progress import progress_from_cell_result
-from bench.cumulative.results_ledger import append_run_records, read_tree_id
-from bench.cumulative.run_artifacts import (
+from harness import config
+from harness.benv import load_bench_env
+from harness.live_stream import run_notice
+from harness.cumulative.manifest import roster_hash as cumulative_roster_hash
+from harness.cumulative.progress import progress_from_cell_result
+from harness.cumulative.results_ledger import append_run_records, read_tree_id
+from harness.cumulative.run_artifacts import (
     RunManifest,
     StatusStream,
     build_scorecard,
@@ -36,26 +36,26 @@ from bench.cumulative.run_artifacts import (
     write_run_manifest,
     write_scorecard,
 )
-from bench.cumulative.run_context import collect_run_context, compare_run_context
-from bench.cumulative.sequencer import CumulativeSequencer
-from bench.cumulative.types import (
+from harness.cumulative.run_context import collect_run_context, compare_run_context
+from harness.cumulative.sequencer import CumulativeSequencer
+from harness.cumulative.types import (
     RosterEntry,
     SessionRecord,
 )
-from bench.egress import worker_model_base_url
-from bench.preflight import verify_worker_model_acceptance
-from bench.process_reaper import (
+from harness.egress import worker_model_base_url
+from harness.preflight import verify_worker_model_acceptance
+from harness.process_reaper import (
     ProcessReaper,
     run_reaper_unconditional,
 )
-from bench.proxy_meter import SpendMeter
-from bench.snapshot import (
+from harness.proxy_meter import SpendMeter
+from harness.snapshot import (
     LoadedSnapshot,
     SnapshotError,
     load_snapshot,
     validate_snapshot_for_seed,
 )
-from bench.spend_key import (
+from harness.spend_key import (
     key_fingerprint,
     resolve_local_llm_proxy_api_key,
     resolve_spend_db_dsn,
@@ -80,7 +80,7 @@ DEFAULT_ON_BUDGET = 0
 
 # FROZEN_TASK_TEMPLATE_HASH — WO-FREEZE-1 template freeze.
 #
-# SHA-256 over the live `tasks/backgammon/scaffold/` directory using the EXACT
+# SHA-256 over the live `task/backgammon/scaffold/` directory using the EXACT
 # algorithm `compute_task_template_hash` applies at runtime (sorted relative
 # path + raw bytes per file). Frozen at WO-FREEZE-1 (2026-08-06). Any change to
 # the scaffold invalidates the hash and therefore every previously scored cell
@@ -181,13 +181,13 @@ def verify_task_template_frozen() -> None:
     """Fail-closed template-freeze guard for the benchmark run path.
 
     Computes the live scaffold hash (via ``compute_task_template_hash`` over
-    ``tasks/backgammon/scaffold``) and raises a RuntimeError naming BOTH the
+    ``task/backgammon/scaffold``) and raises a RuntimeError naming BOTH the
     expected (frozen) and actual (live) hashes plus the scaffold path whenever
     they differ OR the live hash cannot be computed. Purposely touches no model
     endpoint/proxy. Must be called before any scaffold copy or cell scoring.
     """
     repo_root = Path(__file__).resolve().parent.parent
-    scaffold = repo_root / "tasks" / "backgammon" / "scaffold"
+    scaffold = repo_root / "task" / "backgammon" / "scaffold"
     live_hash = compute_task_template_hash(scaffold)
     if live_hash is None:
         raise RuntimeError(
@@ -653,7 +653,7 @@ class RealSessionRunner:
         # adapter in run_session as seed_snapshot_drift.
         self._seed_snapshot_drift: list[dict[str, str | None]] = []
 
-        self._task_dir = self._repo_root / "tasks" / "backgammon"
+        self._task_dir = self._repo_root / "task" / "backgammon"
         if not self._task_dir.is_dir():
             raise RuntimeError(f"backgammon task directory missing: {self._task_dir}")
 
@@ -683,7 +683,7 @@ class RealSessionRunner:
             "stalled_turns": 0,
         }
 
-        from bench.adapters.backgammon import BackgammonRunner
+        from harness.adapters.backgammon import BackgammonRunner
 
         self._runner_cls = BackgammonRunner
 
@@ -713,7 +713,7 @@ class RealSessionRunner:
             return False
 
     def _populate_contention_covariates(self, result: Any) -> None:
-        from bench.contention import ContentionCovariates
+        from harness.contention import ContentionCovariates
 
         retry_count = int(getattr(result, "zero_tool_resumes", 0) or 0)
         wall_seconds_raw = getattr(result, "wall_seconds", None)
@@ -798,7 +798,7 @@ class RealSessionRunner:
         (adapters/backgammon.py: OKP_BENCH_RUNS_DIR, else <repo>/runs) — and
         validates it against this session's model and the running corpus
         identity. The corpus derivations MIRROR run_session's runner_kwargs
-        exactly (chunk_plan_hash over tasks/backgammon/prompts, template_hash
+        exactly (chunk_plan_hash over task/backgammon/prompts, template_hash
         over the scaffold, source_commit from git HEAD): a number computed by
         a different formula is a different number, and a snapshot validated
         against it would be validated against nothing.
@@ -826,7 +826,7 @@ class RealSessionRunner:
             snap,
             model=session.model,
             chunk_plan_hash=compute_task_template_hash(
-                Path(__file__).resolve().parents[1] / "tasks" / "backgammon" / "prompts"
+                Path(__file__).resolve().parents[1] / "task" / "backgammon" / "prompts"
             ),
             template_hash=self._compute_task_template_hash(),
             source_commit=self._current_git_head(getattr(self, "_repo_root", None)),
@@ -1352,7 +1352,7 @@ class RealSessionRunner:
         if roster_path is None or roster_path.exists():
             return
 
-        script = self._task_dir / "gates" / "roster.mjs"
+        script = self._repo_root / "grader" / "roster.mjs"
         if not script.is_file():
             _LOG.warning("run_cumulative.gate_roster_missing_script path=%s", script)
             return
@@ -1528,7 +1528,7 @@ class RealSessionRunner:
             # and must not be rewritten to "" (unlike the sequencer's
             # chunk_plan_hash, whose manifest field is str-typed).
             "chunk_plan_hash": compute_task_template_hash(
-                Path(__file__).resolve().parents[1] / "tasks" / "backgammon" / "prompts"
+                Path(__file__).resolve().parents[1] / "task" / "backgammon" / "prompts"
             ),
             "template_hash": self._compute_task_template_hash(),
             "source_commit": self._current_git_head(getattr(self, "_repo_root", None)),
@@ -1579,7 +1579,7 @@ class RealSessionRunner:
         # scorecard) the moment any one type exceeds the cap. Mirrors
         # ServeTransportError: raised uncaught, propagates out of run_session
         # -> step_until_done -> CLI abort.
-        from bench.adapters.backgammon import ERROR_CAP_PER_TYPE, ErrorCapExceeded
+        from harness.adapters.backgammon import ERROR_CAP_PER_TYPE, ErrorCapExceeded
 
         self._error_totals["guard_aborted_turns"] += int(
             getattr(result, "guard_aborted_turns", 0) or 0
@@ -1652,7 +1652,7 @@ def _build_real_runner(
 
     repo_root = Path(__file__).resolve().parents[1]
     # WO-BENCH-WORKER-SANDBOX-HARDENING: the worker-facing model URL is ALWAYS
-    # set — in BOTH modes it is the cell's egress sidecar (bench/egress.py),
+    # set — in BOTH modes it is the cell's egress sidecar (harness/egress.py),
     # because the cell's --internal network has zero internet route (cloud mode
     # no longer falls through to a direct https://api.orcarouter.ai baseURL).
     # The sidecar name derives from the cell's run_label, which only exists
@@ -1787,7 +1787,7 @@ def _build_context(args: argparse.Namespace, *, require_runtime: bool) -> CliCon
         on_budget=int(args.on_budget),
         run_context=current_run_context,
         chunk_plan_hash=compute_task_template_hash(
-            Path(__file__).resolve().parents[1] / "tasks" / "backgammon" / "prompts"
+            Path(__file__).resolve().parents[1] / "task" / "backgammon" / "prompts"
         )
         or "",
     )
@@ -2191,7 +2191,7 @@ def _emit_predicate_outcomes(args: argparse.Namespace) -> str:
     outcome, and a run that produced no graded gates simply has nothing to say.
     """
     try:
-        from bench.outcomes.predicate_emitter import emit_for_run
+        from harness.outcomes.predicate_emitter import emit_for_run
 
         manifest = Path(str(getattr(args, "manifest", None) or DEFAULT_MANIFEST_PATH))
         run_dir = manifest.expanduser().resolve().parent

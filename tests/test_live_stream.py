@@ -9,7 +9,7 @@ import json
 import os
 import time
 
-from bench.live_stream import (
+from harness.live_stream import (
     HEARTBEAT_INTERVAL_S,
     Heartbeat,
     ENV_NS,

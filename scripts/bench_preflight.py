@@ -49,7 +49,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 # THE ONE SANCTIONED REBUILD. Named identically everywhere a check tells an
 # operator to rebuild, because it is the only build that records what the image
-# was made from — see bench/worker_image.py.
+# was made from — see harness/worker_image.py.
 REBUILD_CMD = (
     "rebuild: press REBUILD WORKER on the board, "
     "or .venv/bin/python scripts/rebuild_worker_image.py"
@@ -206,8 +206,8 @@ def check_identity(c: Check) -> None:
     """
     try:
         sys.path.insert(0, str(REPO))
-        from bench.lifecycle.lconfig import LifecycleConfig
-        from bench.lifecycle.mcp_rest import McpRest
+        from harness.lifecycle.lconfig import LifecycleConfig
+        from harness.lifecycle.mcp_rest import McpRest
     except Exception as exc:  # noqa: BLE001
         c.add("identity assertion", False, f"cannot import lifecycle client: {exc}")
         return
@@ -278,14 +278,14 @@ def check_image(c: Check) -> None:
     """Is the worker image built from the source on disk?
 
     ASKED AS A CONTENT QUESTION, not a timestamp one. This check used to compare
-    the newest mtime under docker/worker against the image's .Created, and it
+    the newest mtime under images/worker against the image's .Created, and it
     could not be cleared: re-saving a file without changing a byte bumps its
     mtime, the rebuild is a full cache hit, the image id and its creation time
     never move, and the check stays red through every rebuild. The operator
     presses REBUILD, a real build succeeds, and nothing changes — indistinguish-
     able from a dead button.
 
-    So the build bakes a digest of its own source (bench/worker_image.py) and
+    So the build bakes a digest of its own source (harness/worker_image.py) and
     this reads it back. The vendored opencode plugin is baked in at build time,
     so a genuinely stale image runs stale plugin code with nothing to say so.
     """
@@ -295,7 +295,7 @@ def check_image(c: Check) -> None:
 
     if str(REPO) not in sys.path:
         sys.path.insert(0, str(REPO))
-    from bench.worker_image import (
+    from harness.worker_image import (
         IMAGE,
         configured_plugin_dir,
         image_digest,
@@ -319,7 +319,7 @@ def check_image(c: Check) -> None:
     # a preflight that had nothing actually wrong with it. Unset seam (a bare
     # clone) still asks the vanilla question, unchanged.
     plugin_dir = configured_plugin_dir()
-    want = source_digest(REPO / "docker" / "worker", plugin_dir=plugin_dir)
+    want = source_digest(REPO / "images" / "worker", plugin_dir=plugin_dir)
     if not baked:
         # Built by a bare `docker build`, which records nothing about its source.
         # Reported as its own case: "we cannot tell" is not "it is current".
@@ -341,9 +341,9 @@ def check_image(c: Check) -> None:
         ok,
         f"built from source {baked[:12]}"
         + (
-            f" but docker/worker {flavour} is now {want[:12]} -> {REBUILD_CMD}"
+            f" but images/worker {flavour} is now {want[:12]} -> {REBUILD_CMD}"
             if not ok
-            else f" — matches docker/worker byte for byte, {flavour}"
+            else f" — matches images/worker byte for byte, {flavour}"
         ),
         remedy=TOOL_WORKER_REBUILD,
     )
@@ -367,10 +367,10 @@ def check_grader_image(c: Check) -> None:
         return
     if str(REPO) not in sys.path:
         sys.path.insert(0, str(REPO))
-    from bench.grader_image import IMAGE, image_digest, source_digest
+    from harness.grader_image import IMAGE, image_digest, source_digest
 
-    gates = REPO / "tasks" / "backgammon" / "gates"
-    dockerfile = REPO / "docker" / "grader" / "Dockerfile"
+    gates = REPO / "grader"
+    dockerfile = REPO / "images" / "grader" / "Dockerfile"
     baked = image_digest(IMAGE)
     if baked is None:
         c.add(
@@ -411,7 +411,7 @@ def check_grader_resources(c: Check) -> None:
         return
     if str(REPO) not in sys.path:
         sys.path.insert(0, str(REPO))
-    from bench.grader_image import IMAGE, image_digest
+    from harness.grader_image import IMAGE, image_digest
 
     if image_digest(IMAGE) is None:
         # The image row above already says this, in the words that fix it.
@@ -519,7 +519,8 @@ def check_self_compact_tool(c: Check, args) -> None:
             "(or the file is missing at the wired path) -> the --compact flag "
             "arms a plugin that is not loaded, and every chunk boundary will "
             "abort the cell on no_compaction_evidence. Rebuild: docker build "
-            "-t okp-bench-worker:v1 docker/worker"
+            "-t okp-bench-worker:v1 images/worker "
+            "--build-context okp-sidecar=images/sidecar"
         ),
         remedy=TOOL_WORKER_REBUILD,
     )
@@ -534,7 +535,8 @@ def check_self_compact_tool(c: Check, args) -> None:
             "this image carries the PRE-FIX arm, which fires on the CHUNK "
             "FINISHED marker alone and leaks a compaction into the repair "
             "phase (run 1788462647). Rebuild: docker build -t "
-            "okp-bench-worker:v1 docker/worker"
+            "okp-bench-worker:v1 images/worker "
+            "--build-context okp-sidecar=images/sidecar"
         ),
         remedy=TOOL_WORKER_REBUILD,
     )
@@ -755,7 +757,7 @@ def check_cloud_key(c: Check, spend_key) -> None:
     fingerprint ONLY — the key value is never printed (R-37). Never creates
     the file."""
     if spend_key is None:
-        c.add("cloud key", False, "skipped — bench import failed")
+        c.add("cloud key", False, "skipped — harness import failed")
         return
     try:
         token = spend_key.resolve_cloud_api_key()
@@ -778,7 +780,7 @@ def check_cloud_model(c: Check, bench_config, args) -> None:
     must be a key of CLOUD_ORCAROUTER_PROVIDER['models'] (the harness ACCEPT
     list); the composed slug is `{router}/{provider}/{model}`."""
     if bench_config is None:
-        c.add("cloud model", False, "skipped — bench import failed")
+        c.add("cloud model", False, "skipped — harness import failed")
         return
     provider = str(args.provider or "").strip()
     model = str(args.model or "").strip()
@@ -801,7 +803,7 @@ def check_cloud_model(c: Check, bench_config, args) -> None:
             False,
             f"--cloud model {model_key!r} is not in the OrcaRouter provider block "
             f"({len(available)} accepted keys; e.g. {sample}, … — full list: "
-            "bench/config.py CLOUD_ORCAROUTER_PROVIDER). "
+            "harness/config.py CLOUD_ORCAROUTER_PROVIDER). "
             "run_cumulative.py exits 2 for this.",
         )
         return
@@ -820,7 +822,7 @@ def check_local_model(c: Check, bench_config, args) -> None:
     in WORKER_MODEL_REGISTRY, and RETIRED_MODEL_ALIASES are refused by their
     RETIREMENT reason, not as 'unknown' (a spelled-right name is not a typo)."""
     if bench_config is None:
-        c.add("local model", False, "skipped — bench import failed")
+        c.add("local model", False, "skipped — harness import failed")
         return
     registry = getattr(bench_config, "WORKER_MODEL_REGISTRY", {})
     retired = getattr(bench_config, "RETIRED_MODEL_ALIASES", {})
@@ -878,7 +880,7 @@ def check_roster_drift(c: Check, bench_config) -> None:
     control plane serves. The mirror is known to lag — drift is a surfaced
     defect, not a gate on launching."""
     if bench_config is None:
-        c.add("roster drift", False, "skipped — bench import failed", blocking=False)
+        c.add("roster drift", False, "skipped — harness import failed", blocking=False)
         return
     config_keys = set(bench_config.CLOUD_ORCAROUTER_PROVIDER.get("models", {}))
     try:
@@ -920,7 +922,7 @@ def check_feedback_completeness(c: Check) -> None:
     WO-FEEDBACK-VOICE-3 (2026-08-30): the feedback voice is SINGLE-SYSTEM. There
     is NO title-derived fallback — `_humanize_check` raises
     `MissingFeedbackOverrideError` for a gate with no entry in
-    `tasks/backgammon/gates/feedback.json`, because the title-derived sentence
+    `grader/feedback.json`, because the title-derived sentence
     (a test title) states the RULE and answers the gate's question for free.
 
     A missing override is therefore a misconfigured benchmark, not a graceful
@@ -930,12 +932,12 @@ def check_feedback_completeness(c: Check) -> None:
     """
     try:
         sys.path.insert(0, str(REPO))
-        from bench.adapters.backgammon import missing_feedback_overrides
+        from harness.adapters.backgammon import missing_feedback_overrides
     except Exception as exc:  # noqa: BLE001
-        c.add("feedback completeness", False, f"could not import bench: {exc}")
+        c.add("feedback completeness", False, f"could not import harness: {exc}")
         return
 
-    gates_dir = REPO / "tasks" / "backgammon" / "gates"
+    gates_dir = REPO / "grader"
     try:
         missing = sorted(missing_feedback_overrides(gates_dir))
     except Exception as exc:  # noqa: BLE001
@@ -961,7 +963,7 @@ def check_feedback_completeness(c: Check) -> None:
         False,
         f"NO-GO: {len(missing)} gate(s) lack a feedback override: "
         f"{shown}{extra}. Write a symptom sentence for each in "
-        "tasks/backgammon/gates/feedback.json before launching.",
+        "grader/feedback.json before launching.",
     )
 
 
@@ -1273,10 +1275,10 @@ def main() -> int:
     bench_config = spend_key = None
     try:
         sys.path.insert(0, str(REPO))
-        from bench import config as bench_config
-        from bench import spend_key
+        from harness import config as bench_config
+        from harness import spend_key
     except Exception as exc:  # noqa: BLE001
-        c.add("bench config", False, f"cannot import bench: {exc}")
+        c.add("bench config", False, f"cannot import harness: {exc}")
 
     if args.cloud:
         check_cloud_key(c, spend_key)

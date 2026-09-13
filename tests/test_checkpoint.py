@@ -1,4 +1,4 @@
-"""Tests for the per-attempt check-point contract (bench.checkpoint).
+"""Tests for the per-attempt check-point contract (harness.checkpoint).
 
 The contract under test: a check-point binds one attempt's delivered tree to
 the moment it was delivered. Each attempt captures into
@@ -19,7 +19,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from bench.checkpoint import checkpoint_root, record_checkpoint
+from harness.checkpoint import checkpoint_root, record_checkpoint
 
 
 def _worktree(root: Path) -> Path:
@@ -145,7 +145,7 @@ def test_capture_failure_never_raises_and_writes_nothing(
     def boom(**kwargs: Any) -> None:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("bench.checkpoint.capture_snapshot", boom)
+    monkeypatch.setattr("harness.checkpoint.capture_snapshot", boom)
     assert _record(run_dir, wt, 1, "hash-1") is None  # must NOT raise
     assert not (checkpoint_root(run_dir) / "index.json").exists()
     assert not checkpoint_root(run_dir).exists()

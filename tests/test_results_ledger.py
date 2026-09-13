@@ -16,15 +16,15 @@ from pathlib import Path
 import re
 from typing import Any
 
-from bench.cumulative.convergence import ConvergencePoint
-from bench.cumulative.progress import progress_from_cell_result
-from bench.cumulative.results_ledger import (
+from harness.cumulative.convergence import ConvergencePoint
+from harness.cumulative.progress import progress_from_cell_result
+from harness.cumulative.results_ledger import (
     RECALL_FIELDS,
     append_run_records,
     build_run_records,
     read_tree_id,
 )
-from bench.cumulative.run_artifacts import (
+from harness.cumulative.run_artifacts import (
     RunManifest,
     StatusStream,
     default_status_stream_path,

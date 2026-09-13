@@ -24,9 +24,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-from bench.cumulative.progress import progress_from_cell_result
-from bench.cumulative.sequencer import CumulativeSequencer
-from bench.cumulative.run_artifacts import (
+from harness.cumulative.progress import progress_from_cell_result
+from harness.cumulative.sequencer import CumulativeSequencer
+from harness.cumulative.run_artifacts import (
     RunManifest,
     StatusStream,
     build_scorecard,
@@ -36,7 +36,7 @@ from bench.cumulative.run_artifacts import (
     write_run_manifest,
     write_scorecard,
 )
-from bench.cumulative.types import RosterEntry, SessionRecord
+from harness.cumulative.types import RosterEntry, SessionRecord
 
 
 def _cell_telemetry() -> dict[str, Any]:

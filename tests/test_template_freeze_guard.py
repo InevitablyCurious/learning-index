@@ -1,7 +1,7 @@
 """WO-FREEZE-1 template-freeze guard tests.
 
 Covers:
-  (a) the live `tasks/backgammon/scaffold/` hash equals FROZEN_TASK_TEMPLATE_HASH;
+  (a) the live `task/backgammon/scaffold/` hash equals FROZEN_TASK_TEMPLATE_HASH;
   (b) compute_task_template_hash over a DELIBERATELY ALTERED temp copy differs
       from the frozen hash and verify_task_template_frozen RAISES naming the
       expected vs actual hashes;
@@ -9,7 +9,7 @@ Covers:
       run path against altered bytes).
 
 The altered copy is a pytest ``tmp_path`` directory only — the real
-``tasks/backgammon/scaffold/`` files are never modified (verified by (a), which
+``task/backgammon/scaffold/`` files are never modified (verified by (a), which
 asserts the live hash still equals the frozen value).
 """
 
@@ -51,7 +51,7 @@ MODULE = _load_run_cumulative_module()
 #        (2026-09-07, frontend origin seam / REQ-SAME-ORIGIN)
 FROZEN = "e1628129a751556e43cd5e700b3ebcec969af14f9797ded5cf77cd5f0dd94f29"
 REPO_ROOT = Path(__file__).resolve().parents[1]
-LIVE_SCAFFOLD = REPO_ROOT / "tasks" / "backgammon" / "scaffold"
+LIVE_SCAFFOLD = REPO_ROOT / "task" / "backgammon" / "scaffold"
 
 
 def _altered_scaffold_copy(tmp_path: Path) -> Path:
@@ -125,7 +125,7 @@ def test_guard_wired_into_prepare_fixture(
 
 
 def _session() -> Any:
-    from bench.cumulative.types import PhaseGroup, SessionRecord
+    from harness.cumulative.types import PhaseGroup, SessionRecord
 
     return SessionRecord(
         sequence_index=1,

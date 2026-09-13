@@ -17,7 +17,7 @@ import json
 
 import pytest
 
-from bench.serve_client import (
+from harness.serve_client import (
     REASON_PROVIDER_UNAVAILABLE,
     REASON_STREAM_FINALIZE_TIMEOUT,
     REASON_STREAM_INCOMPLETE,
@@ -95,13 +95,13 @@ class TestClassification:
 
 class TestBackoff:
     def test_escalates_then_holds(self):
-        from bench.adapters.backgammon import _provider_backoff_seconds
+        from harness.adapters.backgammon import _provider_backoff_seconds
 
         seq = [_provider_backoff_seconds(i) for i in range(1, 7)]
         assert seq == [15.0, 30.0, 60.0, 120.0, 120.0, 120.0]
 
     def test_never_returns_zero_or_negative(self):
-        from bench.adapters.backgammon import _provider_backoff_seconds
+        from harness.adapters.backgammon import _provider_backoff_seconds
 
         for i in (-5, 0, 1, 99):
             assert _provider_backoff_seconds(i) > 0
@@ -110,7 +110,7 @@ class TestBackoff:
         # The schedule must PLATEAU rather than grow without limit: an outage
         # longer than the schedule is ridden out at the cap (within the
         # terminating _MAX_SERVE_RECOVERY_NUDGES budget), not given up on.
-        from bench.adapters.backgammon import (
+        from harness.adapters.backgammon import (
             PROVIDER_BACKOFF_SCHEDULE_S,
             _provider_backoff_seconds,
         )
@@ -120,7 +120,7 @@ class TestBackoff:
 
 class TestTheNudgeReadsAsAPerson:
     def _nudge(self) -> str:
-        from bench.adapters.backgammon import _PROVIDER_RECOVERY_NUDGE
+        from harness.adapters.backgammon import _PROVIDER_RECOVERY_NUDGE
 
         return _PROVIDER_RECOVERY_NUDGE
 
@@ -160,13 +160,13 @@ class TestRecoveryIsWired:
         from pathlib import Path
 
         src = (
-            Path(__file__).resolve().parents[1] / "bench" / "adapters" / "backgammon.py"
+            Path(__file__).resolve().parents[1] / "harness" / "adapters" / "backgammon.py"
         ).read_text(encoding="utf-8")
         assert "or is_provider_outage" in src
         assert "prompt_to_send = _PROVIDER_RECOVERY_NUDGE" in src
         assert "self._provider_backoff(backoff_s)" in src
 
     def test_backoff_is_injectable_so_tests_never_sleep(self):
-        from bench.adapters.backgammon import BackgammonRunner
+        from harness.adapters.backgammon import BackgammonRunner
 
         assert hasattr(BackgammonRunner, "_provider_backoff")

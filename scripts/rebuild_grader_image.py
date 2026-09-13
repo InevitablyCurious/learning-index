@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Rebuild okp-bench-grader:v1 from tasks/backgammon/gates — the one sanctioned way.
+"""Rebuild okp-bench-grader:v1 from grader/ — the one sanctioned way.
 
 A bare ``docker build`` produces a working image that records nothing about
 what it was built from, so the freshness check can only report it as
-unverifiable. This computes the source digest (bench/grader_image.py) and bakes
+unverifiable. This computes the source digest (harness/grader_image.py) and bakes
 it in as a label, giving the instrument the same kind of content-addressed
 identity the corpus already has.
 
@@ -21,14 +21,14 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from bench.grader_image import (  # noqa: E402
+from harness.grader_image import (  # noqa: E402
     IMAGE,
     build_argv,
     source_digest,
 )
 
-GATES = REPO / "tasks" / "backgammon" / "gates"
-DOCKERFILE = REPO / "docker" / "grader" / "Dockerfile"
+GATES = REPO / "grader"
+DOCKERFILE = REPO / "images" / "grader" / "Dockerfile"
 
 
 def main() -> int:

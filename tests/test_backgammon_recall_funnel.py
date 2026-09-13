@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bench.adapters.backgammon import RecallFunnelScan, _scan_recall_funnel
+from harness.adapters.backgammon import RecallFunnelScan, _scan_recall_funnel
 
 
 def _write_plugin_log(worktree: Path, contents: str) -> None:

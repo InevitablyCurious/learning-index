@@ -43,7 +43,7 @@
 // ── TWO HONESTY RULINGS, EACH FORCED BY WHAT THE HARNESS ACTUALLY WRITES ────
 //
 // 1. GATES HAVE NO DENOMINATOR. Verified at the producer:
-//    `tasks/backgammon/gates/report.mjs:596-610` builds its report from
+//    `grader/report.mjs:596-610` builds its report from
 //    `failed_gates` + `problems` and writes NO total. Nothing downstream adds
 //    one. The design comp shows "90/114"; 114 DOES NOT EXIST IN THE DATA.
 //

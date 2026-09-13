@@ -19,14 +19,14 @@ from pathlib import Path
 
 import pytest
 
-# TELLS live in bench.blinding, not here: the seed path scans a plugged-in
+# TELLS live in harness.blinding, not here: the seed path scans a plugged-in
 # memory layer's runtime directive with the same pattern, and two copies of the
 # list would drift into protection that only looks real.
-from bench.blinding import TELL_RE, TELLS, offending_lines as _offending_lines
+from harness.blinding import TELL_RE, TELLS, offending_lines as _offending_lines
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCAFFOLD = REPO_ROOT / "tasks" / "backgammon" / "scaffold"
-PROMPTS = REPO_ROOT / "tasks" / "backgammon" / "prompts"
+SCAFFOLD = REPO_ROOT / "task" / "backgammon" / "scaffold"
+PROMPTS = REPO_ROOT / "task" / "backgammon" / "prompts"
 
 __all__ = ["TELLS", "TELL_RE"]
 
@@ -64,7 +64,7 @@ def test_package_name_is_not_a_tell() -> None:
 
 
 def test_seeded_agents_md_has_no_evaluation_vocabulary() -> None:
-    from bench.adapters.backgammon import _WORKER_AGENTS_MD
+    from harness.adapters.backgammon import _WORKER_AGENTS_MD
 
     offenders = _offending_lines(_WORKER_AGENTS_MD)
     assert not offenders, "seeded AGENTS.md reveals the evaluation:\n  " + "\n  ".join(
@@ -73,7 +73,7 @@ def test_seeded_agents_md_has_no_evaluation_vocabulary() -> None:
 
 
 def test_agents_md_does_not_name_the_model_to_itself() -> None:
-    adapter = (REPO_ROOT / "bench" / "adapters" / "backgammon.py").read_text("utf-8")
+    adapter = (REPO_ROOT / "harness" / "adapters" / "backgammon.py").read_text("utf-8")
     assert "- Model: {self.model}" not in adapter
 
 
@@ -86,7 +86,7 @@ class TestInterruptsSoundHuman:
     """
 
     def _nudges(self) -> dict[str, str]:
-        from bench.adapters import backgammon as b
+        from harness.adapters import backgammon as b
 
         return {
             "loop_recovery": b._LOOP_RECOVERY_NUDGE,

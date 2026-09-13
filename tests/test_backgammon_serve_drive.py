@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from bench.adapters.backgammon import (
+from harness.adapters.backgammon import (
     compact_phase_for,
     _FINALIZE_RECOVERY_NUDGE,
     _LOOP_RECOVERY_NUDGE,
@@ -35,7 +35,7 @@ from bench.adapters.backgammon import (
     TURN_TERMINAL_TRUNCATED,
     bench_session_title,
 )
-from bench.serve_client import (
+from harness.serve_client import (
     LOOP_KILL_WAIT_REASON,
     ServeClientError,
     extract_transcript_metrics,
@@ -43,7 +43,7 @@ from bench.serve_client import (
 )
 
 
-TASK_DIR = (Path(__file__).resolve().parents[1] / "tasks" / "backgammon").resolve()
+TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
 
 class _FakeCell:
@@ -500,7 +500,7 @@ def test_serve_drive_stalled_turn_recovers_with_stall_nudge(
 
 
 def test_serve_drive_stall_is_not_scored_as_a_model_failure(tmp_path: Path) -> None:
-    from bench.adapters.backgammon import _HARNESS_LIMIT_REASONS
+    from harness.adapters.backgammon import _HARNESS_LIMIT_REASONS
 
     assert "turn_stalled" in _HARNESS_LIMIT_REASONS
 
@@ -1191,7 +1191,7 @@ def test_chunk_prompts_carry_the_write_chunking_directive() -> None:
     two of them and ~200-400 in AGENTS.md, which handed the model two limits
     from two directions and made the standing one dead weight.
     """
-    from bench.adapters.backgammon import _WORKER_AGENTS_MD, _WRITE_CHUNKING_DIRECTIVE
+    from harness.adapters.backgammon import _WORKER_AGENTS_MD, _WRITE_CHUNKING_DIRECTIVE
 
     for index in range(1, 7):
         text = (TASK_DIR / "prompts" / f"chunk-0{index}.md").read_text(encoding="utf-8")
@@ -1883,7 +1883,7 @@ def test_serve_drive_provider_outage_is_recovered_not_scored(tmp_path: Path) -> 
     recoverable set, so the work in that turn was lost and the cell was scored
     as if the model had produced nothing.
     """
-    from bench.adapters.backgammon import _PROVIDER_RECOVERY_NUDGE
+    from harness.adapters.backgammon import _PROVIDER_RECOVERY_NUDGE
 
     runner = _make_runner(tmp_path)
     waits: list[float] = []

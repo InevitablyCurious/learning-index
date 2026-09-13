@@ -42,7 +42,7 @@ import { existsSync } from "node:fs";
 import net from "node:net";
 import { join } from "node:path";
 
-import { resolveStartCommand } from "../tasks/backgammon/gates/lib/entrypoint.mjs";
+import { resolveStartCommand } from "../grader/lib/entrypoint.mjs";
 import { resolveCellDir } from "./history.mjs";
 import {
   listServers,

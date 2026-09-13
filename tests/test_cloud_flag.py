@@ -21,13 +21,13 @@ from typing import Any
 
 import pytest
 
-from bench.adapters.backgammon import build_worker_opencode_config
-from bench.adapters.docker_worker import (
+from harness.adapters.backgammon import build_worker_opencode_config
+from harness.adapters.docker_worker import (
     DockerCell,
     DockerCellConfig,
     _build_run_argv,
 )
-from bench.spend_key import (
+from harness.spend_key import (
     SpendKeyError,
     resolve_cloud_api_key,
     resolve_cloud_key_file,
@@ -286,13 +286,13 @@ def test_cloud_enter_injects_key_from_resolver_not_literal(
         raise AssertionError(f"unexpected docker invocation: {argv!r}")
 
     monkeypatch.setattr(
-        "bench.adapters.docker_worker.resolve_cloud_api_key",
+        "harness.adapters.docker_worker.resolve_cloud_api_key",
         lambda **kwargs: "sk-orca-fake",
     )
-    monkeypatch.setattr("bench.adapters.docker_worker.ensure_network", lambda *_: None)
-    monkeypatch.setattr("bench.adapters.docker_worker._host_uid", lambda: 501)
-    monkeypatch.setattr("bench.adapters.docker_worker._host_gid", lambda: 20)
-    monkeypatch.setattr("bench.adapters.docker_worker.subprocess.run", _fake_run)
+    monkeypatch.setattr("harness.adapters.docker_worker.ensure_network", lambda *_: None)
+    monkeypatch.setattr("harness.adapters.docker_worker._host_uid", lambda: 501)
+    monkeypatch.setattr("harness.adapters.docker_worker._host_gid", lambda: 20)
+    monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
     cell = DockerCell(
         DockerCellConfig(

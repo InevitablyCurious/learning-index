@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Rebuild okp-bench-worker:v1 from docker/worker — the one sanctioned way.
+"""Rebuild okp-bench-worker:v1 from images/worker — the one sanctioned way.
 
 A bare ``docker build`` still produces a working image, but it records nothing
 about what it was built from, and preflight then has to report the image as
-unverifiable. This computes the source digest (bench/worker_image.py) and bakes
+unverifiable. This computes the source digest (harness/worker_image.py) and bakes
 it in, so the freshness check has something CONTENT-based to compare against
 instead of a timestamp docker never moves on a cache hit.
 
@@ -28,7 +28,7 @@ REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from bench.worker_image import (  # noqa: E402
+from harness.worker_image import (  # noqa: E402
     ENV_PLUGIN_DIR,
     IMAGE,
     build_argv,
@@ -38,7 +38,7 @@ from bench.worker_image import (  # noqa: E402
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=f"Rebuild {IMAGE} from docker/worker.")
+    parser = argparse.ArgumentParser(description=f"Rebuild {IMAGE} from images/worker.")
     parser.add_argument(
         "--plugin-dir",
         type=Path,
@@ -72,7 +72,7 @@ def main() -> int:
         print("docker is not on PATH — cannot build the worker image", file=sys.stderr)
         return 2
 
-    worker_dir = REPO / "docker" / "worker"
+    worker_dir = REPO / "images" / "worker"
     if not (worker_dir / "Dockerfile").is_file():
         print(f"no Dockerfile at {worker_dir / 'Dockerfile'}", file=sys.stderr)
         return 2

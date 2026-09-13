@@ -26,7 +26,7 @@
 // is REPORTED and never disqualifying — D-SNAP-DEVMODE-EXCEPTIONS (Jerry,
 // 2026-09-05). Dev mode is the operator's fast-iteration tool and a seeded run
 // is never a publicly defendable data point, so drift is a caution, not a gate.
-// `bench/snapshot.py::validate_snapshot_for_seed` implements the same ruling on
+// `harness/snapshot.py::validate_snapshot_for_seed` implements the same ruling on
 // the harness side; the two must not disagree about what refuses.
 //
 // The refusals that remain are the ones with nothing to seed from — no
@@ -205,7 +205,7 @@ export function seedableBy(row, model) {
 /**
  * Corpus drift, as a list of differing fields.
  *
- * Mirrors `bench/snapshot.py::validate_snapshot_for_seed`'s return shape on
+ * Mirrors `harness/snapshot.py::validate_snapshot_for_seed`'s return shape on
  * purpose: the board shows the same drift the harness will report in its
  * `snapshot_validity_relaxed` notice, so the caution an operator reads before
  * starting matches the notice the run emits. `null` on exactly one side is

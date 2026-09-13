@@ -2,7 +2,7 @@ from dataclasses import replace
 
 import pytest
 
-from bench.cumulative.manifest import (
+from harness.cumulative.manifest import (
     CumulativeManifest,
     atomic_write,
     load,
@@ -10,8 +10,8 @@ from bench.cumulative.manifest import (
     roster_hash,
     validate_or_fail,
 )
-from bench.cumulative.ordering import build_schedule
-from bench.cumulative.types import RosterEntry
+from harness.cumulative.ordering import build_schedule
+from harness.cumulative.types import RosterEntry
 
 
 def _sample_roster() -> list[RosterEntry]:

@@ -380,7 +380,7 @@ export async function readTail(path, bytes = 64 * 1024) {
 
 /**
  * Read the HEAD of a file, bounded — the mirror of `readTail`. A cell's
- * `live.jsonl` opens with its `cell.start` record (bench/live_stream.py), so
+ * `live.jsonl` opens with its `cell.start` record (harness/live_stream.py), so
  * resolving a session id reads the first bytes, never the whole append-only
  * stream. "" on any error, same contract as `readTail`.
  */
@@ -504,7 +504,7 @@ export function sessionIdFrom(text) {
 // The harness prints its terminal object as the last log line
 // (`scripts/run_cumulative.py::_print_json(sequencer.step_until_done())`), and
 // the ONLY statuses Python can emit are the sequencer's two TypedDict literals:
-// `done` (cumulative/sequencer.py:38) and `halted_on_gate` (:43).
+// `done` (harness/cumulative/sequencer.py:38) and `halted_on_gate` (:43).
 //
 // This table used to read `status === "ok" || status === "awaiting_extract"`.
 // NEITHER STRING IS EMITTED BY ANY PYTHON FILE IN THE REPO. So every cleanly
@@ -604,7 +604,7 @@ export async function readRunState({ runsRoot, launcher, aliveProbe = externalRu
   // ── IS THIS CELL ALIVE — ONE SOURCE, PUBLISHED BY THE HARNESS ───────────
   //
   // The harness heartbeats into its cell's `live.jsonl` every 15s for as long
-  // as the cell runs (bench/live_stream.py, LIVE-STREAM.md). That record is the
+  // as the cell runs (harness/live_stream.py, LIVE-STREAM.md). That record is the
   // ONLY liveness signal this function consults.
   //
   // WHAT THIS REPLACED, AND WHY IT KEPT BREAKING. Liveness used to be inferred

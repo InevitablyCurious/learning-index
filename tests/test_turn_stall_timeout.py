@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from bench.serve_client import ServeClient, ServeClientError
+from harness.serve_client import ServeClient, ServeClientError
 
 
 class _FakeClient(ServeClient):
@@ -115,7 +115,7 @@ class TestProgressToken:
 
 class TestStallIsNotAModelFailure:
     def test_turn_stalled_is_a_harness_limit(self):
-        from bench.adapters.backgammon import _HARNESS_LIMIT_REASONS
+        from harness.adapters.backgammon import _HARNESS_LIMIT_REASONS
 
         assert "turn_stalled" in _HARNESS_LIMIT_REASONS, (
             "a wedged tool call is the harness losing the turn, not the model "
@@ -123,7 +123,7 @@ class TestStallIsNotAModelFailure:
         )
 
     def test_stall_bound_is_far_below_the_run_budget(self):
-        from bench.adapters.backgammon import (
+        from harness.adapters.backgammon import (
             DEFAULT_RUN_TIMEOUT_S,
             DEFAULT_TURN_STALL_TIMEOUT_S,
         )
@@ -137,7 +137,7 @@ class TestStallIsNotAModelFailure:
         from pathlib import Path
 
         src = (
-            Path(__file__).resolve().parents[1] / "bench" / "adapters" / "backgammon.py"
+            Path(__file__).resolve().parents[1] / "harness" / "adapters" / "backgammon.py"
         ).read_text(encoding="utf-8")
         assert "stall_timeout_s=DEFAULT_TURN_STALL_TIMEOUT_S" in src
         # Layout belongs to the formatter; the canary is the semantic mapping:

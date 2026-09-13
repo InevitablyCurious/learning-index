@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-import bench.adapters.backgammon as backgammon_mod
-from bench.adapters.backgammon import (
+import harness.adapters.backgammon as backgammon_mod
+from harness.adapters.backgammon import (
     DEFAULT_ATTEMPT_HARD_CEILING,
     DEFAULT_MAX_STEPS_PER_ATTEMPT,
     DEFAULT_RUN_TIMEOUT_S,
@@ -16,12 +16,12 @@ from bench.adapters.backgammon import (
     _OpencodeRunStats,
     build_worker_opencode_config,
 )
-from bench.backends.base import RecalledMemory
-from bench.adapters.docker_worker import DockerCellConfig, _build_run_argv
-from bench.config import RunConfig
+from harness.backends.base import RecalledMemory
+from harness.adapters.docker_worker import DockerCellConfig, _build_run_argv
+from harness.config import RunConfig
 
 
-TASK_DIR = (Path(__file__).resolve().parents[1] / "tasks" / "backgammon").resolve()
+TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
 
 def _contains_pair(argv: list[str], left: str, right: str) -> bool:

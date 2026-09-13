@@ -27,7 +27,7 @@ const LIVE_SRC = readFileSync(
   "utf8",
 );
 
-/** The shape bench/control/events.mjs produces for a user turn. */
+/** The shape control/events.mjs produces for a user turn. */
 const USER_ROW = {
   seq: 7,
   at: 1788598797375,

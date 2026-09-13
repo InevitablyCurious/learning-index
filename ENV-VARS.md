@@ -30,7 +30,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_GUARD_BIN | {root}/okp-guard/target/release/okp-guard | YARA guard binary | env |
 | OKP_MCP_HTTP_URL | http://127.0.0.1:4450 | MCP HTTP URL | env |
 | OKP_ANSWERER_POLICY | (none) | scripted recall answerer | env =auto-accept or auto-deny |
-| BENCH_TARGET | tasks/backgammon/golden | gates target dir | env |
+| BENCH_TARGET | task/backgammon/golden | gates target dir | env |
 | DEBUG_API | off | debug endpoints on task servers | env =1 |
 | OKP_DASH_HOST | 127.0.0.1 (image 0.0.0.0) | dashboard bind addr | env |
 | OKP_DASH_PORT | 7717 | dashboard port | env or --port |
@@ -119,7 +119,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_EPOCH | (none) | epoch fp (log-only) | env |
 | OKP_BENCH_TOOLS_MANIFEST | (none) | dev-tools manifest path (control/tools.mjs:192) | env |
 | OKP_BENCH_STATS_MANIFEST | (none) | run-stats manifest path (control/runstats.mjs:182) | env |
-| OKP_DASHBOARD_CONFIG | (none) | dashboard shared-config path (control/routers.mjs:71 + bench/spend_key.py:48) | env |
+| OKP_DASHBOARD_CONFIG | (none) | dashboard shared-config path (control/routers.mjs:71 + harness/spend_key.py:48) | env |
 
 ## read by sibling/runtime (reclassified — was "dead", NOT deleted)
 Re-verified: none of these has a bench-code reader, but each IS read — either by a sibling TOKProject component (hub / client / dashboard) or by an external runtime (docker compose interpolation, opencode, node/npm, playwright, apt). Not bench-surface config; kept off the deletion list.

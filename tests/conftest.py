@@ -1,5 +1,5 @@
 """
-bench pytest configuration.
+harness pytest configuration.
 
 Registers slow/serial markers, prints usage guidance in the report header,
 and prevents serial tests from running under xdist parallelism.

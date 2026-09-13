@@ -52,7 +52,7 @@ BENCH_ROOT = Path(__file__).resolve().parents[1]
 if str(BENCH_ROOT) not in sys.path:
     sys.path.insert(0, str(BENCH_ROOT))
 
-from bench.blinding import offending_lines  # noqa: E402
+from harness.blinding import offending_lines  # noqa: E402
 
 # Reuse the benchmark preflight's row recorder rather than defining a second
 # one: the board renders both through the same component, so a divergence in
@@ -132,14 +132,14 @@ def check_seeded_agents_md(c: Check, directive: str | None) -> None:
         c.add("seeded AGENTS.md carries it", False, "skipped — no readable directive above")
         return
     try:
-        from bench.adapters.backgammon import BackgammonRunner, _WORKER_AGENTS_MD
+        from harness.adapters.backgammon import BackgammonRunner, _WORKER_AGENTS_MD
     except Exception as exc:  # pragma: no cover - import failure is environmental
-        c.add("seeded AGENTS.md carries it", False, f"bench import failed: {exc}")
+        c.add("seeded AGENTS.md carries it", False, f"harness import failed: {exc}")
         return
 
     try:
         runner = BackgammonRunner(
-            task_dir=BENCH_ROOT / "tasks" / "backgammon",
+            task_dir=BENCH_ROOT / "task" / "backgammon",
             work_root=BENCH_ROOT / "runs" / "_preflight_probe",
             model="local-llm-proxy/kimi/kimi-k3",
         )
@@ -289,7 +289,8 @@ def check_tokp_tool_in_image(c: Check) -> None:
         else (
             f"no plugin wired in {WORKER_IMAGE} defines okp_submit_mark -> the model is "
             "told to record and the tool is not there. opencode reports nothing. "
-            f"Rebuild: docker build -t {WORKER_IMAGE} docker/worker"
+            f"Rebuild: docker build -t {WORKER_IMAGE} images/worker "
+            "--build-context okp-sidecar=images/sidecar"
         ),
         remedy=TOOL_WORKER_REBUILD,
     )
@@ -302,7 +303,7 @@ def check_tokp_env_arm(c: Check) -> None:
     deterministic regardless of memory mode. Asserted from source: if that line
     is ever dropped, the plugin loads and the tool silently never registers.
     """
-    src = BENCH_ROOT / "bench" / "adapters" / "docker_worker.py"
+    src = BENCH_ROOT / "harness" / "adapters" / "docker_worker.py"
     try:
         text = src.read_text(encoding="utf-8")
     except OSError as exc:

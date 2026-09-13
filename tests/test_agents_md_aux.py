@@ -21,9 +21,9 @@ from pathlib import Path
 
 import pytest
 
-from bench.adapters.backgammon import BackgammonRunner, _WORKER_AGENTS_MD
+from harness.adapters.backgammon import BackgammonRunner, _WORKER_AGENTS_MD
 
-TASK_DIR = Path(__file__).resolve().parents[1] / "tasks" / "backgammon"
+TASK_DIR = Path(__file__).resolve().parents[1] / "task" / "backgammon"
 
 
 def _runner(tmp_path: Path) -> BackgammonRunner:

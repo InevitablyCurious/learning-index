@@ -28,7 +28,7 @@
 import { BENCH_PURPOSE } from "./contract.mjs";
 
 /**
- * Declared context per alias, mirroring bench/config.py
+ * Declared context per alias, mirroring harness/config.py
  * WORKER_MODEL_REGISTRY. This is a MIRROR, and the mirror is deliberate: the
  * control plane is JS and the registry is Python, so there is no shared import.
  * The DRIFT test in `control.test.mjs` pins these values against the Python

@@ -14,7 +14,7 @@ with it.
 
 from __future__ import annotations
 
-from bench.adapters.backgammon import (
+from harness.adapters.backgammon import (
     TURN_TERMINAL_TRANSPORT_ERROR,
     TURN_TERMINAL_TRUNCATED,
     _build_truncation_evidence,

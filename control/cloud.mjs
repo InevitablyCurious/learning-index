@@ -6,7 +6,7 @@
 // The harness has been able to run a cloud cell for as long as `--cloud` has
 // existed (`scripts/run_cumulative.py`, `_compose_cloud_slug`): it composes the
 // slug `{router}/{provider}/{model}`, checks it against the OrcaRouter provider
-// block in `bench/config.py`, and routes the cell straight at the vendor
+// block in `harness/config.py`, and routes the cell straight at the vendor
 // instead of the local relay. THE CONTROL PLANE COULD NOT REACH ANY OF IT. The
 // board's only launch path built a local invocation, so the bench could measure
 // exactly one class of model and the operator's answer to "benchmark a frontier
@@ -24,7 +24,7 @@
 // ── THE KEY IS RESOLVED HERE AND NEVER LEAVES ───────────────────────────────
 //
 // A cloud cell needs ORCAROUTER_API_KEY. It is resolved SERVER-SIDE, from the
-// same two places `bench/spend_key.py` reads — the environment, then the
+// same two places `harness/spend_key.py` reads — the environment, then the
 // dotenv-format key file (`config/cloud.env`, mode 0600) — and it is NEVER sent
 // to the browser and never accepted FROM the browser. What crosses the wire is
 // `{present, source, fingerprint}`: enough for the board to state whether a
@@ -60,7 +60,7 @@ export const CLOUD_API_KEY_ENV = "ORCAROUTER_API_KEY";
 
 /**
  * The per-cell spend ceiling, mirrored from
- * `bench/adapters/openrouter_proxy.py` ABSOLUTE_MAX_USD.
+ * `harness/adapters/openrouter_proxy.py` ABSOLUTE_MAX_USD.
  *
  * STATED ON THE CONFIRMATION CARD rather than left in the proxy. An operator
  * committing to a cloud cell is committing to a bill, and the one number that
@@ -339,7 +339,7 @@ export function resolveCloudModel(key) {
  * discloses nothing. This object is published to the browser.
  */
 export async function readCloudKey({ benchRoot, env = process.env } = {}) {
-  // ONE RESOLVER. This used to look only at the env var and bench/config/cloud.env,
+  // ONE RESOLVER. This used to look only at the env var and config/cloud.env,
   // while the Routers panel looked in three places — so the board could report a
   // key present and this could still report a cloud cell unable to authenticate.
   // Two resolvers for one credential is how a greyed-out button outlives the

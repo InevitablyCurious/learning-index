@@ -167,7 +167,7 @@ if path:
         fh.write(json.dumps(rec) + "\n")
 ```
 
-Python callers inside the harness can use `bench.live_stream.LiveStream`
+Python callers inside the harness can use `harness.live_stream.LiveStream`
 (`LiveStream.from_env()` returns `None` when the variable is absent).
 
 ## Rules that are not negotiable

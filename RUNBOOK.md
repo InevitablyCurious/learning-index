@@ -122,13 +122,13 @@ nc -z 127.0.0.1 4440   # hub
 #    which bench_preflight.py does for you. NEVER point any bench component at
 #    :4450 (the operator's real host MCP).
 
-# 2. Worker image — rebuild when docker/worker/ CHANGED since the last build
+# 2. Worker image — rebuild when images/worker/ CHANGED since the last build
 #    (the vendored opencode plugin is baked in at build time; a stale image runs
 #    the stale plugin silently). Freshness is a content question, not a
 #    timestamp one: the build bakes a digest of its own source and preflight
 #    reads it back. Compare by hand with:
 docker image inspect okp-bench-worker:v1 --format '{{index .Config.Labels "okp.worker.source_digest"}}'
-#    vs .venv/bin/python -c 'from bench.worker_image import *; from pathlib import Path; print(source_digest(Path("docker/worker")))'
+#    vs .venv/bin/python -c 'from harness.worker_image import *; from pathlib import Path; print(source_digest(Path("images/worker")))'
 #    Rebuild (this is the ONLY build that records what it was built from):
 .venv/bin/python scripts/rebuild_worker_image.py
 
@@ -367,7 +367,7 @@ with exit 2 (verified 2026-08-10). `--until-review` is DEAD (removed by `ba2947a
    in `<stateDir>/insession/<sessionId>/{master.json, changed-lines.json}` at `session.idle`. If the
    tool is NOT available the model falls back to prose `===OKP_MARK_START i/N===` markers. The
    extraction tool is a **TOKProject-native** plugin surface — it is currently vendored in the worker
-   image (`bench/docker/worker/vendor/opencode-plugin`) and must not ship in the public repo (open
+   image (`images/worker/vendor/opencode-plugin`) and must not ship in the public repo (open
    decision ES-2, §11 of `dev-benchmark.md`).
 
 2. **Leader-side extraction** is now **dashboard-driven**: point the dashboard at the cell's exported
@@ -395,7 +395,7 @@ with exit 2 (verified 2026-08-10). `--until-review` is DEAD (removed by `ba2947a
 ## 3. THE CELL — one per invocation, always
 
 **The first pass is chunked (2026-08-09).** Attempt 1 is a
-sequence of chunk prompts (`tasks/backgammon/prompts/chunk-01..06.md`), driven in order through
+sequence of chunk prompts (`task/backgammon/prompts/chunk-01..06.md`), driven in order through
 the one serve session. Per chunk: drive → (optional recording turn) → settle compaction → next
 chunk.
 
@@ -421,7 +421,7 @@ chunk.
 - **Inter-chunk compaction — RESTORED (2026-09-03), worker-side self-fire.** Removed by W1
   (2026-08-27) and restored by WO-COMPACTION-RESTORE: the vendored `plugins/self-compact.ts` is
   wired back into the worker image's opencode plugin array with a hard-assert on its presence
-  (`docker/worker/Dockerfile`; `docker/worker/vendor/PROVENANCE.md`, "W1 compaction removal"
+  (`images/worker/Dockerfile`; `images/worker/vendor/PROVENANCE.md`, "W1 compaction removal"
   entry). **The trigger is `session.idle` and nothing the model wrote (2026-09-09).** There is no
   model-called tool and no model-emitted string: on `session.idle`, when `OKP_SELF_COMPACT=1` AND
   the harness's phase sentinel reads `build` AND the session's fire budget is not spent AND a 60 s
@@ -594,7 +594,7 @@ CONTRACT.md's Node clause to `--experimental-strip-types`; which in turn superse
 the 2026-08-10 feedback-contract baseline that moved CONTRACT.md into the scaffold so the
 published requirements seed every worker worktree; supersedes `a68ff9cb…`, whose cells are walked
 back by the declared re-baseline), computed as SHA-256
-over the live `tasks/backgammon/scaffold/` directory (sorted relative path + raw bytes per file) —
+over the live `task/backgammon/scaffold/` directory (sorted relative path + raw bytes per file) —
 the exact bytes the harness hashes at runtime (`compute_task_template_hash` / `_compute_task_template_hash`,
 scripts/run_cumulative.py). Any change to the scaffold invalidates this hash and therefore every
 previously scored cell; the run path fails closed (`verify_task_template_frozen`, wired at the start
@@ -603,7 +603,7 @@ reasoning template referenced in §12/§17.
 
 **Re-freeze procedure (all four, in one change).** Any scaffold edit that changes the file set or
 its bytes must: (1) recompute `compute_task_template_hash` (SHA-256 over sorted relative path + raw
-bytes of every file under `tasks/backgammon/scaffold/`); (2) update **both** `FROZEN_TASK_TEMPLATE_HASH`
+bytes of every file under `task/backgammon/scaffold/`); (2) update **both** `FROZEN_TASK_TEMPLATE_HASH`
 in `scripts/run_cumulative.py` AND `FROZEN` in `tests/test_template_freeze_guard.py` **together** —
 the freeze-guard test pins `MODULE.FROZEN_TASK_TEMPLATE_HASH == FROZEN`
 (`test_template_freeze_guard.py:58-61`), so a one-sided update fails the suite; (3) refresh the
@@ -812,7 +812,7 @@ walk-back class).
    (operator step).** Never point the bench at an interactive alias: it inherits the 15 s SSE
    heartbeat the bench's undici worker hangs on, clamps output to 16384, and queues behind
    interactive traffic.
-2. **Bench** (`bench/config.py` `WORKER_MODEL_REGISTRY`): mirror the maintainer's daily
+2. **Bench** (`harness/config.py` `WORKER_MODEL_REGISTRY`): mirror the maintainer's daily
    `opencode.json` model block, with the ONE deliberate difference `limit.output: 32768` (the bench
    budget; opencode clamps `max_tokens` to the declared limit, and the alias default is fill-only —
    a 16384 declaration silently halves the cell's budget).
@@ -991,12 +991,12 @@ the status stream (§3) remains the operator's sensor, but is no longer the only
 **Image rebuild is the single re-entry point for both regressions.** The sandbox hardening deployed
 through an image rebuild, and both regressions entered through it: the rebuilt image pulled a
 drifted opencode binary (floating `ARG OPENCODE_VERSION=1.18.1` → `npm i -g
-"opencode-ai@${OPENCODE_VERSION}"`, `docker/worker/Dockerfile:4`/`:20`), which dropped the worker
+"opencode-ai@${OPENCODE_VERSION}"`, `images/worker/Dockerfile:4`/`:20`), which dropped the worker
 `--config`; AND the new `--internal` net dropped the host `:4096` publish. After **any** image
 rebuild, verify BOTH the launch surface (per-cell config delivery — the `8c43a20` `OPENCODE_CONFIG`
 env workaround) AND the serve-drive preconditions (`:4096` reachable via `GET /session` → 200)
 before trusting a run; a rebuild can silently re-introduce either. The CLI binary and the vendored
-plugin SDK are now pinned **together** at `1.18.20` (`docker/worker/Dockerfile:4` →
+plugin SDK are now pinned **together** at `1.18.20` (`images/worker/Dockerfile:4` →
 `npm i -g "opencode-ai@${OPENCODE_VERSION}"` at `:24`; pinned by `409733d`/`3798ac2` after the
 floating-`1.18.1` drift above) — they must move together on any bump.
 
@@ -1172,10 +1172,10 @@ and health returning 200 proved nothing in either Cause B or C.
 dashboard renders "no run observed". The launch log ends in a traceback ~11 s after spawn.
 
 **Root cause.** The run was launched into the SAME tree as an already-completed seq-0 run — no
-reset in between. `resume_or_create` (`bench/cumulative/manifest.py:196-205`) tried to
+reset in between. `resume_or_create` (`harness/cumulative/manifest.py:196-205`) tried to
 resume the stale manifest; `validate_or_fail` raised
 `ValueError: cannot resume: chunk-plan hash drift detected (manifest=… expected=…); start a fresh run`
-(`manifest.py:175-180`). `chunk_plan_hash` is a LIVE SHA-256 over `tasks/backgammon/prompts/`
+(`manifest.py:175-180`). `chunk_plan_hash` is a LIVE SHA-256 over `task/backgammon/prompts/`
 (`scripts/run_cumulative.py:1388`, via `compute_task_template_hash`) — recomputed every launch,
 drift-checked at resume, with **no re-baseline mechanism** — so **any** edit to a prompt file
 (e.g. commit `2314693` editing `chunk-02.md`) changes it. The guard fail-closed as designed. The
@@ -1209,7 +1209,7 @@ latency) are unanswerable from OFF runs — and even ON-cell telemetry is lost w
 `worktree/.okp/state/funnel-snapshot.json` on ON cells, from the dedicated blind mount
 (`<cell>/extraction-state/funnel-snapshot.json`, container `/okp-state`) on OFF cells — plus
 `.okp/logs/okp-plugin-errors.log` host-side into
-`data/cells/<unix_ts>-<run_label>/` (`_export_cell_telemetry`, `bench/adapters/backgammon.py`).
+`data/cells/<unix_ts>-<run_label>/` (`_export_cell_telemetry`, `harness/adapters/backgammon.py`).
 It runs for **BOTH arms** — an OFF cell is the baseline the ON arm is measured against, so exporting
 only on injection-record cells would rebuild the blind spot this sink exists to close. Fail-open by
 contract: a missing surface is a silent no-op and an unwritable sink is logged and swallowed, so
@@ -1247,7 +1247,7 @@ Verified: a denied external read returns a tool error and exits cleanly in secon
 **What this layer can and cannot do:** path-pattern denies alone cannot close every shell
 indirection, which is why they are NOT what makes cheating impossible — Layer 1 is. Inside the
 container there are no oracle files to reach by any indirection, and no route out: the worktree is
-the only mount and the network is `--internal` with four allowlisted upstreams (`bench/egress.py`).
+the only mount and the network is `--internal` with four allowlisted upstreams (`harness/egress.py`).
 This layer is defence in depth over a filesystem that already does not hold the answer.
 
 **No instruction tells the model not to cheat, and none may be added.** `tests/test_blinding.py`
@@ -1441,9 +1441,9 @@ Fixed defects are not listed. They are in git.
 | **KV-PEAK-UNKNOWN** | 🟢 CURIOSITY | Peak resident footprint at full context is unknown. Not a threat given headroom. | nothing |
 | **EMISSIONS-INERT-KEEPERS** | 🟡 OPEN | The emissions module carries an injected serve keeper and reputation keeper (`chain/x/emissions/types/expected_keepers.go`, wired at `keeper/keeper.go:35-47`) whose methods are never invoked outside tests — inert today, and exactly the seam an accidental change would activate. Serve credit touches no economics: emissions qualify contributors on approvals only (`x/emissions/keeper/keeper.go:233`). Recorded 2026-08-07; cross-posted to RECALL-PIVOT-SPEC §8.7 F5. | nothing today — silent-economics drift if activated unnoticed |
 | **INTEGRATION-SUITE-QUARANTINE** | 🟡 OPEN — post-campaign | The dev integration suite is scoped out of the pre-campaign TEST stage (§2): it POSTs `/v1/test/reset`, a route the hub build does not register (`cmd/hub/main.go:390-397` vs `dev/tests/lib/hub-client.ts:95`), and its mutating e2e tests would write orgs and memories to the live campaign hub and chain — the same hazard class as a second wipe. The reset route must not be registered to accommodate it. Restored behind a guard after the campaign (2026-08-07). | nothing while quarantined — pre-campaign TEST is the bench pytest suite |
-| **SERVE-MESSAGE-500** | 🟢 ROOT-CAUSED + FIXED 2026-08-11 | **NOT an opencode bug — the worker's SQLite session DB was CORRUPT.** `PRAGMA integrity_check` on the preserved DBs of BOTH 500-failing cells reports `database disk image is malformed`, with damaged pages in **tree 27 = the `part` table** — exactly the table in the failing `select … from "part" where "message_id" in (?×N)`. The 11:14 cell that never 500'd is **clean**. The IN-list size (36→50) was a **red herring**: a larger list touches more pages, so it meets a corrupt page sooner. **Cause:** the DB was bind-mounted from the macOS filesystem (osxfs/gRPC-FUSE), whose locking + fsync semantics SQLite cannot rely on. Pinning opencode never helped because the image was ALREADY pinned (`docker/worker/Dockerfile:4`, 1.18.1). **Fix:** the session DB now lives on a **named Docker volume** (ext4 in the Linux VM), exported via `docker cp` at teardown to the same published host path; a per-cell volume is chowned to the worker uid (needs `--user 0:0` — the image bakes `USER worker`) and removed in a `finally` so a failed teardown cannot leak volumes. **Second defect closed:** extraction previously accepted any `is_file()` DB. SQLite corruption is PARTIAL — the corrupt DB answered `count(*)`=492 fine — so a corrupt substrate **silently under-reported memories** instead of failing. `bench/session_db_integrity.py` defines the fail-closed guard `require_sound_session_db` (`session_db_integrity.py:154-167`), which EXISTS but has NO non-test caller today — it is not wired into the run path, so a corrupt substrate is NOT caught. | was: intermittently, cell-voiding — now: cause removed, but a corrupt substrate is NOT caught today (the fail-closed guard `require_sound_session_db` exists but has no non-test caller — it is not on the run path) |
+| **SERVE-MESSAGE-500** | 🟢 ROOT-CAUSED + FIXED 2026-08-11 | **NOT an opencode bug — the worker's SQLite session DB was CORRUPT.** `PRAGMA integrity_check` on the preserved DBs of BOTH 500-failing cells reports `database disk image is malformed`, with damaged pages in **tree 27 = the `part` table** — exactly the table in the failing `select … from "part" where "message_id" in (?×N)`. The 11:14 cell that never 500'd is **clean**. The IN-list size (36→50) was a **red herring**: a larger list touches more pages, so it meets a corrupt page sooner. **Cause:** the DB was bind-mounted from the macOS filesystem (osxfs/gRPC-FUSE), whose locking + fsync semantics SQLite cannot rely on. Pinning opencode never helped because the image was ALREADY pinned (`images/worker/Dockerfile:4`, 1.18.1). **Fix:** the session DB now lives on a **named Docker volume** (ext4 in the Linux VM), exported via `docker cp` at teardown to the same published host path; a per-cell volume is chowned to the worker uid (needs `--user 0:0` — the image bakes `USER worker`) and removed in a `finally` so a failed teardown cannot leak volumes. **Second defect closed:** extraction previously accepted any `is_file()` DB. SQLite corruption is PARTIAL — the corrupt DB answered `count(*)`=492 fine — so a corrupt substrate **silently under-reported memories** instead of failing. `harness/session_db_integrity.py` defines the fail-closed guard `require_sound_session_db` (`session_db_integrity.py:154-167`), which EXISTS but has NO non-test caller today — it is not wired into the run path, so a corrupt substrate is NOT caught. | was: intermittently, cell-voiding — now: cause removed, but a corrupt substrate is NOT caught today (the fail-closed guard `require_sound_session_db` exists but has no non-test caller — it is not on the run path) |
 | **RECALL-SELECTION-BIAS** | 🟡 OPEN — known, stated limitation | Recall fires only after a repeat — the second failure under the same stable `failureKey` while still red — so every serve is conditioned on an already-hard problem. Standing therefore measures **"works on stuck problems," not "works."** Defensible, and arguably the population that matters, but a further departure from the sim's uniform-serving assumption (recorded 2026-08-08; claim and limit travel together — the §1.1/§1.2 dual-carriage principle). | every standing/recall conclusion — disclosed, not blocking |
-| **CLOUD-MIRROR-DRIFT** | 🟢 CLOSED (reconciled, verified 2026-09-04) | The `control/cloud.mjs` `CLOUD_MODELS` mirror (`:114`) and `bench/config.py` `CLOUD_ORCAROUTER_PROVIDER["models"]` are now both **117** entries with identical key sets and matching context/output limits; the drift test `control.test.mjs:2104` (`DRIFT: the cloud catalogue matches CLOUD_ORCAROUTER_PROVIDER`) **passes**. The prior "87 mirrored vs 117" drift (30 refused models) is reconciled. Keep the drift test live — it is the guard that caught this class. | — |
+| **CLOUD-MIRROR-DRIFT** | 🟢 CLOSED (reconciled, verified 2026-09-04) | The `control/cloud.mjs` `CLOUD_MODELS` mirror (`:114`) and `harness/config.py` `CLOUD_ORCAROUTER_PROVIDER["models"]` are now both **117** entries with identical key sets and matching context/output limits; the drift test `control.test.mjs:2104` (`DRIFT: the cloud catalogue matches CLOUD_ORCAROUTER_PROVIDER`) **passes**. The prior "87 mirrored vs 117" drift (30 refused models) is reconciled. Keep the drift test live — it is the guard that caught this class. | — |
 
 **Memory is not a constraint — CLOSED, do not re-investigate.** Zero swap, ~211 GB wired headroom.
 The trap that misled two sessions is `top`'s "unused" line, which excludes inactive pages macOS
@@ -1516,7 +1516,7 @@ until the conftest is fixed.
 skipping `__init__`. Any `__init__` attribute that `run_session` reads (e.g.
 `_error_totals`, added 2026-09-08) must be hand-wired into EVERY such fixture in
 the same commit or the suite goes red with `AttributeError`. Grep `__new__` over
-`bench/tests/` before adding such an attribute. (`test_cumulative_pacing_knobs.py`
+`tests/` before adding such an attribute. (`test_cumulative_pacing_knobs.py`
 instead builds a REAL runner via `__init__` — the exception, not the rule.)
 
 **`--dist=load` (work-stealing) is the default.** Tests spread across the `-n auto` workers as they
@@ -1654,7 +1654,7 @@ fast-iteration tool, not a data point.
 
 At the attempt-1 grade boundary every baseline run captures its whole worktree
 into `runs/snapshots/<id>/{tree/,snapshot.json}` (`capture_snapshot`,
-`bench/snapshot.py`; boundary at `bench/adapters/backgammon.py:3079-3080`).
+`harness/snapshot.py`; boundary at `harness/adapters/backgammon.py:3079-3080`).
 Capture can never fail the run: on failure it writes no `snapshot.json` (so the
 snapshot is structurally ineligible) and emits a `notice`. Excluded: `.git/`,
 `.okp/`, `AGENTS.md`, `opencode.json`, `test-results/`; `test/*.cjs` are included
@@ -1692,7 +1692,7 @@ annotates per-row seedability (`control/server.mjs:1020`).
 
 `source_commit` / `chunk_plan_hash` / `template_hash` drift does **not** block
 seeding — it is reported (`notice` `snapshot_validity_relaxed`) and proceeds
-(`bench/snapshot.py:192-208`). Absent, unreadable, and model-mismatched
+(`harness/snapshot.py:192-208`). Absent, unreadable, and model-mismatched
 snapshots still refuse — one `SEED SNAPSHOT REFUSED:` line, exit 2, never a
 scaffold fallback (`scripts/run_cumulative.py:1732-1744`).
 
@@ -1710,7 +1710,7 @@ A seeded run's status record carries `seeded_from_snapshot` (the id),
 `build_phase_ran:false`, `skipped_build_cost` (the snapshot's `build_cost`), and
 `dev_mode:true` — declared at one write seam (`scripts/run_cumulative.py:1400-1417`)
 and carried through `SessionRecord` / `ConvergencePoint`
-(`bench/cumulative/types.py:578-581`, `bench/cumulative/convergence.py:92-95`).
+(`harness/cumulative/types.py:578-581`, `harness/cumulative/convergence.py:92-95`).
 
 ### The two env vars (also in ENV-VARS.md)
 

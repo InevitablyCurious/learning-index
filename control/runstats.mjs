@@ -38,7 +38,7 @@ import { readWall } from "./wall.mjs";
 
 /**
  * The scorecard artifact's filename beside the run's other artifacts, mirroring
- * `bench/cumulative/run_artifacts.py::default_scorecard_path`. Sibling of the
+ * `harness/cumulative/run_artifacts.py::default_scorecard_path`. Sibling of the
  * mutable manifest, so retiring a run tree retires it in the same act.
  */
 const SCORECARD_NAME = "manifest.scorecard.json";

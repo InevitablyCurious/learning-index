@@ -30,7 +30,7 @@
 //
 // The campaign home is the MODEL directory, and that placement is load-bearing.
 // One manifest carries a full schedule — OFF baseline first, then the seeded ON
-// phase (`cumulative/ordering.py:build_schedule`) — so memory mode is a property
+// phase (`harness/cumulative/ordering.py:build_schedule`) — so memory mode is a property
 // of a CELL, not of a campaign. Hoisting `memoryOFF/memoryON` above the model
 // would split one manifest across two directories and break RC-5 (one run
 // directory, one manifest, one status stream) along with the roster-hash freeze

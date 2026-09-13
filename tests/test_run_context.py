@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import subprocess
 
-from bench.cumulative.manifest import CumulativeManifest, resume_or_create, roster_hash
-from bench.cumulative.ordering import build_schedule
-from bench.cumulative.run_context import (
+from harness.cumulative.manifest import CumulativeManifest, resume_or_create, roster_hash
+from harness.cumulative.ordering import build_schedule
+from harness.cumulative.run_context import (
     collect_run_context,
     compare_run_context,
     parse_policy_anchor_log_line,
 )
-from bench.cumulative.types import RosterEntry
+from harness.cumulative.types import RosterEntry
 
 
 POLICY_LINE = (

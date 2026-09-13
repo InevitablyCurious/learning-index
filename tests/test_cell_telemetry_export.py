@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bench.adapters.backgammon import _export_cell_telemetry
+from harness.adapters.backgammon import _export_cell_telemetry
 
 _SNAPSHOT = {"ses_abc": {"recall_fired": 2, "gate_decision_ms": 41}}
 _LOG_LINE = "recall_fired trigger=repeat_failure sid=ses_abc\n"

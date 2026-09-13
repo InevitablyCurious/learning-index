@@ -259,7 +259,7 @@ export function restatement({ model, arm, org, context, kind, cloud = null, comp
 // Proxied from the worker's `opencode serve` at GET /event (text/event-stream).
 //
 // VERIFIED, NOT ASSUMED (2026-08-12): the worker image pins opencode 1.18.1
-// (docker/worker/Dockerfile:4) while the host CLI is 1.18.15. Both were probed
+// (images/worker/Dockerfile:4) while the host CLI is 1.18.15. Both were probed
 // directly — `/event` exists on both and the Event union carries an IDENTICAL
 // 89 variants on each (set difference empty in both directions). The
 // `session.next.*` family this contract depends on is present on the pinned
@@ -374,7 +374,7 @@ export const GATE_STALL_THRESHOLD_S = 600;
 // `component.event_name key=value`; the dotted prefix IS this axis. What was
 // missing was anywhere for those lines to go but a log file.
 //
-// MIRRORED, NOT SHARED. Python owns the definition (`bench/live_stream.py`) and
+// MIRRORED, NOT SHARED. Python owns the definition (`harness/live_stream.py`) and
 // there is no import across the language boundary, so `control.test.mjs` pins
 // the two sides in both directions — the same standing condition that makes the
 // cloud catalogue and the terminal statuses mirrors.

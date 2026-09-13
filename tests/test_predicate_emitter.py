@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from bench.outcomes.predicate_emitter import (
+from harness.outcomes.predicate_emitter import (
     STATE_BINDING_ATTEMPT,
     STATE_BINDING_NOT_RETAINED,
     STATE_BINDING_WORKTREE,

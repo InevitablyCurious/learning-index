@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import pytest
 
-from bench.config import (
+from harness.config import (
     BACKGAMMON_SCORED_LADDER_ROSTER,
     BACKGAMMON_LADDER_SCHEMA_VERSION,
     BenchmarkSchedule,

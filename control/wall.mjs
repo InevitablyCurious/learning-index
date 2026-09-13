@@ -191,7 +191,7 @@ async function enumerateSuite(benchRoot) {
 }
 
 async function enumerateSuiteUncached(benchRoot) {
-  const script = join(benchRoot, "tasks", "backgammon", "gates", "roster.mjs");
+  const script = join(benchRoot, "grader", "roster.mjs");
   // Written to a temp file rather than read from stdout: roster.mjs calls
   // process.exit() immediately after its final write (roster.mjs:375-377), which
   // truncates an asynchronously-flushed stdout pipe. Measured 2026-08-13 —
@@ -206,7 +206,7 @@ async function enumerateSuiteUncached(benchRoot) {
   try {
     if (!(await fs.stat(script)).isFile()) return null;
     await execFileAsync("node", [script, "--out", out], {
-      cwd: join(benchRoot, "tasks", "backgammon", "gates"),
+      cwd: join(benchRoot, "grader"),
       timeout: ROSTER_ENUMERATE_TIMEOUT_MS,
       maxBuffer: 8 * 1024 * 1024,
     });

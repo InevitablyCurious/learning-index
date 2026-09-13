@@ -25,9 +25,9 @@ from pathlib import Path
 
 import pytest
 
-from bench.adapters.backgammon import BackgammonRunner as R
+from harness.adapters.backgammon import BackgammonRunner as R
 
-GATES = Path(__file__).resolve().parents[1] / "tasks" / "backgammon" / "gates"
+GATES = Path(__file__).resolve().parents[1] / "grader"
 
 
 def _problem(check: str) -> dict[str, str]:

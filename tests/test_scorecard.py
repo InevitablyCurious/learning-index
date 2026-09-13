@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 
-from bench.config import BenchmarkSchedule, BenchmarkWave, RunConfig
-from bench.scorecard import Cell, Scorecard
+from harness.config import BenchmarkSchedule, BenchmarkWave, RunConfig
+from harness.scorecard import Cell, Scorecard
 
 
 def _cfg() -> RunConfig:

@@ -1,4 +1,4 @@
-"""Hermetic unit tests for bench.serve_client.
+"""Hermetic unit tests for harness.serve_client.
 
 No live server, no docker, no model. All HTTP IO is made injectable via the
 module-level ``_http_json`` / ``_http_status`` helpers, which these tests
@@ -11,7 +11,7 @@ import urllib.error
 
 import pytest
 
-from bench.serve_client import (
+from harness.serve_client import (
     LOOP_KILL_WAIT_REASON,
     ServeClient,
     ServeClientError,
@@ -592,7 +592,7 @@ def _fake_json(monkeypatch, responses):
             raise responses
         return responses.pop(0)
 
-    monkeypatch.setattr("bench.serve_client._http_json", fake)
+    monkeypatch.setattr("harness.serve_client._http_json", fake)
     return calls
 
 
@@ -631,7 +631,7 @@ def test_send_prompt_accepts_204(monkeypatch):
         seen.update(method=method, url=url, body=body)
         return 204
 
-    monkeypatch.setattr("bench.serve_client._http_status", fake)
+    monkeypatch.setattr("harness.serve_client._http_status", fake)
     client = ServeClient("http://127.0.0.1:4096")
     client.send_prompt("ses_1", "run it")
     assert seen["method"] == "POST"
@@ -641,7 +641,7 @@ def test_send_prompt_accepts_204(monkeypatch):
 
 def test_send_prompt_rejects_non_204(monkeypatch):
     monkeypatch.setattr(
-        "bench.serve_client._http_status",
+        "harness.serve_client._http_status",
         lambda method, url, body=None, timeout=5.0: 500,
     )
     with pytest.raises(ServeClientError):
@@ -655,7 +655,7 @@ def test_abort_accepts_2xx(monkeypatch):
         seen.update(method=method, url=url, body=body)
         return 200
 
-    monkeypatch.setattr("bench.serve_client._http_status", fake)
+    monkeypatch.setattr("harness.serve_client._http_status", fake)
     client = ServeClient("http://127.0.0.1:4096")
     assert client.abort("ses_1") is None
     assert seen["method"] == "POST"
@@ -665,7 +665,7 @@ def test_abort_accepts_2xx(monkeypatch):
 
 def test_abort_rejects_non_2xx(monkeypatch):
     monkeypatch.setattr(
-        "bench.serve_client._http_status",
+        "harness.serve_client._http_status",
         lambda method, url, body=None, timeout=5.0: 500,
     )
     with pytest.raises(ServeClientError):
@@ -673,7 +673,7 @@ def test_abort_rejects_non_2xx(monkeypatch):
 
 
 def test_abort_wraps_transport_error(monkeypatch):
-    from bench import serve_client as sc
+    from harness import serve_client as sc
 
     def boom(*args, **kwargs):
         raise urllib.error.URLError("connection refused")
@@ -703,7 +703,7 @@ def test_wait_idle_returns_true(monkeypatch):
     # First poll busy, second poll idle -> True.
     busy = iter([True, False])
     monkeypatch.setattr(
-        "bench.serve_client.ServeClient.session_busy",
+        "harness.serve_client.ServeClient.session_busy",
         lambda self, sid: next(busy),
     )
     client = ServeClient("http://127.0.0.1:4096", poll_interval=0.0)
@@ -712,7 +712,7 @@ def test_wait_idle_returns_true(monkeypatch):
 
 def test_wait_idle_times_out(monkeypatch):
     monkeypatch.setattr(
-        "bench.serve_client.ServeClient.session_busy",
+        "harness.serve_client.ServeClient.session_busy",
         lambda self, sid: True,
     )
     client = ServeClient("http://127.0.0.1:4096", poll_interval=0.0)
@@ -878,7 +878,7 @@ def test_wait_idle_detailed_returns_loop_killed_on_fresh_marker(tmp_path, monkey
     # Busy forever, as a wedged post-loop-kill session is; the marker must end
     # the wait on the first poll, long before timeout_s.
     monkeypatch.setattr(
-        "bench.serve_client.ServeClient.session_busy",
+        "harness.serve_client.ServeClient.session_busy",
         lambda self, sid: True,
     )
     _write_loop_kill_marker(tmp_path, session_id="ses_1")
@@ -897,7 +897,7 @@ def test_wait_idle_detailed_returns_loop_killed_on_fresh_marker(tmp_path, monkey
 
 def test_wait_idle_detailed_ignores_a_marker_older_than_the_turn(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "bench.serve_client.ServeClient.session_busy",
+        "harness.serve_client.ServeClient.session_busy",
         lambda self, sid: True,
     )
     _write_loop_kill_marker(tmp_path, timestamp=_now_ms() - 120_000)
@@ -916,7 +916,7 @@ def test_wait_idle_detailed_ignores_an_unknown_session_marker(tmp_path, monkeypa
     # harness poll by opencode's replay of an already-recorded loop-kill error,
     # so every turn died ~4s in. It must not end this session's wait.
     monkeypatch.setattr(
-        "bench.serve_client.ServeClient.session_busy",
+        "harness.serve_client.ServeClient.session_busy",
         lambda self, sid: True,
     )
     (tmp_path / "loop-kill-unknown.json").write_text(
@@ -946,7 +946,7 @@ def test_wait_idle_detailed_consumes_the_marker_so_the_next_turn_survives(
     # killed by the same file — that latch is what burned the 20-nudge budget
     # in three consecutive phases and blew the per-benchmark error cap.
     monkeypatch.setattr(
-        "bench.serve_client.ServeClient.session_busy",
+        "harness.serve_client.ServeClient.session_busy",
         lambda self, sid: True,
     )
     marker = _write_loop_kill_marker(tmp_path, session_id="ses_1")
@@ -973,11 +973,11 @@ def test_wait_idle_detailed_without_a_marker_keeps_stall_and_timeout(
 ):
     # Empty marker dir: stall detection and the budget behave exactly as before.
     monkeypatch.setattr(
-        "bench.serve_client.ServeClient.session_busy",
+        "harness.serve_client.ServeClient.session_busy",
         lambda self, sid: True,
     )
     monkeypatch.setattr(
-        "bench.serve_client.ServeClient.session_progress_token",
+        "harness.serve_client.ServeClient.session_progress_token",
         lambda self, sid: (1, 1),
     )
     client = ServeClient("http://127.0.0.1:4096", poll_interval=0.0)
@@ -996,7 +996,7 @@ def test_wait_idle_detailed_default_has_no_marker_check(monkeypatch):
     # loop_kill_marker_dir=None (the default) must never touch the filesystem
     # nor change the outcome: busy until the budget expires.
     monkeypatch.setattr(
-        "bench.serve_client.ServeClient.session_busy",
+        "harness.serve_client.ServeClient.session_busy",
         lambda self, sid: True,
     )
     client = ServeClient("http://127.0.0.1:4096", poll_interval=0.0)
@@ -1019,7 +1019,7 @@ def test_metrics_composition(monkeypatch):
 
 
 def test_http_error_wraps_serve_client_error(monkeypatch):
-    from bench import serve_client as sc
+    from harness import serve_client as sc
 
     def boom(*args, **kwargs):
         raise urllib.error.URLError("connection refused")
@@ -1060,9 +1060,9 @@ def _flaky_json(monkeypatch, outcomes, sleeps=None):
             raise ServeClientError(f"{method} {url} failed: {item}") from item
         return item
 
-    monkeypatch.setattr("bench.serve_client._http_json", fake)
+    monkeypatch.setattr("harness.serve_client._http_json", fake)
     monkeypatch.setattr(
-        "bench.serve_client.time.sleep",
+        "harness.serve_client.time.sleep",
         lambda s: sleeps.append(s) if sleeps is not None else None,
     )
     return calls
@@ -1114,7 +1114,7 @@ def test_wait_idle_treats_a_dead_probe_as_busy_never_idle(monkeypatch):
     def always_fails(self, sid):
         raise ServeClientError("probe down")
 
-    monkeypatch.setattr("bench.serve_client.ServeClient.session_busy", always_fails)
+    monkeypatch.setattr("harness.serve_client.ServeClient.session_busy", always_fails)
     client = ServeClient("http://127.0.0.1:4096", poll_interval=0.0)
     assert client.wait_idle("ses_1", timeout_s=0.05) is False
 
@@ -1129,6 +1129,6 @@ def test_wait_idle_returns_true_once_a_probe_recovers(monkeypatch):
             raise item
         return item
 
-    monkeypatch.setattr("bench.serve_client.ServeClient.session_busy", flaky)
+    monkeypatch.setattr("harness.serve_client.ServeClient.session_busy", flaky)
     client = ServeClient("http://127.0.0.1:4096", poll_interval=0.0)
     assert client.wait_idle("ses_1", timeout_s=5) is True

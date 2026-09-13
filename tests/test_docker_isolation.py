@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from bench.adapters.backgammon import BackgammonRunner
-from bench.grader_run import gate_argv
-from bench.adapters.docker_worker import (
+from harness.adapters.backgammon import BackgammonRunner
+from harness.grader_run import gate_argv
+from harness.adapters.docker_worker import (
     DockerCell,
     DockerCellConfig,
     WORKER_IMAGE,
@@ -24,11 +24,11 @@ from bench.adapters.docker_worker import (
     image_exists,
     worker_image_fingerprint,
 )
-from bench.config import RunConfig
+from harness.config import RunConfig
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-HOST_GOLDEN_PATH = (REPO_ROOT / "tasks" / "backgammon" / "golden").resolve()
+HOST_GOLDEN_PATH = (REPO_ROOT / "task" / "backgammon" / "golden").resolve()
 HOST_RUNNER_PATH = (REPO_ROOT / "scripts" / "run_backgammon.py").resolve()
 RUN_BACKGAMMON_PATH = REPO_ROOT / "scripts" / "run_backgammon.py"
 
@@ -90,7 +90,7 @@ def test_worker_image_fingerprint_returns_id_and_created_from_mocked_inspect(
             stderr="",
         )
 
-    monkeypatch.setattr("bench.adapters.docker_worker.subprocess.run", _fake_run)
+    monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
     fingerprint = worker_image_fingerprint("okp-bench-worker:test")
 
@@ -123,9 +123,9 @@ def test_worker_image_fingerprint_absent_returns_none_and_logs_reason(
             stderr="Error: No such image: okp-bench-worker:missing",
         )
 
-    monkeypatch.setattr("bench.adapters.docker_worker.subprocess.run", _fake_run)
+    monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
-    with caplog.at_level("WARNING", logger="bench.adapters.docker_worker"):
+    with caplog.at_level("WARNING", logger="harness.adapters.docker_worker"):
         fingerprint = worker_image_fingerprint("okp-bench-worker:missing")
 
     assert fingerprint is None
@@ -294,10 +294,10 @@ def test_docker_cell_forwards_ephemeral_proxy_token_not_host_key(
         raise AssertionError(f"unexpected docker invocation: {argv!r}")
 
     monkeypatch.setenv("LOCAL_LLM_PROXY_API_KEY", host_local_proxy_key)
-    monkeypatch.setattr("bench.adapters.docker_worker.ensure_network", lambda *_: None)
-    monkeypatch.setattr("bench.adapters.docker_worker._host_uid", lambda: 501)
-    monkeypatch.setattr("bench.adapters.docker_worker._host_gid", lambda: 20)
-    monkeypatch.setattr("bench.adapters.docker_worker.subprocess.run", _fake_run)
+    monkeypatch.setattr("harness.adapters.docker_worker.ensure_network", lambda *_: None)
+    monkeypatch.setattr("harness.adapters.docker_worker._host_uid", lambda: 501)
+    monkeypatch.setattr("harness.adapters.docker_worker._host_gid", lambda: 20)
+    monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
     cell = DockerCell(
         DockerCellConfig(
@@ -351,11 +351,11 @@ def test_egress_sidecar_mounts_loop_kill_marker_dir(
         raise AssertionError(f"unexpected docker invocation: {argv!r}")
 
     monkeypatch.setattr(
-        "bench.adapters.docker_worker.ensure_network", lambda *_, **__: None
+        "harness.adapters.docker_worker.ensure_network", lambda *_, **__: None
     )
-    monkeypatch.setattr("bench.adapters.docker_worker._host_uid", lambda: 501)
-    monkeypatch.setattr("bench.adapters.docker_worker._host_gid", lambda: 20)
-    monkeypatch.setattr("bench.adapters.docker_worker.subprocess.run", _fake_run)
+    monkeypatch.setattr("harness.adapters.docker_worker._host_uid", lambda: 501)
+    monkeypatch.setattr("harness.adapters.docker_worker._host_gid", lambda: 20)
+    monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
     worktree = tmp_path / "loop-kill-marker-worktree"
     cell = DockerCell(
@@ -406,7 +406,7 @@ def test_kill_worker_processes_uses_exec_pkill_without_container_rm(
         calls.append(list(argv))
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("bench.adapters.docker_worker.subprocess.run", _fake_run)
+    monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
     container_name = "okp-bench-cell-process-kill"
     cell = DockerCell(
@@ -455,7 +455,7 @@ def test_force_kill_still_tears_down_with_docker_rm_f(
         calls.append(list(argv))
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("bench.adapters.docker_worker.subprocess.run", _fake_run)
+    monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
     container_name = "okp-bench-cell-force-kill"
     cell = DockerCell(
@@ -514,7 +514,7 @@ def test_teardown_captures_worker_logs_before_container_rm(
             return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
         raise AssertionError(f"unexpected docker invocation: {argv!r}")
 
-    monkeypatch.setattr("bench.adapters.docker_worker.subprocess.run", _fake_run)
+    monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
     cell = DockerCell(
         DockerCellConfig(
@@ -589,7 +589,7 @@ def test_teardown_cp_failure_is_logged_and_rm_still_runs(
             return subprocess.CompletedProcess(argv, 0, stdout="removed", stderr="")
         raise AssertionError(f"unexpected docker invocation: {argv!r}")
 
-    monkeypatch.setattr("bench.adapters.docker_worker.subprocess.run", _fake_run)
+    monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
     cell = DockerCell(
         DockerCellConfig(
@@ -636,7 +636,7 @@ def test_teardown_skips_capture_when_worker_logs_dir_is_none(
             return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
         raise AssertionError(f"unexpected docker invocation: {argv!r}")
 
-    monkeypatch.setattr("bench.adapters.docker_worker.subprocess.run", _fake_run)
+    monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
     cell = DockerCell(
         DockerCellConfig(
@@ -1096,7 +1096,7 @@ def test_gate_oracle_runs_in_its_own_image_never_the_cell_s() -> None:
 
     # It is built by the one function that knows the mount contract.
     assert "gate_argv(" in gate_source, (
-        "_run_gate_report must build its command through bench.grader_run.gate_argv"
+        "_run_gate_report must build its command through harness.grader_run.gate_argv"
     )
     assert "assert_grader_image_available()" in gate_source, (
         "a missing grading image must abort, never degrade to the host"

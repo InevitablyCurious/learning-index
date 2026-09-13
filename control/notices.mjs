@@ -36,7 +36,7 @@
 //
 // ── THE ENVELOPE IS THE LIVE STREAM'S ───────────────────────────────────────
 //
-// Same shape, same kind, same two axes as `bench/live_stream.py::notice`, so the
+// Same shape, same kind, same two axes as `harness/live_stream.py::notice`, so the
 // aggregator reads one record type from both files and the feed renders one row
 // shape. `source` is always `control` here: this module is the control plane
 // speaking, and a module that could claim another process's name would be able
@@ -52,7 +52,7 @@ import { appendFile } from "node:fs/promises";
 
 import { NOTICE_LEVELS } from "./contract.mjs";
 
-/** Envelope version, matching `bench/live_stream.py::SCHEMA_VERSION`. */
+/** Envelope version, matching `harness/live_stream.py::SCHEMA_VERSION`. */
 const SCHEMA_VERSION = 1;
 
 const NOTICES_SUFFIX = ".notices.jsonl";

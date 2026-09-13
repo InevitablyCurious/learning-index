@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate the control plane's ELIGIBLE-model list from the canonical roster.
 
-`bench/config.py` holds the full provider catalogue. `control/cloud.mjs` holds
+`harness/config.py` holds the full provider catalogue. `control/cloud.mjs` holds
 something narrower and more consequential: the models the harness will ACCEPT,
 which is also what the board's picker offers. Every entry there is a claim that
 a benchmark cell can validly run on that model.
@@ -55,7 +55,7 @@ CONTEXT_ADVISORY_FLOOR = 262144
 
 def canonical_models() -> dict[str, dict]:
     sys.path.insert(0, str(BENCH_ROOT))
-    from bench.config import CLOUD_ORCAROUTER_PROVIDER
+    from harness.config import CLOUD_ORCAROUTER_PROVIDER
 
     return CLOUD_ORCAROUTER_PROVIDER["models"]
 

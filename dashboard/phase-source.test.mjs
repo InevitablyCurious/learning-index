@@ -81,7 +81,7 @@ test("the attempt count and the gate wall now count the same thing", () => {
   // 1788599410 they ran a constant +10 apart, and calling both "failed" read as
   // a contradiction — so the row said "findings" instead.
   //
-  // Conformance is now 65 real gates (`tasks/backgammon/gates/pregate.spec.ts`),
+  // Conformance is now 65 real gates (`grader/conformance/pregate.spec.ts`),
   // so one finding IS one gate. The workaround is removed rather than left
   // behind a condition that no longer holds — a stale relabelling is a second
   // vocabulary for one fact, which is the defect it was working around.

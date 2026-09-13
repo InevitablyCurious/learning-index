@@ -1,4 +1,4 @@
-"""Stream-lined Markdown session transcripts (bench.adapters.transcript).
+"""Stream-lined Markdown session transcripts (harness.adapters.transcript).
 
 Contract under test:
   - a synthetic session DB built on the REAL projection schema
@@ -20,7 +20,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-from bench.adapters.transcript import write_session_transcript
+from harness.adapters.transcript import write_session_transcript
 
 USER_VERBATIM = "USER-SENTINEL-7f3a please fix the login bug before Friday"
 REASONING_VERBATIM = (

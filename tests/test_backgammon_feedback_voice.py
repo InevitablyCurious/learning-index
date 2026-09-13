@@ -17,7 +17,7 @@ import json
 
 import pytest
 
-from bench.adapters.backgammon import BackgammonRunner
+from harness.adapters.backgammon import BackgammonRunner
 
 
 # ── voice ────────────────────────────────────────────────────────────────────
@@ -26,14 +26,12 @@ from bench.adapters.backgammon import BackgammonRunner
 def test_grader_identity_is_stripped_from_delivered_text() -> None:
     """SINGLE-SYSTEM (WO-FEEDBACK-VOICE-3): the model hears the human-written
     symptom line, never the test title. A user does not say "[G05] REQ-HIGHER-DIE"."""
-    from bench.adapters.backgammon import load_feedback_overrides
+    from harness.adapters.backgammon import load_feedback_overrides
     from pathlib import Path
 
     overrides = load_feedback_overrides(
         Path(__file__).resolve().parents[1]
-        / "tasks"
-        / "backgammon"
-        / "gates"
+        / "grader"
         / "feedback.json"
     )
     # A covered gate resolves to its human-written override, and no grader
@@ -80,7 +78,7 @@ def test_humanize_hard_fails_on_an_uncovered_gate() -> None:
     A gate with no override RAISES `MissingFeedbackOverrideError` — a leaky
     title-derived line is worse than no line, because it answers the question
     the gate exists to ask."""
-    from bench.adapters.backgammon import MissingFeedbackOverrideError
+    from harness.adapters.backgammon import MissingFeedbackOverrideError
 
     with pytest.raises(MissingFeedbackOverrideError):
         BackgammonRunner._humanize_check("[ZZ9] REQ-NOTHING — some synthetic gate")
@@ -133,7 +131,7 @@ def test_first_failure_is_the_players_first_report() -> None:
     rule — under the opener that says this is their first pass. Every failure
     verdict now also opens with the excuse eliminator (the clean-browser fact),
     which precedes the opener."""
-    from bench.adapters.backgammon import _EXCUSE_ELIMINATOR
+    from harness.adapters.backgammon import _EXCUSE_ELIMINATOR
 
     text = BackgammonRunner._build_feedback_prompt(
         problems=_problems(), repeat_checks=set()
@@ -159,7 +157,7 @@ def test_repeat_failure_returns_new_information() -> None:
     The new information is the same person's SECOND SIGHTING of the same fault,
     not the grader's assertion — see `test_the_graders_assertion_never_reaches_the_model`.
     """
-    from bench.adapters.backgammon import _EXCUSE_ELIMINATOR
+    from harness.adapters.backgammon import _EXCUSE_ELIMINATOR
 
     problems = _problems()
     first = BackgammonRunner._build_feedback_prompt(
@@ -204,7 +202,7 @@ def test_the_graders_assertion_never_reaches_the_model() -> None:
             "check": "[E08] REQ-SEQ-DEDUP — sequences are distinct by resulting board",
             "observed": (
                 "AssertionError: expected 4 to be 2 // Object.is equality at "
-                "/Users/x/okp-bench/tasks/backgammon/gates/backend/edge/edge-gates.test.ts:171:23"
+                "/Users/x/okp-bench/grader/backend/edge/edge-gates.test.ts:171:23"
             ),
         }
     ]
@@ -267,7 +265,7 @@ def test_runner_death_check_does_not_abort_feedback_composition() -> None:
     from feedback composition — while REMAIN in `failed_gates`/`problems`,
     which the scored artifacts keep untouched.
     """
-    from bench.adapters.backgammon import MissingFeedbackOverrideError
+    from harness.adapters.backgammon import MissingFeedbackOverrideError
 
     infra = "backend:runner backend/gates-13-16.test.ts"
     problems = [
@@ -376,7 +374,7 @@ def test_excuse_eliminator_preempts_the_cache_excuse_on_failure_verdicts() -> No
     with the clean-browser fact so that excuse class is pre-empted — on the
     FIRST report and on every repeat, and never on the pass verdict (which lists
     no problems to excuse)."""
-    from bench.adapters.backgammon import _EXCUSE_ELIMINATOR
+    from harness.adapters.backgammon import _EXCUSE_ELIMINATOR
 
     problems = _problems()
     first = BackgammonRunner._build_feedback_prompt(problems=problems)
