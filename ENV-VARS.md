@@ -1,0 +1,155 @@
+# ENV-VARS.md — bench
+
+Config-surface reference (dead bucket re-verified and resolved). Every env var the code READS, cross-referenced against docs. Buckets: read+documented / read+undocumented / read by sibling/runtime (reclassified — was "dead", NOT deleted) / documented+unread (dead — none remain) / dead-and-undocumented.
+
+## Summary
+| Bucket | Count |
+|---|---|
+| read+documented | 39 |
+| read+undocumented | 60 |
+| read by sibling/runtime (reclassified) | 19 |
+| documented+unread (dead) | 0 |
+| dead-and-undocumented | 0 |
+| total read | 99 |
+| total documented | 58 |
+
+## read+documented
+| Name | Default | Controls | Override |
+|---|---|---|---|
+| OKP_BENCH_HOLD_UI | off | post-cell UI hold window | env OKP_BENCH_HOLD_UI=1 |
+| OKP_BENCH_LEADER_MCP_URL | http://127.0.0.1:4550 | leader MCP endpoint | env |
+| OKP_BENCH_LEADER_KEYSTORE | ~/.okp/bench/leader-keystore | leader keystore dir | env |
+| OKP_BENCH_RUN_TIMEOUT_S | (optional) | run-level timeout | env |
+| OKP_BENCH_SKIP_CLEANUP | off | skip telemetry cleanup | env =1 |
+| OKP_KEYSTORE_PATH | ~/.okp/bench/leader-keystore | MCP keystore | env |
+| LOCAL_LLM_PROXY_API_KEY | (none) | Local LLM Proxy (:4545) token | env or .env |
+| OKP_BENCH_SPEND_DB_DSN | postgresql://spend_proxy:spend_proxy_dev@127.0.0.1:5440/spend_proxy | spend meter DB | env or .env |
+| BENCH_LIVE_STREAM | (none) | live-stream path | env |
+| BENCH_LIVE_STREAM_NS | (none) | stream namespace | env |
+| OKP_RECALL_MODE | prod | plugin recall governor | env =test |
+| OKP_GUARD_BIN | {root}/okp-guard/target/release/okp-guard | YARA guard binary | env |
+| OKP_MCP_HTTP_URL | http://127.0.0.1:4450 | MCP HTTP URL | env |
+| OKP_ANSWERER_POLICY | (none) | scripted recall answerer | env =auto-accept or auto-deny |
+| BENCH_TARGET | tasks/backgammon/golden | gates target dir | env |
+| DEBUG_API | off | debug endpoints on task servers | env =1 |
+| OKP_DASH_HOST | 127.0.0.1 (image 0.0.0.0) | dashboard bind addr | env |
+| OKP_DASH_PORT | 7717 | dashboard port | env or --port |
+| OKP_DASH_BENCH_ROOT | .. (image /bench) | bench root | env |
+| OKP_DASH_POLL_MS | 2000 | refresh cadence | env |
+| OKP_DASH_OPENCODE_URL | http://127.0.0.1:4096 | live agent API | env |
+| OKP_DASH_CONTROL_URL | http://127.0.0.1:7718 | server-to-control URL | env |
+| OKP_DASH_CONTROL_PUBLIC_URL | controlUrl | browser-to-control URL | env |
+| OKP_DASH_SOURCE_<NAME> | per config | per-source toggle | env OKP_DASH_SOURCE_<NAME>=1/0 |
+| OKP_DASH_HUBDB | off | enable hub-db source | env =1 |
+| OKP_HUB_DB_HOST | okp-postgres | postgres host | env |
+| OKP_HUB_DB_PORT | 5432 | postgres port | env |
+| OKP_HUB_DB_USER | okp | postgres user | env |
+| OKP_HUB_DB_NAME | okp_hub | postgres db | env |
+| OKP_HUB_DB_PASSWORD | "" | postgres password (query-time) | env |
+| OKP_INSESSION_EXTRACTION | off | in-session extraction capture | env =1 |
+| OKP_STATE_DIR | ~/.okp | plugin state dir | env |
+| OKP_LOG_DIR | ~/.okp/logs | plugin log dir | env |
+| OKP_PLUGIN_PATH | (none) | plugin path baked into worker opencode.json | build-time env |
+| OKP_SELF_COMPACT | off | worker-side self-fire compaction (marker-detection arm in vendored self-compact.ts) | env =1, exported by the harness per cell when launched with --compact |
+| OKP_COMPACT_PHASE_FILE | (none) | path to the A2 phase sentinel the compaction arm reads on every session.idle; only `build` may fire, and unset/unreadable never fires | env, set to /okp-compact/phase by the harness per cell when launched with --compact (read-only bind mount, both arms) |
+| OKP_BENCH_DEV_MODE | (none) | dev-mode env pin (truthy = on, falsy = off; pinned ⇒ `settable:false`) — read `control/devmode.mjs:48-95` | env |
+| OKP_BENCH_DEV_MODE_FILE | <bench>/config/devmode.json | dev-mode state file location — read `control/devmode.mjs:57-59` | env |
+| OKP_BENCH_SEED_SNAPSHOT | (none) | pins the armed build-snapshot id (env pin ⇒ `settable:false`) — read `control/snapshots.mjs:252` | env |
+| OKP_BENCH_SEED_SNAPSHOT_FILE | <bench>/config/armed-snapshot.json | armed-snapshot state file location — read `control/snapshots.mjs:241` | env |
+
+## read+undocumented
+| Name | Default | Controls | Override |
+|---|---|---|---|
+| OKP_BENCH_HUB_URL | http://127.0.0.1:4440 | hub endpoint | env |
+| OKP_BENCH_MCP_RECALL_URL | http://127.0.0.1:4550 (host) / http://host.docker.internal:4550 (worker) | recall client | env |
+| OKP_BENCH_SERVE_HOST_PORT | 4096 | host-published serve port | env |
+| OKP_BENCH_SERVE_CONTAINER_PORT | 4096 | container serve port | env |
+| OKP_BENCH_ENV_FILE | config/bench.env | durable env file path | env |
+| OKP_BENCH_ROOT | <bench>/.. | workspace-root anchor | env |
+| OKP_BENCH_LEADER_SEED_HEX | "" | leader identity seed | env |
+| OKP_BENCH_ORG_ID | "" | org selector pin | env |
+| OKP_BENCH_LEADER_SIGNER_DIR | scaffold/leader-signer (STALE — dir moved to dev/benchmark/leader-signer; code default in lconfig.py:57-58 is stale too) | signer dir | env |
+| OKP_BENCH_RUNS_DIR | <bench>/runs | runs root | env |
+| OKP_BENCH_MAX_ATTEMPTS | 5 | max attempts/cell | env |
+| OKP_BENCH_MAX_STEPS_PER_ATTEMPT | (optional) | max steps/attempt | env |
+| OKP_BENCH_TURN_STALL_TIMEOUT_S | 600 | turn stall detector | env |
+| OKP_BENCH_PROXY_CHECKPOINT | (none) | proxy checkpoint path | env |
+| OKP_BENCH_REASONING_EFFORT | (none) | worker reasoning effort | env |
+| OKP_BENCH_WORKER_PIDS_LIMIT | 512 | docker pids cap | env |
+| OKP_BENCH_WORKER_MEMORY | 4g | docker mem cap | env |
+| OKP_BENCH_WORKER_CPUS | 8 | docker cpu cap | env |
+| OKP_BENCH_DATA_DIR | <repo>/data | telemetry sink | env |
+| OKP_PROXY_RUNS_DIR | ~/.okp/proxy-runs | relay-proxy identity logs | env |
+| OKP_BENCH_ALLOW_MISSING_RUN_CONTEXT | off | tolerate missing run context | env =1 |
+| OKP_BENCH_DOTENV | <bench>/.env | dotenv path override | env |
+| OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL | egress-derived | worker proxy URL | env |
+| OKP_BENCH_CLOUD_KEY_FILE | config/cloud.env | cloud key file | env |
+| ORCAROUTER_API_KEY | (none) | cloud router key | env or config/cloud.env |
+| OPENROUTER_API_KEY | (none) | temp-injected for SWE-ContextBench solve | env |
+| KEEP_WORK | off | preserve SWE-CB workdir | env |
+| SEAM_RUNS_ROOT | (none) | live-stream seam check | env |
+| OKP_INGRESS_CELL_HOST | (none) | egress ingress cell alias | env (set by harness) |
+| OKP_INGRESS_PORT | 4096 | egress ingress port | env |
+| OKP_CONTROL_PORT | 7718 | control-plane port | env |
+| OKP_CONTROL_BENCH_ROOT | .. | control bench root | env |
+| OKP_CONTROL_PROXY_URL | http://127.0.0.1:4545 | model proxy | env |
+| OKP_CONTROL_RUNTIME_URL | http://127.0.0.1:1234 | LM Studio runtime | env |
+| OKP_CONTROL_SERVE_URL | http://127.0.0.1:4096 | serve API | env |
+| OKP_CONTROL_PYTHON | null | python binary | env |
+| OKP_HOME | ~/.okp/bench | bench identity home | env |
+| OKP_MCP_DIR | client/packages/core (resolve(benchRoot, "..", "client", "packages", "core") — tools.mjs:38) | reference MCP dir | env |
+| OKP_BENCH_ORG | okp-org-0 | request-join tool default org | env |
+| OKP_DASH_RUNS_ROOT | <benchRoot>/runs | dashboard runs root | env |
+| OKP_IDENTITY_SEED_HEX | (none) | leader-signer seed | env or --seed-hex |
+| OKP_ENV | local | base-URL switch | env =production |
+| OKP_HUB_URL | http://localhost:4440 | hub URL | env |
+| OKP_CHAIN_ID | okp-local-1 | chain id | env |
+| OKP_CHAIN_RPC | http://localhost:26657 | chain RPC | env |
+| OKP_CHAIN_REST | http://localhost:1317 | chain REST | env |
+| OKP_SOCIAL_GRAPH_URL | http://localhost:4471 | social-graph | env |
+| OKP_BECH32_PREFIX | okp | bech32 | env |
+| OKP_COIN_DENOM | TOKN | denom | env |
+| OKP_COIN_MIN_DENOM | utokn | min denom | env |
+| OKP_ROOT | derived | plugin okp root | env |
+| OKP_GSTV_SENSORS | enabled | GSTV sensor toggle | env =0/false/off |
+| OKP_PLUGIN_DEBUG | off | plugin debug logging | env =1 |
+| OKP_SERVED_MEMORIES_PATH | ~/.okp/served-memories.json | served-store path | env |
+| OKP_AGENT_KEY | (none) | agent key fp (log-only) | env |
+| OKP_AGENT_PRIVATE_KEY | (none) | agent key fallback fp (log-only) | env |
+| OKP_EPOCH | (none) | epoch fp (log-only) | env |
+| OKP_BENCH_TOOLS_MANIFEST | (none) | dev-tools manifest path (control/tools.mjs:192) | env |
+| OKP_BENCH_STATS_MANIFEST | (none) | run-stats manifest path (control/runstats.mjs:182) | env |
+| OKP_DASHBOARD_CONFIG | (none) | dashboard shared-config path (control/routers.mjs:71 + bench/spend_key.py:48) | env |
+
+## read by sibling/runtime (reclassified — was "dead", NOT deleted)
+Re-verified: none of these has a bench-code reader, but each IS read — either by a sibling TOKProject component (hub / client / dashboard) or by an external runtime (docker compose interpolation, opencode, node/npm, playwright, apt). Not bench-surface config; kept off the deletion list.
+
+| Name | Default | Controls | Reader |
+|---|---|---|---|
+| QDRANT_API_KEY | (REQUIRED — panic if unset) | Qdrant embedding-store auth (hub) | hub/internal/config/config.go:46 — REQUIRED, panics if unset; the bench.env "code default" claim was a false comment, since removed |
+| OKP_MCP_HTTP_ONLY | "1" (set by plugin spawn) | MCP detached HTTP-only mode | client/packages/core (server.ts:268) |
+| OKP_BENCH_ENDPOINTS | off — '1' enables | bench HTTP endpoints on the MCP server | client/packages/core (http-server.ts:96) |
+| OPENCODE_DB_PATH | ~/.local/share/opencode/opencode.db | opencode session-db path for session-title pickup | hub/dashboard (opencode-session-events.ts:7) |
+| NODE_ENV | production (image) | test-mode logger gating | hub/dashboard (logger.ts:89) + client/packages/core (logger.ts:89) |
+| XDG_CONFIG_HOME | ~/.config | installer config-dir fallback | client/packages/plugin (install-opencode.ts:173) |
+| OPENCODE_CONFIG_DIR | (falls to XDG_CONFIG_HOME then ~/.config/opencode) | where installer writes opencode.json | client/packages/plugin (install-opencode.ts:170) |
+| OKP_BIND_HOST | 127.0.0.1 | host port-bind address for all infra services | docker-compose interpolation (hub/infra) |
+| NODE_PATH | /usr/local/lib/node_modules | global node_modules resolution | node runtime |
+| OPENCODE_CONFIG | (none) | opencode binary config file | opencode binary runtime |
+| PLAYWRIGHT_BROWSERS_PATH | /opt/ms-playwright | browser install root | playwright runtime |
+| DEBIAN_FRONTEND | noninteractive | apt non-interactive mode | apt runtime |
+| NPM_CONFIG_UPDATE_NOTIFIER | (various) | npm update-notifier toggle | npm runtime |
+| NPM_CONFIG_FETCH_RETRIES | (various) | npm fetch retry count | npm runtime |
+| NPM_CONFIG_FETCH_TIMEOUT | (various) | npm fetch timeout | npm runtime |
+| NPM_CONFIG_FETCH_RETRY_MINTIMEOUT | (various) | npm retry min backoff | npm runtime |
+| NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT | (various) | npm retry max backoff | npm runtime |
+| OKP_MANAGED_IDENTITY | "1" (set by harness per cell) | suppress first-run identity modal in cells | set by bench (docker_worker.py:1389); read by vendored plugin TUI (tui.tsx:1258) |
+| OKP_ENGINE_PATH | (none) | plugin engine-path override baked at install time | vendored plugin installer (install-opencode.ts:191) |
+
+## dead-and-undocumented
+none
+
+## Notes
+- `OKP_MCP_SEED` was removed from this register: its old note ("read by okp-meta/scripts/lib.sh") was wrong — that script reads `OKP_BENCH_MCP_SEED`, a different, live var. As named, `OKP_MCP_SEED` is a drift-ghost with zero occurrences anywhere and was deleted.
+- `OKP_MCP_URL` was removed: a naming-drift ghost of the live `OKP_MCP_HTTP_URL` (read at `dev/benchmark/leader-signer/vendor/config.ts:96` — moved from the retired `bench/scaffold/leader-signer/`). The bench-doc prose reference in RUNBOOK.md was renamed to the live name.
+- `OKP_BENCH_SPEND_PROXY_BASE_URL` was removed from the register (2026-09-04): the resolver `resolve_spend_proxy_base_url` was deleted in the OpenRouter-proxy cleanup (WO-CLEAN-08); nothing reads this var. The live worker-side var is `OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL` (still listed above). The stale `.env.example` line referencing it was removed too.

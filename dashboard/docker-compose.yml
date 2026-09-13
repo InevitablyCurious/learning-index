@@ -1,0 +1,87 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Bench Dashboard
+#
+#   cd bench/dashboard && docker compose up -d
+#   open http://localhost:7717
+#
+# In Docker Desktop the container appears as `bench-dashboard` with 7717
+# as a clickable link, and the health dot goes green once the board assembles.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  bench-dashboard:
+    build: .
+    image: bench-dashboard:v1
+    container_name: bench-dashboard
+    restart: unless-stopped
+
+    ports:
+      # Host-only by default, matching the rest of the Okp stack. Set
+      # OKP_BIND_HOST=0.0.0.0 to expose it on the LAN — a deliberate act.
+      - "${OKP_BIND_HOST:-127.0.0.1}:7717:7717"
+
+    volumes:
+      # The bench repo, READ-ONLY. `:ro` is not decoration — the dashboard has
+      # no reason to write, and the run artifacts under runs/ are the
+      # authoritative record of a measurement (RC-5). A read-only mount makes
+      # "the dashboard corrupted a run" structurally impossible rather than
+      # merely unlikely.
+      - ..:/bench:ro
+
+    environment:
+      OKP_DASH_BENCH_ROOT: /bench
+      OKP_DASH_POLL_MS: "2000"
+
+      # The live agent session API runs on the HOST, not in this container.
+      # host.docker.internal is the documented Docker Desktop path to it.
+      # If unreachable, the source reports `unwired` and the board simply
+      # loses liveness — it does not fail.
+      OKP_DASH_OPENCODE_URL: "http://host.docker.internal:4096"
+
+      # ── OPT-IN: host-side control plane ─────────────────────────────────
+      # The control plane is the ONLY write-capable surface. This dashboard
+      # stays read-only: it merely READS state from the control plane, and the
+      # browser POSTs to it directly.
+      #
+      # TWO URLs BECAUSE THERE ARE TWO CLIENTS ON DIFFERENT SIDES OF THE
+      # CONTAINER BOUNDARY:
+      #   CONTROL_URL        this container -> the host  (host.docker.internal)
+      #   CONTROL_PUBLIC_URL the browser    -> the host  (already on the host)
+      # Using one for both breaks the other, and the failure looks exactly like
+      # "the control plane is down" while it is running perfectly.
+      #
+      # The control plane binds 127.0.0.1 with no --host flag, by design.
+      # Docker Desktop's proxy presents host.docker.internal traffic to the
+      # host as loopback, so that bind is preserved, NOT weakened.
+      OKP_DASH_SOURCE_CONTROL_PLANE: "1"
+      # The gate suite, split out of the control-plane source so a slow or
+      # absent roster cannot hold the TUI mirror. Same service, own row.
+      OKP_DASH_SOURCE_GATE_SUITE: "1"
+      OKP_DASH_CONTROL_URL: "http://host.docker.internal:7718"
+      OKP_DASH_CONTROL_PUBLIC_URL: "http://127.0.0.1:7718"
+
+      # ── OPT-IN: hub recall tables ───────────────────────────────────────
+      # Off by default. The board must come up on a machine with no database
+      # and no Okp stack. Enable by uncommenting these AND the network
+      # block below, then `docker compose up -d`.
+      # OKP_DASH_HUBDB: "1"
+      # OKP_HUB_DB_HOST: postgres
+      # OKP_HUB_DB_PORT: "5432"
+      # OKP_HUB_DB_USER: okp
+      # OKP_HUB_DB_NAME: okp_hub
+      # OKP_HUB_DB_PASSWORD: okp_dev
+
+    extra_hosts:
+      # Makes host.docker.internal resolve on Linux too, where it is not
+      # automatic as it is on Docker Desktop.
+      - "host.docker.internal:host-gateway"
+
+    # ── OPT-IN: join the hub stack network to reach postgres by name ────
+    # The network is named after the compose project in hub/infra (name: okp),
+    # so it is okp_default — verify with `docker network ls` before enabling.
+    # networks:
+    #   - okp_default
+
+# networks:
+#   okp_default:
+#     external: true

@@ -1,0 +1,12 @@
+# Pip fallback for the bench harness. Prefer the packaged install:
+#   python -m venv .venv && . .venv/bin/activate && pip install -e '.[test]'
+# This file mirrors pyproject.toml [project.dependencies] + [test] and is kept
+# only for environments that cannot install the editable package.
+cryptography>=42
+psycopg[binary]>=3.1
+jsonschema>=4.21
+mini-swe-agent>=2.4
+pytest>=8
+pytest-xdist>=3.5
+pytest-timeout>=2.3
+ruff>=0.8  # formatter (CI gate)

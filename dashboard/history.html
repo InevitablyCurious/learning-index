@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OKP bench — history</title>
+<link rel="stylesheet" href="./vendor/diff2html/diff2html.min.css">
+<style>
+/* ── palette — the board's own tokens (index.html :root), copied verbatim ── */
+:root {
+  --bg:        #02100a;
+  --bg-2:      #04190f;
+  --fg:        #2fe07a;
+  --dim:       #0f5e32;
+  --type:      #e2ffec;
+  --accent:    #54f59a;
+  --danger:    #ff6b6b;   /* errors + removed diff lines only — never decorative */
+  --border:        color-mix(in srgb, var(--fg) 14%, transparent);
+  --border-strong: color-mix(in srgb, var(--fg) 22%, transparent);
+  --hairline:      color-mix(in srgb, var(--fg) 10%, transparent);
+  --font: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+}
+
+html { background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 400 13px/1.5 var(--font);
+}
+
+/* ── header ── */
+.hist-header {
+  display: flex; align-items: baseline; gap: 16px;
+  padding: 14px 20px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--bg); z-index: 10;
+}
+.hist-header h1 {
+  margin: 0; font: 700 13px var(--font);
+  letter-spacing: .14em; text-transform: uppercase; color: var(--type);
+}
+.hist-back { color: var(--fg); text-decoration: none; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 3px 9px; }
+.hist-back:hover { color: var(--type); border-color: var(--fg); }
+
+main { padding: 18px 20px 60px; max-width: 1500px; margin: 0 auto; }
+
+/* ── panes ── */
+.hist-pane { margin-bottom: 28px; }
+.hist-h {
+  margin: 0 0 8px; font: 700 10.5px var(--font);
+  letter-spacing: .16em; text-transform: uppercase; color: var(--fg);
+  display: flex; gap: 10px; align-items: baseline;
+}
+.hist-sub { font: 400 11px var(--font); color: var(--dim); overflow-wrap: anywhere; }
+.hist-note { padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--bg-2); color: var(--fg); }
+.hist-error {
+  padding: 10px 12px; border: 1px solid var(--danger); border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 6%, var(--bg-2)); color: var(--danger);
+  white-space: pre-line; overflow-wrap: anywhere;
+}
+.hist-none { color: var(--dim); }
+
+/* ── rows (runs / checkpoints / files) ── */
+.hist-row {
+  display: grid; gap: 10px; align-items: baseline; width: 100%;
+  text-align: left; font: 400 12px var(--font); color: var(--fg);
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px 11px; margin: 0 0 6px; cursor: pointer;
+}
+.hist-row:hover { border-color: var(--fg); }
+.hist-row.on { border-color: var(--accent); background: color-mix(in srgb, var(--fg) 8%, var(--bg-2)); }
+.hist-head {
+  display: grid; gap: 10px; padding: 4px 11px; margin-bottom: 6px;
+  font: 700 9.5px var(--font); letter-spacing: .14em; text-transform: uppercase; color: var(--dim);
+}
+.run-row { grid-template-columns: minmax(150px, 1.1fr) minmax(130px, .9fr) minmax(180px, 1.5fr) minmax(180px, 1.5fr); }
+
+/* ── "view result": a SIBLING of the row button, never a child ──
+   A button nested inside a button is invalid markup and its click never
+   arrives, so the row and its play control sit side by side in a wrapper. The
+   wrapper carries the row's bottom margin; the row inside it does not. */
+.hist-rowwrap { display: flex; gap: 6px; align-items: stretch; margin: 0 0 6px; }
+.hist-rowwrap > .hist-row { flex: 1 1 auto; margin: 0; }
+.hist-play {
+  flex: 0 0 auto; align-self: stretch; white-space: nowrap; cursor: pointer;
+  font: 700 9.5px var(--font); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--dim); background: var(--bg-2);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 12px;
+}
+.hist-play:hover:not(:disabled) { color: var(--fg); border-color: var(--fg); }
+.hist-play.on { color: var(--accent); border-color: var(--accent); }
+.hist-play:disabled { opacity: .5; cursor: default; }
+.hist-warn {
+  margin-top: 6px; padding: 8px 11px; font: 400 12px var(--font);
+  color: var(--fg); background: var(--bg-2);
+  border: 1px solid var(--accent); border-radius: var(--radius-sm);
+}
+.hist-warn code { font: 400 11px var(--mono, var(--font)); color: var(--dim); overflow-wrap: anywhere; }
+.hist-era {
+  font: 700 9px var(--font); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--dim); margin-left: 6px;
+}
+.hist-era.live { color: var(--accent); }
+/* ── toasts ──
+   Every reason this page cannot show or do something surfaces here, with the
+   detail pre-formatted for pasting. The rule these serve: standardise the
+   VIEW, never the data — an unrecognised or half-finished run says what it is
+   and why, and the operator can hand that sentence to someone else verbatim. */
+#toasts {
+  position: fixed; right: 16px; bottom: 16px; z-index: 50;
+  display: flex; flex-direction: column; gap: 8px; max-width: min(560px, calc(100vw - 32px));
+}
+.toast {
+  background: var(--bg-2); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm); padding: 10px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.28);
+}
+.toast.bad { border-left-color: var(--bad, #e5534b); }
+.toast-head {
+  display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;
+  font: 700 9.5px var(--font); letter-spacing: .12em; text-transform: uppercase; color: var(--dim);
+}
+.toast-code { color: var(--fg); }
+.toast-actions { margin-left: auto; display: flex; gap: 6px; }
+.toast-btn {
+  font: 700 9px var(--font); letter-spacing: .1em; text-transform: uppercase; cursor: pointer;
+  color: var(--dim); background: transparent; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 2px 7px;
+}
+.toast-btn:hover { color: var(--fg); border-color: var(--fg); }
+.toast-body { font: 400 12px var(--font); color: var(--fg); overflow-wrap: anywhere; }
+.toast-where { font: 400 11px var(--font); color: var(--dim); margin-top: 4px; overflow-wrap: anywhere; }
+.hist-del {
+  flex: 0 0 auto; align-self: stretch; white-space: nowrap; cursor: pointer;
+  font: 700 9.5px var(--font); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--dim); background: var(--bg-2);
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 10px;
+}
+.hist-del:hover:not(:disabled) { color: var(--bad, #e5534b); border-color: var(--bad, #e5534b); }
+.hist-del:disabled { opacity: .5; cursor: default; }
+/* The confirmation restates the SERVER's sentence, so it gets room to be read. */
+.hist-confirm {
+  margin-bottom: 10px; padding: 12px 14px;
+  background: var(--bg-2); border: 1px solid var(--bad, #e5534b);
+  border-radius: var(--radius-sm);
+}
+.hist-confirm-head {
+  font: 700 9.5px var(--font); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--bad, #e5534b); margin-bottom: 6px;
+}
+.hist-confirm-body { font: 400 12px var(--font); color: var(--fg); line-height: 1.5; }
+.hist-confirm-actions { display: flex; gap: 8px; margin-top: 10px; }
+.hist-confirm-slot:empty { display: none; }
+.hist-playnote { margin-bottom: 8px; }
+.hist-playnote:empty { display: none; }
+.cp-row  { grid-template-columns: minmax(90px, 1fr) 92px minmax(80px, .8fr) minmax(150px, 1.4fr) 110px; }
+.file-row { grid-template-columns: minmax(200px, 1fr) 92px; }
+.c-id, .c-path { overflow-wrap: anywhere; }
+.c-path { color: var(--fg); }
+.c-num { font-variant-numeric: tabular-nums; color: var(--fg); }
+.c-hash { overflow-wrap: anywhere; }
+.c-chg { color: var(--accent); text-transform: uppercase; font-size: 10.5px; letter-spacing: .08em; }
+.dev-on { color: var(--accent); font-weight: 700; }
+.dev-off { color: var(--dim); }
+.dev-src { color: var(--fg); }
+.dev-file { display: block; }
+.files-head { margin-bottom: 6px; }
+
+/* ── diff pane ── */
+.hist-diff { margin-top: 4px; }
+.diff-path { margin-bottom: 6px; }
+
+/*
+ * The vendor sheet reads EVERY colour through a --d2h-* custom property
+ * (`background-color:#fee8e9; background-color:var(--d2h-del-bg-color)`).
+ * So the whole surface is re-themed by redefining those properties here —
+ * not by chasing individual classes. Anything patched class-by-class is a
+ * class we have to remember; anything left unpatched falls through to the
+ * light defaults, which is how a pure-white .d2h-info bar and a white
+ * side-by-side placeholder column got onto a near-black page.
+ *
+ * Reading the diff must never depend on brightness. Added / removed is
+ * carried by HUE, and by three escalating areas, smallest signal loudest:
+ *   row tint 13%  →  line-number gutter 26%  →  word-level highlight 34%.
+ * Nothing in here exceeds ~luminance 60 on a --bg of 13.
+ */
+.hist-d2h {
+  --d2h-font-family: var(--font);
+  --d2h-font-size: 12px;
+
+  --d2h-bg-color:                    var(--bg);
+  --d2h-border-color:                var(--border);
+  --d2h-dim-color:                   var(--dim);
+  --d2h-line-border-color:           var(--hairline);
+  --d2h-file-header-bg-color:        var(--bg-2);
+  --d2h-file-header-border-color:    var(--border);
+  --d2h-selected-color:              color-mix(in srgb, var(--fg) 14%, var(--bg));
+
+  /* added — the board green */
+  --d2h-ins-bg-color:                color-mix(in srgb, var(--fg) 13%, var(--bg));
+  --d2h-ins-border-color:            color-mix(in srgb, var(--fg) 30%, transparent);
+  --d2h-ins-highlight-bg-color:      color-mix(in srgb, var(--fg) 34%, var(--bg));
+  --d2h-ins-label-color:             var(--accent);
+
+  /* removed — the board's one red, kept desaturated against the bg */
+  --d2h-del-bg-color:                color-mix(in srgb, var(--danger) 13%, var(--bg));
+  --d2h-del-border-color:            color-mix(in srgb, var(--danger) 30%, transparent);
+  --d2h-del-highlight-bg-color:      color-mix(in srgb, var(--danger) 34%, var(--bg));
+  --d2h-del-label-color:             var(--danger);
+
+  /* the paired half of a rewritten line — a weaker version of each side */
+  --d2h-change-del-color:            color-mix(in srgb, var(--danger) 8%, var(--bg));
+  --d2h-change-ins-color:            color-mix(in srgb, var(--fg) 8%, var(--bg));
+  --d2h-change-label-color:          var(--accent);
+  --d2h-moved-label-color:           var(--dim);
+
+  /* hunk header (@@) — furniture, not content */
+  --d2h-info-bg-color:               var(--bg-2);
+  --d2h-info-border-color:           var(--hairline);
+
+  --d2h-empty-placeholder-bg-color:  var(--bg);
+  --d2h-empty-placeholder-border-color: var(--hairline);
+
+  overflow-x: auto;
+  color: var(--fg);
+}
+/* colourScheme is diff2html's choice, not ours — pin the dark set to the same
+   tokens so flipping it can never reintroduce a light default. */
+.hist-d2h {
+  --d2h-dark-color: var(--fg);
+  --d2h-dark-bg-color: var(--d2h-bg-color);
+  --d2h-dark-border-color: var(--d2h-border-color);
+  --d2h-dark-dim-color: var(--d2h-dim-color);
+  --d2h-dark-line-border-color: var(--d2h-line-border-color);
+  --d2h-dark-file-header-bg-color: var(--d2h-file-header-bg-color);
+  --d2h-dark-file-header-border-color: var(--d2h-file-header-border-color);
+  --d2h-dark-empty-placeholder-bg-color: var(--d2h-empty-placeholder-bg-color);
+  --d2h-dark-empty-placeholder-border-color: var(--d2h-empty-placeholder-border-color);
+  --d2h-dark-selected-color: var(--d2h-selected-color);
+  --d2h-dark-ins-bg-color: var(--d2h-ins-bg-color);
+  --d2h-dark-ins-border-color: var(--d2h-ins-border-color);
+  --d2h-dark-ins-highlight-bg-color: var(--d2h-ins-highlight-bg-color);
+  --d2h-dark-ins-label-color: var(--d2h-ins-label-color);
+  --d2h-dark-del-bg-color: var(--d2h-del-bg-color);
+  --d2h-dark-del-border-color: var(--d2h-del-border-color);
+  --d2h-dark-del-highlight-bg-color: var(--d2h-del-highlight-bg-color);
+  --d2h-dark-del-label-color: var(--d2h-del-label-color);
+  --d2h-dark-change-del-color: var(--d2h-change-del-color);
+  --d2h-dark-change-ins-color: var(--d2h-change-ins-color);
+  --d2h-dark-change-label-color: var(--d2h-change-label-color);
+  --d2h-dark-moved-label-color: var(--d2h-moved-label-color);
+  --d2h-dark-info-bg-color: var(--d2h-info-bg-color);
+  --d2h-dark-info-border-color: var(--d2h-info-border-color);
+}
+
+/* ── the few things the vendor sheet does NOT route through a variable ── */
+
+/* it never sets a colour on the code text at all — that inherits */
+.hist-d2h .d2h-file-wrapper { border-radius: var(--radius-md); }
+.hist-d2h .d2h-file-header { font-family: var(--font); }
+.hist-d2h .d2h-file-name { color: var(--type); }
+.hist-d2h .d2h-diff-table { font-family: var(--font); }
+
+/* text hierarchy: context recedes, additions sit at full board green,
+   removals go rose and a step dimmer — so deletions read as *less*, never
+   as brighter. No rule here lands above luminance ~180. */
+.hist-d2h .d2h-code-line-ctn { color: color-mix(in srgb, var(--fg) 78%, var(--bg)); }
+.hist-d2h .d2h-ins .d2h-code-line-ctn { color: var(--fg); }
+.hist-d2h .d2h-del .d2h-code-line-ctn { color: color-mix(in srgb, var(--danger) 82%, var(--bg)); }
+
+/* the +/- glyph is the smallest area on the row, so it carries full signal */
+.hist-d2h .d2h-code-line-prefix { font-weight: 700; }
+.hist-d2h .d2h-ins .d2h-code-line-prefix { color: var(--accent); }
+.hist-d2h .d2h-del .d2h-code-line-prefix { color: var(--danger); }
+
+/* Gutter — second-loudest band, and the part that survives horizontal scroll.
+ *
+ * NOTE THE COMPOUND SELECTORS. diff2html puts BOTH classes on the same <td>:
+ *   <td class="d2h-code-side-linenumber d2h-del">
+ * so `.d2h-del .d2h-code-side-linenumber` (a descendant selector) matches
+ * nothing at all — which is why the gutter tint silently did nothing before.
+ * The descendant forms are kept alongside because the line-by-line output
+ * nests the number cell one level down. */
+.hist-d2h .d2h-code-linenumber.d2h-ins,
+.hist-d2h .d2h-code-side-linenumber.d2h-ins,
+.hist-d2h .d2h-ins .d2h-code-linenumber,
+.hist-d2h .d2h-ins .d2h-code-side-linenumber {
+  background: color-mix(in srgb, var(--fg) 26%, var(--bg));
+  color: color-mix(in srgb, var(--fg) 72%, var(--bg));
+}
+.hist-d2h .d2h-code-linenumber.d2h-del,
+.hist-d2h .d2h-code-side-linenumber.d2h-del,
+.hist-d2h .d2h-del .d2h-code-linenumber,
+.hist-d2h .d2h-del .d2h-code-side-linenumber {
+  background: color-mix(in srgb, var(--danger) 26%, var(--bg));
+  color: color-mix(in srgb, var(--danger) 72%, var(--bg));
+}
+/* the empty-placeholder cell also doubles as a line-number cell — it must not
+   pick up either gutter tint, it is the absence of a line */
+.hist-d2h .d2h-code-side-linenumber.d2h-emptyplaceholder,
+.hist-d2h .d2h-code-side-linenumber.d2h-code-side-emptyplaceholder {
+  background-color: var(--d2h-empty-placeholder-bg-color);
+}
+
+/* word-level highlight — outlined rather than filled, so an intra-line change
+   reads without a bright block. inset shadow, not border: no layout shift. */
+.hist-d2h .d2h-code-line ins, .hist-d2h .d2h-code-side-line ins {
+  box-shadow: inset 0 0 0 1px var(--d2h-ins-border-color);
+}
+.hist-d2h .d2h-code-line del, .hist-d2h .d2h-code-side-line del {
+  box-shadow: inset 0 0 0 1px var(--d2h-del-border-color);
+  text-decoration: none;
+}
+
+/* "no counterpart line" is absence, not content — hatch it faintly instead of
+   filling a column with a solid slab. */
+.hist-d2h .d2h-emptyplaceholder,
+.hist-d2h .d2h-code-side-emptyplaceholder {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 5px,
+    color-mix(in srgb, var(--fg) 5%, transparent) 5px 10px
+  );
+}
+
+@media (max-width: 900px) {
+  .run-row, .hist-head.run-row { grid-template-columns: 1fr 1fr; }
+  .hist-rowwrap { flex-wrap: wrap; }
+  .cp-row { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<header class="hist-header">
+  <a href="/" class="hist-back">← board</a>
+  <h1>run history</h1>
+</header>
+<main id="history-root"></main>
+<div id="toasts" role="status" aria-live="polite"></div>
+<script src="./vendor/diff2html/diff2html.min.js"></script>
+<script type="module">import { boot } from "./history.js"; boot();</script>
+</body>
+</html>

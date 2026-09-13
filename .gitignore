@@ -1,0 +1,79 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# venv
+.venv/
+venv/
+env/
+
+# pytest
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.log
+Thumbs.db
+
+# Okp: NEVER commit the corpus, keys, tokens, or run artifacts.
+# The adapter is open-sourced; the corpus/keys/epoch_sk are NOT.
+runs/
+*.catalog.jsonl
+*.review.jsonl
+*.private.json
+scorecards/
+*.scorecard.json
+
+# EXTRACTION TELEMETRY — CONTAINS MEMORY PLAINTEXT. NEVER COMMIT.
+#
+# okp_bench/extraction_telemetry.py deliberately stores memory bodies so
+# near-duplicate scores are interpretable and the threshold can be tuned from
+# measurement. That is sound for a local, single-operator bench instrument on
+# the operator's own machine — and it is exactly what RUNBOOK §9 forbids from
+# reaching git, which stays hash-only: fingerprints, sizes, counts and reasons.
+#
+# `data/` also holds per-cell funnel snapshots and plugin logs (data/README.md).
+# The tracked .gitkeep files and README are preserved by the negations below, so
+# the layout survives while its CONTENTS never do.
+data/cells/*
+data/extract/*
+!data/cells/.gitkeep
+!data/extract/.gitkeep
+!data/README.md
+# RESULTS LEDGER — results are data, never committed. The ledger lives
+# HOST-side (outside runs/) and must NEVER be mounted into a cell or proxied
+# by the egress sidecar; in-cell code must never see scored results.
+data/results-ledger.jsonl
+
+# --- backgammon task (Phase 2a): never commit installed deps or test artifacts ---
+node_modules/
+tasks/**/test-results/
+tasks/**/playwright-report/
+tasks/**/.last-run.json
+.okp/
+
+# Local orchestration docs (never committed)
+AGENTS.md
+
+# Local bench env
+.env
+.env.*.local
+
+# Cloud (OrcaRouter) API key — NEVER commit
+config/cloud.env
+
+# Dev-mode state — operator machine state, not a repo fact. A fresh clone is OFF.
+config/devmode.json
+# The snapshot armed for the next seeded run. Operator machine state, same
+# class as devmode.json above — never committed.
+config/armed-snapshot.json

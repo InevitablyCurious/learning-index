@@ -1,0 +1,508 @@
+{
+  "schema_version": 2,
+  "_comment": [
+    "HUMAN-WRITTEN SYMPTOM LINES — what the model is told after a failed attempt.",
+    "",
+    "WHY THIS FILE EXISTS. The repair loop used to derive its message from the",
+    "TEST TITLE. A test title states the RULE, so the message stated the rule:",
+    "gate E08 was reported as 'full-turn sequences are distinct by RESULTING",
+    "BOARD', which is the requirement verbatim. Measured on run 1788099503, the",
+    "model failed E08 on attempt 1 and passed it on attempt 2 — it was told. A",
+    "gate answered by its own failure message measures attempt count, not",
+    "capability.",
+    "",
+    "THE VOICE. One sentence, from a person playing the finished game who has",
+    "noticed something wrong. They describe WHAT THEY SAW. They do not know the",
+    "function names, the requirement ids, or the fix — they are a user, not a",
+    "reviewer.",
+    "",
+    "THE TEST: could a reader who has never seen the spec derive the fix from",
+    "this sentence alone? If yes, it is too specific. Name the surface (the",
+    "board, the dice, the pip numbers, the computer's move) and the wrongness.",
+    "Never name the rule.",
+    "",
+    "  BAD  'a checker on the bar counts a full 25 pips'   — states the rule",
+    "  GOOD 'my counter barely moved while my piece sat on the bar'",
+    "",
+    "── TWO PASSES (schema 2, 2026-09-02) ────────────────────────────────────",
+    "",
+    "Each gate carries TWO lines, and which one is sent depends on whether this",
+    "is the first time the model is hearing about that gate or a repeat.",
+    "",
+    "  first   — the player's first report, after their first playthrough.",
+    "  repeat  — the SAME fault, seen again on a replay, after the model has",
+    "            already tried to fix it and failed.",
+    "",
+    "WHY TWO AND NOT ONE. Byte-identical text across attempts returns ZERO new",
+    "information: a failed fix reads exactly like a fix never attempted, and the",
+    "repair loop has no gradient. That is the defect WO-FEEDBACK-1 fixed by",
+    "appending the grader's own assertion text on a repeat — which worked, and",
+    "leaked. The assertion states the rule, which is the one thing this file",
+    "exists to withhold. The second line replaces it.",
+    "",
+    "WHAT A REPEAT LINE IS ALLOWED TO ADD. A SECOND SIGHTING, not a rephrase:",
+    "the player went back and played again, and reports the same fault from a",
+    "different observable angle — what they did differently, what they watched",
+    "for, what they compared it against. Confirmation that the fix missed is",
+    "itself real information and costs nothing. The anti-leak test above applies",
+    "to the repeat line UNCHANGED, and it is the harder line to write: a second",
+    "description drifts toward the cause if it is not held back deliberately.",
+    "",
+    "THIRD AND LATER FAILURES REUSE THE REPEAT LINE. A person does not invent",
+    "fresh phrasing every round, and a third variant would either repeat itself",
+    "or start narrowing toward the fix.",
+    "",
+    "PROVISIONAL — RE-GAUGE AFTER SEVERAL CAMPAIGNS (2026-09-02). These lines",
+    "have not been measured yet. Once several benchmarks have run, take the",
+    "gates that are ALWAYS failing and read the prose those gates feed the",
+    "model: a gate that never goes green may be under-specified rather than",
+    "hard, and the ambiguity would be here, not in the model. See",
+    "dev/priv/dev-bench-prompts.md."
+  ],
+  "gates": {
+    "CONF": {
+      "first": "Something about the app isn't behaving, but I couldn't pin down what.",
+      "repeat": "I went through it again after your fix and something still isn't behaving."
+    },
+    "G01": {
+      "first": "When i start a new game the board doesn't look like a real backgammon setup, the pieces are in the wrong places",
+      "repeat": "I set my own board up next to the screen to compare this time — the opening position still doesn't match."
+    },
+    "G02": {
+      "first": "The numbers showing how many moves are left for a player to finish the game look wrong on a fresh board",
+      "repeat": "On a brand new game, before I've even rolled, those two counters that show how many moves a player has left to finish the game still don't read right to me."
+    },
+    "G03": {
+      "first": "When i roll doubles the game doesn't let me use all four of the dice moves",
+      "repeat": "Rolled doubles several more times and I still get cut short — I run out of moves earlier than I should."
+    },
+    "G04": {
+      "first": "Sometimes the game offers me moves that land on a spot my opponent has stacked with pieces",
+      "repeat": "It happened again — I took one of the moves it offered me and landed somewhere my opponent clearly already holds."
+    },
+    "G05": {
+      "first": "When i roll two dice and only one of them can be played because the other move is blocked, my piece by the smaller number die is moveable",
+      "repeat": "Again on a roll where only one of my two numbers had anywhere to go, the move it left me was the wrong one of the two."
+    },
+    "G06": {
+      "first": "When my piece is on the bar the game doesn't force me to bring it back in before i do anything else",
+      "repeat": "I got sent to the bar again and the game still let me carry on elsewhere as if nothing had happened."
+    },
+    "G07": {
+      "first": "When i hit an opponents piece it doesn't travel to the bar.",
+      "repeat": "Landed on one of theirs again and went looking for it on the bar afterwards — it wasn't there."
+    },
+    "G08": {
+      "first": "The game lets me take a checker off with a roll bigger than the gap it has left to the edge",
+      "repeat": "Still happening as I finish up — pieces are coming off on rolls that are plainly bigger than the distance they had left."
+    },
+    "G09": {
+      "first": "The game let me take a piece off the board even though one of my pieces was still out on the other side of the board",
+      "repeat": "Did it again with a straggler stranded nowhere near my home side, and it still started letting me take pieces off."
+    },
+    "G10": {
+      "first": "When a game ends it doesn't tell me the right way i won or lost",
+      "repeat": "Played several more all the way to the end and the result it announces still doesn't match how the game actually finished."
+    },
+    "G11": {
+      "first": "The doubling cube doesn't start in the middle where it should",
+      "repeat": "On a fresh game the cube still looks misplaced to me before either of us has touched it."
+    },
+    "G12": {
+      "first": "The computer accepts or refuses the doubling cube at the wrong times",
+      "repeat": "Offered it the cube in a few more spots and its answers still don't line up with how the game was actually going."
+    },
+    "G13": {
+      "first": "Sometimes the same die gets used twice in one turn",
+      "repeat": "I watched my turn closely this time and counted — one of the two numbers still got spent twice."
+    },
+    "G14": {
+      "first": "The computer sometimes makes a move that isn't a legal one",
+      "repeat": "Caught it again, and I had to stop and stare at the board: the computer made a move it shouldn't have been able to make."
+    },
+    "G16": {
+      "first": "When i try to open the game a second time while it's already running it just sits there and nothing happens",
+      "repeat": "Tried starting a second copy again while the first was still up, and it still just sits there with nothing on screen."
+    },
+    "E01": {
+      "first": "The dice is broken, whenever i roll doubles i can only move the pieces 2 times - this is wrong please fix it so that the dice rolls work like normal backgammon.",
+      "repeat": "Rolled doubles again and I'm still only getting the two moves out of the roll."
+    },
+    "E02": {
+      "first": "Whenever i'm trying to exit my pieces of the edge of the board during the end of the game - after i have all pieces within the home side - the game allows me to move pieces off the board that shouldn't be allowed which is unfair to my opponent.",
+      "repeat": "Back at the end of the game with everything home, and it's still letting pieces off in ways that feel like cheating my opponent."
+    },
+    "E03": {
+      "first": "There is a problem when i roll and i'm trying to take my piece off and it won't let me, it only lets me move the piece forward but it doesn't let me take it off the board",
+      "repeat": "Same trouble getting my pieces off — the roll just shuffles me further along and the piece stays on the board."
+    },
+    "E04": {
+      "first": "I rolled the dice while my piece was on the bar, and the opponent had filled up his home section with all 5 spaces being taken with 2x pieces and the dice i rolled were blocked but i was able to move my pieces anyways that weren't on the bar or the game just crashed.",
+      "repeat": "Again with a piece on the bar and their home side completely shut: I could still move my other pieces, or the whole thing fell over."
+    },
+    "E05": {
+      "first": "I rolled the dice while my piece was on the bar, and i was able to move another piece (the non-bar piece) before the bar piece, this is broken",
+      "repeat": "With a piece stuck on the bar it still let me pick up a different one first."
+    },
+    "E06": {
+      "first": "The pip numbers next to each player look wrong once someone gets hit — mine barely moves even while I have a checker sitting on the bar",
+      "repeat": "Got hit again and watched the counter — mine still barely reacted while my piece sat there on the bar."
+    },
+    "E07": {
+      "first": "When my piece is on the bar i'm able to take pieces off the board",
+      "repeat": "Still able to take pieces off the board even with one of mine sitting on the bar."
+    },
+    "E08": {
+      "first": "The computer takes a noticeably long time before it plays some rolls, and the more ways there are to play the dice the longer it stalls",
+      "repeat": "Still sitting there waiting on the computer, and the busier the position, the longer I wait."
+    },
+    "E09": {
+      "first": "While the computer is thinking some of my pieces suddenly change position on their own, and the board doesn't stay how i left it",
+      "repeat": "Kept my eyes on the board while it was thinking this time — my pieces still shuffled around on their own."
+    },
+    "F01": {
+      "first": "The game page throws errors in the background when it loads",
+      "repeat": "Opened the page again and it still isn't loading cleanly; there are still errors going off behind it."
+    },
+    "F02": {
+      "first": "The board doesn't show all the points and pieces it should when a game starts",
+      "repeat": "On a new game the board still isn't fully drawn — points and pieces are missing from it."
+    },
+    "F03": {
+      "first": "When i click a piece the possible moves don't show up",
+      "repeat": "Clicked around on my pieces again and nothing lights up to show me where I'm able to go."
+    },
+    "F04": {
+      "first": "When i click a piece the suggested moves don't tell me which die they use",
+      "repeat": "The suggestions still don't tell me which of my two numbers each one would use up."
+    },
+    "F05": {
+      "first": "When i have no moves the game doesn't tell me i have to pass",
+      "repeat": "Got stuck with nothing I could play again, and the game still says nothing about it."
+    },
+    "F06": {
+      "first": "The numbers on screen showing how far each side is from finishing don't match the actual game",
+      "repeat": "Those counters on screen still don't agree with what's actually happening on the board in front of me."
+    },
+    "F07": {
+      "first": "The doubling cube on screen doesn't show the right number or whose it is",
+      "repeat": "The cube on screen still shows the wrong number, or the wrong side of the table owning it."
+    },
+    "F08": {
+      "first": "When i change the difficulty level nothing actually changes",
+      "repeat": "Switched the difficulty again and the computer plays exactly the same as it did before."
+    },
+    "F09": {
+      "first": "When i hit an opponent piece i don't see it go up onto the bar",
+      "repeat": "Hit one of theirs again and never saw the piece travel up to the bar on screen."
+    },
+    "F10": {
+      "first": "When i have a piece on the bar and re-enter it, i don't see it move back onto the board",
+      "repeat": "Brought a piece back in off the bar again and it simply pops into place with no travel across the board."
+    },
+    "F11": {
+      "first": "When i take a piece off the board it doesn't show up in the off tray",
+      "repeat": "Took several pieces off again and the tray at the side still stays empty."
+    },
+    "F12": {
+      "first": "When the game ends i can't start a fresh game unless i reload the page",
+      "repeat": "Game ended again and I still had to reload the whole page before I could play another."
+    },
+    "F13": {
+      "first": "The board gets cut off or spills off the side of the screen",
+      "repeat": "The board still doesn't fit my screen — part of it runs off the side."
+    },
+    "F14": {
+      "first": "The pieces don't move smoothly, they just jump from spot to spot",
+      "repeat": "The pieces still snap straight from one spot to the next with nothing in between."
+    },
+    "REQ-STATE/state.points": {
+      "first": "They're reading the state your app reports and it doesn't include \"points\" — the 24 board points as a list of numbers, positive for white checkers and negative for black. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"points\" — the 24 board points as a list of numbers, positive for white checkers and negative for black — still isn't in there."
+    },
+    "REQ-STATE/state.bar": {
+      "first": "They're reading the state your app reports and it doesn't include \"bar\" — the bar counts, as white and black numbers. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"bar\" — the bar counts, as white and black numbers — still isn't in there."
+    },
+    "REQ-STATE/state.off": {
+      "first": "They're reading the state your app reports and it doesn't include \"off\" — the borne-off counts, as white and black numbers. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"off\" — the borne-off counts, as white and black numbers — still isn't in there."
+    },
+    "REQ-STATE/state.turn": {
+      "first": "They're reading the state your app reports and it doesn't include \"turn\" — whose turn it is. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"turn\" — whose turn it is — still isn't in there."
+    },
+    "REQ-STATE/state.phase": {
+      "first": "They're reading the state your app reports and it doesn't include \"phase\" — what the game is waiting for — rolling, moving, game over, or a double being offered. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"phase\" — what the game is waiting for — rolling, moving, game over, or a double being offered — still isn't in there."
+    },
+    "REQ-STATE/state.dice": {
+      "first": "They're reading the state your app reports and it doesn't include \"dice\" — the dice rolled this turn (two of them, or four on a double). Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"dice\" — the dice rolled this turn (two of them, or four on a double) — still isn't in there."
+    },
+    "REQ-STATE/state.remainingDice": {
+      "first": "They're reading the state your app reports and it doesn't include \"remainingDice\" — the dice not used up yet this turn. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"remainingDice\" — the dice not used up yet this turn — still isn't in there."
+    },
+    "REQ-STATE/state.cube": {
+      "first": "They're reading the state your app reports and it doesn't include \"cube\" — the doubling cube as its value plus who owns it, with no owner meaning centered. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"cube\" — the doubling cube as its value plus who owns it, with no owner meaning centered — still isn't in there."
+    },
+    "REQ-STATE/state.difficulty": {
+      "first": "They're reading the state your app reports and it doesn't include \"difficulty\" — which of easy, medium or hard is set. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"difficulty\" — which of easy, medium or hard is set — still isn't in there."
+    },
+    "REQ-STATE/state.score": {
+      "first": "They're reading the state your app reports and it doesn't include \"score\" — the match score, as white and black numbers. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"score\" — the match score, as white and black numbers — still isn't in there."
+    },
+    "REQ-STATE/state.winner": {
+      "first": "They're reading the state your app reports and it doesn't include \"winner\" — who won, or nothing while the game is still going. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"winner\" — who won, or nothing while the game is still going — still isn't in there."
+    },
+    "REQ-STATE/state.winType": {
+      "first": "They're reading the state your app reports and it doesn't include \"winType\" — how the game was won — single, gammon or backgammon — or nothing while it is still going. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"winType\" — how the game was won — single, gammon or backgammon — or nothing while it is still going — still isn't in there."
+    },
+    "REQ-STATE/state.pointsWon": {
+      "first": "They're reading the state your app reports and it doesn't include \"pointsWon\" — how many points the win was worth, as a number. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"pointsWon\" — how many points the win was worth, as a number — still isn't in there."
+    },
+    "REQ-STATE/state.doubleOfferedBy": {
+      "first": "They're reading the state your app reports and it doesn't include \"doubleOfferedBy\" — who offered the double, or nothing if nobody has. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"doubleOfferedBy\" — who offered the double, or nothing if nobody has — still isn't in there."
+    },
+    "REQ-STATE/state.message": {
+      "first": "They're reading the state your app reports and it doesn't include \"message\" — the message text currently being shown to the player. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"message\" — the message text currently being shown to the player — still isn't in there."
+    },
+    "REQ-STATE/state.turnOver": {
+      "first": "They're reading the state your app reports and it doesn't include \"turnOver\" — whether the turn is finished, as a yes or no. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"turnOver\" — whether the turn is finished, as a yes or no — still isn't in there."
+    },
+    "REQ-STATE/state.gamesPlayed": {
+      "first": "They're reading the state your app reports and it doesn't include \"gamesPlayed\" — how many games have been played, as a number. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"gamesPlayed\" — how many games have been played, as a number — still isn't in there."
+    },
+    "REQ-STATE/state.pip": {
+      "first": "They're reading the state your app reports and it doesn't include \"pip\" — the pip counts, as white and black numbers. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"pip\" — the pip counts, as white and black numbers — still isn't in there."
+    },
+    "REQ-STATE/state.legalMoves": {
+      "first": "They're reading the state your app reports and it doesn't include \"legalMoves\" — the legal moves, as a list. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"legalMoves\" — the legal moves, as a list — still isn't in there."
+    },
+    "REQ-STATE/state.canDouble": {
+      "first": "They're reading the state your app reports and it doesn't include \"canDouble\" — whether doubling is allowed right now, as a yes or no. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"canDouble\" — whether doubling is allowed right now, as a yes or no — still isn't in there."
+    },
+    "REQ-TESTID/testid.scoreWhite": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"scoreWhite\" — the human player's score.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"scoreWhite\" — the human player's score."
+    },
+    "REQ-TESTID/testid.scoreBlack": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"scoreBlack\" — the AI's score.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"scoreBlack\" — the AI's score."
+    },
+    "REQ-TESTID/testid.difficulty": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"difficulty\" — the difficulty selector.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"difficulty\" — the difficulty selector."
+    },
+    "REQ-TESTID/testid.newGameBtn": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"newGameBtn\" — the new-game button.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"newGameBtn\" — the new-game button."
+    },
+    "REQ-TESTID/testid.board": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"board\" — the board itself.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"board\" — the board itself."
+    },
+    "REQ-TESTID/testid.playfield": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"playfield\" — the playing area.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"playfield\" — the playing area."
+    },
+    "REQ-TESTID/testid.checkerLayer": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"checkerLayer\" — the layer the checkers sit in.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"checkerLayer\" — the layer the checkers sit in."
+    },
+    "REQ-TESTID/testid.pointHints": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"pointHints\" — the area move hints appear in.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"pointHints\" — the area move hints appear in."
+    },
+    "REQ-TESTID/testid.turnIndicator": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"turnIndicator\" — whatever shows whose turn it is.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"turnIndicator\" — whatever shows whose turn it is."
+    },
+    "REQ-TESTID/testid.pipWhite": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"pipWhite\" — the human's pip count.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"pipWhite\" — the human's pip count."
+    },
+    "REQ-TESTID/testid.pipBlack": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"pipBlack\" — the AI's pip count.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"pipBlack\" — the AI's pip count."
+    },
+    "REQ-TESTID/testid.cube": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"cube\" — the doubling cube.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"cube\" — the doubling cube."
+    },
+    "REQ-TESTID/testid.cubeVal": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"cubeVal\" — the number on the cube.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"cubeVal\" — the number on the cube."
+    },
+    "REQ-TESTID/testid.cubeOwner": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"cubeOwner\" — whose side the cube is on.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"cubeOwner\" — whose side the cube is on."
+    },
+    "REQ-TESTID/testid.dice": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"dice\" — the dice area.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"dice\" — the dice area."
+    },
+    "REQ-TESTID/testid.rollBtn": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"rollBtn\" — the roll button.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"rollBtn\" — the roll button."
+    },
+    "REQ-TESTID/testid.doubleBtn": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"doubleBtn\" — the double button.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"doubleBtn\" — the double button."
+    },
+    "REQ-TESTID/testid.undoBtn": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"undoBtn\" — the undo button.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"undoBtn\" — the undo button."
+    },
+    "REQ-TESTID/testid.endTurnBtn": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"endTurnBtn\" — the end-turn button.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"endTurnBtn\" — the end-turn button."
+    },
+    "REQ-TESTID/testid.message": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"message\" — the message line.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"message\" — the message line."
+    },
+    "REQ-TESTID/testid.modalOverlay": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"modalOverlay\" — the end-of-game overlay.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"modalOverlay\" — the end-of-game overlay."
+    },
+    "REQ-TESTID/testid.modalTitle": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"modalTitle\" — the overlay's title.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"modalTitle\" — the overlay's title."
+    },
+    "REQ-TESTID/testid.modalBody": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"modalBody\" — the overlay's body.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"modalBody\" — the overlay's body."
+    },
+    "REQ-TESTID/testid.modalBtns": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"modalBtns\" — the overlay's buttons.",
+      "repeat": "They looked again after your fix and still can't find an element tagged \"modalBtns\" — the overlay's buttons."
+    },
+    "REQ-BIND/health": {
+      "first": "They can't reach your app's health check at all — they call it to know whether the app is up before they do anything else.",
+      "repeat": "Their health check against your app still doesn't come back."
+    },
+    "REQ-API/health.status": {
+      "first": "Your health check answers, but not with a success code, so their monitoring treats the app as down.",
+      "repeat": "Your health check still isn't answering with a success code."
+    },
+    "REQ-API/health.body": {
+      "first": "Your health check doesn't answer with JSON, so their monitoring can't read it.",
+      "repeat": "Your health check still isn't answering with readable JSON."
+    },
+    "REQ-API/health.body.status": {
+      "first": "Your health check's answer doesn't carry a \"status\" of \"ok\" — that is the word they look for to decide the app is healthy.",
+      "repeat": "Your health check still doesn't say \"status\": \"ok\"."
+    },
+    "REQ-STATE/state.off.white": {
+      "first": "They can set up a specific board position through your app, but when they read it back the borne-off counts aren't what they set.",
+      "repeat": "The borne-off counts still don't survive being set and read back."
+    },
+    "REQ-DEBUG/debug.setState": {
+      "first": "They need to put your game into a specific position to test their own side against, and the position they send isn't what comes back.",
+      "repeat": "Setting your game to a specific position still doesn't hold."
+    },
+    "REQ-DEBUG/debug.roll": {
+      "first": "They need to queue specific dice so their tests get the same roll every time, and your app ignores what they queue and rolls its own.",
+      "repeat": "Your app still ignores the dice they queue and rolls its own."
+    },
+    "REQ-TESTID/dom": {
+      "first": "Their automation fell over while reading your page.",
+      "repeat": "Their automation still falls over reading your page."
+    },
+    "REQ-TESTID/pregate": {
+      "first": "Their whole integration run against your app fell over before it finished.",
+      "repeat": "Their integration run still falls over before it finishes."
+    },
+    "REQ-TESTID/point": {
+      "first": "The points show up on screen, but their automation can't select them — it looks for exactly 24 of them, each tagged \"point\".",
+      "repeat": "The points are still on screen without the tagging their automation looks for — exactly 24 of them, each tagged \"point\"."
+    },
+    "REQ-TESTID/checker": {
+      "first": "The checkers show up on screen, but their automation can't select them — it looks for exactly 30 of them, 15 a side, each tagged \"checker\".",
+      "repeat": "The checkers are still on screen without the tagging their automation looks for — exactly 30 of them, 15 a side, each tagged \"checker\"."
+    },
+    "REQ-TESTID/bar": {
+      "first": "The bar show up on screen, but their automation can't select them — it looks for the bar column tagged \"bar\".",
+      "repeat": "The bar are still on screen without the tagging their automation looks for — the bar column tagged \"bar\"."
+    },
+    "REQ-TESTID/off-tray": {
+      "first": "The off tray show up on screen, but their automation can't select them — it looks for the off tray tagged \"off-tray\".",
+      "repeat": "The off tray are still on screen without the tagging their automation looks for — the off tray tagged \"off-tray\"."
+    },
+    "REQ-TESTID/die": {
+      "first": "The dice show up on screen, but their automation can't select them — it looks for each die tagged \"die\", at least two showing after a roll.",
+      "repeat": "The dice are still on screen without the tagging their automation looks for — each die tagged \"die\", at least two showing after a roll."
+    },
+    "REQ-BIND/boot": {
+      "first": "The game doesn't come up at all for me — I get nothing.",
+      "repeat": "Still nothing when I try to open it, even from a completely fresh start."
+    },
+    "REQ-RENDER/point": {
+      "first": "The board doesn't have the right number of spaces on it.",
+      "repeat": "I counted the spaces on the board again and it's still not right."
+    },
+    "REQ-RENDER/checker": {
+      "first": "There aren't fifteen pieces each on the board when I start a game.",
+      "repeat": "I counted the pieces again on a new game and there still aren't fifteen each."
+    },
+    "REQ-RENDER/bar": {
+      "first": "There's no bar down the middle of the board.",
+      "repeat": "The middle of the board still doesn't have a bar."
+    },
+    "REQ-RENDER/off-tray": {
+      "first": "There's nowhere on the board for pieces I've taken off to go.",
+      "repeat": "There's still nowhere for my taken-off pieces to sit."
+    },
+    "REQ-RENDER/die": {
+      "first": "I don't see the dice after I roll.",
+      "repeat": "I still can't see the dice after rolling."
+    },
+    "REQ-HINT/hint": {
+      "first": "When i pick up one of my pieces the game doesn't show me where it can go.",
+      "repeat": "I picked a piece up again after your fix and still nothing shows me where it can go."
+    },
+    "F15": {
+      "first": "I opened the game from a different address than usual and got a dead board — it loads but nothing ever appears on it.",
+      "repeat": "Same thing again: reaching the game by its other address still gives me an empty board that never fills in."
+    },
+    "REQ-RESPONSIVE/startup": {
+      "first": "The game never finished loading — it just sat there and nothing ever came up. I ended up force-quitting it.",
+      "repeat": "Tried opening it again and it hung on me the same way. Nothing ever appears, it just sits."
+    },
+    "REQ-RESPONSIVE/moving": {
+      "first": "It locked up on me while I was moving my pieces around — everything stopped and it never came back.",
+      "repeat": "Froze on me again partway through moving my pieces. Same thing: it stops dead and I have to force it closed."
+    },
+    "REQ-RESPONSIVE/bearingoff": {
+      "first": "It locked up on me near the end of the game, around when I was taking pieces off and the stakes went up. It never came back.",
+      "repeat": "Same freeze again at the end of a game — bearing off, doubling, and then it just stops responding."
+    },
+    "REQ-RESPONSIVE/aiturn": {
+      "first": "It locked up while it was the computer's turn — I handed over and it never came back to me.",
+      "repeat": "Again: the computer took its turn, and that was that. It never handed back and I had to force it closed."
+    },
+    "REQ-RESPONSIVE/awkwardroll": {
+      "first": "It locked up on an awkward roll — I'd rolled doubles and had a piece on the bar. Everything stopped and never came back.",
+      "repeat": "Froze on me again on one of those messy rolls, doubles with a piece stuck on the bar. Same dead stop."
+    },
+    "REQ-RESPONSIVE/playing": {
+      "first": "It locked up on me while I was playing — the whole page stopped responding and nothing I clicked did anything after that.",
+      "repeat": "It seized up on me again mid-game. Everything on screen just stops reacting."
+    }
+  }
+}

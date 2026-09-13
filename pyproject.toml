@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bench"
+version = "0.1.0"
+description = "OFF/ON coding-agent memory-ablation harness for The Open Knowledge Project"
+requires-python = ">=3.11"
+dependencies = [
+    "psycopg[binary]>=3.1",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+    "pytest-xdist>=3.5",    # required by addopts: -n auto --dist=load
+    "pytest-timeout>=2.3",  # required by addopts: --timeout=60
+    "ruff>=0.8",            # formatter, CI gate
+]
+
+[tool.setuptools.packages.find]
+include = ["bench*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "serial: marks tests that must not run in parallel (use --dist no with serial marker)",
+]
+addopts = "-n auto -m \"not slow\" --dist=load --timeout=60 --strict-markers --tb=short -ra"
+timeout = 60
+timeout_method = "thread"
+log_cli = true
+log_cli_level = "INFO"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.format]
+quote-style = "double"

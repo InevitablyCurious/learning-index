@@ -1,0 +1,22 @@
+{
+  "pollMs": 2000,
+  "opencodeServeUrl": "http://127.0.0.1:4096",
+  "sources": {
+    "run-manifest": true,
+    "status-stream": true,
+    "run-log": true,
+    "funnel-cells": true,
+    "plugin-log": true,
+    "opencode-serve": true,
+    "learning": true,
+    "live-stream": true,
+    "hub-db": false
+  },
+  "hubDb": {
+    "enabled": false,
+    "host": "okp-postgres",
+    "port": 5432,
+    "user": "okp",
+    "database": "okp_hub"
+  }
+}

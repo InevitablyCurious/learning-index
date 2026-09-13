@@ -1,0 +1,313 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// SOURCE: run-log
+//
+// The LIVE PULSE. The status stream is authoritative but only lands at attempt
+// end (~30 min); this parses the runner's PROGRESS lines from the launch log,
+// which land every few minutes. Without this the board looks frozen for half an
+// hour at a time, and a frozen board on a stream reads as broken.
+//
+// Real lines observed on disk (post WO-NUDGE-INF-1, backgammon.py:2905-2913):
+//   PROGRESS ... step=serve-drive-end phase=initial-chunk-5
+//            turns=38 guard_aborted_turns=0 finalize_timeout_turns=1
+//            recovery_nudges=2 session_turns=131 input=0 output=28080 ...
+//   PROGRESS ... step=chunk-compaction chunk=5 action=backstop ...
+//   PROGRESS ... step=transport-recovery phase=initial-chunk-6
+//            terminal=transport_error action=nudge ...
+//   PROGRESS ... step=memory-mode mode=off pure=true
+//
+// ── THE TURN-COUNT DISTINCTION (WO-NUDGE-INF-1) ──────────────────────────────
+// `turns=` is SCORING turns: raw turns minus guard-killed minus finalize-killed
+//   (backgammon.py: scoring_turns = d_turns - d_guard_aborted - d_finalize_timeouts)
+// `session_turns=` is the RAW count, inflated by every recovered turn.
+//
+// The board displays SCORING turns. Showing session_turns would inflate the
+// measurement by exactly the recovered turns the harness deliberately excludes —
+// the defect class WO-NUDGE-INF-1 fixed. The raw count is carried separately as
+// an anomaly figure, never as the measurement.
+//
+// ── WHY recovery_nudges IS ON THE BOARD ──────────────────────────────────────
+// Nudges are now UNBOUNDED. The report's own named, accepted failure mode: a
+// permanently wedged relay no longer self-terminates, and hang detection "rests
+// entirely on the operator watching the status stream." A climbing nudge count
+// with a phase that never advances IS the wedge signature, and nothing else on
+// the board would reveal it.
+//
+// Tail-bounded: only the last TAIL_BYTES are parsed, so a multi-hour log costs
+// the same as a fresh one.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import { join } from "node:path";
+import { int, str } from "../contract.mjs";
+import { readTail, listDir, statOrNull, activeTreeId } from "./_runtime.mjs";
+
+export const id = "run-log";
+export const fields = ["run.phase", "run.chunk", "run.turns", "run.state", "run.elapsed_s"];
+export function describe() {
+  return "runner PROGRESS lines — the live pulse between attempt records";
+}
+
+const KV = /(\w+)=([^\s]+)/g;
+
+function parseKV(line) {
+  const out = {};
+  let m;
+  KV.lastIndex = 0;
+  while ((m = KV.exec(line))) out[m[1]] = m[2];
+  return out;
+}
+
+/**
+ * The newest LIVE cell launch log under the runs root.
+ *
+ * ORPHAN LOGS ARE SKIPPED — see control/runstate.mjs newestLog for the measured
+ * defect. Cell logs live at the runs ROOT while the run state they describe
+ * lives in `runs/<run_dir>/`, so archiving or wiping a run leaves the log
+ * behind describing data that is gone. This source is the board's LIVE PULSE;
+ * reading a dead log here paints a wiped bench as a running one.
+ *
+ * Kept deliberately identical in behaviour to the control plane's copy: the two
+ * surfaces must never disagree about which run is live.
+ */
+function runDirOf(text) {
+  // A RUN DIR IS A PATH, NOT A NAME — the campaign home is nested under the
+  // tree, so a capture that stops at the first slash yields the tree id (a
+  // directory that exists for every retired tree, making a dead log resolve as
+  // live). Mirrors control/runstate.mjs:runDirOf.
+  // Three rules, most precise first — mirrors control/runstate.mjs:runDirOf.
+  const s = String(text ?? "");
+  // ── THE CAPTURE MUST NOT CROSS WHITESPACE (measured defect, 2026-09-05) ──
+  //
+  // `[^\s]`, not `.`. A run directory is a path and can never contain a space,
+  // so the old `(.+?)` was always wrong — it had nothing to bite on until a log
+  // line carried TWO `/runs/` paths, which seeding produced:
+  //
+  //   src=…/runs/snapshots/<id>/tree dst=…/runs/<tree>/…/memoryOFF/…
+  //
+  // Starting at the FIRST `/runs/`, the lazy quantifier grew across the space to
+  // reach `/memoryOFF/` and captured both paths as one directory name. Nothing
+  // matched it on disk, so this source reported "no cell launch log under runs
+  // root" and every `run.*` field went null for a run that was mid-flight.
+  //
+  // Fixed identically in control/runstate.mjs. TWO COPIES OF ONE RULE is the
+  // real defect underneath this one — they are separate deployables and cannot
+  // share a module today, so the mirror note above is load-bearing: a change to
+  // either must be made to both.
+  const anchored = /\/runs\/([^\s]+?)\/(?:sessions|memoryON|memoryOFF|memoryUNKNOWN)\//.exec(s);
+  if (anchored) return anchored[1];
+  const tree = /\/runs\/(\d{9,11}\/[^/]+\/[^/]+\/[^/]+\/[^/]+)\//.exec(s);
+  if (tree) return tree[1];
+  const flat = /\/runs\/([A-Za-z0-9._-]+)\//.exec(s);
+  return flat ? flat[1] : null;
+}
+
+async function newestLog(runsRoot) {
+  const candidates = [];
+  // Launch logs are written INSIDE the live tree, so retiring a tree retires
+  // its debris. The runs root is still read for pre-tree logs.
+  let treeId = null;
+  try {
+    treeId = await activeTreeId(runsRoot);
+  } catch {
+    treeId = null;
+  }
+  const bases = treeId ? [join(runsRoot, treeId), runsRoot] : [runsRoot];
+  for (const base of bases) {
+    for (const ent of await listDir(base)) {
+      if (!ent.isFile() || !ent.name.endsWith(".log")) continue;
+      if (!/^(off|on)-cell-|^cell-/.test(ent.name)) continue;
+      const p = join(base, ent.name);
+      const st = await statOrNull(p);
+      if (st?.isFile()) {
+        candidates.push({ path: p, mtime: st.mtimeMs, size: st.size, name: ent.name });
+      }
+    }
+  }
+
+  candidates.sort((a, b) => b.mtime - a.mtime);
+  for (const cand of candidates) {
+    const runDir = runDirOf(await readTail(cand.path));
+    // Not yet named: a fresh log that has not printed an artifact path.
+    if (runDir === null) return cand;
+    const st = await statOrNull(join(runsRoot, runDir));
+    if (st?.isDirectory()) return { ...cand, run_dir: runDir };
+  }
+  return null;
+}
+
+/** "initial-chunk-5" -> 5 ; "feedback-2" -> null (no longer a build chunk) */
+function chunkOf(phase) {
+  const m = /^initial-chunk-(\d+)$/.exec(phase ?? "");
+  return m ? Number(m[1]) : null;
+}
+
+export async function read(ctx) {
+  const log = await newestLog(ctx.runsRoot);
+  if (!log) return { ok: false, reason: "no cell launch log under runs root" };
+
+  const text = await readTail(log.path);
+  const lines = text.split("\n").filter((l) => l.includes("PROGRESS"));
+  if (!lines.length) {
+    return { ok: false, reason: "log present but carries no PROGRESS lines yet" };
+  }
+
+  let phase = null;
+  let chunk = null;
+  let sessionTurns = null; // raw, inflated by recovered turns — never the measurement
+  let mode = null;
+  let recoveries = 0;
+  let terminal = null;
+
+  // ── DEDUPE (measured, not assumed) ──────────────────────────────────────
+  // Every PROGRESS line is emitted TWICE: once through the structured logger
+  // (`run_cumulative.progress ...`) and once bare. Verified on disk — each
+  // `step=serve-drive-end` payload appears exactly 2×. Naive accumulation
+  // therefore doubles every per-phase delta (observed: 316 scoring turns
+  // against 163 raw session turns, which is impossible by construction since
+  // scoring turns are a SUBSET of raw turns).
+  //
+  // Deltas are keyed by phase so each phase contributes exactly once. Keying by
+  // phase (not by whole-line identity) is also robust to the two emissions
+  // being formatted differently.
+  const phaseDeltas = new Map();
+
+  for (const line of lines) {
+    const kv = parseKV(line);
+    const step = str(kv.step);
+
+    // STEP-SCOPED PARSING. A blanket key match is wrong: `mode=` also appears on
+    // backend lines as `mode=real` (the recall backend), and `phase=` appears as
+    // `phase=entry` / `phase=owned_org_resolved` during org bootstrap. Only the
+    // steps named below define these fields.
+    switch (step) {
+      case "memory-mode":
+        mode = str(kv.mode); // "on" | "off" — the arm
+        break;
+      case "serve-drive-end": {
+        const ph = str(kv.phase) ?? "(unnamed)";
+        phase = ph;
+        const c = chunkOf(kv.phase);
+        if (c !== null) chunk = c;
+        // Last write wins per phase — identical across the duplicate emissions.
+        phaseDeltas.set(ph, {
+          turns: int(kv.turns) ?? 0,
+          guard: int(kv.guard_aborted_turns) ?? 0,
+          // absent on logs written before WO-NUDGE-INF-1 — stays 0, never null
+          finalize: int(kv.finalize_timeout_turns) ?? 0,
+          nudges: int(kv.recovery_nudges) ?? 0,
+        });
+        // session_turns is CUMULATIVE for the cell, not a delta — take the last.
+        sessionTurns = int(kv.session_turns) ?? sessionTurns;
+        break;
+      }
+      case "serve-drive-start":
+      case "transport-recovery": {
+        const c = chunkOf(kv.phase);
+        if (kv.phase) phase = str(kv.phase);
+        if (c !== null) chunk = c;
+        if (step === "transport-recovery") recoveries += 1;
+        break;
+      }
+      case "chunk-compaction":
+        chunk = int(kv.chunk) ?? chunk;
+        break;
+      default:
+        break;
+    }
+  }
+
+  let scoringTurns = null;
+  let guardAborted = 0;
+  let finalizeTurns = 0;
+  let nudges = 0;
+  for (const d of phaseDeltas.values()) {
+    scoringTurns = (scoringTurns ?? 0) + d.turns;
+    guardAborted += d.guard;
+    finalizeTurns += d.finalize;
+    nudges += d.nudges;
+  }
+  // transport-recovery lines are duplicated too.
+  recoveries = Math.round(recoveries / 2);
+
+  // Terminal state: the runner writes a bare JSON status object as its last
+  // line when the cell stops. `awaiting_extract` means the cell finished and
+  // extraction is the next (separate) invocation.
+  for (const raw of text.split("\n").slice(-6)) {
+    const t = raw.trim();
+    if (!t.startsWith("{") || !t.endsWith("}")) continue;
+    try {
+      const o = JSON.parse(t);
+      if (typeof o?.status === "string") terminal = o.status;
+      if (typeof o?.memory_mode === "string") mode = o.memory_mode;
+    } catch {
+      /* not a status object */
+    }
+  }
+
+  // ── SILENCE: A DEBUG FACT, NEVER A LIVENESS VERDICT ─────────────────────
+  // How long since the runner last wrote to this log. Reported because the age
+  // of the log is a real fact worth seeing (the startup panel shows it as a
+  // watch hint) — but NOTHING derives `stalled` from it, here or downstream.
+  //
+  // It is measured from the log file's MTIME, not from the timestamp text in
+  // the last line. The harness writes NAIVE local timestamps ("2026-08-11
+  // 15:26:00" with no offset), and `Date.parse` resolves those against the
+  // READER's timezone. The dashboard container runs UTC while the harness
+  // writes host local time, so parsing produced a CONSTANT phantom silence
+  // equal to the UTC offset — measured at 25560s (7.1h) on a log written
+  // seconds earlier. mtime is an absolute epoch from the filesystem, so it
+  // carries no timezone ambiguity and needs no agreement between writer and
+  // reader.
+  const silentFor = Math.max(0, Math.round((Date.now() - log.mtime) / 1000));
+
+  // ── THE STALL VERDICT MOVED TO THE PRODUCER (WO-HDR-FIX-01) ─────────────
+  //
+  // This module used to name `stalled = !terminal && silentFor >= 900` and
+  // set the state below. That judged a wedge from the wrong signal: the
+  // harness writes PROGRESS at phase BOUNDARIES, and one build phase has been
+  // observed running 86 model turns between two of them — so the header
+  // printed `CELL STALLED — SILENT 23:29` over a cell that was mid-turn, its
+  // own 15s live.jsonl heartbeat beating the whole time.
+  //
+  // The control plane already migrated off exactly this proxy: it consults
+  // the harness's OWN heartbeat — the only component that knows whether it is
+  // mid-drive, mid-grade or stuck — and publishes `liveness` and `state` on
+  // GET /api/run (control/runstate.mjs). A consumer must never derive a fact
+  // that a producer could state. The verdict reaches the board through
+  // reconcileRunLiveness (run-liveness.mjs), in BOTH directions: a stated
+  // stall lands here, and a beating cell is never stalled. This source's own
+  // fallback state is `running` — a stall it cannot measure is never its to
+  // claim, and when the control plane is unreachable the silence stays
+  // visible as the debug fact below without becoming a verdict.
+
+  return {
+    ok: true,
+    provenance: { path: log.path, mtime: log.mtime, bytes: log.size },
+    patch: {
+      run: {
+        phase,
+        chunk: { current: chunk, total: 6 },
+        turns: scoringTurns, // SCORING turns. never session_turns.
+        session_turns: sessionTurns, // raw, carried for the anomaly rail only
+        arm: mode,
+        state: terminal ? "complete" : "running",
+        terminal_status: terminal,
+        log_silent_s: silentFor, // debug fact — never a liveness gate
+      },
+      honesty: {
+        transport: {
+          // Post WO-NUDGE-INF-1 these are RECOVERED, not fatal. A finalize
+          // timeout used to kill a run at budget; now it is nudged
+          // indefinitely and excluded from scoring. The label must not read
+          // as alarm when it is the system working as designed.
+          guard_aborts: guardAborted,
+          finalize_timeout_turns: finalizeTurns,
+          recovery_nudges: nudges,
+          recoveries,
+        },
+        // The honest cost of recovery: turns that really happened, burned real
+        // tokens, and are correctly excluded from the measurement.
+        recovered_turns: guardAborted + finalizeTurns,
+      },
+    },
+  };
+}

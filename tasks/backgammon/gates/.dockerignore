@@ -1,0 +1,11 @@
+# Build context for the grading image (docker/grader/Dockerfile).
+#
+# node_modules is excluded on purpose and it is the whole point of the image:
+# the toolchain is installed INSIDE it from package-lock.json, so what runs is
+# determined by the lockfile rather than by whatever the operator's machine
+# happened to resolve. Copying a host node_modules in would hand that problem
+# straight back.
+node_modules
+test-results
+.git
+.DS_Store
