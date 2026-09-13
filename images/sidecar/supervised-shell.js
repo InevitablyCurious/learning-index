@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
- * okp-bench supervised shell — process-group reaper for tool commands.
+ * bench supervised shell — process-group reaper for tool commands.
  *
  * PURPOSE. opencode's bash tool runs `shell -c "<command>"` and waits for EOF
  * on the stdout pipe. A command that backgrounds a child (`node … &`) leaves

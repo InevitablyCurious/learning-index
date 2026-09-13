@@ -60,12 +60,12 @@ from harness.blinding import offending_lines  # noqa: E402
 sys.path.insert(0, str(BENCH_ROOT / "scripts"))
 from bench_preflight import Check, TOOL_WORKER_REBUILD  # noqa: E402
 
-WORKER_IMAGE = "okp-bench-worker:v1"
+WORKER_IMAGE = "bench-worker:v1"
 
 # The env seam the adapter reads at seed time (backgammon.py `_agents_md_text`).
 ENV_AUX = "BENCH_AGENTS_AUX_FILE"
 # Where the control plane is told to find the plugin tree.
-ENV_PLUGIN_DIR = "OKP_BENCH_PLUGIN_DIR"
+ENV_PLUGIN_DIR = "BENCH_PLUGIN_DIR"
 
 
 # ── shared checks (any backend) ─────────────────────────────────────────────

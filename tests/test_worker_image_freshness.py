@@ -207,7 +207,7 @@ def test_the_build_carries_the_digest_it_will_be_checked_against(tmp_path: Path)
     worker = _worker_tree(tmp_path)
     argv = build_argv(worker)
     assert f"OKP_WORKER_SOURCE_DIGEST={source_digest(worker)}" in argv
-    assert "-t" in argv and "okp-bench-worker:v1" in argv
+    assert "-t" in argv and "bench-worker:v1" in argv
     # The sidecar seam rides in EVERY build, vanilla included.
     assert f"okp-sidecar={worker.parent / 'sidecar'}" in argv
     assert "OKP_SIDECAR_CONTEXT=okp-sidecar" in argv

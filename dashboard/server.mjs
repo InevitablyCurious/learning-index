@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────────────
-// OKP BENCH DASHBOARD — SERVER
+// BENCH DASHBOARD — SERVER
 //
 //   node server.mjs                 # http://127.0.0.1:7717
 //   node server.mjs --port 8080 --runs ../runs
@@ -65,7 +65,7 @@ const args = parseArgs(process.argv.slice(2));
 
 if (args.help) {
   console.log(`
-okp bench dashboard
+bench dashboard
 
   node server.mjs [options]
 
@@ -920,7 +920,7 @@ const main = async () => {
   const port = args.portExplicit ? args.port : (cfg.port ?? args.port);
   server.listen(port, args.host, () => {
     const port = server.address().port;
-    console.log(`okp bench dashboard → http://${args.host}:${port}`);
+    console.log(`bench dashboard → http://${args.host}:${port}`);
     console.log(`  bench root : ${cfg.benchRoot}`);
     console.log(`  runs root  : ${cfg.runsRoot}`);
     console.log(`  sources    : ${mods.map((m) => m.id).join(", ") || "(none)"}`);

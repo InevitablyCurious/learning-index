@@ -127,7 +127,7 @@ nc -z 127.0.0.1 4440   # hub
 #    the stale plugin silently). Freshness is a content question, not a
 #    timestamp one: the build bakes a digest of its own source and preflight
 #    reads it back. Compare by hand with:
-docker image inspect okp-bench-worker:v1 --format '{{index .Config.Labels "okp.worker.source_digest"}}'
+docker image inspect bench-worker:v1 --format '{{index .Config.Labels "okp.worker.source_digest"}}'
 #    vs .venv/bin/python -c 'from harness.worker_image import *; from pathlib import Path; print(source_digest(Path("images/worker")))'
 #    Rebuild (this is the ONLY build that records what it was built from):
 .venv/bin/python scripts/rebuild_worker_image.py
@@ -187,7 +187,7 @@ A CLOUD cell (OrcaRouter, BILLED) takes the main-parser flags `--cloud --router 
 --provider <vendor> --model <model>` (e.g. `--provider deepseek --model deepseek-chat` = DeepSeek
 V3); the local `--model <bench-alias>` shape above does NOT apply to cloud.
 
-**Optional — hold the stack for UI review.** Set `OKP_BENCH_HOLD_UI=1` on the
+**Optional — hold the stack for UI review.** Set `BENCH_HOLD_UI=1` on the
 run environment. At benchmark end (all attempts + gates done) the cell is NOT torn down: the
 artifact's server boots host-side from the bind-mounted worktree on `http://localhost:8002` —
 the exact code the model wrote, via the same boot the gates perform — and the run waits. The log
@@ -355,7 +355,7 @@ with exit 2 (verified 2026-08-10). `--until-review` is DEAD (removed by `ba2947a
 - **The org must already exist.** The bench no longer auto-provisions orgs
   (`run_cumulative.py:1337-1339`): the maintainer pre-provisions the campaign org via the production
   dashboard first (connects wallet + imports the 24-word mnemonic), and `--org` names that org. The
-  leader MCP endpoint comes from `OKP_BENCH_LEADER_MCP_URL` (the run's existing source; live bench
+  leader MCP endpoint comes from `BENCH_LEADER_MCP_URL` (the run's existing source; live bench
   MCP **:4550**, NOT :4450 — see §7 "Known failure: org bootstrap"). Hub :4440.
 
 **EXTRACT** — two distinct surfaces, both separate from the bench command, never folded inside it.
@@ -891,7 +891,7 @@ and each has a known failure mode:
 | `OKP_MCP_HTTP_ONLY=1` | The bench MCP also runs the stdio server, which treats a backgrounded stdin-EOF as shutdown. Required for any backgrounded start |
 | `< /dev/null` on the launch | Belt-and-braces so the stdio path never sees an open-then-closed stdin |
 | `OKP_RECALL_MODE=test` | Recall is prod-governed (floor 0.55, budget 3) and a fresh low-trust memory is filtered out — **prove-delivery and the ON recall arm both return nothing.** Test mode also **auto-approves** recalled memories; prod or unset **headless injects NOTHING**, because it waits on a human approval popup that no headless run can answer |
-| `OKP_KEYSTORE_PATH="$OKP_BENCH_LEADER_KEYSTORE"` | The org master-key envelope is written by the MCP and read by the invite and provision-recall subprocesses. Omit it and the writer uses the default directory while the readers look in the bench keystore — `decrypt_failed` on recall, `no master key found` on invite. **Writer and readers must share this path.** This was the other half of the 2026-07-13 blocker |
+| `OKP_KEYSTORE_PATH="$BENCH_LEADER_KEYSTORE"` | The org master-key envelope is written by the MCP and read by the invite and provision-recall subprocesses. Omit it and the writer uses the default directory while the readers look in the bench keystore — `decrypt_failed` on recall, `no master key found` on invite. **Writer and readers must share this path.** This was the other half of the 2026-07-13 blocker |
 | `OKP_BENCH_ENDPOINTS=1` | The bench-only `/v1/submit` and `/v1/identity/pubkeys` endpoints are absent. `/v1/health` is always present |
 
 **The bench MCP serves from its build output.** Code changes require a rebuild **and a restart** before
@@ -907,7 +907,7 @@ After a reboot or power failure, bring the stack back up in this order. Do NOT r
 
 - **(a) Bench MCP `:4550`** — `dev/scripts/bench-mcp.sh start` (managed service). Never `make redeploy`.
 - **(b) Control plane `:7718`** — `cd control && nohup node server.mjs --port 7718 > /tmp/okp-control-plane.log 2>&1 < /dev/null &`.
-- **(c) Live-view `:4096`** — the host port is published by the egress sidecar (worker image `okp-bench-worker:v1`, ingress forward `:4096` → cell `:4096`); the worker cell itself stays on the internal-only network and publishes no host ports. If `:4096` is unreachable, the worker image is stale — rebuild with `.venv/bin/python scripts/rebuild_worker_image.py` from the repo root and relaunch the run.
+- **(c) Live-view `:4096`** — the host port is published by the egress sidecar (worker image `bench-worker:v1`, ingress forward `:4096` → cell `:4096`); the worker cell itself stays on the internal-only network and publishes no host ports. If `:4096` is unreachable, the worker image is stale — rebuild with `.venv/bin/python scripts/rebuild_worker_image.py` from the repo root and relaunch the run.
 - **(d) Stale session-db volumes** — `docker volume rm -f` on any leaked `{container}-session-db` volumes (manual only; the harness does not auto-purge them).
 
 ### Completion detection — one transport, bounded recovery
@@ -1010,14 +1010,14 @@ cause):**
 - The sidecar is unguarded: `assert_no_docker_residue` checks the cell only
   (`cell_isolation.py:195-217`), and the sidecar's `--restart unless-stopped`
   (`docker_worker.py:374-375`) has no watcher (no `RestartCount` consumer anywhere).
-- The reaper's dead filter never matches real cells (cells named `okp-bench-cell-cumulative-…`,
-  `backgammon.py:2176-2177`; reaper filters `okp-bench-cell-<task-label>`,
+- The reaper's dead filter never matches real cells (cells named `bench-cell-cumulative-…`,
+  `backgammon.py:2176-2177`; reaper filters `bench-cell-<task-label>`,
   `process_reaper.py:296-311`). The mtime-keyed stall detector is likewise blind while nudges write
   PROGRESS lines (`control/runstate.mjs:344,:371`) — but since the 2026-09-03 purge every nudge
   budget is bounded and fails closed, so there is no longer an infinite deadlock for either to hide;
   the reaper gap still leaks containers, just not runs.
 - Stray containers are unwatched: the reaper never matches auto-named leftovers (a
-  `okp-bench-worker:v1` container has been observed up for hours with no owner).
+  `bench-worker:v1` container has been observed up for hours with no owner).
 
 ### Bench board operations — RESET and RESTORE
 
@@ -1103,7 +1103,7 @@ existence check at lines 55-62). The only membership poll ran for the *contribut
 
 **Narrow disproven hypothesis (still disproven).** That a wipe regenerating the bench keystore
 changes the bench MCP's identity. It does not: identity is seed-derived — `load_bench_identity_seed()`
-(`lib.sh:106-123`) reads `OKP_BENCH_MCP_SEED` (priority) or `~/.okp/bench/bench-identity-seed.txt`,
+(`lib.sh:106-123`) reads `BENCH_MCP_SEED` (priority) or `~/.okp/bench/bench-identity-seed.txt`,
 and the keystore is re-commissioned from that seed on every `bench-mcp-start`. A wipe regenerating
 the keystore does NOT change the identity. **This disproves one specific mechanism — it does NOT
 mean "identity can never be the problem" (see Cause B).**
@@ -1223,7 +1223,7 @@ under `runs/` stay authoritative. `data/` never duplicates or competes with `run
 
 **Retention: exactly 7 days** on `data/cells/` and `data/extract/` entries; enforced by
 `scripts/cleanup_data.py` (run fail-open at the start of each run via `_handle_run`;
-`OKP_BENCH_SKIP_CLEANUP=1` disables). It deletes only under `data/cells/` and `data/extract/`; it
+`BENCH_SKIP_CLEANUP=1` disables). It deletes only under `data/cells/` and `data/extract/`; it
 never touches `runs/`. The 7-day window exceeds a full OFF+ON pair, so no scored cell's telemetry is
 aged out mid-campaign.
 
@@ -1686,7 +1686,7 @@ annotates per-row seedability (`control/server.mjs:1020`).
 > Arming AND disarming are both gated behind dev mode (`dev_mode_off` 409 at
 > `control/server.mjs:1046` — the gate precedes the disarm branch). To clear a
 > stale armed snapshot while dev mode is off, delete `config/armed-snapshot.json`
-> (or unset `OKP_BENCH_SEED_SNAPSHOT`) — the API cannot disarm it.
+> (or unset `BENCH_SEED_SNAPSHOT`) — the API cannot disarm it.
 
 ### The dev-mode validity exception (D-SNAP-DEVMODE-EXCEPTIONS)
 
@@ -1714,5 +1714,5 @@ and carried through `SessionRecord` / `ConvergencePoint`
 
 ### The two env vars (also in ENV-VARS.md)
 
-- `OKP_BENCH_SEED_SNAPSHOT` — pins the armed snapshot id; unset it to arm from the board.
-- `OKP_BENCH_SEED_SNAPSHOT_FILE` — overrides the armed-state file (default `config/armed-snapshot.json`).
+- `BENCH_SEED_SNAPSHOT` — pins the armed snapshot id; unset it to arm from the board.
+- `BENCH_SEED_SNAPSHOT_FILE` — overrides the armed-state file (default `config/armed-snapshot.json`).

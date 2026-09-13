@@ -226,7 +226,7 @@ def test_transient_probe_error_retries_to_clear(monkeypatch):
 
 def test_cell_container_sweep_is_scoped_to_run_label(monkeypatch):
     """The container sweep filters by THIS reaper's run label, never the bare
-    ``okp-bench-cell-`` prefix. Regression: an unscoped sweep force-removed
+    ``bench-cell-`` prefix. Regression: an unscoped sweep force-removed
     other xdist workers' live docker-isolation cells mid-test (the recurring
     'container is not running' flake class)."""
     import harness.process_reaper as pr
@@ -245,7 +245,7 @@ def test_cell_container_sweep_is_scoped_to_run_label(monkeypatch):
 
     assert removed == []
     assert calls == [
-        ["/fake/docker", "ps", "-aq", "--filter", "name=okp-bench-cell-my-run-42"]
+        ["/fake/docker", "ps", "-aq", "--filter", "name=bench-cell-my-run-42"]
     ]
 
 

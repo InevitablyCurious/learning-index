@@ -1,4 +1,4 @@
-"""RC-6 unconditional process reaper for the okp-bench run entrypoint.
+"""RC-6 unconditional process reaper for the bench run entrypoint.
 
 Teardown and reap are unconditional: they run on success, on failure, on abort
 and on operator interrupt. The reaper kills the run's process group, reaps
@@ -7,7 +7,7 @@ containers, asserts no listener remains on bench-owned ports, and reports what
 it killed. A silent reaper is not a reaper (D-NO-REAPER).
 
 Scope rule (2026-08-09): the reaper touches ONLY bench-owned things — child
-processes of the run, ``okp-bench-cell-*`` containers, and the live-view
+processes of the run, ``bench-cell-*`` containers, and the live-view
 serve port. The bench owns NO compose project (cells are plain ``docker run``),
 so there is no compose-down step at all: the old bare ``docker compose down``
 resolved whatever compose file the caller's CWD walked up to — on this host it
@@ -293,7 +293,7 @@ class ProcessReaper:
         """Force-remove leaked bench cell containers. Never fails the reaper.
 
         Cell workers are plain ``docker run`` containers named
-        ``okp-bench-cell-<run_label>``; the run path removes its own on a
+        ``bench-cell-<run_label>``; the run path removes its own on a
         clean exit, so anything still present here is a crash leak. Scoped by
         this reaper's own run label — an unscoped prefix sweep would remove
         OTHER runs' live cells (and did: reaper unit tests force-removing
@@ -308,7 +308,7 @@ class ProcessReaper:
         label = re.sub(r"[^a-zA-Z0-9_.-]", "-", self.run_label)
         try:
             out = subprocess.run(
-                [docker, "ps", "-aq", "--filter", f"name=okp-bench-cell-{label}"],
+                [docker, "ps", "-aq", "--filter", f"name=bench-cell-{label}"],
                 capture_output=True,
                 text=True,
                 timeout=15,

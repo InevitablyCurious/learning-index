@@ -56,7 +56,7 @@ export const ROUTERS = [
 
 /** Where a router's key file lives. One dotenv file holds every router's var. */
 function keyFilePath(benchRoot, env = process.env) {
-  return env.OKP_BENCH_CLOUD_KEY_FILE || join(benchRoot, "config", "cloud.env");
+  return env.BENCH_CLOUD_KEY_FILE || join(benchRoot, "config", "cloud.env");
 }
 
 /**

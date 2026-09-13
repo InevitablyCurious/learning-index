@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /*
- * okp-bench egress sidecar — stdlib-only HTTP reverse proxy.
+ * bench egress sidecar — stdlib-only HTTP reverse proxy.
  *
  * Baked into the worker image at /opt/okp/egress-sidecar.js and run in a
  * dedicated sidecar container attached to BOTH the --internal worker network
- * (okp-bench-internal) and the routable bench network. The worker has zero
+ * (bench-internal) and the routable bench network. The worker has zero
  * internet route; it reaches model/MCP/hub ONLY through this proxy.
  *
  * Fixed port -> upstream map (MUST match harness/egress.py exactly):

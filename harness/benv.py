@@ -34,13 +34,13 @@ def load_bench_env(path: str | os.PathLike[str] | None = None) -> Path | None:
     """
 
     env_path = (
-        Path(path) if path else Path(os.environ.get("OKP_BENCH_ENV_FILE", _DEFAULT_ENV))
+        Path(path) if path else Path(os.environ.get("BENCH_ENV_FILE", _DEFAULT_ENV))
     )
     if not env_path.is_file():
         return None
 
     # Seed workspace-root anchor so bench.env path vars resolve repo-relative without hardcoded absolute paths.
-    os.environ.setdefault("OKP_BENCH_ROOT", str(_REPO_ROOT.parent))
+    os.environ.setdefault("BENCH_ROOT", str(_REPO_ROOT.parent))
 
     seen: dict[str, str] = {}
     for raw in env_path.read_text(encoding="utf-8").splitlines():

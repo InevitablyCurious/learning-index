@@ -1,4 +1,4 @@
-"""Telemetry retention cleanup for okp-bench.
+"""Telemetry retention cleanup for bench.
 
 Deletes entries directly under ``data/cells/`` and ``data/extract/`` whose mtime
 is older than 7 days. ``data/`` is a TELEMETRY/RETENTION layer only, NEVER a
@@ -10,8 +10,8 @@ dirs are always preserved so the empty dirs remain tracked.
 The "silent reaper is not a reaper" ethos applies: every removed entry is logged.
 
 Env overrides:
-    OKP_BENCH_DATA_DIR    absolute path to the data dir (default: repo/data)
-    OKP_BENCH_SKIP_CLEANUP  set to ``1`` to skip cleanup at the run entrypoint
+    BENCH_DATA_DIR    absolute path to the data dir (default: repo/data)
+    BENCH_SKIP_CLEANUP  set to ``1`` to skip cleanup at the run entrypoint
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ _LOG = logging.getLogger("cleanup_data")
 
 
 def resolve_data_dir() -> Path:
-    """Data dir: OKP_BENCH_DATA_DIR env override, else repo root ``data/``."""
-    override = os.environ.get("OKP_BENCH_DATA_DIR", "").strip()
+    """Data dir: BENCH_DATA_DIR env override, else repo root ``data/``."""
+    override = os.environ.get("BENCH_DATA_DIR", "").strip()
     if override:
         return Path(override)
     return Path(__file__).resolve().parents[1] / "data"
@@ -85,7 +85,7 @@ def run_cleanup(data_dir: Path | None = None, dry_run: bool = False) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Retain okp-bench telemetry (7-day window)."
+        description="Retain bench telemetry (7-day window)."
     )
     parser.add_argument(
         "--dry-run",

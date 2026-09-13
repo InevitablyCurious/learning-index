@@ -17,7 +17,7 @@ from typing import Any, Mapping, Sequence
 
 _LOG = logging.getLogger(__name__)
 
-ALLOW_MISSING_ENV = "OKP_BENCH_ALLOW_MISSING_RUN_CONTEXT"
+ALLOW_MISSING_ENV = "BENCH_ALLOW_MISSING_RUN_CONTEXT"
 
 
 def _utc_now_iso() -> str:

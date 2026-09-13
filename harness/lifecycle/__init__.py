@@ -1,4 +1,4 @@
-"""Lifecycle config, REST recall, and delivery-proof helpers for Okp bench flows.
+"""Lifecycle config, REST recall, and delivery-proof helpers for Bench flows.
 
 Surviving scope after the memory-production strip: ``LifecycleConfig``
 (bench endpoint/path configuration) plus the thin client helpers in

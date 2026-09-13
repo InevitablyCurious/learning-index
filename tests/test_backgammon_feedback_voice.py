@@ -202,7 +202,7 @@ def test_the_graders_assertion_never_reaches_the_model() -> None:
             "check": "[E08] REQ-SEQ-DEDUP — sequences are distinct by resulting board",
             "observed": (
                 "AssertionError: expected 4 to be 2 // Object.is equality at "
-                "/Users/x/okp-bench/grader/backend/edge/edge-gates.test.ts:171:23"
+                "/Users/x/bench/grader/backend/edge/edge-gates.test.ts:171:23"
             ),
         }
     ]

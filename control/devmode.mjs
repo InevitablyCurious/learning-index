@@ -32,7 +32,7 @@
 //
 // ── A MALFORMED SETTING IS OFF, AND SAYS SO ─────────────────────────────────
 //
-// `OKP_BENCH_DEV_MODE=enabled` is not a spelling this understands. It reads as
+// `BENCH_DEV_MODE=enabled` is not a spelling this understands. It reads as
 // OFF — the safe direction — but it never reads as "nobody configured anything".
 // Absence and misconfiguration are different facts and the reason string keeps
 // them apart, because a silently-ignored setting is how an operator concludes
@@ -43,7 +43,7 @@ import { promises as fs } from "node:fs";
 import { dirname, join } from "node:path";
 
 /** The variable the control plane reads at startup and on every resolve. */
-export const DEV_MODE_ENV_VAR = "OKP_BENCH_DEV_MODE";
+export const DEV_MODE_ENV_VAR = "BENCH_DEV_MODE";
 
 const TRUTHY = new Set(["1", "true", "yes", "on"]);
 const FALSY = new Set(["0", "false", "no", "off"]);
@@ -55,7 +55,7 @@ const FALSY = new Set(["0", "false", "no", "off"]);
  * state that must never be committed. Both are gitignored.
  */
 export function devModeStateFile(benchRoot, env = process.env) {
-  return env.OKP_BENCH_DEV_MODE_FILE || join(benchRoot, "config", "devmode.json");
+  return env.BENCH_DEV_MODE_FILE || join(benchRoot, "config", "devmode.json");
 }
 
 async function readFileOrNull(path) {

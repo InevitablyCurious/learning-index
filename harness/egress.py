@@ -32,7 +32,7 @@ Stdlib only by design: importable from any harness context without deps.
 
 import hashlib
 
-EGRESS_NETWORK = "okp-bench-internal"
+EGRESS_NETWORK = "bench-internal"
 EGRESS_LOCAL_MODEL_PORT = (
     4545  # sidecar listens 4545 -> host.docker.internal:4545 (local relay)
 )

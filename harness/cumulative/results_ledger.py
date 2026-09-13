@@ -10,7 +10,7 @@ Invariants:
 - HOST-side ONLY: the ledger lives under ``data/`` OUTSIDE ``runs/`` and must
   NEVER be mounted into a cell or proxied by the egress sidecar
   (``harness/egress.py``) — in-cell code must never see scored results.
-- Results are data, never committed (gitignored in okp-bench/.gitignore).
+- Results are data, never committed (gitignored in bench/.gitignore).
 - Torn-line-safe writer, matching ``StatusStream.append``: compact sorted-key
   JSON + newline, flush + fsync per record; readers skip unparseable lines.
 - None-honest: a field is None when its source does not carry it — never

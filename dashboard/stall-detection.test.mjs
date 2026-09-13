@@ -2,7 +2,7 @@
 // HANG DETECTION — a wedged cell must never render as "nothing happening",
 // and a working cell must never render as wedged.
 //
-//     cd okp-bench/dashboard && node --test
+//     cd bench/dashboard && node --test
 //
 // WHY THIS EXISTS
 //

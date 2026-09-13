@@ -848,7 +848,7 @@ def test_partial_chunked_build_aborts_with_incomplete_build_error(
     monkeypatch.setattr(runner, "_run_gate_report", _fake_gate)
 
     run_dir = tmp_path / "rundir"
-    monkeypatch.setenv("OKP_BENCH_RUNS_DIR", str(tmp_path))
+    monkeypatch.setenv("BENCH_RUNS_DIR", str(tmp_path))
 
     with pytest.raises(backgammon_mod.IncompleteBuildError) as excinfo:
         runner.run_cell("incomplete-build", run_dir, task_id="backgammon")

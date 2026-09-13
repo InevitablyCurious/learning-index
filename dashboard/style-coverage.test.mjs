@@ -3,7 +3,7 @@
 //
 // Zero dependencies. Stock `node --test`, no install, no build step:
 //
-//     cd okp-bench/dashboard && node --test
+//     cd bench/dashboard && node --test
 //
 // WHY THIS EXISTS
 //

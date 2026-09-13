@@ -272,12 +272,12 @@ class RunConfig:
     mc_version: int = 1  # MC-1
     hub_url: str = field(
         default_factory=lambda: (
-            os.environ.get("OKP_BENCH_HUB_URL") or "http://127.0.0.1:4440"
+            os.environ.get("BENCH_HUB_URL") or "http://127.0.0.1:4440"
         )
     )  # hub Docker container `hub`; health GET /health (public, no auth). The ONE hub. NOT the mcp.
     mcp_recall_url: str = field(
         default_factory=lambda: (
-            os.environ.get("OKP_BENCH_MCP_RECALL_URL") or "http://127.0.0.1:4550"
+            os.environ.get("BENCH_MCP_RECALL_URL") or "http://127.0.0.1:4550"
         )
     )  # okp-mcp recall CLIENT; health GET /v1/health (bearer-gated). :4550 = the bench MCP slot (commissioned prod MCP); :4450 = the operator host MCP (forbidden for bench recall). NOT the hub.
     # Live-view topology: ONE persistent `opencode serve` per cell, published on a fixed
@@ -285,7 +285,7 @@ class RunConfig:
     # `opencode attach http://127.0.0.1:<serve_host_port>`. 4096 is opencode serve's default.
     serve_host_port: int = field(
         default_factory=lambda: int(
-            os.environ.get("OKP_BENCH_SERVE_HOST_PORT") or "4096"
+            os.environ.get("BENCH_SERVE_HOST_PORT") or "4096"
         )
     )  # host-published port for the per-cell opencode serve
     session_token_path: str = "~/.okp/mcp-session-token"  # Bearer token source (seam)
@@ -407,7 +407,7 @@ WORKER_MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     # build_worker_opencode_config — NOT scored-roster rungs (the roster is now a
     # single subject under D4). Model ids are the bench aliases served by the
     # Local LLM Proxy (its config/models.yaml, bench aliases); the worker reaches
-    # it via OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL=http://host.docker.internal:4545/v1
+    # it via BENCH_WORKER_SPEND_PROXY_BASE_URL=http://host.docker.internal:4545/v1
     # (or --proxy-base-url). Shape mirrors Walter's daily opencode model block
     # for the oMLX alias (2026-08-09 directive): no options block (no
     # temperature pin, no reasoning effort) so the worker puts the same

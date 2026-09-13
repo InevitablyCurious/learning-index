@@ -4,7 +4,7 @@
 #
 # ── WHY THIS EXISTS ─────────────────────────────────────────────────────────
 #
-# The candidate is BUILT inside okp-bench-worker (node:22.12.0, digest-pinned)
+# The candidate is BUILT inside bench-worker (node:22.12.0, digest-pinned)
 # and used to be GRADED on whatever the operator had installed. Four things
 # differed: Node, Playwright, Chromium, and vitest — the last declared as
 # `^2.1.0`, a RANGE, so a reinstall could silently swap the test runner. And

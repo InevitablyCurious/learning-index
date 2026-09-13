@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // CONTROL PLANE TESTS — stdlib runner only
 //
-//   cd okp-bench/control && node --test
+//   cd bench/control && node --test
 //
 // WHAT THESE TESTS ARE FOR. Two of them are DRIFT tests that assert this JS
 // agrees with the Python harness it describes. Those are the ones that matter
@@ -4331,7 +4331,7 @@ test("STOP sweeps the egress sidecar the harness actually names", async () => {
 // ── THE DEV-SHIM SEAM ───────────────────────────────────────────────────────
 //
 // Tools that serve the iterate-on-the-bench loop live in dev/, not here, and
-// attach through OKP_BENCH_TOOLS_MANIFEST. These pin both sides of that: a
+// attach through BENCH_TOOLS_MANIFEST. These pin both sides of that: a
 // clone of bench/ ALONE must be clean, and an attached manifest must never be
 // able to reach machinery it has no business in.
 
@@ -4341,8 +4341,8 @@ test("SEAM: a clone of bench/ alone contributes no external tools", async () => 
   // their own memory system, and a tool permanently "blocked because ../dev is
   // missing" is worse than no tool — it advertises what the clone cannot do.
   const { describeTools } = await import("./tools.mjs");
-  const saved = process.env.OKP_BENCH_TOOLS_MANIFEST;
-  delete process.env.OKP_BENCH_TOOLS_MANIFEST;
+  const saved = process.env.BENCH_TOOLS_MANIFEST;
+  delete process.env.BENCH_TOOLS_MANIFEST;
   try {
     const tools = describeTools(BENCH);
     assert.ok(tools.length > 0, "the built-in tools must still be there");
@@ -4356,8 +4356,8 @@ test("SEAM: a clone of bench/ alone contributes no external tools", async () => 
       "an unset manifest is not an error and must not render a blocked row",
     );
   } finally {
-    if (saved === undefined) delete process.env.OKP_BENCH_TOOLS_MANIFEST;
-    else process.env.OKP_BENCH_TOOLS_MANIFEST = saved;
+    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
+    else process.env.BENCH_TOOLS_MANIFEST = saved;
   }
 });
 
@@ -4366,10 +4366,10 @@ test("SEAM: a broken manifest is REPORTED, never silently skipped", async () => 
   // manifest that legitimately declares nothing — the operator would go looking
   // for their tool and find no trace of why it is absent.
   const { describeTools } = await import("./tools.mjs");
-  const saved = process.env.OKP_BENCH_TOOLS_MANIFEST;
+  const saved = process.env.BENCH_TOOLS_MANIFEST;
   const dir = mkdtempSync(join(tmpdir(), "okp-tools-"));
   try {
-    process.env.OKP_BENCH_TOOLS_MANIFEST = join(dir, "absent.json");
+    process.env.BENCH_TOOLS_MANIFEST = join(dir, "absent.json");
     let row = describeTools(BENCH).find((t) => t.id === "external-tools");
     assert.ok(row, "a missing manifest must surface as a named blocked row");
     assert.equal(row.status, "blocked");
@@ -4377,19 +4377,19 @@ test("SEAM: a broken manifest is REPORTED, never silently skipped", async () => 
 
     const bad = join(dir, "bad.json");
     writeFileSync(bad, "{not json", "utf8");
-    process.env.OKP_BENCH_TOOLS_MANIFEST = bad;
+    process.env.BENCH_TOOLS_MANIFEST = bad;
     row = describeTools(BENCH).find((t) => t.id === "external-tools");
     assert.equal(row.status, "blocked");
 
     const noTools = join(dir, "empty.json");
     writeFileSync(noTools, JSON.stringify({ schema_version: 1 }), "utf8");
-    process.env.OKP_BENCH_TOOLS_MANIFEST = noTools;
+    process.env.BENCH_TOOLS_MANIFEST = noTools;
     row = describeTools(BENCH).find((t) => t.id === "external-tools");
     assert.match(row.blocked_reason, /no "tools" array/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
-    if (saved === undefined) delete process.env.OKP_BENCH_TOOLS_MANIFEST;
-    else process.env.OKP_BENCH_TOOLS_MANIFEST = saved;
+    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
+    else process.env.BENCH_TOOLS_MANIFEST = saved;
   }
 });
 
@@ -4399,7 +4399,7 @@ test("SEAM: a manifest cannot redefine a built-in, and cannot reach mcp-admin", 
   // they can be reviewed. And a manifest must not be able to make
   // `worker-image-rebuild` mean something else on one installation.
   const { describeTools, toolRegistry } = await import("./tools.mjs");
-  const saved = process.env.OKP_BENCH_TOOLS_MANIFEST;
+  const saved = process.env.BENCH_TOOLS_MANIFEST;
   const dir = mkdtempSync(join(tmpdir(), "okp-tools-"));
   try {
     const manifest = join(dir, "tools.json");
@@ -4413,7 +4413,7 @@ test("SEAM: a manifest cannot redefine a built-in, and cannot reach mcp-admin", 
       }),
       "utf8",
     );
-    process.env.OKP_BENCH_TOOLS_MANIFEST = manifest;
+    process.env.BENCH_TOOLS_MANIFEST = manifest;
 
     const registry = toolRegistry(BENCH);
     const builtin = registry.filter((t) => t.id === "worker-image-rebuild");
@@ -4438,8 +4438,8 @@ test("SEAM: a manifest cannot redefine a built-in, and cannot reach mcp-admin", 
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
-    if (saved === undefined) delete process.env.OKP_BENCH_TOOLS_MANIFEST;
-    else process.env.OKP_BENCH_TOOLS_MANIFEST = saved;
+    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
+    else process.env.BENCH_TOOLS_MANIFEST = saved;
   }
 });
 
@@ -4450,8 +4450,8 @@ test("SEAM: the dev manifest that ships in this workspace is valid and wires up"
   if (!existsSync(manifest)) return;
 
   const { describeTools } = await import("./tools.mjs");
-  const saved = process.env.OKP_BENCH_TOOLS_MANIFEST;
-  process.env.OKP_BENCH_TOOLS_MANIFEST = manifest;
+  const saved = process.env.BENCH_TOOLS_MANIFEST;
+  process.env.BENCH_TOOLS_MANIFEST = manifest;
   try {
     // bench-mcp-restart lives here too: it drives ../dev/scripts/bench-mcp.sh,
     // so declaring it as a built-in put a permanently blocked row advertising
@@ -4475,8 +4475,8 @@ test("SEAM: the dev manifest that ships in this workspace is valid and wires up"
     );
     assert.ok(ready.seams.length >= 3, "an operator must be able to see what it will do");
   } finally {
-    if (saved === undefined) delete process.env.OKP_BENCH_TOOLS_MANIFEST;
-    else process.env.OKP_BENCH_TOOLS_MANIFEST = saved;
+    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
+    else process.env.BENCH_TOOLS_MANIFEST = saved;
   }
 });
 
@@ -4496,8 +4496,8 @@ test("SEAM: the dev manifest that ships in this workspace is valid and wires up"
 
 test("TOOLS: the success caveat belongs to the tool, not to the drawer", async () => {
   const { describeTools } = await import("./tools.mjs");
-  const saved = process.env.OKP_BENCH_TOOLS_MANIFEST;
-  delete process.env.OKP_BENCH_TOOLS_MANIFEST;
+  const saved = process.env.BENCH_TOOLS_MANIFEST;
+  delete process.env.BENCH_TOOLS_MANIFEST;
   try {
     const tools = describeTools(BENCH);
     const join = tools.find((t) => t.id === "request-join");
@@ -4514,8 +4514,8 @@ test("TOOLS: the success caveat belongs to the tool, not to the drawer", async (
       );
     }
   } finally {
-    if (saved === undefined) delete process.env.OKP_BENCH_TOOLS_MANIFEST;
-    else process.env.OKP_BENCH_TOOLS_MANIFEST = saved;
+    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
+    else process.env.BENCH_TOOLS_MANIFEST = saved;
   }
 });
 
@@ -4542,14 +4542,14 @@ test("TOOLS: the drawer renders the command's own output", () => {
 
 /** Run `fn` with the stats manifest pointed at `path`, then put the env back. */
 async function withStatsManifest(path, fn) {
-  const saved = process.env.OKP_BENCH_STATS_MANIFEST;
-  if (path === null) delete process.env.OKP_BENCH_STATS_MANIFEST;
-  else process.env.OKP_BENCH_STATS_MANIFEST = path;
+  const saved = process.env.BENCH_STATS_MANIFEST;
+  if (path === null) delete process.env.BENCH_STATS_MANIFEST;
+  else process.env.BENCH_STATS_MANIFEST = path;
   try {
     return await fn();
   } finally {
-    if (saved === undefined) delete process.env.OKP_BENCH_STATS_MANIFEST;
-    else process.env.OKP_BENCH_STATS_MANIFEST = saved;
+    if (saved === undefined) delete process.env.BENCH_STATS_MANIFEST;
+    else process.env.BENCH_STATS_MANIFEST = saved;
   }
 }
 
@@ -5027,16 +5027,16 @@ test("SEAM: every remedy preflight can name is a real tool id somewhere", async 
 
   // The dev manifest is what contributes bench-ready/bench-mcp-restart, and it
   // is present in this workspace — so here, every declared id must resolve.
-  const saved = process.env.OKP_BENCH_TOOLS_MANIFEST;
-  process.env.OKP_BENCH_TOOLS_MANIFEST = join(BENCH, "..", "dev", "bench-tools.json");
+  const saved = process.env.BENCH_TOOLS_MANIFEST;
+  process.env.BENCH_TOOLS_MANIFEST = join(BENCH, "..", "dev", "bench-tools.json");
   try {
     const ids = new Set(toolRegistry(BENCH).map((t) => t.id));
     for (const id of declared) {
       assert.ok(ids.has(id), `preflight names remedy tool "${id}" and nothing registers it`);
     }
   } finally {
-    if (saved === undefined) delete process.env.OKP_BENCH_TOOLS_MANIFEST;
-    else process.env.OKP_BENCH_TOOLS_MANIFEST = saved;
+    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
+    else process.env.BENCH_TOOLS_MANIFEST = saved;
   }
 });
 
@@ -5050,7 +5050,7 @@ test("SEAM: every remedy preflight can name is a real tool id somewhere", async 
 
 test("DEVMODE: env truthy resolves ON and pins the toggle", async () => {
   const root = mkdtempSync(join(tmpdir(), "okp-devmode-"));
-  const r = await resolveDevMode({ benchRoot: root, env: { OKP_BENCH_DEV_MODE: "on" } });
+  const r = await resolveDevMode({ benchRoot: root, env: { BENCH_DEV_MODE: "on" } });
   assert.equal(r.enabled, true);
   assert.equal(r.source, "environment");
   // PINNED: the toggle must refuse rather than write a file the next read ignores.
@@ -5060,7 +5060,7 @@ test("DEVMODE: env truthy resolves ON and pins the toggle", async () => {
 
 test("DEVMODE: env falsy resolves OFF and pins the toggle", async () => {
   const root = mkdtempSync(join(tmpdir(), "okp-devmode-"));
-  const r = await resolveDevMode({ benchRoot: root, env: { OKP_BENCH_DEV_MODE: "off" } });
+  const r = await resolveDevMode({ benchRoot: root, env: { BENCH_DEV_MODE: "off" } });
   assert.equal(r.enabled, false);
   assert.equal(r.source, "environment");
   assert.equal(r.settable, false);
@@ -5074,7 +5074,7 @@ test("DEVMODE: an exported value wins over the state file", async () => {
   mkdirSync(join(root, "config"), { recursive: true });
   writeFileSync(join(root, "config", "devmode.json"), JSON.stringify({ enabled: false }));
 
-  const r = await resolveDevMode({ benchRoot: root, env: { OKP_BENCH_DEV_MODE: "on" } });
+  const r = await resolveDevMode({ benchRoot: root, env: { BENCH_DEV_MODE: "on" } });
   assert.equal(r.enabled, true);
   assert.equal(r.source, "environment");
   rmSync(root, { recursive: true, force: true });
@@ -5107,7 +5107,7 @@ test("DEVMODE: a malformed env value reads OFF and says misconfiguration", async
   // Absence and misconfiguration are different facts. A silently-ignored
   // setting is how an operator concludes the feature is broken.
   const root = mkdtempSync(join(tmpdir(), "okp-devmode-"));
-  const r = await resolveDevMode({ benchRoot: root, env: { OKP_BENCH_DEV_MODE: "banana" } });
+  const r = await resolveDevMode({ benchRoot: root, env: { BENCH_DEV_MODE: "banana" } });
   assert.equal(r.enabled, false);
   assert.equal(r.source, "environment_malformed");
   assert.equal(r.settable, false);
@@ -5144,7 +5144,7 @@ test("DEVMODE: a state file with no boolean enabled reads OFF but stays settable
 test("DEVMODE: an env-pinned mode REFUSES the write and writes nothing", async () => {
   // The POST must not succeed-and-be-ignored: the refusal is the point.
   const root = mkdtempSync(join(tmpdir(), "okp-devmode-"));
-  const w = await writeDevMode({ benchRoot: root, enabled: false, env: { OKP_BENCH_DEV_MODE: "on" } });
+  const w = await writeDevMode({ benchRoot: root, enabled: false, env: { BENCH_DEV_MODE: "on" } });
   assert.equal(w.ok, false);
   assert.equal(w.code, "pinned_by_environment");
   assert.equal(existsSync(join(root, "config", "devmode.json")), false, "a refused write must not touch the state file");

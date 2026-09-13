@@ -29,7 +29,7 @@
 //   runs/baselines.json    DERIVED from the cells (`baselines.mjs`), rewritten
 //                          whenever the derived index changes. Editing it here
 //                          would be conforming data by hand.
-//   docker volumes         named `okp-bench-cell-<label>-session-db` — the label
+//   docker volumes         named `bench-cell-<label>-session-db` — the label
 //                          is MODEL-scoped, not run-scoped, so the same model in
 //                          two trees produces one name. A volume cannot be
 //                          attributed to a run, so deleting one on a run's
@@ -96,7 +96,7 @@ async function strandedVolumes() {
     return String(stdout)
       .split("\n")
       .map((s) => s.trim())
-      .filter((s) => /^okp-bench-cell-.*-session-db$/.test(s));
+      .filter((s) => /^bench-cell-.*-session-db$/.test(s));
   } catch {
     // No docker, or it is not running. Absence of evidence, reported as absence.
     return [];

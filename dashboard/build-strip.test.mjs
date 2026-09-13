@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // BUILD STRIP — the display that must never become a verdict
 //
-//     cd okp-bench/dashboard && node --test
+//     cd bench/dashboard && node --test
 //
 // WO-CHUNKVIS-1. Which of the six build chunks landed, rendered per cell. This
 // panel decides NOTHING: the harness does not gate on these values and neither

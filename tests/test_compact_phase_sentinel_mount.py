@@ -43,7 +43,7 @@ def _cfg(tmp_path: Path, *, memory_mode: str, compact: bool) -> DockerCellConfig
     cfg = DockerCellConfig(
         worktree=tmp_path / f"worktree-{memory_mode}",
         memory_mode=memory_mode,
-        container_name=f"okp-bench-cell-compact-{memory_mode}",
+        container_name=f"bench-cell-compact-{memory_mode}",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
         served_memories_host_path=str(tmp_path / "served-memories.json"),

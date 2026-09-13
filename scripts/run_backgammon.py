@@ -43,7 +43,7 @@ def _utc_compact() -> str:
 
 def _repo_dir() -> Path:
     # THE REPO IS THIS SCRIPT'S OWN PARENT, resolved the way run_cumulative.py
-    # resolves it (parents[1]). It read parents[2]/"okp-bench" — a sibling path
+    # resolves it (parents[1]). It read parents[2]/"bench" — a sibling path
     # from before the rename, which resolves to a directory that does not exist,
     # so the default runs dir and the task dir both pointed nowhere.
     return Path(__file__).resolve().parents[1]
@@ -301,7 +301,7 @@ def main() -> int:
         surface_budget=3,
         max_attempts=args.max_attempts,
         # mcp_recall_url is DELIBERATELY NOT PASSED. RunConfig's default_factory
-        # reads OKP_BENCH_MCP_RECALL_URL and falls back to :4550; pinning the
+        # reads BENCH_MCP_RECALL_URL and falls back to :4550; pinning the
         # literal here made that seam a no-op for this driver alone.
         cost_limit_usd=args.cost_limit,
         cost_target_usd=args.cost_target,

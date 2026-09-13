@@ -16,14 +16,14 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 ## read+documented
 | Name | Default | Controls | Override |
 |---|---|---|---|
-| OKP_BENCH_HOLD_UI | off | post-cell UI hold window | env OKP_BENCH_HOLD_UI=1 |
-| OKP_BENCH_LEADER_MCP_URL | http://127.0.0.1:4550 | leader MCP endpoint | env |
-| OKP_BENCH_LEADER_KEYSTORE | ~/.okp/bench/leader-keystore | leader keystore dir | env |
-| OKP_BENCH_RUN_TIMEOUT_S | (optional) | run-level timeout | env |
-| OKP_BENCH_SKIP_CLEANUP | off | skip telemetry cleanup | env =1 |
+| BENCH_HOLD_UI | off | post-cell UI hold window | env BENCH_HOLD_UI=1 |
+| BENCH_LEADER_MCP_URL | http://127.0.0.1:4550 | leader MCP endpoint | env |
+| BENCH_LEADER_KEYSTORE | ~/.okp/bench/leader-keystore | leader keystore dir | env |
+| BENCH_RUN_TIMEOUT_S | (optional) | run-level timeout | env |
+| BENCH_SKIP_CLEANUP | off | skip telemetry cleanup | env =1 |
 | OKP_KEYSTORE_PATH | ~/.okp/bench/leader-keystore | MCP keystore | env |
 | LOCAL_LLM_PROXY_API_KEY | (none) | Local LLM Proxy (:4545) token | env or .env |
-| OKP_BENCH_SPEND_DB_DSN | postgresql://spend_proxy:spend_proxy_dev@127.0.0.1:5440/spend_proxy | spend meter DB | env or .env |
+| BENCH_SPEND_DB_DSN | postgresql://spend_proxy:spend_proxy_dev@127.0.0.1:5440/spend_proxy | spend meter DB | env or .env |
 | BENCH_LIVE_STREAM | (none) | live-stream path | env |
 | BENCH_LIVE_STREAM_NS | (none) | stream namespace | env |
 | OKP_RECALL_MODE | prod | plugin recall governor | env =test |
@@ -52,38 +52,38 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_PLUGIN_PATH | (none) | plugin path baked into worker opencode.json | build-time env |
 | OKP_SELF_COMPACT | off | worker-side self-fire compaction (marker-detection arm in vendored self-compact.ts) | env =1, exported by the harness per cell when launched with --compact |
 | OKP_COMPACT_PHASE_FILE | (none) | path to the A2 phase sentinel the compaction arm reads on every session.idle; only `build` may fire, and unset/unreadable never fires | env, set to /okp-compact/phase by the harness per cell when launched with --compact (read-only bind mount, both arms) |
-| OKP_BENCH_DEV_MODE | (none) | dev-mode env pin (truthy = on, falsy = off; pinned ⇒ `settable:false`) — read `control/devmode.mjs:48-95` | env |
-| OKP_BENCH_DEV_MODE_FILE | <bench>/config/devmode.json | dev-mode state file location — read `control/devmode.mjs:57-59` | env |
-| OKP_BENCH_SEED_SNAPSHOT | (none) | pins the armed build-snapshot id (env pin ⇒ `settable:false`) — read `control/snapshots.mjs:252` | env |
-| OKP_BENCH_SEED_SNAPSHOT_FILE | <bench>/config/armed-snapshot.json | armed-snapshot state file location — read `control/snapshots.mjs:241` | env |
+| BENCH_DEV_MODE | (none) | dev-mode env pin (truthy = on, falsy = off; pinned ⇒ `settable:false`) — read `control/devmode.mjs:48-95` | env |
+| BENCH_DEV_MODE_FILE | <bench>/config/devmode.json | dev-mode state file location — read `control/devmode.mjs:57-59` | env |
+| BENCH_SEED_SNAPSHOT | (none) | pins the armed build-snapshot id (env pin ⇒ `settable:false`) — read `control/snapshots.mjs:252` | env |
+| BENCH_SEED_SNAPSHOT_FILE | <bench>/config/armed-snapshot.json | armed-snapshot state file location — read `control/snapshots.mjs:241` | env |
 
 ## read+undocumented
 | Name | Default | Controls | Override |
 |---|---|---|---|
-| OKP_BENCH_HUB_URL | http://127.0.0.1:4440 | hub endpoint | env |
-| OKP_BENCH_MCP_RECALL_URL | http://127.0.0.1:4550 (host) / http://host.docker.internal:4550 (worker) | recall client | env |
-| OKP_BENCH_SERVE_HOST_PORT | 4096 | host-published serve port | env |
-| OKP_BENCH_SERVE_CONTAINER_PORT | 4096 | container serve port | env |
-| OKP_BENCH_ENV_FILE | config/bench.env | durable env file path | env |
-| OKP_BENCH_ROOT | <bench>/.. | workspace-root anchor | env |
-| OKP_BENCH_LEADER_SEED_HEX | "" | leader identity seed | env |
-| OKP_BENCH_ORG_ID | "" | org selector pin | env |
-| OKP_BENCH_LEADER_SIGNER_DIR | scaffold/leader-signer (STALE — dir moved to dev/benchmark/leader-signer; code default in lconfig.py:57-58 is stale too) | signer dir | env |
-| OKP_BENCH_RUNS_DIR | <bench>/runs | runs root | env |
-| OKP_BENCH_MAX_ATTEMPTS | 5 | max attempts/cell | env |
-| OKP_BENCH_MAX_STEPS_PER_ATTEMPT | (optional) | max steps/attempt | env |
-| OKP_BENCH_TURN_STALL_TIMEOUT_S | 600 | turn stall detector | env |
-| OKP_BENCH_PROXY_CHECKPOINT | (none) | proxy checkpoint path | env |
-| OKP_BENCH_REASONING_EFFORT | (none) | worker reasoning effort | env |
-| OKP_BENCH_WORKER_PIDS_LIMIT | 512 | docker pids cap | env |
-| OKP_BENCH_WORKER_MEMORY | 4g | docker mem cap | env |
-| OKP_BENCH_WORKER_CPUS | 8 | docker cpu cap | env |
-| OKP_BENCH_DATA_DIR | <repo>/data | telemetry sink | env |
+| BENCH_HUB_URL | http://127.0.0.1:4440 | hub endpoint | env |
+| BENCH_MCP_RECALL_URL | http://127.0.0.1:4550 (host) / http://host.docker.internal:4550 (worker) | recall client | env |
+| BENCH_SERVE_HOST_PORT | 4096 | host-published serve port | env |
+| BENCH_SERVE_CONTAINER_PORT | 4096 | container serve port | env |
+| BENCH_ENV_FILE | config/bench.env | durable env file path | env |
+| BENCH_ROOT | <bench>/.. | workspace-root anchor | env |
+| BENCH_LEADER_SEED_HEX | "" | leader identity seed | env |
+| BENCH_ORG_ID | "" | org selector pin | env |
+| BENCH_LEADER_SIGNER_DIR | scaffold/leader-signer (STALE — dir moved to dev/benchmark/leader-signer; code default in lconfig.py:57-58 is stale too) | signer dir | env |
+| BENCH_RUNS_DIR | <bench>/runs | runs root | env |
+| BENCH_MAX_ATTEMPTS | 5 | max attempts/cell | env |
+| BENCH_MAX_STEPS_PER_ATTEMPT | (optional) | max steps/attempt | env |
+| BENCH_TURN_STALL_TIMEOUT_S | 600 | turn stall detector | env |
+| BENCH_PROXY_CHECKPOINT | (none) | proxy checkpoint path | env |
+| BENCH_REASONING_EFFORT | (none) | worker reasoning effort | env |
+| BENCH_WORKER_PIDS_LIMIT | 512 | docker pids cap | env |
+| BENCH_WORKER_MEMORY | 4g | docker mem cap | env |
+| BENCH_WORKER_CPUS | 8 | docker cpu cap | env |
+| BENCH_DATA_DIR | <repo>/data | telemetry sink | env |
 | OKP_PROXY_RUNS_DIR | ~/.okp/proxy-runs | relay-proxy identity logs | env |
-| OKP_BENCH_ALLOW_MISSING_RUN_CONTEXT | off | tolerate missing run context | env =1 |
-| OKP_BENCH_DOTENV | <bench>/.env | dotenv path override | env |
-| OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL | egress-derived | worker proxy URL | env |
-| OKP_BENCH_CLOUD_KEY_FILE | config/cloud.env | cloud key file | env |
+| BENCH_ALLOW_MISSING_RUN_CONTEXT | off | tolerate missing run context | env =1 |
+| BENCH_DOTENV | <bench>/.env | dotenv path override | env |
+| BENCH_WORKER_SPEND_PROXY_BASE_URL | egress-derived | worker proxy URL | env |
+| BENCH_CLOUD_KEY_FILE | config/cloud.env | cloud key file | env |
 | ORCAROUTER_API_KEY | (none) | cloud router key | env or config/cloud.env |
 | OPENROUTER_API_KEY | (none) | temp-injected for SWE-ContextBench solve | env |
 | KEEP_WORK | off | preserve SWE-CB workdir | env |
@@ -98,7 +98,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_CONTROL_PYTHON | null | python binary | env |
 | OKP_HOME | ~/.okp/bench | bench identity home | env |
 | OKP_MCP_DIR | client/packages/core (resolve(benchRoot, "..", "client", "packages", "core") — tools.mjs:38) | reference MCP dir | env |
-| OKP_BENCH_ORG | okp-org-0 | request-join tool default org | env |
+| BENCH_ORG | okp-org-0 | request-join tool default org | env |
 | OKP_DASH_RUNS_ROOT | <benchRoot>/runs | dashboard runs root | env |
 | OKP_IDENTITY_SEED_HEX | (none) | leader-signer seed | env or --seed-hex |
 | OKP_ENV | local | base-URL switch | env =production |
@@ -117,8 +117,8 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_AGENT_KEY | (none) | agent key fp (log-only) | env |
 | OKP_AGENT_PRIVATE_KEY | (none) | agent key fallback fp (log-only) | env |
 | OKP_EPOCH | (none) | epoch fp (log-only) | env |
-| OKP_BENCH_TOOLS_MANIFEST | (none) | dev-tools manifest path (control/tools.mjs:192) | env |
-| OKP_BENCH_STATS_MANIFEST | (none) | run-stats manifest path (control/runstats.mjs:182) | env |
+| BENCH_TOOLS_MANIFEST | (none) | dev-tools manifest path (control/tools.mjs:192) | env |
+| BENCH_STATS_MANIFEST | (none) | run-stats manifest path (control/runstats.mjs:182) | env |
 | OKP_DASHBOARD_CONFIG | (none) | dashboard shared-config path (control/routers.mjs:71 + harness/spend_key.py:48) | env |
 
 ## read by sibling/runtime (reclassified — was "dead", NOT deleted)
@@ -150,6 +150,6 @@ Re-verified: none of these has a bench-code reader, but each IS read — either 
 none
 
 ## Notes
-- `OKP_MCP_SEED` was removed from this register: its old note ("read by okp-meta/scripts/lib.sh") was wrong — that script reads `OKP_BENCH_MCP_SEED`, a different, live var. As named, `OKP_MCP_SEED` is a drift-ghost with zero occurrences anywhere and was deleted.
+- `OKP_MCP_SEED` was removed from this register: its old note ("read by okp-meta/scripts/lib.sh") was wrong — that script reads `BENCH_MCP_SEED`, a different, live var. As named, `OKP_MCP_SEED` is a drift-ghost with zero occurrences anywhere and was deleted.
 - `OKP_MCP_URL` was removed: a naming-drift ghost of the live `OKP_MCP_HTTP_URL` (read at `dev/benchmark/leader-signer/vendor/config.ts:96` — moved from the retired `bench/scaffold/leader-signer/`). The bench-doc prose reference in RUNBOOK.md was renamed to the live name.
-- `OKP_BENCH_SPEND_PROXY_BASE_URL` was removed from the register (2026-09-04): the resolver `resolve_spend_proxy_base_url` was deleted in the OpenRouter-proxy cleanup (WO-CLEAN-08); nothing reads this var. The live worker-side var is `OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL` (still listed above). The stale `.env.example` line referencing it was removed too.
+- `BENCH_SPEND_PROXY_BASE_URL` was removed from the register (2026-09-04): the resolver `resolve_spend_proxy_base_url` was deleted in the OpenRouter-proxy cleanup (WO-CLEAN-08); nothing reads this var. The live worker-side var is `BENCH_WORKER_SPEND_PROXY_BASE_URL` (still listed above). The stale `.env.example` line referencing it was removed too.

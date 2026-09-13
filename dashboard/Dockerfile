@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Okp Bench Dashboard
+# Bench Dashboard
 #
-#   docker compose up -d          (from okp-bench/dashboard/)
+#   docker compose up -d          (from bench/dashboard/)
 #   open http://localhost:7717
 #
 # Single stage on purpose: there is nothing to build. The dashboard has zero

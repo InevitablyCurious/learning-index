@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // AGENT-EVENT PERSISTENCE + BACKEND-FEED RUN_DIR RESOLUTION TESTS
 //
-//   cd okp-bench/control && node --test
+//   cd bench/control && node --test
 //
 // WHAT THESE TESTS ARE FOR. A board viewing a PAST run must be served that
 // run's own agent events and that run's own backend feed — resolved from

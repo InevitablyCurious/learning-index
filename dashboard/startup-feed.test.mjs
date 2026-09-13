@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // STARTUP FEED — the derivation, and the yield rule
 //
-//     cd okp-bench/dashboard && node --test
+//     cd bench/dashboard && node --test
 //
 // WHY THIS EXISTS
 //

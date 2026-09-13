@@ -51,7 +51,7 @@ const EVENTS = {
   total: 2,
   counts: { tool: 1, file: 1, thinking: 0, error: 0, lifecycle: 0, harness: 0, user: 0 },
   events: [
-    { seq: 1, kind: "tool", name: "run grades", detail: "okp-bench run --cell a1", at: 1788700000000 },
+    { seq: 1, kind: "tool", name: "run grades", detail: "bench run --cell a1", at: 1788700000000 },
     { seq: 2, kind: "file", name: "wrote report", detail: "/tmp/okp/report.md", at: 1788700005000 },
   ],
 };

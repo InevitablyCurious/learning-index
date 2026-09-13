@@ -36,7 +36,7 @@ import { join } from "node:path";
 
 /** Where this installation keeps the plugin tree, or "" when it was never told. */
 function pluginRoot() {
-  return String(process.env.OKP_BENCH_PLUGIN_DIR ?? "").trim();
+  return String(process.env.BENCH_PLUGIN_DIR ?? "").trim();
 }
 
 const BACKENDS = [
@@ -49,7 +49,7 @@ const BACKENDS = [
      *
      *   BENCH_AGENTS_AUX_FILE  the standing record mandate, appended to the
      *                          worker's AGENTS.md at seed time
-     *   OKP_BENCH_PLUGIN_DIR   the plugin tree, passed through so the run sees
+     *   BENCH_PLUGIN_DIR       the plugin tree, passed through so the run sees
      *                          the same one the control plane was started with
      *
      * Both are resolved from the plugin root. A missing mandate file yields no
@@ -60,7 +60,7 @@ const BACKENDS = [
     env() {
       const root = pluginRoot();
       if (!root) return {};
-      const out = { OKP_BENCH_PLUGIN_DIR: root };
+      const out = { BENCH_PLUGIN_DIR: root };
       const mandate = join(root, "plugins", "tokp-record-mandate.md");
       if (existsSync(mandate)) out.BENCH_AGENTS_AUX_FILE = mandate;
       return out;

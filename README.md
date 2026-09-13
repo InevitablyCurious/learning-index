@@ -90,7 +90,7 @@ and measure the same thing.
   OrcaRouter is pinned as the default so a public checkout runs without
   configuration, but it is a default, not a requirement.
 - **Memory system** — recall reaches the worker over a URL seam
-  (`OKP_BENCH_MCP_RECALL_URL`), so a different memory system can answer instead.
+  (`BENCH_MCP_RECALL_URL`), so a different memory system can answer instead.
   **Today that means implementing this project's recall contract.** The former
   `MemoryBackend` adapter abstraction is retired (removed in the 2026-09-03
   cleanup), so the seam is wider than an adapter interface. This is the largest gap between the stated

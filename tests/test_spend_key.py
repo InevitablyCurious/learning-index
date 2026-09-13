@@ -36,7 +36,7 @@ def test_resolve_worker_spend_proxy_base_url_defaults_and_overrides(
 
     dotenv = tmp_path / ".env"
     dotenv.write_text(
-        "OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL=http://from-dotenv/v1\n",
+        "BENCH_WORKER_SPEND_PROXY_BASE_URL=http://from-dotenv/v1\n",
         encoding="utf-8",
     )
     assert (
@@ -45,18 +45,18 @@ def test_resolve_worker_spend_proxy_base_url_defaults_and_overrides(
     )
     assert (
         resolve_worker_spend_proxy_base_url(
-            env={"OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL": "http://from-env/v1"},
+            env={"BENCH_WORKER_SPEND_PROXY_BASE_URL": "http://from-env/v1"},
             dotenv_path=dotenv,
         )
         == "http://from-env/v1"
     )
 
-    # The host-facing OKP_BENCH_SPEND_PROXY_BASE_URL must NEVER leak into
+    # The host-facing BENCH_SPEND_PROXY_BASE_URL must NEVER leak into
     # the worker resolution — with a run_label the egress URL wins, not the
     # host loopback value.
     assert (
         resolve_worker_spend_proxy_base_url(
-            env={"OKP_BENCH_SPEND_PROXY_BASE_URL": "http://127.0.0.1:4545/v1"},
+            env={"BENCH_SPEND_PROXY_BASE_URL": "http://127.0.0.1:4545/v1"},
             dotenv_path=tmp_path / "missing.env",
             run_label=label,
         )

@@ -406,12 +406,12 @@ _HARNESS_LIMIT_REASONS = {
 # bound. Streaming generation advances the progress token continuously and is
 # never mistaken for a stall.
 DEFAULT_TURN_STALL_TIMEOUT_S = float(
-    os.environ.get("OKP_BENCH_TURN_STALL_TIMEOUT_S", "600")
+    os.environ.get("BENCH_TURN_STALL_TIMEOUT_S", "600")
 )
-_PROXY_CHECKPOINT_ENV = "OKP_BENCH_PROXY_CHECKPOINT"
-_REASONING_EFFORT_ENV = "OKP_BENCH_REASONING_EFFORT"
+_PROXY_CHECKPOINT_ENV = "BENCH_PROXY_CHECKPOINT"
+_REASONING_EFFORT_ENV = "BENCH_REASONING_EFFORT"
 
-# WO-HOLD-UI-1: opt-in post-cell observation window. When OKP_BENCH_HOLD_UI=1,
+# WO-HOLD-UI-1: opt-in post-cell observation window. When BENCH_HOLD_UI=1,
 # the cell's stack (container + worktree) is NOT torn down at benchmark end; the
 # artifact's UI server is booted host-side from the bind-mounted worktree on
 # :8002 — the exact bytes the model wrote, the same boot the gates perform
@@ -419,7 +419,7 @@ _REASONING_EFFORT_ENV = "OKP_BENCH_REASONING_EFFORT"
 # Release is operator-explicit: `touch <run_dir>/RELEASE_HOLD`. Teardown then
 # proceeds through the normal unconditional path (RC-6 is preserved — the hold
 # sits INSIDE the cell context, so every abort/interrupt still tears down).
-_HOLD_UI_ENV = "OKP_BENCH_HOLD_UI"
+_HOLD_UI_ENV = "BENCH_HOLD_UI"
 _HOLD_UI_PORT = 8002
 _HOLD_UI_RELEASE_FILE = "RELEASE_HOLD"
 _HOLD_UI_STATE_FILE = "hold-ui.json"
@@ -1142,7 +1142,7 @@ def _export_cell_telemetry(
         return None
 
     try:
-        override = os.environ.get("OKP_BENCH_DATA_DIR", "").strip()
+        override = os.environ.get("BENCH_DATA_DIR", "").strip()
         data_dir = (
             Path(override) if override else Path(__file__).resolve().parents[2] / "data"
         )
@@ -1482,7 +1482,7 @@ def _hold_for_ui_review(
 ) -> None:
     """Hold the cell stack for operator UI review until released.
 
-    No-op unless OKP_BENCH_HOLD_UI=1. Boots the artifact's server host-side
+    No-op unless BENCH_HOLD_UI=1. Boots the artifact's server host-side
     from the worktree on :8002 (the gate boot, minus Playwright), then waits on
     the RELEASE_HOLD sentinel. Never fails the cell: boot problems are logged
     and the hold still proceeds (container + worktree stay inspectable). The
@@ -2050,12 +2050,12 @@ def _safe_title_org_component(org_id: str | None) -> str:
 def bench_session_title(org_id: str | None, memory_mode: str, cell_ts: int) -> str:
     """Deterministic, identifiable OpenCode session title for a bench cell.
 
-    Format: ``okp-bench-<org_id>-<arm on|off>-<cell_ts>``. ``cell_ts`` is
+    Format: ``bench-<org_id>-<arm on|off>-<cell_ts>``. ``cell_ts`` is
     the epoch second captured ONCE at cell start, so the title is stable
     across every attempt and resume of that cell and lands verbatim in the
     exported session DB (``session.title``) for the prod dashboard.
     """
-    return f"okp-bench-{_safe_title_org_component(org_id)}-{memory_mode}-{int(cell_ts)}"
+    return f"bench-{_safe_title_org_component(org_id)}-{memory_mode}-{int(cell_ts)}"
 
 
 class BackgammonRunner(AgentRunner):
@@ -2215,7 +2215,7 @@ class BackgammonRunner(AgentRunner):
         else:
             # No default effort (2026-08-09 directive): the worker request
             # shape must match the daily opencode driver, which sends no
-            # reasoning field. Opt-in only via arg or OKP_BENCH_REASONING_EFFORT.
+            # reasoning field. Opt-in only via arg or BENCH_REASONING_EFFORT.
             env_reasoning_effort = os.getenv(_REASONING_EFFORT_ENV)
             if env_reasoning_effort is not None and env_reasoning_effort.strip():
                 resolved_reasoning_effort = env_reasoning_effort.strip()
@@ -2228,10 +2228,10 @@ class BackgammonRunner(AgentRunner):
         # serve, defaulted from env consistent with config.RunConfig (mirror of the
         # hub_url/mcp_recall_url env-override seam).
         self.serve_host_port = int(
-            os.environ.get("OKP_BENCH_SERVE_HOST_PORT") or "4096"
+            os.environ.get("BENCH_SERVE_HOST_PORT") or "4096"
         )
         self.serve_container_port = int(
-            os.environ.get("OKP_BENCH_SERVE_CONTAINER_PORT") or "4096"
+            os.environ.get("BENCH_SERVE_CONTAINER_PORT") or "4096"
         )
         self.session_id = None if session_id is None else str(session_id)
 
@@ -2354,7 +2354,7 @@ class BackgammonRunner(AgentRunner):
             # Same resolution as the harness's runs root (lconfig.py): env
             # override first, repo-local `runs/` otherwise.
             runs_root = Path(
-                os.environ.get("OKP_BENCH_RUNS_DIR") or (self._repo_root / "runs")
+                os.environ.get("BENCH_RUNS_DIR") or (self._repo_root / "runs")
             )
             snapshot_root = runs_root / "snapshots"
             snapshot_id = str(int(time.time() * 1000))
@@ -2846,7 +2846,7 @@ class BackgammonRunner(AgentRunner):
             self._plugin_present = image_plugin_present()
 
             sanitized_label = re.sub(r"[^a-zA-Z0-9_.-]", "-", run_label)
-            container_name = f"okp-bench-cell-{sanitized_label}"
+            container_name = f"bench-cell-{sanitized_label}"
             stale_rm = subprocess.run(
                 ["docker", "rm", "-f", container_name],
                 capture_output=True,
@@ -3749,7 +3749,7 @@ class BackgammonRunner(AgentRunner):
             # WO-HOLD-UI-1: benchmark end, stack held for operator UI review.
             # Every loop-exit path converges here; this is the last statement
             # inside the cell context, so release resumes into the normal
-            # unconditional teardown (RC-6). No-op unless OKP_BENCH_HOLD_UI=1.
+            # unconditional teardown (RC-6). No-op unless BENCH_HOLD_UI=1.
             if active_cell is not None:
                 _hold_for_ui_review(
                     run_label=run_label,
@@ -4220,7 +4220,7 @@ class BackgammonRunner(AgentRunner):
             check=True,
         )
         subprocess.run(
-            ["git", "config", "user.name", "okp-bench"],
+            ["git", "config", "user.name", "bench"],
             cwd=str(worktree),
             capture_output=True,
             text=True,

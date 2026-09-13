@@ -4,7 +4,7 @@ The contract under test: when attempt 1 is graded on the normal path, the
 runner copies the graded tree beside its gate record — identified by the SAME
 state hash the attempt report carries — with producer-stated provenance. A
 failed capture writes nothing and emits exactly one live notice; the cell
-carries on either way. Snapshots land under $OKP_BENCH_RUNS_DIR/snapshots,
+carries on either way. Snapshots land under $BENCH_RUNS_DIR/snapshots,
 which every test here pins to tmp_path so nothing ever touches bench/runs/.
 """
 
@@ -77,7 +77,7 @@ def _drive(
     gate: Any,
 ) -> Any:
     """Pin the runs root to tmp_path, stub the gate, drive one mock cell."""
-    monkeypatch.setenv("OKP_BENCH_RUNS_DIR", str(tmp_path))
+    monkeypatch.setenv("BENCH_RUNS_DIR", str(tmp_path))
     monkeypatch.setattr(runner, "_run_gate_report", gate)
     return runner._run_cell_impl(
         run_label="lbl",
@@ -399,7 +399,7 @@ def test_seeded_cell_skips_build_and_reaches_first_feedback_round(
     seeded_src = "// built by the snapshot's source cell\nexport const seeded = true;\n"
     (seed_tree / "src" / "game.ts").write_text(seeded_src, encoding="utf-8")
 
-    monkeypatch.delenv("OKP_BENCH_PROXY_CHECKPOINT", raising=False)
+    monkeypatch.delenv("BENCH_PROXY_CHECKPOINT", raising=False)
     _patch_fake_real_arm(monkeypatch)
 
     runner = _make_runner(
@@ -497,7 +497,7 @@ def test_seeded_cell_with_drifted_source_commit_emits_notice_and_skips_build(
         "export const seeded = true;\n", encoding="utf-8"
     )
 
-    monkeypatch.delenv("OKP_BENCH_PROXY_CHECKPOINT", raising=False)
+    monkeypatch.delenv("BENCH_PROXY_CHECKPOINT", raising=False)
     _patch_fake_real_arm(monkeypatch)
 
     runner = _make_runner(
@@ -566,7 +566,7 @@ def test_seeded_cell_with_drifted_source_commit_emits_notice_and_skips_build(
     # and bypasses both, so no stream would ever carry the notice. Same env
     # pin and gate stub `_drive` applies.
     run_dir = tmp_path / "rundir"
-    monkeypatch.setenv("OKP_BENCH_RUNS_DIR", str(tmp_path))
+    monkeypatch.setenv("BENCH_RUNS_DIR", str(tmp_path))
     monkeypatch.setattr(runner, "_run_gate_report", _fake_gate)
     result = runner.run_cell("lbl", run_dir, task_id="backgammon")
 
@@ -663,7 +663,7 @@ def _make_seeded_cache_runner(
     The gate stub records the report_path name of every real grade and passes
     from its first call on; the drive stubs record every feedback phase.
     """
-    monkeypatch.delenv("OKP_BENCH_PROXY_CHECKPOINT", raising=False)
+    monkeypatch.delenv("BENCH_PROXY_CHECKPOINT", raising=False)
     _patch_fake_real_arm(monkeypatch)
 
     runner = _make_runner(

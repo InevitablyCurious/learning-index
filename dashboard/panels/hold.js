@@ -23,7 +23,7 @@
 //                         hold — it is a FINDING, not a success.
 //   vanished mid-render   hold-ui.json is unlinked ON RELEASE. Disappearance
 //                         means RELEASED. It is never an error state.
-//   feature off           OKP_BENCH_HOLD_UI unset. Phrased as a choice not
+//   feature off           BENCH_HOLD_UI unset. Phrased as a choice not
 //                         yet made, so it never reads as broken.
 //
 // CANON (§5.4). Release is NEVER blocked by a dead UI or a bad bind. A board
@@ -44,7 +44,7 @@ export function renderHold(board) {
   if (h.feature_off) {
     return band("off", "HOLD FOR REVIEW — OPT-IN, CURRENTLY OFF", [
       `<div class="hold-line">Hold-for-review is opt-in and is currently off.</div>`,
-      `<div class="note">Set <span class="bright">OKP_BENCH_HOLD_UI=1</span> before the run to stop the harness at session end so you can test the artifact before the cell closes.</div>`,
+      `<div class="note">Set <span class="bright">BENCH_HOLD_UI=1</span> before the run to stop the harness at session end so you can test the artifact before the cell closes.</div>`,
     ]);
   }
 

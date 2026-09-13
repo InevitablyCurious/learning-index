@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ─────────────────────────────────────────────────────────────────────────────
-// OKP BENCH CONTROL PLANE — SERVER
+// BENCH CONTROL PLANE — SERVER
 //
 //   node server.mjs                 # http://127.0.0.1:7718
 //   node server.mjs --port 8081
@@ -151,7 +151,7 @@ const PROCESS_STARTED_AT = new Date().toISOString();
 
 if (args.help) {
   console.log(`
-okp bench control plane
+bench control plane
 
   node server.mjs [options]
 
@@ -767,7 +767,7 @@ async function stopRun() {
     new Promise((resolve) => {
       execFile("docker", args, { timeout: 30000 }, (_err, stdout) => resolve(stdout ?? ""));
     });
-  const cells = await run(["ps", "-aq", "--filter", "name=okp-bench-cell-"]);
+  const cells = await run(["ps", "-aq", "--filter", "name=bench-cell-"]);
   // Must track harness/egress.py:egress_container_name. A stale prefix here does
   // not fail loudly — it silently leaves the sidecar running after a stop, and
   // the next cell then contends with a live egress container from the last one.
@@ -777,7 +777,7 @@ async function stopRun() {
     .flatMap((s) => (s ? s.split(/\s+/) : []))
     .filter(Boolean);
   if (ids.length) await run(["rm", "-f", ...ids]);
-  const vols = await run(["volume", "ls", "-q", "--filter", "name=okp-bench-cell-"]);
+  const vols = await run(["volume", "ls", "-q", "--filter", "name=bench-cell-"]);
   const volIds = String(vols)
     .trim()
     .split(/\s+/)
@@ -1911,7 +1911,7 @@ const server = createServer(async (req, res) => {
       // Context is passed to the worker through the environment rather than a
       // CLI flag because the harness reads it there; `null` means "registry
       // default" and deliberately sets nothing.
-      if (context !== null) env.OKP_BENCH_WORKER_NUM_CTX = String(context);
+      if (context !== null) env.BENCH_WORKER_NUM_CTX = String(context);
 
       let child;
       try {
@@ -2414,7 +2414,7 @@ const server = createServer(async (req, res) => {
     // ── GET /api/stats ───────────────────────────────────────────────────
     // THE ONE NUMBERS SURFACE the ledger footer draws from: `bench` (native to
     // the benchmark, true for any clone) and `custom` (contributed through
-    // OKP_BENCH_STATS_MANIFEST, readings off services the CONTRIBUTOR runs and
+    // BENCH_STATS_MANIFEST, readings off services the CONTRIBUTOR runs and
     // the bench does not ship). Two arrays, one entry shape, never merged —
     // see control/runstats.mjs for why the boundary is drawn there and not on
     // the board.
@@ -2646,7 +2646,7 @@ const server = createServer(async (req, res) => {
 
 // 127.0.0.1 ONLY. There is deliberately no flag to change this.
 server.listen(args.port, "127.0.0.1", () => {
-  console.log(`okp bench control plane → http://127.0.0.1:${args.port}`);
+  console.log(`bench control plane → http://127.0.0.1:${args.port}`);
   console.log(`  bench root : ${BENCH_ROOT}`);
   console.log(`  python     : ${PYTHON}${existsSync(PYTHON) ? "" : "  (MISSING)"}`);
   console.log(`  proxy      : ${args.proxyUrl}`);

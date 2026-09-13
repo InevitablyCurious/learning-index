@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// bench-check.mjs — Okp bench-fixture predicate runner for the backgammon task.
+// bench-check.mjs — bench-fixture predicate runner for the backgammon task.
 // self-contained Node 18+ script, zero external deps (node:child_process, global fetch).
 //
 // The Okp plugin adapter (bench-fixture reporter) parses this script's STDOUT:

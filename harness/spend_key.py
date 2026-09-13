@@ -1,4 +1,4 @@
-"""Spend-proxy key/config resolution for okp-bench.
+"""Spend-proxy key/config resolution for bench.
 
 This module keeps bench configuration minimal for open-source users while
 failing loudly when required auth is missing.
@@ -31,7 +31,7 @@ _VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)
 # dotenv-format file (parsed by _read_dotenv); env export always wins.
 CLOUD_API_KEY_ENV = "ORCAROUTER_API_KEY"
 DEFAULT_CLOUD_KEY_FILE = _REPO_ROOT / "config" / "cloud.env"
-_CLOUD_KEY_FILE_ENV = "OKP_BENCH_CLOUD_KEY_FILE"
+_CLOUD_KEY_FILE_ENV = "BENCH_CLOUD_KEY_FILE"
 
 # The wider Open Knowledge install's operator config, and the field the router
 # credential lives under. Mirrors `shared_config_key` in control/routers.mjs.
@@ -97,7 +97,7 @@ def _read_dotenv(path: Path, *, env: Mapping[str, str]) -> dict[str, str]:
 def _resolve_dotenv_path(
     *, env: Mapping[str, str], dotenv_path: str | os.PathLike[str] | None
 ) -> Path:
-    candidate = dotenv_path if dotenv_path is not None else env.get("OKP_BENCH_DOTENV")
+    candidate = dotenv_path if dotenv_path is not None else env.get("BENCH_DOTENV")
     if candidate is None:
         return _DEFAULT_DOTENV_PATH
     return Path(candidate).expanduser()
@@ -200,16 +200,16 @@ def resolve_spend_db_dsn(
 ) -> str:
     """Resolve spend DB DSN from env, then .env, then local-compose default."""
     env_map = os.environ if env is None else env
-    from_env = str(env_map.get("OKP_BENCH_SPEND_DB_DSN", "")).strip()
+    from_env = str(env_map.get("BENCH_SPEND_DB_DSN", "")).strip()
     if from_env:
         logger.info(
-            "spend_key.resolve_spend_db_dsn outcome=resolved source=env:OKP_BENCH_SPEND_DB_DSN"
+            "spend_key.resolve_spend_db_dsn outcome=resolved source=env:BENCH_SPEND_DB_DSN"
         )
         return from_env
 
     env_file = _resolve_dotenv_path(env=env_map, dotenv_path=dotenv_path)
     dot = _read_dotenv(env_file, env=env_map)
-    from_dotenv = dot.get("OKP_BENCH_SPEND_DB_DSN", "").strip()
+    from_dotenv = dot.get("BENCH_SPEND_DB_DSN", "").strip()
     if from_dotenv:
         logger.info(
             "spend_key.resolve_spend_db_dsn outcome=resolved source=dotenv path=%s",
@@ -238,27 +238,27 @@ def resolve_worker_spend_proxy_base_url(
     (``http://okp-egress-<hash>:4545/v1``). One path per context, no
     dead-loopback fallback:
 
-    1. env ``OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL`` (operator override),
+    1. env ``BENCH_WORKER_SPEND_PROXY_BASE_URL`` (operator override),
     2. the same key in .env,
     3. the egress-derived URL — requires ``run_label``; without it a
        ``ValueError`` is raised, because silently returning any static URL
        would point the worker at something it cannot reach.
 
     Deliberately NO fallback to the host-facing
-    ``OKP_BENCH_SPEND_PROXY_BASE_URL`` (127.0.0.1 is the container's own
+    ``BENCH_SPEND_PROXY_BASE_URL`` (127.0.0.1 is the container's own
     loopback; that would re-import the dead-loopback bug).
     """
     env_map = os.environ if env is None else env
-    from_env = str(env_map.get("OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL", "")).strip()
+    from_env = str(env_map.get("BENCH_WORKER_SPEND_PROXY_BASE_URL", "")).strip()
     if from_env:
         logger.info(
-            "spend_key.resolve_worker_spend_proxy_base_url outcome=resolved source=env:OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL"
+            "spend_key.resolve_worker_spend_proxy_base_url outcome=resolved source=env:BENCH_WORKER_SPEND_PROXY_BASE_URL"
         )
         return from_env
 
     env_file = _resolve_dotenv_path(env=env_map, dotenv_path=dotenv_path)
     dot = _read_dotenv(env_file, env=env_map)
-    from_dotenv = dot.get("OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL", "").strip()
+    from_dotenv = dot.get("BENCH_WORKER_SPEND_PROXY_BASE_URL", "").strip()
     if from_dotenv:
         logger.info(
             "spend_key.resolve_worker_spend_proxy_base_url outcome=resolved source=dotenv path=%s",
@@ -280,7 +280,7 @@ def resolve_worker_spend_proxy_base_url(
     )
     raise ValueError(
         "Cannot resolve the worker model base URL: no "
-        "OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL override is set and no "
+        "BENCH_WORKER_SPEND_PROXY_BASE_URL override is set and no "
         "run_label was provided to derive the per-run egress sidecar URL "
         "(worker cells on the --internal network reach the model only via "
         "their egress sidecar; there is no static container-facing default)."
@@ -290,7 +290,7 @@ def resolve_worker_spend_proxy_base_url(
 def resolve_cloud_key_file(*, env: Mapping[str, str] | None = None) -> Path:
     """Resolve the cloud API-key file path.
 
-    Env override ``OKP_BENCH_CLOUD_KEY_FILE`` (stripped, non-empty) wins;
+    Env override ``BENCH_CLOUD_KEY_FILE`` (stripped, non-empty) wins;
     otherwise the repo default ``config/cloud.env``.
     """
     env_map = os.environ if env is None else env

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild okp-bench-worker:v1 from images/worker — the one sanctioned way.
+"""Rebuild bench-worker:v1 from images/worker — the one sanctioned way.
 
 A bare ``docker build`` still produces a working image, but it records nothing
 about what it was built from, and preflight then has to report the image as
@@ -10,7 +10,7 @@ instead of a timestamp docker never moves on a cache hit.
 Output is docker's own, streamed through unchanged: the build log is the only
 evidence of what happened, and rewriting it would hide which layer failed.
 
-The plugin tree to bake in comes from ``OKP_BENCH_PLUGIN_DIR`` (the seam every
+The plugin tree to bake in comes from ``BENCH_PLUGIN_DIR`` (the seam every
 consumer reads, so the builder and the freshness check agree on what this
 installation builds), and ``--plugin-dir <path>`` overrides it for a one-off
 build. With neither, the build is vanilla — which is what a bare clone gets.

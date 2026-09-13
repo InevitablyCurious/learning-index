@@ -26,7 +26,7 @@ from harness.egress import (
 from harness.spend_key import resolve_cloud_api_key
 
 
-WORKER_IMAGE = "okp-bench-worker:v1"
+WORKER_IMAGE = "bench-worker:v1"
 
 # ── CELL RESOURCE BOUNDS ────────────────────────────────────────────────────
 #
@@ -44,10 +44,10 @@ WORKER_IMAGE = "okp-bench-worker:v1"
 #
 # Sized against observation, not taste: the cell peaked at ~30 processes, so
 # 512 PIDs is ~17x headroom and only a genuine runaway reaches it.
-WORKER_PIDS_LIMIT = int(os.environ.get("OKP_BENCH_WORKER_PIDS_LIMIT", "512"))
-WORKER_MEMORY = os.environ.get("OKP_BENCH_WORKER_MEMORY", "4g")
-WORKER_CPUS = os.environ.get("OKP_BENCH_WORKER_CPUS", "8")
-WORKER_NETWORK = "okp-bench-net"
+WORKER_PIDS_LIMIT = int(os.environ.get("BENCH_WORKER_PIDS_LIMIT", "512"))
+WORKER_MEMORY = os.environ.get("BENCH_WORKER_MEMORY", "4g")
+WORKER_CPUS = os.environ.get("BENCH_WORKER_CPUS", "8")
+WORKER_NETWORK = "bench-net"
 
 # Loop-kill marker exchange: the egress sidecar (a SEPARATE container) writes
 # marker files here when it observes a loop-kill trip on the wire; the host
@@ -91,7 +91,7 @@ def _default_served_memories_container_path() -> str:
 
 def _default_recall_url() -> str:
     return (
-        os.environ.get("OKP_BENCH_MCP_RECALL_URL") or "http://host.docker.internal:4550"
+        os.environ.get("BENCH_MCP_RECALL_URL") or "http://host.docker.internal:4550"
     )
 
 

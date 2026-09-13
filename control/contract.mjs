@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// OKP BENCH CONTROL PLANE — CONSUMABLE CONTRACT v1
+// BENCH CONTROL PLANE — CONSUMABLE CONTRACT v1
 //
 // This module is the SINGLE definition of every shape the control plane emits.
 // The dashboard consumes it; the designer designs against it. Diff this file

@@ -40,7 +40,7 @@ class _StubSequencer:
 def test_handle_run_resolves_layout_for_ledger_append(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    monkeypatch.setenv("OKP_BENCH_SKIP_CLEANUP", "1")
+    monkeypatch.setenv("BENCH_SKIP_CLEANUP", "1")
 
     manifest = tmp_path / "campaign" / "manifest.json"
     manifest.parent.mkdir(parents=True, exist_ok=True)

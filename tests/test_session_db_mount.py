@@ -32,7 +32,7 @@ def _build_memory_on_cfg(
     return DockerCellConfig(
         worktree=worktree,
         memory_mode="on",
-        container_name="okp-bench-cell-session-db-on",
+        container_name="bench-cell-session-db-on",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
         served_memories_host_path=str(tmp_path / "served-memories.json"),
@@ -49,7 +49,7 @@ def test_run_argv_session_db_mount_present_when_configured_memory_mode_off(
     cfg = DockerCellConfig(
         worktree=worktree,
         memory_mode="off",
-        container_name="okp-bench-cell-session-db-off",
+        container_name="bench-cell-session-db-off",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
         session_db_host_path=session_db,
@@ -67,7 +67,7 @@ def test_run_argv_session_db_mount_present_when_configured_memory_mode_off(
     assert _contains_pair(
         argv,
         "-v",
-        "okp-bench-cell-session-db-off-session-db:/home/worker/.local/share/opencode:rw",
+        "bench-cell-session-db-off-session-db:/home/worker/.local/share/opencode:rw",
     )
     # The host path must NOT appear as a bind source: that is the defect.
     assert not any(
@@ -100,7 +100,7 @@ def test_run_argv_session_db_mount_present_when_configured_memory_mode_on(
     assert _contains_pair(
         argv,
         "-v",
-        "okp-bench-cell-session-db-on-session-db:/home/worker/.local/share/opencode:rw",
+        "bench-cell-session-db-on-session-db:/home/worker/.local/share/opencode:rw",
     )
     assert not any(
         str(session_db.resolve()) in item
@@ -115,7 +115,7 @@ def test_run_argv_session_db_mount_absent_when_none(tmp_path: Path) -> None:
     cfg = DockerCellConfig(
         worktree=worktree,
         memory_mode="off",
-        container_name="okp-bench-cell-session-db-none",
+        container_name="bench-cell-session-db-none",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
         session_db_host_path=None,
@@ -183,7 +183,7 @@ def test_serve_port_publishes_to_loopback_only() -> None:
     config = DockerCellConfig(
         worktree=TASK_DIR,
         memory_mode="off",
-        container_name="okp-bench-cell-loopback-publish",
+        container_name="bench-cell-loopback-publish",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
     )

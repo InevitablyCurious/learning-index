@@ -658,17 +658,17 @@ class RealSessionRunner:
             raise RuntimeError(f"backgammon task directory missing: {self._task_dir}")
 
         self._max_attempts, self._max_attempts_source = _resolve_positive_int_env(
-            "OKP_BENCH_MAX_ATTEMPTS",
+            "BENCH_MAX_ATTEMPTS",
             optional=False,
         )
         self._max_steps_per_attempt, self._max_steps_per_attempt_source = (
             _resolve_positive_int_env(
-                "OKP_BENCH_MAX_STEPS_PER_ATTEMPT",
+                "BENCH_MAX_STEPS_PER_ATTEMPT",
                 optional=True,
             )
         )
         self._run_timeout_s, self._run_timeout_s_source = _resolve_positive_int_env(
-            "OKP_BENCH_RUN_TIMEOUT_S",
+            "BENCH_RUN_TIMEOUT_S",
             optional=True,
         )
         self._spend_meter = SpendMeter(resolve_spend_db_dsn())
@@ -795,7 +795,7 @@ class RealSessionRunner:
         WO-SNAP-04 dev-mode seeding. Returns None when no snapshot was declared
         (the normal scaffold+build run). Otherwise loads the snapshot from the
         runs root — the SAME env-or-repo rule the capture side uses
-        (adapters/backgammon.py: OKP_BENCH_RUNS_DIR, else <repo>/runs) — and
+        (adapters/backgammon.py: BENCH_RUNS_DIR, else <repo>/runs) — and
         validates it against this session's model and the running corpus
         identity. The corpus derivations MIRROR run_session's runner_kwargs
         exactly (chunk_plan_hash over task/backgammon/prompts, template_hash
@@ -818,7 +818,7 @@ class RealSessionRunner:
         snap = getattr(self, "_seed_snapshot", None)
         if snap is None:
             runs_root = Path(
-                os.environ.get("OKP_BENCH_RUNS_DIR") or (self._repo_root / "runs")
+                os.environ.get("BENCH_RUNS_DIR") or (self._repo_root / "runs")
             )
             snap = load_snapshot(str(seed_id), runs_root)
             self._seed_snapshot = snap
@@ -1150,7 +1150,7 @@ class RealSessionRunner:
             "session_fp": session_fp,
             "session_id": session_id,
             # WO-STRIP-2b: the deterministic title the cell gave its OpenCode
-            # session(s) (okp-bench-<org>-<arm>-<cell_ts>); joins exported
+            # session(s) (bench-<org>-<arm>-<cell_ts>); joins exported
             # session-DB rows to bench cells on the prod dashboard.
             "session_title": str(getattr(result, "session_title", None) or ""),
             # WO-SNAP-04 honesty fields. Written onto the session by
@@ -1502,7 +1502,7 @@ class RealSessionRunner:
             "model": session.model,
             "memory_mode": session.memory_mode,
             # WO-STRIP-2b: titles the cell's OpenCode session
-            # (okp-bench-<org>-<arm>-<cell_ts>) for prod-dashboard
+            # (bench-<org>-<arm>-<cell_ts>) for prod-dashboard
             # identification. self._org_id is the authoritative source here —
             # same seam the per-cell status record's org_id uses.
             "org_id": str(getattr(self, "_org_id", None) or ""),
@@ -1810,9 +1810,9 @@ def _current_session_or_raise(sequencer: CumulativeSequencer) -> SessionRecord:
 def _handle_run(args: argparse.Namespace) -> int:
     # Fail-open telemetry retention (data/ is a retention layer, never a source
     # of truth; a cleanup failure must never stop a run). Skip with
-    # OKP_BENCH_SKIP_CLEANUP=1.
+    # BENCH_SKIP_CLEANUP=1.
     try:
-        if os.environ.get("OKP_BENCH_SKIP_CLEANUP", "") != "1":
+        if os.environ.get("BENCH_SKIP_CLEANUP", "") != "1":
             from cleanup_data import run_cleanup  # noqa: PLC0415 -- fail-open
 
             _removed = run_cleanup()
@@ -1990,7 +1990,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help=(
             "DEV-MODE seeding flag: start every cell from the captured "
             "snapshot <id> (under <runs>/snapshots/, runs root resolved via "
-            "OKP_BENCH_RUNS_DIR else the repo's runs/) instead of the task "
+            "BENCH_RUNS_DIR else the repo's runs/) instead of the task "
             "scaffold, skipping the chunked build. The snapshot must have "
             "been authored by this run's model; a model mismatch (or an "
             "absent or unreadable snapshot) refuses the run outright (exit 2, "
@@ -2039,7 +2039,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help=(
             "Explicit model base URL baked into worker container opencode.json "
             "(local mode only; cloud mode always uses the egress sidecar). "
-            "Default resolves via OKP_BENCH_WORKER_SPEND_PROXY_BASE_URL "
+            "Default resolves via BENCH_WORKER_SPEND_PROXY_BASE_URL "
             "env/.env, else the cell's per-run egress sidecar "
             "http://okp-egress-<hash>:4545/v1 derived from the run label."
         ),

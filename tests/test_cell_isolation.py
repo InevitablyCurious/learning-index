@@ -119,12 +119,12 @@ def test_docker_residue_never_looks_beyond_this_cells_two_names(monkeypatch) -> 
         return ""
 
     monkeypatch.setattr("harness.cell_isolation._docker_stdout", fake)
-    docker_residue(container_name="okp-bench-cell-x")
+    docker_residue(container_name="bench-cell-x")
 
     flat = " ".join(" ".join(a) for a in seen)
     # Every query is anchored to the exact cell name; no wildcard enumeration.
-    assert "name=^okp-bench-cell-x$" in flat
-    assert "name=^okp-bench-cell-x-session-db$" in flat
+    assert "name=^bench-cell-x$" in flat
+    assert "name=^bench-cell-x-session-db$" in flat
     for forbidden in ("okp-server", "postgres", "qdrant", "hub", "mcp"):
         assert forbidden not in flat
     # And every call is READ-ONLY: `docker ps` / `docker volume ls`, never a
@@ -141,7 +141,7 @@ def test_an_unavailable_docker_daemon_is_not_reported_as_residue(monkeypatch) ->
     """Docker being unreachable is its own loud failure moments later; calling
     it an isolation error would misname it."""
     monkeypatch.setattr("harness.cell_isolation._docker_stdout", lambda args: None)
-    assert docker_residue(container_name="okp-bench-cell-x") == []
+    assert docker_residue(container_name="bench-cell-x") == []
 
 
 def test_a_stub_filled_in_by_a_PREVIOUS_cell_refuses_the_launch(tmp_path: Path) -> None:

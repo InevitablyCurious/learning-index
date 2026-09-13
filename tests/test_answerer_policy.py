@@ -31,7 +31,7 @@ def _build_memory_on_cfg(
     return DockerCellConfig(
         worktree=tmp_path / "worktree-on",
         memory_mode="on",
-        container_name="okp-bench-cell-answerer-on",
+        container_name="bench-cell-answerer-on",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
         served_memories_host_path=str(tmp_path / "served-memories.json"),
@@ -57,7 +57,7 @@ def test_off_cell_carries_off_policy(tmp_path: Path) -> None:
     cfg = DockerCellConfig(
         worktree=worktree,
         memory_mode="off",
-        container_name="okp-bench-cell-answerer-off",
+        container_name="bench-cell-answerer-off",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
     )
@@ -74,7 +74,7 @@ def test_explicit_override_wins(tmp_path: Path) -> None:
     cfg = DockerCellConfig(
         worktree=worktree,
         memory_mode="off",
-        container_name="okp-bench-cell-answerer-override",
+        container_name="bench-cell-answerer-override",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
         answerer_policy="auto-accept",

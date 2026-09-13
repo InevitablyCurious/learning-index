@@ -235,10 +235,10 @@ export function corpusDrift(row, { chunkPlanHash = null, templateHash = null, so
 // selection; whether the operator is allowed to make one is a policy the server
 // owns, and duplicating it would give the two a chance to disagree.
 
-export const ARMED_ENV_VAR = "OKP_BENCH_SEED_SNAPSHOT";
+export const ARMED_ENV_VAR = "BENCH_SEED_SNAPSHOT";
 
 export function armedStateFile(benchRoot, env = process.env) {
-  return env.OKP_BENCH_SEED_SNAPSHOT_FILE || join(benchRoot, "config", "armed-snapshot.json");
+  return env.BENCH_SEED_SNAPSHOT_FILE || join(benchRoot, "config", "armed-snapshot.json");
 }
 
 /**

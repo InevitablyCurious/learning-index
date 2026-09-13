@@ -178,7 +178,7 @@ def test_resolve_cloud_api_key_missing_raises(tmp_path: Path) -> None:
 
 
 def test_resolve_cloud_key_file_env_override() -> None:
-    resolved = resolve_cloud_key_file(env={"OKP_BENCH_CLOUD_KEY_FILE": "/tmp/xyz"})
+    resolved = resolve_cloud_key_file(env={"BENCH_CLOUD_KEY_FILE": "/tmp/xyz"})
     assert resolved == Path("/tmp/xyz")
 
 
@@ -249,7 +249,7 @@ def test_cloud_run_argv_injects_env_ref_not_value(tmp_path: Path) -> None:
     config = DockerCellConfig(
         worktree=worktree,
         memory_mode="off",
-        container_name="okp-bench-cloud-argv-test",
+        container_name="bench-cloud-argv-test",
         cloud=True,
     )
     argv = _build_run_argv(
@@ -298,7 +298,7 @@ def test_cloud_enter_injects_key_from_resolver_not_literal(
         DockerCellConfig(
             worktree=tmp_path / "cloud-enter-worktree",
             memory_mode="off",
-            container_name="okp-bench-cloud-enter-test",
+            container_name="bench-cloud-enter-test",
             cloud=True,
         )
     )

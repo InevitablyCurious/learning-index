@@ -82,7 +82,7 @@ function builtinTools(benchRoot) {
           name: "org",
           label: "org id",
           required: true,
-          default: process.env.OKP_BENCH_ORG ?? "okp-org-0",
+          default: process.env.BENCH_ORG ?? "okp-org-0",
           help: "the org to ask for admission",
         },
       ],
@@ -127,7 +127,7 @@ function builtinTools(benchRoot) {
         "rebuild, every cell runs the old plugin without saying so.",
       seams: [
         "computes a digest of everything images/worker bakes in",
-        "docker build -t okp-bench-worker:v1 images/worker, with that digest as a label",
+        "docker build -t bench-worker:v1 images/worker, with that digest as a label",
         "preflight reads the label back and compares it to the source — a content check, not a timestamp",
       ],
       args: [],
@@ -171,7 +171,7 @@ function builtinTools(benchRoot) {
 // worse than no tool, because it advertises something the clone cannot do.
 //
 // So the bench ships NONE of them and does not know they exist. An external
-// manifest names them, and `OKP_BENCH_TOOLS_MANIFEST` points at it. Unset — the
+// manifest names them, and `BENCH_TOOLS_MANIFEST` points at it. Unset — the
 // default, and what a fresh clone gets — this contributes nothing at all.
 //
 // TWO LIMITS, BOTH DELIBERATE:
@@ -189,7 +189,7 @@ function builtinTools(benchRoot) {
 // the manifest from reaching machinery it has no business in, not from being
 // trusted at all.
 function externalToolsManifestPath() {
-  return (process.env.OKP_BENCH_TOOLS_MANIFEST ?? "").trim();
+  return (process.env.BENCH_TOOLS_MANIFEST ?? "").trim();
 }
 
 /**
@@ -209,7 +209,7 @@ function externalTools(benchRoot) {
     {
       id: "external-tools",
       name: "external tool manifest",
-      blurb: `Tools declared outside the bench repo, via OKP_BENCH_TOOLS_MANIFEST.`,
+      blurb: `Tools declared outside the bench repo, via BENCH_TOOLS_MANIFEST.`,
       seams: [`manifest: ${manifestPath}`],
       args: [],
       refuse_while_running: true,

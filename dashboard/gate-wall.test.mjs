@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // GATE WALL — the dumb component stays dumb
 //
-//     cd okp-bench/dashboard && node --test
+//     cd bench/dashboard && node --test
 //
 // WHY THIS EXISTS
 //

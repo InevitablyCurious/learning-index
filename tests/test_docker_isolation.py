@@ -92,7 +92,7 @@ def test_worker_image_fingerprint_returns_id_and_created_from_mocked_inspect(
 
     monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
-    fingerprint = worker_image_fingerprint("okp-bench-worker:test")
+    fingerprint = worker_image_fingerprint("bench-worker:test")
 
     assert fingerprint is not None
     assert fingerprint.image_id == "sha256:unit-test-image"
@@ -102,7 +102,7 @@ def test_worker_image_fingerprint_returns_id_and_created_from_mocked_inspect(
             "docker",
             "image",
             "inspect",
-            "okp-bench-worker:test",
+            "bench-worker:test",
             "--format",
             "{{.Id}}\n{{.Created}}",
         ]
@@ -120,20 +120,20 @@ def test_worker_image_fingerprint_absent_returns_none_and_logs_reason(
             argv,
             1,
             stdout="",
-            stderr="Error: No such image: okp-bench-worker:missing",
+            stderr="Error: No such image: bench-worker:missing",
         )
 
     monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
     with caplog.at_level("WARNING", logger="harness.adapters.docker_worker"):
-        fingerprint = worker_image_fingerprint("okp-bench-worker:missing")
+        fingerprint = worker_image_fingerprint("bench-worker:missing")
 
     assert fingerprint is None
     assert "docker_worker.image_fingerprint_absent" in caplog.text
     assert "No such image" in caplog.text
 
 
-def _unique_container_name(prefix: str = "okp-bench-cell") -> str:
+def _unique_container_name(prefix: str = "bench-cell") -> str:
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
 
 
@@ -243,7 +243,7 @@ def test_docker_cell_requires_proxy_token_no_fallback(tmp_path: Path) -> None:
         DockerCellConfig(
             worktree=tmp_path / "missing-proxy-token-worktree",
             memory_mode="off",
-            container_name="okp-bench-cell-missing-token",
+            container_name="bench-cell-missing-token",
             proxy_base_url=TEST_PROXY_BASE_URL,
             proxy_token=None,
         )
@@ -254,7 +254,7 @@ def test_docker_cell_requires_proxy_token_no_fallback(tmp_path: Path) -> None:
 
 
 def test_exec_argv_includes_stdin_forwarding_flag(tmp_path: Path) -> None:
-    container_name = "okp-bench-cell-exec-argv"
+    container_name = "bench-cell-exec-argv"
     cell = DockerCell(
         DockerCellConfig(
             worktree=tmp_path / "exec-argv-worktree",
@@ -303,7 +303,7 @@ def test_docker_cell_forwards_ephemeral_proxy_token_not_host_key(
         DockerCellConfig(
             worktree=tmp_path / "argv-ephemeral-token-worktree",
             memory_mode="off",
-            container_name="okp-bench-cell-argv-ephemeral-token",
+            container_name="bench-cell-argv-ephemeral-token",
             proxy_base_url=TEST_PROXY_BASE_URL,
             proxy_token=TEST_PROXY_TOKEN,
         )
@@ -362,7 +362,7 @@ def test_egress_sidecar_mounts_loop_kill_marker_dir(
         DockerCellConfig(
             worktree=worktree,
             memory_mode="off",
-            container_name="okp-bench-cell-loop-kill-marker",
+            container_name="bench-cell-loop-kill-marker",
             proxy_base_url=TEST_PROXY_BASE_URL,
             proxy_token=TEST_PROXY_TOKEN,
             egress_host="okp-egress-loop-kill-marker",
@@ -408,7 +408,7 @@ def test_kill_worker_processes_uses_exec_pkill_without_container_rm(
 
     monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
-    container_name = "okp-bench-cell-process-kill"
+    container_name = "bench-cell-process-kill"
     cell = DockerCell(
         DockerCellConfig(
             worktree=tmp_path / "process-kill-worktree",
@@ -457,7 +457,7 @@ def test_force_kill_still_tears_down_with_docker_rm_f(
 
     monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
 
-    container_name = "okp-bench-cell-force-kill"
+    container_name = "bench-cell-force-kill"
     cell = DockerCell(
         DockerCellConfig(
             worktree=tmp_path / "force-kill-worktree",
@@ -484,7 +484,7 @@ def test_teardown_captures_worker_logs_before_container_rm(
     progress_lines: list[str] = []
 
     worker_logs_dir = tmp_path / "worker-logs"
-    container_name = "okp-bench-cell-capture-order"
+    container_name = "bench-cell-capture-order"
 
     def _fake_run(
         argv: list[str], **kwargs: object
@@ -569,7 +569,7 @@ def test_teardown_cp_failure_is_logged_and_rm_still_runs(
     progress_lines: list[str] = []
 
     worker_logs_dir = tmp_path / "worker-logs-failing-cp"
-    container_name = "okp-bench-cell-capture-fail"
+    container_name = "bench-cell-capture-fail"
 
     def _fake_run(
         argv: list[str], **kwargs: object
@@ -626,7 +626,7 @@ def test_teardown_skips_capture_when_worker_logs_dir_is_none(
     calls: list[list[str]] = []
     progress_lines: list[str] = []
 
-    container_name = "okp-bench-cell-capture-skip"
+    container_name = "bench-cell-capture-skip"
 
     def _fake_run(
         argv: list[str], **kwargs: object
@@ -1056,7 +1056,7 @@ def test_image_and_run_argv_do_not_embed_secrets(tmp_path: Path) -> None:
     cfg = DockerCellConfig(
         worktree=worktree,
         memory_mode="off",
-        container_name="okp-bench-cell-argv-check",
+        container_name="bench-cell-argv-check",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
     )
@@ -1078,7 +1078,7 @@ def test_gate_oracle_runs_in_its_own_image_never_the_cell_s() -> None:
     unpinned axes, and `compute_grader_hash` excludes node_modules, so nothing
     recorded which toolchain produced a result.
 
-    Grading now runs in its OWN image (`okp-bench-grader:v1`). The invariant is
+    Grading now runs in its OWN image (`bench-grader:v1`). The invariant is
     unchanged and is asserted here directly:
 
       * the cell cannot reach the gates or the golden — its config mounts only
@@ -1159,7 +1159,7 @@ def test_run_argv_makes_home_and_tmp_writable_tmpfs_mode_1777() -> None:
     cfg = DockerCellConfig(
         worktree=Path("/tmp/argv-mode-check"),
         memory_mode="off",
-        container_name="okp-bench-cell-mode-check",
+        container_name="bench-cell-mode-check",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
     )
@@ -1186,7 +1186,7 @@ def test_run_argv_memory_mode_on_requires_host_token_file(
     cfg = DockerCellConfig(
         worktree=tmp_path / "argv-memory-on-check",
         memory_mode="on",
-        container_name="okp-bench-cell-memory-on-check",
+        container_name="bench-cell-memory-on-check",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
     )
@@ -1207,7 +1207,7 @@ def test_run_argv_redirects_xdg_state_into_writable_home_and_loads_per_cell_conf
     cfg = DockerCellConfig(
         worktree=Path("/tmp/argv-xdg-check"),
         memory_mode="off",
-        container_name="okp-bench-cell-xdg-check",
+        container_name="bench-cell-xdg-check",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
     )

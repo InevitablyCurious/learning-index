@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild okp-bench-grader:v1 from grader/ — the one sanctioned way.
+"""Rebuild bench-grader:v1 from grader/ — the one sanctioned way.
 
 A bare ``docker build`` produces a working image that records nothing about
 what it was built from, so the freshness check can only report it as

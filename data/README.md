@@ -33,7 +33,7 @@ a cell.
 Entries directly under `data/cells/` and `data/extract/` older than **7 days**
 are deleted by `scripts/cleanup_data.py`, which is wired fail-open into the run
 entrypoint (`scripts/run_cumulative.py::_handle_run`). Retention runs at the
-start of each run and can be skipped with `OKP_BENCH_SKIP_CLEANUP=1`.
+start of each run and can be skipped with `BENCH_SKIP_CLEANUP=1`.
 
 ## Source of truth
 `data/` is a TELEMETRY/RETENTION layer only — NEVER a competing source of truth.

@@ -17,7 +17,7 @@ def _cfg_seeded(seed: int) -> RunConfig:
         ),
         rng_seed=seed,
         mcp_recall_url="http://offline.local",
-        session_token_path="/tmp/__okp_bench_missing_token__",
+        session_token_path="/tmp/__bench_missing_token__",
     )
 
 

@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// OKP BENCH BOARD v2 — RENDERER
+// BENCH BOARD v2 — RENDERER
 //
 // Dependency-free vanilla JS. React from a CDN would make the board a blank
 // page the moment the network hiccups — on a live stream, with the whole stack

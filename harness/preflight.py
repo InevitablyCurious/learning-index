@@ -1,4 +1,4 @@
-"""Mandatory two-tier recall preflight for the okp-bench harness.
+"""Mandatory two-tier recall preflight for the bench harness.
 
 WHY THIS EXISTS: the bench talks to a TWO-TIER recall topology and agents have
 repeatedly confused the tiers — concluding "the hub is down" (and drifting into
@@ -139,7 +139,7 @@ def _default_worker_model_probe(
             encoding="utf-8",
         )
 
-        container_name = f"okp-bench-model-probe-{uuid.uuid4().hex[:12]}"
+        container_name = f"bench-model-probe-{uuid.uuid4().hex[:12]}"
         cmd = [
             "docker",
             "run",

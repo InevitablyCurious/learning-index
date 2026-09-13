@@ -47,7 +47,7 @@ def test_run_argv_memory_mode_on_mounts_plugin_state_rw_and_preserves_existing_m
     cfg = DockerCellConfig(
         worktree=worktree,
         memory_mode="on",
-        container_name="okp-bench-cell-bridge-mount-on",
+        container_name="bench-cell-bridge-mount-on",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
         served_memories_host_path=str(served_memories_host_path),
@@ -88,7 +88,7 @@ def test_run_argv_memory_mode_off_has_no_plugin_state_mount(tmp_path: Path) -> N
     cfg = DockerCellConfig(
         worktree=worktree,
         memory_mode="off",
-        container_name="okp-bench-cell-bridge-mount-off",
+        container_name="bench-cell-bridge-mount-off",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
         plugin_state_host_path=str(tmp_path / "plugin-state-off"),
@@ -110,7 +110,7 @@ def test_run_argv_memory_mode_off_mounts_blind_extraction_state_outside_worktree
     cfg = DockerCellConfig(
         worktree=worktree,
         memory_mode="off",
-        container_name="okp-bench-cell-bridge-mount-off-blind",
+        container_name="bench-cell-bridge-mount-off-blind",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
         extraction_state_host_path=extraction_state,

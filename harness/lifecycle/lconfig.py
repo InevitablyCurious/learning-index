@@ -20,7 +20,7 @@ class LifecycleConfig:
 
     hub_url: str = field(
         default_factory=lambda: (
-            os.environ.get("OKP_BENCH_HUB_URL") or "http://127.0.0.1:4440"
+            os.environ.get("BENCH_HUB_URL") or "http://127.0.0.1:4440"
         )
     )
     # The bench MCP on :4550 is the commissioned prod MCP serving the BENCH's
@@ -33,34 +33,34 @@ class LifecycleConfig:
     # the harness never confirms its own membership.
     leader_mcp_url: str = field(
         default_factory=lambda: (
-            os.environ.get("OKP_BENCH_LEADER_MCP_URL") or "http://127.0.0.1:4550"
+            os.environ.get("BENCH_LEADER_MCP_URL") or "http://127.0.0.1:4550"
         )
     )
     leader_keystore_path: str = field(
         default_factory=lambda: os.environ.get(
-            "OKP_BENCH_LEADER_KEYSTORE", DEFAULT_LEADER_KEYSTORE_PATH
+            "BENCH_LEADER_KEYSTORE", DEFAULT_LEADER_KEYSTORE_PATH
         )
     )
     leader_identity_seed_hex: str = field(
-        default_factory=lambda: os.environ.get("OKP_BENCH_LEADER_SEED_HEX", "")
+        default_factory=lambda: os.environ.get("BENCH_LEADER_SEED_HEX", "")
     )
     session_token_path: str = "~/.okp/mcp-session-token"
-    # Org SELECTOR pin (OKP_BENCH_ORG_ID): identifies the PRE-PROVISIONED org
+    # Org SELECTOR pin (BENCH_ORG_ID): identifies the PRE-PROVISIONED org
     # the run targets — created by the production dashboard, never by the bench.
     # The bench consumes this id as data only (no mint/verify/fund). Empty string
     # means no pin; callers resolve the org or fail loud themselves.
     org_id: str = field(
-        default_factory=lambda: os.environ.get("OKP_BENCH_ORG_ID") or ""
+        default_factory=lambda: os.environ.get("BENCH_ORG_ID") or ""
     )
     leader_signer_dir: str = field(
         default_factory=lambda: (
-            os.environ.get("OKP_BENCH_LEADER_SIGNER_DIR")
+            os.environ.get("BENCH_LEADER_SIGNER_DIR")
             or str(_REPO / "scaffold" / "leader-signer")
         )
     )
     runs_dir: str = field(
         default_factory=lambda: (
-            os.environ.get("OKP_BENCH_RUNS_DIR") or str(_REPO / "runs")
+            os.environ.get("BENCH_RUNS_DIR") or str(_REPO / "runs")
         )
     )
     mc_version: int = 1

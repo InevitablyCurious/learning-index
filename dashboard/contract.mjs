@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// OKP BENCH DASHBOARD — JSON CONTRACT v2.0
+// BENCH DASHBOARD — JSON CONTRACT v2.0
 //
 // This module is the SINGLE definition of what the board consumes. Diff it
 // against what the backend actually emits.

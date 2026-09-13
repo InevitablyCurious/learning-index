@@ -73,7 +73,7 @@ def container_name(report_path: Path) -> str:
     cell = report_path.parent.name or "cell"
     stem = report_path.stem  # attempt-N-report
     safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in f"{cell}-{stem}")
-    return f"okp-bench-grade-{safe.strip('-').lower()}"[:120]
+    return f"bench-grade-{safe.strip('-').lower()}"[:120]
 
 
 def kill_container(name: str) -> None:

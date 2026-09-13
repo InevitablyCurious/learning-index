@@ -522,7 +522,7 @@ def _seed_fixture(
 ) -> tuple[Any, Path, Path]:
     """Runner + a REAL captured snapshot whose provenance matches the corpus.
 
-    The runs root is a tmp dir via OKP_BENCH_RUNS_DIR (the same env-or-repo
+    The runs root is a tmp dir via BENCH_RUNS_DIR (the same env-or-repo
     rule the capture side uses). The scaffold is a real tmp dir with a real
     file, so template_hash is a genuine derivation; chunk_plan_hash is derived
     by the same module function over the real prompts dir that the resolver
@@ -534,7 +534,7 @@ def _seed_fixture(
     Returns ``(runner, runs_root, snap_tree)``.
     """
     runs_root = tmp_path / "runs-root"
-    monkeypatch.setenv("OKP_BENCH_RUNS_DIR", str(runs_root))
+    monkeypatch.setenv("BENCH_RUNS_DIR", str(runs_root))
 
     task_dir = tmp_path / "task"
     scaffold = task_dir / "scaffold"
@@ -594,7 +594,7 @@ def test_resolve_seed_snapshot_bogus_id_raises_not_found(
     module = _load_run_cumulative_module()
     runs_root = tmp_path / "runs-root"
     runs_root.mkdir()
-    monkeypatch.setenv("OKP_BENCH_RUNS_DIR", str(runs_root))
+    monkeypatch.setenv("BENCH_RUNS_DIR", str(runs_root))
     runner = _build_runner(module, tmp_path)
     runner._seed_snapshot_id = "bogus-id"
     with pytest.raises(SnapshotNotFoundError):
@@ -794,7 +794,7 @@ def test_run_session_refusal_aborts_before_runner_construction(
     module = _load_run_cumulative_module()
     runs_root = tmp_path / "runs-root"
     runs_root.mkdir()
-    monkeypatch.setenv("OKP_BENCH_RUNS_DIR", str(runs_root))
+    monkeypatch.setenv("BENCH_RUNS_DIR", str(runs_root))
     runner = _build_runner(module, tmp_path)
     constructed: list[Any] = []
 
@@ -823,7 +823,7 @@ def test_handle_run_refuses_snapshot_error_with_clean_line(
     survive unchanged.
     """
     module = _load_run_cumulative_module()
-    monkeypatch.setenv("OKP_BENCH_SKIP_CLEANUP", "1")
+    monkeypatch.setenv("BENCH_SKIP_CLEANUP", "1")
 
     class _RefusingSequencer:
         def current_session(self) -> SessionRecord:

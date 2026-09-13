@@ -1,4 +1,4 @@
-"""Is `okp-bench-grader:v1` built from the gates on disk?
+"""Is `bench-grader:v1` built from the gates on disk?
 
 WHY THIS MODULE EXISTS
 ----------------------
@@ -26,7 +26,7 @@ import hashlib
 import subprocess
 from pathlib import Path
 
-IMAGE = "okp-bench-grader:v1"
+IMAGE = "bench-grader:v1"
 LABEL = "okp.grader.source_digest"
 
 #: Never baked, and never hashed. ``node_modules`` is the point: the toolchain

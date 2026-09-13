@@ -191,7 +191,7 @@ function payload() {
     org: ui.sel.arm === "on" ? ui.sel.org.trim() || undefined : undefined,
     // NO `context` KEY. The server treats an absent context as "use the
     // registry default" (server.mjs:314 gates on `context !== null`, and
-    // :650 only sets OKP_BENCH_WORKER_NUM_CTX when one was supplied), which
+    // :650 only sets BENCH_WORKER_NUM_CTX when one was supplied), which
     // is exactly the pinned ceiling every bench alias already carries.
   };
 }

@@ -22,8 +22,8 @@
 //            counters.
 //
 // The bench declares NONE of the custom ones and does not know they exist. An
-// external manifest names them and `OKP_BENCH_STATS_MANIFEST` points at it —
-// the same seam shape as `OKP_BENCH_TOOLS_MANIFEST` in tools.mjs, for the same
+// external manifest names them and `BENCH_STATS_MANIFEST` points at it —
+// the same seam shape as `BENCH_TOOLS_MANIFEST` in tools.mjs, for the same
 // reason. Unset, which is what a fresh clone gets, contributes nothing.
 //
 // The two arrive as two ARRAYS under two keys. Same entry shape either side, so
@@ -369,7 +369,7 @@ export function scopeToRun(now, baseline) {
 }
 
 function manifestPath() {
-  return String(process.env.OKP_BENCH_STATS_MANIFEST ?? "").trim();
+  return String(process.env.BENCH_STATS_MANIFEST ?? "").trim();
 }
 
 // ── COLLECTION ───────────────────────────────────────────────────────────────

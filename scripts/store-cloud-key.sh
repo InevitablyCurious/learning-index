@@ -5,7 +5,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-KEY_FILE="${OKP_BENCH_CLOUD_KEY_FILE:-${REPO_ROOT}/config/cloud.env}"
+KEY_FILE="${BENCH_CLOUD_KEY_FILE:-${REPO_ROOT}/config/cloud.env}"
 
 printf '%s' "Enter your OrcaRouter API key: "
 IFS= read -r -s KEY || true

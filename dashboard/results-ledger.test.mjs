@@ -3,7 +3,7 @@
 //
 // Zero dependencies. Stock `node --test`, no install, no build step:
 //
-//     cd okp-bench/dashboard && node --test
+//     cd bench/dashboard && node --test
 //
 // WHAT THIS PINS: the ledger is the board's ONLY memory of past runs, so its
 // reader must never turn a designed nothing into an error, and must never turn

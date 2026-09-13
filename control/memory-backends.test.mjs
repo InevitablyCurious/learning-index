@@ -27,15 +27,15 @@ function wiredTree() {
 }
 
 function withPluginDir(value, fn) {
-  const had = Object.prototype.hasOwnProperty.call(process.env, "OKP_BENCH_PLUGIN_DIR");
-  const prev = process.env.OKP_BENCH_PLUGIN_DIR;
-  if (value === null) delete process.env.OKP_BENCH_PLUGIN_DIR;
-  else process.env.OKP_BENCH_PLUGIN_DIR = value;
+  const had = Object.prototype.hasOwnProperty.call(process.env, "BENCH_PLUGIN_DIR");
+  const prev = process.env.BENCH_PLUGIN_DIR;
+  if (value === null) delete process.env.BENCH_PLUGIN_DIR;
+  else process.env.BENCH_PLUGIN_DIR = value;
   try {
     return fn();
   } finally {
-    if (had) process.env.OKP_BENCH_PLUGIN_DIR = prev;
-    else delete process.env.OKP_BENCH_PLUGIN_DIR;
+    if (had) process.env.BENCH_PLUGIN_DIR = prev;
+    else delete process.env.BENCH_PLUGIN_DIR;
   }
 }
 
@@ -73,7 +73,7 @@ test("TOKP: with a plugin tree, the env names the mandate BY PATH", () => {
   const root = wiredTree();
   withPluginDir(root, () => {
     const env = memoryBackendEnv("tokp");
-    assert.equal(env.OKP_BENCH_PLUGIN_DIR, root, "the run sees the same tree the control plane has");
+    assert.equal(env.BENCH_PLUGIN_DIR, root, "the run sees the same tree the control plane has");
     assert.equal(
       env.BENCH_AGENTS_AUX_FILE,
       join(root, "plugins", "tokp-record-mandate.md"),
@@ -90,7 +90,7 @@ test("TOKP: a tree WITHOUT the mandate omits the key rather than pointing at not
   mkdirSync(join(root, "plugins"), { recursive: true });
   withPluginDir(root, () => {
     const env = memoryBackendEnv("tokp");
-    assert.equal(env.OKP_BENCH_PLUGIN_DIR, root);
+    assert.equal(env.BENCH_PLUGIN_DIR, root);
     assert.ok(!("BENCH_AGENTS_AUX_FILE" in env), "no key beats a key pointing at a missing file");
   });
 });

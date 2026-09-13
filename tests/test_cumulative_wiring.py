@@ -138,8 +138,8 @@ def test_error_cap_per_type_aborts_the_whole_benchmark(tmp_path: Path) -> None:
 def test_lifecycle_config_env_hooks_default_and_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("OKP_BENCH_HUB_URL", raising=False)
-    monkeypatch.delenv("OKP_BENCH_LEADER_MCP_URL", raising=False)
+    monkeypatch.delenv("BENCH_HUB_URL", raising=False)
+    monkeypatch.delenv("BENCH_LEADER_MCP_URL", raising=False)
 
     default_cfg = LifecycleConfig()
     assert default_cfg.hub_url == "http://127.0.0.1:4440"
@@ -148,8 +148,8 @@ def test_lifecycle_config_env_hooks_default_and_override(
     # without the env override minted its org under the wrong leader.
     assert default_cfg.leader_mcp_url == "http://127.0.0.1:4550"
 
-    monkeypatch.setenv("OKP_BENCH_HUB_URL", "http://127.0.0.1:4449")
-    monkeypatch.setenv("OKP_BENCH_LEADER_MCP_URL", "http://127.0.0.1:4550")
+    monkeypatch.setenv("BENCH_HUB_URL", "http://127.0.0.1:4449")
+    monkeypatch.setenv("BENCH_LEADER_MCP_URL", "http://127.0.0.1:4550")
 
     overridden_cfg = LifecycleConfig()
     assert overridden_cfg.hub_url == "http://127.0.0.1:4449"
@@ -159,15 +159,15 @@ def test_lifecycle_config_env_hooks_default_and_override(
 def test_run_config_env_hooks_default_and_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("OKP_BENCH_HUB_URL", raising=False)
-    monkeypatch.delenv("OKP_BENCH_MCP_RECALL_URL", raising=False)
+    monkeypatch.delenv("BENCH_HUB_URL", raising=False)
+    monkeypatch.delenv("BENCH_MCP_RECALL_URL", raising=False)
 
     default_cfg = RunConfig()
     assert default_cfg.hub_url == "http://127.0.0.1:4440"
     assert default_cfg.mcp_recall_url == "http://127.0.0.1:4550"
 
-    monkeypatch.setenv("OKP_BENCH_HUB_URL", "http://127.0.0.1:4444")
-    monkeypatch.setenv("OKP_BENCH_MCP_RECALL_URL", "http://127.0.0.1:4557")
+    monkeypatch.setenv("BENCH_HUB_URL", "http://127.0.0.1:4444")
+    monkeypatch.setenv("BENCH_MCP_RECALL_URL", "http://127.0.0.1:4557")
 
     overridden_cfg = RunConfig()
     assert overridden_cfg.hub_url == "http://127.0.0.1:4444"

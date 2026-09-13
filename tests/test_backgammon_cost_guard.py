@@ -84,7 +84,7 @@ def test_worker_run_argv_injects_output_token_env(tmp_path: Path) -> None:
     cfg = DockerCellConfig(
         worktree=tmp_path / "worktree",
         memory_mode="off",
-        container_name="okp-bench-cell-output-cap-check",
+        container_name="bench-cell-output-cap-check",
         output_token_max=runner.max_output_tokens,
     )
     run_argv = _build_run_argv(
@@ -98,7 +98,7 @@ def test_worker_run_argv_omits_output_token_env_when_unclamped(tmp_path: Path) -
     cfg = DockerCellConfig(
         worktree=tmp_path / "worktree",
         memory_mode="off",
-        container_name="okp-bench-cell-unclamped-check",
+        container_name="bench-cell-unclamped-check",
         output_token_max=None,
     )
     run_argv = _build_run_argv(

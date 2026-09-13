@@ -97,7 +97,7 @@ merged, both served by `GET /api/stats` (`control/runstats.mjs`):
   `loop_errors` / `stream_errors` / `stalled_errors` reading the run scorecard's
   `error_totals` (`guard_aborted_turns` / `finalize_timeout_turns` /
   `stalled_turns`).
-- **CUSTOM** — manifest-driven (`OKP_BENCH_STATS_MANIFEST`); now empty.
+- **CUSTOM** — manifest-driven (`BENCH_STATS_MANIFEST`); now empty.
 
 The CUSTOM zone's old "LOOP ERRORS" slot was the **relay's** shared, monotonic,
 unfiltered loop-guard kill counter (`relay-loop-fires`, delta-scoped over ALL

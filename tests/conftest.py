@@ -19,7 +19,7 @@ def _isolate_telemetry_sink(tmp_path_factory, monkeypatch):
     per-session tmp sink.
     """
     sink = tmp_path_factory.mktemp("bench-data-sink")
-    monkeypatch.setenv("OKP_BENCH_DATA_DIR", str(sink))
+    monkeypatch.setenv("BENCH_DATA_DIR", str(sink))
 
 
 def pytest_report_header(config):

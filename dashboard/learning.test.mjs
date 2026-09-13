@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // LEARNING SOURCE — the pure folds behind the matrix + master validation
 //
-//     cd okp-bench/dashboard && node --test learning.test.mjs
+//     cd bench/dashboard && node --test learning.test.mjs
 //
 // Zero dependencies, stock `node --test`. These pin the pure functions the
 // source builds on; the file walk and the JSON-lines reads are exercised

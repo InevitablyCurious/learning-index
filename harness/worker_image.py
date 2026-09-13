@@ -1,4 +1,4 @@
-"""Is `okp-bench-worker:v1` built from the source on disk?
+"""Is `bench-worker:v1` built from the source on disk?
 
 WHY THIS MODULE EXISTS (2026-09-03)
 -----------------------------------
@@ -26,15 +26,15 @@ import os
 import subprocess
 from pathlib import Path
 
-IMAGE = "okp-bench-worker:v1"
+IMAGE = "bench-worker:v1"
 
 #: THE PLUGIN SEAM. Absolute path to a plugin tree to bake into the worker image.
 #:
 #: WHY AN ENV VAR AND NOT A PATH IN THIS REPO. The plugin is the MEMORY LAYER's,
 #: shipped by the memory side and re-homed out of the public bench tree. `harness/`
 #: must clone and run out of the box, so it cannot know where anyone's plugin
-#: lives -- the same reason `OKP_BENCH_TOOLS_MANIFEST` and
-#: `OKP_BENCH_STATS_MANIFEST` exist. Unset, which is what a fresh clone gets, is
+#: lives -- the same reason `BENCH_TOOLS_MANIFEST` and
+#: `BENCH_STATS_MANIFEST` exist. Unset, which is what a fresh clone gets, is
 #: a VANILLA build: correct, and not an error.
 #:
 #: WHY BOTH SIDES MUST READ IT. The freshness check asks "is this image what this
@@ -46,7 +46,7 @@ IMAGE = "okp-bench-worker:v1"
 #: silently replaced a plugin-bearing image with a vanilla one -- and opencode
 #: swallows a missing plugin without a word, so the next ON cell would simply
 #: have no extraction tool.
-ENV_PLUGIN_DIR = "OKP_BENCH_PLUGIN_DIR"
+ENV_PLUGIN_DIR = "BENCH_PLUGIN_DIR"
 
 
 def configured_plugin_dir(env: dict | None = None) -> Path | None:

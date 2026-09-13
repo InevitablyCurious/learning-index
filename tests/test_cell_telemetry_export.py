@@ -63,7 +63,7 @@ def test_export_copies_both_artifacts_into_timestamped_cell_dir(
     worktree.mkdir()
     _seed_surface(worktree)
     data_dir = tmp_path / "data"
-    monkeypatch.setenv("OKP_BENCH_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("BENCH_DATA_DIR", str(data_dir))
 
     dest = _export_cell_telemetry(worktree, "cumulative-0000-off-local")
 
@@ -86,7 +86,7 @@ def test_export_survives_partial_surface(tmp_path: Path, monkeypatch) -> None:
     worktree.mkdir()
     _seed_surface(worktree, snapshot=False)
     data_dir = tmp_path / "data"
-    monkeypatch.setenv("OKP_BENCH_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("BENCH_DATA_DIR", str(data_dir))
 
     dest = _export_cell_telemetry(worktree, "run-partial")
 
@@ -101,7 +101,7 @@ def test_export_is_noop_when_no_surface_exists(tmp_path: Path, monkeypatch) -> N
     worktree = tmp_path / "worktree"
     worktree.mkdir()
     data_dir = tmp_path / "data"
-    monkeypatch.setenv("OKP_BENCH_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("BENCH_DATA_DIR", str(data_dir))
 
     assert _export_cell_telemetry(worktree, "run-empty") is None
     assert not (data_dir / "cells").exists()
@@ -118,7 +118,7 @@ def test_export_is_fail_open_when_destination_unwritable(
     # Point the sink at a path blocked by an existing FILE, so mkdir raises.
     blocker = tmp_path / "blocker"
     blocker.write_text("not a directory", encoding="utf-8")
-    monkeypatch.setenv("OKP_BENCH_DATA_DIR", str(blocker))
+    monkeypatch.setenv("BENCH_DATA_DIR", str(blocker))
 
     assert _export_cell_telemetry(worktree, "run-blocked") is None
 
@@ -132,7 +132,7 @@ def test_export_never_writes_into_runs(tmp_path: Path, monkeypatch) -> None:
     runs_dir = tmp_path / "runs"
     runs_dir.mkdir()
     data_dir = tmp_path / "data"
-    monkeypatch.setenv("OKP_BENCH_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("BENCH_DATA_DIR", str(data_dir))
 
     dest = _export_cell_telemetry(worktree, "run-isolation")
 
@@ -148,7 +148,7 @@ def test_export_copies_on_cell_insession_tree(tmp_path: Path, monkeypatch) -> No
     worktree.mkdir()
     _seed_surface(worktree, insession=True)
     data_dir = tmp_path / "data"
-    monkeypatch.setenv("OKP_BENCH_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("BENCH_DATA_DIR", str(data_dir))
 
     dest = _export_cell_telemetry(worktree, "run-on", "on")
 
@@ -181,7 +181,7 @@ def test_export_reads_off_cell_blind_state_outside_worktree(
     )
     (blind / "funnel-snapshot.json").write_text(json.dumps(_SNAPSHOT), encoding="utf-8")
     data_dir = tmp_path / "data"
-    monkeypatch.setenv("OKP_BENCH_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("BENCH_DATA_DIR", str(data_dir))
 
     dest = _export_cell_telemetry(worktree, "run-off", "off")
 
@@ -205,7 +205,7 @@ def test_export_insession_only_surface_still_exports(
     worktree.mkdir()
     _seed_surface(worktree, snapshot=False, plugin_log=False, insession=True)
     data_dir = tmp_path / "data"
-    monkeypatch.setenv("OKP_BENCH_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("BENCH_DATA_DIR", str(data_dir))
 
     dest = _export_cell_telemetry(worktree, "run-insession-only", "on")
 

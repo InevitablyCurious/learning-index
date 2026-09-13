@@ -2125,21 +2125,21 @@ def test_serve_drive_finalize_timeout_burst_recovers_within_budget(
 
 
 def test_bench_session_title_format_is_deterministic(tmp_path: Path) -> None:
-    """WO-STRIP-2b: ``okp-bench-<org>-<arm>-<cell_ts>``, identifiably."""
+    """WO-STRIP-2b: ``bench-<org>-<arm>-<cell_ts>``, identifiably."""
     title = bench_session_title("okp-org-0", "off", 1786777435)
-    assert title == "okp-bench-okp-org-0-off-1786777435"
+    assert title == "bench-okp-org-0-off-1786777435"
     assert bench_session_title("okp-org-0", "on", 1786777435) == (
-        "okp-bench-okp-org-0-on-1786777435"
+        "bench-okp-org-0-on-1786777435"
     )
 
 
 def test_bench_session_title_sanitizes_and_falls_back(tmp_path: Path) -> None:
     """org_id is folded to [A-Za-z0-9-]; empty/none -> literal ``org``."""
     assert bench_session_title("okp/org_0", "off", 1786777435) == (
-        "okp-bench-okp-org-0-off-1786777435"
+        "bench-okp-org-0-off-1786777435"
     )
-    assert bench_session_title("", "on", 7) == "okp-bench-org-on-7"
-    assert bench_session_title(None, "off", 7) == "okp-bench-org-off-7"
+    assert bench_session_title("", "on", 7) == "bench-org-on-7"
+    assert bench_session_title(None, "off", 7) == "bench-org-off-7"
 
 
 # ── CHUNK-BOUNDARY COMPACTION ───────────────────────────────────────────────

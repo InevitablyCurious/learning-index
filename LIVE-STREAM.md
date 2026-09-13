@@ -32,7 +32,7 @@ This benchmark is meant to ship as something **any memory system can plug
 into** — but today that is a *wire contract*, not an adapter interface. The
 former `MemoryBackend` adapter abstraction is retired (removed in the
 2026-09-03 cleanup); a different memory system answers by implementing the
-recall wire contract over the `OKP_BENCH_MCP_RECALL_URL` seam. The Open
+recall wire contract over the `BENCH_MCP_RECALL_URL` seam. The Open
 Knowledge Project is the first implementation of this contract, not the definition
 of it. So the benchmark owns a small set of `kind`s describing what the
 *harness* did, and everything backend-specific travels as an `ext` record under
