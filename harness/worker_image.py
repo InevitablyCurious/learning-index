@@ -73,7 +73,7 @@ DIGEST_LABEL = "okp.worker.source_digest"
 #: plugin_dir. The sidecar files (``egress-sidecar.js``,
 #: ``loop-kill-scanner.cjs``, ``supervised-shell.js``) moved out of the worker
 #: context the same way: they live in ``images/sidecar/`` and the build injects
-#: them as a named ``okp-sidecar`` build context (see build_argv), hashed via
+#: them as a named ``sidecar`` build context (see build_argv), hashed via
 #: source_digest's sidecar dir. Everything else under worker_dir is not baked
 #: and must not count.
 #:
@@ -113,7 +113,7 @@ def source_digest(worker_dir: Path, plugin_dir: Path | None = None) -> str:
 
     The sidecar tree at ``worker_dir.parent / "sidecar"`` is ALWAYS hashed when
     it exists, under ``sidecar/``-prefixed rel paths — the build injects it as
-    the named ``okp-sidecar`` context (see build_argv), so the digest covers
+    the named ``sidecar`` context (see build_argv), so the digest covers
     the sidecar source. With `plugin_dir`, every file under it is hashed too,
     under ``plugin/``-prefixed rel paths (BAKED_EXCLUDED dirs and .DS_Store
     skipped in both) — so the digest covers exactly what the dev-side build
@@ -172,8 +172,8 @@ def build_argv(worker_dir: Path, image: str = IMAGE, plugin_dir: Path | None = N
     """The exact build command, digest included. The one sanctioned rebuild.
 
     The sidecar tree is ALWAYS injected as the named build context
-    ``okp-sidecar`` plus the ``OKP_SIDECAR_CONTEXT`` build arg — the literals
-    ``okp-sidecar`` / ``OKP_SIDECAR_CONTEXT`` / ``no-sidecar`` must match the
+    ``sidecar`` plus the ``SIDECAR_CONTEXT`` build arg — the literals
+    ``sidecar`` / ``SIDECAR_CONTEXT`` / ``no-sidecar`` must match the
     Dockerfile seam exactly. With `plugin_dir`, the plugin tree is injected as
     the named build context ``okp-plugin`` plus the ``OKP_PLUGIN_CONTEXT`` /
     ``OKP_PLUGIN_PRESENT`` build args — the three literals must match the
@@ -184,9 +184,9 @@ def build_argv(worker_dir: Path, image: str = IMAGE, plugin_dir: Path | None = N
     argv = ["docker", "build"]
     argv += [
         "--build-context",
-        f"okp-sidecar={worker_dir.parent / 'sidecar'}",
+        f"sidecar={worker_dir.parent / 'sidecar'}",
         "--build-arg",
-        "OKP_SIDECAR_CONTEXT=okp-sidecar",
+        "SIDECAR_CONTEXT=sidecar",
     ]
     if plugin_dir is not None:
         argv += [

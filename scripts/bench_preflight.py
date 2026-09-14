@@ -520,7 +520,8 @@ def check_self_compact_tool(c: Check, args) -> None:
             "arms a plugin that is not loaded, and every chunk boundary will "
             "abort the cell on no_compaction_evidence. Rebuild: docker build "
             "-t bench-worker:v1 images/worker "
-            "--build-context okp-sidecar=images/sidecar"
+            "--build-context sidecar=images/sidecar "
+            "--build-arg SIDECAR_CONTEXT=sidecar"
         ),
         remedy=TOOL_WORKER_REBUILD,
     )
@@ -536,7 +537,8 @@ def check_self_compact_tool(c: Check, args) -> None:
             "FINISHED marker alone and leaks a compaction into the repair "
             "phase (run 1788462647). Rebuild: docker build -t "
             "bench-worker:v1 images/worker "
-            "--build-context okp-sidecar=images/sidecar"
+            "--build-context sidecar=images/sidecar "
+            "--build-arg SIDECAR_CONTEXT=sidecar"
         ),
         remedy=TOOL_WORKER_REBUILD,
     )

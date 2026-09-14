@@ -28,7 +28,7 @@ baked set and the real .dockerignore whitelist must agree.
 
 THE SIDECAR SPLIT (WO-LI2). The sidecar files (egress-sidecar.js,
 loop-kill-scanner.cjs, supervised-shell.js) moved out of the worker context
-into ``images/sidecar/`` and ride into the build as the named ``okp-sidecar``
+into ``images/sidecar/`` and ride into the build as the named ``sidecar``
 build context — the same seam shape as the plugin. The worker context bakes
 only its root whitelist (Dockerfile + .dockerignore); the sidecar tree is
 hashed INTERNALLY from ``worker_dir.parent / "sidecar"`` (the ``images/sidecar/``
@@ -70,7 +70,7 @@ def _worker_tree(root: Path) -> Path:
 
 
 def _sidecar_tree(root: Path) -> Path:
-    """The sidecar context: files that ride in via the ``okp-sidecar`` build context.
+    """The sidecar context: files that ride in via the ``sidecar`` build context.
 
     Created as a SIBLING of the worker tree (``root/images/sidecar``) — exactly
     where ``source_digest`` looks for it: ``worker_dir.parent / "sidecar"``.
@@ -132,7 +132,7 @@ def test_an_edited_loop_kill_scanner_reads_as_stale(tmp_path: Path) -> None:
     It was whitelisted in .dockerignore and cp'd to /opt/okp/ by WO-SEAM-FIX but
     left out of BAKED_FILES, so a scanner-only change shipped an image whose
     scanner was the old one, with preflight reporting the image current. Since
-    the sidecar split the scanner rides via the ``okp-sidecar`` build context,
+    the sidecar split the scanner rides via the ``sidecar`` build context,
     and the digest covers it internally from ``worker_dir.parent / "sidecar"``.
     """
     worker = _worker_tree(tmp_path)
@@ -150,7 +150,7 @@ def test_the_digest_covers_the_files_the_image_actually_bakes(tmp_path: Path) ->
     Since the sidecar split the worker context bakes ONLY Dockerfile and
     .dockerignore; the sidecar tree is hashed INTERNALLY from
     ``worker_dir.parent / "sidecar"`` (the ``images/sidecar/`` dir, injected as
-    the named ``okp-sidecar`` build context) — there is no explicit parameter.
+    the named ``sidecar`` build context) — there is no explicit parameter.
     Nothing under ``vendor/`` bakes from the worker context anymore — the
     plugin dir is covered only via ``plugin_dir``, and its excluded entries
     (``node_modules/``, ``.git/``, ``.DS_Store``) are invisible to the digest,
@@ -200,7 +200,7 @@ def test_the_build_carries_the_digest_it_will_be_checked_against(tmp_path: Path)
     """Write and read are the same value, or the check can never pass.
 
     Order-independent by design: ``build_argv`` prepends the ALWAYS-present
-    ``okp-sidecar`` build context before any plugin context, so both seams are
+    ``sidecar`` build context before any plugin context, so both seams are
     pinned by VALUE, never by position (``index("--build-context")+1`` found
     the sidecar first and misread the plugin seam as absent).
     """
@@ -209,8 +209,8 @@ def test_the_build_carries_the_digest_it_will_be_checked_against(tmp_path: Path)
     assert f"OKP_WORKER_SOURCE_DIGEST={source_digest(worker)}" in argv
     assert "-t" in argv and "bench-worker:v1" in argv
     # The sidecar seam rides in EVERY build, vanilla included.
-    assert f"okp-sidecar={worker.parent / 'sidecar'}" in argv
-    assert "OKP_SIDECAR_CONTEXT=okp-sidecar" in argv
+    assert f"sidecar={worker.parent / 'sidecar'}" in argv
+    assert "SIDECAR_CONTEXT=sidecar" in argv
 
     # Dev-side arm: the plugin tree rides as the named okp-plugin build
     # context, and the digest baked in is the plugin-inclusive one preflight
@@ -222,7 +222,7 @@ def test_the_build_carries_the_digest_it_will_be_checked_against(tmp_path: Path)
     assert "OKP_PLUGIN_CONTEXT=okp-plugin" in dev_argv
     assert "OKP_PLUGIN_PRESENT=1" in dev_argv
     # The sidecar seam survives alongside the plugin seam in the dev build.
-    assert f"okp-sidecar={worker.parent / 'sidecar'}" in dev_argv
+    assert f"sidecar={worker.parent / 'sidecar'}" in dev_argv
     assert f"OKP_WORKER_SOURCE_DIGEST={source_digest(worker, plugin_dir=plugin)}" in dev_argv
 
 

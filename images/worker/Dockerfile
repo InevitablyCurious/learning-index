@@ -12,13 +12,13 @@ FROM ${OKP_PLUGIN_CONTEXT} AS plugin-source
 # Sidecar build-context seam: the sidecar files (egress-sidecar.js,
 # loop-kill-scanner.cjs, supervised-shell.js) live in images/sidecar/, outside
 # this build context. The dev build passes
-#   --build-context okp-sidecar=images/sidecar --build-arg OKP_SIDECAR_CONTEXT=okp-sidecar
-# A vanilla `docker build` omits both, so OKP_SIDECAR_CONTEXT defaults to the
+#   --build-context sidecar=images/sidecar --build-arg SIDECAR_CONTEXT=sidecar
+# A vanilla `docker build` omits both, so SIDECAR_CONTEXT defaults to the
 # empty `no-sidecar` stage below (same FROM ${ARG} AS stage workaround as the
 # plugin seam — COPY --from= does not expand variables).
-ARG OKP_SIDECAR_CONTEXT=no-sidecar
+ARG SIDECAR_CONTEXT=no-sidecar
 FROM scratch AS no-sidecar
-FROM ${OKP_SIDECAR_CONTEXT} AS sidecar-source
+FROM ${SIDECAR_CONTEXT} AS sidecar-source
 
 FROM node:22.12.0-bookworm-slim@sha256:35531c52ce27b6575d69755c73e65d4468dba93a25644eed56dc12879cae9213
 
