@@ -180,7 +180,7 @@ describe("no runner can outlive the suite", () => {
     // The harness kills the process group at DEFAULT_GATE_TIMEOUT_S. The suite
     // must finish inside that or the report is lost — which is the whole defect.
     const harness = fs.readFileSync(
-      path.join(BENCH, "harness", "adapters", "backgammon.py"),
+      path.join(BENCH, "harness", "adapters", "backgammon", "constants.py"),
       "utf-8",
     );
     const gate = /DEFAULT_GATE_TIMEOUT_S\s*=\s*(\d+)/.exec(harness);

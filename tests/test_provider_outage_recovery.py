@@ -160,7 +160,7 @@ class TestRecoveryIsWired:
         from pathlib import Path
 
         src = (
-            Path(__file__).resolve().parents[1] / "harness" / "adapters" / "backgammon.py"
+            Path(__file__).resolve().parents[1] / "harness" / "adapters" / "backgammon" / "serve.py"
         ).read_text(encoding="utf-8")
         assert "or is_provider_outage" in src
         assert "prompt_to_send = _PROVIDER_RECOVERY_NUDGE" in src

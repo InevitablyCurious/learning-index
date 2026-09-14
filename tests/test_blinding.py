@@ -73,7 +73,7 @@ def test_seeded_agents_md_has_no_evaluation_vocabulary() -> None:
 
 
 def test_agents_md_does_not_name_the_model_to_itself() -> None:
-    adapter = (REPO_ROOT / "harness" / "adapters" / "backgammon.py").read_text("utf-8")
+    adapter = (REPO_ROOT / "harness" / "adapters" / "backgammon" / "__init__.py").read_text("utf-8")
     assert "- Model: {self.model}" not in adapter
 
 

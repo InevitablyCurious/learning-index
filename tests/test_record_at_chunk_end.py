@@ -142,6 +142,10 @@ def test_the_prompt_carries_no_evaluation_vocabulary():
 
 def test_the_source_parses_and_the_helper_is_module_level():
     """A nested def would be invisible to the tests above and to reuse."""
-    tree = ast.parse((REPO / "harness" / "adapters" / "backgammon.py").read_text())
+    # WO-LI15-I1B STAGE 1B: the helper's defining module is feedback.py;
+    # __init__.py re-exports it, which is how the tests above reach it.
+    tree = ast.parse(
+        (REPO / "harness" / "adapters" / "backgammon" / "feedback.py").read_text()
+    )
     names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
     assert "_recorded_claim_count" in names

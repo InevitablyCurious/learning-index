@@ -137,7 +137,7 @@ class TestStallIsNotAModelFailure:
         from pathlib import Path
 
         src = (
-            Path(__file__).resolve().parents[1] / "harness" / "adapters" / "backgammon.py"
+            Path(__file__).resolve().parents[1] / "harness" / "adapters" / "backgammon" / "serve.py"
         ).read_text(encoding="utf-8")
         assert "stall_timeout_s=DEFAULT_TURN_STALL_TIMEOUT_S" in src
         # Layout belongs to the formatter; the canary is the semantic mapping:

@@ -15,7 +15,14 @@ from pathlib import Path
 def test_tool_choice_required_guard_absent_in_harness_llm_sources() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     llm_call_sources = [
-        repo_root / "harness" / "adapters" / "backgammon.py",
+        repo_root / "harness" / "adapters" / "backgammon" / "__init__.py",
+        # WO-LI15-I3A STAGE 3A: the serve drive (the LLM call path itself)
+        # moved to serve.py; the ban must follow the drive, and __init__.py
+        # (orchestration + prompt composition) stays covered.
+        repo_root / "harness" / "adapters" / "backgammon" / "serve.py",
+        # WO-LI15-I3B STAGE 3B: the G0/G1 base (cell orchestration,
+        # _run_cell_impl) moved to runner.py; the ban follows the base.
+        repo_root / "harness" / "adapters" / "backgammon" / "runner.py",
     ]
     pattern = re.compile(r"[\"']tool_choice[\"']\s*:\s*[\"']required[\"']")
 
@@ -62,7 +69,9 @@ def test_serve_config_written_before_serve_boots() -> None:
     precede the first `active_cell.start_serve()` occurrence in backgammon.py.
     """
     repo_root = Path(__file__).resolve().parents[1]
-    adapter_path = repo_root / "harness" / "adapters" / "backgammon.py"
+    # WO-LI15-I3B STAGE 3B: the ordering both literals live in (_run_cell_impl)
+    # moved from __init__.py to runner.py; the guard follows the base.
+    adapter_path = repo_root / "harness" / "adapters" / "backgammon" / "runner.py"
     payload = adapter_path.read_text(encoding="utf-8")
 
     config_write = payload.index("_write_worker_permission_config(worktree=worktree)")
@@ -85,7 +94,9 @@ def test_agents_md_written_after_seed() -> None:
     model line so the worker knows what it is running as.
     """
     repo_root = Path(__file__).resolve().parents[1]
-    adapter_path = repo_root / "harness" / "adapters" / "backgammon.py"
+    # WO-LI15-I3B STAGE 3B: the seed/AGENTS.md writes (_run_cell_impl) moved
+    # from __init__.py to runner.py; the guard follows the base.
+    adapter_path = repo_root / "harness" / "adapters" / "backgammon" / "runner.py"
     payload = adapter_path.read_text(encoding="utf-8")
     seed = payload.index(
         'self._copy_tree_contents(self.task_dir / "scaffold", worktree)'
