@@ -29,8 +29,7 @@ from harness.config import RunConfig
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HOST_GOLDEN_PATH = (REPO_ROOT / "task" / "backgammon" / "golden").resolve()
-HOST_RUNNER_PATH = (REPO_ROOT / "scripts" / "run_backgammon.py").resolve()
-RUN_BACKGAMMON_PATH = REPO_ROOT / "scripts" / "run_backgammon.py"
+HOST_RUNNER_PATH = (REPO_ROOT / "scripts" / "run_cumulative.py").resolve()
 
 _DOCKER_OK, _DOCKER_DETAIL = docker_available()
 REQUIRES_DOCKER = pytest.mark.skipif(
@@ -948,56 +947,6 @@ def test_memory_mode_on_off_env_wiring_and_no_seed_keystore_corpus_mounts(
             source_text = str(mount.get("Source", "")).lower()
             assert "keystore" not in source_text
             assert "corpus" not in source_text
-
-
-def test_attempts_single_source_of_truth_from_run_config() -> None:
-    assert RunConfig().max_attempts == 5
-    assert RunConfig(max_attempts=5).to_dict()["max_attempts"] == 5
-
-    tree = ast.parse(RUN_BACKGAMMON_PATH.read_text(encoding="utf-8"))
-    runconfig_calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id == "RunConfig"
-    ]
-    assert runconfig_calls, "run_backgammon.py must construct a RunConfig"
-
-    def _keyword_value(call: ast.Call, name: str) -> ast.AST | None:
-        for kw in call.keywords:
-            if kw.arg == name:
-                return kw.value
-        return None
-
-    assert any(
-        isinstance((value := _keyword_value(call, "max_attempts")), ast.Attribute)
-        and isinstance(value.value, ast.Name)
-        and value.value.id == "args"
-        and value.attr == "max_attempts"
-        for call in runconfig_calls
-    ), "RunConfig.max_attempts must source from CLI args"
-
-    runner_calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and (
-            (isinstance(node.func, ast.Name) and node.func.id == "BackgammonRunner")
-            or (
-                isinstance(node.func, ast.Attribute)
-                and node.func.attr == "BackgammonRunner"
-            )
-        )
-    ]
-    assert runner_calls, "run_backgammon.py must construct BackgammonRunner"
-    assert any(
-        isinstance((value := _keyword_value(call, "max_attempts")), ast.Attribute)
-        and isinstance(value.value, ast.Name)
-        and value.value.id == "cfg"
-        and value.attr == "max_attempts"
-        for call in runner_calls
-    ), "BackgammonRunner.max_attempts must be sourced from cfg.max_attempts"
 
 
 @REQUIRES_DOCKER

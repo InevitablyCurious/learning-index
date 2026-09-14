@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import importlib
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -10,13 +8,10 @@ import pytest
 import harness.adapters.backgammon as backgammon_mod
 from harness.adapters.backgammon import (
     DEFAULT_ATTEMPT_HARD_CEILING,
-    DEFAULT_MAX_STEPS_PER_ATTEMPT,
-    DEFAULT_RUN_TIMEOUT_S,
     BackgammonRunner,
     _OpencodeRunStats,
     build_worker_opencode_config,
 )
-from harness.backends.base import RecalledMemory
 from harness.adapters.docker_worker import DockerCellConfig, _build_run_argv
 from harness.config import RunConfig
 
@@ -118,36 +113,6 @@ def test_attempt_ceiling_clamps_to_canonical_hard_cap(tmp_path: Path) -> None:
     assert runner_small.max_attempts == 3
 
 
-def test_canonical_step_cap_is_100_and_cli_default_carries_it() -> None:
-    assert DEFAULT_MAX_STEPS_PER_ATTEMPT == 100
-
-    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
-    sys.path.insert(0, str(scripts_dir))
-    try:
-        run_backgammon = importlib.import_module("run_backgammon")
-    finally:
-        sys.path.remove(str(scripts_dir))
-
-    parser = run_backgammon._build_arg_parser()
-    args = parser.parse_args(["--run-label", "cap-default-check"])
-    assert args.max_steps_per_attempt == DEFAULT_MAX_STEPS_PER_ATTEMPT
-
-
-def test_canonical_run_timeout_is_5400_and_cli_default_carries_it() -> None:
-    assert DEFAULT_RUN_TIMEOUT_S == 5400
-
-    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
-    sys.path.insert(0, str(scripts_dir))
-    try:
-        run_backgammon = importlib.import_module("run_backgammon")
-    finally:
-        sys.path.remove(str(scripts_dir))
-
-    parser = run_backgammon._build_arg_parser()
-    args = parser.parse_args(["--run-label", "timeout-default-check"])
-    assert args.run_timeout == DEFAULT_RUN_TIMEOUT_S
-
-
 def test_load_chunk_prompts_in_order_with_protocol_on_first_chunk(
     tmp_path: Path,
 ) -> None:
@@ -161,7 +126,7 @@ def test_load_chunk_prompts_in_order_with_protocol_on_first_chunk(
     failed every gate that scripts dice.
     """
     runner_off = _make_runner(tmp_path)
-    chunks = runner_off._load_chunk_prompts(injected_memory=[])
+    chunks = runner_off._load_chunk_prompts()
     assert len(chunks) == 6
     assert not chunks[0].startswith("WORKING STYLE")
     # WO-MARKER-RIP: no chunk asks the model to print a completion string. A
@@ -193,24 +158,8 @@ def test_load_chunk_prompts_in_order_with_protocol_on_first_chunk(
         model="local-llm-proxy/kimi/kimi-k3",
         memory_mode="on",
     )
-    chunks_on = runner_on._load_chunk_prompts(injected_memory=[])
+    chunks_on = runner_on._load_chunk_prompts()
     assert chunks_on == chunks, "the ON arm receives the same chunk plan (RC-4)"
-
-    chunks_mem = runner_off._load_chunk_prompts(
-        injected_memory=[
-            RecalledMemory(
-                cid="cid-123",
-                score=0.95,
-                vector_score=0.90,
-                combined_score=0.93,
-                keyword_score=0.89,
-                matched_keywords=["doubling", "bear-off"],
-                text="Remember legal move ordering and bar re-entry priority.",
-            )
-        ]
-    )
-    assert chunks_mem[0].startswith("# OKP MEMORY CONTEXT")
-    assert "# OKP MEMORY CONTEXT" not in chunks_mem[1]
 
 
 def test_load_chunk_prompts_missing_dir_is_loud(tmp_path: Path) -> None:
@@ -221,4 +170,4 @@ def test_load_chunk_prompts_missing_dir_is_loud(tmp_path: Path) -> None:
         memory_mode="off",
     )
     with pytest.raises(RuntimeError, match="chunked prompts"):
-        runner._load_chunk_prompts(injected_memory=[])
+        runner._load_chunk_prompts()

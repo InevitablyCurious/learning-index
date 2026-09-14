@@ -32,7 +32,6 @@ import urllib.error
 import urllib.request
 import uuid
 
-from harness.adapters._memory_format import _format_memory
 from harness.checkpoint import checkpoint_root, record_checkpoint
 from harness.grader_run import (
     GraderImageMissing,
@@ -63,8 +62,8 @@ from .docker_worker import (
 )
 from .mapping import write_session_mapping
 from .transcript import write_session_transcript
-from harness.backends.base import NeedCard, RecalledMemory
-from harness.runner import AgentRunner, TaskOutcome
+from harness.backends.base import NeedCard
+from harness.runner import AgentRunner
 from harness.serve_client import (
     LOOP_GUARD_SIGNATURES,
     LOOP_KILL_WAIT_REASON,
@@ -2538,7 +2537,6 @@ class BackgammonRunner(AgentRunner):
                 run_label=run_label,
                 run_dir=run_dir,
                 task_id=task_id,
-                injected_memory=[],
             )
             verdict = str(getattr(result, "verdict", "") or "") or None
             # THE FIELD IS `termination_reason`. This read `terminal_reason`,
@@ -2582,34 +2580,6 @@ class BackgammonRunner(AgentRunner):
                 # empty one a reader has to interpret.
                 terminal_exception=terminal_exception,
             )
-
-    def run_task(
-        self, model: str, task_id: str, injected_memory: list[RecalledMemory]
-    ) -> TaskOutcome:
-        selected_model = str(model or self.model)
-        original_model = self.model
-        self.model = selected_model
-        try:
-            with tempfile.TemporaryDirectory(
-                prefix="bg-run-task-", dir=str(self.work_root)
-            ) as temp_dir:
-                result = self._run_cell_impl(
-                    run_label=f"run-task-{task_id}",
-                    run_dir=Path(temp_dir),
-                    task_id=task_id,
-                    injected_memory=injected_memory,
-                )
-        finally:
-            self.model = original_model
-
-        return TaskOutcome(
-            resolved=(result.verdict == "PASS"),
-            input_tokens=result.input_tokens,
-            output_tokens=result.output_tokens,
-            turns=result.turns,
-            wall_cost_usd=result.wall_cost_usd,
-            wall_seconds=result.wall_seconds,
-        )
 
     def _agents_md_text(self, run_label: str) -> str:
         """The seeded AGENTS.md: the neutral notes, plus an imported directive.
@@ -2685,7 +2655,6 @@ class BackgammonRunner(AgentRunner):
         run_label: str,
         run_dir: Path,
         task_id: str,
-        injected_memory: list[RecalledMemory],
     ) -> BackgammonCellResult:
         started = time.monotonic()
         # WO-STRIP-2b: capture the cell epoch ONCE so every surface of this
@@ -2981,9 +2950,7 @@ class BackgammonRunner(AgentRunner):
                             f"PROGRESS step=live-view marker_write_failed detail={exc}"
                         )
 
-                chunk_prompts = self._load_chunk_prompts(
-                    injected_memory=injected_memory
-                )
+                chunk_prompts = self._load_chunk_prompts()
                 build_chunk_expected = len(chunk_prompts)
                 task_prompt = self._joined_chunk_prompt(chunk_prompts)
                 self._progress(
@@ -4275,15 +4242,11 @@ class BackgammonRunner(AgentRunner):
         self._progress("PROGRESS step=memory-mode mode=off pure=true")
         return True
 
-    def _load_chunk_prompts(
-        self, *, injected_memory: list[RecalledMemory]
-    ) -> list[str]:
+    def _load_chunk_prompts(self) -> list[str]:
         """Load the WO-77 chunked first-pass prompts (task/backgammon/prompts/chunk-*.md).
 
         The chunked pass IS the initial pass — there is no monolith fallback.
-        Chunk 1 additionally carries, for arms that deliver memory in-prompt,
-        the memory blob (prepended). Missing or empty chunk data is a loud
-        cell-prep error, never a skip.
+        Missing or empty chunk data is a loud cell-prep error, never a skip.
 
         NO CAPTURE/COMPLIANCE PROTOCOL (2026-08-26). Chunk 1 used to carry an
         appended 193-line producer prompt (`scaffold/sxe-candidate/
@@ -4325,20 +4288,13 @@ class BackgammonRunner(AgentRunner):
                 raise RuntimeError(f"chunk prompt empty: {path}")
             chunks.append(text)
 
-        first = chunks[0]
-        if self.memory_mode != "on":
-            memory_blob = _format_memory(injected_memory)
-            if memory_blob:
-                first = f"{memory_blob}\n{first}"
-        prompts = [first, *chunks[1:]]
-
         # SELF-COMPACTION IS WORKER-SIDED, AND INVISIBLE TO THESE PROMPTS.
         # The plugin fires its own summarize on session.idle, gated entirely by
         # the phase sentinel the harness publishes — so the prompts carry no
         # compaction instruction, ask the model for no sign-off string, and are
         # byte-identical whether or not the flag is set. The harness only
         # observes at the boundary (see _settle_after_chunk).
-        return prompts
+        return chunks
 
     @staticmethod
     def _joined_chunk_prompt(chunks: list[str]) -> str:

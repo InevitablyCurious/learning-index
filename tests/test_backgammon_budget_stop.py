@@ -202,7 +202,7 @@ def test_prompts_are_delivered_over_the_serve_session_never_on_argv(
 
     task_prompt = "D6 initial prompt marker"
     monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *, injected_memory: [task_prompt]
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: [task_prompt]
     )
 
     gate_calls = {"count": 0}
@@ -237,7 +237,6 @@ def test_prompts_are_delivered_over_the_serve_session_never_on_argv(
         run_label="prompt-delivery",
         run_dir=tmp_path / "prompt-delivery",
         task_id="backgammon",
-        injected_memory=[],
     )
 
     assert result.verdict == "PASS"
@@ -257,7 +256,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=4)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *, injected_memory: ["INITIAL PROMPT"]
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
     )
 
     gate_calls = {"count": 0}
@@ -318,7 +317,6 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
         run_label="feedback-gap-pass-verdict",
         run_dir=tmp_path / "feedback-gap-pass-verdict",
         task_id="backgammon",
-        injected_memory=[],
     )
 
     assert result.verdict == "PASS"
@@ -410,7 +408,7 @@ def test_zero_progress_gap_has_no_pass_verdict_and_uses_false_header(
     runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=3)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *, injected_memory: ["INITIAL PROMPT"]
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
     )
 
     gate_calls = {"count": 0}
@@ -450,7 +448,6 @@ def test_zero_progress_gap_has_no_pass_verdict_and_uses_false_header(
         run_label="feedback-gap-zero-progress",
         run_dir=tmp_path / "feedback-gap-zero-progress",
         task_id="backgammon",
-        injected_memory=[],
     )
 
     assert result.verdict == "PASS"
@@ -504,7 +501,6 @@ def test_hard_attempt_ceiling_sets_fail_termination_label(
         run_label="ceiling",
         run_dir=tmp_path / "ceiling",
         task_id="backgammon",
-        injected_memory=[],
     )
 
     assert result.verdict == "FAIL"
@@ -531,7 +527,7 @@ def test_harness_limit_kill_does_not_force_budget_stop_and_loop_can_continue(
     runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=3)
     docker_state = _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *, injected_memory: ["PROMPT"]
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["PROMPT"]
     )
 
     gate_calls = {"count": 0}
@@ -586,7 +582,6 @@ def test_harness_limit_kill_does_not_force_budget_stop_and_loop_can_continue(
         run_label="harness-limit-continue",
         run_dir=tmp_path / "harness-limit-continue",
         task_id="backgammon",
-        injected_memory=[],
     )
 
     assert result.verdict == "PASS"
@@ -617,7 +612,7 @@ def test_stalled_feedback_turn_increments_cell_stalled_turns_exactly_once(
     runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=2)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *, injected_memory: ["INITIAL PROMPT"]
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
     )
 
     gate_calls = {"count": 0}
@@ -670,7 +665,6 @@ def test_stalled_feedback_turn_increments_cell_stalled_turns_exactly_once(
         run_label="stall-count",
         run_dir=tmp_path / "stall-count",
         task_id="backgammon",
-        injected_memory=[],
     )
 
     # The stall was delivered on the feedback round only; the build ran clean.
@@ -688,7 +682,7 @@ def test_non_budget_nonzero_worker_exit_classifies_as_harness_error(
     runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=2)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *, injected_memory: ["PROMPT"]
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["PROMPT"]
     )
     monkeypatch.setattr(
         runner,
@@ -717,7 +711,6 @@ def test_non_budget_nonzero_worker_exit_classifies_as_harness_error(
         run_label="harness-error",
         run_dir=tmp_path / "harness-error",
         task_id="backgammon",
-        injected_memory=[],
     )
 
     assert result.verdict == "FAIL"
@@ -747,7 +740,7 @@ def test_serve_session_create_failure_aborts_the_cell(
     runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=2)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *, injected_memory: ["PROMPT"]
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["PROMPT"]
     )
 
     class _DeadServeClient:
@@ -764,7 +757,6 @@ def test_serve_session_create_failure_aborts_the_cell(
             run_label="no-session",
             run_dir=tmp_path / "no-session",
             task_id="backgammon",
-            injected_memory=[],
         )
 
     assert "one transport" in str(excinfo.value)
@@ -788,7 +780,7 @@ def test_chunked_build_failure_aborts_and_never_reruns_as_one_joined_prompt(
     monkeypatch.setattr(
         runner,
         "_load_chunk_prompts",
-        lambda *, injected_memory: ["CHUNK ONE", "CHUNK TWO"],
+        lambda *args, **kwargs: ["CHUNK ONE", "CHUNK TWO"],
     )
 
     def _die(**kwargs: Any) -> _OpencodeRunStats:
@@ -801,7 +793,6 @@ def test_chunked_build_failure_aborts_and_never_reruns_as_one_joined_prompt(
             run_label="build-died",
             run_dir=tmp_path / "build-died",
             task_id="backgammon",
-            injected_memory=[],
         )
 
     assert "transport died mid-build" in str(excinfo.value)
@@ -824,7 +815,7 @@ def test_partial_chunked_build_aborts_with_incomplete_build_error(
     monkeypatch.setattr(
         runner,
         "_load_chunk_prompts",
-        lambda *, injected_memory: ["CHUNK ONE", "CHUNK TWO", "CHUNK THREE"],
+        lambda *args, **kwargs: ["CHUNK ONE", "CHUNK TWO", "CHUNK THREE"],
     )
 
     opencode_calls = {"count": 0}

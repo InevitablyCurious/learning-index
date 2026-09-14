@@ -232,7 +232,6 @@ def test_run_cell_impl_sets_delivery_yes_when_memory_on_and_inject_log_exists(
         run_label="delivery-on-yes",
         run_dir=tmp_path / "delivery-on-yes",
         task_id="backgammon",
-        injected_memory=[],
     )
 
     assert result.delivery == "YES"
@@ -278,7 +277,6 @@ def test_run_cell_impl_sets_injected_block_est_tokens_from_scanned_chars(
         run_label="delivery-on-est-tokens",
         run_dir=tmp_path / "delivery-on-est-tokens",
         task_id="backgammon",
-        injected_memory=[],
     )
 
     assert result.injected_block_chars == 1207
@@ -313,7 +311,6 @@ def test_run_cell_impl_sets_delivery_not_measured_when_memory_on_without_inject_
         run_label="delivery-on-not-measured",
         run_dir=tmp_path / "delivery-on-not-measured",
         task_id="backgammon",
-        injected_memory=[],
     )
 
     assert result.delivery == "not_measured"
@@ -327,7 +324,6 @@ def test_run_cell_impl_sets_delivery_na_when_memory_off(tmp_path: Path) -> None:
         run_label="delivery-off-na",
         run_dir=tmp_path / "delivery-off-na",
         task_id="backgammon",
-        injected_memory=[],
     )
 
     assert result.delivery == "N/A"

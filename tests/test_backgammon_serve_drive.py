@@ -2364,7 +2364,7 @@ def test_the_compact_flag_leaves_the_chunk_prompts_untouched(
     injected below.
     """
     runner = _make_runner(tmp_path, compact=True)
-    chunks = runner._load_chunk_prompts(injected_memory=[])
+    chunks = runner._load_chunk_prompts()
     assert len(chunks) == 6
     for index, chunk in enumerate(chunks, start=1):
         on_disk = (TASK_DIR / "prompts" / f"chunk-{index:02d}.md").read_text(

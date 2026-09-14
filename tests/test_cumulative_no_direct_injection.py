@@ -1,15 +1,21 @@
+"""No direct injection: the harness has NO injected-memory mechanism at all.
+
+Memory reaches the worker through the plugin substrate (worker-side recall
+auto-inject), never through the harness prompt path. These tests pin that
+absence: chunk prompts are the raw on-disk bytes, `run_cell` forwards only
+cell identity into `_run_cell_impl`, and the removed seam's symbols do not
+reappear in the source.
+"""
+
 import inspect
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-import harness.adapters.backgammon as backgammon_mod
 from harness.adapters.backgammon import (
     BackgammonCellResult,
     BackgammonRunner,
 )
-from harness.backends.base import RecalledMemory
 
 
 TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
@@ -25,62 +31,43 @@ def _make_runner(tmp_path: Path, *, memory_mode: str = "on") -> BackgammonRunner
     )
 
 
-def _sample_injected_memory() -> list[RecalledMemory]:
-    return [
-        RecalledMemory(
-            cid="cid-memory",
-            score=1.0,
-            vector_score=1.0,
-            combined_score=1.0,
-            keyword_score=1.0,
-            matched_keywords=["backgammon"],
-            text="DIRECT_INJECTION_MEMORY_MARKER",
-        )
-    ]
-
-
-def test_cumulative_on_prompt_is_base_prompt_without_memory_blob(
-    monkeypatch: pytest.MonkeyPatch,
+def test_load_chunk_prompts_returns_exactly_the_on_disk_chunks(
     tmp_path: Path,
 ) -> None:
+    # The signature IS the invariant: `self` is the only parameter — the
+    # removed memory kwarg cannot come back without failing here.
+    params = list(inspect.signature(BackgammonRunner._load_chunk_prompts).parameters)
+    assert params == ["self"]
+
     runner = _make_runner(tmp_path, memory_mode="on")
-    format_called = {"value": False}
 
-    def _unexpected_format(memories: list[RecalledMemory]) -> str:
-        del memories
-        format_called["value"] = True
-        raise AssertionError(
-            "_format_memory must not run for cumulative memory_mode='on'"
-        )
+    chunks = runner._load_chunk_prompts()
 
-    monkeypatch.setattr(backgammon_mod, "_format_memory", _unexpected_format)
-
-    chunks = runner._load_chunk_prompts(injected_memory=_sample_injected_memory())
-
-    assert chunks
-    assert all("DIRECT_INJECTION_MEMORY_MARKER" not in c for c in chunks)
+    on_disk = sorted((TASK_DIR / "prompts").glob("chunk-*.md"))
+    assert len(on_disk) == 6
+    # Byte-identical to disk: nothing is prepended, appended, or formatted in.
+    assert chunks == [p.read_text(encoding="utf-8") for p in on_disk]
     assert all("# OKP MEMORY CONTEXT" not in c for c in chunks)
-    assert format_called["value"] is False
 
 
-def test_run_cell_scored_path_passes_empty_injected_memory(
+def test_run_cell_forwards_cell_identity_and_no_memory(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     runner = _make_runner(tmp_path, memory_mode="on")
-    captured: dict[str, Any] = {}
+    captured: dict[str, object] = {}
 
+    # The fake's signature no longer ACCEPTS the removed memory kwarg: if
+    # `run_cell` tried to pass one, this would raise TypeError and fail here.
     def _fake_run_cell_impl(
         *,
         run_label: str,
         run_dir: Path,
         task_id: str,
-        injected_memory: list[RecalledMemory],
     ) -> BackgammonCellResult:
         captured["run_label"] = run_label
         captured["run_dir"] = run_dir
         captured["task_id"] = task_id
-        captured["injected_memory"] = injected_memory
         return BackgammonCellResult(
             verdict="PASS",
             attempts_to_green=0,
@@ -95,25 +82,37 @@ def test_run_cell_scored_path_passes_empty_injected_memory(
             problems_final=[],
             attempt_reports=[],
             worktree=str(run_dir / "worktree"),
-            session_id="sid-cumulative-on",
+            session_id="sid-no-direct-injection",
             memory_mode="on",
             model=runner.model,
         )
 
     monkeypatch.setattr(runner, "_run_cell_impl", _fake_run_cell_impl)
 
-    result = runner.run_cell("run-cumulative-on", tmp_path / "run-cumulative-on")
+    run_dir = tmp_path / "run-no-direct-injection"
+    result = runner.run_cell("run-no-direct-injection", run_dir)
 
-    assert captured["run_label"] == "run-cumulative-on"
+    assert captured["run_label"] == "run-no-direct-injection"
     assert captured["task_id"] == "backgammon"
-    assert captured["injected_memory"] == []
+    assert captured["run_dir"] == run_dir
     assert result.verdict == "PASS"
 
 
-def test_backgammon_on_path_has_no_okp_memory_file_write_logic() -> None:
+def test_backgammon_source_has_no_direct_injection_seam() -> None:
+    # The removed seam symbols, spelled by concatenation so THIS file stays
+    # clean under the repo-wide grep for them — a test asserting their absence
+    # must not reintroduce the literals. At runtime these are the exact
+    # strings that were removed from the adapter.
+    seam_param = "injected" + "_memory"
+    seam_helper = "_format" + "_memory"
+
     prompt_source = inspect.getsource(BackgammonRunner._load_chunk_prompts)
     run_cell_source = inspect.getsource(BackgammonRunner.run_cell)
 
+    for source in (prompt_source, run_cell_source):
+        assert seam_param not in source
+        assert seam_helper not in source
+
+    # The harness also never writes memory into the worktree as a file.
     assert "OKP_MEMORY.md" not in prompt_source
     assert "write_text(" not in prompt_source
-    assert "injected_memory=[]" in run_cell_source

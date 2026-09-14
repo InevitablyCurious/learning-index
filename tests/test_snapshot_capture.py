@@ -83,7 +83,6 @@ def _drive(
         run_label="lbl",
         run_dir=tmp_path / "rundir",
         task_id="backgammon",
-        injected_memory=[],
     )
 
 
@@ -411,7 +410,7 @@ def test_seeded_cell_skips_build_and_reaches_first_feedback_round(
     monkeypatch.setattr(
         runner,
         "_load_chunk_prompts",
-        lambda *, injected_memory: ["BUILD PROMPT THAT MUST NOT BE DELIVERED"],
+        lambda *args, **kwargs: ["BUILD PROMPT THAT MUST NOT BE DELIVERED"],
     )
 
     gate_calls = {"count": 0}
@@ -516,7 +515,7 @@ def test_seeded_cell_with_drifted_source_commit_emits_notice_and_skips_build(
     monkeypatch.setattr(
         runner,
         "_load_chunk_prompts",
-        lambda *, injected_memory: ["BUILD PROMPT THAT MUST NOT BE DELIVERED"],
+        lambda *args, **kwargs: ["BUILD PROMPT THAT MUST NOT BE DELIVERED"],
     )
 
     gate_calls = {"count": 0}
@@ -676,7 +675,7 @@ def _make_seeded_cache_runner(
     monkeypatch.setattr(
         runner,
         "_load_chunk_prompts",
-        lambda *, injected_memory: ["BUILD PROMPT THAT MUST NOT BE DELIVERED"],
+        lambda *args, **kwargs: ["BUILD PROMPT THAT MUST NOT BE DELIVERED"],
     )
 
     def _fake_chunked(**kwargs: Any) -> _OpencodeRunStats:

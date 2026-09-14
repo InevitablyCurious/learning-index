@@ -112,7 +112,7 @@ export function pidAlive(pid) {
 const execFileAsync = promisify(execFile);
 
 /** Bench harness entrypoints, for the conservative fallback in externalRunAlive. */
-const HARNESS_SCRIPT = /run_cumulative\.py|run_backgammon\.py/;
+const HARNESS_SCRIPT = /run_cumulative\.py/;
 
 /**
  * IS THE CLI-LAUNCHED RUN ACTUALLY ALIVE? Ask the kernel, never the mtime.
