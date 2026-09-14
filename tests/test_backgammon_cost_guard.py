@@ -119,7 +119,7 @@ def test_load_chunk_prompts_in_order_with_protocol_on_first_chunk(
     """The chunk plan is the six task prompts and NOTHING ELSE.
 
     Chunk 1 used to carry an appended 193-line producer capture protocol
-    instructing OKP_DISCOVERY emission. It is deleted (2026-08-26):
+    instructing discovery-capture emission. It is deleted (2026-08-26):
     extraction is measured by the plugin substrate, not by asking the model
     under test to narrate it — and that text told the worker the debug seam was
     `BENCH_DEBUG` when every executing source says `DEBUG_API`, so obeying it
@@ -140,7 +140,6 @@ def test_load_chunk_prompts_in_order_with_protocol_on_first_chunk(
     for c in chunks:
         assert "CAPTURE & COMPLIANCE PROTOCOL" not in c
         assert "Okp Contributor Capture Protocol" not in c
-        assert "OKP_DISCOVERY" not in c
         assert "BENCH_DEBUG" not in c, (
             "the debug seam is DEBUG_API everywhere that executes"
         )

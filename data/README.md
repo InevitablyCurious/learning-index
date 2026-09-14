@@ -1,7 +1,8 @@
 # bench telemetry sink (`data/`)
 
 This directory is the host-side, retained home for run telemetry produced by the
-The Open Knowledge Project plugin during a bench campaign.
+worker plugin — the tree `BENCH_PLUGIN_DIR` bakes into the ON image — during a
+bench campaign.
 
 ## Purpose
 The plugin writes its funnel counters and error log into state dirs that are

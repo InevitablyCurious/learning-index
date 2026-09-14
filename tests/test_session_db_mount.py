@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from harness.adapters.backgammon import BackgammonRunner
 from harness.adapters.docker_worker import DockerCellConfig, _build_run_argv
 
@@ -20,24 +18,13 @@ def _contains_pair(argv: list[str], left: str, right: str) -> bool:
     return False
 
 
-def _build_memory_on_cfg(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *, worktree: Path
-) -> DockerCellConfig:
-    fake_home = tmp_path / "fake-home"
-    host_okp = fake_home / ".okp"
-    host_okp.mkdir(parents=True, exist_ok=True)
-    (host_okp / "mcp-session-token").write_text("bridge-test-token\n", encoding="utf-8")
-    monkeypatch.setenv("HOME", str(fake_home))
-
+def _build_memory_on_cfg(*, worktree: Path) -> DockerCellConfig:
     return DockerCellConfig(
         worktree=worktree,
         memory_mode="on",
         container_name="bench-cell-session-db-on",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
-        served_memories_host_path=str(tmp_path / "served-memories.json"),
-        plugin_config_host_path=str(tmp_path / "plugin-config.json"),
-        plugin_state_host_path=str(tmp_path / "plugin-state"),
     )
 
 
@@ -82,12 +69,11 @@ def test_run_argv_session_db_mount_present_when_configured_memory_mode_off(
 
 
 def test_run_argv_session_db_mount_present_when_configured_memory_mode_on(
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     worktree = tmp_path / "worktree-on"
     session_db = tmp_path / "session-db-on"
-    cfg = _build_memory_on_cfg(monkeypatch, tmp_path, worktree=worktree)
+    cfg = _build_memory_on_cfg(worktree=worktree)
     cfg.session_db_host_path = session_db
 
     argv = _build_run_argv(

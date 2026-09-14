@@ -500,33 +500,6 @@ a:hover{color:var(--type)}
 .ck-row.ck-fail .ck-detail{color:var(--danger)}
 .ck-note{margin-top:14px;font:400 11.5px/1.6 var(--font);color:var(--dim)}
 
-/* ── MEMORY BACKEND WIRING (BASELINE · 3) ────────────────────────────────────
-   The verdict reads before the rows do. An operator who takes one look must
-   come away with "wired" or "not wired" — the per-check list is what they read
-   when the answer was no, and burying the answer inside it is how a red result
-   gets skimmed past. Same danger/ok tokens as every other verdict on the board,
-   because "this is fine" must not be a different colour here than elsewhere. */
-.mem-verify{margin-top:12px;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
-.mem-hint{font:400 11px/1.55 var(--font);color:var(--dim)}
-.mem-hint.fail{color:var(--danger)}
-.mem-verdict{margin-top:12px;padding:10px 12px;display:flex;flex-direction:column;gap:3px;
-  border:1px solid var(--border-strong);border-radius:var(--radius-sm)}
-.mem-verdict.ok{border-color:var(--ok)}
-.mem-verdict.bad{border-color:var(--danger)}
-.mem-vhead{font:700 10px var(--font);letter-spacing:.16em}
-.mem-verdict.ok .mem-vhead{color:var(--ok)}
-.mem-verdict.bad .mem-vhead{color:var(--danger)}
-.mem-vsub{font:400 11.5px/1.55 var(--font);color:var(--dim)}
-/* THE APPLIED ENVIRONMENT, AS VALUES. A name tells an operator nothing they did
-   not already assume; the path is what catches a stale or renamed file before
-   it costs a run. Monospace and allowed to wrap — a truncated path is the one
-   rendering that would defeat the point of showing it. */
-.mem-env{margin-top:8px;display:flex;flex-direction:column;gap:3px}
-.mem-env-row{display:grid;grid-template-columns:minmax(0,auto) minmax(0,1fr);gap:9px;align-items:baseline}
-.mem-k{font:700 10px var(--font);letter-spacing:.1em;color:var(--dim);white-space:nowrap}
-.mem-v{font:400 11px/1.5 var(--mono,var(--font));color:var(--fg);word-break:break-all}
-.mem-rows{margin-top:10px}
-
 /* ── THE WAY OUT OF A PREFLIGHT REFUSAL ──────────────────────────────────────
    Under the checklist, not beside it: the rows say what is wrong and this says
    what to press. Bordered rather than tinted, because a red-on-red call to

@@ -63,8 +63,6 @@ def test_no_chunk_prompt_asks_the_worker_for_discovery_capture() -> None:
     for path in sorted((TASK / "prompts").glob("chunk-*.md")):
         text = path.read_text(encoding="utf-8")
         for token in (
-            "OKP_DISCOVERY",
-            "OKP_FINAL_SOLUTIONS_RECORD",
             "candidate_memory_text",
             "CAPTURE & COMPLIANCE",
         ):

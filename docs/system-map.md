@@ -27,7 +27,7 @@ system.
 | Control plane | `control/` | Node stdlib-only `server.mjs` — the only write-capable surface; spawns the harness, one run at a time. |
 | Dashboard | `dashboard/` | Read-only board (containerized) at :7717; renders, never acts. |
 | Images | `images/` | `worker/Dockerfile`, `grader/Dockerfile`, `sidecar/` (egress + loop-kill scanner + supervised shell). |
-| Scripts | `scripts/` | Entrypoints: `run_cumulative.py` (canonical), `rebuild_worker_image.py`, `rebuild_grader_image.py`, `bench_preflight.py`, `memory_preflight.py`. |
+| Scripts | `scripts/` | Entrypoints: `run_cumulative.py` (canonical), `rebuild_worker_image.py`, `rebuild_grader_image.py`, `bench_preflight.py`. |
 | Config | `config/` | `bench.env`; the bench-owned env surface is documented in `ENV-VARS.md`. |
 | Tests | `tests/` | The harness's own pytest suite — grades the instrument, never the candidate. |
 
@@ -55,20 +55,28 @@ read-only. The board (`:7717`) is a separate, read-only viewer.
 
 ## 4. Memory story — OFF vs ON
 
+opencode IS the socket: the benchmark defines NO memory-system interface, NO
+registry, and NO adapter. The only integration surface is ONE "which plugin"
+pointer plus a README.
+
 - **Schedule** (`harness/cumulative/ordering.py`): a full OFF baseline in roster
   order, then a seeded ON schedule. Every model is its own control.
-- **OFF arm.** No memory backend, no memory written. The per-model floor the ON
-  arm is measured against.
-- **ON arm.** A backend registered in `control/memory-backends.mjs` supplies a
-  worker plugin (`BENCH_PLUGIN_DIR`) and a standing record mandate
-  (`BENCH_AGENTS_AUX_FILE`). The plugin captures learnings during the build; on a
-  later cell it recalls prior memories over `BENCH_MCP_RECALL_URL`, guards them,
-  and reinjects them into the system prompt.
+- **OFF arm.** No plugin — the worker image is built VANILLA (`BENCH_PLUGIN_DIR`
+  unset), so no memory is captured or written. The per-model floor the ON arm is
+  measured against.
+- **ON arm.** The worker image is built with a plugin tree: `BENCH_PLUGIN_DIR`,
+  an absolute path to a real npm package built outside this repo, baked in at
+  `/opt/bench-plugin` (`images/worker/Dockerfile`). The plugin captures learnings
+  during the build; on a later cell it recalls prior memories over the recall
+  seam (`BENCH_MCP_RECALL_URL`), guards them, and reinjects them into the system
+  prompt. A standing record mandate can be supplied through the generic
+  `BENCH_AGENTS_AUX_FILE` directive seam. The OFF/ON toggle (`memory_mode`
+  off/on) is the only memory-mode distinction.
 - **The harness reinjects nothing.** Capture, recall, and reinjection belong to
-  the backend's plugin; the benchmark only schedules the arms and measures the Δ.
+  the plugin; the benchmark only schedules the arms and measures the Δ.
 
-The reference backend (OKP/TOKP) and its recall store live **outside** this
-repo; the benchmark is agnostic to which backend is plugged in.
+The plugin and any recall store it talks to live **outside** this repo; the
+benchmark names no backend and is agnostic to which plugin is plugged in.
 
 ## 5. The four balance properties (where they're enforced)
 

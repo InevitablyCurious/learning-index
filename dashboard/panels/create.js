@@ -70,18 +70,6 @@ const ui = {
   pending: false,
   refusal: null,
 
-  // ── the memory backend (frame b2m) ──
-  //
-  // WHICH BACKEND, AND WHAT ITS OWN PREFLIGHT SAID. Held here rather than
-  // re-fetched per render because it is the RESULT OF AN ACTION the operator
-  // took — a poll cannot reconstruct "the operator ran this and it passed", and
-  // a render that re-ran it would fire a docker probe on every repaint.
-  //
-  // `null` backend is a real choice: a run with no memory layer is what every
-  // bench does out of the box, and the flow must not make it unreachable.
-  memory: null,          // backend id, or null for "none"
-  memoryCheck: null,     // { pending, ok, verdict, checks[], applied_env, error }
-
   // ── launch (frame b4) ──
   //
   // Everything the LAUNCH ITSELF learned, which no board poll can reconstruct
@@ -110,11 +98,6 @@ export function openCreate() {
   ui.arm = "off";
   ui.org = null;
   ui.compact = null;
-  // A BACKEND IS PICKED PER RUN, never inherited from the last one. Carrying a
-  // previous choice forward would let a verified-then-changed installation start
-  // a cell under a backend nobody looked at this time.
-  ui.memory = null;
-  ui.memoryCheck = null;
   ui.pending = false;
   ui.refusal = null;
   ui.launch = null;
@@ -180,25 +163,10 @@ export function setCreateRefusal(code, reason) {
 // Dev mode is read from the SERVER's answer on the board payload, never from a
 // local flag: the control plane refuses to arm a snapshot when the mode is off,
 // so a board that offered the step anyway would be offering a dead end.
-//
-// ── WHERE THE MEMORY STEP SITS, AND WHY (2026-09-08) ───────────────────────
-//
-// b2m comes AFTER the model and BEFORE the confirmation, on both the plain and
-// the dev path. After the model because a backend is verified against the run
-// it will serve. Before the confirmation because the confirmation is the last
-// frame that is free — once START is pressed the cell costs hours, and "was the
-// memory layer even wired" is precisely the question that was answerable for
-// free and got answered by a wasted run instead (1788848333).
-//
-// IT IS ON THE BASELINE (OFF) PATH TOO. A baseline is memory-off, but the
-// record mandate goes to BOTH arms — the worker env is armed regardless of
-// memory mode so the two arms differ in memory and nothing else. An OFF cell
-// that silently lacked the mandate is exactly what happened, and a step that
-// skipped itself on the OFF path would have skipped the run that needed it.
-const NEXT_BASE = { b1: "b2", b2: "b2m", b2m: "b3", b3: null, b4: null };
-const BACK_BASE = { b2: "b1", b2m: "b2", b3: "b2m" };
-const NEXT_DEV = { ...NEXT_BASE, b2: "b2s", b2s: "b2m" };
-const BACK_DEV = { ...BACK_BASE, b2s: "b2", b2m: "b2s" };
+const NEXT_BASE = { b1: "b2", b2: "b3", b3: null, b4: null };
+const BACK_BASE = { b2: "b1", b3: "b2" };
+const NEXT_DEV = { ...NEXT_BASE, b2: "b2s", b2s: "b3" };
+const BACK_DEV = { ...BACK_BASE, b2s: "b2", b3: "b2s" };
 function steps(devOn) {
   return devOn ? { next: NEXT_DEV, back: BACK_DEV } : { next: NEXT_BASE, back: BACK_BASE };
 }
@@ -217,60 +185,6 @@ export function createBack(devOn = false) {
 
 /** The model this sequence is for. Read by the seed step's arming call, which
  *  must name the model so the server can apply the same-model rule. */
-
-/** The backend this flow will start the cell with — read by the launch POST. */
-export function createMemoryBackend() {
-  return ui.memory;
-}
-
-/**
- * Pick a backend (or "none", as an empty id).
- *
- * THE VERDICT IS DISCARDED ON EVERY CHANGE. A result belongs to the backend it
- * was measured against, and leaving a green TOKp verdict standing under a
- * freshly-picked different backend is the single most expensive thing this
- * frame could do — it would say "verified" about something nobody checked.
- */
-export function setCreateMemory(id) {
-  const next = String(id ?? "").trim() || null;
-  if (next === ui.memory) return;
-  ui.memory = next;
-  ui.memoryCheck = null;
-}
-
-/**
- * Run the backend's own preflight.
- *
- * The server applies the backend's environment before probing, so a GO here is
- * a statement about what the LAUNCH will use — not about the shell the control
- * plane happens to be running in. A transport failure is kept separate from a
- * refusal: "could not ask" and "asked, and the answer was no" send an operator
- * to different places.
- */
-export async function verifyMemoryBackend(base) {
-  const id = ui.memory;
-  if (!id) return;
-  ui.memoryCheck = { pending: true };
-  try {
-    const res = await fetch(`${base}/api/memory/preflight?backend=${encodeURIComponent(id)}`);
-    const data = await res.json().catch(() => null);
-    if (!data) throw new Error(`unreadable verdict (HTTP ${res.status})`);
-    if (data.ok === false) {
-      ui.memoryCheck = { pending: false, error: data.reason ?? data.code ?? "the control plane refused" };
-      return;
-    }
-    ui.memoryCheck = {
-      pending: false,
-      ok: data.verdict === "go" && (data.blocking_failures ?? 0) === 0,
-      verdict: data.verdict ?? "unknown",
-      checks: data.checks ?? [],
-      applied_env: data.applied_env ?? {},
-    };
-  } catch (err) {
-    ui.memoryCheck = { pending: false, error: `could not reach the control plane — ${String(err?.message ?? err)}` };
-  }
-}
-
 export function createModel() {
   return ui.model;
 }
@@ -333,7 +247,6 @@ function frame(board, ledger) {
     case "b1": return baselineKind(ledger);
     case "b2": return baselineModel(ledger);
     case "b2s": return baselineSeed(ledger, board);
-    case "b2m": return baselineMemory(board);
     case "b3": return baselineConfirm(ledger);
     case "b4": return launchProgress(board);
     // The sequence opens on b1 and every transition is from the map above, so
@@ -625,152 +538,6 @@ function baselineSeed(ledger, board) {
   });
 }
 
-/**
- * FRAME b2m — WHICH MEMORY BACKEND, AND IS IT ACTUALLY WIRED.
- *
- * ── THE FAILURE THIS FRAME EXISTS FOR ───────────────────────────────────────
- *
- * Run 1788848333 went out with the record mandate unwired. Nothing in the tree
- * was broken. The seam did exactly what it promised — an unset variable means
- * "no memory layer", so it seeded the neutral notes and said nothing — and the
- * cell ran to completion with the model never told to record anything. The
- * empty result was indistinguishable from a real finding about the memory
- * system.
- *
- * That failure is not fixable by making the adapter louder: a bare bench
- * legitimately runs with no memory layer, so "unset" cannot be an error there.
- * It is fixable HERE, because choosing a backend on this frame is the operator
- * declaring that one is supposed to be plugged in — and against that
- * declaration, unset IS an error.
- *
- * ── WHY IT IS A SEPARATE PREFLIGHT ──────────────────────────────────────────
- *
- * The launch checklist on b4 asks "can this bench start a cell": ports, images,
- * identity, disk. Those are the same questions whoever is plugged in. This asks
- * "is the memory system I plugged in going to do anything", which is the
- * question a NEW backend — mem0, supermemory, hancho, hindsight — has to be
- * able to answer before anyone spends hours of compute finding out. Folding
- * them together would make every future backend edit the benchmark's own gate.
- *
- * ── VERIFYING IS FREE, AND IT IS NOT AUTOMATIC ──────────────────────────────
- *
- * The probe runs docker, so it is an ACTION the operator takes, not something a
- * repaint fires. What it returns is held in `ui.memoryCheck` because it is the
- * result of that action — no poll can reconstruct "the operator ran this and it
- * passed".
- *
- * NOTHING HERE BLOCKS. A red verdict is loud and the frame still advances: the
- * operator may be deliberately running a cell with no memory layer, or
- * measuring what an unwired one does. What the frame guarantees is that nobody
- * reaches the confirmation without having been TOLD.
- */
-function baselineMemory(board) {
-  const chosen = ui.memory;
-  const chk = ui.memoryCheck;
-
-  const backends = [
-    { id: "tokp", label: "TOKp", blurb: "in-session capture — the model records through a tool as it works" },
-  ];
-
-  const options = backends.map((b) => line({
-    glyph: chosen === b.id ? "◉" : "○",
-    text: b.label,
-    meta: b.blurb,
-    kind: chosen === b.id ? "on" : "off",
-    attr: `data-create-memory="${esc(b.id)}"`,
-  })).join("");
-
-  // "None" is a first-class row, not an absence. Every bench runs this way out
-  // of the box, and a chooser that only offers backends makes the default
-  // configuration unreachable — and unspoken.
-  const none = line({
-    glyph: chosen === null ? "◉" : "○",
-    text: "none",
-    meta: "no memory layer — the model is never told to record anything",
-    kind: chosen === null ? "on" : "off",
-    attr: `data-create-memory=""`,
-  });
-
-  const body = `
-    ${options}
-    ${none}
-    ${chosen ? verifyBlock(chk) : line({
-      glyph: "·",
-      text: "nothing to verify",
-      meta: "a cell with no memory layer has no backend wiring to check",
-      kind: "ghost",
-    })}`;
-
-  return shell({
-    step: "BASELINE · 3",
-    branch: "memory backend",
-    title: "Which memory system is plugged in?",
-    body,
-    note: chosen && !chk?.ok
-      ? "Verify before continuing — an unwired backend produces an empty result that reads like a finding."
-      : "",
-    cta: "next ›",
-    ctaAttr: `data-create-next="1"`,
-    ctaOk: true,
-  });
-}
-
-/** The verify control and whatever the probe last said. */
-function verifyBlock(chk) {
-  if (!chk) {
-    return `
-      <div class="mem-verify">
-        <button class="btn sm primary" data-create-memory-verify="1">VERIFY WIRING</button>
-        <span class="mem-hint">${esc("reads the plugin tree, the record mandate, and the worker image")}</span>
-      </div>`;
-  }
-  if (chk.pending) {
-    return `
-      <div class="mem-verify">
-        <button class="btn sm" disabled>verifying…</button>
-        <span class="mem-hint">${esc("probing the worker image — this runs docker and takes a moment")}</span>
-      </div>`;
-  }
-  if (chk.error) {
-    return `
-      <div class="mem-verify">
-        <button class="btn sm primary" data-create-memory-verify="1">RETRY</button>
-        <span class="mem-hint fail">${esc(chk.error)}</span>
-      </div>`;
-  }
-
-  const rows = (chk.checks ?? []).map((c) => checkRow({
-    state: c.status === "pass" ? "pass" : (c.status === "warn" ? "unobserved" : "fail"),
-    label: c.name,
-    src: c.status === "pass" ? "ok" : c.status,
-    detail: c.status === "pass" ? "" : (c.detail ?? ""),
-  })).join("");
-
-  // THE ENV IS SHOWN AS VALUES, NOT NAMES. "BENCH_AGENTS_AUX_FILE is set" is
-  // what the last run would also have said if it had been asked the wrong
-  // question; the path is the whole fact, and seeing it is how an operator
-  // catches a stale or renamed mandate file before it costs a run.
-  const env = Object.entries(chk.applied_env ?? {});
-  const envBlock = env.length
-    ? `<div class="mem-env">${env.map(([k, v]) =>
-        `<div class="mem-env-row"><span class="mem-k">${esc(k)}</span><span class="mem-v">${esc(v)}</span></div>`,
-      ).join("")}</div>`
-    : `<div class="mem-env"><span class="mem-hint fail">${esc("the backend resolved NO environment — nothing would be applied to the run")}</span></div>`;
-
-  return `
-    <div class="mem-verdict ${chk.ok ? "ok" : "bad"}">
-      <span class="mem-vhead">${esc(chk.ok ? "WIRED — the model will be told to record" : "NOT WIRED")}</span>
-      <span class="mem-vsub">${esc(chk.ok
-        ? "the mandate lands in the worker's AGENTS.md and the tool exists in the image"
-        : "this cell would run with the memory layer doing nothing, and the result would look clean")}</span>
-    </div>
-    ${envBlock}
-    <div class="ck-list mem-rows">${rows}</div>
-    <div class="mem-verify">
-      <button class="btn sm" data-create-memory-verify="1">RE-VERIFY</button>
-    </div>`;
-}
-
 function baselineConfirm(ledger) {
   const m = (ledger?.startable ?? []).find((x) => x.id === ui.model) ?? null;
   const cloud = ledger?.cloud ?? null;
@@ -826,7 +593,7 @@ function baselineConfirm(ledger) {
     ${seedWarning()}`;
 
   return shell({
-    step: isOn ? "RUN · 1" : "BASELINE · 4",
+    step: isOn ? "RUN · 1" : "BASELINE · 3",
     branch: isOn ? "run against the floor" : "start new baseline",
     title: "Confirm",
     body,
@@ -1091,11 +858,6 @@ export async function launchCell(base, { model, kind, arm = null, org = null } =
     // value that graded a cell is the one recorded against it, rather than
     // whatever the drawer happened to say later.
     payload.graderWorkerTarget = graderWorkerTarget();
-    // THE BACKEND TRAVELS WITH THE START, so the server applies exactly the
-    // environment the operator verified on b2m. Omitted when none was chosen —
-    // a run with no memory layer is a real configuration and the server treats
-    // an absent id as exactly that, rather than as a default to guess at.
-    if (ui.memory) payload.memory_backend = ui.memory;
 
     const pv = await fetch(`${base}/api/run/preview`, {
       method: "POST",
@@ -1308,7 +1070,7 @@ function launchProgress(board) {
       : `<span class="ck-head">STARTING…</span>`;
 
   return shell({
-    step: "BASELINE · 5",
+    step: "BASELINE · 4",
     branch: ui.model ? esc(ui.model) : "start new baseline",
     title: "Launch",
     body: `

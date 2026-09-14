@@ -56,6 +56,12 @@ Three claims, three artifacts, never merged:
 | outcome | the episode resolved, or didn't | that the memory caused it |
 | **arm delta** | memory-on resolves more than control | — this is the only causal surface |
 
+The two arms differ in exactly one thing — the worker image's build state:
+**control (OFF) = no plugin** (vanilla build, `BENCH_PLUGIN_DIR` unset);
+**memory-on (ON) = the plugin tree `BENCH_PLUGIN_DIR` names**, baked in at
+build time. The board never renders a backend name, by design: the benchmark
+defines no memory-system interface and names no backend.
+
 Consequences that are enforced in code, not by convention:
 
 - **A serve count is never a success metric.** Serves live in the honesty rail
@@ -251,7 +257,9 @@ The two arm accents differ in **luminance as well as hue** (L\*≈70 vs ≈68 wi
 opposed hue), so they survive 4:2:0 chroma subsampling at 720p, stay distinct in
 greyscale, and read for viewers with red-green colour vision deficiency. Arm
 identity is additionally carried in **words** (`MEMORY ON` / `CONTROL`), so the
-board never depends on colour alone.
+board never depends on colour alone. Those words name the arms' only
+distinction: `CONTROL` = the vanilla image (no plugin); `MEMORY ON` = the image
+built with the plugin `BENCH_PLUGIN_DIR` points at.
 
 Red and green are reserved for gate verdicts. An arm accent that reads as a
 verdict is a lie.

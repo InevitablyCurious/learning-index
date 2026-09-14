@@ -371,8 +371,6 @@ import {
   createStep,
   createSelection,
   createForward,
-  setCreateMemory,
-  verifyMemoryBackend,
   createBack,
   createModel,
   setCreateKind,
@@ -517,7 +515,7 @@ function bindInteraction() {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-model],[data-create-compact],[data-create-memory],[data-create-memory-verify],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-pop-toggle],[data-pop-view],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-recordchunk-set],[data-gradertarget-set],[data-seed-pick]");
+  const t = e.target.closest("[data-metric],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-pop-toggle],[data-pop-view],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-recordchunk-set],[data-gradertarget-set],[data-seed-pick]");
   if (!t) return;
 
   if (t.dataset.metric) { setCurveMetric(t.dataset.metric); render(); return; }
@@ -582,25 +580,6 @@ function onClick(e) {
   // The row carries what is CURRENTLY shown, so the first click flips away from
   // the state the operator can see rather than from the tri-state's null.
   if (t.dataset.createCompact) { toggleCreateCompact(t.dataset.createCompact === "on"); render(); return; }
-  // PICK A MEMORY BACKEND. `hasAttribute` rather than `dataset.createMemory`,
-  // because "none" is the EMPTY value — a truthiness test on the dataset would
-  // make the one row representing "no memory layer" unclickable, which is the
-  // configuration every bench runs out of the box.
-  if (t.hasAttribute("data-create-memory")) {
-    setCreateMemory(t.getAttribute("data-create-memory"));
-    render();
-    return;
-  }
-  // VERIFY THE BACKEND'S WIRING. Runs a docker probe server-side, so it is an
-  // action the operator takes rather than something a repaint fires. Paint
-  // immediately so the pending state is visible while the probe runs, then
-  // again when it answers.
-  if (t.hasAttribute("data-create-memory-verify")) {
-    const base = board?.control?.base_url;
-    void verifyMemoryBackend(base).then(render);
-    render();
-    return;
-  }
   if (t.hasAttribute("data-create-baseline-continue")) {
     // START ACTUALLY STARTS. The sequence's own three frames are the
     // confirmation; this runs preflight, then the server's preview and start,

@@ -5,13 +5,13 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 ## Summary
 | Bucket | Count |
 |---|---|
-| read+documented | 39 |
-| read+undocumented | 60 |
-| read by sibling/runtime (reclassified) | 19 |
+| read+documented | 36 |
+| read+undocumented | 58 |
+| read by sibling/runtime (reclassified) | 18 |
 | documented+unread (dead) | 0 |
 | dead-and-undocumented | 0 |
-| total read | 99 |
-| total documented | 58 |
+| total read | 93 |
+| total documented | 52 |
 
 ## read+documented
 | Name | Default | Controls | Override |
@@ -26,10 +26,9 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | BENCH_SPEND_DB_DSN | postgresql://spend_proxy:spend_proxy_dev@127.0.0.1:5440/spend_proxy | spend meter DB | env or .env |
 | BENCH_LIVE_STREAM | (none) | live-stream path | env |
 | BENCH_LIVE_STREAM_NS | (none) | stream namespace | env |
-| OKP_RECALL_MODE | prod | plugin recall governor | env =test |
+| BENCH_PLUGIN_DIR | (none) | THE one plugin pointer: absolute path to the plugin tree baked into the worker image at /opt/bench-plugin; unset ⇒ vanilla (no-plugin) build — read `harness/worker_image.py:49`, `scripts/rebuild_worker_image.py` | env or --plugin-dir |
+| BENCH_AGENTS_AUX_FILE | (none) | generic standing-directive seam: markdown appended to the cell's AGENTS.md at seed time (not memory-specific) — read `harness/adapters/backgammon.py:2609` | env |
 | OKP_GUARD_BIN | {root}/okp-guard/target/release/okp-guard | YARA guard binary | env |
-| OKP_MCP_HTTP_URL | http://127.0.0.1:4450 | MCP HTTP URL | env |
-| OKP_ANSWERER_POLICY | (none) | scripted recall answerer | env =auto-accept or auto-deny |
 | BENCH_TARGET | task/backgammon/golden | gates target dir | env |
 | DEBUG_API | off | debug endpoints on task servers | env =1 |
 | OKP_DASH_HOST | 127.0.0.1 (image 0.0.0.0) | dashboard bind addr | env |
@@ -46,11 +45,9 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_HUB_DB_USER | okp | postgres user | env |
 | OKP_HUB_DB_NAME | okp_hub | postgres db | env |
 | OKP_HUB_DB_PASSWORD | "" | postgres password (query-time) | env |
-| OKP_INSESSION_EXTRACTION | off | in-session extraction capture | env =1 |
-| OKP_STATE_DIR | ~/.okp | plugin state dir | env |
 | OKP_LOG_DIR | ~/.okp/logs | plugin log dir | env |
 | OKP_PLUGIN_PATH | (none) | plugin path baked into worker opencode.json | build-time env |
-| OKP_SELF_COMPACT | off | worker-side self-fire compaction (marker-detection arm in vendored self-compact.ts) | env =1, exported by the harness per cell when launched with --compact |
+| OKP_SELF_COMPACT | off | worker-side self-fire compaction (the plugin tree's self-compact.ts, baked in via BENCH_PLUGIN_DIR) | env =1, exported by the harness per cell when launched with --compact |
 | OKP_COMPACT_PHASE_FILE | (none) | path to the A2 phase sentinel the compaction arm reads on every session.idle; only `build` may fire, and unset/unreadable never fires | env, set to /okp-compact/phase by the harness per cell when launched with --compact (read-only bind mount, both arms) |
 | BENCH_DEV_MODE | (none) | dev-mode env pin (truthy = on, falsy = off; pinned ⇒ `settable:false`) — read `control/devmode.mjs:48-95` | env |
 | BENCH_DEV_MODE_FILE | <bench>/config/devmode.json | dev-mode state file location — read `control/devmode.mjs:57-59` | env |
@@ -102,7 +99,6 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_DASH_RUNS_ROOT | <benchRoot>/runs | dashboard runs root | env |
 | OKP_IDENTITY_SEED_HEX | (none) | leader-signer seed | env or --seed-hex |
 | OKP_ENV | local | base-URL switch | env =production |
-| OKP_HUB_URL | http://localhost:4440 | hub URL | env |
 | OKP_CHAIN_ID | okp-local-1 | chain id | env |
 | OKP_CHAIN_RPC | http://localhost:26657 | chain RPC | env |
 | OKP_CHAIN_REST | http://localhost:1317 | chain REST | env |
@@ -113,7 +109,6 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_ROOT | derived | plugin okp root | env |
 | OKP_GSTV_SENSORS | enabled | GSTV sensor toggle | env =0/false/off |
 | OKP_PLUGIN_DEBUG | off | plugin debug logging | env =1 |
-| OKP_SERVED_MEMORIES_PATH | ~/.okp/served-memories.json | served-store path | env |
 | OKP_AGENT_KEY | (none) | agent key fp (log-only) | env |
 | OKP_AGENT_PRIVATE_KEY | (none) | agent key fallback fp (log-only) | env |
 | OKP_EPOCH | (none) | epoch fp (log-only) | env |
@@ -143,13 +138,13 @@ Re-verified: none of these has a bench-code reader, but each IS read — either 
 | NPM_CONFIG_FETCH_TIMEOUT | (various) | npm fetch timeout | npm runtime |
 | NPM_CONFIG_FETCH_RETRY_MINTIMEOUT | (various) | npm retry min backoff | npm runtime |
 | NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT | (various) | npm retry max backoff | npm runtime |
-| OKP_MANAGED_IDENTITY | "1" (set by harness per cell) | suppress first-run identity modal in cells | set by bench (docker_worker.py:1389); read by vendored plugin TUI (tui.tsx:1258) |
-| OKP_ENGINE_PATH | (none) | plugin engine-path override baked at install time | vendored plugin installer (install-opencode.ts:191) |
+| OKP_ENGINE_PATH | (none) | plugin engine-path override baked at install time | plugin installer, built outside this repo (install-opencode.ts:191) |
 
 ## dead-and-undocumented
 none
 
 ## Notes
 - `OKP_MCP_SEED` was removed from this register: its old note ("read by okp-meta/scripts/lib.sh") was wrong — that script reads `BENCH_MCP_SEED`, a different, live var. As named, `OKP_MCP_SEED` is a drift-ghost with zero occurrences anywhere and was deleted.
-- `OKP_MCP_URL` was removed: a naming-drift ghost of the live `OKP_MCP_HTTP_URL` (read at `dev/benchmark/leader-signer/vendor/config.ts:96` — moved from the retired `bench/scaffold/leader-signer/`). The bench-doc prose reference in RUNBOOK.md was renamed to the live name.
+- `OKP_MCP_URL` was removed: a naming-drift ghost of `OKP_MCP_HTTP_URL` (read at `dev/benchmark/leader-signer/vendor/config.ts:96` — moved from the retired `bench/scaffold/leader-signer/`). The bench-doc prose reference in RUNBOOK.md was renamed to the live name.
+- Backend-env removal (2026-09, memory-backend registry retirement): `OKP_RECALL_MODE`, `OKP_MCP_HTTP_URL`, `OKP_ANSWERER_POLICY`, `OKP_INSESSION_EXTRACTION`, `OKP_STATE_DIR`, `OKP_HUB_URL`, `OKP_SERVED_MEMORIES_PATH`, and `OKP_MANAGED_IDENTITY` were struck from this register — no bench-code reader or setter remains (the harness no longer injects them per cell; `harness/adapters/docker_worker.py:365-373` keeps only vestigial field contracts). They are the PLUGIN's own env surface now, owned and documented where the plugin is built (outside this repo). The bench's only plugin-facing vars are `BENCH_PLUGIN_DIR` (the one pointer) and `BENCH_AGENTS_AUX_FILE` (generic directive seam), plus the flagged compaction/build set kept above (`OKP_SELF_COMPACT`, `OKP_COMPACT_PHASE_FILE`, `OKP_PLUGIN_PATH`, `OKP_LOG_DIR`). `OKP_RECALL_MODE` survives in bench code ONLY as the run-context lever `L4_OKP_RECALL_MODE`, read from the hub container's env (`harness/cumulative/run_context.py:171-172`) — a measurement record, not a config this repo sets.
 - `BENCH_SPEND_PROXY_BASE_URL` was removed from the register (2026-09-04): the resolver `resolve_spend_proxy_base_url` was deleted in the OpenRouter-proxy cleanup (WO-CLEAN-08); nothing reads this var. The live worker-side var is `BENCH_WORKER_SPEND_PROXY_BASE_URL` (still listed above). The stale `.env.example` line referencing it was removed too.

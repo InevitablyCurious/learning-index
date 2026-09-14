@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import hashlib
-import json
 import logging
 import os
 from pathlib import Path
@@ -17,10 +16,8 @@ import urllib.request
 
 from harness.config import RunConfig
 from harness.egress import (
-    EGRESS_HUB_PORT,
     EGRESS_INGRESS_CELL_HOST_ENV,
     EGRESS_INGRESS_PORT_ENV,
-    EGRESS_MCP_PORT,
     EGRESS_NETWORK,
 )
 from harness.spend_key import resolve_cloud_api_key
@@ -365,12 +362,14 @@ class DockerCellConfig:
     output_token_max: int | None = None
     worker_logs_dir: Path | None = None
     session_db_host_path: Path | None = None
-    # OFF-arm extraction state: a dedicated host bind-mount OUTSIDE /work, so the
-    # OFF (blinded) cell's in-session extraction state never lands inside the
-    # worktree its model works in. Container side: /okp-state.
+    # Vestigial: once the OFF-arm extraction-state bind-mount (container side
+    # /okp-state), removed with the memory backend. The current run-argv
+    # builder never reads this field; retained for the field contract.
     extraction_state_host_path: Path | None = None
-    # Gate-answerer policy driven into the worker env per cell. None derives from
-    # memory_mode (auto-accept for "on", "off" otherwise); an explicit value wins.
+    # Vestigial: once the gate-answerer policy driven into the worker env per
+    # cell as OKP_ANSWERER_POLICY, removed with the memory backend. The
+    # current run-argv builder never reads this field; retained for the field
+    # contract.
     answerer_policy: str | None = None
     # Live-view topology: persistent `opencode serve` ports. Fixed host:4096 ->
     # container:4096 (opencode serve default). Wired from RunConfig by the harness.
@@ -1439,112 +1438,6 @@ def _build_run_argv(
             ]
         )
 
-    if memory_mode == "on":
-        host_token = _resolve_host_path("~/.okp/mcp-session-token")
-        if not host_token.is_file():
-            raise FileNotFoundError(
-                "memory_mode='on' requires host token ~/.okp/mcp-session-token; "
-                "start the bench MCP or run bench preflight to mint it"
-            )
-
-        recall_mode = str(config.recall_mode).strip().lower()
-        if not recall_mode:
-            raise ValueError(
-                "DockerCellConfig.recall_mode must be non-empty when memory_mode='on'"
-            )
-
-        host_served_memories = _resolve_host_path(config.served_memories_host_path)
-        _ensure_served_memories_store(host_served_memories)
-
-        host_plugin_state = _resolve_host_path(config.plugin_state_host_path)
-        _ensure_plugin_state_dir(host_plugin_state)
-
-        host_plugin_config = _resolve_host_path(config.plugin_config_host_path)
-        _merge_plugin_config(
-            host_plugin_config,
-            recall_relevance_floor=config.primary_recall_relevance_floor,
-            recall_max_injected=config.primary_recall_max_injected,
-        )
-
-        token_dest = f"{config.home_dir}/.okp/mcp-session-token"
-        plugin_config_dest = f"{config.home_dir}/.okp/plugin-config.json"
-
-        if config.egress_host:
-            # Egress contract: on the --internal network the host.docker.internal
-            # URLs are unreachable; MCP/hub resolve to the sidecar container by
-            # name on the contract ports (harness/egress.py).
-            mcp_http_url = f"http://{config.egress_host}:{EGRESS_MCP_PORT}"
-            hub_url = f"http://{config.egress_host}:{EGRESS_HUB_PORT}"
-        else:
-            mcp_http_url = config.recall_url
-            hub_url = config.hub_url
-
-        run_cmd.extend(
-            [
-                # ── THE CELL HAS NO IDENTITY, AND THAT IS THE DESIGN ──────────
-                #
-                # A cell is a measurement SUBJECT, not a contributor. It never
-                # mints a keypair, never signs and never attributes: the leader
-                # identity behind the commissioned MCP on :4550 does all three,
-                # and the cell reaches it with the mounted session token.
-                #
-                # DECLARED, NOT INFERRED. The plugin could have guessed this
-                # from OKP_MCP_HTTP_URL being set, but an MCP URL says where a
-                # service IS, not whose identity it carries. That inference is
-                # how a contributor silently served the LEADER's identity for
-                # four days (AGENTS.md 2.1 — "liveness is not identity"), so the
-                # bench states it in its own words instead.
-                #
-                # Without this the plugin's first-run TUI raises a modal asking
-                # the operator to create an identity — over a running cell, in a
-                # container that is destroyed at teardown, so the keypair it
-                # would create is discarded seconds later. Suppressing the
-                # prompt is the whole fix; supplying an identity would be wrong.
-                "-e",
-                "OKP_MANAGED_IDENTITY=1",
-                "-e",
-                f"OKP_MCP_HTTP_URL={mcp_http_url}",
-                "-e",
-                f"OKP_RECALL_MODE={recall_mode}",
-                "-e",
-                f"OKP_HUB_URL={hub_url}",
-                "-e",
-                f"OKP_SERVED_MEMORIES_PATH={config.served_memories_container_path}",
-                # Vendored okp plugin hardcodes ~/.okp/mcp-session-token and
-                # the bench MCP API is bearer-gated; mount that token only, read-only.
-                "-v",
-                f"{host_token}:{token_dest}:ro",
-                # The plugin reads ~/.okp/plugin-config.json from homedir(); mount
-                # a host-authored config so primary governor values are explicit.
-                "-v",
-                f"{host_plugin_config}:{plugin_config_dest}:ro",
-                # Shared served-store file bridges container writes back to the host.
-                "-v",
-                f"{host_served_memories}:{config.served_memories_container_path}:rw",
-                # Shared plugin-state directory bridges queue/decisions/heartbeat.
-                "-v",
-                f"{host_plugin_state}:{config.plugin_state_container_path}:rw",
-            ]
-        )
-
-    # Gate-answerer policy: derived per cell unless explicitly overridden. ON cells
-    # auto-accept so the recall gate completes without a human (D3 goal); OFF cells
-    # are explicitly `off` so any future regression that fires the gate in OFF still
-    # cannot hang on a human (RC-4 comparability). Injected for BOTH arms so the
-    # worker env is deterministic regardless of memory_mode.
-    if config.answerer_policy is not None:
-        answerer_policy = config.answerer_policy
-    elif memory_mode == "on":
-        answerer_policy = "auto-accept"
-    else:
-        answerer_policy = "off"
-    run_cmd.extend(["-e", f"OKP_ANSWERER_POLICY={answerer_policy}"])
-
-    # In-session extraction capture: the vendored plugin gates its capture pipeline on
-    # OKP_INSESSION_EXTRACTION === "1" (plugin.ts:710). Arm it unconditionally,
-    # like OKP_ANSWERER_POLICY, so the worker env is deterministic regardless of memory_mode.
-    run_cmd.extend(["-e", "OKP_INSESSION_EXTRACTION=1"])
-
     # PLAN BEFORE WORK. A plugin that honours REQUIRE_TODOS refuses mutating
     # tools until the agent has written a todo list. Set only when asked for:
     # it CHANGES WHAT THE AGENT DOES, so a run with it and a run without it are
@@ -1587,24 +1480,6 @@ def _build_run_argv(
             ]
         )
 
-    # OFF-arm extraction state: route the in-session extraction state to a dedicated
-    # bind-mount OUTSIDE /work so the OFF (blinded) cell's capture never lands inside
-    # the worktree. ON cells already write to the mounted /work/.okp/state, so they
-    # get no OKP_STATE_DIR and no /okp-state mount.
-    if memory_mode == "off" and config.extraction_state_host_path is not None:
-        host_extraction_state = (
-            Path(config.extraction_state_host_path).expanduser().resolve()
-        )
-        host_extraction_state.mkdir(parents=True, exist_ok=True)
-        run_cmd.extend(
-            [
-                "-e",
-                "OKP_STATE_DIR=/okp-state",
-                "-v",
-                f"{host_extraction_state}:/okp-state:rw",
-            ]
-        )
-
     # Live-view topology: in the LEGACY (non-egress) path the cell itself
     # publishes host:serve_host_port -> container:serve_container_port. In
     # egress mode the cell runs on the --internal network (no gateway), where a
@@ -1637,66 +1512,6 @@ def _result_detail(completed: subprocess.CompletedProcess[str]) -> str:
 
 def _resolve_host_path(raw_path: str) -> Path:
     return Path(str(raw_path)).expanduser().resolve()
-
-
-def _ensure_served_memories_store(path: Path) -> None:
-    resolved = Path(path).expanduser().resolve()
-    resolved.parent.mkdir(parents=True, exist_ok=True)
-
-    if resolved.exists() and not resolved.is_file():
-        raise RuntimeError(f"served-memories path must be a file: {resolved}")
-
-    if not resolved.exists():
-        resolved.write_text('{"version":1,"memories":{}}', encoding="utf-8")
-
-    resolved.chmod(0o600)
-
-
-def _ensure_plugin_state_dir(path: Path) -> None:
-    resolved = Path(path).expanduser().resolve()
-
-    if resolved.exists() and not resolved.is_dir():
-        raise RuntimeError(f"plugin-state path must be a directory: {resolved}")
-
-    resolved.mkdir(parents=True, exist_ok=True)
-    resolved.chmod(0o700)
-
-
-def _merge_plugin_config(
-    path: Path,
-    *,
-    recall_relevance_floor: float,
-    recall_max_injected: int,
-) -> None:
-    resolved = Path(path).expanduser().resolve()
-    resolved.parent.mkdir(parents=True, exist_ok=True)
-
-    payload: dict[str, object] = {}
-    if resolved.exists():
-        if not resolved.is_file():
-            raise RuntimeError(f"plugin-config path must be a file: {resolved}")
-        raw = resolved.read_text(encoding="utf-8").strip()
-        if raw:
-            try:
-                decoded = json.loads(raw)
-            except json.JSONDecodeError as exc:
-                raise RuntimeError(
-                    f"plugin-config at {resolved} is invalid JSON: {exc}"
-                ) from exc
-            if not isinstance(decoded, dict):
-                raise RuntimeError(
-                    f"plugin-config at {resolved} must decode to a JSON object"
-                )
-            payload = dict(decoded)
-
-    payload["recall_relevance_floor"] = float(recall_relevance_floor)
-    payload["recall_max_injected"] = int(recall_max_injected)
-
-    resolved.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    resolved.chmod(0o600)
 
 
 def _host_uid() -> int:

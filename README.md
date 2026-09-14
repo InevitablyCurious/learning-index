@@ -32,6 +32,8 @@ One-time install, two image builds, then a control plane and a board:
 python -m venv .venv && . .venv/bin/activate && pip install -e '.[test]'
 
 # 2. build the worker and grader images (a run refuses without them)
+#    set BENCH_PLUGIN_DIR=<abs path to plugin tree> first to bake a plugin in
+#    (the memory ON arm); unset, the worker build is vanilla (memory OFF).
 .venv/bin/python scripts/rebuild_worker_image.py
 .venv/bin/python scripts/rebuild_grader_image.py
 
@@ -49,31 +51,30 @@ Runs are started from the board (or `POST /api/run/start`). Each cell spawns the
 canonical entrypoint `.venv/bin/python scripts/run_cumulative.py run --mode
 off|on` — argv only, never a shell. `RUNBOOK.md` is the operative run card.
 
-## Plug in a memory backend
+## Plug in a memory plugin
 
-The benchmark is memory-agnostic. A memory system registers as one row in
-`control/memory-backends.mjs`:
+opencode IS the socket. Any memory system bolts on through opencode's own
+plugin mechanism; the benchmark defines NO memory-system interface, NO
+registry, and NO adapter. The entire integration surface is ONE "which
+plugin" pointer plus this README:
 
-```js
-{ id, label, blurb, env() }
-```
+- **`BENCH_PLUGIN_DIR`** — an absolute path to a plugin tree (a real npm
+  package, built outside this repo). When it is set, the worker image build
+  bakes that tree in, installed generically at `/opt/bench-plugin`; when it is
+  unset, the build is VANILLA — no plugin at all. That is the whole memory
+  ON/OFF distinction: the ON arm runs an image built with the plugin, the OFF
+  baseline loads none.
+- **`BENCH_AGENTS_AUX_FILE`** — an optional, generic standing-directive seam:
+  a markdown file the harness appends to the cell's `AGENTS.md` at seed time.
+  It is not memory-specific.
 
-- `id` — what the board and preflight agree to call it.
-- `label` — what an operator reads.
-- `blurb` — one line describing it.
-- `env()` — a function returning the run environment the backend needs. It
-  resolves the backend's plugin directory (`BENCH_PLUGIN_DIR`) and its standing
-  record mandate (`BENCH_AGENTS_AUX_FILE`) from the operator's own installation,
-  and may return `{}` when the values cannot be resolved — that is a preflight
-  refusal, never an error here.
+The plugin tree does the memory system's work: capture learnings during the
+build, then recall and reinject them into later cells. The harness itself
+reinjects nothing; it measures the OFF/ON contrast.
 
-The plugin tree does the backend's work: capture learnings during the build,
-then recall and reinject them into later cells over the `BENCH_MCP_RECALL_URL`
-seam. The harness itself reinjects nothing; it measures the OFF/ON contrast.
-
-**The reference backend is OKP/TOKP, and it lives outside this repo.** It is
-supplied to a build via `BENCH_PLUGIN_DIR`; nothing in this repo's public
-surface needs to know its name.
+**The plugin is built outside this repo** and supplied to a build via
+`BENCH_PLUGIN_DIR`; nothing in this repo's public surface needs to know its
+name.
 
 ## Repository layout
 
@@ -95,10 +96,10 @@ tests/      The harness's own pytest suite — grades the instrument, not the ca
 
 `bench` / `BENCH_` / `bench-*` is the benchmark's own neutral identity — the
 image names (`bench-worker:v1`, `bench-grader:v1`), the env prefix, and the
-harness package. Backend-specific tokens (`okp`, `tokp`) are deliberately absent
-from the public surface: the one place a backend's name enters the tree is its
-registry row in `control/memory-backends.mjs`, and even that is generic over
-whatever backend an operator installs.
+harness package. Backend-specific tokens are deliberately absent from the
+public surface: a memory plugin enters the tree only at build time, through
+the `BENCH_PLUGIN_DIR` pointer, and the benchmark is generic over whatever
+plugin an operator installs.
 
 ## Licence
 

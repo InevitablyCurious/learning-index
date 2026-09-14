@@ -87,9 +87,11 @@ RUN set -eux; \
     self_compact_path=""; \
     if [ -f /opt/docker-worker-context/vendor/opencode-plugin/package.json ]; then \
       npm i -g --install-links=true /opt/docker-worker-context/vendor/opencode-plugin; \
-      plugin_path="$(npm root -g)/@morfascolabs/opencode-plugin/plugins/plugin.ts"; \
+      pkg_name="$(node -p 'require("/opt/docker-worker-context/vendor/opencode-plugin/package.json").name')"; \
+      ln -s "$(npm root -g)/${pkg_name}" /opt/bench-plugin; \
+      plugin_path="/opt/bench-plugin/plugins/plugin.ts"; \
       test -f "${plugin_path}"; \
-      self_compact_path="$(npm root -g)/@morfascolabs/opencode-plugin/plugins/self-compact.ts"; \
+      self_compact_path="/opt/bench-plugin/plugins/self-compact.ts"; \
       test -f "${self_compact_path}"; \
     else \
       echo "NOTE: vendored opencode-plugin missing; opencode plugin remains disabled in-image."; \
@@ -106,7 +108,7 @@ if (pluginPath) {
   config.plugin = [pluginPath, selfCompactPath].filter(Boolean)
   config.mcp = {
     okp: {
-      "//": "disabled by design: use external OKP_MCP_HTTP_URL, do not auto-spawn local MCP",
+      "//": "disabled by design: the plugin supplies its own MCP transport, do not auto-spawn local MCP",
       enabled: false,
     },
   }

@@ -123,8 +123,8 @@ nc -z 127.0.0.1 4440   # hub
 #    :4450 (the operator's real host MCP).
 
 # 2. Worker image — rebuild when images/worker/ CHANGED since the last build
-#    (the vendored opencode plugin is baked in at build time; a stale image runs
-#    the stale plugin silently). Freshness is a content question, not a
+#    (the plugin tree BENCH_PLUGIN_DIR names is baked in at build time; unset
+#    builds vanilla — no plugin; a stale image runs the stale plugin silently). Freshness is a content question, not a
 #    timestamp one: the build bakes a digest of its own source and preflight
 #    reads it back. Compare by hand with:
 docker image inspect bench-worker:v1 --format '{{index .Config.Labels "okp.worker.source_digest"}}'
@@ -360,15 +360,14 @@ with exit 2 (verified 2026-08-10). `--until-review` is DEAD (removed by `ba2947a
 
 **EXTRACT** — two distinct surfaces, both separate from the bench command, never folded inside it.
 
-1. **In-session extraction (the harvest)** runs DURING the cell: the worker plugin exposes the
-   `okp_submit_mark` tool, and the model CALLS it (one call per knowledge claim) to record
-   failures-to-green — `traj_label` / `polarity` (`negative`|`positive`) / `statement` / `did_what` /
-   `did_why` / `evidence[]`. It is armed by `OKP_INSESSION_EXTRACTION=1` (set per cell). Capture lands
-   in `<stateDir>/insession/<sessionId>/{master.json, changed-lines.json}` at `session.idle`. If the
-   tool is NOT available the model falls back to prose `===OKP_MARK_START i/N===` markers. The
-   extraction tool is a **TOKProject-native** plugin surface — it is currently vendored in the worker
-   image (`images/worker/vendor/opencode-plugin`) and must not ship in the public repo (open
-   decision ES-2, §11 of `dev-benchmark.md`).
+1. **In-session extraction (the harvest)** runs DURING the cell: the worker plugin — the tree
+   `BENCH_PLUGIN_DIR` baked into the image at `/opt/bench-plugin` — exposes a capture tool, and the
+   model CALLS it (one call per knowledge claim) to record failures-to-green — `traj_label` /
+   `polarity` (`negative`|`positive`) / `statement` / `did_what` / `did_why` / `evidence[]`. Capture
+   lands in `<stateDir>/insession/<sessionId>/{master.json, changed-lines.json}` at `session.idle`,
+   and the harness harvests it at cell end (`_export_cell_telemetry`). The capture tool is PLUGIN
+   surface, built outside this repo: the benchmark loads whatever plugin the pointer names, defines
+   no memory-system interface of its own, and never ships memory-system code in the public repo.
 
 2. **Leader-side extraction** is now **dashboard-driven**: point the dashboard at the cell's exported
    session DB (`OPENCODE_DB_PATH=<cell>/session-db/opencode.db`) → Sessions page → "Extract with this
@@ -419,10 +418,9 @@ chunk.
   flagged on the board. The rows no longer carry a `marker` field, and the `nudges` column now
   counts UPSTREAM RECOVERIES (see below), the only re-drives that still exist.
 - **Inter-chunk compaction — RESTORED (2026-09-03), worker-side self-fire.** Removed by W1
-  (2026-08-27) and restored by WO-COMPACTION-RESTORE: the vendored `plugins/self-compact.ts` is
-  wired back into the worker image's opencode plugin array with a hard-assert on its presence
-  (`images/worker/Dockerfile`; `images/worker/vendor/PROVENANCE.md`, "W1 compaction removal"
-  entry). **The trigger is `session.idle` and nothing the model wrote (2026-09-09).** There is no
+  (2026-08-27) and restored by WO-COMPACTION-RESTORE: the plugin tree's `plugins/self-compact.ts`
+  (baked in via `BENCH_PLUGIN_DIR`) is wired into the worker image's opencode plugin array with a
+  hard-assert on its presence (`images/worker/Dockerfile`). **The trigger is `session.idle` and nothing the model wrote (2026-09-09).** There is no
   model-called tool and no model-emitted string: on `session.idle`, when `OKP_SELF_COMPACT=1` AND
   the harness's phase sentinel reads `build` AND the session's fire budget is not spent AND a 60 s
   cooldown has elapsed AND no fire is already in flight AND this assistant turn has not already
@@ -447,8 +445,8 @@ chunk.
   the end of `feedback-2`. `CHUNK FINISHED` was a MODEL-EMITTED convention, not a harness event;
   the instruction lived only in the six chunk prompts, but repair rounds run in the SAME session
   with no system prompt and no phase framing, so the convention survived every compaction and the
-  model kept printing it while fixing gate failures (its own `okp_submit_mark` labels read
-  `chunk7-*`/`chunk8-*`). It was also INVISIBLE: `_settle_after_chunk` runs only at build
+   model kept printing it while fixing gate failures (its own capture-tool labels read
+   `chunk7-*`/`chunk8-*`). It was also INVISIBLE: `_settle_after_chunk` runs only at build
   boundaries, and VOID-INSTRUMENT (`run_artifacts.py`) catches only a compaction that was KILLED,
   so a stray one that COMPLETED scored as a normal cell. Both arms were equally exposed, so the ON
   leg was measuring "chunk compaction + stochastic repair compaction". **The marker condition is
@@ -890,7 +888,7 @@ and each has a known failure mode:
 | `OKP_GUARD_BIN`, derived from the workspace root | Guard scanning fails. The plugin normally injects it; a manual start does not. **Umbral no longer belongs in this row** — it ships as WASM inside `client` and needs no variable. The 2026-07-13 cell-1 abort and the 2026-08-14 recurrence were both caused by the old `OKP_UMBRAL_SIDECAR_BIN` requirement, which no longer exists |
 | `OKP_MCP_HTTP_ONLY=1` | The bench MCP also runs the stdio server, which treats a backgrounded stdin-EOF as shutdown. Required for any backgrounded start |
 | `< /dev/null` on the launch | Belt-and-braces so the stdio path never sees an open-then-closed stdin |
-| `OKP_RECALL_MODE=test` | Recall is prod-governed (floor 0.55, budget 3) and a fresh low-trust memory is filtered out — **prove-delivery and the ON recall arm both return nothing.** Test mode also **auto-approves** recalled memories; prod or unset **headless injects NOTHING**, because it waits on a human approval popup that no headless run can answer |
+| Recall-governor mode `OKP_RECALL_MODE=test` — the recall stack's OWN env (plugin-side, built outside this repo), never a bench config var; the bench only RECORDS it as the `L4_OKP_RECALL_MODE` run-context lever (`harness/cumulative/run_context.py:171-172`) | Recall is prod-governed (floor 0.55, budget 3) and a fresh low-trust memory is filtered out — **prove-delivery and the ON recall arm both return nothing.** Test mode also **auto-approves** recalled memories; prod or unset **headless injects NOTHING**, because it waits on a human approval popup that no headless run can answer |
 | `OKP_KEYSTORE_PATH="$BENCH_LEADER_KEYSTORE"` | The org master-key envelope is written by the MCP and read by the invite and provision-recall subprocesses. Omit it and the writer uses the default directory while the readers look in the bench keystore — `decrypt_failed` on recall, `no master key found` on invite. **Writer and readers must share this path.** This was the other half of the 2026-07-13 blocker |
 | `OKP_BENCH_ENDPOINTS=1` | The bench-only `/v1/submit` and `/v1/identity/pubkeys` endpoints are absent. `/v1/health` is always present |
 
@@ -995,10 +993,11 @@ drifted opencode binary (floating `ARG OPENCODE_VERSION=1.18.1` → `npm i -g
 `--config`; AND the new `--internal` net dropped the host `:4096` publish. After **any** image
 rebuild, verify BOTH the launch surface (per-cell config delivery — the `8c43a20` `OPENCODE_CONFIG`
 env workaround) AND the serve-drive preconditions (`:4096` reachable via `GET /session` → 200)
-before trusting a run; a rebuild can silently re-introduce either. The CLI binary and the vendored
-plugin SDK are now pinned **together** at `1.18.20` (`images/worker/Dockerfile:4` →
-`npm i -g "opencode-ai@${OPENCODE_VERSION}"` at `:24`; pinned by `409733d`/`3798ac2` after the
-floating-`1.18.1` drift above) — they must move together on any bump.
+before trusting a run; a rebuild can silently re-introduce either. The CLI binary is pinned at
+`1.18.20` (`images/worker/Dockerfile:25` → `npm i -g "opencode-ai@${OPENCODE_VERSION}"` at `:45`;
+pinned by `409733d`/`3798ac2` after the floating-`1.18.1` drift above), and the plugin tree baked
+in via `BENCH_PLUGIN_DIR` is built outside this repo against the same opencode SDK — the two must
+move together on any bump.
 
 **Known broken — do not be surprised (the integrity inventory; none surfaces as a distinct scored
 cause):**
@@ -1121,7 +1120,7 @@ prompt**.
 
 **Root cause.** `lconfig.py` defaulted `leader_mcp_url` to `:4450` — the **real host okp-mcp**,
 which has no seed support and always loads the operator's biometric keychain identity `05c4b8cb…`.
-`create_org` hands that URL to leader-signer as `OKP_MCP_HTTP_URL`; `POST /v1/org-setup` stamps *that
+`create_org` hands that URL to leader-signer as its MCP-endpoint env; `POST /v1/org-setup` stamps *that
 MCP's* pubkey as the org leader; the hub writes it as the org's only `members` row. The harness then
 polls for its own membership (Ed25519 pubkey fingerprint `aa2aa706`) and never finds it.
 
@@ -1307,7 +1306,7 @@ detected); its counter is not optional instrumentation.
 
 This section governs the **leader-side** extraction job (`/v1/extract` over the exported session DB,
 §2 stage 2) and its integrity gate + smart-leader review. The **in-session** extraction (the
-`okp_submit_mark` toolcall → `insession/master.json` harvest, §2 stage 1) is the producer of the
+plugin's capture toolcall → `insession/master.json` harvest, §2 stage 1) is the producer of the
 failures-to-green that this job distills; its mechanics and its known defect (evidence cap "1..5"
 not enforced at the tool seam) are charted in `dev-benchmark.md` §12.
 
@@ -1377,7 +1376,8 @@ and reported separately from the model's work tokens** — every progress vector
 carries the injected-memory-token count as its own field. Progressive disclosure is parked as a
 future seam, not a flag.
 
-**Caveat, unverified:** if the vendored plugin inside the worker image predates this cadence, the
+**Caveat, unverified:** if the plugin baked into the worker image (via `BENCH_PLUGIN_DIR`) predates
+this cadence, the
 plugin still re-injects every turn. **Do not report cadence effects as conformant until the image is
 confirmed to carry the cadence code** — confirmed by comparing the manifest's recorded worker image
 fingerprint against an image built from the commit under test (§0 step 2).

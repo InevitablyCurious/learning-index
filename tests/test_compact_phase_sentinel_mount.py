@@ -46,9 +46,6 @@ def _cfg(tmp_path: Path, *, memory_mode: str, compact: bool) -> DockerCellConfig
         container_name=f"bench-cell-compact-{memory_mode}",
         proxy_base_url=TEST_PROXY_BASE_URL,
         proxy_token=TEST_PROXY_TOKEN,
-        served_memories_host_path=str(tmp_path / "served-memories.json"),
-        plugin_config_host_path=str(tmp_path / "plugin-config.json"),
-        plugin_state_host_path=str(tmp_path / "plugin-state"),
     )
     cfg.self_compact = compact
     if compact:
@@ -58,7 +55,7 @@ def _cfg(tmp_path: Path, *, memory_mode: str, compact: bool) -> DockerCellConfig
 
 @pytest.mark.parametrize("memory_mode", ["on", "off"])
 def test_the_sentinel_is_mounted_for_both_arms(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, memory_mode: str
+    tmp_path: Path, memory_mode: str
 ) -> None:
     """BOTH ARMS OR THE COMPARISON IS WORTHLESS.
 
@@ -67,10 +64,6 @@ def test_the_sentinel_is_mounted_for_both_arms(
     compact during repair would break the very comparability the OFF arm exists
     to provide.
     """
-    monkeypatch.setenv("HOME", str(tmp_path / "fake-home"))
-    (tmp_path / "fake-home" / ".okp").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "fake-home" / ".okp" / "mcp-session-token").write_text("t\n")
-
     cfg = _cfg(tmp_path, memory_mode=memory_mode, compact=True)
     argv = _build_run_argv(
         config=cfg,
@@ -87,7 +80,7 @@ def test_the_sentinel_is_mounted_for_both_arms(
 
 
 def test_the_sentinel_mount_is_read_only_and_outside_the_worktree(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     """Two separate properties, both load-bearing.
 
@@ -99,10 +92,6 @@ def test_the_sentinel_mount_is_read_only_and_outside_the_worktree(
     must never see it — the same reason the OFF arm's extraction state lives at
     /okp-state rather than in the worktree.
     """
-    monkeypatch.setenv("HOME", str(tmp_path / "fake-home"))
-    (tmp_path / "fake-home" / ".okp").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "fake-home" / ".okp" / "mcp-session-token").write_text("t\n")
-
     cfg = _cfg(tmp_path, memory_mode="on", compact=True)
     argv = _build_run_argv(
         config=cfg, worktree=cfg.worktree, uid=501, gid=20, memory_mode="on"
@@ -118,13 +107,9 @@ def test_the_sentinel_mount_is_read_only_and_outside_the_worktree(
 
 
 def test_no_sentinel_and_no_env_when_the_run_does_not_compact(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     """A non-compacting run is byte-for-byte unchanged by this mechanism."""
-    monkeypatch.setenv("HOME", str(tmp_path / "fake-home"))
-    (tmp_path / "fake-home" / ".okp").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "fake-home" / ".okp" / "mcp-session-token").write_text("t\n")
-
     cfg = _cfg(tmp_path, memory_mode="on", compact=False)
     argv = _build_run_argv(
         config=cfg, worktree=cfg.worktree, uid=501, gid=20, memory_mode="on"
@@ -136,16 +121,12 @@ def test_no_sentinel_and_no_env_when_the_run_does_not_compact(
 
 
 def test_arming_compaction_without_a_sentinel_path_refuses_to_launch(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     """The plugin is fail-closed on the sentinel, so a cell launched without the
     mount would never compact and would abort at the first chunk boundary on
     no_compaction_evidence — after paying for a whole build. Refuse at launch
     instead, where the mistake is free and legible."""
-    monkeypatch.setenv("HOME", str(tmp_path / "fake-home"))
-    (tmp_path / "fake-home" / ".okp").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "fake-home" / ".okp" / "mcp-session-token").write_text("t\n")
-
     cfg = _cfg(tmp_path, memory_mode="on", compact=True)
     cfg.compact_phase_host_path = None
 
@@ -201,10 +182,6 @@ def test_sidecar_gets_rw_sentinel_mount_and_phase_env_when_compacting(
     the cell mounts :ro, but RW (no suffix) and with OKP_COMPACT_PHASE_FILE so
     its scanner can write `repair` between rounds. The cell's own :ro mount is
     unchanged — the cell still cannot forge its phase."""
-    monkeypatch.setenv("HOME", str(tmp_path / "fake-home"))
-    (tmp_path / "fake-home" / ".okp").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "fake-home" / ".okp" / "mcp-session-token").write_text("t\n")
-
     cfg = _cfg(tmp_path, memory_mode="on", compact=True)
     cfg.egress_host = "okp-egress-compact-sentinel"
 
@@ -233,10 +210,6 @@ def test_sidecar_gets_no_sentinel_mount_when_not_compacting(
     """A non-compacting egress run's sidecar is byte-for-byte unchanged: no
     /okp-compact mount, no OKP_COMPACT_PHASE_FILE env (the guard mirrors the
     worker's self_compact gate)."""
-    monkeypatch.setenv("HOME", str(tmp_path / "fake-home"))
-    (tmp_path / "fake-home" / ".okp").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "fake-home" / ".okp" / "mcp-session-token").write_text("t\n")
-
     cfg = _cfg(tmp_path, memory_mode="on", compact=False)
     cfg.egress_host = "okp-egress-no-compact-sentinel"
     # The real harness sets the host path on EVERY cell (backgammon.py:4081)

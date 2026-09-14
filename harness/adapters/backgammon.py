@@ -1820,8 +1820,8 @@ _WORKER_AGENTS_MD = """\
 # memory-blob prepend on chunk 1): the "## Not yet / do not record" block and its
 # splice are removed.
 #
-# The AUX cadence directive (tokp-record-mandate.md, injected via
-# BENCH_AGENTS_AUX_FILE) already reaches build chunks through the standing
+# The AUX cadence directive (supplied via BENCH_AGENTS_AUX_FILE) already
+# reaches build chunks through the standing
 # AGENTS.md, so the model is told to capture during build by the memory layer's own
 # mandate — never by a hardcoded adapter splice. As before, nothing is written INTO
 # task/backgammon/prompts/: those six chunk files stay the fixed, certified corpus
@@ -1951,8 +1951,8 @@ def build_worker_opencode_config(
         "shell": "/opt/okp/supervised-shell.js",
     }
     if plugin_present:
-        # Plugin paths must stay in lockstep with the image-baked paths computed in
-        # images/worker/Dockerfile ($(npm root -g)/@morfascolabs/opencode-plugin/plugins/*.ts).
+        # Plugin paths must stay in lockstep with the image-baked paths installed
+        # by images/worker/Dockerfile (fixed generic location /opt/bench-plugin/plugins/*.ts).
         # self-compact.ts self-gates on OKP_SELF_COMPACT=1, so it is safe to load
         # unconditionally (a no-op in the control arm) — mirroring the Dockerfile.
         # Written ONLY when the image actually baked the plugin (label
@@ -1960,12 +1960,12 @@ def build_worker_opencode_config(
         # a vanilla image has no plugin files at these paths, and an opencode.json
         # pointing at absent plugins kills the worker at boot.
         config["plugin"] = [
-            "/usr/local/lib/node_modules/@morfascolabs/opencode-plugin/plugins/plugin.ts",
-            "/usr/local/lib/node_modules/@morfascolabs/opencode-plugin/plugins/self-compact.ts",
+            "/opt/bench-plugin/plugins/plugin.ts",
+            "/opt/bench-plugin/plugins/self-compact.ts",
         ]
         config["mcp"] = {
             "okp": {
-                "//": "disabled by design: use external OKP_MCP_HTTP_URL, do not auto-spawn local MCP",
+                "//": "disabled by design: the plugin supplies its own MCP transport, do not auto-spawn local MCP",
                 "enabled": False,
             }
         }
@@ -4250,7 +4250,7 @@ class BackgammonRunner(AgentRunner):
 
         NO CAPTURE/COMPLIANCE PROTOCOL (2026-08-26). Chunk 1 used to carry an
         appended 193-line producer prompt (`scaffold/sxe-candidate/
-        S-fork-reasoning.md`) instructing the worker to emit `OKP_DISCOVERY`
+        S-fork-reasoning.md`) instructing the worker to emit discovery
         blocks in a fixed schema. It is deleted, along with its orphaned E-fork
         pair, for two reasons:
 

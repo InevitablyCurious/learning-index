@@ -27,7 +27,7 @@ import re
 # "gate") is not swept up.
 #
 # Note on ``\bokp\b``: ``_`` is a word character, so this matches the prose "the
-# okp tool" but NOT an identifier like ``okp_submit_mark``. That is deliberate —
+# okp tool" but NOT an identifier like ``okp_submit``. That is deliberate —
 # a memory layer has to be able to name its own tool in a directive, and a bare
 # identifier reads as a tool name rather than as a statement about the run.
 TELLS = [

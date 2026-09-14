@@ -81,7 +81,6 @@ import { readHold, releaseHold } from "./hold.mjs";
 // WHERE A CELL'S MEASUREMENT LANDS. One campaign directory per model — see the
 // module header. Split out so the rule is testable without binding a port.
 import { campaignTargetFor } from "./campaign.mjs";
-import { listMemoryBackends, memoryBackend, memoryBackendEnv } from "./memory-backends.mjs";
 import { collectStats, captureStatsBaseline, readStatsBaseline } from "./runstats.mjs";
 import { listSnapshots, readSnapshot, seedableBy, resolveArmed, writeArmed } from "./snapshots.mjs";
 import { notice, noticesPathFor } from "./notices.mjs";
@@ -1297,87 +1296,6 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    // ── GET /api/memory/preflight ────────────────────────────────────────
-    //
-    // IS THE PLUGGED-IN MEMORY BACKEND ACTUALLY WIRED?
-    //
-    // Deliberately NOT more rows on /api/preflight. That endpoint answers "can
-    // this bench start a cell" — ports, images, identity, disk — and those are
-    // the same questions whoever is plugged in. This answers "is the memory
-    // system I plugged in going to do anything", which is the question a NEW
-    // backend has to be able to answer before anyone spends hours of compute
-    // finding out. One endpoint for both would make every future backend edit
-    // the benchmark's own gate.
-    //
-    // THE ENV IS APPLIED HERE, NOT ASSUMED FROM THE SHELL. The backend registry
-    // resolves what a run with this backend needs and the probe runs UNDER that
-    // env, so what preflight checks is what the launch will actually use —
-    // rather than whatever the operator happened to export before starting the
-    // control plane. Run 1788848333 is the failure this closes: nothing was
-    // broken, nothing was wired, and the two were indistinguishable.
-    //
-    // Same row shape as /api/preflight, so the board renders both through one
-    // component. That is the only thing the two share.
-    if (path === "/api/memory/preflight" && req.method === "GET") {
-      const id = url.searchParams.get("backend") || "";
-      const backend = memoryBackend(id);
-      if (!backend) {
-        sendJson(res, 400, refuse(
-          "unknown_backend",
-          `no memory backend named ${JSON.stringify(id)} — this bench offers: ` +
-            listMemoryBackends().map((b) => b.id).join(", "),
-        ));
-        return;
-      }
-
-      const applied = memoryBackendEnv(backend.id);
-      const argv = [join(BENCH_ROOT, "scripts", "memory_preflight.py"), "--json", "--backend", backend.id];
-      const out = await new Promise((done) => {
-        execFile(
-          PYTHON,
-          argv,
-          { cwd: BENCH_ROOT, timeout: 240000, env: { ...process.env, ...applied } },
-          (err, stdout, stderr) => done({ err, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") }),
-        );
-      });
-
-      let parsed = null;
-      for (const line of out.stdout.split("\n").map((l) => l.trim()).reverse()) {
-        if (!line.startsWith("{")) continue;
-        try { parsed = JSON.parse(line); break; } catch { /* keep looking */ }
-      }
-      if (!parsed) {
-        sendJson(res, 502, refuse(
-          "memory_preflight_unreadable",
-          "the memory preflight produced no readable verdict — its own output is " +
-            "included so the failing layer is visible rather than guessed at",
-          { stdout_tail: out.stdout.slice(-1500), stderr_tail: out.stderr.slice(-1500) },
-        ));
-        return;
-      }
-      attachRemedies(parsed?.checks, describeTools(BENCH_ROOT));
-
-      // WHAT WAS APPLIED IS PART OF THE ANSWER. A verdict with no statement of
-      // the env it was reached under is unauditable: the operator cannot tell a
-      // GO earned by a wired backend from a GO earned by the shell they happen
-      // to be in. Values, not just names — a path is the whole fact here.
-      sendJson(res, 200, {
-        ...parsed,
-        backend: backend.id,
-        backend_label: backend.label,
-        applied_env: applied,
-      });
-      return;
-    }
-
-    // ── GET /api/memory/backends ─────────────────────────────────────────
-    // What this bench can be plugged into. Data, so the board never carries its
-    // own copy of the list.
-    if (path === "/api/memory/backends" && req.method === "GET") {
-      sendJson(res, 200, { ok: true, backends: listMemoryBackends() });
-      return;
-    }
-
     // ── POST /api/run/stop/preview ───────────────────────────────────────
     //
     // ABORT A LIVE CELL FROM THE BOARD.
@@ -1893,21 +1811,6 @@ const server = createServer(async (req, res) => {
       // A CLI-launched harness has nobody to set this and runs identically
       // without it.
       env.BENCH_NOTICES = noticesPathFor(logPath);
-      // ── THE MEMORY BACKEND'S OWN ENVIRONMENT ────────────────────────────
-      //
-      // Applied from the registry, by id, so the run gets exactly what the
-      // board preflighted — not whatever the operator happened to export before
-      // starting the control plane. An absent/unknown id resolves to `{}` and
-      // the run goes out with no memory layer, which is a real configuration
-      // (a bare bench) and stays available.
-      //
-      // WHY THE ID TRAVELS ON THE REQUEST rather than being armed server-side:
-      // an armed flag would be a second source of truth about what a run was
-      // configured with, and the run's own env is the first. The board sends
-      // what it verified; the server applies that and nothing else.
-      const memoryBackendId = String(payload?.memory_backend ?? "").trim();
-      const memoryEnv = memoryBackendId ? memoryBackendEnv(memoryBackendId) : {};
-      Object.assign(env, memoryEnv);
       // Context is passed to the worker through the environment rather than a
       // CLI flag because the harness reads it there; `null` means "registry
       // default" and deliberately sets nothing.
