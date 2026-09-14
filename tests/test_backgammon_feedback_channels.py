@@ -243,7 +243,7 @@ def test_the_pregate_emits_the_PROBLEM_lines_report_mjs_parses() -> None:
     )
 
     # And the parser on the other side still expects that shape.
-    report = (GATES / "report.mjs").read_text(encoding="utf-8")
+    report = (GATES / "lib" / "parse.mjs").read_text(encoding="utf-8")
     assert 'clean.startsWith("PROBLEM ")' in report
     assert '": expected "' in report and '", observed "' in report
 

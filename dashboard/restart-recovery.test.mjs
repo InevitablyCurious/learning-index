@@ -70,9 +70,12 @@ test("the source layer refetches from scratch when the ring re-bases", async () 
 });
 
 test("the SSE proxy resets a per-client cursor that outruns the ring", async () => {
-  const src = code(await read("server.mjs"));
-  assert.match(src, /since > cursor/, "the tick loop must reset a stale per-client cursor");
-  assert.match(src, /requested > ringCursor/, "the connect path must replay a stale reconnect from scratch");
+  // The tick loop lives in lib/broadcast.mjs; the connect path stays in
+  // server.mjs. Each watermark reset is pinned in the file that owns it.
+  const tickSrc = code(await read("lib/broadcast.mjs"));
+  assert.match(tickSrc, /since > cursor/, "the tick loop must reset a stale per-client cursor");
+  const connectSrc = code(await read("server.mjs"));
+  assert.match(connectSrc, /requested > ringCursor/, "the connect path must replay a stale reconnect from scratch");
 });
 
 test("the browser rebuilds (not splices) its window on a re-base", async () => {

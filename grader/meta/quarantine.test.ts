@@ -39,7 +39,7 @@ describe("a quarantined test cannot vote", () => {
   });
 
   it("the grader walks only backend/, so it cannot pick one up", () => {
-    const report = fs.readFileSync(path.join(GATES, "report.mjs"), "utf-8");
+    const report = fs.readFileSync(path.join(GATES, "lib", "backend.mjs"), "utf-8");
     const walk = /function backendTestFiles\(\)[\s\S]*?\n}/.exec(report);
     expect(walk).toBeTruthy();
     expect(walk![0]).toMatch(/path\.join\(GATES_DIR, "backend"\)/);

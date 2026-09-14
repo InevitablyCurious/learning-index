@@ -171,7 +171,7 @@ test("DRIFT: retired aliases match RETIRED_MODEL_ALIASES in config.py", () => {
   // so they are pinned. A retirement declared on ONE side only is the dangerous
   // case: the CLI would refuse the alias while the board still offered it a
   // [+ baseline] button, or the reverse.
-  const src = readFileSync(join(BENCH, "harness", "config.py"), "utf8");
+  const src = readFileSync(join(BENCH, "harness", "rosters.py"), "utf8");
   const block = /RETIRED_MODEL_ALIASES: dict\[str, str\] = \{([\s\S]*?)\n\}/.exec(src);
   assert.ok(block, "RETIRED_MODEL_ALIASES not found in config.py");
   const pythonIds = [...block[1].matchAll(/^\s{4}"([^"]+)":/gm)].map((m) => m[1]);
@@ -2490,7 +2490,7 @@ test("DRIFT: the cloud catalogue matches CLOUD_ORCAROUTER_PROVIDER in config.py"
   // worker context registry. This is the test that makes the mirror safe: a
   // model added on one side and not the other fails here rather than presenting
   // to the operator as "that model does not exist".
-  const src = readFileSync(join(BENCH, "harness", "config.py"), "utf8");
+  const src = readFileSync(join(BENCH, "harness", "rosters.py"), "utf8");
   const start = src.indexOf("CLOUD_ORCAROUTER_PROVIDER");
   assert.ok(start > -1, "CLOUD_ORCAROUTER_PROVIDER not found in config.py");
 
@@ -3109,8 +3109,8 @@ test("WALL: a completed run is gradable and carries no reason", async () => {
 // ── PER-FILE BACKEND INVOCATION ─────────────────────────────────────────────
 
 test("REPORT: the backend phase spawns one runner PER FILE, under one phase marker", () => {
-  const src = readFileSync(join(BENCH, "grader", "report.mjs"), "utf8");
-  const body = src.slice(src.indexOf("function runBackendPhase()"), src.indexOf("function firstFrontendFailureMessage"));
+  const src = readFileSync(join(BENCH, "grader", "lib", "backend.mjs"), "utf8");
+  const body = src.slice(src.indexOf("function runBackendPhase()"));
 
   assert.match(body, /for \(const file of backendTestFiles\(\)\)/, "the suite is invoked file by file");
   assert.match(body, /spawnRunner\(`backend \$\{file\}`/, "each file gets its own process");

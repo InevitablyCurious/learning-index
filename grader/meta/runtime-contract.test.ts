@@ -245,7 +245,11 @@ describe("the instrument is pinned as tightly as the corpus it measures", () => 
 });
 
 describe("a stalled runner produces a finding the model can be told", () => {
-  const src = fs.readFileSync(path.join(GATES, "report.mjs"), "utf-8");
+  const src = [
+    fs.readFileSync(path.join(GATES, "lib", "conformance.mjs"), "utf-8"),
+    fs.readFileSync(path.join(GATES, "lib", "frontend.mjs"), "utf-8"),
+    fs.readFileSync(path.join(GATES, "lib", "backend.mjs"), "utf-8"),
+  ].join("\n");
 
   it("every situation it can emit has a symptom line to deliver", () => {
     // CALLED, not regex-matched. The first version scraped the source and
