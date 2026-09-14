@@ -30,7 +30,13 @@ def test_the_flag_survives_every_hop_of_the_chain():
 
     # 2. the sequencer's runner-kwargs dict passes it under the SAME name — a
     #    drift here is a TypeError at cell construction, not at import.
-    seq = (REPO / "scripts" / "run_cumulative.py").read_text()
+    # LI-14: the flag's wiring now spans the package facade (the CLI declaration
+    # in _build_arg_parser -> __init__.py) and runner.py (the runner-kwargs dict
+    # in run_session AND the _build_real_runner handoff), so pin the shape across
+    # BOTH sources — reading __init__.py alone would miss strings 1 and 3.
+    seq = (REPO / "scripts" / "run_cumulative" / "__init__.py").read_text() + (
+        REPO / "scripts" / "run_cumulative" / "runner.py"
+    ).read_text()
     assert '"record_at_chunk_end": bool(getattr(self, "_record_at_chunk_end", False)),' in seq
 
     # 3. the CLI declares it and hands it to the sequencer

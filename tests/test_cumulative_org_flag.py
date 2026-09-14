@@ -1,25 +1,19 @@
 from __future__ import annotations
 
-import importlib.util
 import os
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-# Import the run_cumulative script module by file path (scripts/ is not a package).
-_SCRIPT_PATH = (
-    __import__("pathlib").Path(__file__).resolve().parents[1]
-    / "scripts"
-    / "run_cumulative.py"
-)
-_SPEC = importlib.util.spec_from_file_location("run_cumulative", _SCRIPT_PATH)
-if _SPEC is None or _SPEC.loader is None:  # pragma: no cover - import guard
-    raise RuntimeError(f"failed to load script module at {_SCRIPT_PATH}")
-_MODULE = importlib.util.module_from_spec(_SPEC)
-sys.modules[_SPEC.name] = _MODULE
-_SPEC.loader.exec_module(_MODULE)
+# LI-14: run_cumulative is now a package (scripts/run_cumulative/) fronted by a
+# thin scripts/run_cumulative.py entrypoint. Import the PACKAGE so the
+# monkeypatch targets below (_build_context / _current_session_or_raise) patch
+# the namespace _handle_run actually resolves those bare names in.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+import run_cumulative  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -42,10 +36,10 @@ def test_on_without_org_errors_before_runtime_build() -> None:
         raise AssertionError("_build_context must not run for ON-without-org")
 
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(_MODULE, "_build_context", _forbidden_build_context)
+    monkeypatch.setattr(run_cumulative, "_build_context", _forbidden_build_context)
     try:
         with pytest.raises(RuntimeError) as excinfo:
-            _MODULE._handle_run(args)
+            run_cumulative._handle_run(args)
     finally:
         monkeypatch.undo()
 
@@ -77,15 +71,15 @@ def test_on_with_org_and_off_without_org_do_not_raise() -> None:
             return SimpleNamespace(sequencer=_StubSequencer())
 
         monkeypatch = pytest.MonkeyPatch()
-        monkeypatch.setattr(_MODULE, "_build_context", _stub_build_context)
+        monkeypatch.setattr(run_cumulative, "_build_context", _stub_build_context)
         session_mode = str(getattr(args, "mode", "") or "").strip().lower() or "off"
         monkeypatch.setattr(
-            _MODULE,
+            run_cumulative,
             "_current_session_or_raise",
             lambda seq: SimpleNamespace(memory_mode=session_mode),
         )
         try:
-            _MODULE._handle_run(args)
+            run_cumulative._handle_run(args)
         finally:
             monkeypatch.undo()
         assert called["called"] is True

@@ -15,27 +15,24 @@ asserts the live hash still equals the frozen value).
 
 from __future__ import annotations
 
-import importlib.util
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 
-def _load_run_cumulative_module() -> Any:
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "run_cumulative.py"
-    module = importlib.util.spec_from_file_location(
-        "run_cumulative_freeze_test", script_path
-    )
-    assert module is not None
-    loaded = importlib.util.module_from_spec(module)
-    assert module.loader is not None
-    module.loader.exec_module(loaded)
-    return loaded
+# LI-14: run_cumulative is now a package (scripts/run_cumulative/) fronted by a
+# thin scripts/run_cumulative.py entrypoint. Import the PACKAGE. The freeze guard
+# (verify_task_template_frozen) and compute_task_template_hash both live in
+# run_cumulative.template, so the monkeypatch below targets THAT submodule —
+# patching the facade's re-export would not reach the guard's __globals__ (the
+# same reason the run-artifacts test patches run_cumulative.runner.load_snapshot).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+import run_cumulative  # noqa: E402
 
-
-MODULE = _load_run_cumulative_module()
+MODULE = run_cumulative
 
 # Re-frozen 2026-09-10 (WO-CONTRACT-CHUNK-12: REQ-INIT's literal opening array,
 # REQ-PIP's "167", and REQ-WINCLASS's boundary cut from the published surface —
@@ -85,7 +82,9 @@ def test_altered_copy_differs_and_guard_raises_with_mismatch_named(
     # hashes the repo scaffold; monkeypatching its hash dependency lets the
     # genuine mismatch-naming raise fire without touching the real scaffold.
     monkeypatch.setattr(
-        MODULE, "compute_task_template_hash", lambda _scaffold: altered_hash
+        run_cumulative.template,
+        "compute_task_template_hash",
+        lambda _scaffold: altered_hash,
     )
     with pytest.raises(RuntimeError) as exc:
         MODULE.verify_task_template_frozen()
@@ -115,7 +114,9 @@ def test_guard_wired_into_prepare_fixture(
     runner._task_dir = tmp_path / "task"
 
     monkeypatch.setattr(
-        MODULE, "compute_task_template_hash", lambda _scaffold: altered_hash
+        run_cumulative.template,
+        "compute_task_template_hash",
+        lambda _scaffold: altered_hash,
     )
     with pytest.raises(RuntimeError) as exc:
         runner.prepare_fixture(_session())

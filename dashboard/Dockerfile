@@ -24,7 +24,7 @@ WORKDIR /app
 
 # No package.json, no install: the whole point is zero dependencies. If a
 # package.json ever appears here, something has been added that should not be.
-COPY contract.mjs server.mjs run-liveness.mjs board.js overlay.js dom.js index.html history.html history.js ./
+COPY contract.mjs server.mjs run-liveness.mjs board.js board-actions.js overlay.js dom.js index.html history.html history.js ./
 # server.mjs's extracted modules (board-build / broadcast / tui / state) —
 # without this line `node server.mjs` crashes on import inside the image.
 COPY lib/ ./lib/

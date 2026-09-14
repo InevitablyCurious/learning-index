@@ -523,7 +523,9 @@ test("an idle bench must not impersonate the run that just finished", async (t) 
   // screen. Nothing was broken; the card was showing the wrong source.
 
   await t.test("the server only merges prompts while a cell is IN FLIGHT", async () => {
-    const src = await readFile(new URL("../control/server.mjs", import.meta.url), "utf8");
+    // The /api/events handler moved from control/server.mjs to
+    // control/routes/events.mjs in LI-14 phase 2; the gate lives with it.
+    const src = await readFile(new URL("../control/routes/events.mjs", import.meta.url), "utf8");
     assert.match(src, /const cellInFlight = liveRunState\.can_start !== true;/,
       "the live branch resolves whether a cell is actually running");
     assert.match(src, /if \(cellInFlight\) \{\s*\n\s*try \{\s*\n\s*const fb = await readFeedback/,

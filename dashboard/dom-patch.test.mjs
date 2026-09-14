@@ -215,7 +215,9 @@ test("the control-plane source publishes the reachability flag", async () => {
 test("every control write path is gated on reachability", async () => {
   // A path that reads base_url directly bypasses the gate and reintroduces the
   // silent failure: the operator clicks, the fetch dies, nothing is said.
-  const src = code(await read("board.js"));
+  // The handlers live in board-actions.js (LI-14 split); the gate lives with
+  // them. board.js keeps render/connect and is pinned by the tests above.
+  const src = code(await read("board-actions.js"));
   // `doArmRun`/`doStartRun` were the two legs of the arm→confirm handshake and
   // went with it; `doLaunchBaseline` is the single write path that replaced
   // them, and it carries the same gate.
@@ -231,7 +233,7 @@ test("every control write path is gated on reachability", async () => {
   ];
   for (const name of paths) {
     const start = src.indexOf(`function ${name}`);
-    assert.notEqual(start, -1, `${name} not found in board.js`);
+    assert.notEqual(start, -1, `${name} not found in board-actions.js`);
     const body = src.slice(start, start + 700);
     assert.match(
       body,

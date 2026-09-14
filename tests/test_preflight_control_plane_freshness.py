@@ -91,7 +91,12 @@ def test_the_check_is_blocking() -> None:
 
 
 def test_the_control_plane_actually_serves_started_at() -> None:
-    """The check reads a field the server must publish; pin both ends."""
-    src = (REPO / "control" / "server.mjs").read_text(encoding="utf-8")
+    """The check reads a field the server must publish; pin both ends.
+
+    Since LI-14 phase 2 the /api/health handler — and the PROCESS_STARTED_AT
+    stamp it serves — live in control/routes/meta.mjs, which the entrypoint
+    parses at startup, so the stamp is still taken at process load.
+    """
+    src = (REPO / "control" / "routes" / "meta.mjs").read_text(encoding="utf-8")
     assert "const PROCESS_STARTED_AT = new Date().toISOString();" in src
     assert "started_at: PROCESS_STARTED_AT," in src

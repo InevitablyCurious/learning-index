@@ -71,23 +71,11 @@ export function clip(s, n) {
   return t.length <= n ? t : `${t.slice(0, n - 1)}…`;
 }
 
-// ── arm vocabulary ───────────────────────────────────────────────────────────
-// Arm identity is carried by TWO channels — colour AND the literal words
-// "MEMORY ON" / "CONTROL" — so the board reads correctly in greyscale and for
-// a viewer with colour vision deficiency.
-
-export const ARM = {
-  on: { cls: "a", label: "MEMORY ON", short: "A", color: "var(--fg)" },
-  off: { cls: "b", label: "CONTROL", short: "B", color: "var(--dim)" },
-};
-
-export function armOf(arm) {
-  return ARM[arm] ?? { cls: "null", label: "UNKNOWN ARM", short: "—", color: "var(--dim)" };
-}
-
 // ── state ────────────────────────────────────────────────────────────────────
 
-let board = null;
+// LIVE BINDING, exported for board-actions.js: reassigned ONLY here, by the
+// stream handlers below; the action module reads it and never writes it.
+export let board = null;
 let lastError = null;
 let consecutiveErrors = 0;
 
@@ -299,19 +287,9 @@ function connect() {
 // ── render ───────────────────────────────────────────────────────────────────
 
 import { renderTopbar, renderProvenance } from "./panels/chrome.js";
-import {
-  armReset,
-  commitReset,
-  openReset,
-  closeReset,
-  isResetOpen,
-} from "./panels/treereset.js";
-import {
-  loadRouters,
-  setRouterDraft,
-  saveRouterKey,
-} from "./panels/routers.js";
-import { setDevMode, isDevModeBusy, isDevModeOn } from "./panels/devmode.js";
+import { openReset, closeReset, isResetOpen } from "./panels/treereset.js";
+import { setRouterDraft } from "./panels/routers.js";
+import { isDevModeOn } from "./panels/devmode.js";
 import {
   debounced,
   graderWorkerTarget,
@@ -326,17 +304,12 @@ import {
   closeTools,
   isToolsOpen,
   toggleToolDetail,
-  loadTools,
   setToolArg,
-  runTool,
 } from "./panels/tools.js";
 import {
-  loadBackups,
   openRestore,
   closeRestore,
   clearSelection,
-  armRestore,
-  commitRestore,
   isRestoreOpen,
 } from "./panels/restore.js";
 import { renderCurve, setCurveMetric, setCurveTab, curveTab } from "./panels/curve.js";
@@ -355,8 +328,6 @@ import {
   jumpToLive,
   feedExportText,
   feedExportLabel,
-  selectHistoricalRun,
-  selectHistoricalRunUnreachable,
   clearHistoricalRun,
   historicalSelection,
 } from "./panels/live.js";
@@ -365,7 +336,6 @@ import { renderRail } from "./panels/rail.js";
 import { renderRecall } from "./panels/recall.js";
 import {
   openCreate,
-  launchCell,
   closeCreate,
   isCreateOpen,
   createStep,
@@ -382,11 +352,7 @@ import {
   setCreatePending,
   setCreateRefusal,
 } from "./panels/create.js";
-import {
-  previewStop,
-  commitStop,
-  disarmStop,
-} from "./panels/runstart.js";
+import { disarmStop } from "./panels/runstart.js";
 import {
   askDetach, cancelDetach, isDetachConfirming, paintTui, fitTui,
 } from "./panels/tui.js";
@@ -397,6 +363,26 @@ import { setLearningView } from "./panels/learning.js";
 import { togglePopout } from "./panels/popout.js";
 import { renderOverlay } from "./overlay.js";
 import { patch } from "./dom.js";
+// The 16 network handlers live in board-actions.js (LI-14): state + render
+// stay here, the acts that reach the control plane are dispatched by onClick.
+import {
+  doPreviewStop,
+  doCommitStop,
+  doLoadRouters,
+  doSaveRouterKey,
+  doToggleDevMode,
+  doLaunchBaseline,
+  doLoadTools,
+  doRunTool,
+  pointFeedAt,
+  releaseHold,
+  detachTui,
+  doLoadBackups,
+  doArmRestore,
+  doCommitRestore,
+  doArmReset,
+  doCommitReset,
+} from "./board-actions.js";
 
 function render() {
   const root = document.getElementById("root");
@@ -476,6 +462,9 @@ function render() {
   // it, so a throw here costs motion and never a number.
   try { paintTicks(root); } catch (err) { console.error("tick paint failed:", err); }
 }
+
+/** Exported for board-actions.js — every handler repaints through this. */
+export { render };
 
 // ── interaction ──────────────────────────────────────────────────────────────
 // ONE DELEGATED LISTENER, bound to `document` and never to a rendered node.
@@ -824,128 +813,6 @@ function onRunSel(e) {
   if (e.target.closest("[data-create-provider]")) { setCreateProvider(e.target.value); render(); }
 }
 
-async function doPreviewStop() {
-  const reach = controlReachability(board);
-  if (!reach.ok) { console.error(`stop unavailable — ${reach.code}`); render(); return; }
-  render();
-  await previewStop(board.control.base_url);
-  render();
-}
-
-async function doCommitStop() {
-  const reach = controlReachability(board);
-  if (!reach.ok) { console.error(`stop unavailable — ${reach.code}`); render(); return; }
-  render();
-  await commitStop(board.control.base_url);
-  render();
-}
-
-async function doLoadRouters() {
-  const reach = controlReachability(board);
-  if (!reach.ok) { console.error(`routers unavailable — ${reach.code}`); render(); return; }
-  await loadRouters(board.control.base_url);
-  render();
-}
-
-async function doSaveRouterKey(id) {
-  const reach = controlReachability(board);
-  if (!reach.ok) { console.error(`routers unavailable — ${reach.code}`); render(); return; }
-  render();
-  await saveRouterKey(board.control.base_url, id);
-  render();
-}
-
-async function doToggleDevMode(desired) {
-  const reach = controlReachability(board);
-  if (!reach.ok) { console.error(`dev mode unavailable — ${reach.code}`); render(); return; }
-  // The busy flag is LIVE: setDevMode raises it before the POST and clears it in
-  // a finally, so this is a real double-POST guard, not a dead condition.
-  if (isDevModeBusy()) { render(); return; }
-  render();
-  await setDevMode(board.control.base_url, desired === "on");
-  render();
-}
-
-async function doLaunchBaseline(opts) {
-  const reach = controlReachability(board);
-  if (!reach.ok) {
-    console.error(`run start unavailable — ${reach.code}: ${reach.reason}`);
-    render();
-    return;
-  }
-  // The frame is switched INSIDE launchBaseline before the first await, so the
-  // checklist is on screen while preflight runs rather than after it returns.
-  render();
-  await launchCell(board.control.base_url, opts);
-  render();
-}
-
-async function doLoadTools() {
-  const reach = controlReachability(board);
-  if (!reach.ok) { console.error(`tools unavailable — ${reach.code}`); render(); return; }
-  await loadTools(board.control.base_url);
-  render();
-}
-
-async function doRunTool(id) {
-  const reach = controlReachability(board);
-  if (!reach.ok) { console.error(`tools unavailable — ${reach.code}`); render(); return; }
-  render();
-  await runTool(board.control.base_url, id);
-  render();
-  // RE-READ THE REGISTRY AFTER EVERY RUN. A tool can change what the other
-  // tools can do — restarting the bench MCP unblocks `join org`, and
-  // `bench-ready` restarts this control plane, after which the list held here
-  // is a copy of a registry that no longer exists. Pressing a stale row sends a
-  // tool id at a server mid-restart and reads as a broken button. A failed
-  // re-read keeps the rows on screen and says they may be out of date.
-  await loadTools(board.control.base_url);
-  render();
-}
-
-/**
- * Point the DATA FEED card at one baseline. Never throws, never blocks a render.
- *
- * WHETHER THE RUN IS OLD OR RUNNING NOW. A row whose cell is IN FLIGHT has no
- * frozen record — its feed IS the live one — so selecting it returns the card to
- * live rather than reading a transcript that does not exist yet.
- *
- * A row that can address nothing leaves the card AS IT WAS. Clearing it would
- * make an unaddressable row behave like BACK TO LIVE, which is a different act
- * the operator did not ask for.
- */
-async function pointFeedAt(board, b) {
-  if (!b) return;
-  if (board?.models_ledger?.run_in_flight === true && b.state === "running") {
-    clearHistoricalRun();
-    render();
-    return;
-  }
-  if (b.state !== "complete") return;
-  if (typeof b.run_dir !== "string" || !b.run_dir) return;
-  if (!Number.isInteger(b.sequence_index) || b.sequence_index < 0) return;
-
-  const sel = {
-    run_dir: b.run_dir,
-    sequence_index: b.sequence_index,
-    label: `${b.id} · ${b.model ?? "unknown model"}`,
-  };
-  // THE SAME REACHABILITY GATE EVERY OTHER CONTROL CARRIES, and this one needs
-  // it for a reason the writes do not: both feed reads go CLIENT-DIRECT to the
-  // control plane at `base_url`, which is a loopback address. Opened from
-  // another device on the LAN — the documented case — that address means the
-  // VIEWING machine, so the fetch dies before it leaves the browser. Refusing
-  // with the reason on screen beats two feeds that silently read as empty.
-  const reach = controlReachability(board);
-  if (!reach.ok) {
-    selectHistoricalRunUnreachable(sel, `${reach.code}: ${reach.reason}`);
-    render();
-    return;
-  }
-  const read = await selectHistoricalRun(board.control.base_url, sel);
-  if (read) render();
-}
-
 function onKeydown(e) {
   if (e.key !== "Escape") return;
   // ── THE ORDER MIRRORS THE STACK IN overlay.js ────────────────────────────
@@ -1021,108 +888,6 @@ export function controlReachability(b) {
     };
   }
   return { ok: true, code: null, reason: null, fix: null };
-}
-
-/** The board never posts. The browser posts DIRECTLY to the control plane. */
-async function releaseHold() {
-  const reach = controlReachability(board);
-  if (!reach.ok) {
-    console.error(`hold release unavailable — ${reach.code}: ${reach.reason}`);
-    return;
-  }
-  const base = board.control.base_url;
-  try {
-    const res = await fetch(`${base}/api/hold/release`, { method: "POST" });
-    if (!res.ok) console.error(`hold release refused: HTTP ${res.status}`);
-    // The next poll observes the file vanish, which IS the success signal.
-  } catch (err) {
-    console.error("hold release failed:", err);
-  }
-}
-
-async function detachTui() {
-  const reach = controlReachability(board);
-  cancelDetach();
-  if (!reach.ok) {
-    console.error(`tui detach unavailable — ${reach.code}: ${reach.reason}`);
-    render();
-    return;
-  }
-  const base = board.control.base_url;
-  try {
-    const res = await fetch(`${base}/api/tui/detach`, { method: "POST" });
-    if (!res.ok) console.error(`tui detach refused: HTTP ${res.status}`);
-  } catch (err) {
-    console.error("tui detach failed:", err);
-  }
-  render();
-}
-
-// Run start is the loudest control on the board, so a silent `return` here was
-// the worst instance of the original defect: the operator arms a run, nothing
-// happens, and no reason is given anywhere. The reason now reaches the console
-// AND the topbar banner explains the LAN case before the click.
-/**
- * RESTORE, in three steps: read history, pick one, confirm it.
- *
- * Each re-checks reachability rather than trusting that the control was only
- * rendered while reachable — the board can go unreachable between render and
- * click, and a POST into the void would leave the dialog looking armed.
- */
-async function doLoadBackups() {
-  const reach = controlReachability(board);
-  if (!reach.ok) { console.error(`restore unavailable — ${reach.code}`); render(); return; }
-  await loadBackups(board.control.base_url);
-  render();
-}
-
-async function doArmRestore(id) {
-  const reach = controlReachability(board);
-  if (!reach.ok) { console.error(`restore unavailable — ${reach.code}`); render(); return; }
-  render();
-  await armRestore(board.control.base_url, id);
-  render();
-}
-
-async function doCommitRestore() {
-  const reach = controlReachability(board);
-  if (!reach.ok) { console.error(`restore unavailable — ${reach.code}`); render(); return; }
-  // Reloads the page on success — see commitRestore.
-  await commitRestore(board.control.base_url);
-  render();
-}
-
-/**
- * RESET, in two clicks against the server's own restatement.
- *
- * Both halves re-check reachability rather than trusting that the button was
- * only rendered when reachable — the board can go unreachable between render
- * and click, and a POST into the void would leave the control looking armed.
- */
-async function doArmReset() {
-  const reach = controlReachability(board);
-  if (!reach.ok) {
-    console.error(`reset unavailable — ${reach.code}: ${reach.reason}`);
-    render();
-    return;
-  }
-  render();
-  await armReset(board.control.base_url);
-  render();
-}
-
-async function doCommitReset() {
-  const reach = controlReachability(board);
-  if (!reach.ok) {
-    console.error(`reset unavailable — ${reach.code}: ${reach.reason}`);
-    render();
-    return;
-  }
-  // On success this reloads the page outright — see commitReset. Nothing after
-  // it runs, which is the point: no panel keeps a selection that outlives the
-  // data it referred to.
-  await commitReset(board.control.base_url);
-  render();
 }
 
 // FIRST PAINT, THEN THE STREAM. render() draws the "connecting to feed…" state

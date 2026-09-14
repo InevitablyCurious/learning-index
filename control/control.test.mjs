@@ -225,10 +225,11 @@ test("COMPACTION: the token separates on from off, and the restatement says whic
 });
 
 test("COMPACTION: the default follows the context window, on both substrates", () => {
-  const src = readFileSync(join(BENCH, "control", "server.mjs"), "utf8");
-  // The rule is written once, in the server, and reads the roster entry — which
-  // is a real row for a local model and a synthesised one of the same shape for
-  // a cloud model, so one code path covers both.
+  // The rule's home moved from server.mjs to lib/validate.mjs (LI-14 phase 1).
+  const src = readFileSync(join(BENCH, "control", "lib", "validate.mjs"), "utf8");
+  // The rule is written once, in the control plane's validation lib, and reads
+  // the roster entry — which is a real row for a local model and a synthesised
+  // one of the same shape for a cloud model, so one code path covers both.
   assert.match(src, /function compactDefaultFor\(entry\)/);
   assert.match(src, /COMPACT_DEFAULT_CEILING/);
   // An unknown window compacts: a model nobody could size is likelier narrow
@@ -246,7 +247,8 @@ test("COMPACTION: the ceiling is its own constant, not the advisory floor", () =
 });
 
 test("COMPACTION: the start passes the flag EXPLICITLY, never by omission", () => {
-  const src = readFileSync(join(BENCH, "control", "server.mjs"), "utf8");
+  // The launch route moved from server.mjs to routes/run.mjs (LI-14 phase 2).
+  const src = readFileSync(join(BENCH, "control", "routes", "run.mjs"), "utf8");
   // Both forms, always. Passing nothing when compaction is off would hand the
   // decision back to a default and the arm the operator confirmed would stop
   // being the arm guaranteed to run.
@@ -265,12 +267,17 @@ test("REQUIRE TODOS: every name that reads the value is in a scope that HAS it",
   // Source-shape assertions are the cheap guard for a plain-JS server with no
   // type checker: they cost nothing and they pin the three points that have to
   // agree.
-  const src = readFileSync(join(BENCH, "control", "server.mjs"), "utf8");
+  // The launch route moved from server.mjs to routes/run.mjs (LI-14 phase 2).
+  const src = readFileSync(join(BENCH, "control", "routes", "run.mjs"), "utf8");
+  // The success return lives in finishValidate, which moved to lib/validate.mjs
+  // (LI-14 phase 1); the destructures and the argv push below are route code
+  // and live in routes/run.mjs.
+  const validateSrc = readFileSync(join(BENCH, "control", "lib", "validate.mjs"), "utf8");
 
   // 1. validateStart must RETURN it, or every consumer destructures undefined.
   // Assert the FIELD is in the return, not the exact field list — pinning the
   // whole list makes every later addition look like a regression.
-  const ret = src.match(/return \{ ok: true,[^}]*\}/);
+  const ret = validateSrc.match(/return \{ ok: true,[^}]*\}/);
   assert.ok(ret, "validateStart's success return not found");
   assert.match(ret[0], /requireTodos/, "validateStart must return requireTodos, not merely accept it");
 
@@ -318,12 +325,17 @@ test("RECORD AT CHUNK END: the same three points must agree", () => {
   // Same chain, same three failure points as REQUIRE TODOS above. Written at
   // the same time as the feature this run, because the previous flag shipped
   // broken twice for exactly these reasons.
-  const src = readFileSync(join(BENCH, "control", "server.mjs"), "utf8");
-  assert.match(src, /const recordAtChunkEnd = payload\?\.recordAtChunkEnd === true;/);
+  // The launch route moved from server.mjs to routes/run.mjs (LI-14 phase 2).
+  const src = readFileSync(join(BENCH, "control", "routes", "run.mjs"), "utf8");
+  // The parameter read and the success return moved to lib/validate.mjs
+  // (LI-14 phase 1); the destructures and the argv push are route code and
+  // live in routes/run.mjs.
+  const validateSrc = readFileSync(join(BENCH, "control", "lib", "validate.mjs"), "utf8");
+  assert.match(validateSrc, /const recordAtChunkEnd = payload\?\.recordAtChunkEnd === true;/);
   // Asserts the FIELD is returned, not the identity of its neighbours. Pinning
   // the exact tuple made this fail when an unrelated setting was threaded
   // through — a false alarm that says nothing about record-at-chunk-end.
-  const returned = /return \{ ok: true, model, arm[^}]*\};/.exec(src);
+  const returned = /return \{ ok: true, model, arm[^}]*\};/.exec(validateSrc);
   assert.ok(returned, "validateStart no longer returns its usual shape");
   assert.match(returned[0], /\brecordAtChunkEnd\b/, "validateStart must RETURN it");
   const destructures = src.match(/const \{ model, arm, org, context, kind, cloud, compact[^}]*\} = check;/g) ?? [];
@@ -342,8 +354,10 @@ test("REQUIRE TODOS: the preflight handler does NOT pass a flag preflight cannot
   // --require-todos argument — and its `compact` is a URL search param, not the
   // validated launch value. An insertion there was both a scope error and a bad
   // flag. Pin the shape so it cannot come back.
-  const src = readFileSync(join(BENCH, "control", "server.mjs"), "utf8");
-  const handler = src.slice(src.indexOf('path === "/api/preflight"'));
+  // The preflight route moved from server.mjs to routes/run.mjs (LI-14 phase
+  // 2); the entry's `path:` literal is the route's pin there.
+  const src = readFileSync(join(BENCH, "control", "routes", "run.mjs"), "utf8");
+  const handler = src.slice(src.indexOf('path: "/api/preflight"'));
   const body = handler.slice(0, handler.indexOf("execFile("));
   assert.ok(
     !body.includes("--require-todos"),
@@ -1184,18 +1198,19 @@ test("every refusal carries a human-readable reason", () => {
 // the one place it is useless.
 //
 // server.mjs calls listen() at import, so it cannot be imported into a test
-// process. These assertions read the source instead. That is weaker than
-// calling the function, and it is chosen deliberately: a source assertion that
-// pins the two load-bearing details is worth more than no guard at all on a bug
-// that already shipped once.
-const SERVER_SRC = readFileSync(join(HERE, "server.mjs"), "utf8");
+// process — and since LI-14 phase 2 the preview/start route bodies live in
+// control/routes/run.mjs, so these assertions read THAT source instead. That
+// is weaker than calling the function, and it is chosen deliberately: a source
+// assertion that pins the two load-bearing details is worth more than no guard
+// at all on a bug that already shipped once.
+const RUN_ROUTES_SRC = readFileSync(join(HERE, "routes", "run.mjs"), "utf8");
 
 function previewHandlerSource() {
-  const start = SERVER_SRC.indexOf('path === "/api/run/preview"');
+  const start = RUN_ROUTES_SRC.indexOf('path: "/api/run/preview"');
   assert.notEqual(start, -1, "the /api/run/preview route disappeared");
-  const end = SERVER_SRC.indexOf('path === "/api/run/start"', start);
+  const end = RUN_ROUTES_SRC.indexOf('path: "/api/run/start"', start);
   assert.notEqual(end, -1, "could not find the end of the preview handler");
-  return SERVER_SRC.slice(start, end);
+  return RUN_ROUTES_SRC.slice(start, end);
 }
 
 test("preview validates parameters through the same path as start", () => {
@@ -1227,9 +1242,9 @@ test("preview reports the serial gate without refusing on it", () => {
 });
 
 test("start still requires the confirmation token", () => {
-  const startIdx = SERVER_SRC.indexOf('path === "/api/run/start"');
+  const startIdx = RUN_ROUTES_SRC.indexOf('path: "/api/run/start"');
   assert.notEqual(startIdx, -1, "the /api/run/start route disappeared");
-  const src = SERVER_SRC.slice(startIdx, startIdx + 1600);
+  const src = RUN_ROUTES_SRC.slice(startIdx, startIdx + 1600);
   assert.doesNotMatch(
     src,
     /requireConfirm:\s*false/,
@@ -4317,13 +4332,14 @@ test("RUNSTATE: `running` is published and agrees with `state`", async () => {
 // creates. A stale prefix here is silent: stop reports success and leaves the
 // sidecar running, and the next cell contends with it.
 test("STOP sweeps the egress sidecar the harness actually names", async () => {
-  const src = readFileSync(join(HERE, "server.mjs"), "utf8");
+  // The stop path moved from server.mjs to lib/lifecycle.mjs (LI-14 phase 1).
+  const src = readFileSync(join(HERE, "lib", "lifecycle.mjs"), "utf8");
   const py = readFileSync(join(HERE, "..", "harness", "egress.py"), "utf8");
   const prefix = /f"([a-z0-9-]+-)\{hashlib/.exec(py);
   assert.ok(prefix, "egress.py must still build the sidecar name from a literal prefix");
   assert.ok(
     src.includes(`name=${prefix[1]}`),
-    `server.mjs stop filter must use the harness's own prefix '${prefix[1]}'`,
+    `the stop filter must use the harness's own prefix '${prefix[1]}'`,
   );
   assert.ok(!src.includes("name=wv-egress-"), "the pre-rename prefix must not linger in the stop path");
 });
@@ -5241,8 +5257,9 @@ test("RUNDIR: an ordinary single-path line is unchanged", () => {
 // across ALL eras and reads their artifacts back; benchmark_id, cell, and the
 // diff relPath all arrive from the wire, so every refusal shape (invalid_run /
 // path_traversal / not_found) is asserted here, not just the happy path.
-// server.mjs self-listens at import, so its wiring is pinned by source text
-// (SERVER_SRC) — the same deliberate trade the GUARD section makes.
+// server.mjs self-listens at import, so the route wiring is pinned by source
+// text (routes/tree.mjs since LI-14 phase 2) — the same deliberate trade the
+// GUARD section makes.
 
 const HISTORY_DIFF = "--- a/src/game.ts\n+++ b/src/game.ts\n@@ -1 +1 @@\n-old\n+new\n";
 const HISTORY_CAMPAIGN = "local/local-llm-proxy/omlx/qwen3-6-35b-a3b-bench";
@@ -5479,19 +5496,26 @@ test("HISTORY: a synthetic run round-trips checkpoints, diff, and transcript", a
   }
 });
 
-test("HISTORY: server.mjs wires the four routes, the import, and sendText", () => {
+test("HISTORY: routes/tree.mjs wires the four routes, the import, and sendText", () => {
   // server.mjs calls listen() at import, so the wiring is pinned by source
-  // text — the same deliberate trade the GUARD section's SERVER_SRC makes.
+  // text — the same deliberate trade the GUARD section makes. Since LI-14
+  // phase 2 the history routes live in control/routes/tree.mjs, one directory
+  // down from the modules they import, so the needles carry the ../ prefix.
+  const TREE_ROUTES_SRC = readFileSync(join(HERE, "routes", "tree.mjs"), "utf8");
   for (const needle of [
     '"/api/history"',
     '"/api/history/checkpoints"',
     '"/api/history/diff"',
     '"/api/history/transcript"',
-    'from "./history.mjs"',
-    "function sendText(",
+    'from "../history.mjs"',
+    'from "../lib/http.mjs"',
   ]) {
-    assert.ok(SERVER_SRC.includes(needle), `server.mjs no longer contains ${needle}`);
+    assert.ok(TREE_ROUTES_SRC.includes(needle), `routes/tree.mjs no longer contains ${needle}`);
   }
+  // sendText's DEFINITION moved to lib/http.mjs (LI-14 phase 1); the import
+  // needle above is what wires it into the routes this test pins.
+  const httpSrc = readFileSync(join(HERE, "lib", "http.mjs"), "utf8");
+  assert.ok(httpSrc.includes("function sendText("), "lib/http.mjs no longer defines sendText");
 });
 
 // ── /history must show the archive, and the board must not (2026-09-10) ─────
@@ -5561,7 +5585,8 @@ test("HISTORY: an archived cell still resolves to a real directory", async () =>
 // launch to reach that line.
 
 test("LAUNCH: every setting the argv builder uses is destructured everywhere", () => {
-  const src = readFileSync(join(HERE, "server.mjs"), "utf-8");
+  // The launch route moved from server.mjs to routes/run.mjs (LI-14 phase 2).
+  const src = readFileSync(join(HERE, "routes", "run.mjs"), "utf-8");
 
   // SCOPED TO THE LAUNCH BUILDER, not to every argv in the file. The first
   // version scanned all of them and flagged `cloudProvider`, which is a local
@@ -5598,8 +5623,11 @@ test("LAUNCH: every setting the argv builder uses is destructured everywhere", (
   }
 
   // And the preview must return each one, or the destructure above is reading
-  // a key nobody wrote.
-  const ret = /return \{ ok: true, model, arm[^}]*\};/.exec(src);
+  // a key nobody wrote. The success return lives in finishValidate, which
+  // moved to lib/validate.mjs (LI-14 phase 1); the builder and the destructures
+  // above are route code and live in routes/run.mjs.
+  const validateSrc = readFileSync(join(HERE, "lib", "validate.mjs"), "utf-8");
+  const ret = /return \{ ok: true, model, arm[^}]*\};/.exec(validateSrc);
   assert.ok(ret, "the preview no longer returns its usual shape");
   for (const name of used) {
     assert.ok(ret[0].includes(name), `preview does not return \`${name}\``);

@@ -10,9 +10,10 @@
 // from (run_dir, sequence_index), never from the newest cell. These tests pin
 // the module level of that fix (agent-events.mjs, runstate.mjs
 // logPathForRunDir + cellDirForRun/cellSessionId, backend-feed.mjs) and
-// source-pin the server.mjs routes that wire it,
-// because server.mjs calls listen() at import and cannot be imported here
-// (the same tradeoff control.test.mjs makes for its SERVER_SRC guards).
+// source-pin the routes that wire it — since LI-14 phase 2 those live in
+// routes/events.mjs, because the control plane's entrypoint calls listen() at
+// import and cannot be imported here (the same tradeoff control.test.mjs
+// makes for its route-source guards).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from "node:test";
@@ -33,7 +34,12 @@ import { EventRing } from "./events.mjs";
 import { cellDirForRun, cellSessionId, logPathForRunDir } from "./runstate.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SERVER_SRC = readFileSync(join(HERE, "server.mjs"), "utf8");
+// LI-14 phase 1 moved the shared singletons to state.mjs and the non-route
+// helpers to lib/*.mjs; phase 2 moved the /api/events and /api/backend-feed
+// route bodies these pins watch from server.mjs to routes/events.mjs.
+const EVENTS_ROUTES_SRC = readFileSync(join(HERE, "routes", "events.mjs"), "utf8");
+const STATE_SRC = readFileSync(join(HERE, "state.mjs"), "utf8");
+const EVENTS_SRC = readFileSync(join(HERE, "lib", "events.mjs"), "utf8");
 
 // ── AGENT EVENTS ─────────────────────────────────────────────────────────────
 
@@ -340,35 +346,37 @@ test("CELL SCOPE: readBackendFeed pins the live half to the requested cell's liv
 // ── SERVER WIRING (source-pin) ───────────────────────────────────────────────
 
 test("SERVER WIRING: /api/events has a persisted ?run_dir= branch", () => {
-  // server.mjs calls listen() at import, so the route is pinned by source —
-  // weaker than calling it, and chosen deliberately (control.test.mjs's rule).
-  assert.match(SERVER_SRC, /url\.searchParams\.get\("run_dir"\)/);
-  assert.match(SERVER_SRC, /readAgentEvents/);
+  // The control plane's entrypoint calls listen() at import, so the route body
+  // is pinned by source — weaker than calling it, and chosen deliberately
+  // (control.test.mjs's rule).
+  assert.match(EVENTS_ROUTES_SRC, /url\.searchParams\.get\("run_dir"\)/);
+  assert.match(EVENTS_ROUTES_SRC, /readAgentEvents/);
 });
 
 test("SERVER WIRING: backend-feed resolves notices from ?run_dir=", () => {
-  assert.match(SERVER_SRC, /logPathForRunDir\(RUNS_ROOT, requestedRunDir\)/);
-  assert.match(SERVER_SRC, /createAgentEventSink/);
+  assert.match(EVENTS_ROUTES_SRC, /logPathForRunDir\(RUNS_ROOT, requestedRunDir\)/);
+  // The persist sink is created in state.mjs since LI-14 phase 1.
+  assert.match(STATE_SRC, /createAgentEventSink/);
 });
 
 test("SERVER WIRING: both routes read ?sequence_index= and pin their reads to it", () => {
   // CELL-SCOPED READS: /api/events and /api/backend-feed must each read the
   // param AND hand it to their reader — a board viewing one cell is served
   // that cell's events and that cell's stream, never the newest cell's.
-  assert.match(SERVER_SRC, /url\.searchParams\.get\("sequence_index"\)/);
-  const paramReads = SERVER_SRC.match(/url\.searchParams\.get\("sequence_index"\)/g) ?? [];
+  assert.match(EVENTS_ROUTES_SRC, /url\.searchParams\.get\("sequence_index"\)/);
+  const paramReads = EVENTS_ROUTES_SRC.match(/url\.searchParams\.get\("sequence_index"\)/g) ?? [];
   assert.ok(paramReads.length >= 2, "both routes read the param");
-  assert.ok(SERVER_SRC.includes("sequenceIndex"));
-  assert.match(SERVER_SRC, /readAgentEvents\(\{[^)]*sequenceIndex/, "the events route passes sequenceIndex through");
+  assert.ok(EVENTS_ROUTES_SRC.includes("sequenceIndex"));
+  assert.match(EVENTS_ROUTES_SRC, /readAgentEvents\(\{[^)]*sequenceIndex/, "the events route passes sequenceIndex through");
   // The intent is "sequenceIndex reaches the reader", not "it is the last key in
   // the object literal" — pinning key ORDER makes an unrelated addition fail.
-  assert.match(SERVER_SRC, /readBackendFeed\(\{[\s\S]*?sequenceIndex,/, "the backend-feed route passes sequenceIndex through");
+  assert.match(EVENTS_ROUTES_SRC, /readBackendFeed\(\{[\s\S]*?sequenceIndex,/, "the backend-feed route passes sequenceIndex through");
 
   // A ?run_dir= READ IS COMPLETE. The tail window and row cap serve the live
   // path; on a concluded cell they cut the START of the run — measured, a 310KB
   // live.jsonl against a 256KB window hid the first 1h44m of a 2h19m cell.
   assert.match(
-    SERVER_SRC,
+    EVENTS_ROUTES_SRC,
     /readBackendFeed\(\{[\s\S]*?complete: Boolean\(requestedRunDir\)/,
     "a historical backend read must not be windowed",
   );
@@ -460,7 +468,7 @@ test("the historical rebuild preserves ARRIVAL order and drops prompts into it",
   //
   // agent-events.jsonl is append-only IN ARRIVAL ORDER, which is the true order
   // and the one the live feed showed, so it is left exactly as it lies.
-  const SRC = SERVER_SRC;
+  const SRC = EVENTS_ROUTES_SRC;
   assert.match(SRC, /interleaveByArrival\(persisted\.rows, promptRows\)/,
     "the rebuild must not re-sort the transcript");
   assert.doesNotMatch(
@@ -469,9 +477,10 @@ test("the historical rebuild preserves ARRIVAL order and drops prompts into it",
     "the plain time-sort of both families must not come back",
   );
 
-  // The function itself, exercised through the module's own source (it is
-  // private to server.mjs, which is not import-safe — it listens at import).
-  const body = SRC.slice(SRC.indexOf("function interleaveByArrival"));
+  // The function itself, exercised through the module's own source (it moved
+  // to lib/events.mjs in LI-14 phase 1; server.mjs is not import-safe — it
+  // listens at import).
+  const body = EVENTS_SRC.slice(EVENTS_SRC.indexOf("function interleaveByArrival"));
   const fn = new Function(`${body.slice(0, body.indexOf("\n}\n") + 3)}; return interleaveByArrival;`)();
 
   const agent = [

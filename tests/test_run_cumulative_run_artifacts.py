@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import importlib.util
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -15,14 +15,12 @@ from harness.snapshot import (
     capture_snapshot,
 )
 
-
-def _load_run_cumulative_module() -> Any:
-    script_path = Path(__file__).resolve().parents[1] / "scripts" / "run_cumulative.py"
-    spec = importlib.util.spec_from_file_location("run_cumulative_script", script_path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+# LI-14: run_cumulative is now a package (scripts/run_cumulative/) fronted by a
+# thin scripts/run_cumulative.py entrypoint. Import the PACKAGE: load_snapshot
+# lives in run_cumulative.runner and _build_context is re-imported into the
+# facade, so the monkeypatch targets below patch the right namespaces.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+import run_cumulative  # noqa: E402
 
 
 def _cell_result() -> Any:
@@ -159,7 +157,7 @@ def _read_status_records(runs_dir: Path) -> list[dict[str, Any]]:
 
 
 def test_run_manifest_and_status_stream_written(tmp_path: Path) -> None:
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runs_dir = tmp_path / "runs"
     runner = _build_runner(module, tmp_path, runs_dir=runs_dir)
     runner._runner_cls = _FakeRunner
@@ -229,7 +227,7 @@ def test_run_manifest_and_status_stream_written(tmp_path: Path) -> None:
 
 
 def test_run_manifest_carries_runner_seed(tmp_path: Path) -> None:
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runs_dir = tmp_path / "runs"
     runner = _build_runner(module, tmp_path, runs_dir=runs_dir)
     runner._runner_cls = _FakeRunner
@@ -242,7 +240,7 @@ def test_run_manifest_carries_runner_seed(tmp_path: Path) -> None:
 
 
 def test_run_manifest_write_once_and_stream_append_only(tmp_path: Path) -> None:
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runs_dir = tmp_path / "runs"
     runner = _build_runner(module, tmp_path, runs_dir=runs_dir)
     runner._runner_cls = _FakeRunner
@@ -265,7 +263,7 @@ def test_run_manifest_write_once_and_stream_append_only(tmp_path: Path) -> None:
 
 def test_turn_terminal_records_appended_for_truncated_turns(tmp_path: Path) -> None:
     """WO-TRUNC-1: a truncated turn lands in the status stream as turn_terminal."""
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runs_dir = tmp_path / "runs"
 
     result = _cell_result()
@@ -349,7 +347,7 @@ def test_scoring_turn_exclusions_reach_the_status_stream(tmp_path: Path) -> None
     measurement unreconstructable from the authoritative artifacts. This pins
     both fields into the attempt record.
     """
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runs_dir = tmp_path / "runs"
 
     result = _cell_result()
@@ -389,7 +387,7 @@ def test_scoring_turn_exclusions_reach_the_status_stream(tmp_path: Path) -> None
 
 
 def test_served_model_capture_and_failure_tolerance(tmp_path: Path) -> None:
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runs_dir = tmp_path / "runs"
 
     class _Identity:
@@ -424,7 +422,7 @@ def test_local_proxy_log_served_identity_lands_in_manifest_and_status(
     upstreamModel) lands in BOTH the run manifest and the attempt status
     records, while alias-echo rows and non-request rows are rejected. The spend
     DB stays empty here, so the proxy log is the sole source of identity."""
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runs_dir = tmp_path / "runs"
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -546,7 +544,7 @@ def _seed_fixture(
     runner._current_git_head = lambda repo_root: _SEED_COMMIT
     runner._seed_snapshot_id = snapshot_id
 
-    repo_root = Path(module.__file__).resolve().parents[1]
+    repo_root = run_cumulative.REPO_ROOT
     provenance: dict[str, Any] = {
         "chunk_plan_hash": module.compute_task_template_hash(
             repo_root / "task" / "backgammon" / "prompts"
@@ -577,7 +575,7 @@ def _seed_fixture(
 
 
 def test_seed_snapshot_flag_parses_on_main_parser() -> None:
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     parser = module._build_arg_parser()
     assert parser.parse_args(["run"]).seed_snapshot is None
     assert (
@@ -591,7 +589,7 @@ def test_seed_snapshot_flag_parses_on_main_parser() -> None:
 def test_resolve_seed_snapshot_bogus_id_raises_not_found(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runs_root = tmp_path / "runs-root"
     runs_root.mkdir()
     monkeypatch.setenv("BENCH_RUNS_DIR", str(runs_root))
@@ -604,7 +602,7 @@ def test_resolve_seed_snapshot_bogus_id_raises_not_found(
 def test_resolve_seed_snapshot_returns_loaded_tree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runner, _runs_root, snap_tree = _seed_fixture(module, tmp_path, monkeypatch)
     snap = runner._resolve_seed_snapshot(_session(0))
     assert snap is not None
@@ -619,7 +617,7 @@ def test_resolve_seed_snapshot_returns_loaded_tree(
 def test_resolve_seed_snapshot_model_mismatch_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runner, *_ = _seed_fixture(
         module, tmp_path, monkeypatch, author_model="local-llm-proxy/other"
     )
@@ -631,7 +629,7 @@ def test_resolve_seed_snapshot_corpus_mismatch_proceeds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """D-SNAP-DEVMODE-EXCEPTIONS: corpus drift is reported, never refused."""
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runner, *_ = _seed_fixture(module, tmp_path, monkeypatch, template_hash="th-wrong")
     snap = runner._resolve_seed_snapshot(_session(0))
     # The seed PROCEEDS: the resolver returns the snapshot, no raise.
@@ -651,14 +649,14 @@ def test_resolve_seed_snapshot_corpus_mismatch_proceeds(
 def test_resolve_seed_snapshot_caches_load_but_validates_per_session(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runner, *_ = _seed_fixture(module, tmp_path, monkeypatch)
     first = runner._resolve_seed_snapshot(_session(0))
 
     def _boom(*args: Any, **kwargs: Any) -> Any:
         raise AssertionError("load_snapshot must not run again for this campaign")
 
-    monkeypatch.setattr(module, "load_snapshot", _boom)
+    monkeypatch.setattr(run_cumulative.runner, "load_snapshot", _boom)
     second = runner._resolve_seed_snapshot(_session(1))
     assert second is first
 
@@ -673,7 +671,7 @@ def test_resolve_seed_snapshot_caches_load_but_validates_per_session(
 def test_run_session_seeded_threads_tree_and_writes_honesty_fields(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runner, _runs_root, snap_tree = _seed_fixture(module, tmp_path, monkeypatch)
     constructed: list[Any] = []
 
@@ -716,7 +714,7 @@ def test_run_session_seeded_with_drifted_source_commit_proceeds(
     the drift the resolver reported is threaded to the adapter on
     ``seed_snapshot_drift`` (the seam the notice emission consumes).
     """
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runner, _runs_root, snap_tree = _seed_fixture(
         module, tmp_path, monkeypatch, source_commit="drifted-commit"
     )
@@ -757,7 +755,7 @@ def test_run_session_unseeded_writes_honest_build_phase_ran_true(
     Also proves the defensive getattr convention: this runner is built via
     __new__ and never had _seed_snapshot_id set at all.
     """
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runner = _build_runner(module, tmp_path)
     constructed: list[Any] = []
 
@@ -791,7 +789,7 @@ def test_run_session_refusal_aborts_before_runner_construction(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A refused snapshot ABORTS — no cell runner, no scaffold-build fallback."""
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     runs_root = tmp_path / "runs-root"
     runs_root.mkdir()
     monkeypatch.setenv("BENCH_RUNS_DIR", str(runs_root))
@@ -822,7 +820,7 @@ def test_handle_run_refuses_snapshot_error_with_clean_line(
     reported warning); the operator surface for the refusals that remain must
     survive unchanged.
     """
-    module = _load_run_cumulative_module()
+    module = run_cumulative
     monkeypatch.setenv("BENCH_SKIP_CLEANUP", "1")
 
     class _RefusingSequencer:
