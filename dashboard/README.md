@@ -8,7 +8,7 @@ skeptical engineer reading it closely.
 docker compose up -d          # → http://localhost:7717
 ```
 
-In Docker Desktop it appears as `bench-dashboard` with 7717 as a
+In Docker Desktop it appears as `learning-index-dashboard` with 7717 as a
 clickable link and a health dot that goes green once the board assembles.
 
 Host mode still works and needs no install — Node 18+ stdlib only:

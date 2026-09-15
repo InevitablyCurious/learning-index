@@ -1,18 +1,24 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Bench Dashboard
 #
-#   cd bench/dashboard && docker compose up -d
+#   cd dashboard && docker compose up -d
 #   open http://localhost:7717
 #
-# In Docker Desktop the container appears as `bench-dashboard` with 7717
-# as a clickable link, and the health dot goes green once the board assembles.
+# In Docker Desktop the container appears as `learning-index-dashboard` with
+# 7717 as a clickable link, and the health dot goes green once the board
+# assembles.
 # ─────────────────────────────────────────────────────────────────────────────
 
+# The project name is pinned, never left to compose's folder-name default: this
+# directory is called `dashboard`, and any other checkout with the same folder
+# name would otherwise share the project and replace this board's container.
+name: learning-index-dashboard
+
 services:
-  bench-dashboard:
+  learning-index-dashboard:
     build: .
-    image: bench-dashboard:v1
-    container_name: bench-dashboard
+    image: learning-index-dashboard:v1
+    container_name: learning-index-dashboard
     restart: unless-stopped
 
     ports:

@@ -41,7 +41,7 @@ for i in $(seq 1 20); do
   sleep 1
   if [ "$i" = 20 ]; then
     echo "  FAILED: /api/health never came up on :${PORT}"
-    docker compose logs --tail 30 bench-dashboard
+    docker compose logs --tail 30 learning-index-dashboard
     exit 1
   fi
 done
