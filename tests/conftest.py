@@ -22,6 +22,21 @@ def _isolate_telemetry_sink(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("BENCH_DATA_DIR", str(sink))
 
 
+@pytest.fixture(autouse=True)
+def _isolate_runs_root(tmp_path_factory, monkeypatch):
+    """Never let a test write into the REAL `runs/` tree.
+
+    Cell-path tests reach the attempt-1 snapshot capture, which writes
+    `<BENCH_RUNS_DIR or repo>/runs/snapshots/<id>/`. Without this, every suite
+    run deposited fixture snapshots (no model, no source commit) beside real
+    campaign data, where the control plane lists them as seedable builds.
+    Redirect every test to its own tmp runs root; a test that needs a specific
+    root still sets BENCH_RUNS_DIR itself, which overrides this.
+    """
+    runs_root = tmp_path_factory.mktemp("bench-runs-root")
+    monkeypatch.setenv("BENCH_RUNS_DIR", str(runs_root))
+
+
 def pytest_report_header(config):
     """Print usage guidance on every test run."""
     lines = []
