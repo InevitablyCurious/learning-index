@@ -454,8 +454,8 @@ ERROR_CAP_PER_TYPE = 20
 # stripped long ago because `tests/test_blinding.py` FORBIDS "cheat", "grader",
 # "oracle" and the rest from anything the model can read — a model that knows it
 # is being measured is not the model this run is measuring. What survives reads
-# as ordinary onboarding ("take a denial at face value", "stick to this
-# directory") and earns its place as working guidance, not as a deterrent.
+# as ordinary onboarding ("accept a denial and find another way", "stay in
+# this folder") and earns its place as working guidance, not as a deterrent.
 #
 # Cheating is prevented STRUCTURALLY, never by instruction: the gates, the
 # golden tree and the gate runner are not on the container's filesystem at all,
@@ -469,48 +469,12 @@ ERROR_CAP_PER_TYPE = 20
 # oversized stream can be killed mid-flight by the transport — losing the whole
 # write (2026-08-09).
 _WORKER_AGENTS_MD = """\
-# Notes for whoever picks this up
+# Notes
 
-## Scope
-- CONTRACT.md in this folder is the spec. Build what it describes — it is
-  complete, so you should not need anything outside this folder to finish.
-- If a tool call is denied, take the denial at face value and find another way
-  to do the work; don't try to route around it.
-- Stick to this project directory. Nothing you need lives outside it.
-
-## Chunk large writes — always
-- Never write a large file in a single tool call. A single-shot massive write
-  can be cut off mid-stream by the transport, and the entire write is lost.
-- Keep every write and edit to around 150 lines or less. Start each new file
-  with a bounded initial write, then grow it with successive append or edit
-  calls — each its own small generation.
-- The same for big rewrites: several small, targeted edits — never one giant
-  replacement.
-- If a write call fails or the result looks truncated, re-apply only the
-  missing chunk; do not restart the file from zero unless it is corrupt.
-
-## Long-running commands
-- Start a long-lived server by launching it from a small Node launcher that
-  discards its output and detaches the process, e.g.
-  `node -e "const {spawn}=require('node:child_process'); spawn('node',['src/server.ts'],{stdio:'ignore',detached:true}).unref()"`.
-  A bare `nohup node src/server.ts > /tmp/server.log 2>&1 &` leaves the pipe
-  open, so the shell keeps waiting and the command hangs until its timeout.
-- Stop what you started by PID (`kill <pid>`), not by pattern-matching on a
-  wrapper name — killing `npm start` does not kill the `node` process it
-  spawned, and the orphan will hold the terminal open.
-
-## Dependencies — use what is installed
-- The packages this project needs are already installed, including Playwright
-  and Chromium for browser testing. Use what is present rather than adding more.
-- Playwright is installed GLOBALLY, not in this project's node_modules. Load it
-  with CommonJS `require('playwright')` — never `import` from 'playwright' (an
-  ESM import cannot resolve the global install). Run the bare `playwright`
-  command, not `npx playwright`.
-- NEVER run `playwright install` or any package install — this machine has no
-  network, so an install hangs and wastes the whole run.
-
-## Tests and servers — keep them bounded
-- Always run a test or a dev server with an explicit timeout; never leave
-  anything running with no bound.
-- Stay within this machine's compute and memory limits. An unbounded test or an
-  orphaned background process can exhaust the machine and stall everything else."""
+- CONTRACT.md is the full spec. Everything you need is in this folder; stay in it.
+- If a tool call is denied, accept it and find another way.
+- Keep each write or edit under ~150 lines; build big files in several passes.
+- Start servers detached: `node -e "require('node:child_process').spawn('node',['src/server.ts'],{stdio:'ignore',detached:true}).unref()"`. Stop them with `kill <pid>`.
+- Playwright and Chromium are installed globally: use `require('playwright')` and the bare `playwright` command. There is no network, so never install packages.
+- Give every test and server run a timeout.
+"""
