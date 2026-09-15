@@ -5,10 +5,7 @@
 # A vanilla `docker build` omits both, so OKP_PLUGIN_CONTEXT defaults to the empty
 # `no-plugin` stage below and the conditional plugin install is skipped with no error.
 # (COPY --from= does not expand variables, hence the FROM ${ARG} AS stage workaround.)
-ARG OKP_PLUGIN_CONTEXT=no-plugin
-FROM scratch AS no-plugin
-FROM ${OKP_PLUGIN_CONTEXT} AS plugin-source
-
+#
 # Sidecar build-context seam: the sidecar files (egress-sidecar.js,
 # loop-kill-scanner.cjs, supervised-shell.js) live in images/sidecar/, outside
 # this build context. The dev build passes
@@ -16,7 +13,15 @@ FROM ${OKP_PLUGIN_CONTEXT} AS plugin-source
 # A vanilla `docker build` omits both, so SIDECAR_CONTEXT defaults to the
 # empty `no-sidecar` stage below (same FROM ${ARG} AS stage workaround as the
 # plugin seam — COPY --from= does not expand variables).
+#
+# Both ARGs MUST precede the first FROM: an ARG declared after a FROM is scoped
+# to that stage, so a later `FROM ${ARG}` sees it blank and the build fails.
+ARG OKP_PLUGIN_CONTEXT=no-plugin
 ARG SIDECAR_CONTEXT=no-sidecar
+
+FROM scratch AS no-plugin
+FROM ${OKP_PLUGIN_CONTEXT} AS plugin-source
+
 FROM scratch AS no-sidecar
 FROM ${SIDECAR_CONTEXT} AS sidecar-source
 
