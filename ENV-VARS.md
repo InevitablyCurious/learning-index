@@ -21,7 +21,6 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | BENCH_LEADER_KEYSTORE | ~/.okp/bench/leader-keystore | leader keystore dir | env |
 | BENCH_RUN_TIMEOUT_S | (optional) | run-level timeout | env |
 | BENCH_SKIP_CLEANUP | off | skip telemetry cleanup | env =1 |
-| OKP_KEYSTORE_PATH | ~/.okp/bench/leader-keystore | MCP keystore | env |
 | LOCAL_LLM_PROXY_API_KEY | (none) | Local LLM Proxy (:4545) token | env or .env |
 | BENCH_SPEND_DB_DSN | postgresql://spend_proxy:spend_proxy_dev@127.0.0.1:5440/spend_proxy | spend meter DB | env or .env |
 | BENCH_LIVE_STREAM | (none) | live-stream path | env |
@@ -93,9 +92,6 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_CONTROL_RUNTIME_URL | http://127.0.0.1:1234 | LM Studio runtime | env |
 | OKP_CONTROL_SERVE_URL | http://127.0.0.1:8719 | serve API | env |
 | OKP_CONTROL_PYTHON | null | python binary | env |
-| OKP_HOME | ~/.okp/bench | bench identity home | env |
-| OKP_MCP_DIR | client/packages/core (resolve(benchRoot, "..", "client", "packages", "core") — tools.mjs:38) | reference MCP dir | env |
-| BENCH_ORG | okp-org-0 | request-join tool default org | env |
 | OKP_DASH_RUNS_ROOT | <benchRoot>/runs | dashboard runs root | env |
 | OKP_IDENTITY_SEED_HEX | (none) | leader-signer seed | env or --seed-hex |
 | OKP_ENV | local | base-URL switch | env =production |
@@ -112,7 +108,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_AGENT_KEY | (none) | agent key fp (log-only) | env |
 | OKP_AGENT_PRIVATE_KEY | (none) | agent key fallback fp (log-only) | env |
 | OKP_EPOCH | (none) | epoch fp (log-only) | env |
-| BENCH_TOOLS_MANIFEST | (none) | dev-tools manifest path (control/tools.mjs:192) | env |
+| BENCH_TOOLS_URL | (none) | address of a custom-tools service whose tools the board's drawer lists and runs; never consulted by preflight or a run — see CUSTOM-TOOLS.md (control/tools.mjs) | env |
 | BENCH_STATS_MANIFEST | (none) | run-stats manifest path (control/runstats.mjs:182) | env |
 | OKP_DASHBOARD_CONFIG | (none) | dashboard shared-config path (control/routers.mjs:71 + harness/spend_key.py:48) | env |
 

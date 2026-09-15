@@ -3,12 +3,13 @@
 
 WHY THIS EXISTS
 ---------------
-Starting a cell requires ~6 checks that were previously scattered across
-RUNBOOK §0/§2.1/§7 and the workspace AGENTS.md. Doing them by hand costs an
-operator (or an agent) a long, error-prone discovery pass every single time,
-and the most important check — asserting the bench MCP identity at the seam —
-was effectively undiscoverable because `/v1/identity/pubkeys` is bearer-gated
-and returns `{"status":"error","error":"unauthorized"}` to a plain curl.
+Starting a cell requires a set of checks that were previously scattered across
+RUNBOOK §0/§2.1/§7. Doing them by hand costs an operator (or an agent) a long,
+error-prone discovery pass every single time.
+
+These are the BENCHMARK's own checks only. A memory system's services, and any
+custom tools, are checked by whoever manages them — never here, so a run does
+not depend on them.
 
 Run this instead. It prints a GO / NO-GO verdict and, on GO, the exact
 launch command with `< /dev/null` and the flag ordering already correct.
@@ -78,7 +79,6 @@ from preflight.core import REPO, Check  # noqa: E402
 from preflight.disk import check_disk  # noqa: E402
 from preflight.feedback import check_feedback_completeness  # noqa: E402
 from preflight.grader_tools import check_grader_tools  # noqa: E402
-from preflight.identity import check_identity  # noqa: E402
 from preflight.images import (  # noqa: E402
     check_grader_image,
     check_grader_resources,
@@ -93,18 +93,15 @@ from preflight.live import check_live_stream  # noqa: E402
 # A refusal that names a shell command sends the operator to a terminal, and an
 # operator sent to a shell for one thing ends up doing everything there — the
 # same reasoning that moved the rebuild onto the board in the first place. So a
-# failure that a custom tool repairs says WHICH TOOL, by id, and the board turns
-# that into the button.
+# failure that a built-in tool repairs says WHICH TOOL, by id, and the board
+# turns that into the button.
 #
-# IDS, NOT NAMES. The tool registry (control/tools.mjs + the dev manifest) is the
-# only thing that knows a tool's display name and whether it is registered here
-# at all — `bench-ready` and `bench-mcp-restart` are dev-contributed and absent
-# from a bare clone of bench/. An id that resolves to nothing degrades to the
-# text remedy already in the detail line, which is why every detail below still
-# names its own fix in words.
+# IDS, NOT NAMES. The control plane's built-in registry (control/tools.mjs) is the
+# only thing that knows a tool's display name. Preflight is the benchmark's own, so
+# it names ONLY the benchmark's own tools — never a custom tool served through
+# BENCH_TOOLS_URL, which a given installation may not have. Every detail below
+# still names its own fix in words.
 TOOL_WORKER_REBUILD = "worker-image-rebuild"
-TOOL_BENCH_READY = "bench-ready"
-TOOL_BENCH_MCP_RESTART = "bench-mcp-restart"
 
 
 def port_open(port: int, host: str = "127.0.0.1", timeout: float = 2.0) -> bool:
@@ -116,18 +113,14 @@ def port_open(port: int, host: str = "127.0.0.1", timeout: float = 2.0) -> bool:
 
 
 def check_ports(c: Check) -> None:
-    for port, what in ((4545, "local relay"), (4550, "bench MCP"), (4440, "hub")):
+    # The local model relay is the benchmark's own dependency: a local cell's
+    # model is reached through it. A memory system's services are NOT checked
+    # here — that belongs to whoever manages the memory system, and a baseline
+    # uses none of them. No button: nothing on the board brings the relay up.
+    for port, what in ((4545, "local relay"),):
         ok = port_open(port)
         hint = "" if ok else "  -> see RUNBOOK §7 for bring-up"
-        # Only the bench MCP has a button of its own. The relay and the hub are
-        # brought up with the stack, and pointing at Restart MCP for a dead hub
-        # would send the operator to press something that cannot help.
-        c.add(
-            f"port {port} ({what})",
-            ok,
-            ("open" if ok else "CLOSED") + hint,
-            remedy=TOOL_BENCH_MCP_RESTART if port == 4550 else None,
-        )
+        c.add(f"port {port} ({what})", ok, ("open" if ok else "CLOSED") + hint)
 
 
 def main() -> int:
@@ -187,7 +180,6 @@ def main() -> int:
         print("\nBENCH PREFLIGHT  (RUNBOOK §0 + AGENTS.md §2.1)\n")
     c = Check()
     check_ports(c)
-    check_identity(c)
     check_image(c)
     check_serve_drive_image(c)
     check_grader_image(c)

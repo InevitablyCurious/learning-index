@@ -37,7 +37,7 @@ import { ensureTree } from "../tree.mjs";
 // CUSTOM TOOLS. The harness owns the registry — the board renders what this
 // serves rather than keeping its own copy that could claim a tool exists.
 // /api/preflight resolves each failure's remedy to an actual button through it.
-import { attachRemedies, describeTools } from "../tools.mjs";
+import { attachRemedies, describeBuiltinTools } from "../tools.mjs";
 import {
   args,
   BENCH_ROOT,
@@ -555,8 +555,10 @@ export const routes = [
       //
       // Preflight names the tool that repairs a failure by ID and stops there;
       // this side owns the registry that turns an id into a button. See
-      // `attachRemedies` in tools.mjs for why the split is where it is.
-      attachRemedies(parsed?.checks, describeTools(BENCH_ROOT));
+      // `attachRemedies` in tools.mjs for why the split is where it is. Only the
+      // BUILT-IN tools: preflight names nothing else, so this never contacts the
+      // custom-tools service.
+      attachRemedies(parsed?.checks, describeBuiltinTools(BENCH_ROOT));
 
       // Exit 1 is a NO-GO, not a transport failure: the verdict travels in the
       // body and the HTTP status stays 200 so the board renders the reasons.

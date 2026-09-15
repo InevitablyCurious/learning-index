@@ -54,195 +54,153 @@ test("STOP sweeps the egress sidecar the harness actually names", async () => {
   assert.ok(!src.includes("name=wv-egress-"), "the pre-rename prefix must not linger in the stop path");
 });
 
-// ── THE DEV-SHIM SEAM ───────────────────────────────────────────────────────
+// ── CUSTOM TOOLS ────────────────────────────────────────────────────────────
 //
-// Tools that serve the iterate-on-the-bench loop live in dev/, not here, and
-// attach through BENCH_TOOLS_MANIFEST. These pin both sides of that: a
-// clone of bench/ ALONE must be clean, and an attached manifest must never be
-// able to reach machinery it has no business in.
+// Custom tools reach the drawer only through a separate service at
+// BENCH_TOOLS_URL (CUSTOM-TOOLS.md). These pin the benchmark's side of that: with
+// no service it serves only its own tools; a service that cannot be read is
+// REPORTED as one row; a service can neither redefine a built-in nor reach
+// preflight; and running a custom tool forwards exactly its declared arguments
+// and the service's own output. Each test runs its own throwaway service.
 
-test("SEAM: a clone of bench/ alone contributes no external tools", async () => {
-  // The whole reason the manifest exists. Declaring dev tools in the registry
-  // would put contributor orchestration into the repo people clone to measure
-  // their own memory system, and a tool permanently "blocked because ../dev is
-  // missing" is worse than no tool — it advertises what the clone cannot do.
-  const { describeTools } = await import("../tools.mjs");
-  const saved = process.env.BENCH_TOOLS_MANIFEST;
-  delete process.env.BENCH_TOOLS_MANIFEST;
+async function withToolsService(handler, fn) {
+  const { createServer } = await import("node:http");
+  const server = createServer(handler);
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const saved = process.env.BENCH_TOOLS_URL;
+  process.env.BENCH_TOOLS_URL = url;
   try {
-    const tools = describeTools(BENCH);
-    assert.ok(tools.length > 0, "the built-in tools must still be there");
-    assert.equal(
-      tools.filter((t) => t.external).length,
-      0,
-      "an unset manifest must contribute nothing at all",
-    );
-    assert.ok(
-      !tools.some((t) => t.id === "external-tools"),
-      "an unset manifest is not an error and must not render a blocked row",
-    );
+    return await fn(url);
   } finally {
-    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
-    else process.env.BENCH_TOOLS_MANIFEST = saved;
+    if (saved === undefined) delete process.env.BENCH_TOOLS_URL;
+    else process.env.BENCH_TOOLS_URL = saved;
+    await new Promise((r) => server.close(r));
+  }
+}
+
+function readJson(req) {
+  return new Promise((done) => {
+    let body = "";
+    req.on("data", (c) => { body += String(c); });
+    req.on("end", () => done(body ? JSON.parse(body) : {}));
+  });
+}
+
+function sendJson(res, status, body) {
+  res.writeHead(status, { "content-type": "application/json" });
+  res.end(JSON.stringify(body));
+}
+
+const SERVED = {
+  id: "join-something",
+  name: "Join something",
+  blurb: "asks to be admitted",
+  seams: ["one", "two"],
+  args: [{ name: "org", label: "org id", required: true, default: "org-0", help: "which org" }],
+  success_note: "Sent, NOT accepted",
+  timeout_ms: 5000,
+};
+
+test("SEAM: with no custom-tools service the drawer serves only the benchmark's own tools", async () => {
+  const { describeTools } = await import("../tools.mjs");
+  const saved = process.env.BENCH_TOOLS_URL;
+  delete process.env.BENCH_TOOLS_URL;
+  try {
+    const tools = await describeTools(BENCH);
+    assert.deepEqual(tools.map((t) => t.id), ["worker-image-rebuild"]);
+    assert.equal(tools.filter((t) => t.external).length, 0, "no service means no custom rows at all");
+    assert.equal(tools[0].success_note, null, "a built-in's own output is its report");
+  } finally {
+    if (saved === undefined) delete process.env.BENCH_TOOLS_URL;
+    else process.env.BENCH_TOOLS_URL = saved;
   }
 });
 
-test("SEAM: a broken manifest is REPORTED, never silently skipped", async () => {
-  // Returning [] would make a typo in the path indistinguishable from a
-  // manifest that legitimately declares nothing — the operator would go looking
-  // for their tool and find no trace of why it is absent.
+test("SEAM: a service that is down or off-contract is REPORTED, never silently skipped", async () => {
   const { describeTools } = await import("../tools.mjs");
-  const saved = process.env.BENCH_TOOLS_MANIFEST;
-  const dir = mkdtempSync(join(tmpdir(), "okp-tools-"));
+
+  // Off-contract: answers, but with no tools array.
+  await withToolsService((req, res) => sendJson(res, 200, { hello: true }), async (url) => {
+    const row = (await describeTools(BENCH)).find((t) => t.id === "custom-tools");
+    assert.ok(row, "an off-contract service must surface as a named blocked row");
+    assert.equal(row.status, "blocked");
+    assert.match(row.blocked_reason, /custom tools unavailable at/);
+    assert.ok(row.blocked_reason.includes(url));
+  });
+
+  // Down: an address nothing listens on any more.
+  let closedUrl = "";
+  await withToolsService((req, res) => sendJson(res, 200, { tools: [] }), async (url) => { closedUrl = url; });
+  const saved = process.env.BENCH_TOOLS_URL;
+  process.env.BENCH_TOOLS_URL = closedUrl;
   try {
-    process.env.BENCH_TOOLS_MANIFEST = join(dir, "absent.json");
-    let row = describeTools(BENCH).find((t) => t.id === "external-tools");
-    assert.ok(row, "a missing manifest must surface as a named blocked row");
+    const tools = await describeTools(BENCH);
+    const row = tools.find((t) => t.id === "custom-tools");
     assert.equal(row.status, "blocked");
-    assert.match(row.blocked_reason, /cannot read/);
-
-    const bad = join(dir, "bad.json");
-    writeFileSync(bad, "{not json", "utf8");
-    process.env.BENCH_TOOLS_MANIFEST = bad;
-    row = describeTools(BENCH).find((t) => t.id === "external-tools");
-    assert.equal(row.status, "blocked");
-
-    const noTools = join(dir, "empty.json");
-    writeFileSync(noTools, JSON.stringify({ schema_version: 1 }), "utf8");
-    process.env.BENCH_TOOLS_MANIFEST = noTools;
-    row = describeTools(BENCH).find((t) => t.id === "external-tools");
-    assert.match(row.blocked_reason, /no "tools" array/);
+    assert.ok(row.blocked_reason.includes(closedUrl));
+    assert.ok(tools.some((t) => t.id === "worker-image-rebuild"), "the built-ins are unaffected");
   } finally {
-    rmSync(dir, { recursive: true, force: true });
-    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
-    else process.env.BENCH_TOOLS_MANIFEST = saved;
+    if (saved === undefined) delete process.env.BENCH_TOOLS_URL;
+    else process.env.BENCH_TOOLS_URL = saved;
   }
 });
 
-test("SEAM: a manifest cannot redefine a built-in, and cannot reach mcp-admin", async () => {
-  // TWO LIMITS, BOTH DELIBERATE. `mcp-admin` runs as the BENCH IDENTITY against
-  // the leader keystore; identity-bearing handlers stay in the bench repo where
-  // they can be reviewed. And a manifest must not be able to make
-  // `worker-image-rebuild` mean something else on one installation.
+test("SEAM: served tools arrive with their own inputs and caveat, marked as custom", async () => {
+  const { describeTools } = await import("../tools.mjs");
+  await withToolsService((req, res) => sendJson(res, 200, { tools: [SERVED] }), async () => {
+    const row = (await describeTools(BENCH)).find((t) => t.id === "join-something");
+    assert.equal(row.status, "wired");
+    assert.equal(row.external, true);
+    assert.equal(row.args[0].name, "org");
+    assert.equal(row.args[0].default, "org-0");
+    assert.equal(row.success_note, "Sent, NOT accepted");
+    assert.equal(row.refuse_while_running, true, "a tool that does not say otherwise is refused mid-cell");
+  });
+});
+
+test("SEAM: a service cannot redefine a built-in", async () => {
   const { describeTools, toolRegistry } = await import("../tools.mjs");
-  const saved = process.env.BENCH_TOOLS_MANIFEST;
-  const dir = mkdtempSync(join(tmpdir(), "okp-tools-"));
-  try {
-    const manifest = join(dir, "tools.json");
-    writeFileSync(
-      manifest,
-      JSON.stringify({
-        tools: [
-          { id: "worker-image-rebuild", name: "hijack", command: "/bin/echo" },
-          { id: "sneaky", name: "sneaky", command: "/bin/echo", invoke: { kind: "mcp-admin" } },
-        ],
-      }),
-      "utf8",
-    );
-    process.env.BENCH_TOOLS_MANIFEST = manifest;
-
-    const registry = toolRegistry(BENCH);
-    const builtin = registry.filter((t) => t.id === "worker-image-rebuild");
+  const hijack = { id: "worker-image-rebuild", name: "hijack", timeout_ms: 1 };
+  await withToolsService((req, res) => sendJson(res, 200, { tools: [hijack] }), async () => {
+    const builtin = (await toolRegistry(BENCH)).filter((t) => t.id === "worker-image-rebuild");
     assert.equal(builtin.length, 1, "the built-in must survive intact");
-    assert.match(
-      String(builtin[0].invoke.argv[0] ?? ""),
-      /rebuild_worker_image\.py$/,
-      "the built-in must not be replaced",
-    );
-
-    const collision = describeTools(BENCH).find(
-      (t) => t.id === "worker-image-rebuild-external",
-    );
+    assert.match(String(builtin[0].invoke.argv[0] ?? ""), /rebuild_worker_image\.py$/);
+    const collision = (await describeTools(BENCH)).find((t) => t.id === "worker-image-rebuild-external");
     assert.equal(collision.status, "blocked");
     assert.match(collision.blocked_reason, /built-in/);
-
-    const sneaky = registry.find((t) => t.id === "sneaky");
-    assert.equal(
-      sneaky.invoke.kind,
-      "script",
-      "an external tool is FORCED onto the generic script runner — it must never select mcp-admin",
-    );
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
-    else process.env.BENCH_TOOLS_MANIFEST = saved;
-  }
+  });
 });
 
-test("SEAM: the dev manifest that ships in this workspace is valid and wires up", async () => {
-  // The manifest lives in dev/, so this is skipped in a bench-only checkout
-  // rather than failing — which is the seam working as designed.
-  const manifest = join(BENCH, "..", "dev", "bench-tools.json");
-  if (!existsSync(manifest)) return;
+test("SEAM: running a custom tool forwards only its declared arguments and the service's own output", async () => {
+  const { invokeTool } = await import("../tools.mjs");
+  let received = null;
+  const handler = async (req, res) => {
+    if (req.method === "GET") return sendJson(res, 200, { tools: [SERVED] });
+    received = await readJson(req);
+    sendJson(res, 200, { ok: false, code: "exit_2", reason: "the hub refused", stdout: "out", stderr: "err" });
+  };
+  await withToolsService(handler, async () => {
+    const out = await invokeTool(BENCH, "join-something", { org: "org-7", smuggled: "--evil" });
+    assert.deepEqual(received, { id: "join-something", args: { org: "org-7" } });
+    assert.equal(out.ok, false);
+    assert.equal(out.code, "exit_2", "the service's own verdict is forwarded, not rewritten");
+    assert.equal(out.reason, "the hub refused");
+    assert.equal(out.stdout, "out");
 
-  const { describeTools } = await import("../tools.mjs");
-  const saved = process.env.BENCH_TOOLS_MANIFEST;
-  process.env.BENCH_TOOLS_MANIFEST = manifest;
-  try {
-    // bench-mcp-restart lives here too: it drives ../dev/scripts/bench-mcp.sh,
-    // so declaring it as a built-in put a permanently blocked row advertising
-    // dev/ on the board of anyone who cloned bench alone.
-    const mcp = describeTools(BENCH).find((t) => t.id === "bench-mcp-restart");
-    assert.ok(mcp, "dev/bench-tools.json must contribute bench-mcp-restart");
-    assert.equal(mcp.external, true, "the bench MCP supervisor is a dev shim, not a built-in");
-
-    const ready = describeTools(BENCH).find((t) => t.id === "bench-ready");
-    assert.ok(ready, "dev/bench-tools.json must contribute bench-ready");
-    assert.equal(ready.external, true, "a contributed tool must be marked as one");
-    assert.equal(
-      ready.status,
-      "wired",
-      `bench-ready is blocked: ${ready.blocked_reason}`,
-    );
-    assert.equal(
-      ready.refuse_while_running,
-      true,
-      "converging the substrate mid-cell would change what is being measured",
-    );
-    assert.ok(ready.seams.length >= 3, "an operator must be able to see what it will do");
-  } finally {
-    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
-    else process.env.BENCH_TOOLS_MANIFEST = saved;
-  }
+    const missing = await invokeTool(BENCH, "join-something", {});
+    assert.equal(missing.code, "missing_arg");
+  });
 });
 
-// ── A TOOL REPORTS ITS OWN OUTCOME ──────────────────────────────────────────
-//
-// THE MEASURED DEFECT (2026-09-03). The drawer's success block hardcoded
-// request-join's vocabulary, so every tool that succeeded rendered "SENT — the
-// org's leader still has to accept it on their dashboard". A worker-image
-// rebuild that ran a real ten-second docker build reported that it was waiting
-// on a human to approve something, and the build log the control plane returns
-// in full was thrown away. From the board there was no way to tell a working
-// button from a dead one.
-//
-// Pinned on the SHAPE (the note is data on the tool, and output is rendered)
-// rather than on any one string, because the bug was that one tool's words were
-// structural.
-
-test("TOOLS: the success caveat belongs to the tool, not to the drawer", async () => {
-  const { describeTools } = await import("../tools.mjs");
-  const saved = process.env.BENCH_TOOLS_MANIFEST;
-  delete process.env.BENCH_TOOLS_MANIFEST;
-  try {
-    const tools = describeTools(BENCH);
-    const join = tools.find((t) => t.id === "request-join");
-    assert.match(
-      String(join.success_note ?? ""),
-      /accept/i,
-      "request-join must carry its own 'submitted is not accepted' caveat",
-    );
-    for (const t of tools.filter((t) => t.id !== "request-join")) {
-      assert.equal(
-        t.success_note,
-        null,
-        `${t.id} must not inherit another tool's outcome line — its output is its report`,
-      );
-    }
-  } finally {
-    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
-    else process.env.BENCH_TOOLS_MANIFEST = saved;
-  }
+test("SEAM: preflight's fix buttons never contact the custom-tools service", async () => {
+  const { describeBuiltinTools } = await import("../tools.mjs");
+  let hits = 0;
+  await withToolsService((req, res) => { hits += 1; sendJson(res, 200, { tools: [SERVED] }); }, async () => {
+    const ids = describeBuiltinTools(BENCH).map((t) => t.id);
+    assert.deepEqual(ids, ["worker-image-rebuild"]);
+    assert.equal(hits, 0, "resolving preflight remedies must not depend on the service");
+  });
 });
 
 test("TOOLS: the drawer renders the command's own output", () => {

@@ -82,6 +82,15 @@ reinjects nothing; it measures the OFF/ON contrast.
 `BENCH_PLUGIN_DIR`; nothing in this repo's public surface needs to know its
 name.
 
+## Custom tools
+
+The board's tool drawer lists the benchmark's own tools and, optionally, tools
+served by a separate custom-tools service — for example a memory system's own
+operations. Point `BENCH_TOOLS_URL` at that service; unset, the drawer shows only
+the benchmark's tools. The benchmark never consults the service for preflight or
+for a run, so it runs the same whether the service is healthy, broken or absent.
+The contract is in [CUSTOM-TOOLS.md](./CUSTOM-TOOLS.md).
+
 ## Repository layout
 
 ```

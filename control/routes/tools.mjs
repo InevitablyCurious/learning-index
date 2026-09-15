@@ -30,7 +30,7 @@ export const routes = [
     method: "GET",
     path: "/api/tools",
     async handle(req, res, url) {
-      sendJson(res, 200, { ok: true, tools: describeTools(BENCH_ROOT) });
+      sendJson(res, 200, { ok: true, tools: await describeTools(BENCH_ROOT) });
       return;
     },
   },
@@ -56,7 +56,7 @@ export const routes = [
       // running cell changes what is being measured mid-measurement, and the
       // result would look valid. The refusal names the run and the remedy —
       // stopping a cell is a button on the same board.
-      const sensitive = describeTools(BENCH_ROOT).find(
+      const sensitive = (await describeTools(BENCH_ROOT)).find(
         (t) => t.id === payload?.id && t.refuse_while_running,
       );
       if (sensitive) {

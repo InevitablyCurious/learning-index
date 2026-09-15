@@ -456,7 +456,7 @@ function argField(t, a) {
 /**
  * The outcome — the TOOL's, not a template's.
  *
- * WHAT WAS WRONG HERE. This block hardcoded request-join's vocabulary, so every
+ * WHAT WAS WRONG HERE. This block hardcoded one tool's vocabulary, so every
  * tool that succeeded reported SENT and a caveat about an org leader approving
  * it. A worker-image rebuild that ran a real docker build for ten seconds said
  * it was waiting on a human, and the build log — which the control plane
@@ -472,8 +472,8 @@ function resultBlock(t, r) {
   const log = out ? `<pre class="tool-log">${esc(out)}</pre>` : "";
 
   if (r.ok) {
-    // Structured fields, when the handler returned any (the mcp-admin path
-    // parses JSON; the script path does not).
+    // Structured fields, when the tool returned any (a custom tool may return a
+    // structured `result`; a built-in script does not).
     const res = r.result && typeof r.result === "object" ? r.result : {};
     const lines = Object.entries(res)
       .filter(([, v]) => v !== null && v !== undefined && typeof v !== "object")

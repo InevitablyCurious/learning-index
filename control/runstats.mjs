@@ -23,8 +23,8 @@
 //
 // The bench declares NONE of the custom ones and does not know they exist. An
 // external manifest names them and `BENCH_STATS_MANIFEST` points at it —
-// the same seam shape as `BENCH_TOOLS_MANIFEST` in tools.mjs, for the same
-// reason. Unset, which is what a fresh clone gets, contributes nothing.
+// for the same reason custom tools reach the board only through
+// `BENCH_TOOLS_URL` (tools.mjs). Unset, which is what a fresh clone gets, contributes nothing.
 //
 // The two arrive as two ARRAYS under two keys. Same entry shape either side, so
 // the board renders one slot renderer for both — but they are never

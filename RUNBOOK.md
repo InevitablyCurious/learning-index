@@ -78,17 +78,16 @@ Everything an operator needs to launch a run. Rationale and rules live in the se
 .venv/bin/python scripts/bench_preflight.py --cloud --provider deepseek --model deepseek-chat --mode off
 ```
 
-It performs EVERY check in this section — ports, **identity asserted at the seam**, worker-image
+It performs EVERY check in this section — the local model relay port, worker-image
 staleness, the campaign slot (active-tree-aware: `runs/<tree>/…/<model>`; the legacy flat
 `runs/cumulative-<model>` slot only when no tree pointer exists), disk — then prints **GO** with
 the exact launch command (correct flag order, `< /dev/null` included), or **NO-GO** naming the fix.
 Exit 0 = GO, 1 = NO-GO.
 
 Added 2026-08-11 because doing this by hand cost a full discovery pass every run: the
-steps were spread across §0/§2.1/§7, and the identity assertion — the one check that has actually
-caught a real defect — was effectively undiscoverable, since `/v1/identity/pubkeys` is bearer-gated
-and answers a plain `curl` with `{"status":"error","error":"unauthorized"}`. The script reads the
-token the same way the harness does. **It only reads and reports** — it never archives, wipes, or
+steps were spread across §0/§2.1/§7. A memory system's own services (its MCP, hub and identity)
+are NOT checked here: that belongs to whoever manages the memory system, and a baseline uses none
+of them. **It only reads and reports** — it never archives, wipes, or
 launches; those stay operator decisions (step 3a, §2).
 
 **Start — PRIMARY: the control plane** (`127.0.0.1:8718`). It owns backgrounding, stdin
@@ -112,15 +111,8 @@ SECONDARY path.
 The manual equivalents below are reference for debugging a NO-GO.
 
 ```bash
-# 1. Preflight — all three must succeed (§7 for bring-up if any fail):
+# 1. Preflight — the local model relay must answer (§7 for bring-up):
 nc -z 127.0.0.1 4545   # local relay (session + extraction models)
-nc -z 127.0.0.1 4550   # the ONE bench Model Context Protocol (MCP; identity 22f765e8)
-nc -z 127.0.0.1 4440   # hub
-#    A PORT ANSWERING IS NOT AN IDENTITY (AGENTS.md §2.1). `nc` proves liveness
-#    only; it proved nothing in two real failures. The fingerprint above is
-#    fingerprint(ed_pubkey_bytes) and MUST be asserted via GET /v1/identity/pubkeys —
-#    which bench_preflight.py does for you. NEVER point any bench component at
-#    :4450 (the operator's real host MCP).
 
 # 2. Worker image — rebuild when images/worker/ CHANGED since the last build
 #    (the plugin tree BENCH_PLUGIN_DIR names is baked in at build time; unset

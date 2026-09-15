@@ -33,8 +33,8 @@ IMAGE = "bench-worker:v1"
 #: WHY AN ENV VAR AND NOT A PATH IN THIS REPO. The plugin is the MEMORY LAYER's,
 #: shipped by the memory side and re-homed out of the public bench tree. `harness/`
 #: must clone and run out of the box, so it cannot know where anyone's plugin
-#: lives -- the same reason `BENCH_TOOLS_MANIFEST` and
-#: `BENCH_STATS_MANIFEST` exist. Unset, which is what a fresh clone gets, is
+#: lives -- the same reason custom tools reach the board only through
+#: `BENCH_TOOLS_URL` and custom stats through `BENCH_STATS_MANIFEST`. Unset, which is what a fresh clone gets, is
 #: a VANILLA build: correct, and not an error.
 #:
 #: WHY BOTH SIDES MUST READ IT. The freshness check asks "is this image what this

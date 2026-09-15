@@ -60,7 +60,7 @@ def test_a_control_plane_older_than_the_source_is_stale_and_names_the_fix() -> N
     )
     assert ok is False
     assert "control/server.mjs is NEWER" in detail
-    assert "make control-restart" in detail, "a failure must name its remedy"
+    assert "restart the control plane" in detail, "a failure must name its remedy"
 
 
 def test_a_control_plane_with_no_started_at_is_stale_by_definition() -> None:
@@ -76,7 +76,7 @@ def test_a_control_plane_with_no_started_at_is_stale_by_definition() -> None:
     )
     assert ok is False
     assert "DEFINITELY stale" in detail
-    assert "make control-restart" in detail
+    assert "restart the control plane" in detail
 
 
 def test_the_check_is_blocking() -> None:

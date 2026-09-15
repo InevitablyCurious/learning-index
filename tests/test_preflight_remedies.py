@@ -8,7 +8,7 @@ an operator sent to a shell for one thing ends up doing everything there, which
 is the reasoning that put the rebuild on the board in the first place.
 
 Preflight now names the remedy by TOOL ID. It deliberately stops there: the tool
-registry (control/tools.mjs plus the dev manifest) is the only thing that knows a
+registry (control/tools.mjs) is the only thing that knows a
 tool's display name and whether it is installed at all, and a second copy of that
 mapping here would be the drift this seam exists to prevent.
 
@@ -109,9 +109,9 @@ def test_a_docker_less_host_is_offered_no_button() -> None:
     )
 
 
-def test_the_bench_mcp_port_is_the_only_port_with_a_button() -> None:
-    """The relay and the hub come up with the stack. Pointing a dead hub at
-    Restart MCP would send the operator to press something that cannot help."""
+def test_the_relay_port_check_offers_no_button() -> None:
+    """A dead model relay is brought up outside the board, so no tool repairs it —
+    and preflight checks no memory-system service at all."""
     pf = _preflight()
     c = pf.Check()
     saved = pf.port_open
@@ -122,9 +122,7 @@ def test_the_bench_mcp_port_is_the_only_port_with_a_button() -> None:
         pf.port_open = saved
 
     remedies = {r["name"]: r["remedy_tool"] for r in c.as_rows()}
-    assert remedies["port 4550 (bench MCP)"] == "bench-mcp-restart"
-    assert remedies["port 4545 (local relay)"] is None
-    assert remedies["port 4440 (hub)"] is None
+    assert remedies == {"port 4545 (local relay)": None}
 
 
 def test_every_remedy_a_check_names_is_one_of_the_declared_tool_ids() -> None:
@@ -136,7 +134,7 @@ def test_every_remedy_a_check_names_is_one_of_the_declared_tool_ids() -> None:
     declared = {
         v for k, v in vars(pf).items() if k.startswith("TOOL_") and isinstance(v, str)
     }
-    assert declared == {"worker-image-rebuild", "bench-ready", "bench-mcp-restart"}
+    assert declared == {"worker-image-rebuild"}
 
     src = (REPO / "scripts" / "bench_preflight.py").read_text(encoding="utf-8")
     for line in src.splitlines():

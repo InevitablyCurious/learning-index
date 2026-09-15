@@ -47,8 +47,8 @@ test("SEAM: the dev stats manifest is valid and the relay loop counter stays ret
 // this side is the one that knows which tools exist here.
 
 test("REMEDY: a failure's tool id resolves to the registry's own name and status", async () => {
-  const { attachRemedies, describeTools } = await import("../tools.mjs");
-  const registry = describeTools(BENCH);
+  const { attachRemedies, describeBuiltinTools } = await import("../tools.mjs");
+  const registry = describeBuiltinTools(BENCH);
   const rebuild = registry.find((t) => t.id === "worker-image-rebuild");
   assert.ok(rebuild, "worker-image-rebuild is a built-in and must be in the registry");
 
@@ -66,8 +66,7 @@ test("REMEDY: a failure's tool id resolves to the registry's own name and status
 });
 
 test("REMEDY: an id this installation does not have becomes null, never a button", async () => {
-  // `bench-ready` and `bench-mcp-restart` are dev-contributed: a bare clone of
-  // bench/ has neither. Rendering a button for a tool that is not registered
+  // Rendering a button for a tool that is not registered
   // would refuse the moment it was pressed, which is worse than the words the
   // check already carries.
   const { attachRemedies } = await import("../tools.mjs");
@@ -80,35 +79,25 @@ test("REMEDY: a check with no remedy_tool is left completely alone", async () =>
   // Most failures have no button — a campaign slot to archive, a dead hub, a
   // roster that disagrees with itself. Those must not grow an empty `remedy`
   // key the board could mistake for "resolved to nothing".
-  const { attachRemedies, describeTools } = await import("../tools.mjs");
+  const { attachRemedies, describeBuiltinTools } = await import("../tools.mjs");
   const checks = [{ name: "campaign slot", status: "fail" }, { name: "disk free", status: "pass" }];
-  attachRemedies(checks, describeTools(BENCH));
+  attachRemedies(checks, describeBuiltinTools(BENCH));
   assert.ok(!("remedy" in checks[0]));
   assert.ok(!("remedy" in checks[1]));
 });
 
-test("SEAM: every remedy preflight can name is a real tool id somewhere", async () => {
+test("SEAM: every remedy preflight can name is one of the benchmark's own tools", async () => {
   // THE CROSS-FILE CONTRACT, pinned. Preflight names tools by id in a Python
-  // file; the registry defines them in JS. Nothing but this test connects the
-  // two, and an id that matches nothing degrades SILENTLY to "no button" —
-  // which looks exactly like a check that never had a remedy.
-  const { toolRegistry } = await import("../tools.mjs");
+  // file; the built-in registry defines them in JS. An id that matches nothing
+  // degrades SILENTLY to "no button". And preflight is the benchmark's own: it
+  // must never point at a custom tool, which an installation may not have.
+  const { describeBuiltinTools } = await import("../tools.mjs");
   const src = readFileSync(join(BENCH, "scripts", "bench_preflight.py"), "utf8");
   const declared = [...src.matchAll(/^TOOL_[A-Z_]+ = "([a-z0-9-]+)"$/gm)].map((m) => m[1]);
-  assert.ok(declared.length >= 3, `preflight declares no remedy tool ids: ${declared}`);
-
-  // The dev manifest is what contributes bench-ready/bench-mcp-restart, and it
-  // is present in this workspace — so here, every declared id must resolve.
-  const saved = process.env.BENCH_TOOLS_MANIFEST;
-  process.env.BENCH_TOOLS_MANIFEST = join(BENCH, "..", "dev", "bench-tools.json");
-  try {
-    const ids = new Set(toolRegistry(BENCH).map((t) => t.id));
-    for (const id of declared) {
-      assert.ok(ids.has(id), `preflight names remedy tool "${id}" and nothing registers it`);
-    }
-  } finally {
-    if (saved === undefined) delete process.env.BENCH_TOOLS_MANIFEST;
-    else process.env.BENCH_TOOLS_MANIFEST = saved;
+  assert.ok(declared.length >= 1, `preflight declares no remedy tool ids: ${declared}`);
+  const ids = new Set(describeBuiltinTools(BENCH).map((t) => t.id));
+  for (const id of declared) {
+    assert.ok(ids.has(id), `preflight names remedy tool "${id}", which is not a built-in tool`);
   }
 });
 

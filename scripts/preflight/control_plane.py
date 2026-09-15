@@ -67,24 +67,18 @@ def check_control_plane_freshness(c: Check) -> None:
             "control plane",
             True,
             "not running on :8718 — board launches unavailable "
-            "(start: cd dev && make control-start)",
+            "(start it: node control/server.mjs)",
         )
         return
-
-    # Function-local: the remedy id is a literal in the entry (regex-pinned by
-    # control/control.test.mjs); a top-level import here would be circular.
-    from bench_preflight import TOOL_BENCH_READY
 
     ok, detail = control_plane_freshness_verdict(
         started_at=str(health.get("started_at") or ""),
         newest_mtime=newest,
         newest_path=newest_path,
     )
-    # PREPARE BENCH, not Rebuild worker. Staleness here means the long-lived
-    # host process is running code older than control/ on disk, and the only
-    # tool that cycles it is bench-ready — which deliberately restarts it LAST,
-    # because a process cannot supervise its own replacement.
-    c.add("control plane", ok, detail, remedy=TOOL_BENCH_READY)
+    # NO BUTTON. The fix is restarting this long-lived host process, and a
+    # process cannot supervise its own replacement; the detail names the fix.
+    c.add("control plane", ok, detail)
 
 
 def control_plane_freshness_verdict(
@@ -101,7 +95,7 @@ def control_plane_freshness_verdict(
         return (
             False,
             "running, but reports no started_at — it predates the freshness "
-            "field entirely, so it is DEFINITELY stale -> cd dev && make control-restart",
+            "field entirely, so it is DEFINITELY stale -> restart the control plane (node control/server.mjs)",
         )
 
     import datetime as _dt
@@ -115,7 +109,7 @@ def control_plane_freshness_verdict(
         f"started {started_at[:19]}"
         + (
             f" but {newest_path} is NEWER -> the running process is not this "
-            "code; restart: cd dev && make control-restart"
+            "code; restart the control plane (node control/server.mjs)"
             if stale
             else " (newer than control/ — no restart needed)"
         ),
