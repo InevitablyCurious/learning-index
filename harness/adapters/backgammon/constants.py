@@ -363,15 +363,8 @@ _COMPACT_SETTLE_GRACE_S = 20.0
 #
 # EXACTLY ONE BUILD-FLAGGED DRIVE PER CHUNK. The plugin fires at most once per
 # flagged idle and is hard-capped at six fires per session, so the sentinel's
-# job is to make sure the six idles it flags are the six CHUNK BOUNDARIES:
-#
-#   record turn ON  -> the chunk drive is HELD (repair) and the trailing
-#                      `-record-N` turn is flagged build. Compaction then lands
-#                      AFTER the recording and BEFORE the next chunk, which is
-#                      the ordering the recording turn exists to protect: the
-#                      material must still be in context when it is recorded.
-#   record turn OFF -> there is no trailing turn, so the chunk drive itself is
-#                      flagged build and its idle is the boundary.
+# job is to make sure the six idles it flags are the six CHUNK BOUNDARIES: the
+# chunk drive itself is flagged build and its idle is the boundary.
 #
 # Recovery nudge re-drives are ALWAYS HELD (repair): a nudge is not a chunk
 # boundary — the boundary idle already fired at the abort that triggered the
@@ -385,9 +378,6 @@ _COMPACT_SETTLE_GRACE_S = 20.0
 _COMPACT_PHASE_BUILD = "build"
 _COMPACT_PHASE_REPAIR = "repair"
 _COMPACT_PHASE_FILENAME = "phase"
-
-# Phase-name suffix of the per-chunk recording turn (`initial-chunk-3-record-3`).
-_RECORD_PHASE_MARKER = "-record-"
 
 
 # How many fixed complaints the pass verdict names before it summarises the
@@ -524,110 +514,3 @@ _WORKER_AGENTS_MD = """\
   anything running with no bound.
 - Stay within this machine's compute and memory limits. An unbounded test or an
   orphaned background process can exhaust the machine and stall everything else."""
-
-
-# ── PHASE SIGNALS ONLY. THE MEMORY LAYER OWNS EVERYTHING ELSE. ──────────────
-#
-# This is a PUBLIC benchmark: anyone plugs their own memory system in, so nothing
-# here may name one. These three blocks used to carry a specific vendor's capture
-# protocol — its tool name, its argument list, its fragment schema — hardcoded
-# into the adapter. That is a violation of the plug-in contract and it is gone.
-#
-# What survives is the one thing the tree legitimately knows and a memory layer
-# cannot: WHICH PHASE THE RUN IS IN. The split is now:
-#
-#   the tree (here)        the EVENT — "not yet", "now", "still now"
-#   AGENTS.md (imported)   the memory layer's standing cadence, from
-#                          BENCH_AGENTS_AUX_FILE — see _agents_md_text()
-#   the tool description   the memory layer's own rules, reissued every turn
-#
-# So these blocks say WHEN and never HOW, and they name no tool. A memory layer
-# with no notion of phases can ignore them; one that has such a notion reads them
-# as the cue its own directive told the model to wait for.
-#
-# ── BUILD-PHASE CAPTURE REINSTATED (Jerry, 2026-09-08 — reversal) ────────────
-#
-# The 2026-09-04 decision to exclude capture during the build phase has been
-# REVERSED. Capture during build is allowed and expected — the golden run carried
-# no such exclusion. The build chunks therefore carry ONLY the chunk body (plus the
-# memory-blob prepend on chunk 1): the "## Not yet / do not record" block and its
-# splice are removed.
-#
-# The AUX cadence directive (supplied via BENCH_AGENTS_AUX_FILE) already
-# reaches build chunks through the standing
-# AGENTS.md, so the model is told to capture during build by the memory layer's own
-# mandate — never by a hardcoded adapter splice. As before, nothing is written INTO
-# task/backgammon/prompts/: those six chunk files stay the fixed, certified corpus
-# (dev-benchmark.md §1b), and editing them would change chunk_plan_hash and put
-# memory-layer vocabulary inside the tree test_blinding.py scans.
-
-_REPAIR_CAPTURE_REMINDER_MD = """\
-## Recording
-
-Still the time to record what you learn. When you have finished working through \
-the problems above, record it the way your notes describe — same limits, same \
-evidence rules."""
-
-
-# ── THE RECORDING TURN ──────────────────────────────────────────────────────
-#
-# Sent once per chunk, AFTER the chunk drive reaches idle and BEFORE
-# compaction. Since WO-MARKER-RIP it is also the drive the phase sentinel flags
-# as the chunk boundary, so the compaction fires on ITS idle — the recording
-# always precedes the summarize it would otherwise be summarized away by.
-#
-# ── WHY IT EXISTS (run 1788976174) ─────────────────────────────────────────
-#
-# 148 tool calls, 26 completed todos, 13 chunk boundaries, ZERO records. The
-# transcript shows the model forming the intent and losing it:
-#
-#   [reasoning]  "Let me now record the knowledge and finish. Actually wait —
-#                 I should record this chunk's learnings. Let me do that now."
-#   [text]       "CHUNK FINISHED"       <- the sign-off string, since deleted
-#   [step-finish] reason: "stop"
-#   [compaction]  auto: true
-#
-# The intent lived in a reasoning block; the sign-off ended the turn; compaction
-# fired into the gap. Thirteen boundaries, zero preceded by a record. The model
-# was not disobeying — it had no turn left to act in. (The string is gone now,
-# but the shape is not: a turn that ends is a turn with no room left in it, so
-# the recording still needs a turn of its own.)
-#
-# ── WHY A TURN AND NOT A STRONGER INSTRUCTION ──────────────────────────────
-#
-# This is the golden run's own shape. `pilot-driver.py` did not ask the model to
-# remember to extract; it ASKED, on every one of its 111 chunks, and the model
-# could answer with an empty fragment. The forcing was in the QUESTION being
-# unskippable — never in the answer being mandatory.
-#
-# So the flexibility is preserved exactly: the model decides what, or whether,
-# to record. It just no longer has to find a moment to do it in, because the
-# moment is given.
-#
-# ── WHY THE HARNESS SAYS NOTHING ABOUT HOW ─────────────────────────────────
-#
-# Same rule as every other capture surface here: `harness/` says WHEN, the memory
-# layer says HOW. This names no tool and describes no shape — a plugged-in
-# memory layer supplies both through its own directive. A cell with no memory
-# layer reads this as a moment to reflect and moves on, which costs one turn and
-# breaks nothing.
-_RECORD_NOW_MD = """\
-This chunk is closed. Before moving on, record what you learned from it, the way \
-your notes describe.
-
-If this chunk produced nothing worth recording, say so and move on — an empty \
-stretch is an honest result, and inventing something to fill the space is worse \
-than recording nothing."""
-
-
-_SESSION_EXTRACTION_MD = """\
-## Recording
-
-You have moved past building and into fixing. The standing instruction in your \
-notes applies here exactly as it did during the build: when you have finished \
-working through the problems above, record what you learned, the way those \
-notes describe.
-
-Solving the problems above is still the job. Recording is what you do once you \
-have.
-"""

@@ -183,7 +183,6 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
         gate_roster_path: Path | str | None = None,
         compact: bool = False,
         require_todos: bool = False,
-        record_at_chunk_end: bool = False,
         chunk_plan_hash: str | None = None,
         template_hash: str | None = None,
         source_commit: str | None = None,
@@ -222,10 +221,6 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
         self.compact = bool(compact)
         # Benchmark run-condition, off unless the operator asked for it.
         self.require_todos = bool(require_todos)
-        # Ask for a record at every chunk boundary — the golden run's own shape.
-        # See _RECORD_NOW_MD for why this is a turn rather than a stronger
-        # instruction, and for the run that made it necessary.
-        self.record_at_chunk_end = bool(record_at_chunk_end)
         self.memory_mode = str(memory_mode)
         # Bench identity for session titling (WO-STRIP-2b). Empty is legitimate
         # (mock/unit callers); the title then uses the "org" fallback component.
@@ -867,10 +862,6 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
         unmetered_turns_total = 0
         unmetered_turn_wall_total = 0.0
         prev_run_stats: _OpencodeRunStats | None = None
-        # Set once the capture protocol has been delivered on a troubleshooting
-        # round. One session throughout, so it only needs sending once.
-        sent_capture_protocol = False
-
         # `<worktree>.events.jsonl` USED TO BE DECLARED HERE and is gone: the
         # stdout transport that wrote it was deleted in the serve-only
         # migration, and its three readers have all been re-pointed or removed
@@ -1132,7 +1123,7 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
                     # A transport fault here used to restart the entire build on
                     # the stdout path with all six chunks JOINED INTO ONE PROMPT.
                     # That is not the same experiment: the chunk boundaries are
-                    # where the recording turns and the compactions happen, so
+                    # where the compactions happen, so
                     # the salvaged cell measured a different thing under the same
                     # name. It aborts instead.
                     if self._serve_client is None or self._cell_session_id is None:
@@ -1153,10 +1144,6 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
                             prior_cost_usd=cell_cost_usd,
                             timeout_s=self.run_timeout_s,
                             kill_hook=active_cell.kill_worker_processes,
-                            # Where the memory layer persists its master — the
-                            # harness reads it to MEASURE whether the recording
-                            # turn landed, rather than trusting a self-report.
-                            extraction_state_dir=active_cell.config.extraction_state_host_path,
                         )
                     except ServeTransportError:
                         raise
@@ -1718,13 +1705,6 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
                 )
                 feedback = self._build_feedback_prompt(
                     problems=problems,
-                    # TROUBLESHOOTING IS WHERE CAPTURE HAPPENS. The full protocol
-                    # rides the FIRST feedback round of the session and later
-                    # rounds get a short reminder: it is one opencode session
-                    # throughout, so the protocol stays in context once sent, and
-                    # repeating 11.6k characters every round would burn tokens on
-                    # the phase the measurement is actually about.
-                    capture_protocol=not sent_capture_protocol,
                     # WHICH OPENER. "I've checked your resolution for the
                     # problems that were given before" is only true once the
                     # model has actually been given a list before — which is
@@ -1743,10 +1723,8 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
                     feedback = f"{pass_verdict}\n\n{feedback}"
                 self._progress(
                     f"PROGRESS run_label={run_label} step=feedback-problems-only-built attempt={attempt} "
-                    f"checks={len(feedback_checks)} repeats={len(repeat_checks)} "
-                    f"capture_protocol={'full' if not sent_capture_protocol else 'reminder'}"
+                    f"checks={len(feedback_checks)} repeats={len(repeat_checks)}"
                 )
-                sent_capture_protocol = True
                 self._progress(
                     f"PROGRESS run_label={run_label} step=feedback-injection attempt={attempt} "
                     f"problem_count={len(problems)} session_id={session_id}"

@@ -145,9 +145,6 @@ class RunManifest:
     # about it are not comparable, and a run that does not record the condition
     # it ran under cannot be compared to anything later.
     require_todos: bool = False
-    # The recording turn, as the cell actually ran it — a turn per chunk changes
-    # the totals, so a run that does not record the condition cannot be compared.
-    record_at_chunk_end: bool = False
     # How much of the grading machine this run was allowed to use.
     #
     # NOT in the same class as the three fields above. Those change what the
@@ -180,7 +177,6 @@ class RunManifest:
             "grader_worker_target": self.grader_worker_target,
             "compact": bool(self.compact),
             "require_todos": bool(self.require_todos),
-            "record_at_chunk_end": bool(self.record_at_chunk_end),
         }
 
     @classmethod

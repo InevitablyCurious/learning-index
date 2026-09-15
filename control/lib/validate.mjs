@@ -54,9 +54,6 @@ export async function validateStart(
   // distinguishable from "off". This has no such default — the operator's switch
   // is the whole story, and absent means off.
   const requireTodos = payload?.requireTodos === true;
-  // THE RECORDING TURN. Plain boolean like requireTodos — no server-side
-  // default to resolve, so absent means off.
-  const recordAtChunkEnd = payload?.recordAtChunkEnd === true;
   // MACHINE SHARE for grading. Validated here rather than trusted: a nonsense
   // fraction would reach the container and be silently ignored, which is worse
   // than being told. Absent leaves the container's own default.
@@ -118,7 +115,7 @@ export async function validateStart(
       retired_reason: null,
     };
     return await finishValidate(
-      { model, arm, org, context, kind, entry: cloudEntry, cloud, compactRequested, requireTodos, recordAtChunkEnd, graderWorkerTarget },
+      { model, arm, org, context, kind, entry: cloudEntry, cloud, compactRequested, requireTodos, graderWorkerTarget },
       { requireConfirm, runsRoot, payload },
     );
   }
@@ -193,7 +190,7 @@ export function compactDefaultFor(entry) {
 }
 
 export async function finishValidate(
-  { model, arm, org, context, kind, entry, cloud, compactRequested = null, requireTodos = false, recordAtChunkEnd = false, graderWorkerTarget = null },
+  { model, arm, org, context, kind, entry, cloud, compactRequested = null, requireTodos = false, graderWorkerTarget = null },
   { requireConfirm, runsRoot, payload },
 ) {
   // ON cells write memories into an org, so a cell needs an org id; OFF cells
@@ -312,5 +309,5 @@ export async function finishValidate(
     );
   }
 
-  return { ok: true, model, arm, org, context, kind, entry, cloud, compact, requireTodos, recordAtChunkEnd, graderWorkerTarget, snapshotId };
+  return { ok: true, model, arm, org, context, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, snapshotId };
 }

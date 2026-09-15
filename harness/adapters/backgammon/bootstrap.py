@@ -75,9 +75,7 @@ class BootstrapMixin:
         value = (
             _COMPACT_PHASE_REPAIR
             if held
-            else compact_phase_for(
-                phase, record_turn_enabled=self.record_at_chunk_end
-            )
+            else compact_phase_for(phase)
         )
         target = Path(host_dir).expanduser().resolve() / _COMPACT_PHASE_FILENAME
         try:
@@ -180,7 +178,6 @@ class BootstrapMixin:
             container_name=container_name,
         )
         cell_config.session_db_host_path = session_db_dir
-        cell_config.extraction_state_host_path = worktree.parent / "extraction-state"
         # A2 phase sentinel: a sibling of the worktree, never inside it — the
         # model must not see instrument state, and the gates must not score it.
         cell_config.compact_phase_host_path = worktree.parent / "compact-phase"

@@ -140,26 +140,6 @@ def test_build_cell_config_wires_session_db_host_path_to_run_dir(
     assert expected.is_dir()
 
 
-def test_build_cell_config_wires_extraction_state_host_path_to_run_dir(
-    tmp_path: Path,
-) -> None:
-    run_dir = tmp_path / "run"
-    worktree = run_dir / "worktree"
-    worktree.mkdir(parents=True, exist_ok=True)
-    runner = BackgammonRunner(
-        task_dir=TASK_DIR,
-        work_root=tmp_path / "work-root",
-        model="openrouter/anthropic/claude-opus-4.8",
-        mock="scaffold",
-    )
-
-    cell_config = runner._build_cell_config(
-        worktree=worktree, container_name="cell-extraction-state"
-    )
-
-    assert cell_config.extraction_state_host_path == run_dir / "extraction-state"
-
-
 def test_serve_port_publishes_to_loopback_only() -> None:
     """`-p 4096:4096` binds 0.0.0.0 — verified on a live cell as
     "0.0.0.0:4096->4096/tcp, [::]:4096->4096/tcp" — which publishes the

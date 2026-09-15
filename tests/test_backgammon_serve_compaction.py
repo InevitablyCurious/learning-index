@@ -345,22 +345,7 @@ def test_exactly_one_drive_per_chunk_is_flagged_build() -> None:
     chunk — so the re-drive's completion can serve as the chunk's one real
     boundary. Either way a chunk spends at most one qualifying idle.
     """
-    with_record = [
-        "initial-chunk-3",
-        "initial-chunk-3-record-3",
-    ]
-    flagged = [
-        p for p in with_record if compact_phase_for(p, record_turn_enabled=True) == "build"
-    ]
-    assert flagged == ["initial-chunk-3-record-3"]
-
-    without_record = ["initial-chunk-3"]
-    flagged_off = [
-        p
-        for p in without_record
-        if compact_phase_for(p, record_turn_enabled=False) == "build"
-    ]
-    assert flagged_off == ["initial-chunk-3"]
+    assert compact_phase_for("initial-chunk-3") == "build"
 
 
 def test_an_unknown_phase_name_is_treated_as_repair() -> None:

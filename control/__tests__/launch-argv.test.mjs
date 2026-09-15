@@ -30,7 +30,7 @@ test("LAUNCH: every setting the argv builder uses is destructured everywhere", (
     (m) => m[1],
   );
   const used = [...new Set([...pushes, ...guarded])];
-  assert.ok(used.length >= 3, `expected several launch settings, found ${used.join(", ")}`);
+  assert.ok(used.length >= 2, `expected several launch settings, found ${used.join(", ")}`);
 
   // Every destructure of the preview result must carry all of them: the argv
   // builder sits inside one of these scopes and cannot see what it did not name.

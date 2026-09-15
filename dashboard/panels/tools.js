@@ -45,7 +45,6 @@ import { renderDevModeSection } from "./devmode.js";
 import {
   GRADER_TARGET_CHOICES,
   graderWorkerTarget,
-  recordAtChunkEndOn,
   renderSwitch,
   requireTodosOn,
   setGraderWorkerTarget,
@@ -255,28 +254,6 @@ export function renderToolsDrawer(board) {
           </section>
 
           ${renderRoutersSection()}
-
-          <section class="mn-sec">
-            <span class="mn-h">MEMORY LAYER</span>
-            <p class="dw-lede">
-              Settings that belong to the memory system being measured, not to the benchmark.
-              The benchmark says WHEN a phase begins and ends; what the agent records, and how
-              often, is the memory layer's own business — so these live apart from the modes
-              above and a bench with no memory layer plugged in can ignore them entirely.
-            </p>
-
-            ${renderSwitch({
-              name: "RECORD AT CHUNK END",
-              desc:
-                "Spend one turn at every chunk boundary asking the agent to record what it " +
-                "learned, before the session is compacted. It stays free to record nothing.",
-              state: recordAtChunkEndOn() ? "on" : "off",
-              attr: "data-recordchunk-set",
-              warn: recordAtChunkEndOn()
-                ? "Costs a model turn per chunk, so turn and token totals move. Re-establish the OFF floor after switching."
-                : null,
-            })}
-          </section>
 
           <section class="mn-sec">
             <span class="mn-h">CUSTOM TOOLS</span>

@@ -39,7 +39,6 @@
 import { esc } from "../board.js";
 
 const REQUIRE_TODOS_KEY = "okp.bench.requireTodos";
-const RECORD_AT_CHUNK_END_KEY = "okp.bench.recordAtChunkEnd";
 
 /**
  * Read the require-todos preference. Default OFF.
@@ -63,30 +62,6 @@ export function setRequireTodos(on) {
     window.localStorage.setItem(REQUIRE_TODOS_KEY, on ? "1" : "0");
   } catch {
     /* storage blocked — the session keeps working, the choice just will not stick */
-  }
-}
-
-/**
- * Read the record-at-chunk-end preference. Default OFF.
- *
- * Same class as require-todos: a LAUNCH PREFERENCE for this browser, not server
- * state. Off by default because it spends a model turn per chunk, which moves
- * the turn and token totals — a measurement variable, not a convenience.
- */
-export function recordAtChunkEndOn() {
-  try {
-    return window.localStorage.getItem(RECORD_AT_CHUNK_END_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-/** Persist it. Silent no-op when storage is unavailable. */
-export function setRecordAtChunkEnd(on) {
-  try {
-    window.localStorage.setItem(RECORD_AT_CHUNK_END_KEY, on ? "1" : "0");
-  } catch {
-    /* storage blocked — the session works, the choice does not stick */
   }
 }
 

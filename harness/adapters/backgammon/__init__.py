@@ -81,8 +81,6 @@ from .constants import (
     _PROVIDER_RECOVERY_NUDGE,
     _PROXY_CHECKPOINT_ENV,
     _REASONING_EFFORT_ENV,
-    _RECORD_NOW_MD,
-    _RECORD_PHASE_MARKER,
     _RESERVATION_SAFETY_FACTOR,
     _STALL_RECOVERY_NUDGE,
     _STUB_SENTINEL,
@@ -103,7 +101,6 @@ from .feedback import (
     missing_feedback_overrides,
     _default_progress,
     _died_reason,
-    _recorded_claim_count,
 )
 from .telemetry import (
     DECLARED_TEST_COMMANDS,

@@ -240,12 +240,7 @@ def test_prompts_are_delivered_over_the_serve_session_never_on_argv(
     )
 
     assert result.verdict == "PASS"
-    # capture_protocol=True: this is the session's FIRST troubleshooting round,
-    # which is where the capture protocol is delivered (it is no longer in
-    # AGENTS.md — Jerry, 2026-09-04).
-    feedback_prompt = runner._build_feedback_prompt(
-        checks=[REAL_CHECK], capture_protocol=True
-    )
+    feedback_prompt = runner._build_feedback_prompt(checks=[REAL_CHECK])
     assert delivered == [task_prompt, feedback_prompt]
 
 
@@ -331,13 +326,10 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     pass_verdict = runner._build_pass_verdict(newly_passing=[REAL_PASS1, REAL_PASS2])
     # REAL_CHECK failed in BOTH of the last two attempts, so it is a repeat and
     # renders as that gate's second-sighting line — the gradient, per gate.
-    # capture_protocol=False: the protocol went out on feedback-1, so every later
-    # round carries only the short reminder — one session, so it stays in context.
     failure_feedback = runner._build_feedback_prompt(
         checks=[REAL_CHECK],
         had_prior_feedback=True,
         repeat_checks={REAL_CHECK},
-        capture_protocol=False,
     )
     assert (
         "I've checked your resolution for the problems that were given before, "
@@ -361,7 +353,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     # Feedback 1 — the player's FIRST report, so the first-pass opener. Nothing
     # newly passed after attempt 1, so no pass verdict rides along.
     assert prompt_texts[1] == runner._build_feedback_prompt(
-        checks=[REAL_CHECK], had_prior_feedback=False, capture_protocol=True
+        checks=[REAL_CHECK], had_prior_feedback=False
     )
     # Feedback 2 — the FOLDED message (WO-FEEDBACK-ONEPHASE): REAL_PASS1 and
     # REAL_PASS2 newly passed after attempt 2, so the pass verdict opens the

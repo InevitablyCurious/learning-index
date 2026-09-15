@@ -387,7 +387,7 @@ with exit 2 (verified 2026-08-10). `--until-review` is DEAD (removed by `ba2947a
 
 **The first pass is chunked (2026-08-09).** Attempt 1 is a
 sequence of chunk prompts (`task/backgammon/prompts/chunk-01..06.md`), driven in order through
-the one serve session. Per chunk: drive → (optional recording turn) → settle compaction → next
+the one serve session. Per chunk: drive → settle compaction → next
 chunk.
 
 - **A CHUNK IS OVER WHEN THE SESSION GOES IDLE. Nothing else (WO-MARKER-RIP, 2026-09-09).**
@@ -450,10 +450,7 @@ chunk.
   prompt; the file is bind-mounted READ-ONLY at `/okp-compact/phase` (outside `/work`, so the model
   never sees it and the gates never score it) and the plugin re-reads it on every `session.idle`.
   **EXACTLY ONE DRIVE PER CHUNK IS FLAGGED `build`**, which is what the plugin's six-fire budget
-  assumes. With `--record-at-chunk-end` ON the chunk drive is HELD and the trailing
-  `initial-chunk-N-record-N` turn carries `build`, so the compaction lands AFTER the recording and
-  before the next chunk (recovery nudges inherit the held chunk drive's phase and cannot fire a
-  mid-chunk compaction). With it OFF the chunk drive itself carries `build`. `feedback-*` and any
+  assumes: the chunk drive itself carries `build`. `feedback-*` and any
   unrecognised phase map to `repair`. Mounted for BOTH arms whenever `--compact` is set.
   FAIL-CLOSED IN EVERY DIRECTION: unset env, unreadable file, or any value other than `build`
   means DO NOT FIRE, and a cell armed with `--compact` but no sentinel path refuses to launch.

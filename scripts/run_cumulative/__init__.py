@@ -337,16 +337,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Let the agent work without planning first (the default).",
     )
 
-    # THE RECORDING TURN — one extra turn per chunk boundary, asking for a
-    # record. This is the golden run's own shape (`pilot-driver.py` asked on all
-    # 111 of its chunks; the model could answer empty), restored after run
-    # 1788976174 lost all 13 of its boundaries: the model formed the intent in a
-    # reasoning block, emitted the chunk marker, the turn ended, and compaction
-    # fired into the gap. Zero records from 26 completed todos.
-    #
-    # OFF by default: it costs a model turn per chunk and therefore changes the
-    # token and turn totals, which makes it a measurement variable like
-    # compaction. Turning it on re-bases the floor.
     # ── MACHINE SHARE FOR GRADING ──────────────────────────────────────────
     #
     # NOT a measurement variable, unlike everything around it: it changes how
@@ -368,25 +358,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
             "Share (0-1] of the grading container's FREE cpu and memory to use "
             "for test workers. Unset leaves the container's own default."
         ),
-    )
-
-    record_group = run_parser.add_mutually_exclusive_group()
-    record_group.add_argument(
-        "--record-at-chunk-end",
-        dest="record_at_chunk_end",
-        action="store_true",
-        default=False,
-        help=(
-            "After each chunk marker and before compaction, spend one turn "
-            "asking the model to record what it learned. The model stays free "
-            "to record nothing; only the question is unskippable."
-        ),
-    )
-    record_group.add_argument(
-        "--no-record-at-chunk-end",
-        dest="record_at_chunk_end",
-        action="store_false",
-        help="Do not ask at chunk boundaries (the default).",
     )
 
     subparsers.add_parser("state", help="Print cumulative sequencer state summary.")

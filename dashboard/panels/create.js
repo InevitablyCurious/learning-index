@@ -33,7 +33,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { esc } from "../board.js";
-import { graderWorkerTarget, recordAtChunkEndOn, requireTodosOn } from "./switches.js";
+import { graderWorkerTarget, requireTodosOn } from "./switches.js";
 import { renderSeedFrame, refreshSnapshots, seedWarning, armedSnapshotId } from "./snapshot.js";
 import { isDevModeOn } from "./devmode.js";
 
@@ -850,9 +850,8 @@ export async function launchCell(base, { model, kind, arm = null, org = null } =
     // This has no server default — off is off — so always stating it is the
     // honest form, and a missing key would silently mean off anyway.
     payload.requireTodos = requireTodosOn();
-    payload.recordAtChunkEnd = recordAtChunkEndOn();
-    // MACHINE SHARE for grading. Read at SEND time like the two above, but not
-    // the same KIND of setting: those change what the agent does and make two
+    // MACHINE SHARE for grading. Read at SEND time like the one above, but not
+    // the same KIND of setting: that changes what the agent does and make two
     // runs incomparable, this only changes how many test workers the grading
     // container starts once the model is done. It travels with the run so the
     // value that graded a cell is the one recorded against it, rather than

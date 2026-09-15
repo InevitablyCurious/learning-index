@@ -40,7 +40,6 @@ from .constants import (
     TURN_TERMINAL_TRUNCATED,
     _COMPACT_PHASE_BUILD,
     _COMPACT_PHASE_REPAIR,
-    _RECORD_PHASE_MARKER,
     _TRANSPORT_ERROR_SIGNATURES,
 )
 from .models import _OpencodeRunStats
@@ -149,25 +148,13 @@ def _build_truncation_evidence(
     }
 
 
-def compact_phase_for(phase: str, *, record_turn_enabled: bool = False) -> str:
+def compact_phase_for(phase: str) -> str:
     """Map a drive phase name onto the sentinel value the plugin reads.
 
-    ``record_turn_enabled`` says whether every chunk is followed by a recording
-    turn. It moves WHICH drive in a chunk is the boundary — see the block above
-    — and nothing else. Both arms flag exactly one drive per chunk.
+    Each chunk drive is its chunk's one boundary — see the block above.
     """
     is_build_leg = phase == "initial" or phase.startswith("initial-chunk")
-    if not is_build_leg:
-        return _COMPACT_PHASE_REPAIR
-    if not record_turn_enabled:
-        return _COMPACT_PHASE_BUILD
-    # The recording turn is the boundary; the chunk drive that precedes it (and
-    # any recovery nudge inside that drive) is held.
-    return (
-        _COMPACT_PHASE_BUILD
-        if _RECORD_PHASE_MARKER in phase
-        else _COMPACT_PHASE_REPAIR
-    )
+    return _COMPACT_PHASE_BUILD if is_build_leg else _COMPACT_PHASE_REPAIR
 
 
 class TransportMixin:

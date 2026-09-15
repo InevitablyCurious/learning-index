@@ -172,7 +172,6 @@ class RealSessionRunner:
         cloud_slug: str | None = None,
         compact: bool = False,
         require_todos: bool = False,
-        record_at_chunk_end: bool = False,
         grader_worker_target: float | None = None,
         seed_snapshot: str | None = None,
     ) -> None:
@@ -197,9 +196,6 @@ class RealSessionRunner:
         # reason as compaction: a campaign whose arms disagree about it measures
         # the planning change, not memory.
         self._require_todos = bool(require_todos)
-        # Campaign-wide like compaction: arms that disagree would measure the
-        # recording turn, not memory.
-        self._record_at_chunk_end = bool(record_at_chunk_end)
         self._grader_worker_target = (
             None if grader_worker_target is None else float(grader_worker_target)
         )
@@ -512,7 +508,6 @@ class RealSessionRunner:
                 roster_fingerprint=None,
                 compact=bool(getattr(self, "_compact", False)),
                 require_todos=bool(getattr(self, "_require_todos", False)),
-                record_at_chunk_end=bool(getattr(self, "_record_at_chunk_end", False)),
                 grader_worker_target=getattr(self, "_grader_worker_target", None),
             )
             write_run_manifest(
@@ -1083,7 +1078,6 @@ class RealSessionRunner:
             # one place this decision is made.
             "compact": bool(getattr(self, "_compact", False)),
             "require_todos": bool(getattr(self, "_require_todos", False)),
-            "record_at_chunk_end": bool(getattr(self, "_record_at_chunk_end", False)),
             "grader_worker_target": getattr(self, "_grader_worker_target", None),
             # WO-SNAP-02: corpus identity for snapshot provenance. The
             # producer states these; the runner/snapshot consumer must never
@@ -1290,7 +1284,6 @@ def _build_real_runner(
         # flag), and absent means OFF — the pre-compaction behaviour.
         compact=bool(getattr(args, "compact", False)),
         require_todos=bool(getattr(args, "require_todos", False)),
-        record_at_chunk_end=bool(getattr(args, "record_at_chunk_end", False)),
         grader_worker_target=getattr(args, "grader_worker_target", None),
         # WO-SNAP-04: declared on the MAIN parser (every subcommand parses it;
         # only `run` builds a real runner). Absent/empty means no seeding —

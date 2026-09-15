@@ -110,7 +110,7 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, context, kind, cloud, compact, requireTodos, recordAtChunkEnd, graderWorkerTarget, snapshotId } = check;
+      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId } = check;
       sendJson(res, 200, {
         ok: true,
         token: confirmationToken({ model, arm, org, context, kind, compact, snapshotId }),
@@ -121,7 +121,6 @@ export const routes = [
         // than the one the panel guessed.
         compact: compact === true,
         requireTodos: requireTodos === true,
-        recordAtChunkEnd: recordAtChunkEnd === true,
         graderWorkerTarget: graderWorkerTarget ?? null,
         // What the operator is committing to, in machine form beside the prose.
         // The confirmation card states the substrate and — for a cloud cell —
@@ -159,7 +158,7 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, context, kind, cloud, compact, requireTodos, recordAtChunkEnd, graderWorkerTarget, snapshotId } = check;
+      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId } = check;
 
       // ARGV ARRAY, NO SHELL. Main-parser flags MUST precede the subcommand —
       // argparse exits 2 otherwise (verified 2026-08-10). This ordering is the
@@ -239,7 +238,6 @@ export const routes = [
 
       argv.push("run", "--mode", arm, compact ? "--compact" : "--no-compact");
       if (requireTodos) argv.push("--require-todos");
-      if (recordAtChunkEnd) argv.push("--record-at-chunk-end");
       if (graderWorkerTarget != null) {
         argv.push("--grader-worker-target", String(graderWorkerTarget));
       }

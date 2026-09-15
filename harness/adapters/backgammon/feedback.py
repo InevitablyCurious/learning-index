@@ -38,8 +38,6 @@ from .constants import (
     _EXCUSE_ELIMINATOR,
     _GRADER_DIR,
     _PASS_VERDICT_MAX_LISTED,
-    _REPAIR_CAPTURE_REMINDER_MD,
-    _SESSION_EXTRACTION_MD,
     _STUB_SENTINEL,
     _TEAM_EXCUSE_ELIMINATOR,
     _TEAM_HEADER,
@@ -232,35 +230,6 @@ def _died_reason(report: Mapping[str, Any]) -> str:
     return "no_exit_signal"
 
 
-def _recorded_claim_count(state_dir: Path | None, session_id: str) -> int | None:
-    """Claims the memory layer has persisted for this session, or None.
-
-    Reads the plugin's own artifact rather than asking the model whether it
-    recorded — the model's account of its own compliance is exactly the kind of
-    self-report this project does not accept anywhere else.
-
-    None means UNREADABLE (no layer, not written yet, malformed), which is a
-    third answer and never folded into zero: "no memory layer" and "a memory
-    layer that recorded nothing" are different facts.
-    """
-    if state_dir is None:
-        return None
-    master = Path(state_dir) / "insession" / session_id / "master.json"
-    try:
-        data = json.loads(master.read_text())
-    except (OSError, ValueError):
-        return None
-    trajectories = data.get("trajectories")
-    if not isinstance(trajectories, list):
-        return None
-    total = 0
-    for traj in trajectories:
-        knowledge = traj.get("knowledge") if isinstance(traj, dict) else None
-        if isinstance(knowledge, list):
-            total += len(knowledge)
-    return total
-
-
 def _default_progress(message: str) -> None:
     stamp = _dt.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     print(f"[bg] {stamp} {message}", flush=True)
@@ -433,7 +402,6 @@ class FeedbackMixin:
         checks: list[str] | None = None,
         had_prior_feedback: bool = False,
         repeat_checks: set[str] | None = None,
-        capture_protocol: bool | None = None,
     ) -> str:
         """Compose the message the model receives after a failed attempt.
 
@@ -476,21 +444,6 @@ class FeedbackMixin:
 
         Repeats are keyed on the raw gate id (stable), never the rendered
         sentence (lossy).
-
-        CAPTURE RIDES THIS PROMPT, AFTER THE PLAYER'S WORDS (2026-09-04). The
-        capture protocol used to live in AGENTS.md, in front of the model for the
-        whole session including the build. It is now delivered here, because
-        troubleshooting is the phase whose knowledge is worth preserving.
-
-        It is appended as its own trailing section and NEVER folded into the
-        complaint list: the message above it is one person describing what they
-        hit while playing, and a player does not ask for a tool call. Mixing the
-        two would cost the voice, which is load-bearing — a model that can tell
-        it is being measured is not the model this run is measuring.
-
-        `capture_protocol=True` sends the full protocol (the first troubleshooting
-        round of a session), `False` sends the short reminder, `None` sends
-        neither — the default, so every existing caller and test is unchanged.
 
         THE EXCUSE ELIMINATOR (2026-09-04). Every failure verdict — first or
         repeat — OPENS with `_EXCUSE_ELIMINATOR`: the harness-side fact that
@@ -609,14 +562,6 @@ class FeedbackMixin:
             for n, label in enumerate(by_channel["team"], start=1):
                 lines.append(f"{n}) {label}")
             lines += ["", _TEAM_EXCUSE_ELIMINATOR]
-
-        # LAST, AND SEPARATE. Everything above is the player's message; this is
-        # the harness speaking to the worker about capture. It is appended, never
-        # interleaved — see the docstring.
-        if capture_protocol is True:
-            lines += ["", _SESSION_EXTRACTION_MD]
-        elif capture_protocol is False:
-            lines += ["", _REPAIR_CAPTURE_REMINDER_MD]
 
         return "\n".join(lines)
 

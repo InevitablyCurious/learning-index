@@ -225,34 +225,6 @@ test("REQUIRE TODOS: the value is on the LAUNCH payload, not a bystander functio
   assert.match(imp[0], /requireTodosOn/, "never mirror the preference into `ui` — read it from the store");
 });
 
-test("RECORD AT CHUNK END: the same three points must agree", () => {
-  // Same chain, same three failure points as REQUIRE TODOS above. Written at
-  // the same time as the feature this run, because the previous flag shipped
-  // broken twice for exactly these reasons.
-  // The launch route moved from server.mjs to routes/run.mjs (LI-14 phase 2).
-  const src = readFileSync(join(BENCH, "control", "routes", "run.mjs"), "utf8");
-  // The parameter read and the success return moved to lib/validate.mjs
-  // (LI-14 phase 1); the destructures and the argv push are route code and
-  // live in routes/run.mjs.
-  const validateSrc = readFileSync(join(BENCH, "control", "lib", "validate.mjs"), "utf8");
-  assert.match(validateSrc, /const recordAtChunkEnd = payload\?\.recordAtChunkEnd === true;/);
-  // Asserts the FIELD is returned, not the identity of its neighbours. Pinning
-  // the exact tuple made this fail when an unrelated setting was threaded
-  // through — a false alarm that says nothing about record-at-chunk-end.
-  const returned = /return \{ ok: true, model, arm[^}]*\};/.exec(validateSrc);
-  assert.ok(returned, "validateStart no longer returns its usual shape");
-  assert.match(returned[0], /\brecordAtChunkEnd\b/, "validateStart must RETURN it");
-  const destructures = src.match(/const \{ model, arm, org, context, kind, cloud, compact[^}]*\} = check;/g) ?? [];
-  for (const d of destructures) assert.match(d, /recordAtChunkEnd/, `destructure missing it: ${d}`);
-  assert.match(src, /if \(recordAtChunkEnd\) argv\.push\("--record-at-chunk-end"\)/);
-
-  // And it must be on the object that is actually POSTed, not a bystander.
-  const create = readFileSync(join(BENCH, "dashboard", "panels", "create.js"), "utf8");
-  const launch = create.slice(create.indexOf("const payload = { model: ui.model"));
-  const body = launch.slice(0, launch.indexOf("/api/run/start"));
-  assert.match(body, /payload\.recordAtChunkEnd = recordAtChunkEndOn\(\)/);
-});
-
 test("REQUIRE TODOS: the preflight handler does NOT pass a flag preflight cannot take", () => {
   // /api/preflight shells out to bench_preflight.py, which has no
   // --require-todos argument — and its `compact` is a URL search param, not the

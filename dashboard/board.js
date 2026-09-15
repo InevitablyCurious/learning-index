@@ -293,10 +293,8 @@ import { isDevModeOn } from "./panels/devmode.js";
 import {
   debounced,
   graderWorkerTarget,
-  recordAtChunkEndOn,
   requireTodosOn,
   setGraderWorkerTarget,
-  setRecordAtChunkEnd,
   setRequireTodos,
 } from "./panels/switches.js";
 import {
@@ -504,7 +502,7 @@ function bindInteraction() {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-pop-toggle],[data-pop-view],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-recordchunk-set],[data-gradertarget-set],[data-seed-pick]");
+  const t = e.target.closest("[data-metric],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-pop-toggle],[data-pop-view],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick]");
   if (!t) return;
 
   if (t.dataset.metric) { setCurveMetric(t.dataset.metric); render(); return; }
@@ -639,13 +637,6 @@ function onClick(e) {
   // it is written locally and rides the next launch payload. Debounced like
 
   // dev mode: a switch is a thing people double-tap.
-
-  if (t.dataset.recordchunkSet) {
-    if (debounced("recordchunk")) return;
-    setRecordAtChunkEnd(t.dataset.recordchunkSet === "on");
-    render();
-    return;
-  }
 
   // MACHINE SHARE — how much of the grading machine to use. Unlike the switches
   // around it this is NOT a measurement variable: it changes how long grading

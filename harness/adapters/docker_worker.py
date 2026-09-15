@@ -314,11 +314,6 @@ class DockerCellConfig:
     output_token_max: int | None = None
     worker_logs_dir: Path | None = None
     session_db_host_path: Path | None = None
-    # LIVE: host dir where the memory layer persists its master journal. The
-    # harness reads it (runner.py -> serve.py -> feedback._recorded_claim_count)
-    # to MEASURE whether the recording turn actually landed, rather than
-    # trusting a self-report. Set per cell by the bootstrap.
-    extraction_state_host_path: Path | None = None
     # Live-view topology: persistent `opencode serve` ports. Fixed host:8719 ->
     # container:4096 (opencode serve default). Wired from RunConfig by the harness.
     # Publisher depends on the path: the cell publishes it directly in the legacy

@@ -16,7 +16,7 @@ consume the serve_client INSTANCE and the active_cell passed in, never
 the patched classes. Every other name below (the .constants nudges /
 turn-terminal reasons / settle bounds, the serve_client reasons and
 classifiers, LOOP_KILL_MARKER_DIRNAME, _build_truncation_evidence,
-_provider_backoff_seconds, _recorded_claim_count, _OpencodeRunStats)
+_provider_backoff_seconds, _OpencodeRunStats)
 is not monkeypatched anywhere, so importing them directly is correct
 -- same rationale as transport.py's serve_client imports and
 grading.py's grader_run imports.
@@ -59,11 +59,9 @@ from .constants import (
     _LOOP_RECOVERY_NUDGE,
     _MAX_SERVE_RECOVERY_NUDGES,
     _PROVIDER_RECOVERY_NUDGE,
-    _RECORD_NOW_MD,
     _STALL_RECOVERY_NUDGE,
 )
 from .exceptions import ServeTransportError
-from .feedback import _recorded_claim_count
 from .models import _OpencodeRunStats
 from .transport import _build_truncation_evidence, _provider_backoff_seconds
 
@@ -938,12 +936,11 @@ class ServeMixin:
         prior_cost_usd: float = 0.0,
         timeout_s: float = 5400.0,
         kill_hook: Callable[[], None] | None = None,
-        extraction_state_dir: Path | None = None,
     ) -> _OpencodeRunStats:
         """WO-77 chunked first pass: drive the chunk prompts IN ORDER through the
         one serve session.
 
-        PER CHUNK: drive -> (optional) recording turn -> settle the worker's own
+        PER CHUNK: drive -> settle the worker's own
         compaction -> next chunk. A drive is over when the session goes IDLE;
         a non-zero exit ends the whole build there and every later chunk is
         reported ``not_reached``.
@@ -1071,54 +1068,6 @@ class ServeMixin:
                 return _aggregate(
                     exit_code=stats.exit_code, killed_reason=stats.killed_reason
                 )
-
-            # ── THE RECORDING TURN ──────────────────────────────────────────
-            #
-            # HERE, and nowhere else: after the chunk drive has reached a clean
-            # idle (the chunk is closed, so there is something to record) and
-            # BEFORE compaction settles (the material is still in context). Run
-            # 1788976174 lost all thirteen of its boundaries into the gap
-            # between these two points.
-            #
-            # SINCE WO-MARKER-RIP THIS TURN IS ALSO THE COMPACTION BOUNDARY.
-            # When it is enabled the phase sentinel flags THIS drive, not the
-            # chunk drive, so the worker's own compaction fires on this turn's
-            # idle — after the recording, never before it. See
-            # `compact_phase_for`.
-            #
-            # THE GAP IS MEASURED, NOT ASSUMED. The count comes from the memory
-            # layer's own persisted master, never from asking the model whether
-            # it complied — a self-report is the one kind of evidence this
-            # project rejects everywhere else. `None` means unreadable (no layer,
-            # or nothing written yet) and stays distinct from zero.
-            if self.record_at_chunk_end:
-                before = _recorded_claim_count(extraction_state_dir, session_id)
-                rec_stats = _drive(f"{phase}-record-{index}", _RECORD_NOW_MD)
-                report["recovery_nudges"] += rec_stats.recovery_nudges
-                report["guard_aborted_turns"] += rec_stats.guard_aborted_turns
-                report["finalize_timeout_turns"] += rec_stats.finalize_timeout_turns
-                after = _recorded_claim_count(extraction_state_dir, session_id)
-
-                report["record_asked"] = True
-                if before is None or after is None:
-                    report["record_landed"] = None
-                    report["claims_added"] = None
-                    outcome = "unreadable"
-                else:
-                    added = after - before
-                    report["record_landed"] = added > 0
-                    report["claims_added"] = added
-                    outcome = "landed" if added > 0 else "MISSED"
-                self._progress(
-                    f"PROGRESS run_label={run_label} step=chunk-record "
-                    f"chunk={index} session_id={session_id} outcome={outcome} "
-                    f"claims_before={before} claims_after={after}"
-                )
-                if rec_stats.exit_code != 0:
-                    return _aggregate(
-                        exit_code=rec_stats.exit_code,
-                        killed_reason=rec_stats.killed_reason,
-                    )
 
             # ── LET THE WORKER'S OWN COMPACTION SETTLE ──────────────────────
             #
