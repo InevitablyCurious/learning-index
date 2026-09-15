@@ -33,7 +33,13 @@ _STUB_SENTINEL = 'throw new Error("not implemented")'
 _CHUNK_STUB_FILE = {2: "src/game.ts", 3: "src/ai.ts", 4: "src/server.ts"}
 
 
-_DEFAULT_TASK_DIR = Path(__file__).resolve().parents[2] / "task" / "backgammon"
+# WHERE THE GRADER LIVES — the one place the harness names it. The gate code,
+# its feedback lines (feedback.json) and the grader identity hash all resolve
+# from here, so they cannot drift apart again. The restructure moved them out
+# of task/backgammon/gates/ into grader/, and four call sites kept looking in
+# the old place. This module sits at harness/adapters/backgammon/, so the repo
+# root is parents[3].
+_GRADER_DIR = Path(__file__).resolve().parents[3] / "grader"
 
 
 _RESERVATION_SAFETY_FACTOR = 1.10

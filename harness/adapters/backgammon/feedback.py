@@ -35,8 +35,8 @@ from typing import Any
 
 from .constants import (
     _CHUNK_STUB_FILE,
-    _DEFAULT_TASK_DIR,
     _EXCUSE_ELIMINATOR,
+    _GRADER_DIR,
     _PASS_VERDICT_MAX_LISTED,
     _REPAIR_CAPTURE_REMINDER_MD,
     _SESSION_EXTRACTION_MD,
@@ -48,7 +48,7 @@ from .exceptions import MissingFeedbackOverrideError
 
 
 def load_feedback_overrides(path: Path) -> dict[str, dict[str, str]]:
-    """Load `gates/feedback.json` — the human-written symptom line per gate.
+    """Load `grader/feedback.json` — the human-written symptom line per gate.
 
     THE CONTRACT. Keys are a gate's bracket token (`"E08"`, `"F12"`), a
     conformance sub-check key (`"REQ-STATE/state.pip"`), or the exact raw check
@@ -288,9 +288,7 @@ class FeedbackMixin:
         """
         cached = getattr(cls, "_FEEDBACK_OVERRIDES_CACHE", None)
         if cached is None:
-            cached = load_feedback_overrides(
-                _DEFAULT_TASK_DIR / "gates" / "feedback.json"
-            )
+            cached = load_feedback_overrides(_GRADER_DIR / "feedback.json")
             cls._FEEDBACK_OVERRIDES_CACHE = cached
         return cached
 
@@ -304,7 +302,7 @@ class FeedbackMixin:
         why there are two.
 
         SINGLE-SYSTEM (WO-FEEDBACK-VOICE-3, 2026-08-30). The ONLY sentence a gate
-        may carry is the human-written line in `gates/feedback.json`. Deriving
+        may carry is the human-written line in `grader/feedback.json`. Deriving
         the sentence from the TEST TITLE leaks the fix whenever the title states
         the rule rather than the symptom — measured on the deepseek-chat run
         1788099503: gate E08 failed on attempt 1, the model was told
@@ -351,7 +349,7 @@ class FeedbackMixin:
         raise MissingFeedbackOverrideError(
             f"no feedback override for gate token {token!r} "
             f"(check: {raw!r}). The feedback voice is single-system: every gate "
-            "must carry a human-written symptom line in gates/feedback.json. "
+            "must carry a human-written symptom line in grader/feedback.json. "
             "Run the bench preflight to list the missing gates."
         )
 
@@ -637,7 +635,7 @@ class FeedbackMixin:
         import harness.adapters.backgammon as _pkg
         compute_grader_hash = _pkg.compute_grader_hash  # late-bound: tests patch the package attr; read once per call
         try:
-            current = compute_grader_hash(self.task_dir / "gates")
+            current = compute_grader_hash(_GRADER_DIR)
             stored = json.loads(
                 (snapshot_dir / "snapshot.json").read_text(encoding="utf-8")
             ).get("grader_hash")

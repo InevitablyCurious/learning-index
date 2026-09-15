@@ -76,6 +76,7 @@ from .constants import (
     TURN_TERMINAL_OBSERVATION_LOST,
     TURN_TERMINAL_STALLED,
     TURN_TERMINAL_TRANSPORT_ERROR,
+    _GRADER_DIR,
     _HARNESS_LIMIT_REASONS,
     _REASONING_EFFORT_ENV,
     _RESERVATION_SAFETY_FACTOR,
@@ -474,7 +475,7 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
                 # Grader identity: the hash of the gate code that produced
                 # this grade. A later seeded cell reuses the stored grade
                 # ONLY when this hash still matches (dev-mode grade cache).
-                "grader_hash": compute_grader_hash(self.task_dir / "gates"),
+                "grader_hash": compute_grader_hash(_GRADER_DIR),
                 "worker_image_fingerprint": (
                     worker_image_identity.to_dict()
                     if worker_image_identity is not None

@@ -34,7 +34,7 @@ class MissingFeedbackOverrideError(RuntimeError):
 
     WO-FEEDBACK-VOICE-3 (2026-08-30): the feedback voice is SINGLE-SYSTEM —
     the ONLY sentence a gate may carry is the human-written line in
-    `gates/feedback.json`. The old title-derived fallback is gone: a test title
+    `grader/feedback.json`. The old title-derived fallback is gone: a test title
     states the RULE, so a gate with no override would leak its answer and the
     repair loop would measure attempt count, not capability. This is raised, not
     silently papered over, because a gate the model cannot be told about in the

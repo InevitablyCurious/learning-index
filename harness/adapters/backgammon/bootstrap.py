@@ -32,7 +32,7 @@ import shutil
 import subprocess
 
 from ..docker_worker import DockerCell
-from .constants import _COMPACT_PHASE_FILENAME, _COMPACT_PHASE_REPAIR
+from .constants import _COMPACT_PHASE_FILENAME, _COMPACT_PHASE_REPAIR, _GRADER_DIR
 from .exceptions import ServeTransportError
 from .transport import compact_phase_for
 from .worker_config import build_worker_opencode_config
@@ -117,7 +117,7 @@ class BootstrapMixin:
             heartbeat.set_phase(str(phase))
 
     def _write_worker_permission_config(self, *, worktree: Path) -> None:
-        gates_dir = str((self.task_dir / "gates").resolve())
+        gates_dir = str(_GRADER_DIR.resolve())
         golden_dir = str((self.task_dir / "golden").resolve())
         # Stashed by the Docker arm beside the image-identity probe; default
         # True keeps direct/mock callers on the plugin-baked path.
