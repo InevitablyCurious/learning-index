@@ -29,6 +29,15 @@
  * `timeout-<wrapper pid>` is written there: "<unix seconds> <command, first
  * 200 chars>\n" — the same best-effort forensic-marker pattern as
  * loop-kill-scanner.cjs.
+ *
+ * WATCHDOG (run 1789474325). The timer below lives in THIS process, so it dies
+ * with it. The model sets its own short tool timeouts, and opencode then kills
+ * the wrapper before the 90s cut: the command's group was orphaned and a test
+ * server spun at 100% CPU until the harness's 600s stall watchdog. A separate
+ * watchdog process — detached, in its own session, stdio ignored so it never
+ * holds opencode's pipe — kills the whole group at the timeout plus a short
+ * grace (so a live wrapper still cuts first and reports 124), and exits as
+ * soon as the group is gone.
  */
 'use strict';
 
@@ -54,6 +63,30 @@ let timedOut = false;
 // every descendant) on both macOS and Linux. stdio:'inherit' is the
 // byte-transparent pass-through for stdout/stderr/stdin.
 const child = spawn('bash', args, { detached: true, stdio: 'inherit' });
+
+// Out-of-process backstop (see WATCHDOG in the header). Argv: <pgid> <deadline
+// epoch ms>. EPERM means the group exists but is not ours to signal — alive.
+const WATCHDOG_GRACE_MS = 2000;
+const WATCHDOG_SRC = `
+const [pgid, deadline] = process.argv.slice(1).map(Number);
+const alive = () => { try { process.kill(-pgid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+const tick = () => {
+  if (!alive()) process.exit(0);
+  if (Date.now() >= deadline) {
+    try { process.kill(-pgid, 'SIGKILL'); } catch {}
+    process.exit(0);
+  }
+  setTimeout(tick, 500);
+};
+tick();
+`;
+if (child.pid) {
+  spawn(
+    process.execPath,
+    ['-e', WATCHDOG_SRC, String(child.pid), String(Date.now() + timeoutMs + WATCHDOG_GRACE_MS)],
+    { detached: true, stdio: 'ignore' }
+  ).unref();
+}
 
 function killGroup() {
   try {

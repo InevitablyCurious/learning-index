@@ -99,6 +99,52 @@ def test_background_child_is_reaped_on_normal_exit() -> None:
             pass
 
 
+def test_watchdog_reaps_the_group_when_the_wrapper_itself_is_killed() -> None:
+    """Run 1789474325: opencode killed the wrapper on the model's own short
+    timeout, the wrapper's in-process timer died with it, and a backgrounded
+    server orphaned. The detached watchdog must still kill the group at the
+    timeout (1s here) plus its grace."""
+    environ = os.environ.copy()
+    environ["BENCH_TOOL_TIMEOUT_S"] = "1"
+    proc = subprocess.Popen(
+        ["node", str(WRAPPER), "-c", 'sleep 60 & echo "child=$!"; sleep 60'],
+        stdout=subprocess.PIPE,
+        text=True,
+        env=environ,
+    )
+    pid: int | None = None
+    try:
+        assert proc.stdout is not None
+        line = proc.stdout.readline()
+        assert line.startswith("child="), line
+        pid = int(line.split("=", 1)[1])
+
+        proc.kill()  # SIGKILL: no handler runs, the in-process timer is gone
+        proc.wait(timeout=5)
+        os.kill(pid, 0)  # the orphan is still alive right after the wrapper dies
+
+        deadline = time.monotonic() + 10.0
+        while True:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return  # the watchdog reaped it
+            if time.monotonic() >= deadline:
+                raise AssertionError(
+                    f"background child {pid} still alive 10s after a 1s timeout — "
+                    "nothing reaped the group once the wrapper was killed"
+                )
+            time.sleep(0.1)
+    finally:
+        if pid is not None:
+            try:
+                os.killpg(os.getpgid(pid), 9)
+            except (ProcessLookupError, PermissionError):
+                pass
+        if proc.stdout is not None:
+            proc.stdout.close()
+
+
 def test_timeout_kills_hanging_command_and_writes_marker(tmp_path: Path) -> None:
     """Timeout path: exit 124, group killed, ONE forensic marker written.
 
