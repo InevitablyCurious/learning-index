@@ -79,6 +79,7 @@ from .constants import (
     _GRADER_DIR,
     _HARNESS_LIMIT_REASONS,
     _REASONING_EFFORT_ENV,
+    _REPO_ROOT,
     _RESERVATION_SAFETY_FACTOR,
     _WORKER_AGENTS_MD,
 )
@@ -337,7 +338,7 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
 
         self.logger = logger
         self._progress_cb = progress or _default_progress
-        self._repo_root = Path(__file__).resolve().parents[2]
+        self._repo_root = _REPO_ROOT
 
         if self.memory_mode not in {"off", "on"}:
             raise ValueError("memory_mode must be 'off' or 'on'")

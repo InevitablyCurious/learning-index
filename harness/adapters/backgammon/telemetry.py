@@ -32,6 +32,7 @@ import time
 
 from harness.outcomes.predicate_emitter import walk_manifest
 
+from .constants import _REPO_ROOT
 from .models import RecallFunnelScan
 
 _LOG = logging.getLogger(__name__)
@@ -164,7 +165,7 @@ def _export_cell_telemetry(
     try:
         override = os.environ.get("BENCH_DATA_DIR", "").strip()
         data_dir = (
-            Path(override) if override else Path(__file__).resolve().parents[2] / "data"
+            Path(override) if override else _REPO_ROOT / "data"
         )
         dest = data_dir / "cells" / f"{int(time.time())}-{run_label}"
         dest.mkdir(parents=True, exist_ok=True)

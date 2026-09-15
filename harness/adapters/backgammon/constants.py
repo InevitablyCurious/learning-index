@@ -33,13 +33,21 @@ _STUB_SENTINEL = 'throw new Error("not implemented")'
 _CHUNK_STUB_FILE = {2: "src/game.ts", 3: "src/ai.ts", 4: "src/server.ts"}
 
 
+# THE REPO ROOT — the one place this package counts folders up from itself.
+# The package split moved these modules one level deeper (the old single
+# backgammon.py sat in harness/adapters/), and every copy of
+# `Path(__file__).resolve().parents[2]` silently started landing in harness/:
+# build snapshots, cell telemetry, the grading cwd and the grader lookup all
+# pointed at the wrong place. Anything that needs the repo root imports this.
+# This module sits at harness/adapters/backgammon/, so the root is parents[3].
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
 # WHERE THE GRADER LIVES — the one place the harness names it. The gate code,
 # its feedback lines (feedback.json) and the grader identity hash all resolve
 # from here, so they cannot drift apart again. The restructure moved them out
 # of task/backgammon/gates/ into grader/, and four call sites kept looking in
-# the old place. This module sits at harness/adapters/backgammon/, so the repo
-# root is parents[3].
-_GRADER_DIR = Path(__file__).resolve().parents[3] / "grader"
+# the old place.
+_GRADER_DIR = _REPO_ROOT / "grader"
 
 
 _RESERVATION_SAFETY_FACTOR = 1.10

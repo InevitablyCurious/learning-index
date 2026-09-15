@@ -12,9 +12,9 @@ monkeypatched anywhere -- tests import them from harness.grader_run
 directly -- so importing them here is correct (same rationale as
 transport.py's serve_client imports). GraderImageMissing is NOT imported:
 the moved bodies never reference it. subprocess is the dual-safe module
-singleton. Path(__file__).resolve().parents[2] in _run_gate_report is
-UNCHANGED by the move: grading.py sits in the same directory as
-__init__.py, so the parents chain resolves identically.
+singleton. The grading cwd is constants._REPO_ROOT, never a local
+parents[N] count: the move put this module one directory deeper than
+the old single backgammon.py, so the old parents[2] landed in harness/.
 """
 
 from __future__ import annotations
@@ -34,6 +34,7 @@ from harness.grader_run import (
     kill_container as kill_grading_container,
 )
 
+from .constants import _REPO_ROOT
 from .exceptions import GateTimeoutError, GraderReportUnreadableError
 
 
@@ -98,7 +99,7 @@ class GradingMixin:
         )
         # `docker` is invoked from the repo root; the gates travel inside the
         # image, so there is no gates directory for this process to stand in.
-        gates_cwd = str(Path(__file__).resolve().parents[2])
+        gates_cwd = str(_REPO_ROOT)
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
         gate_started = time.monotonic()
