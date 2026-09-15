@@ -48,7 +48,7 @@ from typing import Any
 
 # ── EXPLICIT RE-EXPORTS (never ``import *``) ────────────────────────────────
 # Every externally-imported name is listed individually so nothing silently
-# drops. THE MONKEYPATCH SEAM: ``tests/test_serve_client.py`` patches
+# drops. THE MONKEYPATCH SEAM: ``tests/test_serve_http.py`` patches
 # ``harness.serve_client._http_json`` / ``._http_status`` BY STRING, and the
 # ``ServeClient`` method bodies below resolve those names as BARE GLOBALS in
 # THIS module's namespace at call time — which is exactly why ``ServeClient``
