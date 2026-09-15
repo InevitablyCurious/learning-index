@@ -144,29 +144,24 @@ _HOLD_UI_HEARTBEAT_S = 30.0
 #
 # The chunking reminder (Walter 2026-08-10): the finalize kills that day were
 # oversized single generations (one 32000-token write; ~4900-token writes) —
-# the model tried to emit whole files in one call. All three nudges carry the
-# write-in-chunks directive so a re-driven turn retries at safe granularity
+# the model tried to emit whole files in one call. Only the cut-off nudge
+# carries the write-in-chunks directive (Jerry, 2026-09-15: each nudge names
+# only the situation that just happened, or the model is left guessing what a
+# write limit has to do with a loop, a stall or a dropped connection), so a
+# re-driven turn retries at safe granularity
 # (~150 lines ≈ 1.5K output tokens; every observed sub-1K-token generation
 # finalized cleanly, the killed ones were ~4.9K+). ONE NUMBER, EVERYWHERE:
 # ~150 lines is also what the six chunk prompts and AGENTS.md say, so the model
 # is never handed two different limits by two different voices.
-_WRITE_CHUNKING_DIRECTIVE = (
-    "Keep each write to around 150 lines or less — the big ones keep getting "
-    "truncated on me. Build the long files up across a few passes instead of "
-    "one huge write."
-)
+_WRITE_CHUNKING_DIRECTIVE = "Keep writes under ~150 lines."
 _LOOP_RECOVERY_NUDGE = (
-    "You started going in circles there and repeating yourself, so I stopped "
-    "it. Don't rewrite anything you've already done — just pick up from the "
-    "next thing that still needs doing. "
-    + _WRITE_CHUNKING_DIRECTIVE
-    + " No recap, just carry on."
+    "You were going in circles, so I stopped you. "
+    "Pick up from the next unfinished step. No recap."
 )
 _FINALIZE_RECOVERY_NUDGE = (
-    "Your last message got cut off partway through on my end. Carry on from "
-    "where it stopped — no need to redo the parts that already came through. "
+    "Your last message got cut off. Continue from where it stopped. "
     + _WRITE_CHUNKING_DIRECTIVE
-    + " No recap, just carry on."
+    + " No recap."
 )
 
 # STALLED TOOL CALL RECOVERY (2026-09-11).
@@ -187,10 +182,7 @@ _FINALIZE_RECOVERY_NUDGE = (
 # one of the more interesting ones — it is certainly more informative than the
 # cell dying with no verdict at all.
 _STALL_RECOVERY_NUDGE = (
-    "Your tool call was running for ten minutes, so I cancelled it. "
-    "Try a different approach. "
-    + _WRITE_CHUNKING_DIRECTIVE
-    + " No recap, just carry on."
+    "That command ran ten minutes, so I cancelled it. Try another way. No recap."
 )
 
 # PROVIDER OUTAGE RECOVERY (2026-08-24). A live cell lost 8 turns to stream
@@ -204,11 +196,7 @@ _STALL_RECOVERY_NUDGE = (
 # blipped is a straightforward false negative. The model is told nothing
 # about providers — from its side a message simply did not go through.
 _PROVIDER_RECOVERY_NUDGE = (
-    "Sorry — that cut out on my end, my connection dropped for a second. "
-    "Nothing to do with what you were doing. Carry on from where you stopped; "
-    "no need to redo anything that already came through. "
-    + _WRITE_CHUNKING_DIRECTIVE
-    + " No recap, just carry on."
+    "My connection dropped. Continue from where you stopped. No recap."
 )
 
 

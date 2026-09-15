@@ -148,11 +148,11 @@ class TestTheNudgeReadsAsAPerson:
 
     def test_absolves_the_model(self) -> None:
         # A model told only "that failed, try again" may conclude its own work
-        # was wrong and start rewriting good code.
-        assert "nothing to do with what you were doing" in self._nudge().lower()
+        # was wrong and start rewriting good code. The fault is named as ours.
+        assert "my connection dropped" in self._nudge().lower()
 
     def test_tells_it_not_to_redo_finished_work(self) -> None:
-        assert "no need to redo" in self._nudge().lower()
+        assert "continue from where you stopped" in self._nudge().lower()
 
 
 class TestRecoveryIsWired:
