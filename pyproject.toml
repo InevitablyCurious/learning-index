@@ -31,6 +31,9 @@ markers = [
 addopts = "-n auto -m \"not slow\" --dist=load --timeout=60 --strict-markers --tb=short -ra"
 timeout = 60
 timeout_method = "thread"
+# Each run's tmp_path folders are removed when the NEXT run starts: keep only
+# the current session (pytest's default keeps the last 3).
+tmp_path_retention_count = 1
 log_cli = true
 log_cli_level = "INFO"
 

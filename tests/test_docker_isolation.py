@@ -753,15 +753,20 @@ def test_fresh_cell_isolation_between_distinct_worktrees(tmp_path: Path) -> None
 
 @REQUIRES_DOCKER
 def test_no_seed_keystore_corpus_env_or_mounts_in_either_arm(
-    tmp_path: Path,
+    tmp_path_factory: pytest.TempPathFactory,
 ) -> None:
     """Neither arm may see identity seed, keystore, or corpus material — not as
     container env, not as a mount source. Generic isolation, asserted for the
     ON and OFF arm alike."""
     _require_worker_image()
 
-    worktree_on = tmp_path / "worktree-on"
-    worktree_off = tmp_path / "worktree-off"
+    # A NEUTRAL tmp dir, never `tmp_path`: pytest names `tmp_path` after the
+    # test, and this test's name contains the very words ("keystore",
+    # "corpus") its mount assertions forbid, so the worktree path tripped its
+    # own check.
+    root = tmp_path_factory.mktemp("isolation")
+    worktree_on = root / "worktree-on"
+    worktree_off = root / "worktree-off"
     worktree_on.mkdir(parents=True, exist_ok=True)
     worktree_off.mkdir(parents=True, exist_ok=True)
 
