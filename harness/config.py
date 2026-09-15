@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 import hashlib
 import json
 import os
-from pathlib import Path
 from typing import Any
 
 
@@ -190,12 +189,6 @@ def _default_benchmark_schedule() -> BenchmarkSchedule:
     return _DEFAULT_SCHEDULE
 
 
-def _default_served_memories_host_path() -> str:
-    """Resolved host path for the shared served-memories store JSON."""
-
-    return str(Path("~/.okp/served-memories.json").expanduser().resolve())
-
-
 # ---------------------------------------------------------------------------
 # RunConfig — schedule is the single active path (no model_ladder shim)
 # ---------------------------------------------------------------------------
@@ -224,15 +217,8 @@ class RunConfig:
     )
     run_label: str = ""  # threaded for per-cell session ids
     # Per DECISIONS.md D-BENCH-CONTRACT §b, primary scored ON path must not rely on
-    # hidden test-mode auto-accept. Primary path runs recall in prod mode and uses a
-    # declared governor policy (relevance floor + injection budget) via plugin-config.
+    # hidden test-mode auto-accept. Primary path runs recall in prod mode.
     primary_recall_mode: str = "prod"
-    primary_recall_relevance_floor: float = 0.0
-    primary_recall_max_injected: int = 1000
-    served_memories_host_path: str = field(
-        default_factory=_default_served_memories_host_path
-    )
-    served_memories_container_path: str = "/home/worker/.okp/served-memories.json"
     org_id: str = ""  # D5a: org MUST be pinned explicitly by the run driver; okp-org-0 is never a valid arm target.
     # orchestrator._resolve_owned_org handles empty/None gracefully; do NOT make this required (tests build RunConfig() bare).
     mc_version: int = 1  # MC-1
@@ -281,10 +267,6 @@ class RunConfig:
             "deterministic_recall_limit": self.deterministic_recall_limit,
             "run_label": self.run_label,
             "primary_recall_mode": self.primary_recall_mode,
-            "primary_recall_relevance_floor": self.primary_recall_relevance_floor,
-            "primary_recall_max_injected": self.primary_recall_max_injected,
-            "served_memories_host_path": self.served_memories_host_path,
-            "served_memories_container_path": self.served_memories_container_path,
             "org_id": self.org_id,
             "mc_version": self.mc_version,
             "hub_url": self.hub_url,

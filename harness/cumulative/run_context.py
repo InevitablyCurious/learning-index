@@ -9,11 +9,9 @@ purpose.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import json
 import logging
 import os
-import subprocess
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 _LOG = logging.getLogger(__name__)
 
@@ -29,98 +27,8 @@ def _utc_now_iso() -> str:
     )
 
 
-def _run_command(args: Sequence[str], *, timeout_s: int = 10) -> str:
-    _LOG.info(
-        "op=run_context.command_start argv=%s timeout_s=%d", " ".join(args), timeout_s
-    )
-    try:
-        completed = subprocess.run(
-            list(args),
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-        )
-    except subprocess.CalledProcessError as exc:
-        _LOG.error(
-            "op=run_context.command_failed argv=%s returncode=%s stdout=%r stderr=%r",
-            " ".join(args),
-            exc.returncode,
-            exc.stdout,
-            exc.stderr,
-        )
-        raise RuntimeError(f"run context command failed: {' '.join(args)}") from exc
-    except subprocess.TimeoutExpired as exc:
-        _LOG.error(
-            "op=run_context.command_timeout argv=%s timeout_s=%d stdout=%r stderr=%r",
-            " ".join(args),
-            timeout_s,
-            exc.stdout,
-            exc.stderr,
-        )
-        raise RuntimeError(f"run context command timed out: {' '.join(args)}") from exc
-
-    _LOG.info(
-        "op=run_context.command_ok argv=%s stdout_bytes=%d stderr_bytes=%d",
-        " ".join(args),
-        len(completed.stdout or ""),
-        len(completed.stderr or ""),
-    )
-    return completed.stdout
-
-
-def _parse_env_output(output: str) -> dict[str, str]:
-    env: dict[str, str] = {}
-    for line in output.splitlines():
-        if "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        env[key] = value
-    return env
-
-
-def _latest_policy_anchor_payload(logs: str) -> dict[str, Any]:
-    latest: dict[str, Any] | None = None
-    for line in logs.splitlines():
-        if "hub.policy_anchor" not in line:
-            continue
-        start = line.find("{")
-        if start < 0:
-            continue
-        try:
-            decoded = json.loads(line[start:])
-        except json.JSONDecodeError:
-            _LOG.warning("op=run_context.policy_anchor_parse_skip line=%r", line)
-            continue
-        if isinstance(decoded, dict) and decoded.get("op") == "hub.policy_anchor":
-            latest = decoded
-
-    if latest is None:
-        raise RuntimeError("no parseable hub.policy_anchor log line found in hub logs")
-    return latest
-
-
-def parse_policy_anchor_log_line(line: str) -> dict[str, Any]:
-    """Parse one structured hub.policy_anchor log line for unit tests and callers."""
-
-    payload = _latest_policy_anchor_payload(line)
-    return {
-        "version": str(payload.get("policy_version", "")),
-        "hash": str(payload.get("policy_hash", "")),
-        "anchor_status": str(payload.get("status", "")),
-        "observed_at": str(payload.get("ts") or payload.get("time") or _utc_now_iso()),
-    }
-
-
 def _lever(value: Any, source: str) -> dict[str, Any]:
     return {"value": value, "source": source}
-
-
-def _required_env_lever(env: Mapping[str, str], key: str) -> str:
-    value = str(env.get(key, "")).strip()
-    if not value:
-        raise RuntimeError(f"hub env missing required recall lever {key}")
-    return value
 
 
 def _env_lever_with_default(
@@ -128,7 +36,7 @@ def _env_lever_with_default(
 ) -> dict[str, Any]:
     value = str(env.get(key, "")).strip()
     if value:
-        return _lever(value, "hub-env")
+        return _lever(value, "bench-env")
     return _lever(default, "documented-default")
 
 
@@ -147,18 +55,12 @@ def _validate_fraction_lever(lever_id: str, lever: Mapping[str, Any]) -> None:
 
 
 def _collect_available() -> dict[str, Any]:
-    env_output = _run_command(["docker", "exec", "okp-hub", "env"])
-    hub_env = _parse_env_output(env_output)
-
-    logs_output = _run_command(["docker", "logs", "okp-hub"], timeout_s=20)
-    edge_policy = parse_policy_anchor_log_line(logs_output)
-
     # BENCH-ONLY rate, never a production default: production exploration is
     # 1–5%, but at bench query volume 1% yields about zero exploration serves.
     # 0.10 is the smallest round fraction that yields a usable count while
     # staying an order of magnitude below a level unacceptable in production.
     bench_exploration_fraction = _env_lever_with_default(
-        hub_env, "BENCH_EXPLORATION_FRACTION", "0.10"
+        os.environ, "BENCH_EXPLORATION_FRACTION", "0.10"
     )
     _validate_fraction_lever(
         "L14_BENCH_EXPLORATION_FRACTION", bench_exploration_fraction
@@ -168,26 +70,26 @@ def _collect_available() -> dict[str, Any]:
         "L1_relevance_floor": _lever("0.55", "documented-default"),
         "L2_surface_budget": _lever("3", "documented-default"),
         "L3_recall_limit": _lever("3", "documented-default"),
-        "L4_OKP_RECALL_MODE": _lever(
-            _required_env_lever(hub_env, "OKP_RECALL_MODE"), "hub-env"
+        "L4_OKP_RECALL_MODE": _env_lever_with_default(
+            os.environ, "BENCH_RECALL_MODE", "prod"
         ),
         "L6_gamma": _lever("0.1", "compiled-const"),
         "L7_delta": _lever("0.15", "compiled-const"),
-        "L8_RETRIEVAL_TEMPERATURE": _lever(
-            _required_env_lever(hub_env, "RETRIEVAL_TEMPERATURE"), "hub-env"
+        "L8_RETRIEVAL_TEMPERATURE": _env_lever_with_default(
+            os.environ, "BENCH_RETRIEVAL_TEMPERATURE", "0.7"
         ),
-        "L9_RETRIEVAL_NEW_MEM_BOOST_MULT": _lever(
-            _required_env_lever(hub_env, "RETRIEVAL_NEW_MEM_BOOST_MULT"), "hub-env"
+        "L9_RETRIEVAL_NEW_MEM_BOOST_MULT": _env_lever_with_default(
+            os.environ, "BENCH_RETRIEVAL_NEW_MEM_BOOST_MULT", "0.5"
         ),
-        "L10_RETRIEVAL_NEW_MEM_BOOST_WINDOW": _lever(
-            _required_env_lever(hub_env, "RETRIEVAL_NEW_MEM_BOOST_WINDOW"), "hub-env"
+        "L10_RETRIEVAL_NEW_MEM_BOOST_WINDOW": _env_lever_with_default(
+            os.environ, "BENCH_RETRIEVAL_NEW_MEM_BOOST_WINDOW", "30"
         ),
         "L11_contestedThreshold": _lever("0.20", "compiled-const"),
         "L12_RETRIEVAL_OPEN_LOOP_FRACTION": _env_lever_with_default(
-            hub_env, "RETRIEVAL_OPEN_LOOP_FRACTION", "0.0"
+            os.environ, "BENCH_RETRIEVAL_OPEN_LOOP_FRACTION", "0.0"
         ),
         "L13_RETRIEVAL_COUNTERFACTUAL_LOGGING": _env_lever_with_default(
-            hub_env, "RETRIEVAL_COUNTERFACTUAL_LOGGING", "false"
+            os.environ, "BENCH_RETRIEVAL_COUNTERFACTUAL_LOGGING", "false"
         ),
         # Distinct from L12: L12 is the hub production open-loop fraction; L14 is the bench's own exploration rate.
         "L14_BENCH_EXPLORATION_FRACTION": bench_exploration_fraction,
@@ -202,7 +104,7 @@ def _collect_available() -> dict[str, Any]:
         "status": "available",
         "collected_at": _utc_now_iso(),
         "levers": levers,
-        "edge_policy": edge_policy,
+        "edge_policy": None,
     }
 
 
@@ -229,12 +131,8 @@ def collect_run_context() -> dict[str, Any]:
             }
         raise
 
-    policy = context.get("edge_policy") or {}
     _LOG.info(
-        "op=run_context.collect_ok policy_version=%s policy_hash=%s anchor_status=%s lever_count=%d",
-        policy.get("version"),
-        policy.get("hash"),
-        policy.get("anchor_status"),
+        "op=run_context.collect_ok lever_count=%d",
         len(context.get("levers", {})),
     )
     return context
@@ -279,5 +177,4 @@ def compare_run_context(
 __all__ = [
     "collect_run_context",
     "compare_run_context",
-    "parse_policy_anchor_log_line",
 ]

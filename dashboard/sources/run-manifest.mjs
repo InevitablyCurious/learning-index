@@ -4,9 +4,11 @@
 // Reads <runs_root>/<run_dir>/manifest.json — written at run start. Carries the
 // provenance a skeptical engineer checks FIRST:
 //
-//   - policy version + anchor verification status (a run on an unverified
-//     anchor is not a valid run — RUNBOOK §6)
+//   - policy-anchor observation was REMOVED with the hub-shell decoupling:
+//     the benchmark no longer reads the backend hub container, so
+//     policy_version / policy_anchor_status report null
 //   - the recall-mode lever, which is what makes the approval gate auto-approve
+//     (operator-supplied via BENCH_RECALL_MODE in the bench process env)
 //   - org, model, seed, roster
 //
 // GATE MODE IS DERIVED, NEVER HARDCODED. It reads the L4_OKP_RECALL_MODE
@@ -21,7 +23,7 @@ import { readJson, activeRun } from "./_runtime.mjs";
 export const id = "run-manifest";
 export const fields = ["provenance", "run.org_id", "run.model"];
 export function describe() {
-  return "run manifest — policy anchor, levers, org, model identity (RC-5)";
+  return "run manifest — levers, org, model identity (RC-5)";
 }
 
 export async function read(ctx) {

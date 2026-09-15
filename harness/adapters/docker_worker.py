@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import hashlib
 import logging
 import os
@@ -14,7 +14,6 @@ from typing import Callable
 import urllib.error
 import urllib.request
 
-from harness.config import RunConfig
 from harness.egress import (
     EGRESS_INGRESS_CELL_HOST_ENV,
     EGRESS_INGRESS_PORT_ENV,
@@ -64,32 +63,6 @@ class ImageFingerprint:
 
     def to_dict(self) -> dict[str, str]:
         return {"image_id": self.image_id, "created": self.created}
-
-
-def _default_primary_recall_mode() -> str:
-    return str(RunConfig().primary_recall_mode)
-
-
-def _default_primary_recall_relevance_floor() -> float:
-    return float(RunConfig().primary_recall_relevance_floor)
-
-
-def _default_primary_recall_max_injected() -> int:
-    return int(RunConfig().primary_recall_max_injected)
-
-
-def _default_served_memories_host_path() -> str:
-    return str(RunConfig().served_memories_host_path)
-
-
-def _default_served_memories_container_path() -> str:
-    return str(RunConfig().served_memories_container_path)
-
-
-def _default_recall_url() -> str:
-    return (
-        os.environ.get("BENCH_MCP_RECALL_URL") or "http://host.docker.internal:4550"
-    )
 
 
 def _ingress_cell_alias(container_name: str) -> str:
@@ -294,31 +267,10 @@ class DockerCellConfig:
     container_name: str
     image: str = WORKER_IMAGE
     network: str = WORKER_NETWORK
-    # Must be container-reachable (host.docker.internal form) when workers are used; defaults to the bench MCP port :4550.
-    recall_url: str = field(default_factory=_default_recall_url)
-    hub_url: str = "http://host.docker.internal:4440"
     # When set, the worker runs on the --internal egress network and reaches
     # model/MCP/hub only via the sidecar container of this name. Empty (default)
     # keeps the legacy bridge-network path with direct host.docker.internal reach.
     egress_host: str = ""
-    # Primary scored path defaults to RunConfig.primary_recall_mode (prod).
-    # Diagnostic/non-primary paths can still override this field (for example, test mode).
-    recall_mode: str = field(default_factory=_default_primary_recall_mode)
-    primary_recall_relevance_floor: float = field(
-        default_factory=_default_primary_recall_relevance_floor
-    )
-    primary_recall_max_injected: int = field(
-        default_factory=_default_primary_recall_max_injected
-    )
-    served_memories_host_path: str = field(
-        default_factory=_default_served_memories_host_path
-    )
-    served_memories_container_path: str = field(
-        default_factory=_default_served_memories_container_path
-    )
-    plugin_state_host_path: str = "~/.okp/state"
-    plugin_state_container_path: str = "/work/.okp/state"
-    plugin_config_host_path: str = "~/.okp/plugin-config.json"
     proxy_base_url: str | None = None
     proxy_token: str | None = None
     # Cloud mode (derived by BackgammonRunner from the model slug's provider id;
@@ -362,15 +314,11 @@ class DockerCellConfig:
     output_token_max: int | None = None
     worker_logs_dir: Path | None = None
     session_db_host_path: Path | None = None
-    # Vestigial: once the OFF-arm extraction-state bind-mount (container side
-    # /okp-state), removed with the memory backend. The current run-argv
-    # builder never reads this field; retained for the field contract.
+    # LIVE: host dir where the memory layer persists its master journal. The
+    # harness reads it (runner.py -> serve.py -> feedback._recorded_claim_count)
+    # to MEASURE whether the recording turn actually landed, rather than
+    # trusting a self-report. Set per cell by the bootstrap.
     extraction_state_host_path: Path | None = None
-    # Vestigial: once the gate-answerer policy driven into the worker env per
-    # cell as OKP_ANSWERER_POLICY, removed with the memory backend. The
-    # current run-argv builder never reads this field; retained for the field
-    # contract.
-    answerer_policy: str | None = None
     # Live-view topology: persistent `opencode serve` ports. Fixed host:4096 ->
     # container:4096 (opencode serve default). Wired from RunConfig by the harness.
     # Publisher depends on the path: the cell publishes it directly in the legacy
@@ -567,18 +515,6 @@ class DockerCell:
             gid=gid,
             memory_mode=mode,
         )
-
-        if mode == "on":
-            self._progress(
-                "PROGRESS recall-primary-config "
-                f"mode={str(self.config.recall_mode).strip().lower()} "
-                f"served_store_host={_resolve_host_path(self.config.served_memories_host_path)} "
-                f"served_store_container={self.config.served_memories_container_path} "
-                f"plugin_state_host={_resolve_host_path(self.config.plugin_state_host_path)} "
-                f"plugin_state_container={self.config.plugin_state_container_path} "
-                f"recall_relevance_floor={float(self.config.primary_recall_relevance_floor):.6g} "
-                f"recall_max_injected={int(self.config.primary_recall_max_injected)}"
-            )
 
         run_env = os.environ.copy()
         if self.config.cloud:
@@ -1508,10 +1444,6 @@ def _result_detail(completed: subprocess.CompletedProcess[str]) -> str:
     stdout = completed.stdout.strip() if completed.stdout else ""
     detail = stderr or stdout
     return detail or f"exit={completed.returncode}"
-
-
-def _resolve_host_path(raw_path: str) -> Path:
-    return Path(str(raw_path)).expanduser().resolve()
 
 
 def _host_uid() -> int:

@@ -1,22 +1,9 @@
 from __future__ import annotations
 
-import subprocess
-
 from harness.cumulative.manifest import CumulativeManifest, resume_or_create, roster_hash
 from harness.cumulative.ordering import build_schedule
-from harness.cumulative.run_context import (
-    collect_run_context,
-    compare_run_context,
-    parse_policy_anchor_log_line,
-)
+from harness.cumulative.run_context import compare_run_context
 from harness.cumulative.types import RosterEntry
-
-
-POLICY_LINE = (
-    '{"ts":"2026-07-30T01:00:00Z","op":"hub.policy_anchor",'
-    '"status":"anchor_verified","policy_version":"edge-policy-v1",'
-    '"policy_hash":"91b9a7e23e58c14e18c152851e0987093870b575a641d604c14de32f4c8df993"}'
-)
 
 
 def _roster() -> list[RosterEntry]:
@@ -33,17 +20,6 @@ def _roster() -> list[RosterEntry]:
 def _schedule(roster: list[RosterEntry]):
     computed = roster_hash(roster)
     return build_schedule(roster, seed=17, roster_hash=computed, on_budget=1)
-
-
-def test_parse_policy_anchor_log_line() -> None:
-    parsed = parse_policy_anchor_log_line(f"prefix {POLICY_LINE}")
-
-    assert parsed == {
-        "version": "edge-policy-v1",
-        "hash": "91b9a7e23e58c14e18c152851e0987093870b575a641d604c14de32f4c8df993",
-        "anchor_status": "anchor_verified",
-        "observed_at": "2026-07-30T01:00:00Z",
-    }
 
 
 def test_manifest_round_trip_with_and_without_run_context() -> None:
@@ -83,11 +59,11 @@ def test_resume_keeps_original_run_context(tmp_path) -> None:
     path = tmp_path / "manifest.json"
     first_context = {
         "status": "available",
-        "levers": {"L8_RETRIEVAL_TEMPERATURE": {"value": "0.7", "source": "hub-env"}},
+        "levers": {"L8_RETRIEVAL_TEMPERATURE": {"value": "0.7", "source": "bench-env"}},
     }
     second_context = {
         "status": "available",
-        "levers": {"L8_RETRIEVAL_TEMPERATURE": {"value": "0.9", "source": "hub-env"}},
+        "levers": {"L8_RETRIEVAL_TEMPERATURE": {"value": "0.9", "source": "bench-env"}},
     }
 
     created = resume_or_create(
@@ -118,11 +94,11 @@ def test_resume_keeps_original_run_context(tmp_path) -> None:
 def test_compare_run_context_flags_changed_lever() -> None:
     recorded = {
         "status": "available",
-        "levers": {"L8_RETRIEVAL_TEMPERATURE": {"value": "0.7", "source": "hub-env"}},
+        "levers": {"L8_RETRIEVAL_TEMPERATURE": {"value": "0.7", "source": "bench-env"}},
     }
     current = {
         "status": "available",
-        "levers": {"L8_RETRIEVAL_TEMPERATURE": {"value": "0.9", "source": "hub-env"}},
+        "levers": {"L8_RETRIEVAL_TEMPERATURE": {"value": "0.9", "source": "bench-env"}},
     }
 
     assert compare_run_context(recorded, current) == ["levers.L8_RETRIEVAL_TEMPERATURE"]
