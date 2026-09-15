@@ -220,21 +220,21 @@ class BootstrapMixin:
             check=True,
         )
         subprocess.run(
-            ["git", "config", "user.email", "bench@okp.local"],
+            ["git", "config", "user.email", "dev@localhost"],
             cwd=str(worktree),
             capture_output=True,
             text=True,
             check=True,
         )
         subprocess.run(
-            ["git", "config", "user.name", "bench"],
+            ["git", "config", "user.name", "dev"],
             cwd=str(worktree),
             capture_output=True,
             text=True,
             check=True,
         )
         subprocess.run(
-            ["git", "commit", "--allow-empty", "-m", "bench cell seed"],
+            ["git", "commit", "--allow-empty", "-m", "Initial commit"],
             cwd=str(worktree),
             capture_output=True,
             text=True,

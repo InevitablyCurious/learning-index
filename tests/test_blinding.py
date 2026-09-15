@@ -71,8 +71,56 @@ def test_seeded_agents_md_has_no_evaluation_vocabulary() -> None:
 
 
 def test_agents_md_does_not_name_the_model_to_itself() -> None:
-    adapter = (REPO_ROOT / "harness" / "adapters" / "backgammon" / "__init__.py").read_text("utf-8")
+    # runner.py is where the seeded AGENTS.md is written.
+    adapter = (REPO_ROOT / "harness" / "adapters" / "backgammon" / "runner.py").read_text("utf-8")
+    assert '(worktree / "AGENTS.md").write_text(' in adapter
     assert "- Model: {self.model}" not in adapter
+
+
+def test_seeded_worktree_has_no_evaluation_vocabulary(tmp_path: Path) -> None:
+    """Everything the harness leaves in /work before the first prompt.
+
+    The per-file scan above covers what this repo ships. This one runs the real
+    seed steps — scaffold copy, AGENTS.md, git init — and scans the result,
+    including the git metadata: the model lists and queries /work/.git, and the
+    seed commit's author and message used to be `bench <bench@okp.local>` /
+    "bench cell seed".
+    """
+    import shutil
+    import subprocess
+
+    from harness.adapters.backgammon import _WORKER_AGENTS_MD, BackgammonRunner
+
+    worktree = tmp_path / "cell" / "worktree"
+    shutil.copytree(SCAFFOLD, worktree)
+    (worktree / "AGENTS.md").write_text(_WORKER_AGENTS_MD, encoding="utf-8")
+    runner = BackgammonRunner(
+        task_dir=SCAFFOLD.parent,
+        work_root=tmp_path / "work-root",
+        model="openrouter/anthropic/claude-opus-4.8",
+        mock="scaffold",
+    )
+    runner._init_worktree_git(worktree=worktree)
+
+    surfaces: dict[str, str] = {}
+    for path in worktree.rglob("*"):
+        if not path.is_file() or "objects" in path.relative_to(worktree).parts:
+            continue
+        try:
+            surfaces[str(path.relative_to(worktree))] = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+    surfaces["git log"] = subprocess.run(
+        ["git", "log", "--format=%an%n%ae%n%cn%n%ce%n%B"],
+        cwd=worktree, capture_output=True, text=True, check=True,
+    ).stdout
+
+    leaks = {name: _offending_lines(text) for name, text in surfaces.items()}
+    leaks = {name: lines for name, lines in leaks.items() if lines}
+    assert "git log" in surfaces and ".git/config" in surfaces
+    assert not leaks, "the seeded worktree reveals the evaluation:\n" + "\n".join(
+        f"  {name}: {lines}" for name, lines in leaks.items()
+    )
 
 
 class TestInterruptsSoundHuman:
@@ -89,6 +137,7 @@ class TestInterruptsSoundHuman:
         return {
             "loop_recovery": b._LOOP_RECOVERY_NUDGE,
             "finalize_recovery": b._FINALIZE_RECOVERY_NUDGE,
+            "stall_recovery": b._STALL_RECOVERY_NUDGE,
             "provider_recovery": b._PROVIDER_RECOVERY_NUDGE,
         }
 
