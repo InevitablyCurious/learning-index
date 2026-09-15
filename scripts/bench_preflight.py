@@ -77,6 +77,7 @@ from preflight.control_plane import (  # noqa: E402
 from preflight.core import REPO, Check  # noqa: E402
 from preflight.disk import check_disk  # noqa: E402
 from preflight.feedback import check_feedback_completeness  # noqa: E402
+from preflight.grader_tools import check_grader_tools  # noqa: E402
 from preflight.identity import check_identity  # noqa: E402
 from preflight.images import (  # noqa: E402
     check_grader_image,
@@ -191,6 +192,7 @@ def main() -> int:
     check_serve_drive_image(c)
     check_grader_image(c)
     check_grader_resources(c)
+    check_grader_tools(c)
 
     bench_config = spend_key = None
     try:

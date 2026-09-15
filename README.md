@@ -25,25 +25,31 @@ under test is the memory system.
 
 ## Quickstart
 
-One-time install, two image builds, then a control plane and a board:
+One-time installs, two image builds, then a control plane and a board:
 
 ```bash
 # 1. install the harness (once)
 python -m venv .venv && . .venv/bin/activate && pip install -e '.[test]'
 
-# 2. build the worker and grader images (a run refuses without them)
+# 2. install the grader's test tools on the host (once). Every run lists the
+#    gate suite on the host at cell start, and the board's gate wall does the
+#    same; without these the list comes back empty. Preflight refuses until
+#    they are installed.
+(cd grader && npm ci)
+
+# 3. build the worker and grader images (a run refuses without them)
 #    set BENCH_PLUGIN_DIR=<abs path to plugin tree> first to bake a plugin in
 #    (the memory ON arm); unset, the worker build is vanilla (memory OFF).
 .venv/bin/python scripts/rebuild_worker_image.py
 .venv/bin/python scripts/rebuild_grader_image.py
 
-# 3. preflight — prints GO with the exact launch command, or NO-GO naming the fix
+# 4. preflight — prints GO with the exact launch command, or NO-GO naming the fix
 .venv/bin/python scripts/bench_preflight.py --model <alias>
 
-# 4. start the control plane (the only write-capable surface)
+# 5. start the control plane (the only write-capable surface)
 node control/server.mjs            # http://127.0.0.1:8718
 
-# 5. start the read-only board (in another shell)
+# 6. start the read-only board (in another shell)
 (cd dashboard && docker compose up -d)   # http://127.0.0.1:8717
 ```
 
