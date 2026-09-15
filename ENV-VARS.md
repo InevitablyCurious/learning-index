@@ -5,13 +5,13 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 ## Summary
 | Bucket | Count |
 |---|---|
-| read+documented | 36 |
+| read+documented | 35 |
 | read+undocumented | 58 |
 | read by sibling/runtime (reclassified) | 18 |
 | documented+unread (dead) | 0 |
 | dead-and-undocumented | 0 |
-| total read | 93 |
-| total documented | 52 |
+| total read | 92 |
+| total documented | 51 |
 
 ## read+documented
 | Name | Default | Controls | Override |
@@ -26,7 +26,6 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | BENCH_LIVE_STREAM | (none) | live-stream path | env |
 | BENCH_LIVE_STREAM_NS | (none) | stream namespace | env |
 | BENCH_PLUGIN_DIR | (none) | THE one plugin pointer: absolute path to the plugin tree baked into the worker image at /opt/bench-plugin; unset ⇒ vanilla (no-plugin) build — read `harness/worker_image.py:49`, `scripts/rebuild_worker_image.py` | env or --plugin-dir |
-| BENCH_AGENTS_AUX_FILE | (none) | generic standing-directive seam: markdown appended to the cell's AGENTS.md at seed time (not memory-specific) — read `harness/adapters/backgammon.py:2609` | env |
 | OKP_GUARD_BIN | {root}/okp-guard/target/release/okp-guard | YARA guard binary | env |
 | BENCH_TARGET | task/backgammon/golden | gates target dir | env |
 | DEBUG_API | off | debug endpoints on task servers | env =1 |
@@ -142,5 +141,5 @@ none
 ## Notes
 - `OKP_MCP_SEED` was removed from this register: its old note ("read by okp-meta/scripts/lib.sh") was wrong — that script reads `BENCH_MCP_SEED`, a different, live var. As named, `OKP_MCP_SEED` is a drift-ghost with zero occurrences anywhere and was deleted.
 - `OKP_MCP_URL` was removed: a naming-drift ghost of `OKP_MCP_HTTP_URL` (read at `dev/benchmark/leader-signer/vendor/config.ts:96` — moved from the retired `bench/scaffold/leader-signer/`). The bench-doc prose reference in RUNBOOK.md was renamed to the live name.
-- Backend-env removal (2026-09, memory-backend registry retirement): `OKP_RECALL_MODE`, `OKP_MCP_HTTP_URL`, `OKP_ANSWERER_POLICY`, `OKP_INSESSION_EXTRACTION`, `OKP_STATE_DIR`, `OKP_HUB_URL`, `OKP_SERVED_MEMORIES_PATH`, and `OKP_MANAGED_IDENTITY` were struck from this register — no bench-code reader or setter remains (the harness no longer injects them per cell; the vestigial `DockerCellConfig` field contracts were removed too (LI-17)). They are the PLUGIN's own env surface now, owned and documented where the plugin is built (outside this repo). The bench's only plugin-facing vars are `BENCH_PLUGIN_DIR` (the one pointer) and `BENCH_AGENTS_AUX_FILE` (generic directive seam), plus the flagged compaction/build set kept above (`BENCH_SELF_COMPACT`, `BENCH_COMPACT_PHASE_FILE`, `OKP_PLUGIN_PATH`, `OKP_LOG_DIR`). `OKP_RECALL_MODE` survives in bench code ONLY as the run-context lever `L4_OKP_RECALL_MODE`, read from the operator-supplied `BENCH_RECALL_MODE` env (default `prod`) — a measurement record, not a config this repo sets.
+- Backend-env removal (2026-09, memory-backend registry retirement): `OKP_RECALL_MODE`, `OKP_MCP_HTTP_URL`, `OKP_ANSWERER_POLICY`, `OKP_INSESSION_EXTRACTION`, `OKP_STATE_DIR`, `OKP_HUB_URL`, `OKP_SERVED_MEMORIES_PATH`, and `OKP_MANAGED_IDENTITY` were struck from this register — no bench-code reader or setter remains (the harness no longer injects them per cell; the vestigial `DockerCellConfig` field contracts were removed too (LI-17)). They are the PLUGIN's own env surface now, owned and documented where the plugin is built (outside this repo). The bench's only plugin-facing vars are `BENCH_PLUGIN_DIR` (the one pointer), plus the flagged compaction/build set kept above (`BENCH_SELF_COMPACT`, `BENCH_COMPACT_PHASE_FILE`, `OKP_PLUGIN_PATH`, `OKP_LOG_DIR`). `OKP_RECALL_MODE` survives in bench code ONLY as the run-context lever `L4_OKP_RECALL_MODE`, read from the operator-supplied `BENCH_RECALL_MODE` env (default `prod`) — a measurement record, not a config this repo sets.
 - `BENCH_SPEND_PROXY_BASE_URL` was removed from the register (2026-09-04): the resolver `resolve_spend_proxy_base_url` was deleted in the OpenRouter-proxy cleanup (WO-CLEAN-08); nothing reads this var. The live worker-side var is `BENCH_WORKER_SPEND_PROXY_BASE_URL` (still listed above). The stale `.env.example` line referencing it was removed too.

@@ -69,9 +69,8 @@ pointer plus a README.
   `/opt/bench-plugin` (`images/worker/Dockerfile`). The plugin captures learnings
   during the build; on a later cell it recalls prior memories over the recall
   seam (`BENCH_MCP_RECALL_URL`), guards them, and reinjects them into the system
-  prompt. A standing record mandate can be supplied through the generic
-  `BENCH_AGENTS_AUX_FILE` directive seam. The OFF/ON toggle (`memory_mode`
-  off/on) is the only memory-mode distinction.
+  prompt. The OFF/ON toggle (`memory_mode` off/on) is the only memory-mode
+  distinction.
 - **The harness reinjects nothing.** Capture, recall, and reinjection belong to
   the plugin; the benchmark only schedules the arms and measures the Δ.
 

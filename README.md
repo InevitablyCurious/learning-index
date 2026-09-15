@@ -70,9 +70,6 @@ plugin" pointer plus this README:
   unset, the build is VANILLA — no plugin at all. That is the whole memory
   ON/OFF distinction: the ON arm runs an image built with the plugin, the OFF
   baseline loads none.
-- **`BENCH_AGENTS_AUX_FILE`** — an optional, generic standing-directive seam:
-  a markdown file the harness appends to the cell's `AGENTS.md` at seed time.
-  It is not memory-specific.
 
 The plugin tree does the memory system's work: capture learnings during the
 build, then recall and reinject them into later cells. The harness itself

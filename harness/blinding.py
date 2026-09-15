@@ -4,18 +4,8 @@ Nothing the model can read may reveal that it is being measured. A model that
 knows it is in an evaluation is not the model whose behaviour the run is trying
 to measure.
 
-This module exists because that rule now has to hold at RUNTIME as well as in
-the tree. ``tests/test_blinding.py`` scans the files this repo ships — the
-scaffold, the prompts, the seeded AGENTS.md — and a static scan is enough for
-anything committed here. It is NOT enough for the auxiliary directive a plugged-
-in memory layer supplies at seed time (``BENCH_AGENTS_AUX_FILE``): that text is
-written by somebody else, arrives after the tests have run, and lands in the one
-file the model reads for the whole session. Scanning it needs the same pattern
-the tests use, so the pattern lives here and both sides import it.
-
-Keeping two copies would be worse than having no runtime check at all: a TELL
-added to the test list but not the runtime one reads as protection that isn't
-there.
+``tests/test_blinding.py`` scans the files this repo ships — the scaffold, the
+prompts, the seeded AGENTS.md — against the pattern kept here.
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@ Extracted VERBATIM from harness/adapters/backgammon/__init__.py
 (WO-LI15-I3B STAGE 3B): the BackgammonRunner class statement -- its
 class-level attributes and the G0/G1 base methods (__init__,
 build_need_card, _capture_attempt_one_snapshot, _record_checkpoint,
-run_cell, _agents_md_text, _mark_harness_resume, _run_cell_impl,
+run_cell, _mark_harness_resume, _run_cell_impl,
 _run_cell_attempt) -- now lives here; the package __init__ is a thin
 re-export shim. The role mixins (utils, pricing, feedback, telemetry,
 transport, bootstrap, grading, serve) are imported for the bases, so
@@ -678,58 +678,6 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
                 terminal_exception=terminal_exception,
             )
 
-    def _agents_md_text(self, run_label: str) -> str:
-        """The seeded AGENTS.md: the neutral notes, plus an imported directive.
-
-        A plugged-in memory layer needs ONE standing instruction the model can
-        see for the whole session — when to record what it has learned. That
-        cannot be hardcoded here: this is a public benchmark and the tree must
-        know nothing about any particular memory system. So the text is IMPORTED
-        at seed time from the path in ``BENCH_AGENTS_AUX_FILE``.
-
-        Contract:
-
-        - Env unset, or set to empty -> returns ``_WORKER_AGENTS_MD`` unchanged,
-          byte for byte. This is the default, and it is what makes the repo
-          clone and run with no memory layer wired at all.
-        - Path set but missing/unreadable -> ABORT. A memory layer that asked
-          for a directive and silently did not get one would run a whole cell
-          whose model was never told to record anything, and the empty result
-          would read as a finding about the memory system rather than as a
-          misconfiguration.
-
-        The directive is appended under a neutral heading — the notes are
-        written in the voice of a colleague leaving handover notes, and a
-        section break keeps the imported text in that voice rather than reading
-        as a second document stapled on.
-        """
-        raw = (os.environ.get("BENCH_AGENTS_AUX_FILE") or "").strip()
-        if not raw:
-            return _WORKER_AGENTS_MD
-
-        path = Path(raw)
-        try:
-            directive = path.read_text(encoding="utf-8").strip()
-        except OSError as exc:
-            raise RuntimeError(
-                f"BENCH_AGENTS_AUX_FILE={path} could not be read ({exc}). "
-                "A declared directive that does not arrive is a misconfiguration, "
-                "never a silent no-op: the cell would run with the model never "
-                "told to record anything."
-            ) from exc
-
-        if not directive:
-            raise RuntimeError(
-                f"BENCH_AGENTS_AUX_FILE={path} is empty. Unset the variable to "
-                "run with no directive; an empty file is ambiguous."
-            )
-
-        self._progress(
-            f"PROGRESS run_label={run_label} step=agents-md-aux "
-            f"src={path} chars={len(directive)}"
-        )
-        return f"{_WORKER_AGENTS_MD}\n\n## Recording what you learn\n\n{directive}"
-
     @staticmethod
     def _mark_harness_resume(prev: _OpencodeRunStats | None) -> None:
         """Mark the previous invocation's last burned turn as harness-resumed.
@@ -793,25 +741,7 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
             self._copy_tree_contents(self.task_dir / "scaffold", worktree)
         # No runtime/model block: naming the model back to itself is a tell
         # that something is driving it, and nothing downstream reads this.
-        #
-        # A STANDING DIRECTIVE IS BACK HERE (2026-09-07), and the earlier
-        # objection has been answered rather than ignored. It was moved out on
-        # 2026-09-04 because this file loads for the whole session, so a capture
-        # instruction here sat in front of the model throughout the build; it
-        # was phase-scoped onto the prompts instead. That is now the WRONG
-        # shape: a memory layer that captures at work boundaries needs its
-        # cadence standing for the whole session, and a prompt splice cannot
-        # provide that — it decays with every compaction.
-        #
-        # What is different is WHERE the text comes from. This is a public
-        # benchmark: anyone plugs their own memory system in, so nothing about
-        # any particular one may be hardcoded here. The directive is IMPORTED at
-        # seed time from BENCH_AGENTS_AUX_FILE and appended.
-        # Unset -> the file is exactly _WORKER_AGENTS_MD, byte for byte, and the
-        # tree clones and runs with no memory layer at all.
-        (worktree / "AGENTS.md").write_text(
-            self._agents_md_text(run_label), encoding="utf-8"
-        )
+        (worktree / "AGENTS.md").write_text(_WORKER_AGENTS_MD, encoding="utf-8")
         self._progress(
             f"PROGRESS run_label={run_label} step=worktree-seed "
             f"src={self._seed_snapshot_tree if self._seed_snapshot_tree is not None else self.task_dir / 'scaffold'} "
