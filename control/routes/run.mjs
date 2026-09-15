@@ -519,8 +519,8 @@ export const routes = [
     path: "/api/preflight",
     async handle(req, res, url) {
       const model = url.searchParams.get("model") || "";
-      // Ask preflight to prove the worker image wires the restored
-      // marker-detection compaction plugin (self-compact.ts) when this run
+      // Ask preflight to prove the worker image wires the benchmark's own
+      // compaction plugin (images/worker/self-compact.ts) when this run
       // will actually use it. opencode SWALLOWS plugin load errors, so a
       // stale image is otherwise silent right up until every chunk boundary
       // aborts the cell on no_compaction_evidence.

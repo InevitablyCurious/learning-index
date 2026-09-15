@@ -73,8 +73,8 @@ def test_the_sentinel_is_mounted_for_both_arms(
         memory_mode=memory_mode,
     )
 
-    assert _contains_pair(argv, "-e", "OKP_SELF_COMPACT=1")
-    assert _contains_pair(argv, "-e", "OKP_COMPACT_PHASE_FILE=/okp-compact/phase")
+    assert _contains_pair(argv, "-e", "BENCH_SELF_COMPACT=1")
+    assert _contains_pair(argv, "-e", "BENCH_COMPACT_PHASE_FILE=/okp-compact/phase")
     host = (tmp_path / f"compact-phase-{memory_mode}").resolve()
     assert _contains_pair(argv, "-v", f"{host}:/okp-compact:ro")
 
@@ -115,9 +115,9 @@ def test_no_sentinel_and_no_env_when_the_run_does_not_compact(
         config=cfg, worktree=cfg.worktree, uid=501, gid=20, memory_mode="on"
     )
 
-    assert not any("OKP_COMPACT_PHASE_FILE" in a for a in argv)
+    assert not any("BENCH_COMPACT_PHASE_FILE" in a for a in argv)
     assert not any("/okp-compact" in a for a in argv)
-    assert not _contains_pair(argv, "-e", "OKP_SELF_COMPACT=1")
+    assert not _contains_pair(argv, "-e", "BENCH_SELF_COMPACT=1")
 
 
 def test_arming_compaction_without_a_sentinel_path_refuses_to_launch(
@@ -179,7 +179,7 @@ def test_sidecar_gets_rw_sentinel_mount_and_phase_env_when_compacting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The sidecar is the repair-phase WRITER: it must carry the same host dir
-    the cell mounts :ro, but RW (no suffix) and with OKP_COMPACT_PHASE_FILE so
+    the cell mounts :ro, but RW (no suffix) and with BENCH_COMPACT_PHASE_FILE so
     its scanner can write `repair` between rounds. The cell's own :ro mount is
     unchanged — the cell still cannot forge its phase."""
     cfg = _cfg(tmp_path, memory_mode="on", compact=True)
@@ -197,7 +197,7 @@ def test_sidecar_gets_rw_sentinel_mount_and_phase_env_when_compacting(
         part == f"{host}:/okp-compact:ro" for part in sidecar_argv
     ), "sidecar phase mount must be RW, not :ro"
     assert _contains_pair(
-        sidecar_argv, "-e", "OKP_COMPACT_PHASE_FILE=/okp-compact/phase"
+        sidecar_argv, "-e", "BENCH_COMPACT_PHASE_FILE=/okp-compact/phase"
     ), f"sidecar argv missing phase env: {sidecar_argv!r}"
 
     # Worker cell mount unchanged: still read-only.
@@ -208,7 +208,7 @@ def test_sidecar_gets_no_sentinel_mount_when_not_compacting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A non-compacting egress run's sidecar is byte-for-byte unchanged: no
-    /okp-compact mount, no OKP_COMPACT_PHASE_FILE env (the guard mirrors the
+    /okp-compact mount, no BENCH_COMPACT_PHASE_FILE env (the guard mirrors the
     worker's self_compact gate)."""
     cfg = _cfg(tmp_path, memory_mode="on", compact=False)
     cfg.egress_host = "okp-egress-no-compact-sentinel"
@@ -222,4 +222,4 @@ def test_sidecar_gets_no_sentinel_mount_when_not_compacting(
     sidecar_argv, _worker_argv = run_argvs
 
     assert not any("/okp-compact" in part for part in sidecar_argv)
-    assert not any("OKP_COMPACT_PHASE_FILE" in part for part in sidecar_argv)
+    assert not any("BENCH_COMPACT_PHASE_FILE" in part for part in sidecar_argv)

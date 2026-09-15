@@ -22,12 +22,12 @@ process.env.OKP_LOOP_KILL_MARKER_DIR ||= fs.mkdtempSync(
 );
 const MARKER_DIR = process.env.OKP_LOOP_KILL_MARKER_DIR;
 
-// The sidecar reads OKP_COMPACT_PHASE_FILE once at module load, so the
+// The sidecar reads BENCH_COMPACT_PHASE_FILE once at module load, so the
 // sentinel path must be in the env BEFORE the require below — same posture
 // as MARKER_DIR. Unset outside this file: the writer no-ops.
 const PHASE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "okp-sidecar-phase-"));
-process.env.OKP_COMPACT_PHASE_FILE ||= path.join(PHASE_DIR, "phase");
-const COMPACT_PHASE_FILE = process.env.OKP_COMPACT_PHASE_FILE;
+process.env.BENCH_COMPACT_PHASE_FILE ||= path.join(PHASE_DIR, "phase");
+const COMPACT_PHASE_FILE = process.env.BENCH_COMPACT_PHASE_FILE;
 
 const { createRequire } = await import("node:module");
 const require = createRequire(import.meta.url);

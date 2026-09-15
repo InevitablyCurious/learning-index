@@ -89,6 +89,7 @@ DIGEST_LABEL = "okp.worker.source_digest"
 BAKED_FILES = (
     "Dockerfile",
     ".dockerignore",
+    "self-compact.ts",
 )
 
 #: Never hashed from the plugin or sidecar contexts (mirrors the old

@@ -229,7 +229,7 @@ def check_self_compact_tool(c: Check, args) -> None:
         # sentinel env name; wiring alone was never proof of behaviour.
         "const gated=ok&&plugs.every(function(p){"
         "return fs.readFileSync(String(p),'utf8')"
-        ".indexOf('OKP_COMPACT_PHASE_FILE')>=0});"
+        ".indexOf('BENCH_COMPACT_PHASE_FILE')>=0});"
         "console.log(JSON.stringify({wired:plugs,exist:ok,gated:gated}))"
     )
     proc = subprocess.run(
@@ -261,10 +261,7 @@ def check_self_compact_tool(c: Check, args) -> None:
             "self-compact.ts is NOT wired in the image's baked opencode config "
             "(or the file is missing at the wired path) -> the --compact flag "
             "arms a plugin that is not loaded, and every chunk boundary will "
-            "abort the cell on no_compaction_evidence. Rebuild: docker build "
-            "-t bench-worker:v1 images/worker "
-            "--build-context sidecar=images/sidecar "
-            "--build-arg SIDECAR_CONTEXT=sidecar"
+            "abort the cell on no_compaction_evidence. " + REBUILD_CMD
         ),
         remedy=TOOL_WORKER_REBUILD,
     )
@@ -272,16 +269,13 @@ def check_self_compact_tool(c: Check, args) -> None:
         "self-compact phase gate",
         present and gated,
         "the baked plugin reads the harness phase sentinel "
-        "(OKP_COMPACT_PHASE_FILE) — repair rounds cannot compact"
+        "(BENCH_COMPACT_PHASE_FILE) — repair rounds cannot compact"
         if (present and gated)
         else (
-            "the baked self-compact.ts does NOT read OKP_COMPACT_PHASE_FILE -> "
-            "this image carries the PRE-FIX arm, which fires on the CHUNK "
-            "FINISHED marker alone and leaks a compaction into the repair "
-            "phase (run 1788462647). Rebuild: docker build -t "
-            "bench-worker:v1 images/worker "
-            "--build-context sidecar=images/sidecar "
-            "--build-arg SIDECAR_CONTEXT=sidecar"
+            "the baked self-compact.ts does NOT read BENCH_COMPACT_PHASE_FILE -> "
+            "this image predates the benchmark's current phase-gated compaction "
+            "arm (an older arm leaked a compaction into the repair phase, run "
+            "1788462647). " + REBUILD_CMD
         ),
         remedy=TOOL_WORKER_REBUILD,
     )

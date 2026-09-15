@@ -277,8 +277,8 @@ class DockerCellConfig:
     # never set independently): True swaps the cell's key path from the spend-proxy
     # token to the OrcaRouter API key resolved on the host.
     cloud: bool = False
-    # SELF-COMPACTION, declared per cell. Exported as OKP_SELF_COMPACT=1; the
-    # worker plugin self-gates on that env and resolves the model to compact
+    # SELF-COMPACTION, declared per cell. Exported as BENCH_SELF_COMPACT=1; the
+    # benchmark's own self-compact plugin (images/worker/self-compact.ts) self-gates on that env and resolves the model to compact
     # with from the session itself — the harness passes no model ids.
     self_compact: bool = False
     # PLAN BEFORE WORK, declared per cell. Exported as REQUIRE_TODOS=1.
@@ -459,7 +459,7 @@ class DockerCell:
                         "-v",
                         f"{host_compact_phase}:{self.config.compact_phase_container_dir}",
                         "-e",
-                        f"OKP_COMPACT_PHASE_FILE={self.config.compact_phase_container_file}",
+                        f"BENCH_COMPACT_PHASE_FILE={self.config.compact_phase_container_file}",
                     ]
                 )
             sidecar_cmd.extend(
@@ -1381,10 +1381,10 @@ def _build_run_argv(
     if config.require_todos:
         run_cmd.extend(["-e", "REQUIRE_TODOS=1"])
 
-    # SELF-COMPACTION. The worker plugin self-gates on OKP_SELF_COMPACT=1 and
+    # SELF-COMPACTION. The benchmark's self-compact plugin self-gates on BENCH_SELF_COMPACT=1 and
     # resolves the model to compact with from the session itself.
     if config.self_compact:
-        run_cmd.extend(["-e", "OKP_SELF_COMPACT=1"])
+        run_cmd.extend(["-e", "BENCH_SELF_COMPACT=1"])
 
         # A2 phase sentinel. Mounted for BOTH arms whenever compaction is armed
         # — the leak was never memory-mode-specific, and an OFF cell that could
@@ -1410,7 +1410,7 @@ def _build_run_argv(
         run_cmd.extend(
             [
                 "-e",
-                f"OKP_COMPACT_PHASE_FILE={config.compact_phase_container_file}",
+                f"BENCH_COMPACT_PHASE_FILE={config.compact_phase_container_file}",
                 "-v",
                 f"{host_compact_phase}:{config.compact_phase_container_dir}:ro",
             ]

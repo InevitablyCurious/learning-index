@@ -34,18 +34,18 @@ def build_worker_opencode_config(
         "small_model": model,
         "shell": "/opt/okp/supervised-shell.js",
     }
+    # Paths stay in lockstep with images/worker/Dockerfile. Self-compaction is the
+    # benchmark's own (/opt/bench/self-compact.ts), baked into EVERY image and
+    # self-gated on BENCH_SELF_COMPACT=1, so it is listed for both arms. The memory
+    # plugin is listed ONLY when the image actually baked it (label
+    # okp.worker.plugin_present="1", read by docker_worker.image_plugin_present):
+    # a vanilla image has no plugin file there, and an opencode.json pointing at
+    # an absent plugin kills the worker at boot.
+    config["plugin"] = ["/opt/bench/self-compact.ts"]
     if plugin_present:
-        # Plugin paths must stay in lockstep with the image-baked paths installed
-        # by images/worker/Dockerfile (fixed generic location /opt/bench-plugin/plugins/*.ts).
-        # self-compact.ts self-gates on OKP_SELF_COMPACT=1, so it is safe to load
-        # unconditionally (a no-op in the control arm) — mirroring the Dockerfile.
-        # Written ONLY when the image actually baked the plugin (label
-        # okp.worker.plugin_present="1", read by docker_worker.image_plugin_present):
-        # a vanilla image has no plugin files at these paths, and an opencode.json
-        # pointing at absent plugins kills the worker at boot.
         config["plugin"] = [
             "/opt/bench-plugin/plugins/plugin.ts",
-            "/opt/bench-plugin/plugins/self-compact.ts",
+            "/opt/bench/self-compact.ts",
         ]
         config["mcp"] = {
             "okp": {

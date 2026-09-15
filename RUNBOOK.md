@@ -418,10 +418,11 @@ chunk.
   flagged on the board. The rows no longer carry a `marker` field, and the `nudges` column now
   counts UPSTREAM RECOVERIES (see below), the only re-drives that still exist.
 - **Inter-chunk compaction — RESTORED (2026-09-03), worker-side self-fire.** Removed by W1
-  (2026-08-27) and restored by WO-COMPACTION-RESTORE: the plugin tree's `plugins/self-compact.ts`
-  (baked in via `BENCH_PLUGIN_DIR`) is wired into the worker image's opencode plugin array with a
-  hard-assert on its presence (`images/worker/Dockerfile`). **The trigger is `session.idle` and nothing the model wrote (2026-09-09).** There is no
-  model-called tool and no model-emitted string: on `session.idle`, when `OKP_SELF_COMPACT=1` AND
+  (2026-08-27) and restored by WO-COMPACTION-RESTORE: the benchmark's own `images/worker/self-compact.ts`
+  (benchmark-native since 2026-09-15 — baked into EVERY worker image at `/opt/bench/self-compact.ts`,
+  with or without a memory plugin, so both arms compact identically) is wired into the image's
+  opencode plugin array with a hard-assert on its presence (`images/worker/Dockerfile`). **The trigger is `session.idle` and nothing the model wrote (2026-09-09).** There is no
+  model-called tool and no model-emitted string: on `session.idle`, when `BENCH_SELF_COMPACT=1` AND
   the harness's phase sentinel reads `build` AND the session's fire budget is not spent AND a 60 s
   cooldown has elapsed AND no fire is already in flight AND this assistant turn has not already
   fired, the plugin fires `session.summarize({auto:true})` — disarm-first, model resolved from the
@@ -433,7 +434,7 @@ chunk.
   Autocontinue is suppressed for self-fired compactions only (the harness sends the next chunk
   prompt itself); overflow auto-compaction keeps its default autocontinue. Opt-in behind the
   `--compact` flag (flag/UI passing unchanged) — the flag flows to the cell as env
-  `OKP_SELF_COMPACT=1`. The harness only OBSERVES the fire: at each chunk boundary it runs a
+  `BENCH_SELF_COMPACT=1`. The harness only OBSERVES the fire: at each chunk boundary it runs a
   bounded fail-closed wait (`_settle_after_chunk`, `_COMPACT_SETTLE_TIMEOUT_S=300` with a 20 s
   start-grace) for the worker's own summarize to land a compaction part; no part within the wait
   is `no_compaction_evidence` and aborts the cell. No fallback, backstop, or substitute summarize
@@ -465,7 +466,7 @@ chunk.
   FAIL-CLOSED IN EVERY DIRECTION: unset env, unreadable file, or any value other than `build`
   means DO NOT FIRE, and a cell armed with `--compact` but no sentinel path refuses to launch.
   A broken sentinel therefore surfaces as `no_compaction_evidence` at the first chunk boundary.
-  Preflight asserts the BAKED plugin actually reads `OKP_COMPACT_PHASE_FILE`, so a stale image
+  Preflight asserts the BAKED plugin actually reads `BENCH_COMPACT_PHASE_FILE`, so a stale image
   cannot run an older arm.
 - **One fire per boundary (2026-09-03).** The arm previously stamped its cooldown on summarize
   SUCCESS, so an idle arriving while a summarize was still in flight passed the 60 s cooldown and

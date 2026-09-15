@@ -37,7 +37,7 @@ const MARKER_DIR = process.env.OKP_LOOP_KILL_MARKER_DIR || "";
 // once at startup. Set by the harness per cell (ENV-VARS.md) — on a loop kill
 // the sidecar writes `repair` here so the compaction arm sees it before the
 // session idles.
-const COMPACT_PHASE_FILE = process.env.OKP_COMPACT_PHASE_FILE || null;
+const COMPACT_PHASE_FILE = process.env.BENCH_COMPACT_PHASE_FILE || null;
 
 // `scan: true` marks a MODEL-WIRE port: only these have their responses
 // observed for relay loop-kill signatures.

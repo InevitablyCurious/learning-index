@@ -89,28 +89,32 @@ COPY --from=sidecar-source / /opt/docker-worker-context/sidecar/
 
 RUN set -eux; \
     plugin_path=""; \
-    self_compact_path=""; \
+    mkdir -p /opt/bench; \
+    cp /opt/docker-worker-context/self-compact.ts /opt/bench/self-compact.ts; \
+    chmod 0644 /opt/bench/self-compact.ts; \
     if [ -f /opt/docker-worker-context/vendor/opencode-plugin/package.json ]; then \
       npm i -g --install-links=true /opt/docker-worker-context/vendor/opencode-plugin; \
       pkg_name="$(node -p 'require("/opt/docker-worker-context/vendor/opencode-plugin/package.json").name')"; \
       ln -s "$(npm root -g)/${pkg_name}" /opt/bench-plugin; \
       plugin_path="/opt/bench-plugin/plugins/plugin.ts"; \
       test -f "${plugin_path}"; \
-      self_compact_path="/opt/bench-plugin/plugins/self-compact.ts"; \
-      test -f "${self_compact_path}"; \
     else \
       echo "NOTE: vendored opencode-plugin missing; opencode plugin remains disabled in-image."; \
     fi; \
-    OKP_PLUGIN_PATH="${plugin_path}" OKP_SELF_COMPACT_PATH="${self_compact_path}" node - <<'NODE'
+    OKP_PLUGIN_PATH="${plugin_path}" node - <<'NODE'
 const fs = require("node:fs")
 const pluginPath = (process.env.OKP_PLUGIN_PATH || "").trim()
-const selfCompactPath = (process.env.OKP_SELF_COMPACT_PATH || "").trim()
+// Benchmark-native self-compaction: wired into EVERY image, with or without a
+// memory plugin. It self-gates on BENCH_SELF_COMPACT=1, so a cell that did not
+// ask for compaction loads it and nothing happens.
+const selfCompactPath = "/opt/bench/self-compact.ts"
 const config = {
   $schema: "https://opencode.ai/config.json",
   shell: "/opt/okp/supervised-shell.js",
+  plugin: [selfCompactPath],
 }
 if (pluginPath) {
-  config.plugin = [pluginPath, selfCompactPath].filter(Boolean)
+  config.plugin = [pluginPath, selfCompactPath]
   config.mcp = {
     okp: {
       "//": "disabled by design: the plugin supplies its own MCP transport, do not auto-spawn local MCP",
@@ -124,6 +128,7 @@ NODE
 
 RUN set -eux; \
     chmod 0666 /etc/xdg/opencode/opencode.json; \
+    test -f /opt/bench/self-compact.ts; \
     mkdir -p /opt/okp; \
     cp /opt/docker-worker-context/sidecar/egress-sidecar.js /opt/okp/egress-sidecar.js; \
     cp /opt/docker-worker-context/sidecar/loop-kill-scanner.cjs /opt/okp/loop-kill-scanner.cjs; \
