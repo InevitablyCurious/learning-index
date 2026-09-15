@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -10,6 +10,11 @@ import SelfCompactPlugin from './self-compact.ts';
 // The plugin is opt-in behind the bench env flag; tests exercise the enabled
 // path unless a test says otherwise.
 process.env.BENCH_SELF_COMPACT = '1';
+
+// The plugin logs into opencode's data dir; keep the suite's logs off the host's
+// real one.
+const DATA_HOME = mkdtempSync(join(tmpdir(), 'self-compact-data-'));
+process.env.XDG_DATA_HOME = DATA_HOME;
 
 // The A2 phase sentinel. In a real cell the harness writes this file on a
 // read-only bind mount before every prompt; here a temp file stands in for it.
@@ -136,6 +141,19 @@ test('a build-phase idle fires summarize once with the session model and auto:tr
 // WO-MARKER-RIP. There is no longer any text the model can write, or fail to
 // write, that changes whether this arm fires. A turn that says nothing about
 // finishing fires exactly like one that does — the phase sentinel decides.
+test('decisions are logged inside opencode\'s data dir, the one a cell exports', async () => {
+  // Run 1789474325: the log lived on a tmpfs and its stderr mirror never reached
+  // opencode.log, so no record of any fire or skip survived the cell.
+  const { client } = makeClient()
+  const hooks = await makeHooks(client)
+  await hooks.event(idleEvent())
+
+  const dir = join(DATA_HOME, 'opencode', 'self-compact')
+  const files = readdirSync(dir).filter((f) => f.endsWith('-self-compact.log'))
+  assert.equal(files.length, 1)
+  assert.match(readFileSync(join(dir, files[0]), 'utf8'), /"msg":"firing-summarize"/)
+})
+
 test('the turn text is not read: an ordinary working turn still fires', async () => {
   const { client, summarizeCalls } = makeClient()
   const hooks = await makeHooks(client)

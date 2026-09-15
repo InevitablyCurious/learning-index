@@ -12,10 +12,16 @@ import type { Plugin } from "@opencode-ai/plugin"
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
-const LOG_DIR = join(
-  process.env.HOME ?? "/tmp",
-  ".local/state/opencode/self-compact",
-)
+/**
+ * Inside opencode's DATA dir, because that is the one directory a bench cell
+ * exports at teardown (the session DB volume). Resolved per call so a test can
+ * point XDG_DATA_HOME somewhere else.
+ */
+function logDir(): string {
+  const dataHome =
+    process.env.XDG_DATA_HOME ?? join(process.env.HOME ?? "/tmp", ".local/share")
+  return join(dataHome, "opencode", "self-compact")
+}
 
 /**
  * Phase sentinel (A2). The harness publishes the CURRENT DRIVE PHASE to a file
@@ -59,29 +65,28 @@ const MAX_FIRES_PER_SESSION = 6
 function log(line: string, fields: Record<string, unknown> = {}): void {
   const ts = new Date().toISOString()
 
-  // ── MIRRORED TO STDERR, BECAUSE THE FILE IS THROWN AWAY ───────────────────
+  // ── THE FILE IS THE RECORD THAT SURVIVES THE CELL ─────────────────────────
   //
-  // LOG_DIR is under $HOME, which on a bench cell is a tmpfs discarded when the
-  // container exits. Every decision this plugin makes — why it fired, why it
-  // skipped — was being written somewhere nobody could ever read.
+  // Every decision this plugin makes — why it fired, why it skipped — has to be
+  // readable after the run. It used to live under $HOME/.local/state, a tmpfs
+  // discarded when the container exits, and the stderr mirror did not rescue
+  // it: opencode does NOT copy plugin stderr into `opencode.log` (run
+  // 1789474325's exported logs held zero self-compact lines; stderr went to the
+  // serve's /tmp log). The file now lives in opencode's data dir, which the cell
+  // exports to session-db/ and worker-logs/opencode/.
   //
-  // That cost a real diagnosis (2026-09-11): a summarize fired on a dead
-  // stream's idle and the reasoning had to be reconstructed from opencode's own
-  // log and timestamps, because this plugin's account of itself did not
-  // survive the run. opencode captures plugin stderr into `opencode.log`, which
-  // IS exported with the cell, so the decision is recoverable afterwards.
-  //
-  // The file write stays: it is nicer to read on a live container, and it costs
-  // nothing. Neither may throw — compaction must never fail because logging did.
+  // The stderr mirror stays for a live container. Neither may throw —
+  // compaction must never fail because logging did.
   try {
     console.error(`[self-compact] ${JSON.stringify({ msg: line, ...fields })}`)
   } catch {
     // A console that refuses is not a reason to skip the file below.
   }
   try {
-    mkdirSync(LOG_DIR, { recursive: true })
+    const dir = logDir()
+    mkdirSync(dir, { recursive: true })
     appendFileSync(
-      join(LOG_DIR, `${ts.slice(0, 10)}-self-compact.log`),
+      join(dir, `${ts.slice(0, 10)}-self-compact.log`),
       JSON.stringify({ ts, msg: line, ...fields }) + "\n",
     )
   } catch {
