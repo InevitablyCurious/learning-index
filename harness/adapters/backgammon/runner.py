@@ -317,7 +317,7 @@ class BackgammonRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, 
         # serve, defaulted from env consistent with config.RunConfig (mirror of the
         # hub_url/mcp_recall_url env-override seam).
         self.serve_host_port = int(
-            os.environ.get("BENCH_SERVE_HOST_PORT") or "4096"
+            os.environ.get("BENCH_SERVE_HOST_PORT") or "8719"
         )
         self.serve_container_port = int(
             os.environ.get("BENCH_SERVE_CONTAINER_PORT") or "4096"

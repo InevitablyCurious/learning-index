@@ -404,7 +404,7 @@ def _discover_bench_ports() -> list[int]:
     """Ports the BENCH itself publishes and must clear at teardown.
 
     Only the live-view serve host port qualifies (RunConfig.serve_host_port,
-    default 4096) — one persistent `opencode serve` per cell (WO-WATCH-1E),
+    default 8719) — one persistent `opencode serve` per cell (WO-WATCH-1E),
     asserted clear so a leaked serve is caught. The hub (:4440) and MCP recall
     client (:4550) are STANDING infra owned outside the bench (card §7: the
     hub is the ONE hub, normally already running); asserting them clear was a

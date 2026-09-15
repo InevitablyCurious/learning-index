@@ -9,7 +9,7 @@
 //
 // ── WHY THE STATE LIVES HERE AND NOT IN THE BROWSER ─────────────────────────
 //
-// The board is a read-only container on :7717. The control plane is the host
+// The board is a read-only container on :8717. The control plane is the host
 // process that spawns the harness. A dev-mode flag held in the browser would
 // mean this service takes the browser's word for what mode it is in — the same
 // thing the confirmation-token design already refuses, for the same reason: the

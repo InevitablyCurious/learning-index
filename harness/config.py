@@ -234,10 +234,10 @@ class RunConfig:
     )  # okp-mcp recall CLIENT; health GET /v1/health (bearer-gated). :4550 = the bench MCP slot (commissioned prod MCP); :4450 = the operator host MCP (forbidden for bench recall). NOT the hub.
     # Live-view topology: ONE persistent `opencode serve` per cell, published on a fixed
     # host port bound to the container-side serve port. The founder attaches a TUI via
-    # `opencode attach http://127.0.0.1:<serve_host_port>`. 4096 is opencode serve's default.
+    # `opencode attach http://127.0.0.1:<serve_host_port>`. 8719 is the bench's host port; the container side stays opencode serve's default 4096.
     serve_host_port: int = field(
         default_factory=lambda: int(
-            os.environ.get("BENCH_SERVE_HOST_PORT") or "4096"
+            os.environ.get("BENCH_SERVE_HOST_PORT") or "8719"
         )
     )  # host-published port for the per-cell opencode serve
     session_token_path: str = "~/.okp/mcp-session-token"  # Bearer token source (seam)

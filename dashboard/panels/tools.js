@@ -191,7 +191,7 @@ export async function runTool(base, id) {
       data ?? { ok: false, code: `HTTP ${res.status}`, reason: "the control plane returned nothing readable" };
   } catch (err) {
     // THE COMMON CAUSE IS A RESTART, NOT A BREAKAGE. `bench-ready` converges the
-    // control plane last, so for a few seconds there is nothing on :7718 to
+    // control plane last, so for a few seconds there is nothing on :8718 to
     // answer — and a bare "Failed to fetch" reads like the tool is broken.
     ui.results[id] = {
       ok: false,

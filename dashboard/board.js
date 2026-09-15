@@ -846,7 +846,7 @@ function onKeydown(e) {
  * `base_url` is a loopback address, and loopback resolves to whichever machine
  * dereferences it. Browsing the board from the host, that is the host and every
  * control POST works. Browsing it from another device on the LAN — the
- * documented remote-viewing case — `127.0.0.1:7718` is THAT DEVICE, so the
+ * documented remote-viewing case — `127.0.0.1:8718` is THAT DEVICE, so the
  * request dies before it leaves the laptop and surfaces as a transport error
  * with no obvious cause.
  *
@@ -883,8 +883,8 @@ export function controlReachability(b) {
         "That address means THIS device, not the bench host, so the request would never leave your machine. " +
         "The control plane binds loopback only, on purpose — it starts runs and spawns processes, so it is never exposed on a network.",
       fix:
-        `ssh -L 7717:127.0.0.1:7717 -L 7718:127.0.0.1:7718 <user>@${location.hostname}\n` +
-        "then open http://127.0.0.1:7717 in this browser. Both ports tunnel to the bench host's loopback, so the controls work and nothing is exposed on the network.",
+        `ssh -L 8717:127.0.0.1:8717 -L 8718:127.0.0.1:8718 <user>@${location.hostname}\n` +
+        "then open http://127.0.0.1:8717 in this browser. Both ports tunnel to the bench host's loopback, so the controls work and nothing is exposed on the network.",
     };
   }
   return { ok: true, code: null, reason: null, fix: null };

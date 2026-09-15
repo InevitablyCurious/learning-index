@@ -108,7 +108,7 @@ export async function tuiTick(cfg) {
   if (tuiInFlight) return;
   tuiInFlight = true;
   try {
-    const base = cfg.controlUrl ?? "http://127.0.0.1:7718";
+    const base = cfg.controlUrl ?? "http://127.0.0.1:8718";
     const res = await fetch(`${base}/api/tui`, {
       signal: AbortSignal.timeout(2000),
       headers: { accept: "application/json" },

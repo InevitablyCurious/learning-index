@@ -91,17 +91,17 @@ and answers a plain `curl` with `{"status":"error","error":"unauthorized"}`. The
 token the same way the harness does. **It only reads and reports** — it never archives, wipes, or
 launches; those stay operator decisions (step 3a, §2).
 
-**Start — PRIMARY: the control plane** (`127.0.0.1:7718`). It owns backgrounding, stdin
+**Start — PRIMARY: the control plane** (`127.0.0.1:8718`). It owns backgrounding, stdin
 discipline, log placement and run state — no `nohup`, no `< /dev/null`, no hand-placed log.
 Preview, read the restatement, confirm:
 
 ```bash
-curl -s -X POST 127.0.0.1:7718/api/run/preview \
+curl -s -X POST 127.0.0.1:8718/api/run/preview \
   -d '{"model":"qwen3.6-35b-a3b-bench","arm":"off"}'
 # CLOUD payload: {"model":"deepseek/deepseek-chat","arm":"off","kind":"cloud"}
 # (model = the {provider}/{model} roster key; ON cells add "org":"<org>")
 # → {"token":…, "restatement":…} — read the restatement, then confirm:
-curl -s -X POST 127.0.0.1:7718/api/run/start -d '{"confirm":"<token>"}'
+curl -s -X POST 127.0.0.1:8718/api/run/start -d '{"confirm":"<token>"}'
 ```
 
 The control plane spawns `run_cumulative.py [--cloud --provider <vendor> --model <model> |
@@ -132,7 +132,7 @@ docker image inspect bench-worker:v1 --format '{{index .Config.Labels "okp.worke
 #    Rebuild (this is the ONLY build that records what it was built from):
 .venv/bin/python scripts/rebuild_worker_image.py
 
-# 3. Run one cell — SECONDARY PATH. The control plane (127.0.0.1:7718) is the
+# 3. Run one cell — SECONDARY PATH. The control plane (127.0.0.1:8718) is the
 #    recommended start (above): it owns backgrounding, stdin discipline and log
 #    placement, and writes the log IN-TREE at runs/<tree>/<arm>-cell-<ts>.log —
 #    NOT runs/off-cell-$TS.log. This direct launch places its own log via the
@@ -156,8 +156,8 @@ TS=$(date +%Y%m%dT%H%M%S) && nohup .venv/bin/python scripts/run_cumulative.py \
 #     This is BY DESIGN — one manifest = one subject model, so OFF/ON pairing
 #     inside a manifest is always same-model. Archive (never delete) via the
 #     control-plane TREE RESET (§7) and rerun:
-curl -s -X POST 127.0.0.1:7718/api/tree/reset/preview   # → token + restatement + moves/keeps
-curl -s -X POST 127.0.0.1:7718/api/tree/reset -d '{"confirm":"<token>"}'
+curl -s -X POST 127.0.0.1:8718/api/tree/reset/preview   # → token + restatement + moves/keeps
+curl -s -X POST 127.0.0.1:8718/api/tree/reset -d '{"confirm":"<token>"}'
 #     The reset rolls forward: the results tree + active-tree.json +
 #     baselines.json (+ pre-tree cumulative-* folders, cell logs)
 #     move into runs/backups/<unix-seconds>/ and a fresh tree is minted.
@@ -173,15 +173,15 @@ sed -n 's/^attach_cmd=//p' runs/*/*/*/*/*/memory*/cell-*/live-view.txt
 #    (equivalently, from the launch log — in-tree for control-plane starts:)
 grep -E 'attach_cmd|session_id' runs/<tree>/<arm>-cell-<ts>.log | tail -5
 #    then attach to the cell's live worker serve — the id is per-run, e.g.:
-opencode attach http://127.0.0.1:4096 --session ses_00b54ddb7ffemO5eRSBu0ni034
+opencode attach http://127.0.0.1:8719 --session ses_00b54ddb7ffemO5eRSBu0ni034
 #    `--session` is NOT optional: without it the terminal UI opens its own new-session
 #    view instead of the live worker session. There is only ever ONE session on
-#    :4096, so `-c` (continue last) is the typo-proof route:
-opencode attach http://127.0.0.1:4096 -c
+#    :8719, so `-c` (continue last) is the typo-proof route:
+opencode attach http://127.0.0.1:8719 -c
 ```
 
 **Control plane (recommended) and cloud cells.** A cell may also be started through the control
-service (`127.0.0.1:7718`) — `POST /api/run/preview` → confirm token → `POST /api/run/start` with
+service (`127.0.0.1:8718`) — `POST /api/run/preview` → confirm token → `POST /api/run/start` with
 body `{"confirm": "<token>"}`; it owns backgrounding, stdin discipline, log placement and run state.
 A CLOUD cell (OrcaRouter, BILLED) takes the main-parser flags `--cloud --router orcarouter
 --provider <vendor> --model <model>` (e.g. `--provider deepseek --model deepseek-chat` = DeepSeek
@@ -193,7 +193,7 @@ artifact's server boots host-side from the bind-mounted worktree on `http://loca
 the exact code the model wrote, via the same boot the gates perform — and the run waits. The log
 carries a loud `HOLD-UI ACTIVE` line with the URL, the held container name, and the release
 command; machine-readable state is `<run_dir>/hold-ui.json`. Browse the UI (the live view on
-:4096 also stays up), then release: `touch <run_dir>/RELEASE_HOLD`. Teardown + reap then run
+:8719 also stays up), then release: `touch <run_dir>/RELEASE_HOLD`. Teardown + reap then run
 unconditionally as always (RC-6); heartbeat progress lines keep the status stream live during
 the wait (rule 5.15 is not tripped). Never set this on an unattended cell — the run waits until
 released or killed, and a kill still tears the stack down.
@@ -904,8 +904,8 @@ config while keeping test-mode auto-approve. That is the clean way; changing the
 After a reboot or power failure, bring the stack back up in this order. Do NOT run `make redeploy` for recovery — it wipes the bench MCP and identity.
 
 - **(a) Bench MCP `:4550`** — `dev/scripts/bench-mcp.sh start` (managed service). Never `make redeploy`.
-- **(b) Control plane `:7718`** — `cd control && nohup node server.mjs --port 7718 > /tmp/okp-control-plane.log 2>&1 < /dev/null &`.
-- **(c) Live-view `:4096`** — the host port is published by the egress sidecar (worker image `bench-worker:v1`, ingress forward `:4096` → cell `:4096`); the worker cell itself stays on the internal-only network and publishes no host ports. If `:4096` is unreachable, the worker image is stale — rebuild with `.venv/bin/python scripts/rebuild_worker_image.py` from the repo root and relaunch the run.
+- **(b) Control plane `:8718`** — `cd control && nohup node server.mjs --port 8718 > /tmp/okp-control-plane.log 2>&1 < /dev/null &`.
+- **(c) Live-view `:8719`** — the host port is published by the egress sidecar (worker image `bench-worker:v1`, ingress forward host `:8719` → cell `:4096`); the worker cell itself stays on the internal-only network and publishes no host ports. If `:8719` is unreachable, the worker image is stale — rebuild with `.venv/bin/python scripts/rebuild_worker_image.py` from the repo root and relaunch the run.
 - **(d) Stale session-db volumes** — `docker volume rm -f` on any leaked `{container}-session-db` volumes (manual only; the harness does not auto-purge them).
 
 ### Completion detection — one transport, bounded recovery
@@ -1020,8 +1020,8 @@ cause):**
 
 ### Bench board operations — RESET and RESTORE
 
-The bench board (dashboard `:7717`) drives two run-tree operations through the control service
-(`127.0.0.1:7718`); there is no CLI for either, and both refuse while a cell is in flight.
+The bench board (dashboard `:8717`) drives two run-tree operations through the control service
+(`127.0.0.1:8718`); there is no CLI for either, and both refuse while a cell is in flight.
 
 - **RESET** — backs up first, then mints a fresh tree. Everything currently under `runs/` that is
   benchmark data (the `active-tree.json` pointer and any `runs/<unix-seconds>/` trees) is swept into
@@ -1054,7 +1054,7 @@ A mode value other than on/off yields `memoryUNKNOWN/` in place of `memoryOFF`/`
 
 ### Dashboard deployment — the whole repo is mounted read-only
 
-The dashboard (`:7717`) runs in its own container and mounts the ENTIRE `bench/` repo
+The dashboard (`:8717`) runs in its own container and mounts the ENTIRE `bench/` repo
 read-only at `/bench` (`dashboard/docker-compose.yml:29` → `- ..:/bench:ro`). Consequence: **any new
 file under `bench/` is already served at `/bench/<rel-path>`** — a new data source needs only
 a new reader module (`dashboard/sources/*.mjs`), and ONLY reader source requires an image rebuild

@@ -41,10 +41,10 @@ python -m venv .venv && . .venv/bin/activate && pip install -e '.[test]'
 .venv/bin/python scripts/bench_preflight.py --model <alias>
 
 # 4. start the control plane (the only write-capable surface)
-node control/server.mjs            # http://127.0.0.1:7718
+node control/server.mjs            # http://127.0.0.1:8718
 
 # 5. start the read-only board (in another shell)
-(cd dashboard && docker compose up -d)   # http://127.0.0.1:7717
+(cd dashboard && docker compose up -d)   # http://127.0.0.1:8717
 ```
 
 Runs are started from the board (or `POST /api/run/start`). Each cell spawns the
@@ -85,7 +85,7 @@ task/       The backgammon task — scaffold (stubs), golden (never shown), prom
 grader/     report.mjs + the gate suite (conformance/backend/frontend) — the only
             component that sees the golden.
 control/    Node control plane (server.mjs) — the only write-capable surface.
-dashboard/  Read-only board (containerized) at :7717.
+dashboard/  Read-only board (containerized) at :8717.
 images/     worker/, grader/ Dockerfiles + sidecar/ (egress + loop-kill).
 scripts/    Entrypoints: run_cumulative.py, rebuild_*_image.py, *_preflight.py.
 config/     bench.env and the bench-owned env surface (see ENV-VARS.md).

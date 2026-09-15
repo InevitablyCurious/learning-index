@@ -31,11 +31,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 function parseArgs(argv) {
   const out = {
-    port: Number(process.env.OKP_CONTROL_PORT ?? 7718),
+    port: Number(process.env.OKP_CONTROL_PORT ?? 8718),
     benchRoot: process.env.OKP_CONTROL_BENCH_ROOT ?? resolve(HERE, ".."),
     proxyUrl: process.env.OKP_CONTROL_PROXY_URL ?? "http://127.0.0.1:4545",
     runtimeUrl: process.env.OKP_CONTROL_RUNTIME_URL ?? "http://127.0.0.1:1234",
-    serveUrl: process.env.OKP_CONTROL_SERVE_URL ?? "http://127.0.0.1:4096",
+    serveUrl: process.env.OKP_CONTROL_SERVE_URL ?? "http://127.0.0.1:8719",
     python: process.env.OKP_CONTROL_PYTHON ?? null,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -58,11 +58,11 @@ bench control plane
 
   node server.mjs [options]
 
-  --port <n>          default 7718
+  --port <n>          default 8718
   --bench-root <dir>  default: the parent of this file
   --proxy-url <url>   default http://127.0.0.1:4545   (model roster)
   --runtime-url <url> default http://127.0.0.1:1234   (residency + context)
-  --serve-url <url>   default http://127.0.0.1:4096   (worker event stream)
+  --serve-url <url>   default http://127.0.0.1:8719   (worker event stream)
 
   Binds 127.0.0.1 only. There is deliberately no --host flag.
 `);

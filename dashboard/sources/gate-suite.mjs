@@ -35,7 +35,7 @@ export function describe() {
 const TIMEOUT_MS = 2500;
 
 export async function read(ctx) {
-  const base = ctx.config?.controlUrl ?? "http://127.0.0.1:7718";
+  const base = ctx.config?.controlUrl ?? "http://127.0.0.1:8718";
   const url = `${base}/api/wall`;
   try {
     const res = await fetch(url, {

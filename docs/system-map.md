@@ -25,7 +25,7 @@ system.
 | Task | `task/backgammon/` | The instrument's task: `scaffold/` (stubs the model builds from), `golden/` (reference solution, never shown), `prompts/` (chunked build prompts). |
 | Grader | `grader/` | `report.mjs` + the gate suite (conformance / backend / frontend, plus `meta/` and `quarantine/`). The only component that sees the golden. |
 | Control plane | `control/` | Node stdlib-only `server.mjs` — the only write-capable surface; spawns the harness, one run at a time. |
-| Dashboard | `dashboard/` | Read-only board (containerized) at :7717; renders, never acts. |
+| Dashboard | `dashboard/` | Read-only board (containerized) at :8717; renders, never acts. |
 | Images | `images/` | `worker/Dockerfile`, `grader/Dockerfile`, `sidecar/` (egress + loop-kill scanner + supervised shell). |
 | Scripts | `scripts/` | Entrypoints: `run_cumulative.py` (canonical), `rebuild_worker_image.py`, `rebuild_grader_image.py`, `bench_preflight.py`. |
 | Config | `config/` | `bench.env`; the bench-owned env surface is documented in `ENV-VARS.md`. |
@@ -48,10 +48,10 @@ system.
 4. **Scorecard.** `run_artifacts.build_scorecard` aggregates the write-once
    manifest + append-only status stream into `manifest.scorecard.json` per cell.
 
-The **control plane** (`control/server.mjs`, binds 127.0.0.1:7718, no shell, one
+The **control plane** (`control/server.mjs`, binds 127.0.0.1:8718, no shell, one
 run at a time) spawns the entrypoint
 `.venv/bin/python scripts/run_cumulative.py run --mode <arm>` and observes
-read-only. The board (`:7717`) is a separate, read-only viewer.
+read-only. The board (`:8717`) is a separate, read-only viewer.
 
 ## 4. Memory story — OFF vs ON
 

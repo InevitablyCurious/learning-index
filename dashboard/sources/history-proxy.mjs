@@ -52,7 +52,7 @@ const PROXY_TIMEOUT_MS = 10_000;
  * the board's honest-error convention.
  */
 export async function proxyHistory(pathname, search, controlUrl) {
-  const target = (controlUrl ?? "http://127.0.0.1:7718") + pathname + search;
+  const target = (controlUrl ?? "http://127.0.0.1:8718") + pathname + search;
   try {
     // No accept header: diff is text/plain and transcript is text/markdown, so
     // assuming JSON here is exactly the drift this proxy exists to avoid.

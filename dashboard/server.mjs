@@ -2,7 +2,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // BENCH DASHBOARD — SERVER
 //
-//   node server.mjs                 # http://127.0.0.1:7717
+//   node server.mjs                 # http://127.0.0.1:8717
 //   node server.mjs --port 8080 --runs ../runs
 //
 // ZERO DEPENDENCIES. Node stdlib only. No build step, no npm install.
@@ -42,12 +42,12 @@ function parseArgs(argv) {
   // exposed to the network unless someone decides it should be.
   // INSIDE A CONTAINER that default is wrong in a way that looks like a bug:
   // a process bound to the container's loopback is unreachable from a
-  // published port, so `-p 7717:7717` would silently serve nothing. The
+  // published port, so `-p 8717:8717` would silently serve nothing. The
   // container image sets OKP_DASH_HOST=0.0.0.0 explicitly, which is safe
   // there precisely because the container's network namespace IS the boundary
   // and publishing is still opt-in at `docker run`.
   const out = {
-    port: 7717,
+    port: 8717,
     host: process.env.OKP_DASH_HOST ?? "127.0.0.1",
     runs: null,
     config: null,
@@ -71,7 +71,7 @@ bench dashboard
 
   node server.mjs [options]
 
-  --port <n>        default 7717
+  --port <n>        default 8717
   --host <addr>     default 127.0.0.1 (pass 0.0.0.0 to expose deliberately)
   --runs <dir>      runs root (default: ../runs relative to this file)
   --config <file>   default: ./dashboard.config.json
@@ -85,7 +85,7 @@ const DEFAULT_CONFIG = {
   benchRoot: resolve(HERE, ".."),
   runsRoot: null, // derived from benchRoot when null
   pollMs: 2000,
-  opencodeServeUrl: "http://127.0.0.1:4096",
+  opencodeServeUrl: "http://127.0.0.1:8719",
   // The host-side control plane. Opt-in like every other network source: the
   // board must come up with nothing else running.
   //
@@ -96,7 +96,7 @@ const DEFAULT_CONFIG = {
   // on the host and must use a host address. Publishing the server's own URL
   // to the browser would make every write fail with a connection error that
   // looks like the control plane is down when it is running fine.
-  controlUrl: "http://127.0.0.1:7718",
+  controlUrl: "http://127.0.0.1:8718",
   controlPublicUrl: null, // defaults to controlUrl when not set
     sources: {
       "run-manifest": true,
@@ -405,8 +405,8 @@ const main = async () => {
     // ── GET /api/control-base ────────────────────────────────────────────
     // Where the BROWSER should post. The /history page has to reach the
     // control plane directly for "view result" (the board is read-only and
-    // proxies GETs only), and a page that inferred :7718 from the board's
-    // :7717 would be deriving a fact this process can simply state.
+    // proxies GETs only), and a page that inferred :8718 from the board's
+    // :8717 would be deriving a fact this process can simply state.
     if (url.pathname === "/api/control-base") {
       const base = publicControlBase(cfg);
       res

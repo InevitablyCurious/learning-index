@@ -32,11 +32,11 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | BENCH_TARGET | task/backgammon/golden | gates target dir | env |
 | DEBUG_API | off | debug endpoints on task servers | env =1 |
 | OKP_DASH_HOST | 127.0.0.1 (image 0.0.0.0) | dashboard bind addr | env |
-| OKP_DASH_PORT | 7717 | dashboard port | env or --port |
+| OKP_DASH_PORT | 8717 | dashboard port | env or --port |
 | OKP_DASH_BENCH_ROOT | .. (image /bench) | bench root | env |
 | OKP_DASH_POLL_MS | 2000 | refresh cadence | env |
-| OKP_DASH_OPENCODE_URL | http://127.0.0.1:4096 | live agent API | env |
-| OKP_DASH_CONTROL_URL | http://127.0.0.1:7718 | server-to-control URL | env |
+| OKP_DASH_OPENCODE_URL | http://127.0.0.1:8719 | live agent API | env |
+| OKP_DASH_CONTROL_URL | http://127.0.0.1:8718 | server-to-control URL | env |
 | OKP_DASH_CONTROL_PUBLIC_URL | controlUrl | browser-to-control URL | env |
 | OKP_DASH_SOURCE_<NAME> | per config | per-source toggle | env OKP_DASH_SOURCE_<NAME>=1/0 |
 | OKP_DASH_HUBDB | off | enable hub-db source | env =1 |
@@ -59,7 +59,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 |---|---|---|---|
 | BENCH_HUB_URL | http://127.0.0.1:4440 | hub endpoint | env |
 | BENCH_MCP_RECALL_URL | http://127.0.0.1:4550 (host) / http://host.docker.internal:4550 (worker) | recall client | env |
-| BENCH_SERVE_HOST_PORT | 4096 | host-published serve port | env |
+| BENCH_SERVE_HOST_PORT | 8719 | host-published serve port | env |
 | BENCH_SERVE_CONTAINER_PORT | 4096 | container serve port | env |
 | BENCH_ENV_FILE | config/bench.env | durable env file path | env |
 | BENCH_ROOT | <bench>/.. | workspace-root anchor | env |
@@ -87,11 +87,11 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | SEAM_RUNS_ROOT | (none) | live-stream seam check | env |
 | OKP_INGRESS_CELL_HOST | (none) | egress ingress cell alias | env (set by harness) |
 | OKP_INGRESS_PORT | 4096 | egress ingress port | env |
-| OKP_CONTROL_PORT | 7718 | control-plane port | env |
+| OKP_CONTROL_PORT | 8718 | control-plane port | env |
 | OKP_CONTROL_BENCH_ROOT | .. | control bench root | env |
 | OKP_CONTROL_PROXY_URL | http://127.0.0.1:4545 | model proxy | env |
 | OKP_CONTROL_RUNTIME_URL | http://127.0.0.1:1234 | LM Studio runtime | env |
-| OKP_CONTROL_SERVE_URL | http://127.0.0.1:4096 | serve API | env |
+| OKP_CONTROL_SERVE_URL | http://127.0.0.1:8719 | serve API | env |
 | OKP_CONTROL_PYTHON | null | python binary | env |
 | OKP_HOME | ~/.okp/bench | bench identity home | env |
 | OKP_MCP_DIR | client/packages/core (resolve(benchRoot, "..", "client", "packages", "core") — tools.mjs:38) | reference MCP dir | env |

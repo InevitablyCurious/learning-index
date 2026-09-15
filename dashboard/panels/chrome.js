@@ -26,7 +26,7 @@
 //    harness's own heartbeat silence, and for how long — and never
 //    FAILED / DEAD / ABORTED / CRASHED.
 //  - The control-plane reach banner stays. STOP is a write, so when the browser
-//    cannot reach :7718 the button is dead and the operator must be told why
+//    cannot reach :8718 the button is dead and the operator must be told why
 //    BEFORE clicking, not after.
 // ─────────────────────────────────────────────────────────────────────────────
 

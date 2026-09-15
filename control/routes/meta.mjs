@@ -98,7 +98,7 @@ export const routes = [
         // ── WHEN THIS PROCESS LOADED ITS CODE ────────────────────────────────
         //
         // The control plane is a LONG-LIVED HOST PROCESS and `make control-start`
-        // is a deliberate no-op when :7718 is already listening, so an edit to
+        // is a deliberate no-op when :8718 is already listening, so an edit to
         // control/ sits inert until someone restarts it by hand. That is exactly
         // how the 2026-09-02 compaction launch ran without --compact: the source
         // had the flag, the running process did not, and nothing said so.

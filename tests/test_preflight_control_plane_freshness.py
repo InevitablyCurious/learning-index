@@ -3,7 +3,7 @@
 MEASURED FAILURE (2026-09-02). Chunk-boundary compaction shipped, the operator
 launched from the board, and no cell compacted. The flag was present in
 `control/server.mjs`, absent from the argv the RUNNING control plane built, and
-nothing said so: `make control-start` is a deliberate no-op when :7718 is
+nothing said so: `make control-start` is a deliberate no-op when :8718 is
 already listening, so `make up` never restarts it and the process had been up
 since before the edit. The run completed looking entirely normal and measured
 something other than what was configured.

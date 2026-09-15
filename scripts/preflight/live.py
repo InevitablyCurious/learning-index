@@ -13,7 +13,7 @@ from preflight.core import REPO, Check
 
 # ── the board's during-the-run surface ──────────────────────────────────────
 #
-# LIVENESS IS NOT WIRING (AGENTS.md §2.1). The board answering 200 on :7717
+# LIVENESS IS NOT WIRING (AGENTS.md §2.1). The board answering 200 on :8717
 # proves nothing about whether its sources RESOLVE, exactly as a port answering
 # proved nothing about identity. This asserts the SEAM instead: the reader's own
 # resolver, invoked directly, against the streams actually on disk.

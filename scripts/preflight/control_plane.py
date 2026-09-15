@@ -13,7 +13,7 @@ def check_control_plane_freshness(c: Check) -> None:
     """Is the RUNNING control plane older than the control-plane source?
 
     THE FAILURE THIS EXISTS FOR (2026-09-02). The control plane is a long-lived
-    HOST process, and `make control-start` is a deliberate no-op when :7718 is
+    HOST process, and `make control-start` is a deliberate no-op when :8718 is
     already listening — so `make up` never restarts it. A compaction launch ran
     with the flag present in `control/server.mjs` and absent from the argv the
     running process built, because that process had been up since before the
@@ -56,7 +56,7 @@ def check_control_plane_freshness(c: Check) -> None:
 
     try:
         with urllib.request.urlopen(
-            "http://127.0.0.1:7718/api/health", timeout=3
+            "http://127.0.0.1:8718/api/health", timeout=3
         ) as resp:
             health = json.loads(resp.read().decode("utf-8"))
     except Exception:  # noqa: BLE001 - any failure to reach it means it is down
@@ -66,7 +66,7 @@ def check_control_plane_freshness(c: Check) -> None:
         c.add(
             "control plane",
             True,
-            "not running on :7718 — board launches unavailable "
+            "not running on :8718 — board launches unavailable "
             "(start: cd dev && make control-start)",
         )
         return

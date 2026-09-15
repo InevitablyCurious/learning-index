@@ -319,12 +319,12 @@ class DockerCellConfig:
     # to MEASURE whether the recording turn actually landed, rather than
     # trusting a self-report. Set per cell by the bootstrap.
     extraction_state_host_path: Path | None = None
-    # Live-view topology: persistent `opencode serve` ports. Fixed host:4096 ->
+    # Live-view topology: persistent `opencode serve` ports. Fixed host:8719 ->
     # container:4096 (opencode serve default). Wired from RunConfig by the harness.
     # Publisher depends on the path: the cell publishes it directly in the legacy
     # (non-egress) path; in egress mode the SIDECAR publishes it (WO-25) because
     # the cell is on the --internal network where -p is silently dropped.
-    serve_host_port: int = 4096
+    serve_host_port: int = 8719
     serve_container_port: int = 4096
 
 

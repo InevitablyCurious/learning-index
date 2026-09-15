@@ -101,7 +101,7 @@ function verdict(processes, blocking) {
 
 /**
  * THE CONTROL PLANE — the only thing on the board that can start a run.
- * The board is read-only by construction; the BROWSER posts to :7718 directly.
+ * The board is read-only by construction; the BROWSER posts to :8718 directly.
  * So if this is not reachable FROM THE BROWSER, no button on the board works,
  * and that must be the first line the operator reads.
  */
@@ -139,7 +139,7 @@ function controlPlane(b) {
   if (remote) {
     return proc("control-plane", "control plane", "bad", base, null,
       "the board cannot start a run itself — every start is posted by the browser to the control service.",
-      `this board is open at ${location.hostname}, but the control plane is published as ${base}. That address means THIS device, not the bench host, so a start request would never leave your machine. Tunnel it: ssh -L 7717:127.0.0.1:7717 -L 7718:127.0.0.1:7718 <user>@${location.hostname}`);
+      `this board is open at ${location.hostname}, but the control plane is published as ${base}. That address means THIS device, not the bench host, so a start request would never leave your machine. Tunnel it: ssh -L 8717:127.0.0.1:8717 -L 8718:127.0.0.1:8718 <user>@${location.hostname}`);
   }
   return proc("control-plane", "control plane", "ok", base, null,
     "the only surface that can start a run; the browser posts to it directly.");

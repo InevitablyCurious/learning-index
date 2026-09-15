@@ -22,7 +22,7 @@ Contract:
     EGRESS_HUB_PORT         (4440) -> http://host.docker.internal:4440
 - Ingress forward (WO-25): when EGRESS_INGRESS_CELL_HOST_ENV is set, the
   sidecar additionally listens on EGRESS_INGRESS_PORT_ENV and forwards to the
-  named cell container's serve port, so host :4096 reaches the cell's
+  named cell container's serve port, so host :8719 reaches the cell's
   live-view `opencode serve` while the cell stays internal-only.
 - Worker-facing URLs are plain HTTP to the sidecar; cloud TLS is terminated
   at the sidecar.

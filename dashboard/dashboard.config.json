@@ -1,6 +1,6 @@
 {
   "pollMs": 2000,
-  "opencodeServeUrl": "http://127.0.0.1:4096",
+  "opencodeServeUrl": "http://127.0.0.1:8719",
   "sources": {
     "run-manifest": true,
     "status-stream": true,

@@ -2,7 +2,7 @@
 # Bench Dashboard
 #
 #   docker compose up -d          (from bench/dashboard/)
-#   open http://localhost:7717
+#   open http://localhost:8717
 #
 # Single stage on purpose: there is nothing to build. The dashboard has zero
 # dependencies and no build step, so a builder stage would produce nothing and
@@ -39,7 +39,7 @@ COPY sources/ ./sources/
 # 127.0.0.1 would silently serve nothing. Exposure is still opt-in at the
 # `ports:` / `-p` level — the container network namespace is the boundary.
 ENV OKP_DASH_HOST=0.0.0.0 \
-    OKP_DASH_PORT=7717 \
+    OKP_DASH_PORT=8717 \
     OKP_DASH_BENCH_ROOT=/bench \
     NODE_ENV=production
 
@@ -48,12 +48,12 @@ ENV OKP_DASH_HOST=0.0.0.0 \
 # user with no writable state of its own.
 USER node
 
-EXPOSE 7717
+EXPOSE 8717
 
 # Reports unhealthy if the board stops assembling — this is what makes the
 # green/red dot in Docker Desktop meaningful rather than decorative.
 HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.OKP_DASH_PORT||7717)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.OKP_DASH_PORT||8717)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "server.mjs"]

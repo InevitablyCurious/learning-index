@@ -23,8 +23,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BENCH="$(cd "$HERE/.." && pwd)"
-PORT="${OKP_DASH_PORT:-7717}"
-CONTROL_PORT="${OKP_CONTROL_PORT:-7718}"
+PORT="${OKP_DASH_PORT:-8717}"
+CONTROL_PORT="${OKP_CONTROL_PORT:-8718}"
 
 cd "$HERE"
 
@@ -75,7 +75,7 @@ if [ "${1:-}" = "--control" ]; then
   # KILL WHATEVER HOLDS THE PORT, by asking the kernel who holds it.
   #
   # Two argv patterns have now failed here. "control/server.mjs" missed a
-  # process started from inside control/; "server.mjs --port 7718" missed one
+  # process started from inside control/; "server.mjs --port 8718" missed one
   # started WITHOUT the flag (`node control/server.mjs`, the default port). Both
   # failures are identical and silent: the old process survives, the new one
   # dies on EADDRINUSE, and the health check below passes AGAINST THE STALE

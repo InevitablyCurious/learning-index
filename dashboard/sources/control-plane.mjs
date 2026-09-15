@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // SOURCE: control-plane  [OPT-IN — network]
 //
-// Consumes the host-side control plane (default http://127.0.0.1:7718), which
+// Consumes the host-side control plane (default http://127.0.0.1:8718), which
 // owns the three surfaces the read-only board cannot own itself: the model
 // roster, run control, and the live event feed.
 //
@@ -33,12 +33,12 @@
  * to it when they are the same host (the bare `node server.mjs` case).
  *
  * Exported because the /history page needs the same answer for its "view
- * result" POST, and a page that derived :7718 from the board's :7717 would be
+ * result" POST, and a page that derived :8718 from the board's :8717 would be
  * deriving a fact the producer can state — which is the one rule everything
  * else here is built on.
  */
 export function publicControlBase(config) {
-  const base = config?.controlUrl ?? "http://127.0.0.1:7718";
+  const base = config?.controlUrl ?? "http://127.0.0.1:8718";
   return config?.controlPublicUrl ?? base;
 }
 
@@ -153,7 +153,7 @@ export function ringRestarted(data, cursor) {
 }
 
 export async function read(ctx) {
-  const base = ctx.config?.controlUrl ?? "http://127.0.0.1:7718";
+  const base = ctx.config?.controlUrl ?? "http://127.0.0.1:8718";
   const publicBase = publicControlBase(ctx.config);
 
   // Capabilities first: it is the cheapest call and its failure is the whole

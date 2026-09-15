@@ -2,14 +2,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // BENCH CONTROL PLANE — SERVER
 //
-//   node server.mjs                 # http://127.0.0.1:7718
+//   node server.mjs                 # http://127.0.0.1:8718
 //   node server.mjs --port 8081
 //
 // ZERO DEPENDENCIES. Node stdlib only. No build step, no npm install.
 //
 // ── THIS IS THE ONLY PART OF THE BOARD THAT CAN CHANGE THE WORLD ─────────────
 //
-// The dashboard on :7717 is read-only by construction and MUST STAY THAT WAY:
+// The dashboard on :8717 is read-only by construction and MUST STAY THAT WAY:
 // GET-only, bench repo mounted `:ro`, no docker socket, uid 1000. Those are
 // kernel-enforced properties that make "the dashboard corrupted a run"
 // impossible rather than unlikely.
@@ -103,8 +103,8 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const path = url.pathname;
 
-  // CORS for the dashboard origin only. The board runs on :7717 and this
-  // service on :7718, so a browser treats them as cross-origin.
+  // CORS for the dashboard origin only. The board runs on :8717 and this
+  // service on :8718, so a browser treats them as cross-origin.
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("access-control-allow-headers", "content-type");
   res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");

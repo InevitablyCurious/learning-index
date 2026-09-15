@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // SOURCE: opencode-serve  [OPT-IN — network]
 //
-// The live agent session API (default http://127.0.0.1:4096). This is the
+// The live agent session API (default http://127.0.0.1:8719). This is the
 // fastest-moving truth on the board: turn count and token burn update while a
 // chunk is still running, long before the status stream records anything.
 //
@@ -35,7 +35,7 @@ export function describe() {
 }
 
 export async function read(ctx) {
-  const base = ctx.config?.opencodeServeUrl ?? "http://127.0.0.1:4096";
+  const base = ctx.config?.opencodeServeUrl ?? "http://127.0.0.1:8719";
 
   let res;
   try {

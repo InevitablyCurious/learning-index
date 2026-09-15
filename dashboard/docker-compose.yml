@@ -2,10 +2,10 @@
 # Bench Dashboard
 #
 #   cd dashboard && docker compose up -d
-#   open http://localhost:7717
+#   open http://localhost:8717
 #
 # In Docker Desktop the container appears as `learning-index-dashboard` with
-# 7717 as a clickable link, and the health dot goes green once the board
+# 8717 as a clickable link, and the health dot goes green once the board
 # assembles.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ services:
     ports:
       # Host-only by default, matching the rest of the Okp stack. Set
       # OKP_BIND_HOST=0.0.0.0 to expose it on the LAN — a deliberate act.
-      - "${OKP_BIND_HOST:-127.0.0.1}:7717:7717"
+      - "${OKP_BIND_HOST:-127.0.0.1}:8717:8717"
 
     volumes:
       # The bench repo, READ-ONLY. `:ro` is not decoration — the dashboard has
@@ -42,7 +42,7 @@ services:
       # host.docker.internal is the documented Docker Desktop path to it.
       # If unreachable, the source reports `unwired` and the board simply
       # loses liveness — it does not fail.
-      OKP_DASH_OPENCODE_URL: "http://host.docker.internal:4096"
+      OKP_DASH_OPENCODE_URL: "http://host.docker.internal:8719"
 
       # ── OPT-IN: host-side control plane ─────────────────────────────────
       # The control plane is the ONLY write-capable surface. This dashboard
@@ -63,8 +63,8 @@ services:
       # The gate suite, split out of the control-plane source so a slow or
       # absent roster cannot hold the TUI mirror. Same service, own row.
       OKP_DASH_SOURCE_GATE_SUITE: "1"
-      OKP_DASH_CONTROL_URL: "http://host.docker.internal:7718"
-      OKP_DASH_CONTROL_PUBLIC_URL: "http://127.0.0.1:7718"
+      OKP_DASH_CONTROL_URL: "http://host.docker.internal:8718"
+      OKP_DASH_CONTROL_PUBLIC_URL: "http://127.0.0.1:8718"
 
       # ── OPT-IN: hub recall tables ───────────────────────────────────────
       # Off by default. The board must come up on a machine with no database

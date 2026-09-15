@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // HISTORY PAGE — standalone /history for the bench board.
 //
-// The board (:7717) shows the live run; this page shows the RECORD: every
-// benchmark run the control plane (:7718) knows about, its check-points, the
+// The board (:8717) shows the live run; this page shows the RECORD: every
+// benchmark run the control plane (:8718) knows about, its check-points, the
 // files each check-point changed, and the stored unified diffs rendered
 // side-by-side. All data arrives over plain fetch() from the control plane —
 // there is no shared sources/ module (those are server-side only).
@@ -445,7 +445,7 @@ export async function loadDiff(base, run, cell, diffPath) {
 
 /**
  * Where the browser posts. Stated by the board at /api/control-base, because a
- * page that guessed :7718 from its own :7717 would be deriving a fact the
+ * page that guessed :8718 from its own :8717 would be deriving a fact the
  * producer can state — and would guess wrong the moment either is remapped.
  */
 export async function loadControlBase(base) {

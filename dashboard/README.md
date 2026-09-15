@@ -5,16 +5,16 @@ phosphor palette, built to be read at a glance on a stream and to survive a
 skeptical engineer reading it closely.
 
 ```bash
-docker compose up -d          # → http://localhost:7717
+docker compose up -d          # → http://localhost:8717
 ```
 
-In Docker Desktop it appears as `learning-index-dashboard` with 7717 as a
+In Docker Desktop it appears as `learning-index-dashboard` with 8717 as a
 clickable link and a health dot that goes green once the board assembles.
 
 Host mode still works and needs no install — Node 18+ stdlib only:
 
 ```bash
-node server.mjs               # → http://127.0.0.1:7717
+node server.mjs               # → http://127.0.0.1:8717
 node server.mjs --help
 ```
 
@@ -163,10 +163,10 @@ Env vars override the config file, so the container is reconfigured with
 | Var | Default | Purpose |
 |---|---|---|
 | `OKP_DASH_HOST` | `127.0.0.1` (image: `0.0.0.0`) | bind address |
-| `OKP_DASH_PORT` | `7717` | port |
+| `OKP_DASH_PORT` | `8717` | port |
 | `OKP_DASH_BENCH_ROOT` | `..` (image: `/bench`) | bench repo root |
 | `OKP_DASH_POLL_MS` | `2000` | refresh cadence |
-| `OKP_DASH_OPENCODE_URL` | `http://127.0.0.1:4096` | live agent API |
+| `OKP_DASH_OPENCODE_URL` | `http://127.0.0.1:8719` | live agent API |
 | `OKP_DASH_SOURCE_<NAME>` | — | force a source on/off |
 | `OKP_DASH_HUBDB` | off | enable the hub-db source |
 | `OKP_HUB_DB_{HOST,PORT,USER,NAME,PASSWORD}` | — | hub postgres |

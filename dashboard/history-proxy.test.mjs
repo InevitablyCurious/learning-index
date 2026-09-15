@@ -136,7 +136,7 @@ test("proxyHistory: controlUrl defaults to the loopback control plane", async ()
       await proxyHistory("/api/history", "", undefined);
     },
   );
-  assert.equal(calls[0].url, "http://127.0.0.1:7718/api/history");
+  assert.equal(calls[0].url, "http://127.0.0.1:8718/api/history");
 });
 
 test("proxyHistory: bounded timeout signal, and no JSON-assuming accept header", async () => {
