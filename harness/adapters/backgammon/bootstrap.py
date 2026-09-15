@@ -34,6 +34,8 @@ import subprocess
 from ..docker_worker import DockerCell
 from .constants import _COMPACT_PHASE_FILENAME, _COMPACT_PHASE_REPAIR, _GRADER_DIR
 from .exceptions import ServeTransportError
+from harness.adapters.docker_worker import worker_config_host_dir
+
 from .transport import compact_phase_for
 from .worker_config import build_worker_opencode_config
 
@@ -153,7 +155,11 @@ class BootstrapMixin:
                 "PROGRESS step=worker-permission-config "
                 f"reasoning_effort={self.reasoning_effort} model={self.model}"
             )
-        (worktree / "opencode.json").write_text(
+        # Outside the worktree: the permission rules name the grading and
+        # reference folders, and anything in /work is readable by the model.
+        config_dir = worker_config_host_dir(worktree)
+        config_dir.mkdir(parents=True, exist_ok=True)
+        (config_dir / "opencode.json").write_text(
             json.dumps(config, indent=2) + "\n", encoding="utf-8"
         )
         self._progress(
@@ -181,6 +187,9 @@ class BootstrapMixin:
         # A2 phase sentinel: a sibling of the worktree, never inside it — the
         # model must not see instrument state, and the gates must not score it.
         cell_config.compact_phase_host_path = worktree.parent / "compact-phase"
+        # Must exist before `docker run`, or Docker creates the mount source
+        # itself; the file inside is written once the container is up.
+        worker_config_host_dir(worktree).mkdir(parents=True, exist_ok=True)
         cell_config.output_token_max = self.max_output_tokens
         cell_config.proxy_base_url = self.proxy_base_url
         cell_config.proxy_token = self.proxy_token

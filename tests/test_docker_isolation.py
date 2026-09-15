@@ -191,20 +191,34 @@ def _inspect_mounts(container_name: str) -> list[dict[str, object]]:
     return mounts
 
 
-def _assert_mounts_are_only_worktree(
+def _assert_mounts_are_only_worktree_and_settings(
     mounts: list[dict[str, object]], worktree: Path
 ) -> None:
+    """Exactly two mounts: the worktree at /work, and the cell's settings
+    directory READ-ONLY outside /work (its permission rules name the grading
+    and reference folders, so the model must not be able to read it)."""
+    from harness.adapters.docker_worker import (
+        WORKER_CONFIG_CONTAINER_DIR,
+        worker_config_host_dir,
+    )
+
     assert mounts, "container must expose at least one mount"
     destinations = {str(mount.get("Destination", "")) for mount in mounts}
-    assert destinations == {"/work"}
+    assert destinations == {"/work", WORKER_CONFIG_CONTAINER_DIR}
 
-    expected_source = os.path.realpath(str(worktree.resolve()))
+    settings = [m for m in mounts if m.get("Destination") == WORKER_CONFIG_CONTAINER_DIR]
+    assert len(settings) == 1 and settings[0].get("RW") is False, settings
+
+    expected_sources = {
+        os.path.realpath(str(worktree.resolve())),
+        os.path.realpath(str(worker_config_host_dir(worktree))),
+    }
     source_paths = {
         os.path.realpath(str(Path(str(mount.get("Source", ""))).resolve()))
         for mount in mounts
         if mount.get("Source")
     }
-    assert source_paths == {expected_source}
+    assert source_paths == expected_sources
     assert os.path.realpath(str(HOST_GOLDEN_PATH)) not in source_paths
 
 
@@ -699,7 +713,7 @@ def test_forbidden_mounts_and_oracle_paths_absent(tmp_path: Path) -> None:
         )
 
         mounts = _inspect_mounts(cell.container_name)
-        _assert_mounts_are_only_worktree(mounts, worktree)
+        _assert_mounts_are_only_worktree_and_settings(mounts, worktree)
 
 
 @REQUIRES_DOCKER
@@ -784,7 +798,7 @@ def test_no_seed_keystore_corpus_env_or_mounts_in_either_arm(
             assert forbidden not in on_env
 
         mounts_on = _inspect_mounts(on_cell.container_name)
-        _assert_mounts_are_only_worktree(mounts_on, worktree_on)
+        _assert_mounts_are_only_worktree_and_settings(mounts_on, worktree_on)
 
         for mount in mounts_on:
             source_text = str(mount.get("Source", "")).lower()
@@ -797,7 +811,7 @@ def test_no_seed_keystore_corpus_env_or_mounts_in_either_arm(
             assert forbidden not in off_env
 
         mounts_off = _inspect_mounts(off_cell.container_name)
-        _assert_mounts_are_only_worktree(mounts_off, worktree_off)
+        _assert_mounts_are_only_worktree_and_settings(mounts_off, worktree_off)
         for mount in mounts_off:
             source_text = str(mount.get("Source", "")).lower()
             assert "keystore" not in source_text
@@ -1001,7 +1015,18 @@ def test_run_argv_redirects_xdg_state_into_writable_home_and_loads_per_cell_conf
     assert _contains_pair(argv, "-e", f"XDG_DATA_HOME={home}/.local/share")
     assert _contains_pair(argv, "-e", f"XDG_CACHE_HOME={home}/.cache")
     assert _contains_pair(argv, "-e", f"OPENCODE_CONFIG_DIR={home}/.config/opencode")
-    # Per-cell config (bind-mounted at /work) is the container-wide default config.
-    assert _contains_pair(argv, "-e", "OPENCODE_CONFIG=/work/opencode.json")
+    # Per-cell config is the container-wide default config, mounted read-only
+    # OUTSIDE /work so the model cannot read the permission rules.
+    from harness.adapters.docker_worker import (
+        WORKER_CONFIG_CONTAINER_DIR,
+        WORKER_CONFIG_CONTAINER_FILE,
+        worker_config_host_dir,
+    )
+
+    assert _contains_pair(argv, "-e", f"OPENCODE_CONFIG={WORKER_CONFIG_CONTAINER_FILE}")
+    assert not WORKER_CONFIG_CONTAINER_FILE.startswith("/work")
+    assert _contains_pair(
+        argv, "-v", f"{worker_config_host_dir(cfg.worktree)}:{WORKER_CONFIG_CONTAINER_DIR}:ro"
+    )
     # HOME still points at the writable tmpfs.
     assert _contains_pair(argv, "-e", f"HOME={home}")

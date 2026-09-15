@@ -641,7 +641,7 @@ class DockerCell:
         host_port = int(self.config.serve_host_port)
         container_port = int(self.config.serve_container_port)
         script = (
-            f"OPENCODE_CONFIG=/work/opencode.json nohup opencode serve "
+            f"OPENCODE_CONFIG={WORKER_CONFIG_CONTAINER_FILE} nohup opencode serve "
             f"--hostname 0.0.0.0 --port {container_port} "
             "--print-logs >/tmp/opencode-serve.log 2>&1 & echo $!"
         )
@@ -1214,6 +1214,20 @@ def _emit(progress: Callable[[str], None] | None, message: str) -> None:
     progress(message)
 
 
+# THE WORKER'S SETTINGS FILE LIVES OUTSIDE /work. It carries the permission
+# rules, and those name the grading and reference folders — a file inside /work
+# is one the model can open, and run 1789474325's model did. It sits in a
+# sibling of the worktree, mounted read-only as a DIRECTORY so the rewrite before
+# each drive is visible inside the container.
+WORKER_CONFIG_CONTAINER_DIR = "/etc/opencode"
+WORKER_CONFIG_CONTAINER_FILE = f"{WORKER_CONFIG_CONTAINER_DIR}/opencode.json"
+
+
+def worker_config_host_dir(worktree: Path) -> Path:
+    """Host directory holding a cell's opencode.json, beside its worktree."""
+    return Path(worktree).expanduser().resolve().parent / "worker-config"
+
+
 def _build_run_argv(
     *,
     config: DockerCellConfig,
@@ -1297,7 +1311,7 @@ def _build_run_argv(
             # --read-only root, but opencode must WRITE state (e.g. its config-dir
             # .gitignore) or it aborts with "FileSystem.writeFile". Redirect the XDG +
             # opencode state dirs into the writable HOME tmpfs. OPENCODE_CONFIG points
-            # at the per-cell /work/opencode.json (bind-mounted from the host worktree),
+            # at the per-cell opencode.json (a read-only mount OUTSIDE /work),
             # loaded container-wide so every `docker exec opencode run` process and the
             # serve use it without the --config flag; the baked /etc/xdg config remains
             # the image-level fallback for any unconfigured process.
@@ -1310,11 +1324,13 @@ def _build_run_argv(
             "-e",
             f"OPENCODE_CONFIG_DIR={config.home_dir}/.config/opencode",
             "-e",
-            "OPENCODE_CONFIG=/work/opencode.json",
+            f"OPENCODE_CONFIG={WORKER_CONFIG_CONTAINER_FILE}",
             "-e",
             "LOCAL_LLM_PROXY_API_KEY",
             "-v",
             mount,
+            "-v",
+            f"{worker_config_host_dir(worktree)}:{WORKER_CONFIG_CONTAINER_DIR}:ro",
         ]
     )
 

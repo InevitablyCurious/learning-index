@@ -52,8 +52,8 @@ def test_serve_launch_carries_per_cell_config_env() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     adapter_path = repo_root / "harness" / "adapters" / "docker_worker.py"
     payload = adapter_path.read_text(encoding="utf-8")
-    assert "OPENCODE_CONFIG=/work/opencode.json" in payload, (
-        "the serve launch script must set OPENCODE_CONFIG=/work/opencode.json "
+    assert 'f"OPENCODE_CONFIG={WORKER_CONFIG_CONTAINER_FILE} nohup opencode serve "' in payload, (
+        "the serve launch script must set OPENCODE_CONFIG to the mounted per-cell file "
         "so the per-cell config (local :4545 routing) is loaded by `opencode serve`."
     )
 
@@ -62,7 +62,7 @@ def test_serve_config_written_before_serve_boots() -> None:
     """The per-cell config must exist before the serve boots.
 
     `opencode serve` boots once per cell and is reused across all attempts, so
-    the per-cell config file (/work/opencode.json) must be written before
+    the per-cell config file (opencode.json) must be written before
     `active_cell.start_serve()` runs. A config written after serve boot would
     never be read by the already-running serve. Guard the call ordering: the
     first `_write_worker_permission_config(worktree=worktree)` occurrence must
