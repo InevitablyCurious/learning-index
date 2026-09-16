@@ -102,7 +102,7 @@ def test_the_team_carries_its_own_excuse_eliminator() -> None:
     )
     assert "clean checkout" in msg and "isn't there to find" in msg
     # And the original one still opens the message.
-    assert "clean browser" in msg
+    assert "latest code from scratch" in msg
 
 
 def test_the_teams_opener_is_not_the_graders_vocabulary() -> None:

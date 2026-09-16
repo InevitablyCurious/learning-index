@@ -22,7 +22,7 @@ this; everything below exists there in finished form.
 |---|---|
 | `agents.md` | Standing notes, in front of the model for the whole session. Keep it short — it is resent on every turn. |
 | `chunk-01.md` … | The build steps, in filename order. One task per step. |
-| `repair/opener.md` | Opens every repair message: how you checked, so the model cannot blame a stale page. |
+| `repair/opener.md` | Opens every repair message: how you checked, stated as a plain fact. |
 | `repair/first-round.md` | Heading for the first list of problems. |
 | `repair/repeat-round.md` | Heading when problems are still there after a fix attempt. |
 | `repair/no-change.md` | Put first when the model's last round changed no code at all. |
@@ -30,6 +30,15 @@ this; everything below exists there in finished form.
 | `repair/team-header.md` / `team-note.md` | Optional second voice, for checks a different kind of user would hit. |
 | `nudges/write-limit.md` | The write-size limit, written once and reused. |
 | `nudges/cut-off.md`, `loop.md`, `stall.md`, `connection.md` | What the user says when the benchmark has to interrupt: a reply that got cut off, going in circles, a command that ran too long, a dropped connection. Use `{write_limit}` to include the limit above. |
+
+### Rules for anything the model reads
+
+These come from runs where one added line changed how the model behaved.
+
+1. **Say what to do, not why things fail.** An explanation such as "a running server keeps the old code" gets reused as an excuse about the user.
+2. **Never name an excuse to prevent it.** Writing "not a stale page, not the cache, not a hard refresh" puts those words in the model's mouth.
+3. **Read each new line next to the repair messages.** If the model could use it to explain why the user still sees a problem, rewrite it.
+4. **Change one model-facing thing per run**, so a change in behavior points to one cause.
 
 Two rules for everything in `prompts/`:
 

@@ -15,9 +15,7 @@
 - If you set a timeout on a command, give it enough time to finish; a timeout shorter than the work just cuts the work off.
 
 ## Running the server for testing
-Pick one of these two ways; do not mix them.
-
-**A. Start, test and stop in one command** — simplest for a quick check:
+Start, test and stop in one command:
 ```
 node --experimental-strip-types src/server.ts > /tmp/server.log 2>&1 &
 PID=$!
@@ -26,21 +24,15 @@ curl -s -X POST localhost:8002/api/new -H 'content-type: application/json' -d '{
 kill $PID
 ```
 
-**B. Keep a server running across commands** — start it detached and save its PID:
-```
-node -e "const p=require('node:child_process').spawn('node',['--experimental-strip-types','src/server.ts'],{stdio:'ignore',detached:true});require('node:fs').writeFileSync('/tmp/server.pid',String(p.pid));p.unref()"
-```
-Wait for `localhost:8002/health` before sending requests. After changing the server's code, stop it and start it again — a running server keeps the old code.
-
 ## Stopping a server
-- Stop it by its PID: `kill $(cat /tmp/server.pid)`.
+- Stop it by its PID: `kill $PID`.
 - Never stop processes by matching a name. `pkill -f node` also kills the shell your command is running in, and `pkill -f server.ts` matches the very command that contains it — either way the command hangs for two minutes and does nothing.
 - If port 8002 is still taken, find the server's PID with `ps -eo pid,args | grep "[s]rc/server.ts"` and kill that PID.
 - To run a second copy alongside, set another port: `PORT=8003 node --experimental-strip-types src/server.ts`.
 
 ## Checking the page in a browser
 - Playwright and Chromium are installed globally. Load them with `require('playwright')` and run with plain `node`, not `npx`.
-- Start the server first (A or B above), then point the browser at `http://127.0.0.1:8002/`:
+- In the same command as the server (above), put the browser check between starting it and `kill $PID`, pointed at `http://127.0.0.1:8002/`:
 ```
 node -e "
 const { chromium } = require('playwright');

@@ -367,13 +367,15 @@ def test_repeat_gradient_ignores_harness_infra_checks() -> None:
     assert not [ln for ln in text.splitlines() if ln[:2] == "2)"]
 
 
-def test_excuse_eliminator_preempts_the_cache_excuse_on_failure_verdicts() -> None:
-    """OFF-CELL MEASURED DEFLECTION (run 1788499216, 2026-09-04): the model,
-    with ten gates flat-failing across five attempts, told the grader to
-    hard-refresh the browser to clear the cache. Every failure verdict now opens
-    with the clean-browser fact so that excuse class is pre-empted — on the
-    FIRST report and on every repeat, and never on the pass verdict (which lists
-    no problems to excuse)."""
+def test_every_failure_verdict_opens_with_how_the_player_checked() -> None:
+    """Every failure verdict opens with how the player checked — on the FIRST
+    report and on every repeat, and never on the pass verdict.
+
+    NAMING AN EXCUSE PLANTS IT (run 1789564423). The opener used to name the
+    excuses it meant to prevent: cache, hard refresh, stale page, leftover
+    files. Together with a note that "a running server keeps the old code", the
+    model told the player to restart the server and hard-refresh. The opener now
+    states the fact and names nothing."""
     from harness.adapters.challenge import _EXCUSE_ELIMINATOR
 
     problems = _problems()
@@ -385,11 +387,10 @@ def test_excuse_eliminator_preempts_the_cache_excuse_on_failure_verdicts() -> No
     )
     for verdict in (first, repeat):
         assert verdict.startswith(_EXCUSE_ELIMINATOR)
-        assert "clean browser" in verdict
-        assert "cache cleared" in verdict
-        assert "hard refresh" in verdict
-        assert "saved session" in verdict
+        assert "latest code from scratch" in verdict
         assert "brand-new game" in verdict
+        for planted in ("refresh", "cache", "stale", "leftover", "restart"):
+            assert planted not in verdict.lower(), f"the opener names an excuse: {planted}"
 
     verdict = ChallengeRunner._build_pass_verdict(
         newly_passing=["[G05] REQ-HIGHER-DIE — use higher die"]

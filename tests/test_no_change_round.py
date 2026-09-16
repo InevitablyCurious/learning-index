@@ -25,7 +25,5 @@ def test_an_unknown_hash_never_counts_as_unchanged() -> None:
 
 
 def test_the_texts_the_model_receives() -> None:
-    assert _NO_CHANGE_NOTE.strip() == (
-        "You didn't change any code since my last message, so I'm seeing exactly the same game."
-    )
-    assert "write it into the code now, then test it" in _LOOP_RECOVERY_NUDGE
+    assert _NO_CHANGE_NOTE.strip() == "You didn't change any code since my last message."
+    assert "Write what you had worked out into the code now." in _LOOP_RECOVERY_NUDGE

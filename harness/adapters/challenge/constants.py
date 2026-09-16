@@ -386,6 +386,12 @@ _PASS_VERDICT_MAX_LISTED = 10
 # and on every repeat: it is a constant of how grading happens, not a sighting,
 # so it carries no gradient by design. It is absent from the pass verdict,
 # which lists no problems to excuse.
+#
+# NAMING AN EXCUSE PLANTS IT (run 1789564423). This opener used to list the
+# excuses it pre-empted — cache, hard refresh, stale page, leftover files — and
+# beside a note that a running server keeps old code, the model told the player
+# to restart the server and hard-refresh. It now states how the player checked
+# and names nothing. See challenges/TEMPLATE/README.md, rules for model text.
 _EXCUSE_ELIMINATOR = _PACK.text("repair/opener.md")
 
 # ── THE SECOND DEFLECTION, CLOSED BEFORE IT IS USED ─────────────────────────

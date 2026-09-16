@@ -1,1 +1,1 @@
-One thing before the list: I check in a clean browser every time. I load your latest code with the cache cleared and no saved session carried over (the equivalent of a hard refresh), and I always start from a brand-new game. So none of what follows is a stale page or leftover files on my end — if it's still there, it's in the code you changed.
+Before the list: every time I check, I run your latest code from scratch and start a brand-new game.

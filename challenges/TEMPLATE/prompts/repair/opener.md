@@ -1,1 +1,1 @@
-One thing before the list: <how you checked, so a stale page or leftover state cannot be blamed>.
+Before the list: <how you checked, as a plain fact — do not name the excuses you want to avoid>.
