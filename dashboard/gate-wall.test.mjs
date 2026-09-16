@@ -726,3 +726,35 @@ test("gate card: hovering a square renders its description, rounds, failure and 
   setGateHover(null, null);
   assert.ok(!renderWall(board).includes('class="gcard'), "leaving the wall closes an unpinned card");
 });
+
+test("gate card: placement is measured so the whole card fits the window — it never scrolls", async () => {
+  const { setGateHover, fitGateCard } = await import("./panels/wall.js");
+  const gates = [{ id: "T1", title: "tall", state: "failing", detail: { description: null, rounds: [], last_failure: null, told: null } }];
+  const board = boardWith(suiteWith(gates));
+  // A stand-in card whose height shrinks as it widens: 900px of text at 420px wide.
+  const fakeCard = () => {
+    let width = 420;
+    const el = {
+      className: "gcard",
+      classList: { toggle: noop },
+      style: {
+        set cssText(v) { width = Number(/width:(\d+)px/.exec(v)?.[1] ?? width); },
+        get cssText() { return `width:${width}px`; },
+      },
+      getBoundingClientRect: () => ({ height: Math.ceil(378000 / width) }),
+    };
+    return el;
+  };
+  setGateHover("T1", { left: 500, right: 520, top: 300, bottom: 320 });
+  assert.ok(renderWall(board).includes("visibility:hidden"), "the first paint is invisible, for measuring");
+  const view = { innerWidth: 1280, innerHeight: 600 };
+  assert.equal(fitGateCard(fakeCard(), view), true);
+  const html = renderWall(board);
+  const width = Number(/class="gcard[^"]*"[^>]*width:(\d+)px/.exec(html)[1]);
+  const top = Number(/class="gcard[^"]*"[^>]*top:(\d+)px/.exec(html)[1]);
+  const height = Math.ceil(378000 / width);
+  assert.ok(!html.includes("visibility:hidden"), "the measured card is shown");
+  assert.ok(top >= 8 && top + height <= 600 - 8, `card ${top}–${top + height} fits a 600px window`);
+  assert.equal(fitGateCard(fakeCard(), view), false, "a settled card does not redraw again");
+  setGateHover(null, null);
+});

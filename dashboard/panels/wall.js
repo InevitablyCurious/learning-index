@@ -130,20 +130,20 @@ export function gateVisual(g) {
 // grading report's words for its latest failure, and what the model was told.
 // The card derives nothing but the one-line status from those facts.
 
-const card = { hover: null, pinned: null, anchor: null };
+const card = { hover: null, pinned: null, anchor: null, fit: null };
 
 /** Pointer or focus reached a square. Returns true when the card must redraw. */
 export function setGateHover(id, rect) {
   if (card.hover === id) return false;
   card.hover = id;
-  if (id && !card.pinned) card.anchor = rect ?? card.anchor;
+  if (id && !card.pinned && rect) { card.anchor = rect; card.fit = null; }
   return !card.pinned || !id;
 }
 
 /** A square was clicked: pin it, or unpin it if it already was. */
 export function toggleGatePin(id, rect) {
   card.pinned = card.pinned === id ? null : id;
-  if (card.pinned) card.anchor = rect ?? card.anchor;
+  if (card.pinned && rect) { card.anchor = rect; card.fit = null; }
   return true;
 }
 
@@ -193,21 +193,16 @@ function gateCard(gates) {
          ${d.told.first ? `<p><span class="gc-k">first time</span> ${esc(d.told.first)}</p>` : ""}
          ${d.told.repeat ? `<p><span class="gc-k">again</span> ${esc(d.told.repeat)}</p>` : ""}</div>`
     : "";
-  // Beside the square, kept inside the window: it opens below or above,
-  // whichever has more room, and scrolls inside that room rather than running
-  // off the screen. It slides left when it would pass the right edge.
-  const vw = globalThis.innerWidth ?? 1280;
-  const vh = globalThis.innerHeight ?? 800;
-  const a = card.anchor ?? { left: 8, right: 8, top: 8, bottom: 8 };
-  const w = Math.min(420, vw - 16);
-  const left = Math.max(8, Math.min(Math.round(a.left), vw - w - 8));
-  const roomBelow = vh - a.bottom - 14;
-  const roomAbove = a.top - 14;
-  const place = roomBelow >= roomAbove
-    ? `top:${Math.round(a.bottom + 6)}px;max-height:${Math.max(120, Math.round(roomBelow))}px`
-    : `bottom:${Math.round(vh - a.top + 6)}px;max-height:${Math.max(120, Math.round(roomAbove))}px`;
+  // WHERE IT SITS is decided by measuring, not guessing: the first paint is
+  // invisible, fitGateCard (called by the board after every paint) measures
+  // the card's real height at a few widths and stores the first placement where
+  // the whole card fits the window. Nothing on the card ever scrolls.
+  const fit = card.fit && card.fit.id === g.id ? card.fit : null;
+  const place = fit
+    ? `left:${fit.left}px;top:${fit.top}px;width:${fit.width}px`
+    : "left:0;top:0;width:420px;visibility:hidden";
   return `
-    <div class="gcard${card.pinned ? " pinned" : ""}" role="dialog" aria-label="${esc(desc?.name ?? g.title ?? g.id)}" style="left:${left}px;${place}">
+    <div class="gcard${card.pinned ? " pinned" : ""}${fit?.compact ? " compact" : ""}" role="dialog" aria-label="${esc(desc?.name ?? g.title ?? g.id)}" style="${place}">
       <div class="gc-head">
         <span class="gc-name">${esc(desc?.name ?? g.title ?? g.id)}</span>
         <span class="gc-status ${status.cls}">${esc(status.text)}</span>
@@ -221,6 +216,68 @@ function gateCard(gates) {
       ${rounds ? `<div class="gc-sec gc-rounds"><span class="gc-h">ROUNDS</span>${rounds}</div>` : ""}
       <div class="gc-foot"><span class="gc-id">${esc(g.id)}</span><span>${card.pinned ? "click the square or press esc to close" : "click to pin"}</span></div>
     </div>`;
+}
+
+const FIT_WIDTHS = [420, 520, 640, 760, 900, 1100];
+const EDGE = 8;
+const GAP = 6;
+
+/** A placement where a card of this size fits entirely, or null. */
+function placeFor(w, h, a, vw, vh) {
+  const clampLeft = (x) => Math.max(EDGE, Math.min(Math.round(x), vw - w - EDGE));
+  const clampTop = (y) => Math.max(EDGE, Math.min(Math.round(y), vh - h - EDGE));
+  if (w > vw - 2 * EDGE || h > vh - 2 * EDGE) return null;
+  if (a.bottom + GAP + h <= vh - EDGE) return { left: clampLeft(a.left), top: Math.round(a.bottom + GAP) };
+  if (a.top - GAP - h >= EDGE) return { left: clampLeft(a.left), top: Math.round(a.top - GAP - h) };
+  if (a.right + GAP + w <= vw - EDGE) return { left: Math.round(a.right + GAP), top: clampTop(a.top) };
+  if (a.left - GAP - w >= EDGE) return { left: Math.round(a.left - GAP - w), top: clampTop(a.top) };
+  return { left: clampLeft(a.left), top: clampTop(a.top) }; // over the wall, still whole
+}
+
+/**
+ * Measure the drawn card and store where it fits whole. Returns true when the
+ * placement changed and the board must draw again.
+ */
+export function fitGateCard(el, view = globalThis) {
+  const id = card.pinned ?? card.hover;
+  if (!el || !id) return false;
+  const vw = view.innerWidth;
+  const vh = view.innerHeight;
+  const a = card.anchor ?? { left: EDGE, right: EDGE, top: EDGE, bottom: EDGE };
+  const saved = { cssText: el.style.cssText, className: el.className };
+  let chosen = null;
+  for (const compact of [false, true]) {
+    el.classList.toggle("compact", compact);
+    for (const width of FIT_WIDTHS) {
+      const w = Math.min(width, vw - 2 * EDGE);
+      el.style.cssText = `left:0;top:0;width:${w}px;visibility:hidden`;
+      const h = el.getBoundingClientRect().height;
+      const spot = placeFor(w, h, a, vw, vh);
+      if (spot) { chosen = { id, width: w, compact, ...spot }; break; }
+      if (w < width) break; // already as wide as the window allows
+    }
+    if (chosen) break;
+  }
+  // Nothing fits even compact and window-wide: pin it to the top-left corner at
+  // full width. The window itself is too small; the card is still not a scroller.
+  chosen ??= { id, width: vw - 2 * EDGE, compact: true, left: EDGE, top: EDGE };
+  el.style.cssText = saved.cssText;
+  el.className = saved.className;
+  const prev = card.fit;
+  const same = prev && ["id", "width", "compact", "left", "top"].every((k) => prev[k] === chosen[k]);
+  if (same) return false;
+  card.fit = chosen;
+  return true;
+}
+
+/** The window changed size or scrolled: re-read the square, measure again. */
+export function refitGateCard(doc = globalThis.document) {
+  const id = card.pinned ?? card.hover;
+  if (!id) return false;
+  const cell = doc?.querySelector?.(`[data-gate-id="${CSS.escape(id)}"]`);
+  if (cell) card.anchor = cell.getBoundingClientRect();
+  card.fit = null;
+  return true;
 }
 
 export function renderWall(board) {

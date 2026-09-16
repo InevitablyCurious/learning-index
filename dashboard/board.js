@@ -311,7 +311,7 @@ import {
   isRestoreOpen,
 } from "./panels/restore.js";
 import { renderCurve, setCurveMetric, setCurveTab, curveTab } from "./panels/curve.js";
-import { clearGatePin, renderWall, setGateHover, toggleGatePin } from "./panels/wall.js";
+import { clearGatePin, fitGateCard, refitGateCard, renderWall, setGateHover, toggleGatePin } from "./panels/wall.js";
 import { renderLedger, toggleBaselineRow } from "./panels/ledger.js";
 import {
   renderLive,
@@ -438,6 +438,8 @@ function render() {
       ${renderResults(board)}
     </div>
   `);
+  // The gate card is drawn invisible, measured, then placed where it fits whole.
+  if (fitGateCard(document.querySelector(".gcard"))) render();
 
   // AFTER the swap: the feed is append-only and stateful, so it paints into the
   // fresh container rather than being rebuilt by the string above.
@@ -488,6 +490,8 @@ function bindInteraction() {
   // The gate card follows the pointer and keyboard focus over the wall.
   document.addEventListener("mouseover", onGateHover);
   document.addEventListener("focusin", onGateHover);
+  window.addEventListener("resize", () => { if (refitGateCard()) render(); });
+  window.addEventListener("scroll", () => { if (refitGateCard()) render(); }, { passive: true });
   // A resized window changes the card's width and therefore the font size that
   // makes 130 columns fit. The poll would correct it within half a second
   // anyway; this makes the drag itself smooth rather than steppy.

@@ -1341,10 +1341,14 @@ a:hover{color:var(--type)}
    visibly different from one that follows the pointer. */
 .gcell[data-gate-id]{cursor:pointer}
 .gcell[data-gate-id]:focus-visible,.gcell.pinned{outline:2px solid var(--type);outline-offset:1px}
-.gcard{position:fixed;z-index:40;width:min(420px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:auto;
+.gcard{position:fixed;z-index:40;overflow:hidden;box-sizing:border-box;
   background:var(--surface-raised);border:1px solid var(--border-strong);border-radius:var(--radius-md);
   box-shadow:var(--shadow-raise);padding:12px 14px;font:12px/1.5 var(--font);color:var(--text-body)}
 .gcard.pinned{border-color:var(--accent)}
+/* Compact: chosen only when the full-size card cannot fit the window whole. */
+.gcard.compact{padding:8px 10px;font-size:11px;line-height:1.35}
+.gcard.compact .gc-name{font-size:12.5px}
+.gcard.compact .gc-sec{padding:3px 0}
 .gc-head{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
 .gc-name{color:var(--text-bright);font-size:14px;font-weight:600}
 .gc-status{font-size:11px;letter-spacing:.04em}
