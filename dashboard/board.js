@@ -341,6 +341,7 @@ import {
   createForward,
   createBack,
   createModel,
+  setCreateChallenge,
   setCreateKind,
   setCreateModel,
   toggleCreateCompact,
@@ -502,7 +503,7 @@ function bindInteraction() {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-pop-toggle],[data-pop-view],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick]");
+  const t = e.target.closest("[data-metric],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-pop-toggle],[data-pop-view],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick]");
   if (!t) return;
 
   if (t.dataset.metric) { setCurveMetric(t.dataset.metric); render(); return; }
@@ -562,6 +563,12 @@ function onClick(e) {
     render();
     return;
   }
+  if (t.dataset.createChallenge) {
+    setCreateChallenge(t.dataset.createChallenge);
+    render();
+    return;
+  }
+
   if (t.dataset.createKind) { setCreateKind(t.dataset.createKind); render(); return; }
   if (t.dataset.createModel) { setCreateModel(t.dataset.createModel); render(); return; }
   // The row carries what is CURRENTLY shown, so the first click flips away from

@@ -13,7 +13,7 @@
 
 import { createHash } from "node:crypto";
 import { spawn, execFile } from "node:child_process";
-import { open } from "node:fs/promises";
+import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -110,7 +110,7 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId } = check;
+      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge } = check;
       sendJson(res, 200, {
         ok: true,
         token: confirmationToken({ model, arm, org, context, kind, compact, snapshotId }),
@@ -121,6 +121,7 @@ export const routes = [
         // than the one the panel guessed.
         compact: compact === true,
         requireTodos: requireTodos === true,
+        challenge: challenge?.id ?? null,
         graderWorkerTarget: graderWorkerTarget ?? null,
         // What the operator is committing to, in machine form beside the prose.
         // The confirmation card states the substrate and — for a cloud cell —
@@ -158,7 +159,7 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId } = check;
+      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge } = check;
 
       // ARGV ARRAY, NO SHELL. Main-parser flags MUST precede the subcommand —
       // argparse exits 2 otherwise (verified 2026-08-10). This ordering is the
@@ -206,6 +207,22 @@ export const routes = [
         console.error(`[run] tree could not be ensured; filing this run in the legacy flat layout: ${tree_error}`);
       }
       const target = await campaignTargetFor({ model, kind, cloud }, RUNS_ROOT);
+
+      // THE CHALLENGE IS PINNED TO THE CAMPAIGN. The first cell records which
+      // challenge it built; every later cell in that campaign is measured
+      // against the same one. A campaign whose cells built different things
+      // produces a delta measuring the challenge, which is exactly the shape
+      // of an answer nobody can read.
+      const pinned = await pinnedChallengeFor(target.manifest_arg);
+      if (pinned && challenge?.id && pinned !== challenge.id) {
+        sendJson(res, 409, refuse(
+          "challenge_pinned",
+          `this baseline is measured on '${pinned}'. Its first cell built that, so every ` +
+            `later cell builds it too — start a new baseline to measure '${challenge.id}'.`,
+          { pinned, requested: challenge.id },
+        ));
+        return;
+      }
       if (target.manifest_arg) argv.push("--manifest", target.manifest_arg);
       // `run` ACCEPTS EXACTLY --mode, --proxy-base-url, --proxy-token-file.
       // `--until-review` was removed from the harness by ba2947a (2026-08-14)
@@ -297,6 +314,8 @@ export const routes = [
       // CLI flag because the harness reads it there; `null` means "registry
       // default" and deliberately sets nothing.
       if (context !== null) env.BENCH_WORKER_NUM_CTX = String(context);
+      // The harness reads this at import; unset means its own default.
+      if (challenge?.dir) env.BENCH_TASK_DIR = challenge.dir;
 
       let child;
       try {
@@ -624,3 +643,22 @@ export const routes = [
     },
   },
 ];
+
+/**
+ * The challenge this campaign was started on, or null when it has no cells yet.
+ *
+ * Read from the run manifest the harness itself writes (producer states,
+ * consumer reads) rather than from a pin file this side would have to keep in
+ * step with what actually ran.
+ */
+async function pinnedChallengeFor(manifestArg) {
+  if (!manifestArg) return null;
+  try {
+    const dir = manifestArg.slice(0, manifestArg.lastIndexOf("/"));
+    const raw = await readFile(join(dir, "manifest.run-manifest.json"), "utf8");
+    const declared = String(JSON.parse(raw)?.challenge ?? "").trim();
+    return declared || null;
+  } catch {
+    return null;
+  }
+}

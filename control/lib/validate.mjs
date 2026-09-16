@@ -7,6 +7,7 @@
 // one place the compaction default is written.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { findChallenge } from "../challenges.mjs";
 import { confirmationToken, restatement, refuse } from "../contract.mjs";
 import { CONTEXT_CHOICES } from "../roster.mjs";
 import { baselineFor, collectOffCells } from "../baselines.mjs";
@@ -54,6 +55,10 @@ export async function validateStart(
   // distinguishable from "off". This has no such default — the operator's switch
   // is the whole story, and absent means off.
   const requireTodos = payload?.requireTodos === true;
+  // WHICH CHALLENGE. Absent means the installation's own default (the bundled
+  // example), which is what a CLI launch gets. Named, it must exist AND be
+  // runnable — offering a challenge that cannot grade is worse than refusing.
+  const challengeId = typeof payload?.challenge === "string" ? payload.challenge.trim() : "";
   // MACHINE SHARE for grading. Validated here rather than trusted: a nonsense
   // fraction would reach the container and be silently ignored, which is worse
   // than being told. Absent leaves the container's own default.
@@ -115,7 +120,7 @@ export async function validateStart(
       retired_reason: null,
     };
     return await finishValidate(
-      { model, arm, org, context, kind, entry: cloudEntry, cloud, compactRequested, requireTodos, graderWorkerTarget },
+      { model, arm, org, context, kind, entry: cloudEntry, cloud, compactRequested, requireTodos, graderWorkerTarget, challengeId },
       { requireConfirm, runsRoot, payload },
     );
   }
@@ -144,7 +149,7 @@ export async function validateStart(
   }
 
   return await finishValidate(
-    { model, arm, org, context, kind, entry, cloud: null, compactRequested, requireTodos },
+    { model, arm, org, context, kind, entry, cloud: null, compactRequested, requireTodos, challengeId },
     { requireConfirm, runsRoot, payload },
   );
 }
@@ -190,7 +195,7 @@ export function compactDefaultFor(entry) {
 }
 
 export async function finishValidate(
-  { model, arm, org, context, kind, entry, cloud, compactRequested = null, requireTodos = false, graderWorkerTarget = null },
+  { model, arm, org, context, kind, entry, cloud, compactRequested = null, requireTodos = false, graderWorkerTarget = null, challengeId = "" },
   { requireConfirm, runsRoot, payload },
 ) {
   // ON cells write memories into an org, so a cell needs an org id; OFF cells
@@ -309,5 +314,18 @@ export async function finishValidate(
     );
   }
 
-  return { ok: true, model, arm, org, context, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, snapshotId };
+  let challenge = null;
+  if (challengeId) {
+    challenge = await findChallenge(BENCH_ROOT, challengeId);
+    if (!challenge) {
+      return refuse("challenge_unknown",
+        `no challenge '${challengeId}' — clone it into challenges/ or pick one the board lists`);
+    }
+    if (!challenge.ready) {
+      return refuse("challenge_not_runnable",
+        `'${challengeId}' cannot be run: ${challenge.blocked_reason}`);
+    }
+  }
+
+  return { ok: true, model, arm, org, context, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge };
 }

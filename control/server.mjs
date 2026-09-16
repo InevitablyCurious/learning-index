@@ -72,6 +72,7 @@ import { routes as snapshotRoutes } from "./routes/snapshots.mjs";
 import { routes as runRoutes } from "./routes/run.mjs";
 import { routes as treeRoutes } from "./routes/tree.mjs";
 import { routes as toolRoutes } from "./routes/tools.mjs";
+import { routes as challengeRoutes } from "./routes/challenges.mjs";
 import { routes as eventRoutes } from "./routes/events.mjs";
 import { routes as wallRoutes } from "./routes/wall.mjs";
 
@@ -93,6 +94,7 @@ for (const r of [
   ...runRoutes,
   ...treeRoutes,
   ...toolRoutes,
+...challengeRoutes,
   ...eventRoutes,
   ...wallRoutes,
 ]) {

@@ -265,6 +265,7 @@ const STATIC = {
   "/panels/restore.js": { file: "panels/restore.js", type: "text/javascript; charset=utf-8" },
   "/panels/tools.js": { file: "panels/tools.js", type: "text/javascript; charset=utf-8" },
   "/panels/devmode.js": { file: "panels/devmode.js", type: "text/javascript; charset=utf-8" },
+  "/panels/challenge.js": { file: "panels/challenge.js", type: "text/javascript; charset=utf-8" },
   "/panels/switches.js": { file: "panels/switches.js", type: "text/javascript; charset=utf-8" },
   "/panels/tick.js": { file: "panels/tick.js", type: "text/javascript; charset=utf-8" },
   "/panels/snapshot.js": { file: "panels/snapshot.js", type: "text/javascript; charset=utf-8" },

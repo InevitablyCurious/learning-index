@@ -509,6 +509,19 @@ a:hover{color:var(--type)}
   border:1px solid var(--border-strong);border-radius:var(--radius-sm)}
 .fx-head{font:700 10px var(--font);letter-spacing:.16em;color:var(--dim)}
 .fx-row{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+/* the challenge step: one row per challenge, unrunnable ones shown with why */
+.cl-row{display:flex;align-items:flex-start;gap:9px;padding:8px 10px;border:1px solid var(--line);border-radius:4px;margin-bottom:6px;cursor:pointer}
+.cl-row.on{border-color:var(--ok);background:var(--panel2)}
+.cl-row.blocked{cursor:not-allowed;opacity:.62}
+.cl-row:focus-visible{outline:2px solid var(--ok);outline-offset:1px}
+.cl-dot{color:var(--dim);line-height:1.35}
+.cl-row.on .cl-dot{color:var(--ok)}
+.cl-body{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cl-name{font:600 12px var(--font);color:var(--fg)}
+.cl-tag{font:500 10px var(--font);letter-spacing:.08em;color:var(--dim)}
+.cl-meta{font:400 11px var(--font);color:var(--dim);overflow-wrap:anywhere}
+.cl-note{font:400 11px var(--font);color:var(--dim);padding:6px 0}
+.cl-note.bad{color:var(--bad)}
 /* Which checks this one press repairs — a stale image trips several at once. */
 .fx-fixes{font:400 10.5px/1.55 var(--font);color:var(--dim)}
 /* A tool that cannot run says why, right here. Shown rather than hidden: a

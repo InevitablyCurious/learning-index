@@ -36,6 +36,12 @@ import { esc } from "../board.js";
 import { graderWorkerTarget, requireTodosOn } from "./switches.js";
 import { renderSeedFrame, refreshSnapshots, seedWarning, armedSnapshotId } from "./snapshot.js";
 import { isDevModeOn } from "./devmode.js";
+import {
+  challengeById,
+  refreshChallenges,
+  renderChallengeList,
+  soleReadyChallenge,
+} from "./challenge.js";
 
 /**
  * THE WHOLE FLOW'S STATE, in one object.
@@ -45,12 +51,15 @@ import { isDevModeOn } from "./devmode.js";
  */
 const ui = {
   open: false,
-  // b1 → b2 → b3 → b4   (with b2s spliced in under dev mode)
+  // b1 → b2 → bc → b3 → b4   (with b2s spliced in under dev mode)
   step: "b1",
 
   // ── the cell being configured ──
   kind: null,        // "local" | "cloud"
   model: null,       // the id from `startable`
+  // Which challenge this baseline is measured on. null until the step resolves
+  // it (one ready challenge pre-selects; two or more are the operator's call).
+  challenge: null,
   query: "",
   provider: "all",
   // Which arm this cell runs. Set by this flow's own frames (always "off" — a
@@ -89,6 +98,7 @@ const ROW = {
 };
 
 export function openCreate() {
+  ui.challenge = null;
   ui.open = true;
   ui.step = "b1";
   ui.kind = null;
@@ -163,10 +173,10 @@ export function setCreateRefusal(code, reason) {
 // Dev mode is read from the SERVER's answer on the board payload, never from a
 // local flag: the control plane refuses to arm a snapshot when the mode is off,
 // so a board that offered the step anyway would be offering a dead end.
-const NEXT_BASE = { b1: "b2", b2: "b3", b3: null, b4: null };
-const BACK_BASE = { b2: "b1", b3: "b2" };
-const NEXT_DEV = { ...NEXT_BASE, b2: "b2s", b2s: "b3" };
-const BACK_DEV = { ...BACK_BASE, b2s: "b2", b3: "b2s" };
+const NEXT_BASE = { b1: "b2", b2: "bc", bc: "b3", b3: null, b4: null };
+const BACK_BASE = { b2: "b1", bc: "b2", b3: "bc" };
+const NEXT_DEV = { ...NEXT_BASE, b2: "b2s", b2s: "bc" };
+const BACK_DEV = { ...BACK_BASE, b2s: "b2", bc: "b2s" };
 function steps(devOn) {
   return devOn ? { next: NEXT_DEV, back: BACK_DEV } : { next: NEXT_BASE, back: BACK_BASE };
 }
@@ -187,6 +197,10 @@ export function createBack(devOn = false) {
  *  must name the model so the server can apply the same-model rule. */
 export function createModel() {
   return ui.model;
+}
+
+export function setCreateChallenge(id) {
+  ui.challenge = id;
 }
 
 export function setCreateKind(kind) {
@@ -247,6 +261,7 @@ function frame(board, ledger) {
     case "b1": return baselineKind(ledger);
     case "b2": return baselineModel(ledger);
     case "b2s": return baselineSeed(ledger, board);
+    case "bc": return baselineChallenge(board);
     case "b3": return baselineConfirm(ledger);
     case "b4": return launchProgress(board);
     // The sequence opens on b1 and every transition is from the map above, so
@@ -538,6 +553,30 @@ function baselineSeed(ledger, board) {
   });
 }
 
+function baselineChallenge(board) {
+  // Fired on render, read on the next one — the seed step's shape, so a slow
+  // control plane cannot block the frame.
+  refreshChallenges(board?.control?.base_url);
+  // One ready challenge is still a choice, but not one worth making twice: it
+  // starts selected and the operator continues. Two or more, nothing is
+  // pre-picked — the benchmark does not decide what is being measured.
+  if (ui.challenge === null) ui.challenge = soleReadyChallenge();
+  const picked = ui.challenge ? challengeById(ui.challenge) : null;
+  return shell({
+    step: "BASELINE · 3",
+    branch: "start new baseline",
+    title: "Pick the challenge",
+    body: renderChallengeList(ui.challenge),
+    note:
+      "The challenge is what the cell builds and what the gates grade. It is pinned to "
+      + "this baseline: every later cell builds the same one.",
+    back: "‹ back",
+    cta: picked ? `${picked.name.toUpperCase()} →` : "PICK A CHALLENGE",
+    ctaAttr: picked ? `data-create-next="1"` : "",
+    ctaOk: Boolean(picked),
+  });
+}
+
 function baselineConfirm(ledger) {
   const m = (ledger?.startable ?? []).find((x) => x.id === ui.model) ?? null;
   const cloud = ledger?.cloud ?? null;
@@ -593,7 +632,7 @@ function baselineConfirm(ledger) {
     ${seedWarning()}`;
 
   return shell({
-    step: isOn ? "RUN · 1" : "BASELINE · 3",
+    step: isOn ? "RUN · 1" : "BASELINE · 4",
     branch: isOn ? "run against the floor" : "start new baseline",
     title: "Confirm",
     body,
@@ -849,6 +888,10 @@ export async function launchCell(base, { model, kind, arm = null, org = null } =
     // that "unspecified" must reach, so omitting the key is meaningful there.
     // This has no server default — off is off — so always stating it is the
     // honest form, and a missing key would silently mean off anyway.
+    // WHICH CHALLENGE. The server resolves the id and refuses an unknown or
+    // unrunnable one; it also refuses a second challenge on a baseline that
+    // already built something else.
+    if (ui.challenge) payload.challenge = ui.challenge;
     payload.requireTodos = requireTodosOn();
     // MACHINE SHARE for grading. Read at SEND time like the one above, but not
     // the same KIND of setting: that changes what the agent does and make two
@@ -1069,7 +1112,7 @@ function launchProgress(board) {
       : `<span class="ck-head">STARTING…</span>`;
 
   return shell({
-    step: "BASELINE · 4",
+    step: "BASELINE · 5",
     branch: ui.model ? esc(ui.model) : "start new baseline",
     title: "Launch",
     body: `

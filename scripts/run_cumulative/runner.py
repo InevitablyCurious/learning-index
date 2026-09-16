@@ -8,6 +8,7 @@ bare-name call resolves in this module's namespace — the monkeypatch target
 
 from __future__ import annotations
 
+from harness.challenge_spec import default_spec
 from harness.prompt_pack import default_task_dir
 
 import argparse
@@ -509,6 +510,7 @@ class RealSessionRunner:
                 worker_image_fingerprint=self._serialize_worker_fingerprint(result),
                 seed=getattr(self, "_seed", None),
                 template_hash=self._compute_task_template_hash(),
+                challenge=default_spec().name,
                 roster_fingerprint=None,
                 compact=bool(getattr(self, "_compact", False)),
                 require_todos=bool(getattr(self, "_require_todos", False)),

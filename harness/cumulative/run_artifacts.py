@@ -135,6 +135,8 @@ class RunManifest:
     worker_image_fingerprint: dict | str | None = None
     seed: int | None = None
     template_hash: str | None = None
+    #: Which challenge this cell built — the example is 'backgammon'.
+    challenge: str = ""
     roster_fingerprint: str | None = None
     # Chunk-boundary compaction, as the cell actually ran it. A compacted cell
     # and an uncompacted one sit on different turn/token scales, so a record
@@ -173,6 +175,7 @@ class RunManifest:
             "worker_image_fingerprint": self.worker_image_fingerprint,
             "seed": self.seed,
             "template_hash": self.template_hash,
+            "challenge": self.challenge,
             "roster_fingerprint": self.roster_fingerprint,
             "grader_worker_target": self.grader_worker_target,
             "compact": bool(self.compact),
@@ -195,6 +198,7 @@ class RunManifest:
             worker_image_fingerprint=d.get("worker_image_fingerprint"),
             seed=d.get("seed"),
             template_hash=d.get("template_hash"),
+            challenge=str(d.get("challenge") or ""),
             roster_fingerprint=d.get("roster_fingerprint"),
             compact=bool(d.get("compact", False)),
         )
