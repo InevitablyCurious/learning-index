@@ -60,7 +60,7 @@ def _build_context(args: argparse.Namespace, *, require_runtime: bool) -> CliCon
         model_override=model_override,
         cloud_slug=cloud_slug,
     )
-    config_fingerprint = config.backgammon_ladder_roster_fingerprint()
+    config_fingerprint = config.ladder_roster_fingerprint()
 
     if require_runtime:
         runner = _build_real_runner(args, layout, cloud_slug=cloud_slug)

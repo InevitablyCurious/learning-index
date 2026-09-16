@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from harness.adapters.backgammon import BackgammonRunner
+from harness.adapters.challenge import ChallengeRunner
 from harness.adapters.docker_worker import DockerCellConfig, _build_run_argv
 
 
@@ -124,7 +124,7 @@ def test_build_cell_config_wires_session_db_host_path_to_run_dir(
     run_dir = tmp_path / "run"
     worktree = run_dir / "worktree"
     worktree.mkdir(parents=True, exist_ok=True)
-    runner = BackgammonRunner(
+    runner = ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="openrouter/anthropic/claude-opus-4.8",

@@ -29,7 +29,7 @@ from harness.cumulative.types import (
 
 
 def _cell_telemetry() -> dict[str, Any]:
-    """BackgammonCellResult-shaped telemetry accepted by progress_from_cell_result."""
+    """ChallengeCellResult-shaped telemetry accepted by progress_from_cell_result."""
     return {
         "problems_before": 3,
         "problems_final": ["problem-2", "problem-3"],

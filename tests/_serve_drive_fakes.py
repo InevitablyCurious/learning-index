@@ -1,10 +1,10 @@
 """Shared fakes for the serve-drive test modules (WO-LI18 split).
 
-Moved verbatim out of tests/test_backgammon_serve_drive.py so the feature
+Moved verbatim out of tests/test_challenge_serve_drive.py so the feature
 split shares one fake serve client, one fake cell, one runner factory and
 the canned metrics shapes. The dead ``_FakeServeClient.session_busy`` stub
 was dropped in the move (zero callers); ``guard_killed_compactions_since``
-stays — the harness calls it (harness/adapters/backgammon/serve.py).
+stays — the harness calls it (harness/adapters/challenge/serve.py).
 
 Not a test module: the ``_`` prefix and non-``test_`` name keep pytest
 (testpaths=["tests"]) from collecting it.
@@ -18,7 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from harness.adapters.backgammon import BackgammonRunner
+from harness.adapters.challenge import ChallengeRunner
 from harness.serve_client import (
     LOOP_KILL_WAIT_REASON,
     extract_transcript_metrics,
@@ -329,8 +329,8 @@ class _FakeServeClient:
         return self.metrics_result
 
 
-def _make_runner(tmp_path: Path, *, compact: bool = False) -> BackgammonRunner:
-    return BackgammonRunner(
+def _make_runner(tmp_path: Path, *, compact: bool = False) -> ChallengeRunner:
+    return ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="local-llm-proxy/kimi/kimi-k3",

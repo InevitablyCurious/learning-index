@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.adapters.backgammon import BackgammonRunner
+from harness.adapters.challenge import ChallengeRunner
 from harness.grader_run import gate_argv
 from harness.adapters.docker_worker import (
     DockerCell,
@@ -907,7 +907,7 @@ def test_gate_oracle_runs_in_its_own_image_never_the_cell_s() -> None:
       * a missing image aborts rather than falling back to the host, because
         the fallback is the path that recreates the original defect.
     """
-    gate_source = inspect.getsource(BackgammonRunner._run_gate_report)
+    gate_source = inspect.getsource(ChallengeRunner._run_gate_report)
 
     # The oracle never runs inside the cell's own container.
     assert "docker exec" not in gate_source.lower()
@@ -943,7 +943,7 @@ def test_gate_oracle_runs_in_its_own_image_never_the_cell_s() -> None:
     assert not any("golden" in str(a) for a in argv)
 
     # ── UNCHANGED: the CELL still sees only its worktree ────────────────────
-    run_cell_source = inspect.getsource(BackgammonRunner._run_cell_impl)
+    run_cell_source = inspect.getsource(ChallengeRunner._run_cell_impl)
     run_cell_tree = ast.parse(textwrap.dedent(run_cell_source))
     build_cell_config_calls = [
         node
@@ -956,7 +956,7 @@ def test_gate_oracle_runs_in_its_own_image_never_the_cell_s() -> None:
     ]
     assert build_cell_config_calls, "_run_cell_impl must call self._build_cell_config"
 
-    build_cell_source = inspect.getsource(BackgammonRunner._build_cell_config)
+    build_cell_source = inspect.getsource(ChallengeRunner._build_cell_config)
     build_cell_tree = ast.parse(textwrap.dedent(build_cell_source))
     docker_cfg_calls = [
         node

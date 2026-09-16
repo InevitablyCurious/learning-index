@@ -18,8 +18,8 @@ import urllib.request
 
 import pytest
 
-from harness.adapters import backgammon as backgammon_mod
-from harness.adapters.backgammon import (
+from harness.adapters import challenge as challenge_mod
+from harness.adapters.challenge import (
     _HOLD_UI_ENV,
     _HOLD_UI_RELEASE_FILE,
     _HOLD_UI_STATE_FILE,
@@ -114,7 +114,7 @@ def test_hold_boots_real_ui_and_release_tears_it_down(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(_HOLD_UI_ENV, "1")
-    monkeypatch.setattr(backgammon_mod, "_HOLD_UI_PORT", _BOOT_TEST_PORT)
+    monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", _BOOT_TEST_PORT)
     assert _port_free(_BOOT_TEST_PORT), "test requires a free boot-test port"
     worktree = _mk_worktree(tmp_path, _BOOT_TEST_PORT)
     lines: list[str] = []
@@ -143,7 +143,7 @@ def test_hold_survives_unresolvable_entrypoint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(_HOLD_UI_ENV, "1")
-    monkeypatch.setattr(backgammon_mod, "_HOLD_UI_PORT", _UNRESOLVABLE_TEST_PORT)
+    monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", _UNRESOLVABLE_TEST_PORT)
     worktree = tmp_path / "worktree"
     worktree.mkdir()
     lines: list[str] = []
@@ -192,7 +192,7 @@ def test_state_file_carries_the_consumable_release_contract(
 ) -> None:
     """A consumer (the dashboard, a separate agent's work) must be able to
     release the hold from hold-ui.json ALONE, without reading this source."""
-    monkeypatch.setattr(backgammon_mod, "_HOLD_UI_PORT", _RELEASE_CONTRACT_PORT)
+    monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", _RELEASE_CONTRACT_PORT)
     monkeypatch.setenv(_HOLD_UI_ENV, "1")
     worktree = _mk_worktree(tmp_path, _RELEASE_CONTRACT_PORT)
     lines: list[str] = []
@@ -253,7 +253,7 @@ def test_no_url_is_offered_when_the_ui_never_booted(
 ) -> None:
     """Handing the operator a link to a dead server is worse than saying
     nothing — the close-out must say the UI failed and name the log."""
-    monkeypatch.setattr(backgammon_mod, "_HOLD_UI_PORT", 18314)
+    monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", 18314)
     monkeypatch.setenv(_HOLD_UI_ENV, "1")
     worktree = tmp_path / "worktree"
     worktree.mkdir()  # no entrypoint -> boot fails

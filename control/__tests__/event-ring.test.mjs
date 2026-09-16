@@ -332,7 +332,7 @@ test("the stall ALARM fires well before the harness's destructive timeout", () =
   // early so a human can look; the timeout is a kill that must fire late so it
   // never truncates a slow-but-working grade. If these ever cross, the gate is
   // killed before the operator is ever told anything was wrong.
-  const py = readFileSync(join(BENCH, "harness", "adapters", "backgammon", "constants.py"), "utf8");
+  const py = readFileSync(join(BENCH, "harness", "adapters", "challenge", "constants.py"), "utf8");
   const m = /DEFAULT_GATE_TIMEOUT_S\s*=\s*(\d+)/.exec(py);
   assert.ok(m, "DEFAULT_GATE_TIMEOUT_S vanished from backgammon.py");
   const timeout = Number(m[1]);
@@ -346,7 +346,7 @@ test("the harness streams gate output instead of buffering it", () => {
   // DRIFT TEST against the Python. A buffered gate writes ZERO bytes until it
   // exits, which is what made a 32-minute grade invisible. If this regresses to
   // capture_output the entire feature is silently dead while still "passing".
-  const py = readFileSync(join(BENCH, "harness", "adapters", "backgammon", "grading.py"), "utf8");
+  const py = readFileSync(join(BENCH, "harness", "adapters", "challenge", "grading.py"), "utf8");
   const fn = py.slice(py.indexOf("def _run_gate_report"), py.indexOf("def _emit_gate_phase_progress"));
   assert.ok(fn.length > 0, "_run_gate_report vanished");
   // Strip the docstring before asserting: it deliberately NAMES the old

@@ -60,7 +60,7 @@ keys default safely):
 - ``user_messages``: count of messages with ``info.role == "user"``.
 
 Transport-anomaly terminal mapping (mirrors the harness ``TURN_TERMINAL_*``
-semantics in ``harness/adapters/backgammon.py``; the exact strings here
+semantics in ``harness/adapters/challenge.py``; the exact strings here
 are the documented surface of :func:`classify_transport_anomaly`):
 
 - any error text carries the loop-guard signature
@@ -85,7 +85,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Callable, Optional
 
-# Truncation step-finish reasons (mirrors backgammon.py
+# Truncation step-finish reasons (mirrors the challenge adapter
 # ``TRUNCATED_STEP_FINISH_REASONS = frozenset({"unknown", "stream-incomplete"})``,
 # extended with "length").
 TRUNCATED_STEP_FINISH_REASONS = frozenset({"unknown", "stream-incomplete", "length"})

@@ -85,7 +85,7 @@ def test_error_cap_per_type_aborts_the_whole_benchmark(tmp_path: Path) -> None:
     # ErrorCapExceeded is imported function-locally inside run_session, so it
     # is not a run_cumulative module attribute — bind the SAME class from its
     # canonical home.
-    from harness.adapters.backgammon import ErrorCapExceeded
+    from harness.adapters.challenge import ErrorCapExceeded
 
     runner = module.RealSessionRunner.__new__(module.RealSessionRunner)
 

@@ -63,7 +63,7 @@ def _point(sequence_index: int, session_fp: str) -> ConvergencePoint:
 
 
 def _off_telemetry() -> dict[str, Any]:
-    """BackgammonCellResult-shaped telemetry with NO recall fields (OFF cell)."""
+    """ChallengeCellResult-shaped telemetry with NO recall fields (OFF cell)."""
     return {
         "problems_before": 3,
         "problems_final": ["problem-1"],

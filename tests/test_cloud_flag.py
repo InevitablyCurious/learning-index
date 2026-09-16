@@ -21,7 +21,7 @@ from typing import Any
 
 import pytest
 
-from harness.adapters.backgammon import build_worker_opencode_config
+from harness.adapters.challenge import build_worker_opencode_config
 from harness.adapters.docker_worker import (
     DockerCell,
     DockerCellConfig,

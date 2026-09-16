@@ -8,6 +8,8 @@ bare-name call resolves in this module's namespace — the monkeypatch target
 
 from __future__ import annotations
 
+from harness.prompt_pack import default_task_dir
+
 import argparse
 import json
 import logging
@@ -156,7 +158,7 @@ class _NoopSessionRunner:
 
 
 class RealSessionRunner:
-    """Real per-session runtime seam composed from BackgammonRunner."""
+    """Real per-session runtime seam composed from ChallengeRunner."""
 
     def __init__(
         self,
@@ -214,9 +216,11 @@ class RealSessionRunner:
         # adapter in run_session as seed_snapshot_drift.
         self._seed_snapshot_drift: list[dict[str, str | None]] = []
 
-        self._task_dir = self._repo_root / "task" / "backgammon"
+        # THE CHALLENGE, NOT THE EXAMPLE. Backgammon is what ships; a challenge
+        # is its own repo, selected with BENCH_TASK_DIR (harness/prompt_pack.py).
+        self._task_dir = default_task_dir()
         if not self._task_dir.is_dir():
-            raise RuntimeError(f"backgammon task directory missing: {self._task_dir}")
+            raise RuntimeError(f"challenge directory missing: {self._task_dir}")
 
         self._max_attempts, self._max_attempts_source = _resolve_positive_int_env(
             "BENCH_MAX_ATTEMPTS",
@@ -236,7 +240,7 @@ class RealSessionRunner:
         self._session_states: dict[int, _SessionRunState] = {}
 
         # WO-ERRDATA: per-benchmark error-type totals. One RealSessionRunner
-        # spans a whole campaign (per-cell BackgammonRunner is rebuilt each
+        # spans a whole campaign (per-cell ChallengeRunner is rebuilt each
         # cell), so THIS is the only object that can hold cross-cell totals.
         self._error_totals: dict[str, int] = {
             "guard_aborted_turns": 0,
@@ -244,9 +248,9 @@ class RealSessionRunner:
             "stalled_turns": 0,
         }
 
-        from harness.adapters.backgammon import BackgammonRunner
+        from harness.adapters.challenge import ChallengeRunner
 
-        self._runner_cls = BackgammonRunner
+        self._runner_cls = ChallengeRunner
 
         # Write-once run-manifest + append-only status stream sit as siblings of
         # the MUTABLE cumulative manifest. ``run_manifest_base_path`` is the
@@ -356,7 +360,7 @@ class RealSessionRunner:
         WO-SNAP-04 dev-mode seeding. Returns None when no snapshot was declared
         (the normal scaffold+build run). Otherwise loads the snapshot from the
         runs root — the SAME env-or-repo rule the capture side uses
-        (adapters/backgammon.py: BENCH_RUNS_DIR, else <repo>/runs) — and
+        (adapters/challenge.py: BENCH_RUNS_DIR, else <repo>/runs) — and
         validates it against this session's model and the running corpus
         identity. The corpus derivations MIRROR run_session's runner_kwargs
         exactly (chunk_plan_hash over task/backgammon/prompts, template_hash
@@ -623,7 +627,7 @@ class RealSessionRunner:
                 input_tokens + output_tokens + cache_read_tokens + cache_write_tokens
             ),
             # `work_output_tokens` has ALWAYS carried reasoning folded inside
-            # it (adapters/backgammon.py accumulates output+reasoning). This
+            # it (adapters/challenge.py accumulates output+reasoning). This
             # names the reasoning share so the split is recoverable:
             #   generation-only = work_output_tokens - work_reasoning_tokens
             "work_reasoning_tokens": reasoning_tokens,
@@ -657,7 +661,7 @@ class RealSessionRunner:
             # INSTRUMENT rule reads it and `truncated_turns` (which is ALL
             # anomalies) was voiding cells over a looping model the harness had
             # already caught and recovered. See the field's definition in
-            # adapters/backgammon.py.
+            # adapters/challenge.py.
             "instrument_anomaly_turns": int(
                 getattr(result, "instrument_anomaly_turns", 0) or 0
             ),
@@ -666,7 +670,7 @@ class RealSessionRunner:
             # classes excluded regardless of retry status). Carried so
             # downstream void-consumers read the producer's statement instead
             # of re-deriving the gate. See the field's definition in
-            # adapters/backgammon.py.
+            # adapters/challenge.py.
             "unrecovered_anomaly_turns": int(
                 getattr(result, "unrecovered_anomaly_turns", 0) or 0
             ),
@@ -684,7 +688,7 @@ class RealSessionRunner:
             #
             # NOTE: `recovery_nudges` is deliberately NOT emitted. It exists on
             # the internal per-phase `_OpencodeRunStats` only and never reaches
-            # `BackgammonCellResult`, so emitting it here would silently write a
+            # `ChallengeCellResult`, so emitting it here would silently write a
             # constant 0 and fabricate the appearance of a measurement. The
             # nudge count stays observable on the PROGRESS line until it is
             # plumbed through the cell result properly.
@@ -693,7 +697,7 @@ class RealSessionRunner:
             ),
             # Stalled turns: harness-side progress-token freezes that never enter
             # the transcript, so they have no serve-metric or ledger counter —
-            # counted on BackgammonCellResult from killed_reason == "turn_stalled".
+            # counted on ChallengeCellResult from killed_reason == "turn_stalled".
             "stalled_turns": int(getattr(result, "stalled_turns", 0) or 0),
             # D-SERVE-MESSAGE-500: non-zero gates the cell VOID-INSTRUMENT in
             # run_artifacts — the harness lost sight of the session, so nothing
@@ -1126,7 +1130,7 @@ class RealSessionRunner:
         # parsing the run label. Set as an attribute rather than a constructor
         # argument so an adapter that predates the live stream still works.
         runner._cell_seq = int(session.sequence_index)
-        result = runner.run_cell(state.run_label, state.run_dir, task_id="backgammon")
+        result = runner.run_cell(state.run_label, state.run_dir)
         state.last_session_id = result.session_id or state.last_session_id
 
         # WO-ERRDATA-20-CAP: accumulate per-cell error counts into the
@@ -1134,7 +1138,7 @@ class RealSessionRunner:
         # scorecard) the moment any one type exceeds the cap. Mirrors
         # ServeTransportError: raised uncaught, propagates out of run_session
         # -> step_until_done -> CLI abort.
-        from harness.adapters.backgammon import ERROR_CAP_PER_TYPE, ErrorCapExceeded
+        from harness.adapters.challenge import ERROR_CAP_PER_TYPE, ErrorCapExceeded
 
         self._error_totals["guard_aborted_turns"] += int(
             getattr(result, "guard_aborted_turns", 0) or 0

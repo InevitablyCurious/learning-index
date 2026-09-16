@@ -16,8 +16,8 @@ Read path: reuses the canonical part-join projection from
 ``client/packages/core/src/session-db-substrate.ts`` (``part JOIN message``
 ordered by message time/rowid then part time/rowid) and the read-only
 ``file:...?mode=ro`` URI connection precedent from
-``harness/adapters/backgammon.py``. Pure stdlib and self-contained; deliberately
-does NOT import from backgammon.py (that would be circular once the teardown
+``harness/adapters/challenge.py``. Pure stdlib and self-contained; deliberately
+does NOT import from the challenge adapter (that would be circular once the teardown
 caller lives there).
 """
 

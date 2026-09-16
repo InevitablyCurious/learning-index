@@ -24,7 +24,7 @@ def check_feedback_completeness(c: Check) -> None:
     """
     try:
         sys.path.insert(0, str(REPO))
-        from harness.adapters.backgammon import missing_feedback_overrides
+        from harness.adapters.challenge import missing_feedback_overrides
     except Exception as exc:  # noqa: BLE001
         c.add("feedback completeness", False, f"could not import harness: {exc}")
         return

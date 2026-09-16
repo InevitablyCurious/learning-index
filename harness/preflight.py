@@ -32,7 +32,7 @@ import urllib.request
 import uuid
 from typing import Any, Callable, NamedTuple, Sequence
 
-from harness.adapters.backgammon import build_worker_opencode_config
+from harness.adapters.challenge import build_worker_opencode_config
 from harness.adapters.docker_worker import WORKER_IMAGE, docker_available, image_exists
 
 LOGGER = logging.getLogger("harness.preflight")
@@ -295,7 +295,7 @@ def verify_worker_model_acceptance(
     log = logger or LOGGER
     remediation = (
         " declare the roster model under provider.<provider-id>.models in worker opencode.json "
-        "(see build_worker_opencode_config in harness/adapters/backgammon.py) "
+        "(see build_worker_opencode_config in harness/adapters/challenge.py) "
         "or use a catalog-known slug; see report "
         "27-07-26-1038-smoke3-kimik3-harness-error-model-not-found.md"
     )

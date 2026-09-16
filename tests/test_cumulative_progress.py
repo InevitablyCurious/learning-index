@@ -7,13 +7,13 @@ from typing import Any
 
 import pytest
 
-from harness.adapters.backgammon import (
+from harness.adapters.challenge import (
     TRUNCATED_STEP_FINISH_REASONS,
     TURN_TERMINAL_GUARD_ABORT,
     TURN_TERMINAL_TRANSPORT_ERROR,
     TURN_TERMINAL_TRUNCATED,
-    BackgammonCellResult,
-    BackgammonRunner,
+    ChallengeCellResult,
+    ChallengeRunner,
     _OpencodeRunStats,
 )
 from harness.adapters.docker_worker import ImageFingerprint
@@ -35,8 +35,8 @@ from harness.cumulative.types import (
 TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
 
-def _make_runner(tmp_path: Path) -> BackgammonRunner:
-    return BackgammonRunner(
+def _make_runner(tmp_path: Path) -> ChallengeRunner:
+    return ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="openrouter/anthropic/claude-opus-4.8",
@@ -263,7 +263,7 @@ def test_extract_agentic_cycles_fallback_corruption_and_missing(tmp_path: Path) 
 
 
 def test_progress_from_cell_result_maps_problem_and_telemetry_math() -> None:
-    result = BackgammonCellResult(
+    result = ChallengeCellResult(
         verdict="FAIL",
         attempts_to_green=2,
         termination_reason="attempt_ceiling_reached",
@@ -299,7 +299,7 @@ def test_progress_from_cell_result_maps_problem_and_telemetry_math() -> None:
 
 
 def test_progress_from_cell_result_preserves_none_for_nullable_fields() -> None:
-    result = BackgammonCellResult(
+    result = ChallengeCellResult(
         verdict="FAIL",
         attempts_to_green="FAIL",
         termination_reason="attempt_ceiling_reached",
@@ -414,7 +414,7 @@ def test_progress_vector_off_phase_does_not_report_on_only_seams() -> None:
 
 
 def test_progress_from_cell_result_maps_injected_block_fields_when_present() -> None:
-    result = BackgammonCellResult(
+    result = ChallengeCellResult(
         verdict="PASS",
         attempts_to_green=0,
         termination_reason="gates_green",
@@ -444,7 +444,7 @@ def test_progress_from_cell_result_maps_injected_block_fields_when_present() -> 
 
 
 def test_progress_from_cell_result_persists_worker_image_fingerprint() -> None:
-    result = BackgammonCellResult(
+    result = ChallengeCellResult(
         verdict="PASS",
         attempts_to_green=0,
         termination_reason="gates_green",
@@ -474,7 +474,7 @@ def test_progress_from_cell_result_persists_worker_image_fingerprint() -> None:
 
 
 def test_progress_from_cell_result_preserves_none_for_injected_block_fields() -> None:
-    result = BackgammonCellResult(
+    result = ChallengeCellResult(
         verdict="PASS",
         attempts_to_green=0,
         termination_reason="gates_green",
@@ -805,7 +805,7 @@ def test_manifest_session_records_support_done_state_equivalent_convergence() ->
     assert len(convergence["trend_hash"]) == 8
 
 
-def _make_backgammon_cell_result(**overrides: Any) -> BackgammonCellResult:
+def _make_backgammon_cell_result(**overrides: Any) -> ChallengeCellResult:
     base: dict[str, Any] = {
         "verdict": "PASS",
         "attempts_to_green": 1,
@@ -825,7 +825,7 @@ def _make_backgammon_cell_result(**overrides: Any) -> BackgammonCellResult:
         "model": "openrouter/anthropic/claude-opus-4.8",
     }
     base.update(overrides)
-    return BackgammonCellResult(**base)
+    return ChallengeCellResult(**base)
 
 
 def test_progress_from_cell_result_derives_full_green_from_verdict() -> None:
@@ -1035,17 +1035,17 @@ def _stats(*anomalies: dict[str, Any]) -> _OpencodeRunStats:
 
 
 def test_detect_stream_incomplete_fires_on_transport_and_guard_terminals() -> None:
-    assert BackgammonRunner._detect_stream_incomplete(
+    assert ChallengeRunner._detect_stream_incomplete(
         _stats(_anomaly(TURN_TERMINAL_TRANSPORT_ERROR))
     )
-    assert BackgammonRunner._detect_stream_incomplete(
+    assert ChallengeRunner._detect_stream_incomplete(
         _stats(_anomaly(TURN_TERMINAL_GUARD_ABORT))
     )
 
 
 @pytest.mark.parametrize("reason", sorted(TRUNCATED_STEP_FINISH_REASONS))
 def test_detect_stream_incomplete_fires_on_a_truncated_turn(reason: str) -> None:
-    assert BackgammonRunner._detect_stream_incomplete(
+    assert ChallengeRunner._detect_stream_incomplete(
         _stats(_anomaly(TURN_TERMINAL_TRUNCATED, finish_reason=reason))
     )
 
@@ -1058,14 +1058,14 @@ def test_detect_stream_incomplete_ignores_an_output_cap() -> None:
     counts as an instrument failure — a scoring change instrumentation does not
     get to make on its own.
     """
-    assert not BackgammonRunner._detect_stream_incomplete(
+    assert not ChallengeRunner._detect_stream_incomplete(
         _stats(_anomaly(TURN_TERMINAL_TRUNCATED, finish_reason="length"))
     )
     assert "length" not in TRUNCATED_STEP_FINISH_REASONS
 
 
 def test_detect_stream_incomplete_is_false_when_nothing_went_wrong() -> None:
-    assert not BackgammonRunner._detect_stream_incomplete(_stats())
-    assert not BackgammonRunner._detect_stream_incomplete(
+    assert not ChallengeRunner._detect_stream_incomplete(_stats())
+    assert not ChallengeRunner._detect_stream_incomplete(
         _stats(_anomaly("silent_phase"))
     )

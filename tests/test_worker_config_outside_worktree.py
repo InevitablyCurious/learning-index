@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from harness.adapters.backgammon import BackgammonRunner
+from harness.adapters.challenge import ChallengeRunner
 from harness.adapters.docker_worker import worker_config_host_dir
 
 TASK_DIR = Path(__file__).resolve().parents[1] / "task" / "backgammon"
@@ -17,7 +17,7 @@ TASK_DIR = Path(__file__).resolve().parents[1] / "task" / "backgammon"
 def test_settings_file_is_written_outside_the_worktree(tmp_path: Path) -> None:
     worktree = tmp_path / "cell" / "worktree"
     worktree.mkdir(parents=True)
-    runner = BackgammonRunner(
+    runner = ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="openrouter/anthropic/claude-opus-4.8",

@@ -381,7 +381,7 @@ def test_scoring_turn_exclusions_reach_the_status_stream(tmp_path: Path) -> None
     assert attempt["stalled_turns"] == 1
 
     # `recovery_nudges` is deliberately absent: it never reaches
-    # BackgammonCellResult, so emitting it would write a constant 0 and
+    # ChallengeCellResult, so emitting it would write a constant 0 and
     # fabricate the appearance of a measurement.
     assert "recovery_nudges" not in attempt
 

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from .backgammon import BackgammonCellResult, BackgammonRunner
+from .challenge import ChallengeCellResult, ChallengeRunner
 
 __all__ = [
-    "BackgammonCellResult",
-    "BackgammonRunner",
+    "ChallengeCellResult",
+    "ChallengeRunner",
 ]

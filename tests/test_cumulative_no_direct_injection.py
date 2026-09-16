@@ -12,17 +12,17 @@ from pathlib import Path
 
 import pytest
 
-from harness.adapters.backgammon import (
-    BackgammonCellResult,
-    BackgammonRunner,
+from harness.adapters.challenge import (
+    ChallengeCellResult,
+    ChallengeRunner,
 )
 
 
 TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
 
-def _make_runner(tmp_path: Path, *, memory_mode: str = "on") -> BackgammonRunner:
-    return BackgammonRunner(
+def _make_runner(tmp_path: Path, *, memory_mode: str = "on") -> ChallengeRunner:
+    return ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="openrouter/anthropic/claude-opus-4.8",
@@ -36,7 +36,7 @@ def test_load_chunk_prompts_returns_exactly_the_on_disk_chunks(
 ) -> None:
     # The signature IS the invariant: `self` is the only parameter — the
     # removed memory kwarg cannot come back without failing here.
-    params = list(inspect.signature(BackgammonRunner._load_chunk_prompts).parameters)
+    params = list(inspect.signature(ChallengeRunner._load_chunk_prompts).parameters)
     assert params == ["self"]
 
     runner = _make_runner(tmp_path, memory_mode="on")
@@ -64,11 +64,11 @@ def test_run_cell_forwards_cell_identity_and_no_memory(
         run_label: str,
         run_dir: Path,
         task_id: str,
-    ) -> BackgammonCellResult:
+    ) -> ChallengeCellResult:
         captured["run_label"] = run_label
         captured["run_dir"] = run_dir
         captured["task_id"] = task_id
-        return BackgammonCellResult(
+        return ChallengeCellResult(
             verdict="PASS",
             attempts_to_green=0,
             termination_reason="gates_green",
@@ -98,7 +98,7 @@ def test_run_cell_forwards_cell_identity_and_no_memory(
     assert result.verdict == "PASS"
 
 
-def test_backgammon_source_has_no_direct_injection_seam() -> None:
+def test_challenge_source_has_no_direct_injection_seam() -> None:
     # The removed seam symbols, spelled by concatenation so THIS file stays
     # clean under the repo-wide grep for them — a test asserting their absence
     # must not reintroduce the literals. At runtime these are the exact
@@ -106,8 +106,8 @@ def test_backgammon_source_has_no_direct_injection_seam() -> None:
     seam_param = "injected" + "_memory"
     seam_helper = "_format" + "_memory"
 
-    prompt_source = inspect.getsource(BackgammonRunner._load_chunk_prompts)
-    run_cell_source = inspect.getsource(BackgammonRunner.run_cell)
+    prompt_source = inspect.getsource(ChallengeRunner._load_chunk_prompts)
+    run_cell_source = inspect.getsource(ChallengeRunner.run_cell)
 
     for source in (prompt_source, run_cell_source):
         assert seam_param not in source

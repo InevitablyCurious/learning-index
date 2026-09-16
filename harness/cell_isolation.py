@@ -152,7 +152,7 @@ def _assert_drift_free(
     lines.append(
         "  Nothing was launched. Remove the run directory and start again; if this "
         "repeats, the seed step is failing silently and the removal in "
-        "backgammon.py is not taking effect."
+        "the challenge adapter is not taking effect."
     )
     raise CellIsolationError("\n".join(lines))
 

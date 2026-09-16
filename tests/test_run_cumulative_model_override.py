@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from harness import config
-from harness.adapters.backgammon import build_worker_opencode_config
+from harness.adapters.challenge import build_worker_opencode_config
 
 
 def _load_run_cumulative_module() -> Any:
@@ -87,7 +87,7 @@ def test_ladder_fingerprint_is_stable_against_the_live_manifest() -> None:
     campaign (archive runs/cumulative first), update the constant here.
     """
     assert (
-        config.backgammon_ladder_roster_fingerprint()
+        config.ladder_roster_fingerprint()
         == "30c92a5b10edb8f453b0e454ed17122adc2f78a25278290d3f5a78be1a8e590d"
     )
 

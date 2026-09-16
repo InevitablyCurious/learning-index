@@ -12,7 +12,7 @@ nothing and withhold having written everything.
 
 from pathlib import Path
 
-from harness.adapters.backgammon import build_chunk_completion, count_stub_sentinels
+from harness.adapters.challenge import build_chunk_completion, count_stub_sentinels
 
 
 # The live 2026-08-26 build: chunks 1-3 ran clean, chunk 4 hung on a tool call

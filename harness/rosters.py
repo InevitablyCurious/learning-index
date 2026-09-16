@@ -71,7 +71,7 @@ _DEFAULT_SCHEDULE: BenchmarkSchedule = BenchmarkSchedule(
 # no code path that turns it into a roster entry.
 #
 # IT IS NOT DELETED, AND THAT IS NOT AN OVERSIGHT.
-# `backgammon_ladder_roster_fingerprint()` hashes this tuple, and the hash is
+# `ladder_roster_fingerprint()` hashes this tuple, and the hash is
 # frozen into every campaign manifest. `CumulativeSequencer.__init__` re-computes
 # it on EVERY launch (not only on `resume`) and refuses on drift. Editing this
 # tuple therefore invalidates runs/cumulative — the live campaign and the OFF

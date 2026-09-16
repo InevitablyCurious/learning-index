@@ -62,7 +62,7 @@ def test_package_name_is_not_a_tell() -> None:
 
 
 def test_seeded_agents_md_has_no_evaluation_vocabulary() -> None:
-    from harness.adapters.backgammon import _WORKER_AGENTS_MD
+    from harness.adapters.challenge import _WORKER_AGENTS_MD
 
     offenders = _offending_lines(_WORKER_AGENTS_MD)
     assert not offenders, "seeded AGENTS.md reveals the evaluation:\n  " + "\n  ".join(
@@ -72,7 +72,7 @@ def test_seeded_agents_md_has_no_evaluation_vocabulary() -> None:
 
 def test_agents_md_does_not_name_the_model_to_itself() -> None:
     # runner.py is where the seeded AGENTS.md is written.
-    adapter = (REPO_ROOT / "harness" / "adapters" / "backgammon" / "runner.py").read_text("utf-8")
+    adapter = (REPO_ROOT / "harness" / "adapters" / "challenge" / "runner.py").read_text("utf-8")
     assert '(worktree / "AGENTS.md").write_text(' in adapter
     assert "- Model: {self.model}" not in adapter
 
@@ -89,12 +89,12 @@ def test_seeded_worktree_has_no_evaluation_vocabulary(tmp_path: Path) -> None:
     import shutil
     import subprocess
 
-    from harness.adapters.backgammon import _WORKER_AGENTS_MD, BackgammonRunner
+    from harness.adapters.challenge import _WORKER_AGENTS_MD, ChallengeRunner
 
     worktree = tmp_path / "cell" / "worktree"
     shutil.copytree(SCAFFOLD, worktree)
     (worktree / "AGENTS.md").write_text(_WORKER_AGENTS_MD, encoding="utf-8")
-    runner = BackgammonRunner(
+    runner = ChallengeRunner(
         task_dir=SCAFFOLD.parent,
         work_root=tmp_path / "work-root",
         model="openrouter/anthropic/claude-opus-4.8",
@@ -132,7 +132,7 @@ class TestInterruptsSoundHuman:
     """
 
     def _nudges(self) -> dict[str, str]:
-        from harness.adapters import backgammon as b
+        from harness.adapters import challenge as b
 
         return {
             "loop_recovery": b._LOOP_RECOVERY_NUDGE,

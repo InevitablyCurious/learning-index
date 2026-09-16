@@ -150,7 +150,7 @@ def _build_roster(
     cloud_slug: str | None = None,
 ) -> tuple[list[RosterEntry], str]:
     roster: list[RosterEntry] = []
-    for rung in config.backgammon_scored_ladder_roster():
+    for rung in config.scored_ladder_roster():
         model = str(rung.model)
         roster.append(
             RosterEntry(
@@ -183,7 +183,7 @@ def _build_roster(
             ",".join(entry.model for entry in roster),
         )
     if not roster:
-        raise RuntimeError("backgammon_scored_ladder_roster resolved empty")
+        raise RuntimeError("scored_ladder_roster resolved empty")
     override_slugs = _apply_model_override(
         [entry.model for entry in roster],
         model_override=model_override,

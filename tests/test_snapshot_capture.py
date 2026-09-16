@@ -17,8 +17,8 @@ from typing import Any
 
 import pytest
 
-import harness.adapters.backgammon as backgammon_mod
-from harness.adapters.backgammon import BackgammonRunner, _OpencodeRunStats
+import harness.adapters.challenge as challenge_mod
+from harness.adapters.challenge import ChallengeRunner, _OpencodeRunStats
 from harness.adapters.docker_worker import ImageFingerprint
 from harness.live_stream import LiveStream
 from harness.snapshot import compute_grader_hash
@@ -59,8 +59,8 @@ def _make_runner(
     mock: str | None = "scaffold",
     max_attempts: int = 8,
     **extra: Any,
-) -> BackgammonRunner:
-    return BackgammonRunner(
+) -> ChallengeRunner:
+    return ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="local-llm-proxy/okp-bench-worker",
@@ -71,7 +71,7 @@ def _make_runner(
 
 
 def _drive(
-    runner: BackgammonRunner,
+    runner: ChallengeRunner,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     gate: Any,
@@ -191,7 +191,7 @@ def test_forced_capture_failure_writes_nothing_and_one_notice(
     runner = _make_runner(tmp_path, mock="scaffold")
     runner._live = LiveStream(tmp_path / "live.jsonl", run_id="lbl")
     monkeypatch.setattr(
-        "harness.adapters.backgammon.capture_snapshot", lambda **kwargs: None
+        "harness.adapters.challenge.capture_snapshot", lambda **kwargs: None
     )
 
     result = _drive(runner, tmp_path, monkeypatch, lambda **kwargs: dict(PASS_REPORT))
@@ -306,12 +306,12 @@ def test_capture_writes_grade_report_and_grader_hash(
 
 # A real graded gate check (the single-system feedback contract hard-fails on
 # synthetic labels, so loop mechanics must drive the cell with genuine ids —
-# same precedent as tests/test_backgammon_budget_stop.py).
+# same precedent as tests/test_challenge_budget_stop.py).
 SEEDED_CHECK = "[G02] REQ-PIP — pip count"
 
 
 def _patch_fake_real_arm(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Hermetic real-arm (mock=None) stubs, mirroring test_backgammon_budget_stop.
+    """Hermetic real-arm (mock=None) stubs, mirroring test_challenge_budget_stop.
 
     No docker, no serve HTTP, no model contact: the container, the transport
     and both drive methods are stood in; everything above them is real.
@@ -350,11 +350,11 @@ def _patch_fake_real_arm(monkeypatch: pytest.MonkeyPatch) -> None:
             # Never start a real `opencode serve`; the session is stubbed below.
             pass
 
-    monkeypatch.setattr(backgammon_mod, "DockerCellConfig", _FakeDockerCellConfig)
-    monkeypatch.setattr(backgammon_mod, "DockerCell", _FakeDockerCell)
-    monkeypatch.setattr(backgammon_mod, "docker_available", lambda: (True, "ok"))
+    monkeypatch.setattr(challenge_mod, "DockerCellConfig", _FakeDockerCellConfig)
+    monkeypatch.setattr(challenge_mod, "DockerCell", _FakeDockerCell)
+    monkeypatch.setattr(challenge_mod, "docker_available", lambda: (True, "ok"))
     monkeypatch.setattr(
-        backgammon_mod,
+        challenge_mod,
         "worker_image_fingerprint",
         lambda: ImageFingerprint(
             image_id="sha256:fake-seeded-test-worker",
@@ -362,7 +362,7 @@ def _patch_fake_real_arm(monkeypatch: pytest.MonkeyPatch) -> None:
         ),
     )
 
-    real_run = backgammon_mod.subprocess.run
+    real_run = challenge_mod.subprocess.run
 
     def _run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
         cmd = args[0] if args else kwargs.get("args")
@@ -372,7 +372,7 @@ def _patch_fake_real_arm(monkeypatch: pytest.MonkeyPatch) -> None:
             )
         return real_run(*args, **kwargs)
 
-    monkeypatch.setattr(backgammon_mod.subprocess, "run", _run)
+    monkeypatch.setattr(challenge_mod.subprocess, "run", _run)
 
     class _FakeServeClient:
         def __init__(self, base_url: str, **kwargs: Any) -> None:
@@ -381,7 +381,7 @@ def _patch_fake_real_arm(monkeypatch: pytest.MonkeyPatch) -> None:
         def create_session(self, title: str | None = None) -> str:
             return "ses_seeded_cell"
 
-    monkeypatch.setattr(backgammon_mod, "ServeClient", _FakeServeClient)
+    monkeypatch.setattr(challenge_mod, "ServeClient", _FakeServeClient)
 
 
 def test_seeded_cell_skips_build_and_reaches_first_feedback_round(
@@ -656,7 +656,7 @@ def _make_seeded_cache_runner(
     snap_dir: Path,
     *,
     max_attempts: int = 3,
-) -> tuple[BackgammonRunner, list[str], list[dict[str, Any]]]:
+) -> tuple[ChallengeRunner, list[str], list[dict[str, Any]]]:
     """Hermetic seeded real-arm runner; returns (runner, graded paths, phases).
 
     The gate stub records the report_path name of every real grade and passes
@@ -738,7 +738,7 @@ def test_seeded_cache_hit_skips_the_attempt_one_grade(
         tmp_path, grader_hash="test-grader-hash", grade=dict(CACHED_FAIL_REPORT)
     )
     monkeypatch.setattr(
-        backgammon_mod, "compute_grader_hash", lambda gates: "test-grader-hash"
+        challenge_mod, "compute_grader_hash", lambda gates: "test-grader-hash"
     )
     runner, graded_paths, attempt_calls = _make_seeded_cache_runner(
         monkeypatch, tmp_path, snap_dir
@@ -783,7 +783,7 @@ def test_seeded_cache_miss_grades_for_real_and_stays_silent(
         tmp_path, grader_hash="stale-grader-hash", grade=dict(CACHED_FAIL_REPORT)
     )
     monkeypatch.setattr(
-        backgammon_mod, "compute_grader_hash", lambda gates: "test-grader-hash"
+        challenge_mod, "compute_grader_hash", lambda gates: "test-grader-hash"
     )
     runner, graded_paths, attempt_calls = _make_seeded_cache_runner(
         monkeypatch, tmp_path, snap_dir

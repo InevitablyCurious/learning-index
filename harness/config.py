@@ -285,7 +285,7 @@ class RunConfig:
 
 @dataclass(frozen=True)
 class LadderRung:
-    """One rung of the scored backgammon ladder (single source of truth).
+    """One rung of the scored model ladder (single source of truth).
 
     ``role`` is ``"source"`` (knowledge source: session runs feed self-extraction
     into the org pool; not scored for lift) or ``"measure"`` (scored OFF/ON cells;
@@ -303,7 +303,7 @@ class LadderRung:
 # Worker opencode model declarations mirror manager session provider blocks
 # (name/reasoning/tool_call/limit shape). Any worker-only additions
 # (interleaved + optional headers) are layered by
-# adapters.backgammon.build_worker_opencode_config.
+# adapters.challenge.build_worker_opencode_config.
 WORKER_MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     # Local proxy declarations. These are opencode MODEL BLOCKS used by
     # build_worker_opencode_config — NOT scored-roster rungs (the roster is now a
@@ -402,14 +402,14 @@ WORKER_MODEL_REGISTRY: dict[str, dict[str, Any]] = {
 }
 
 
-def backgammon_scored_ladder_roster() -> tuple[LadderRung, ...]:
+def scored_ladder_roster() -> tuple[LadderRung, ...]:
     """Return the canonical ordered scored-ladder roster."""
     from harness.rosters import BACKGAMMON_SCORED_LADDER_ROSTER
 
     return BACKGAMMON_SCORED_LADDER_ROSTER
 
 
-def backgammon_ladder_roster_fingerprint(
+def ladder_roster_fingerprint(
     rungs: tuple[LadderRung, ...] | None = None,
 ) -> str:
     """Return a deterministic fingerprint of the ordered ladder roster.
@@ -446,7 +446,7 @@ def backgammon_ladder_roster_fingerprint(
 # top-level import either way would be circular. Instead the moved names are
 # resolved on first attribute access. Both `from harness.config import X` and
 # `config.X` route through this, so the pre-split import surface is unchanged
-# for run_cumulative.py, bench_preflight.py, adapters/backgammon.py,
+# for run_cumulative.py, bench_preflight.py, adapters/challenge.py,
 # sync_cloud_roster.py and the tests.
 # ---------------------------------------------------------------------------
 

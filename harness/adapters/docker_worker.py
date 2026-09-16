@@ -1,4 +1,4 @@
-"""Docker worker isolation primitives for backgammon benchmark cells."""
+"""Docker worker isolation primitives for benchmark cells."""
 
 from __future__ import annotations
 
@@ -273,7 +273,7 @@ class DockerCellConfig:
     egress_host: str = ""
     proxy_base_url: str | None = None
     proxy_token: str | None = None
-    # Cloud mode (derived by BackgammonRunner from the model slug's provider id;
+    # Cloud mode (derived by ChallengeRunner from the model slug's provider id;
     # never set independently): True swaps the cell's key path from the spend-proxy
     # token to the OrcaRouter API key resolved on the host.
     cloud: bool = False

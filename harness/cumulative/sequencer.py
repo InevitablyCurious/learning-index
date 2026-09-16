@@ -64,7 +64,7 @@ class SessionRunner(Protocol):
         """Reset the per-session coding fixture (never the cumulative corpus)."""
 
     def run_session(self, session: SessionRecord) -> object:
-        """Execute one coding session and return telemetry (BackgammonCellResult-shaped)."""
+        """Execute one coding session and return telemetry (ChallengeCellResult-shaped)."""
 
 
 class CumulativeSequencer:

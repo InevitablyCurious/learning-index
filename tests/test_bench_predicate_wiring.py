@@ -3,15 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from harness.adapters.backgammon import BackgammonRunner
+from harness.adapters.challenge import ChallengeRunner
 from harness.adapters.bench_report import parse_failing_ids
 
 
 def _make_runner(
     *, tmp_path: Path, task_dir: Path, memory_mode: str = "on"
-) -> tuple[BackgammonRunner, Path]:
+) -> tuple[ChallengeRunner, Path]:
     work_root = tmp_path / "work_root"
-    runner = BackgammonRunner(
+    runner = ChallengeRunner(
         task_dir=task_dir,
         work_root=work_root,
         model="test-model",

@@ -19,8 +19,8 @@ from harness.config import (
     BACKGAMMON_LADDER_SCHEMA_VERSION,
     BenchmarkSchedule,
     BenchmarkWave,
-    backgammon_ladder_roster_fingerprint,
-    backgammon_scored_ladder_roster,
+    ladder_roster_fingerprint,
+    scored_ladder_roster,
     benchmark_schedule_fingerprint,
     parse_benchmark_schedule,
     RunConfig,
@@ -347,7 +347,7 @@ class TestCorpusPreservationGuard:
 class TestCanonRoster:
     """Tests for canon roster constants."""
 
-    def test_backgammon_ladder_schema_version_exists(self) -> None:
+    def test_challenge_ladder_schema_version_exists(self) -> None:
         """BACKGAMMON_LADDER_SCHEMA_VERSION is defined."""
         assert isinstance(BACKGAMMON_LADDER_SCHEMA_VERSION, int)
         assert BACKGAMMON_LADDER_SCHEMA_VERSION >= 1
