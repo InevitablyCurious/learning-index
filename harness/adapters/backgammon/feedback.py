@@ -36,6 +36,10 @@ from typing import Any
 from .constants import (
     _CHUNK_STUB_FILE,
     _EXCUSE_ELIMINATOR,
+    _FEEDBACK_HEADER_FIRST,
+    _FEEDBACK_HEADER_REPEAT,
+    _FIXED_OPENER_MANY,
+    _FIXED_OPENER_ONE,
     _GRADER_DIR,
     _PASS_VERDICT_MAX_LISTED,
     _STUB_SENTINEL,
@@ -374,11 +378,7 @@ class FeedbackMixin:
         if not deduped:
             return ""
 
-        opener = (
-            "That fixed it — I'm not running into this any more:"
-            if len(deduped) == 1
-            else "That fixed it — I'm not running into these any more:"
-        )
+        opener = _FIXED_OPENER_ONE if len(deduped) == 1 else _FIXED_OPENER_MANY
         # Generous, but bounded: naming what got fixed is the signal that stops
         # the model undoing it, and a numbered list holds far more than the old
         # comma-spliced sentence could. The tail keeps a mass pass from turning
@@ -456,14 +456,7 @@ class FeedbackMixin:
         sighting, so it carries no new information and only the opener and the
         per-gate lines carry the gradient.
         """
-        header = (
-            "I've checked your resolution for the problems that were given "
-            "before, played the game in full again, and I'm still seeing these "
-            "problems:"
-            if had_prior_feedback
-            else "I've checked your work thoroughly, and I want to list the "
-            "issues that I've encountered while playing the game:"
-        )
+        header = _FEEDBACK_HEADER_REPEAT if had_prior_feedback else _FEEDBACK_HEADER_FIRST
 
         # Accept either the rich problem records or a bare check list, so older
         # callers and tests keep working unchanged.

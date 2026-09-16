@@ -11,6 +11,13 @@ grading/pricing leaves -- a later stage).
 import os
 from pathlib import Path
 
+from harness.prompt_pack import default_pack
+
+# EVERY MODEL-FACING WORD BELOW IS LOADED, NOT WRITTEN HERE. The text lives in
+# the challenge's own prompts directory (harness/prompt_pack.py says why); the
+# names stay so every call site and test keeps reading one constant.
+_PACK = default_pack()
+
 
 # ── BUILD-CHUNK COMPLETION: OPERATOR TELEMETRY, NEVER A GATE ────────────────
 #
@@ -153,16 +160,9 @@ _HOLD_UI_HEARTBEAT_S = 30.0
 # finalized cleanly, the killed ones were ~4.9K+). ONE NUMBER, EVERYWHERE:
 # ~150 lines is also what the six chunk prompts and AGENTS.md say, so the model
 # is never handed two different limits by two different voices.
-_WRITE_CHUNKING_DIRECTIVE = "Keep writes under ~150 lines."
-_LOOP_RECOVERY_NUDGE = (
-    "You were going in circles, so I stopped you. "
-    "Pick up from the next unfinished step. No recap."
-)
-_FINALIZE_RECOVERY_NUDGE = (
-    "Your last message got cut off. Continue from where it stopped. "
-    + _WRITE_CHUNKING_DIRECTIVE
-    + " No recap."
-)
+_WRITE_CHUNKING_DIRECTIVE = _PACK.text("nudges/write-limit.md")
+_LOOP_RECOVERY_NUDGE = _PACK.nudge("nudges/loop.md")
+_FINALIZE_RECOVERY_NUDGE = _PACK.nudge("nudges/cut-off.md")
 
 # STALLED TOOL CALL RECOVERY (2026-09-11).
 #
@@ -181,9 +181,7 @@ _FINALIZE_RECOVERY_NUDGE = (
 # a terminal would do. Whether it then adapts is a capability observation, and
 # one of the more interesting ones — it is certainly more informative than the
 # cell dying with no verdict at all.
-_STALL_RECOVERY_NUDGE = (
-    "That command ran ten minutes, so I cancelled it. Try another way. No recap."
-)
+_STALL_RECOVERY_NUDGE = _PACK.nudge("nudges/stall.md")
 
 # PROVIDER OUTAGE RECOVERY (2026-08-24). A live cell lost 8 turns to stream
 # deaths, two of them the provider answering "The upstream provider is
@@ -195,9 +193,7 @@ _STALL_RECOVERY_NUDGE = (
 # agentic behaviour at all, and scoring a cell lower because the provider
 # blipped is a straightforward false negative. The model is told nothing
 # about providers — from its side a message simply did not go through.
-_PROVIDER_RECOVERY_NUDGE = (
-    "My connection dropped. Continue from where you stopped. No recap."
-)
+_PROVIDER_RECOVERY_NUDGE = _PACK.nudge("nudges/connection.md")
 
 
 # Wait before re-prompting a provider that just said it was unavailable —
@@ -385,13 +381,7 @@ _PASS_VERDICT_MAX_LISTED = 10
 # and on every repeat: it is a constant of how grading happens, not a sighting,
 # so it carries no gradient by design. It is absent from the pass verdict,
 # which lists no problems to excuse.
-_EXCUSE_ELIMINATOR = (
-    "One thing before the list: I check in a clean browser every time. I load "
-    "your latest code with the cache cleared and no saved session carried over "
-    "(the equivalent of a hard refresh), and I always start from a brand-new "
-    "game. So none of what follows is a stale page or leftover files on my end "
-    "— if it's still there, it's in the code you changed."
-)
+_EXCUSE_ELIMINATOR = _PACK.text("repair/opener.md")
 
 # ── THE SECOND DEFLECTION, CLOSED BEFORE IT IS USED ─────────────────────────
 #
@@ -409,20 +399,22 @@ _EXCUSE_ELIMINATOR = (
 # transcripts. Read the first two repair rounds of the next few cells: if the
 # model argues with the team instead of changing the code, this wording is the
 # lever, not the routing.
-_TEAM_EXCUSE_ELIMINATOR = (
-    "They work from the written spec for this app, against the code exactly as "
-    "it is right now, on a clean checkout — so if they can't find something, "
-    "it isn't there to find."
-)
+_TEAM_EXCUSE_ELIMINATOR = _PACK.text("repair/team-note.md")
 
 # The team's opener. DELIBERATELY NOT "conformance checks" — that is the
 # grader's word for the gate, a team integrating an app would never say it, and
 # it tells the model it is being measured. Same class of tell as the `FAILING`
 # label that was removed from the old bullet list.
-_TEAM_HEADER = (
-    "Also, my software team is trying to integrate your app into their own "
-    "software and they hit some problems on their side:"
-)
+_TEAM_HEADER = _PACK.text("repair/team-header.md")
+
+# The two list headers and the fixed-problems opener. Singular and plural are
+# separate files rather than a formatted string: a challenge author writes the
+# sentence their tester would say, in their own language, without meeting a
+# pluralisation rule in Python.
+_FEEDBACK_HEADER_FIRST = _PACK.text("repair/first-round.md")
+_FEEDBACK_HEADER_REPEAT = _PACK.text("repair/repeat-round.md")
+_FIXED_OPENER_ONE = _PACK.text("repair/fixed-one.md")
+_FIXED_OPENER_MANY = _PACK.text("repair/fixed-many.md")
 
 
 # WO-ERRDATA-C1: the max per-error-type total allowed per benchmark before
@@ -456,14 +448,4 @@ ERROR_CAP_PER_TYPE = 20
 # because the model writes code in very large single generations, and one
 # oversized stream can be killed mid-flight by the transport — losing the whole
 # write (2026-08-09).
-_WORKER_AGENTS_MD = """\
-# Notes
-
-- Everything you need is in this folder; stay in it.
-- If a tool call is denied, accept it and find another way.
-- Keep each write or edit under ~150 lines; build big files in several passes.
-- Each command runs in its own session: a server started with a plain `&` is killed when that command ends, and a later request to it gets an empty reply.
-- Start servers detached so they survive: `node -e "require('node:child_process').spawn('node',['src/server.ts'],{stdio:'ignore',detached:true}).unref()"`. Stop them with `kill <pid>`. Or start and test in the same command.
-- Playwright and Chromium are installed globally: use `require('playwright')` and the bare `playwright` command. There is no network, so never install packages.
-- Give every test and server run a timeout.
-"""
+_WORKER_AGENTS_MD = _PACK.text("agents.md") + "\n"

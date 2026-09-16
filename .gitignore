@@ -77,3 +77,8 @@ config/devmode.json
 # The snapshot armed for the next seeded run. Operator machine state, same
 # class as devmode.json above — never committed.
 config/armed-snapshot.json
+
+# Challenge repos cloned in here are their own repos, never this one.
+challenges/*
+!challenges/README.md
+!challenges/TEMPLATE/
