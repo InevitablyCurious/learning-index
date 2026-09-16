@@ -82,7 +82,9 @@ export async function listChallenges(benchRoot) {
       const manifest = await readManifest(dir);
       if (!manifest && !(await isDir(join(dir, "prompts")))) continue;
       const reason = await blockedReason(dir, manifest);
+      const declaredSuite = String(manifest?.grader_dir ?? "");
       found.push({
+        grader_dir: declaredSuite ? (isAbsolute(declaredSuite) ? declaredSuite : resolve(dir, declaredSuite)) : null,
         id: entry.name,
         name: String(manifest?.name ?? entry.name),
         dir,

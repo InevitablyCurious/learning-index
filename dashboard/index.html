@@ -1335,6 +1335,36 @@ a:hover{color:var(--type)}
 .gcell.instrument.sm{font-size:0;display:inline-block;border-width:2px}
 /* the legend's inline swatches — fixed 9px, never stretched by the grid */
 .gcell.sm{width:9px;height:9px;aspect-ratio:auto;display:inline-block;vertical-align:baseline;flex:none}
+
+/* THE GATE CARD (panels/wall.js gateCard). Fixed to the viewport beside the
+   square it describes; pinned cards take a brighter rim so a card that stays is
+   visibly different from one that follows the pointer. */
+.gcell[data-gate-id]{cursor:pointer}
+.gcell[data-gate-id]:focus-visible,.gcell.pinned{outline:2px solid var(--type);outline-offset:1px}
+.gcard{position:fixed;z-index:40;width:min(420px,calc(100vw - 16px));max-height:calc(100vh - 16px);overflow:auto;
+  background:var(--surface-raised);border:1px solid var(--border-strong);border-radius:var(--radius-md);
+  box-shadow:var(--shadow-raise);padding:12px 14px;font:12px/1.5 var(--font);color:var(--text-body)}
+.gcard.pinned{border-color:var(--accent)}
+.gc-head{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.gc-name{color:var(--text-bright);font-size:14px;font-weight:600}
+.gc-status{font-size:11px;letter-spacing:.04em}
+.gc-status.ok{color:var(--check)}
+.gc-status.bad{color:var(--danger)}
+.gc-status.amber{color:var(--warn,#e0b34d)}
+.gc-status.dim{color:var(--text-muted)}
+.gc-sec{border-top:1px solid var(--hairline);padding:6px 0}
+.gc-sec p{margin:2px 0}
+.gc-h{display:block;font-size:10px;letter-spacing:.08em;color:var(--comment)}
+.gc-k{color:var(--comment)}
+.gc-tech{color:var(--text-bright);word-break:break-word}
+.gc-where{color:var(--text-muted);font-size:11px;word-break:break-all}
+.gc-rounds{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
+.gc-rounds .gc-h{width:100%}
+.gc-round.ok{color:var(--check)}
+.gc-round.bad{color:var(--danger)}
+.gc-round.dim{color:var(--text-muted)}
+.gc-id{color:var(--comment);letter-spacing:.04em}
+.gc-foot{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--hairline);padding-top:6px;font-size:10px;color:var(--text-muted)}
 .wall-legend{display:flex;align-items:center;gap:18px;flex-wrap:wrap;font:400 12px var(--font);color:var(--dim)}
 .wall-legend>span{display:inline-flex;align-items:center;gap:7px;min-width:0}
 .wall-legend .note{flex:1 1 220px;min-width:0}

@@ -58,6 +58,8 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
+import { attachGateDetail } from "./gate-detail.mjs";
+import { listChallenges } from "./challenges.mjs";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -482,6 +484,17 @@ export async function readWall({ runsRoot, runDir, benchRoot = null }) {
   const last = attempts.length > 0 ? attempts[attempts.length - 1] : null;
   const gradable = last ? (last.gradable ?? null) : null;
 
+  // EACH SQUARE'S STORY, for the board's hover card: the challenge's plain
+  // description of the check, its result per round, the grading report's words
+  // for its latest failure, and what the model was told. See gate-detail.mjs.
+  const graderDir = benchRoot ? await graderDirFor(benchRoot, target.path) : null;
+  const detailedGates = await attachGateDetail({
+    gates: folded.gates,
+    attempts,
+    runPath: target.path,
+    graderDir,
+  });
+
   return {
     ok: true,
     contract_version: WALL_CONTRACT_VERSION,
@@ -507,7 +520,7 @@ export async function readWall({ runsRoot, runDir, benchRoot = null }) {
     gradable,
     ungradable_reason: last?.ungradable_reason ?? null,
     aborted_runners: Array.isArray(last?.aborted_runners) ? last.aborted_runners : [],
-    gates: folded.gates,
+    gates: detailedGates,
     totals: folded.totals,
     // Gates the runner reported reaching and produced no verdict for. Outside
     // `totals` on purpose — a subset of `untested`, not a fourth bucket.
@@ -515,4 +528,18 @@ export async function readWall({ runsRoot, runDir, benchRoot = null }) {
     unwired,
     unwired_reasons: reasons,
   };
+}
+
+/**
+ * The grading suite a campaign was built against: the challenge its run
+ * manifest records, else the only challenge this installation has. More than
+ * one and none recorded means the answer is unknown — no detail, not a guess.
+ */
+async function graderDirFor(benchRoot, runPath) {
+  const recorded = String((await readJsonOrNull(join(runPath, "manifest.run-manifest.json")))?.challenge ?? "");
+  const challenges = await listChallenges(benchRoot);
+  const chosen = recorded
+    ? challenges.find((c) => c.id === recorded)
+    : challenges.length === 1 ? challenges[0] : null;
+  return chosen?.grader_dir ?? null;
 }

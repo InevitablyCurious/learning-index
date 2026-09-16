@@ -682,3 +682,47 @@ test("an empty grid still says nothing was measured, never 0 passing", () => {
   assert.match(html, /NO GATE OUTCOMES YET/);
   assert.doesNotMatch(html, /0\/0 passing/);
 });
+
+// ── THE GATE CARD ───────────────────────────────────────────────────────────
+//
+// Hover shows one card; click pins it; escape closes the pin. The card renders
+// the server's detail as given and states when a description is missing.
+
+test("gate card: hovering a square renders its description, rounds, failure and told lines", async () => {
+  const { setGateHover, toggleGatePin, clearGatePin } = await import("./panels/wall.js");
+  const gates = [
+    {
+      id: "E04",
+      title: "shut out",
+      state: "failing",
+      ever_failed: true,
+      detail: {
+        description: { key: "E04", name: "Shut out on the bar", what: "No legal move.", how: "White on the bar." },
+        rounds: [{ attempt: 1, status: "fail" }, { attempt: 2, status: "fail" }],
+        last_failure: { attempt: 2, message: "expected 2 to be +0", location: "edge.test.ts:116" },
+        told: { first: "The bar is wrong.", repeat: "Still wrong." },
+      },
+    },
+    { id: "G01", title: "start", state: "passing", detail: { description: null, rounds: [], last_failure: null, told: null } },
+  ];
+  const board = boardWith(suiteWith(gates));
+
+  assert.ok(!renderWall(board).includes('class="gcard'), "no card before a hover");
+  assert.equal(setGateHover("E04", { left: 10, right: 20, top: 10, bottom: 20 }), true);
+  const html = renderWall(board);
+  for (const text of ["Shut out on the bar", "FAILED — never fixed", "No legal move.", "White on the bar.",
+    "LAST FAILURE · round 2", "expected 2 to be +0", "edge.test.ts:116", "The bar is wrong.", "Still wrong."]) {
+    assert.ok(html.includes(text), `card is missing: ${text}`);
+  }
+
+  // Pinned wins over a passing hover, and escape releases it.
+  toggleGatePin("E04", null);
+  setGateHover("G01", null);
+  assert.ok(renderWall(board).includes("Shut out on the bar"), "the pinned card stays while the pointer moves");
+  assert.equal(clearGatePin(), true);
+  const passed = renderWall(board);
+  assert.ok(passed.includes("PASSED — round 1") && passed.includes("No description for this check yet"));
+  assert.ok(!passed.includes("WHAT THE MODEL WAS TOLD"), "a gate that never failed shows no complaint lines");
+  setGateHover(null, null);
+  assert.ok(!renderWall(board).includes('class="gcard'), "leaving the wall closes an unpinned card");
+});

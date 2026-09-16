@@ -119,6 +119,110 @@ export function gateVisual(g) {
   }
 }
 
+// ── THE GATE CARD ───────────────────────────────────────────────────────────
+//
+// Hover a square to read it; click to pin it so it stays while you read; click
+// it again, or press escape, to let it go. One card at a time — the pinned one
+// wins over whatever the pointer is passing.
+//
+// Everything on it is served by the control plane (control/gate-detail.mjs):
+// the challenge's own description of the check, its result per round, the
+// grading report's words for its latest failure, and what the model was told.
+// The card derives nothing but the one-line status from those facts.
+
+const card = { hover: null, pinned: null, anchor: null };
+
+/** Pointer or focus reached a square. Returns true when the card must redraw. */
+export function setGateHover(id, rect) {
+  if (card.hover === id) return false;
+  card.hover = id;
+  if (id && !card.pinned) card.anchor = rect ?? card.anchor;
+  return !card.pinned || !id;
+}
+
+/** A square was clicked: pin it, or unpin it if it already was. */
+export function toggleGatePin(id, rect) {
+  card.pinned = card.pinned === id ? null : id;
+  if (card.pinned) card.anchor = rect ?? card.anchor;
+  return true;
+}
+
+/** Escape: true when there was a pinned card to close. */
+export function clearGatePin() {
+  if (!card.pinned) return false;
+  card.pinned = null;
+  return true;
+}
+
+function statusLine(g) {
+  const rounds = g.detail?.rounds ?? [];
+  const failedRounds = rounds.filter((r) => r.status === "fail").map((r) => r.attempt);
+  if (g.state === "untested") return { cls: "dim", text: "NOT YET TESTED" };
+  if (g.unmeasured_cause) return { cls: "amber", text: "NOT MEASURED — the runner died, not the code" };
+  if (g.state === "passing") {
+    if (!g.ever_failed) return { cls: "ok", text: "PASSED — round 1" };
+    const span = failedRounds.length ? `after failing round${failedRounds.length > 1 ? "s" : ""} ${failedRounds.join(", ")}` : "";
+    return { cls: "ok", text: `FIXED — round ${g.first_pass_attempt ?? "?"}${span ? `, ${span}` : ""}` };
+  }
+  const everPassed = rounds.some((r) => r.status === "pass");
+  if (everPassed) return { cls: "bad", text: "FAILING — it passed earlier and broke again" };
+  return { cls: "bad", text: rounds.length > 1 ? "FAILED — never fixed" : "FAILED" };
+}
+
+function gateCard(gates) {
+  const id = card.pinned ?? card.hover;
+  const g = id ? gates.find((x) => x.id === id) : null;
+  if (!g) return "";
+  const d = g.detail ?? {};
+  const desc = d.description;
+  const status = statusLine(g);
+  const rounds = (d.rounds ?? [])
+    .map((r) => {
+      const mark = r.status === "pass" ? "✓" : r.status === "fail" ? "✗" : "·";
+      const cls = r.status === "pass" ? "ok" : r.status === "fail" ? "bad" : "dim";
+      return `<span class="gc-round ${cls}">${esc(String(r.attempt))} ${mark}</span>`;
+    })
+    .join("");
+  const failure = d.last_failure
+    ? `<div class="gc-sec"><span class="gc-h">LAST FAILURE · round ${esc(String(d.last_failure.attempt))}</span>
+         <p class="gc-tech">${esc(d.last_failure.message || "the grader's report gave no message")}</p>
+         ${d.last_failure.location ? `<p class="gc-where">${esc(d.last_failure.location)}</p>` : ""}</div>`
+    : "";
+  const told = d.told && (g.ever_failed || g.state === "failing")
+    ? `<div class="gc-sec"><span class="gc-h">WHAT THE MODEL WAS TOLD</span>
+         ${d.told.first ? `<p><span class="gc-k">first time</span> ${esc(d.told.first)}</p>` : ""}
+         ${d.told.repeat ? `<p><span class="gc-k">again</span> ${esc(d.told.repeat)}</p>` : ""}</div>`
+    : "";
+  // Beside the square, kept inside the window: it opens below or above,
+  // whichever has more room, and scrolls inside that room rather than running
+  // off the screen. It slides left when it would pass the right edge.
+  const vw = globalThis.innerWidth ?? 1280;
+  const vh = globalThis.innerHeight ?? 800;
+  const a = card.anchor ?? { left: 8, right: 8, top: 8, bottom: 8 };
+  const w = Math.min(420, vw - 16);
+  const left = Math.max(8, Math.min(Math.round(a.left), vw - w - 8));
+  const roomBelow = vh - a.bottom - 14;
+  const roomAbove = a.top - 14;
+  const place = roomBelow >= roomAbove
+    ? `top:${Math.round(a.bottom + 6)}px;max-height:${Math.max(120, Math.round(roomBelow))}px`
+    : `bottom:${Math.round(vh - a.top + 6)}px;max-height:${Math.max(120, Math.round(roomAbove))}px`;
+  return `
+    <div class="gcard${card.pinned ? " pinned" : ""}" role="dialog" aria-label="${esc(desc?.name ?? g.title ?? g.id)}" style="left:${left}px;${place}">
+      <div class="gc-head">
+        <span class="gc-name">${esc(desc?.name ?? g.title ?? g.id)}</span>
+        <span class="gc-status ${status.cls}">${esc(status.text)}</span>
+      </div>
+      ${desc
+        ? `<div class="gc-sec"><span class="gc-h">WHAT IT CHECKS</span><p>${esc(desc.what)}</p></div>
+           <div class="gc-sec"><span class="gc-h">HOW IT'S TESTED</span><p>${esc(desc.how)}</p></div>`
+        : `<div class="gc-sec"><p class="gc-tech">No description for this check yet — add one to the challenge's checks.json.</p></div>`}
+      ${failure}
+      ${told}
+      ${rounds ? `<div class="gc-sec gc-rounds"><span class="gc-h">ROUNDS</span>${rounds}</div>` : ""}
+      <div class="gc-foot"><span class="gc-id">${esc(g.id)}</span><span>${card.pinned ? "click the square or press esc to close" : "click to pin"}</span></div>
+    </div>`;
+}
+
 export function renderWall(board) {
   const suite = board.suite ?? null;
   const gates = overlayLive(suite?.gates ?? [], board.live ?? null);
@@ -132,6 +236,7 @@ export function renderWall(board) {
         ${runTag(suite)}
       </div>
       ${gates.length ? grid(gates) : empty(suite)}
+      ${gates.length ? gateCard(gates) : ""}
       ${gates.length ? legend(suite) : ""}
       ${runBlock(board)}
     </section>`;
@@ -418,7 +523,12 @@ function grid(gates) {
               st === "instrument"
               ? "!"
               : "";
-      return `<span class="gcell ${esc(st)}" title="${esc(`${label} — ${VISUAL_WORD[st]}${when}`)}">${mark}</span>`;
+      // THE CARD REPLACES THE TOOLTIP. A browser tooltip holds one line; the
+      // card (gateCard, below) holds what the check does, its rounds, the
+      // failure and what the model was told. The short label stays for screen
+      // readers.
+      const pinned = card.pinned === g.id ? " pinned" : "";
+      return `<span class="gcell ${esc(st)}${pinned}" data-gate-id="${esc(g.id)}" tabindex="0" aria-label="${esc(`${label} — ${VISUAL_WORD[st]}${when}`)}">${mark}</span>`;
     })
     .join("");
   // `--wall-cols` is published so the CSS can size every band as a fraction of

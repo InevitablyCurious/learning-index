@@ -1,0 +1,371 @@
+{
+  "schema_version": 1,
+  "_comment": [
+    "What each check verifies and how, in plain words — shown on the board's gate wall.",
+    "`checks` is keyed by the check's bracket token ([G01], [E04], [F12]).",
+    "`setup` matches the setup (conformance) checks by their title; {x} stands for the",
+    "field or tag the title names, and fills the same slot in `key` and the text.",
+    "`key` is the check's key in feedback.json, so the card can show what the player was told.",
+    "Written from each test's own code. When a test changes, change its entry."
+  ],
+  "checks": {
+    "G01": {
+      "name": "Standard opening position",
+      "what": "A new game starts from the standard backgammon setup, with white to move and the cube in the middle.",
+      "how": "Calls the engine's opening-position and new-game functions directly: every point must match the standard layout, white must be to move in the roll phase, the cube must be 1 and unowned, the bar and off trays empty, no winner, and each colour's opponent must be the other colour."
+    },
+    "G02": {
+      "name": "Pip counts",
+      "what": "Pip counts — how far each side still has to travel — are right, with a checker on the bar counting as 25.",
+      "how": "Counts pips on the opening position (167 each), on a white position with checkers on the bar and on point 4 (29), a black position with two on the bar (55), and a nearly finished white position (2)."
+    },
+    "G03": {
+      "name": "Dice give the right number of moves",
+      "what": "Doubles give four moves and an ordinary roll gives two.",
+      "how": "From the opening position, asks how many dice can be used: 3-3-3-3 must allow four, 3-1 two, and black's 6-6-6-6 four."
+    },
+    "G04": {
+      "name": "Blocked points and hits",
+      "what": "A checker can't land on a point held by two or more opposing checkers, but can land on a single one.",
+      "how": "White on 8, black holding 5 with two checkers and a single black on 6: a 3 must give no moves and a 2 exactly 8→6. From the opening position a 6 may only move checkers from 24, 13 and 8, all staying on the board."
+    },
+    "G05": {
+      "name": "Play the higher die",
+      "what": "When only one of the two dice can be played, the player must play the higher one.",
+      "how": "White on 13 with black holding 6: with a 3 and a 4 only one die can be used, and the only legal move must be 13→9 using the 4."
+    },
+    "G06": {
+      "name": "Entering from the bar",
+      "what": "A checker on the bar must come back in first, and a player who can't enter has no move.",
+      "how": "White on the bar with a 2 must have exactly one move, entering on 23. With black holding 23 and 21, a roll of 2 and 4 must leave no legal moves."
+    },
+    "G07": {
+      "name": "Hitting sends a checker to the bar",
+      "what": "Landing on a single opposing checker hits it and sends it to the bar.",
+      "how": "White on 8 moves onto a lone black checker on 5 with a 3: the move must report a hit, white must now sit on 5, black must have one checker on the bar, and point 8 must be empty."
+    },
+    "G08": {
+      "name": "Bearing off, including a bigger die",
+      "what": "Bearing off works, including using a bigger die than needed when no checker is further back.",
+      "how": "White with two checkers on 3 and the rest off can bear off from 3 with a 5. With checkers on 5 and 3, a 5 must bear off from 5 only — never from 3."
+    },
+    "G09": {
+      "name": "No bearing off until all are home",
+      "what": "No bearing off while any checker is outside home or on the bar.",
+      "how": "White on 3 with another on 8: a 3 must not bear off. White on 2 with a checker on the bar: a 2 must not bear off. Both positions must report that not all checkers are home."
+    },
+    "G10": {
+      "name": "Single, gammon or backgammon",
+      "what": "A finished game is classed correctly as a single win, a gammon or a backgammon.",
+      "how": "White has all 15 off in each case. Black with 2 already off → single. Black with none off, none on the bar and none in white's home → gammon. A black checker in white's home, or on the bar → backgammon. White with only 14 off → not won."
+    },
+    "G11": {
+      "name": "The doubling cube's state",
+      "what": "The cube starts in the middle, goes to whoever accepts a double, and can't be offered after rolling.",
+      "how": "Through the running server: a new game must have the cube at 1, unowned, with doubling allowed. The player doubles, the computer accepts, and the cube must become 2 owned by black. After rolling, doubling must be disallowed and trying anyway must leave the cube unchanged."
+    },
+    "G12": {
+      "name": "The computer's cube decisions",
+      "what": "The computer accepts, declines and offers the cube at its published win-chance thresholds, and its win chance rises as it gets further ahead.",
+      "how": "Even position (30 pips each): win chance 0.5 and every difficulty accepts. Black hopelessly behind (350 against 2): win chance under 0.24 and hard declines. Hard never offers when white owns the cube, offers or holds on a 30-against-61 position exactly as its thresholds say, easy never offers, and hard holds when far too far ahead. A last case checks win chance never drops as the pip lead grows."
+    },
+    "G13": {
+      "name": "Turn flow",
+      "what": "A die can't be used twice, turns go white → black → white, and a player with no move passes with a clear message.",
+      "how": "Through the running server with the roll fixed to 1 and 3: after playing the 3, playing it again must leave the remaining dice unchanged. Playing out white's turn, ending it and advancing the computer must hand the turn back to white. With white on the bar and both entry points blocked, rolling 2 and 4 must end the turn with no legal moves and a message saying there's no legal move or a pass."
+    },
+    "G14": {
+      "name": "Legal computer moves, and hard beats easy",
+      "what": "Every move the computer makes is legal, and hard really is stronger than easy.",
+      "how": "200 random positions and rolls at each difficulty: every chosen move is replayed through the engine and must be legal and produce the board the computer claims. Then 25 full games with fixed dice, hard as black against easy as white: hard must win more."
+    },
+    "G16": {
+      "name": "Port 8002, and a clear error when taken",
+      "what": "The server listens on port 8002, and a second copy fails clearly instead of hanging.",
+      "how": "With the server already running, starts a second copy on the same port: within 6 seconds it must exit with an error, and its output must name 8002 and say the port is in use or already taken."
+    },
+    "E01": {
+      "name": "Doubles are four moves",
+      "what": "Doubles really are four moves, not two.",
+      "how": "From the opening position, 3-3-3-3 must allow four moves and 3-5 two."
+    },
+    "E02": {
+      "name": "Bigger die bears off only from the back",
+      "what": "A bigger-than-needed die only bears off from the highest occupied point.",
+      "how": "White on 6 and 3 with a 5: bearing off must not be allowed, but 6→1 must be. With only the checker on 3 left, the 5 must bear it off."
+    },
+    "E03": {
+      "name": "Exact die always bears off",
+      "what": "A die that exactly matches a checker's distance always bears it off.",
+      "how": "White on 6 and 3 with a 3: bearing off from 3 must be allowed."
+    },
+    "E04": {
+      "name": "Shut out on the bar",
+      "what": "A player shut out on the bar has no legal move at all — not even with other checkers.",
+      "how": "White on the bar, black holding all of 19–24, and white also on 13: with a 3 and a 5, no die may be used and the list of legal moves must be empty."
+    },
+    "E05": {
+      "name": "The bar comes first",
+      "what": "While a checker is on the bar, no other checker may move.",
+      "how": "White on the bar and on 13 with a 3: there must be moves, and every one must be entering from the bar."
+    },
+    "E06": {
+      "name": "Bar counts 25 pips",
+      "what": "A checker on the bar counts as 25 pips, and borne-off checkers count nothing.",
+      "how": "One white checker on the bar → 25. Add one on 6 → 31. Add three borne off → still 31."
+    },
+    "E07": {
+      "name": "On the bar means not all home",
+      "what": "A checker on the bar means not all checkers are home.",
+      "how": "White with one checker on 3 is all home; add one on the bar and it must no longer be."
+    },
+    "E08": {
+      "name": "Each end position listed once",
+      "what": "The list of possible turns holds each resulting position once, not once per order of moves.",
+      "how": "Two white checkers on 10 with a 1 and a 2: there are several orders to play them but only two different end positions, so the list must hold exactly two, all different."
+    },
+    "E09": {
+      "name": "Copying a board",
+      "what": "Copying a board gives a fully independent copy.",
+      "how": "Copies a board, changes the copy's points, bar and borne-off counts, and checks the original is untouched."
+    },
+    "F01": {
+      "name": "Page loads cleanly",
+      "what": "The game page loads without errors.",
+      "how": "Opens the page in a browser and requires no console errors and no page errors."
+    },
+    "F02": {
+      "name": "Full board is drawn",
+      "what": "A new game draws the whole board.",
+      "how": "Starts a new game and reloads: exactly 24 points and 30 checkers, 15 of each colour."
+    },
+    "F03": {
+      "name": "Making a move by clicking",
+      "what": "A player can make a real move by clicking.",
+      "how": "Fixes the next roll to 6-5, clicks Roll, clicks a movable checker, clicks one of its hints, and requires one fewer die left afterwards."
+    },
+    "F04": {
+      "name": "Hints show which die",
+      "what": "Move hints show which die each move uses.",
+      "how": "Fixes the roll to 3-5, clicks Roll and a movable checker: every hint's text must be 3 or 5 (or \"off\")."
+    },
+    "F05": {
+      "name": "No-move notice",
+      "what": "When the player can't move, the page says so.",
+      "how": "Puts white on the bar with both entry points blocked and fixes the roll to 2-4. After Roll the message must say there's no legal move or a pass, clicking the bar checker must show no hints, and the turn must be over."
+    },
+    "F06": {
+      "name": "Pip counts on screen",
+      "what": "The pip counts on screen match the game.",
+      "how": "The opening position must show 167 and 167, matching the server. A custom position is then set, and the displayed counts must match the server again."
+    },
+    "F07": {
+      "name": "The cube on screen",
+      "what": "The cube on screen shows its value and who owns it.",
+      "how": "New game: value \"1\" and an owner label reading as centred. After the player doubles and the computer accepts: value \"2\", and the owner label must name the side the server reports."
+    },
+    "F08": {
+      "name": "Difficulty selector",
+      "what": "Changing the difficulty and starting a new game really changes it.",
+      "how": "Selects hard and clicks New game: the server must report hard. Then the same for easy."
+    },
+    "F09": {
+      "name": "Hit checker shown on the bar",
+      "what": "A hit checker is drawn on the bar.",
+      "how": "Sets a position with one black checker on the bar and reloads: the bar must be visible with exactly one black checker drawn on it."
+    },
+    "F10": {
+      "name": "Re-entering shown on the board",
+      "what": "Coming back in from the bar is shown on the board.",
+      "how": "White on the bar with the roll fixed to 3-5. After Roll, clicking the bar checker must show two hints; clicking one must take the checker off the bar, the server must agree, and a white checker must appear on point 20 or 22."
+    },
+    "F11": {
+      "name": "Borne-off checkers in the tray",
+      "what": "Borne-off checkers appear in the player's off tray.",
+      "how": "Sets a position with 3 white checkers borne off: the player's tray must be visible with exactly 3 white checkers in it."
+    },
+    "F12": {
+      "name": "Win banner and new game",
+      "what": "A win ends the game with a banner, and a new game starts without reloading the page.",
+      "how": "Sets a won position with the message \"You win!\": the message must show it, and if a modal is open its title must say Win. Clicking New game must redraw the standard opening layout, hide the modal, and not reload the page."
+    },
+    "F13": {
+      "name": "Fits the window",
+      "what": "The board fits the window with no sideways scrolling.",
+      "how": "At 1280×800 and at 1440×900, starts a new game and requires that neither the board nor the page scrolls horizontally."
+    },
+    "F14": {
+      "name": "Animation",
+      "what": "Checkers and move hints are animated.",
+      "how": "Reads the page's styles: a checker must have a transition on its position or an animation, and the hint shown for a bar checker must have an animation."
+    },
+    "F15": {
+      "name": "Works on either host name",
+      "what": "The game works whether it's opened at localhost or 127.0.0.1.",
+      "how": "Loads the page at both addresses: each must show the board with 24 points and 30 checkers and no errors."
+    }
+  },
+  "setup": [
+    {
+      "title": "the app boots and serves",
+      "key": "REQ-BIND/boot",
+      "name": "Server starts",
+      "what": "The server starts and serves the game.",
+      "how": "Runs the server with its start command and waits for it to answer on port 8002."
+    },
+    {
+      "title": "the health check responds",
+      "key": "REQ-BIND/health",
+      "name": "Health check answers",
+      "what": "The health address answers.",
+      "how": "Requests /health on the running server."
+    },
+    {
+      "title": "the health check returns a success status",
+      "key": "REQ-API/health.status",
+      "name": "Health check succeeds",
+      "what": "The health address returns success.",
+      "how": "Requests /health and requires status 200."
+    },
+    {
+      "title": "the health check returns a JSON body",
+      "key": "REQ-API/health.body",
+      "name": "Health check returns data",
+      "what": "The health address returns JSON.",
+      "how": "Requests /health and requires a JSON body."
+    },
+    {
+      "title": "the health body carries status \"ok\"",
+      "key": "REQ-API/health.body.status",
+      "name": "Health check says ok",
+      "what": "The health reply says the server is ok.",
+      "how": "Requests /health and requires {\"status\": \"ok\"}."
+    },
+    {
+      "title": "the reported state carries \"{x}\"",
+      "key": "REQ-STATE/state.{x}",
+      "name": "Game state has \"{x}\"",
+      "what": "The game state the server reports includes the \"{x}\" field.",
+      "how": "Sets a position through the debug route and checks the reply carries a \"{x}\" field."
+    },
+    {
+      "title": "borne-off counts survive a set and read back",
+      "key": "REQ-STATE/state.off.white",
+      "name": "Borne-off count reads back",
+      "what": "A borne-off count that is set is reported back unchanged.",
+      "how": "Sets 7 white checkers borne off through the debug route; the reply must say 7."
+    },
+    {
+      "title": "a specific board position can be set and read back",
+      "key": "REQ-DEBUG/debug.setState",
+      "name": "Setting a position",
+      "what": "A position set through the debug route is what the game then reports.",
+      "how": "Sets a known position and requires the reply to echo it back."
+    },
+    {
+      "title": "a queued dice roll is honoured",
+      "key": "REQ-DEBUG/debug.roll",
+      "name": "Fixing the next roll",
+      "what": "A roll queued through the debug route is the next roll.",
+      "how": "Queues 6-1, rolls, and requires the dice to come back as 1 and 6."
+    },
+    {
+      "title": "the page tags \"{x}\"",
+      "key": "REQ-TESTID/testid.{x}",
+      "name": "Page element \"{x}\"",
+      "what": "The page has the \"{x}\" element that automation looks for.",
+      "how": "Loads the page and looks for an element tagged data-testid=\"{x}\"."
+    },
+    {
+      "title": "24 board points are drawn",
+      "key": "REQ-RENDER/point",
+      "name": "24 points drawn",
+      "what": "The board draws all 24 points.",
+      "how": "Loads a new game and counts the drawn points: exactly 24."
+    },
+    {
+      "title": "24 board points are tagged for automation",
+      "key": "REQ-TESTID/point",
+      "name": "24 points tagged",
+      "what": "All 24 points carry the tag automation uses.",
+      "how": "Counts elements tagged as points: exactly 24."
+    },
+    {
+      "title": "30 checkers are drawn",
+      "key": "REQ-RENDER/checker",
+      "name": "30 checkers drawn",
+      "what": "The board draws all 30 checkers.",
+      "how": "Loads a new game and counts the drawn checkers: exactly 30."
+    },
+    {
+      "title": "30 checkers are tagged for automation",
+      "key": "REQ-TESTID/checker",
+      "name": "30 checkers tagged",
+      "what": "All 30 checkers carry the tag automation uses.",
+      "how": "Counts elements tagged as checkers: exactly 30."
+    },
+    {
+      "title": "the bar is drawn",
+      "key": "REQ-RENDER/bar",
+      "name": "Bar drawn",
+      "what": "The bar is drawn.",
+      "how": "Loads the page and looks for the bar."
+    },
+    {
+      "title": "the bar is tagged for automation",
+      "key": "REQ-TESTID/bar",
+      "name": "Bar tagged",
+      "what": "The bar carries the tag automation uses.",
+      "how": "Looks for an element tagged as the bar."
+    },
+    {
+      "title": "the off tray is drawn",
+      "key": "REQ-RENDER/off-tray",
+      "name": "Off tray drawn",
+      "what": "The off tray is drawn.",
+      "how": "Loads the page and looks for the off tray."
+    },
+    {
+      "title": "the off tray is tagged for automation",
+      "key": "REQ-TESTID/off-tray",
+      "name": "Off tray tagged",
+      "what": "The off tray carries the tag automation uses.",
+      "how": "Looks for an element tagged as the off tray."
+    },
+    {
+      "title": "the dice are drawn",
+      "key": "REQ-RENDER/die",
+      "name": "Dice drawn",
+      "what": "The dice are drawn after a roll.",
+      "how": "Rolls and counts the drawn dice."
+    },
+    {
+      "title": "the dice are tagged for automation",
+      "key": "REQ-TESTID/die",
+      "name": "Dice tagged",
+      "what": "The dice carry the tag automation uses.",
+      "how": "Rolls and counts elements tagged as dice."
+    },
+    {
+      "title": "selecting a movable checker shows move hints",
+      "key": "REQ-HINT/hint",
+      "name": "Selecting shows hints",
+      "what": "Clicking a checker that can move shows where it can go.",
+      "how": "Rolls fixed dice, clicks a movable checker, and requires at least one hint to appear."
+    },
+    {
+      "title": "the page can be read by automation",
+      "key": "REQ-TESTID/dom",
+      "name": "Page is readable",
+      "what": "The page can be loaded and read by a browser.",
+      "how": "Loads the page and requires a document the checks can read."
+    },
+    {
+      "title": "the conformance run completes",
+      "key": "REQ-TESTID/pregate",
+      "name": "Setup checks finish",
+      "what": "The setup checks run to the end.",
+      "how": "Fails only when the setup phase itself could not complete."
+    }
+  ]
+}

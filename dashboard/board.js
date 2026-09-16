@@ -311,7 +311,7 @@ import {
   isRestoreOpen,
 } from "./panels/restore.js";
 import { renderCurve, setCurveMetric, setCurveTab, curveTab } from "./panels/curve.js";
-import { renderWall } from "./panels/wall.js";
+import { clearGatePin, renderWall, setGateHover, toggleGatePin } from "./panels/wall.js";
 import { renderLedger, toggleBaselineRow } from "./panels/ledger.js";
 import {
   renderLive,
@@ -485,6 +485,9 @@ export { render };
 // module importable everywhere else, which is what the guard already claimed.
 function bindInteraction() {
   document.addEventListener("click", onClick);
+  // The gate card follows the pointer and keyboard focus over the wall.
+  document.addEventListener("mouseover", onGateHover);
+  document.addEventListener("focusin", onGateHover);
   // A resized window changes the card's width and therefore the font size that
   // makes 130 columns fit. The poll would correct it within half a second
   // anyway; this makes the drag itself smooth rather than steppy.
@@ -503,8 +506,13 @@ function bindInteraction() {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-pop-toggle],[data-pop-view],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick]");
+  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-pop-toggle],[data-pop-view],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick]");
   if (!t) return;
+
+  if (t.dataset.gateId) {
+    if (toggleGatePin(t.dataset.gateId, t.getBoundingClientRect())) render();
+    return;
+  }
 
   if (t.dataset.metric) { setCurveMetric(t.dataset.metric); render(); return; }
   // Selecting or leaving TUI MIRROR changes what this client is subscribed to,
@@ -811,8 +819,20 @@ function onRunSel(e) {
   if (e.target.closest("[data-create-provider]")) { setCreateProvider(e.target.value); render(); }
 }
 
+function onGateHover(e) {
+  const cell = e.target?.closest?.("[data-gate-id]");
+  const overCard = e.target?.closest?.(".gcard");
+  if (overCard) return;
+  const redraw = cell
+    ? setGateHover(cell.dataset.gateId, cell.getBoundingClientRect())
+    : setGateHover(null, null);
+  if (redraw) render();
+}
+
 function onKeydown(e) {
   if (e.key !== "Escape") return;
+  // A pinned gate card is the smallest thing on screen that escape can close.
+  if (clearGatePin()) { render(); return; }
   // ── THE ORDER MIRRORS THE STACK IN overlay.js ────────────────────────────
   //
   // Escape dismisses what the operator is actually LOOKING AT, so this list has
