@@ -63,7 +63,12 @@ task/**/.last-run.json
 .okp/
 
 # Local orchestration docs (never committed)
-AGENTS.md
+# The repo's OWN agent instructions, root only. A bare `AGENTS.md` here also
+# swallowed every challenge's seeded notes (task/*/prompts/AGENTS.md), which
+# exist on disk and never reached the repo — a fresh clone had a challenge with
+# no notes for the model.
+/AGENTS.md
+!**/prompts/AGENTS.md
 
 # Local bench env
 .env

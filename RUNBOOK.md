@@ -1203,7 +1203,7 @@ latency) are unanswerable from OFF runs — and even ON-cell telemetry is lost w
 `worktree/.okp/state/funnel-snapshot.json` on ON cells, from the dedicated blind mount
 (`<cell>/extraction-state/funnel-snapshot.json`, container `/okp-state`) on OFF cells — plus
 `.okp/logs/okp-plugin-errors.log` host-side into
-`data/cells/<unix_ts>-<run_label>/` (`_export_cell_telemetry`, `harness/adapters/backgammon.py`).
+`data/cells/<unix_ts>-<run_label>/` (`_export_cell_telemetry`, `harness/adapters/challenge.py`).
 It runs for **BOTH arms** — an OFF cell is the baseline the ON arm is measured against, so exporting
 only on injection-record cells would rebuild the blind spot this sink exists to close. Fail-open by
 contract: a missing surface is a silent no-op and an unwritable sink is logged and swallowed, so
@@ -1649,7 +1649,7 @@ fast-iteration tool, not a data point.
 
 At the attempt-1 grade boundary every baseline run captures its whole worktree
 into `runs/snapshots/<id>/{tree/,snapshot.json}` (`capture_snapshot`,
-`harness/snapshot.py`; boundary at `harness/adapters/backgammon.py:3079-3080`).
+`harness/snapshot.py`; boundary at `harness/adapters/challenge.py:3079-3080`).
 Capture can never fail the run: on failure it writes no `snapshot.json` (so the
 snapshot is structurally ineligible) and emits a `notice`. Excluded: `.git/`,
 `.okp/`, `AGENTS.md`, `opencode.json`, `test-results/`; `test/*.cjs` are included

@@ -132,7 +132,7 @@ export async function runConformancePhase() {
   // `failedGates` still carries the `conformance:REQ-*` strings, and that is
   // deliberate: they are what `problems` is keyed on, and the repair prompt
   // resolves its per-check feedback lines through those keys
-  // (`_CONF_KEY_RE` in adapters/backgammon.py). One finding is now one gate, so
+  // (`_CONF_KEY_RE` in adapters/challenge.py). One finding is now one gate, so
   // the count here and the count on the wall agree.
   // A stalled phase is a freeze the player sees. Same rule as the backend
   // files: the infra check stays for the artifacts, this is what reaches the

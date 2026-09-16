@@ -7,7 +7,7 @@ runs/<tree>/<...campaign...>/memory<ARM>/cell-<seq>/live.jsonl
 ```
 
 **One stream per CELL, beside that cell's own artifacts** — the harness opens it
-in `BackgammonRunner.run_cell` via `LiveStream.for_run(run_dir)`, where
+in `ChallengeRunner.run_cell` via `LiveStream.for_run(run_dir)`, where
 `run_dir` is the cell directory. This file said `runs/<run-id>/live.jsonl` until
 2026-08-29, and both dashboard readers believed it: they joined the filename
 onto the CAMPAIGN directory (the one holding `manifest.json`, one level above

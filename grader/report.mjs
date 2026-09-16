@@ -154,7 +154,7 @@ export function announceGateSet(phase) {
  * Announce a phase, then run its one command.
  *
  * `[report] phase=<name> …` IS A WIRE FORMAT. The python adapter
- * (`harness/adapters/backgammon.py`) parses these lines out of stderr and
+ * (`harness/adapters/challenge.py`) parses these lines out of stderr and
  * turns them into the board's live `gate-phase-start` / `gate-phase-end`
  * events: a line WITHOUT `status=` opens the phase, one WITH it closes it.
  * A second opener for the same phase would tell the board a new phase had
