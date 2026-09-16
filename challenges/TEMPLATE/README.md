@@ -25,6 +25,7 @@ this; everything below exists there in finished form.
 | `repair/opener.md` | Opens every repair message: how you checked, so the model cannot blame a stale page. |
 | `repair/first-round.md` | Heading for the first list of problems. |
 | `repair/repeat-round.md` | Heading when problems are still there after a fix attempt. |
+| `repair/no-change.md` | Put first when the model's last round changed no code at all. |
 | `repair/fixed-one.md` / `fixed-many.md` | Opens the list of problems that are now gone. |
 | `repair/team-header.md` / `team-note.md` | Optional second voice, for checks a different kind of user would hit. |
 | `nudges/write-limit.md` | The write-size limit, written once and reused. |

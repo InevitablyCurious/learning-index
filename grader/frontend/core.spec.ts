@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { expect, test } from "./fixtures.ts";
+import { expect, playerClick, test } from "./fixtures.ts";
 
 type Player = "white" | "black";
 type Difficulty = "easy" | "medium" | "hard";
@@ -43,7 +43,7 @@ async function clickTopWhiteChecker(page: Page, from: number): Promise<boolean> 
   );
   const count = await checker.count();
   if (count === 0) return false;
-  await checker.nth(count - 1).click();
+  await playerClick(checker.nth(count - 1));
   return true;
 }
 

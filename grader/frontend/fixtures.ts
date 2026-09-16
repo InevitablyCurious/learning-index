@@ -30,7 +30,7 @@
 // every worker at worker 0's server. It is overridden per worker instead.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { test as base, expect } from "@playwright/test";
+import { test as base, expect, type Locator } from "@playwright/test";
 
 import { BASE_URL, PORT, startServer, stopServer, type ServerHandle } from "../lib/harness.ts";
 
@@ -58,3 +58,34 @@ export const test = base.extend<{}, { gameServer: ServerHandle }>({
 });
 
 export { expect, PORT, BASE_URL };
+
+// ── CLICK WHERE A PLAYER CLICKS ─────────────────────────────────────────────
+//
+// `locator.click()` insists that the element ITSELF receives the click, and
+// times out when it does not. A player's mouse has no such rule: it lands on
+// whatever is drawn on top at that spot. Run 1789564423's page set
+// `pointer-events: none` on its checkers and handled the click on the point
+// underneath — playable by hand, and four gates (F03, F04, F10, F14) timed out
+// on the click alone. The checker must still be on screen; what receives the
+// click is the page's own business.
+export async function playerClick(target: Locator): Promise<void> {
+  await expect(target).toBeVisible();
+  // Pages redraw checkers by replacing their elements, so an element found a
+  // moment ago can be gone by the time it is measured. Each try looks it up
+  // afresh; the position is read in the page, in the same coordinates the
+  // mouse uses.
+  let box: { x: number; y: number; width: number; height: number } | null = null;
+  for (let tries = 0; tries < 20 && !box; tries++) {
+    try {
+      box = await target.evaluate((el) => {
+        el.scrollIntoView({ block: "center", inline: "center" });
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }, undefined, { timeout: 1000 });
+    } catch {
+      await target.page().waitForTimeout(100);
+    }
+  }
+  if (!box) throw new Error("the element never held still on screen long enough to click");
+  await target.page().mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+}

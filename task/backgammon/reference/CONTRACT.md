@@ -321,7 +321,7 @@ displays the owner: wording for the human/white (e.g. "you"/"your"/"white"), for
 - **`REQ-AISTRENGTH`** — `difficulty` selects strength; over repeated self-play, **hard wins more
   games than easy**.
 - **`REQ-NEWGAME`** — win / gammon / backgammon end the game with a banner (the win message contains
-  "You win" when the human wins; a modal, if used, is titled with "Win") and allow a new game
+  "You win" when the human wins; a modal, if used, has "win" in its title, in any capitals) and allow a new game
   **without a page reload** (which resets to the standard opening position).
 - **`REQ-COMPACT`** — the board is compact (no horizontal overflow) at 1280×800 and 1440×900.
 - **`REQ-ANIM`** — checker movement, dice, and hints are visibly animated. Acceptance contract

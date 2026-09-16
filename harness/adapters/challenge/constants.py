@@ -421,6 +421,14 @@ _FEEDBACK_HEADER_REPEAT = _PACK.text("repair/repeat-round.md")
 _FIXED_OPENER_ONE = _PACK.text("repair/fixed-one.md")
 _FIXED_OPENER_MANY = _PACK.text("repair/fixed-many.md")
 
+# ── A ROUND THAT CHANGED NOTHING ────────────────────────────────────────────
+#
+# Runs 1789536879 and 1789564423 each had repair rounds whose code was
+# byte-identical to the round before (same state hash), and the model answered
+# the unchanged list with "hard-refresh your browser". The player can see that
+# nothing moved; saying so is a fact about the round, not a hint about any check.
+_NO_CHANGE_NOTE = _PACK.text("repair/no-change.md")
+
 
 # WO-ERRDATA-C1: the max per-error-type total allowed per benchmark before
 # fast-fail abort — the 21st instance of any one type aborts the run.

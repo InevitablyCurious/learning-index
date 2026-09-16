@@ -187,7 +187,7 @@
     "F12": {
       "name": "Win banner and new game",
       "what": "A win ends the game with a banner, and a new game starts without reloading the page.",
-      "how": "Sets a won position with the message \"You win!\": the message must show it, and if a modal is open its title must say Win. Clicking New game must redraw the standard opening layout, hide the modal, and not reload the page."
+      "how": "Sets a won position with the message \"You win!\": the message must show it, and if a modal is open its title must say win (any capitals). Clicking New game must redraw the standard opening layout, hide the modal, and not reload the page."
     },
     "F13": {
       "name": "Fits the window",

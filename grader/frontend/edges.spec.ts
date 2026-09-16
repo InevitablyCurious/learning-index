@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, test } from "./fixtures.ts";
+import { expect, playerClick, test } from "./fixtures.ts";
 import { checkerAnimates, hintAnimates } from "../lib/acceptance.ts";
 import { BASE_URL } from "../lib/harness.ts";
 
@@ -120,7 +120,7 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
     '[data-testid="checker"][data-color="white"][data-loc="bar"]',
   );
   await expect(whiteBarChecker).toHaveCount(1);
-  await whiteBarChecker.click();
+  await playerClick(whiteBarChecker);
 
   const hints = page.locator('[data-testid="hint"]');
   await expect(hints).toHaveCount(2);
@@ -197,7 +197,8 @@ test("[F12] REQ-NEWGAME — win state + new game without reload", async ({ page 
     (el) => !el.classList.contains("hidden"),
   );
   if (modalVisible) {
-    await expect(page.locator('[data-testid="modalTitle"]')).toContainText("Win");
+    // Capitals are not the player's concern: "You win!" says it as well as "Win".
+    await expect(page.locator('[data-testid="modalTitle"]')).toContainText(/win/i);
   }
 
   await page.evaluate(() => {
@@ -308,7 +309,7 @@ test("[F14] REQ-ANIM — animation present", async ({ page }) => {
     '[data-testid="checker"][data-color="white"][data-loc="bar"]',
   );
   await expect(whiteBarChecker).toHaveCount(1);
-  await whiteBarChecker.click();
+  await playerClick(whiteBarChecker);
 
   const hint = page.locator('[data-testid="hint"]').first();
   await expect(hint).toBeVisible();

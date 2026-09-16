@@ -307,6 +307,14 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
         )
 
     monkeypatch.setattr(runner, "_run_opencode_serve", _fake_opencode)
+    # The fake model edits nothing, but this test is about a model that did fix
+    # things between rounds: give each graded round its own code fingerprint so
+    # the "you didn't change any code" line (tests/test_no_change_round.py)
+    # stays out of it.
+    hashes = iter(f"hash-{n}" for n in range(100))
+    monkeypatch.setattr(
+        "harness.adapters.challenge.runner._snapshot_state_hash", lambda _worktree: next(hashes)
+    )
 
     result = runner._run_cell_impl(
         run_label="feedback-gap-pass-verdict",

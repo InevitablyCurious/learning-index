@@ -69,6 +69,7 @@ from ..mapping import write_session_mapping
 from ..transcript import write_session_transcript
 from .bootstrap import BootstrapMixin
 from .constants import (
+    _NO_CHANGE_NOTE,
     _SPEC,
     DEFAULT_ATTEMPT_HARD_CEILING,
     DEFAULT_GATE_TIMEOUT_S,
@@ -149,6 +150,15 @@ from .worker_config import bench_session_title
 # relay STREAM DEATH, and a provider outage the relay is relaying. See the
 # recovery-nudge block below.
 
+
+
+def _code_unchanged_since_last_round(attempt_reports: list[dict[str, Any]]) -> bool:
+    """True when the last two graded rounds ran against identical code."""
+    if len(attempt_reports) < 2:
+        return False
+    before = attempt_reports[-2].get("state_hash")
+    after = attempt_reports[-1].get("state_hash")
+    return before is not None and before == after
 
 class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, TransportMixin, BootstrapMixin, GradingMixin, ServeMixin, AgentRunner):
     def __init__(
@@ -1657,6 +1667,21 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 # lists what is still broken. One prompt, not two.
                 if pass_verdict:
                     feedback = f"{pass_verdict}\n\n{feedback}"
+                # A ROUND THAT CHANGED NOTHING: the graded code is byte-identical
+                # to the round before. Said first, before anything else the
+                # player reports. Unknown hashes (None) never count as unchanged,
+                # and a round where something newly passed is never called
+                # unchanged — "nothing changed" beside "that fixed it" would
+                # contradict itself (identical code can only pass differently
+                # through a flaky check, which is not the model's news).
+                code_unchanged = not pass_verdict and _code_unchanged_since_last_round(
+                    attempt_reports
+                )
+                if code_unchanged:
+                    feedback = f"{_NO_CHANGE_NOTE}\n\n{feedback}"
+                    self._progress(
+                        f"PROGRESS run_label={run_label} step=feedback-code-unchanged attempt={attempt}"
+                    )
                 self._progress(
                     f"PROGRESS run_label={run_label} step=feedback-problems-only-built attempt={attempt} "
                     f"checks={len(feedback_checks)} repeats={len(repeat_checks)}"
