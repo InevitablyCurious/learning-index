@@ -198,7 +198,6 @@ test("[F12] REQ-NEWGAME — win state + new game without reload", async ({ page 
   );
   if (modalVisible) {
     await expect(page.locator('[data-testid="modalTitle"]')).toContainText("Win");
-    await expect(page.locator('[data-testid="modalBody"]')).toContainText("win");
   }
 
   await page.evaluate(() => {

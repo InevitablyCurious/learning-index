@@ -65,8 +65,8 @@
       "repeat": "I went through it again after your fix and something still isn't behaving."
     },
     "G01": {
-      "first": "When i start a new game the board doesn't look like a real backgammon setup, the pieces are in the wrong places",
-      "repeat": "I set my own board up next to the screen to compare this time — the opening position still doesn't match."
+      "first": "When i start a new game the setup isn't how a real game starts — the pieces, the cube, or whose turn it is is off",
+      "repeat": "Fresh game again and I went over the whole table before the first roll — the starting setup still isn't right."
     },
     "G02": {
       "first": "The numbers showing how many moves are left for a player to finish the game look wrong on a fresh board",
@@ -105,20 +105,20 @@
       "repeat": "Played several more all the way to the end and the result it announces still doesn't match how the game actually finished."
     },
     "G11": {
-      "first": "The doubling cube doesn't start in the middle where it should",
-      "repeat": "On a fresh game the cube still looks misplaced to me before either of us has touched it."
+      "first": "On a fresh game the doubling cube already reads like someone doubled, or it doesn't change the way it should when we double",
+      "repeat": "Started over and checked the cube before either of us touched it, then doubled — it's still wrong somewhere along the way."
     },
     "G12": {
       "first": "The computer accepts or refuses the doubling cube at the wrong times",
       "repeat": "Offered it the cube in a few more spots and its answers still don't line up with how the game was actually going."
     },
     "G13": {
-      "first": "Sometimes the same die gets used twice in one turn",
-      "repeat": "I watched my turn closely this time and counted — one of the two numbers still got spent twice."
+      "first": "Turns don't flow right — sometimes a die gets used twice, the turn doesn't come back to me, or i'm stuck with nothing to play and the game won't move on",
+      "repeat": "I watched several turns closely: between spending the dice, handing the turn over and being stuck with no move, something still goes wrong."
     },
     "G14": {
-      "first": "The computer sometimes makes a move that isn't a legal one",
-      "repeat": "Caught it again, and I had to stop and stare at the board: the computer made a move it shouldn't have been able to make."
+      "first": "The computer's skill setting doesn't seem to change anything — the toughest level is no more of a challenge, or it makes a move it shouldn't be able to",
+      "repeat": "Switched between the levels again: the top setting still isn't any stronger, or it slips in a move that isn't allowed."
     },
     "G16": {
       "first": "When i try to open the game a second time while it's already running it just sits there and nothing happens",

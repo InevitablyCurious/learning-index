@@ -13,7 +13,7 @@ export function opponent(p: Player): Player;
 /** The standard opening arrangement as a fresh points[] array. */
 export function startingPoints(): number[];
 
-/** A fresh GameState for a new game at the given difficulty (white to move, phase "roll", centered cube, empty bar and off). */
+/** A fresh GameState for a new game at the given difficulty (white to move, phase "roll", cube `{value: 1, owner: null}`, empty bar and off). */
 export function createGame(difficulty: GameState["difficulty"]): GameState;
 
 /** True when ALL of `player`'s checkers are in that player's home quadrant. */

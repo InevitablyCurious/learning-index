@@ -244,7 +244,7 @@ def test_legacy_checks_kwarg_still_works() -> None:
     text = ChallengeRunner._build_feedback_prompt(
         checks=["[G01] REQ-INIT — initial position"]
     )
-    assert "1) When i start a new game the board doesn't look like" in text
+    assert "1) When i start a new game the setup isn't how a real game starts" in text
 
 
 # ── harness-infra check names are not gates ──────────────────────────────────

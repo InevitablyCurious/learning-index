@@ -14,7 +14,7 @@ What the game should feel like to play:
 - The board fits the window with no sideways scrolling on ordinary laptop screens (1280×800 and 1440×900).
 - Winning ends the game with a banner, and you can start a new game without reloading the page.
 
-Wording the page uses: a hint's visible text is the die value it would use, or "off" for bearing off. The cube owner reads as the human ("you", "your" or "white"), the AI ("ai", "opponent" or "black"), or centered ("center", "centered" or "centre") when nobody owns it. The win banner says "You win" when the human wins; if you show an end-of-game modal, its title contains "Win" and it is shown by toggling the `hidden` class off `modalOverlay`.
+Wording the page uses: `pipWhite` and `pipBlack` contain just the number (e.g. `167`), with any label outside those elements; a hint's visible text is the die value it would use, or "off" for bearing off. The cube owner reads as the human ("you", "your" or "white"), the AI ("ai", "opponent" or "black"), or centered ("center", "centered" or "centre") when nobody owns it. The win banner says "You win" when the human wins; if you show an end-of-game modal, its title contains "Win" and it is shown by toggling the `hidden` class off `modalOverlay`.
 
 Required `data-testid` hooks (EXACT — the UI automation selects on these; static elements keep their existing `id` and ALSO carry a `data-testid` with the same string):
 

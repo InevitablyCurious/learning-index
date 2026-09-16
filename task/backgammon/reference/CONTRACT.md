@@ -307,7 +307,7 @@ displays the owner: wording for the human/white (e.g. "you"/"your"/"white"), for
 "ai"/"opponent"/"black"), or centered when unowned (e.g. "center"/"centered"/"centre").
 
 ### Pip display — `REQ-PIPUI`
-`pipWhite` / `pipBlack` show integer pip counts equal to the engine's `pip.white` / `pip.black`.
+`pipWhite` / `pipBlack` contain just the integer pip counts (no label inside the element), equal to the engine's `pip.white` / `pip.black`.
 
 ## 6. Behavioural / gameplay requirements (published)
 
