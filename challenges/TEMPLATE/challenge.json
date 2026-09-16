@@ -1,0 +1,13 @@
+{
+  "name": "your-challenge",
+  "run_label": "your-challenge-cumulative-primary",
+  "summary": "<one sentence: what the model is asked to build>",
+  "language": "typescript",
+  "stack": ["node", "typescript"],
+  "app_port": 8002,
+  "grader_dir": "grader",
+  "grader_phases": ["conformance", "backend", "frontend"],
+  "test_commands": ["npm test"],
+  "stub_sentinel": "throw new Error(\"not implemented\")",
+  "chunk_stub_files": { "2": "src/example.ts" }
+}

@@ -69,6 +69,7 @@ from ..mapping import write_session_mapping
 from ..transcript import write_session_transcript
 from .bootstrap import BootstrapMixin
 from .constants import (
+    _SPEC,
     DEFAULT_ATTEMPT_HARD_CEILING,
     DEFAULT_GATE_TIMEOUT_S,
     DEFAULT_RUN_TIMEOUT_S,
@@ -402,11 +403,13 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
 
     def build_need_card(self, task_id: str) -> NeedCard:
         intent = "debug" if "debug" in task_id.lower() else "build"
+        # The challenge says what it is; the adapter only says what kind of
+        # work this cell is doing.
         return NeedCard(
             intent=intent,
-            task="build a complete playable backgammon game with Node + TypeScript and backend APIs",
-            language="typescript",
-            stack=["backgammon", "node", "typescript"],
+            task=_SPEC.summary,
+            language=_SPEC.language,
+            stack=list(_SPEC.stack),
         )
 
     def _capture_attempt_one_snapshot(

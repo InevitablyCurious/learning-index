@@ -8,8 +8,9 @@ this; everything below exists there in finished form.
 
 ## What you provide
 
-| Folder | What it is |
+| File / folder | What it is |
 |---|---|
+| `challenge.json` | What your challenge declares about itself: its name, the sentence describing it, the language and stack, the port the app answers on, where the grading suite is, its phases, the test commands to count, and which build step fills in which stub file. The benchmark reads this instead of assuming the example's values. |
 | `prompts/` | Every word the model reads. See below. |
 | `scaffold/` | The folder the model starts in — the stubs, the start command, nothing else. Copied into the cell at the start of every run. |
 | `golden/` | Your own working solution. It is never given to the model; it proves the challenge is buildable and keeps the grading suite honest. |
@@ -52,9 +53,9 @@ The benchmark needs three things from your suite:
 The example's suite lives in the benchmark repo (`grader/`) and its sentences in
 `grader/feedback.json`.
 
-## Not yet
+## Still to come
 
-The benchmark still resolves some of this by convention rather than from a
-manifest in this folder, and its adapter is still named after the example
-challenge. Both are being worked on; when they land, this README gains the
-manifest and loses the caveat.
+The example's grading suite lives in the benchmark repo (`grader/`) rather than
+in its own folder, and its `grader_dir` points there. A challenge of your own
+keeps its suite inside itself, which is what the `grader_dir` default in this
+template does.

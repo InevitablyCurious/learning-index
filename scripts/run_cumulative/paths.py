@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 from harness import config
+from harness.challenge_spec import default_spec
 
 # The original module derived the repo root as ``Path(__file__).resolve().parents[1]``
 # (scripts/run_cumulative.py -> repo root). From inside the package the same
@@ -29,7 +30,9 @@ DEFAULT_ORG_ID = "okp-org-0"
 DEFAULT_PROXY_RUNS_DIR = Path(
     os.environ.get("OKP_PROXY_RUNS_DIR", str(Path.home() / ".okp" / "proxy-runs"))
 )
-DEFAULT_TASK_LABEL = "backgammon-cumulative-primary"
+# The challenge names its own campaign; the example calls itself
+# backgammon-cumulative-primary (task/backgammon/challenge.json).
+DEFAULT_TASK_LABEL = default_spec().run_label
 # Gate enumeration shells out to `vitest list` + `playwright --list` twice. Cold,
 # that is tens of seconds; the bound exists so a wedged enumerator can never
 # hold a campaign's first cell hostage — it is instrumentation, not grading.

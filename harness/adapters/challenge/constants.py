@@ -11,12 +11,17 @@ grading/pricing leaves -- a later stage).
 import os
 from pathlib import Path
 
+from harness.challenge_spec import default_spec
 from harness.prompt_pack import default_pack
 
 # EVERY MODEL-FACING WORD BELOW IS LOADED, NOT WRITTEN HERE. The text lives in
 # the challenge's own prompts directory (harness/prompt_pack.py says why); the
 # names stay so every call site and test keeps reading one constant.
 _PACK = default_pack()
+
+# The challenge's own declared facts — grading suite, phases, port, stub
+# marker. See harness/challenge_spec.py for why these are not written here.
+_SPEC = default_spec()
 
 
 # ── BUILD-CHUNK COMPLETION: OPERATOR TELEMETRY, NEVER A GATE ────────────────
@@ -33,11 +38,11 @@ _PACK = default_pack()
 # the file it owns still holds its scaffold stubs did not do its work, so the
 # FILE is reported beside the outcome — `state: complete` next to
 # `stubs_remaining: 5` is a visible discrepancy rather than a silent one.
-_STUB_SENTINEL = 'throw new Error("not implemented")'
+_STUB_SENTINEL = _SPEC.stub_sentinel
 # Chunk -> the scaffold file that chunk is responsible for emptying of stubs.
 # Chunks 1, 5 and 6 own no stub file: 1 is structure/types, 5 is the frontend
 # (whose scaffold carries no sentinels), 6 is a verification pass.
-_CHUNK_STUB_FILE = {2: "src/game.ts", 3: "src/ai.ts", 4: "src/server.ts"}
+_CHUNK_STUB_FILE = _SPEC.chunk_stub_files
 
 
 # THE REPO ROOT — the one place this package counts folders up from itself.
@@ -54,7 +59,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 # from here, so they cannot drift apart again. The restructure moved them out
 # of task/backgammon/gates/ into grader/, and four call sites kept looking in
 # the old place.
-_GRADER_DIR = _REPO_ROOT / "grader"
+_GRADER_DIR = _SPEC.grader_dir
 
 
 _RESERVATION_SAFETY_FACTOR = 1.10
@@ -97,7 +102,7 @@ _REASONING_EFFORT_ENV = "BENCH_REASONING_EFFORT"
 # proceeds through the normal unconditional path (RC-6 is preserved — the hold
 # sits INSIDE the cell context, so every abort/interrupt still tears down).
 _HOLD_UI_ENV = "BENCH_HOLD_UI"
-_HOLD_UI_PORT = 8002
+_HOLD_UI_PORT = _SPEC.app_port
 _HOLD_UI_RELEASE_FILE = "RELEASE_HOLD"
 _HOLD_UI_STATE_FILE = "hold-ui.json"
 _HOLD_UI_SERVER_LOG = "hold-ui-server.log"

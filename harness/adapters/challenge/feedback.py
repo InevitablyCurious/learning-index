@@ -41,6 +41,7 @@ from .constants import (
     _FIXED_OPENER_MANY,
     _FIXED_OPENER_ONE,
     _GRADER_DIR,
+    _SPEC,
     _PASS_VERDICT_MAX_LISTED,
     _STUB_SENTINEL,
     _TEAM_EXCUSE_ELIMINATOR,
@@ -118,7 +119,7 @@ def gate_tokens_in_suite(gates_dir: Path) -> set[str]:
     """
     pattern = re.compile(r'["\'`]\s*\[([A-Z]+[0-9]*)\]')
     found: set[str] = set()
-    for directory in ("backend", "conformance", "frontend"):
+    for directory in _SPEC.grader_phases:
         root = gates_dir / directory
         if not root.is_dir():
             continue

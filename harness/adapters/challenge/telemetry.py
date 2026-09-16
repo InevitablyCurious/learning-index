@@ -32,7 +32,7 @@ import time
 
 from harness.outcomes.predicate_emitter import walk_manifest
 
-from .constants import _REPO_ROOT
+from .constants import _SPEC, _REPO_ROOT
 from .models import RecallFunnelScan
 
 _LOG = logging.getLogger(__name__)
@@ -216,15 +216,7 @@ def _scan_funnel_snapshot(worktree: Path) -> dict[str, dict[str, int | None]] | 
 # Gate runner = `node report.mjs` (grader/). Worker-invoked
 # test commands are observed via bash tool_use events. test_invocations counts
 # bash tool_use events whose command contains any declared string.
-DECLARED_TEST_COMMANDS: tuple[str, ...] = (
-    "node report.mjs",
-    "npx vitest",
-    "npx playwright",
-    "npm test",
-    "npm run test",
-    "vitest",
-    "playwright test",
-)
+DECLARED_TEST_COMMANDS: tuple[str, ...] = _SPEC.test_commands
 
 
 class TelemetryMixin:
