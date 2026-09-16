@@ -2,10 +2,9 @@ GOAL: We are building a fully functional backgammon game in Node + TypeScript th
 
 TASK: Implement the HTTP server and the full game API in `src/server.ts`, wiring the engine and AI into a playable backend.
 
-Binding requirements:
+Binding (as in chunk 1): listen on `PORT`, or **8002** when it is unset; print a startup line with the URL; if the port is taken, exit non-zero after a clear single-line message that names the port and says it is already in use.
 
-- The server MUST listen on `PORT` from the environment, and on **8002** when `PORT` is not set (`const PORT = Number(process.env.PORT ?? 8002)`, already in the stub). If that port is already in use, exit non-zero after printing a clear, single-line message that names the port and says it is already in use — never hang, never silently swap ports. On boot, print a startup line containing the URL.
-- All game routes accept `POST` with a JSON body (empty `{}` allowed) and respond `200 application/json` with the **full serialized state** (schema below). Unknown `/api/*` → `404 {"error":"unknown endpoint"}`. Static files are served from `public/` for all other paths.
+All game routes accept `POST` with a JSON body (empty `{}` allowed) and respond `200 application/json` with the full serialized state (below). Unknown `/api/*` → `404 {"error":"unknown endpoint"}`. Static files are served from `public/` for all other paths.
 
 The API surface (EXACT):
 
@@ -22,19 +21,7 @@ The API surface (EXACT):
 | POST | `/api/ai` | — | Advance one AI step. |
 | GET | `/health` | — | `200 {"status":"ok","port":8002}` (liveness; always available). |
 
-Doubling-cube state machine (REQ-CUBE-STATE):
-
-- A new game's cube is `{value:1, owner:null}` (centered). `canDouble` is `true` only when it is the player's turn in the `"roll"` phase (before rolling) and the player may double (cube centered or owned by that player). During `"move"` phase `canDouble` is `false`.
-- When a double is offered and accepted, the cube value doubles and its owner becomes the player who accepted (the taker) — e.g. human (white) offers, AI (black) accepts → `{value:2, owner:"black"}`.
-
-Debug seam (REQ-DEBUG) — gated by env `DEBUG_API=1`; when `DEBUG_API` is not `1` these routes MUST behave as unknown endpoints (404):
-
-| Method | Path | Body | Effect |
-|---|---|---|---|
-| POST | `/api/debug/state` | a full/partial state object (field names per the schema below) | Overwrite the in-memory game with the supplied fields. Returns the resulting serialized state. |
-| POST | `/api/debug/roll` | `{dice:number[]}` | Enqueue `dice` as the next roll; the next dice-roll consumes this queue instead of `Math.random`. Doubles are a 4-length array (e.g. `[3,3,3,3]`). A subsequent `/api/roll` yields those dice (sorted ascending in `dice`). Returns serialized state. |
-
-Serialized state schema (REQ-STATE) — every game-route response carries exactly these top-level keys (plus any route-specific `extra` fields spread in):
+Serialized state — every game-route response carries exactly these top-level keys (plus any route-specific `extra` fields spread in):
 
 ```
 points, bar, off, turn, phase, dice, remainingDice, cube, difficulty, score,
@@ -42,11 +29,20 @@ winner, winType, pointsWon, doubleOfferedBy, message, turnOver, gamesPlayed,
 pip, legalMoves, canDouble
 ```
 
-- `pip`: `{ white: number, black: number }` — both players' pip counts from the engine (REQ-PIP).
+- `pip`: `{ white: number, black: number }` — both players' pip counts from the engine.
 - `legalMoves`: `Move[]` — the human's legal moves right now (`[]` unless it is the human's move phase).
-- `canDouble`: boolean, per the cube state machine above.
+- `canDouble`: boolean — whether the human may offer a double at this moment.
 - `history` is NOT serialized.
 
-Turn flow the server must drive: doubles yield 4 moves; dice are consumed as used; when the human has no legal move the turn auto-passes (`turnOver === true`, `legalMoves === []`, `message` mentions "no legal move"/"pass"); after the human turn ends, `/api/ai` advances the AI using `chooseMoves`; win/gammon/backgammon ends the game with `winner`, `winType`, `pointsWon` (cube value × win multiplier) and a clear `message`; `/api/new` starts a fresh game without any reload and keeps `score`/`gamesPlayed`.
+Turn flow the server drives: dice are consumed as they are played; when the human has no legal move the turn passes, with `turnOver === true`, `legalMoves === []` and a `message` that says there is no legal move (wording containing "no legal move" or "pass"); after the human turn ends, `/api/ai` advances the AI with `chooseMoves`; a win ends the game with `winner`, `winType` and `pointsWon` (cube value × win multiplier) and a clear `message`; `/api/new` starts a fresh game without any reload and keeps `score` and `gamesPlayed`.
+
+Debug seam — gated by env `DEBUG_API=1`; when `DEBUG_API` is not `1` these routes behave as unknown endpoints (404). It exists so a game can be driven into a known position with known dice:
+
+| Method | Path | Body | Effect |
+|---|---|---|---|
+| POST | `/api/debug/state` | a full/partial state object (field names as above) | Overwrite the in-memory game with the supplied fields. The response is the resulting serialized state, and it echoes the supplied fields back — a position set this way reads back the same through `/api/state`. |
+| POST | `/api/debug/roll` | `{dice:number[]}` | Enqueue `dice` as the next roll; the next dice-roll consumes this queue instead of `Math.random`. Doubles are a 4-length array (e.g. `[3,3,3,3]`); a normal roll is 2-length. A subsequent `/api/roll` yields those dice, sorted ascending in `dice`. Returns serialized state. |
+
+A position supplied to `/api/debug/state` is a real backgammon position — exactly 15 checkers per side across points, bar and off.
 
 **Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.

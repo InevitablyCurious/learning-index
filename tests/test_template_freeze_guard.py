@@ -34,6 +34,8 @@ import run_cumulative  # noqa: E402
 
 MODULE = run_cumulative
 
+# Re-frozen 2026-09-15: CONTRACT.md moved out of the scaffold to
+# task/backgammon/reference/ — the model is given the six build prompts only.
 # Re-frozen 2026-09-10 (WO-CONTRACT-CHUNK-12: REQ-INIT's literal opening array,
 # REQ-PIP's "167", and REQ-WINCLASS's boundary cut from the published surface —
 # derivable from the retained board convention, so they were transcription, not
@@ -46,7 +48,7 @@ MODULE = run_cumulative
 #        (2026-09-10, WO-PORT-ASSIGNABLE)
 # Prior: e0a14bdba4294caa42cab090dfc0edfba79ad399e331e95a705df71b678b001c
 #        (2026-09-07, frontend origin seam / REQ-SAME-ORIGIN)
-FROZEN = "e1628129a751556e43cd5e700b3ebcec969af14f9797ded5cf77cd5f0dd94f29"
+FROZEN = "d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LIVE_SCAFFOLD = REPO_ROOT / "task" / "backgammon" / "scaffold"
 

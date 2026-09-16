@@ -2,21 +2,19 @@ GOAL: We are building a fully functional backgammon game in Node + TypeScript th
 
 TASK: Build the frontend in `public/index.html`, `public/style.css`, and `public/app.js` — a compact, animated, fully playable board UI driven by the API.
 
-Requirements:
+Render everything from the serialized state: checkers on points, bar and off, dice, cube, pip counts, score, turn indicator, messages. Call the API with root-relative paths (`fetch('/api/state', …)`) so the page works whichever host name it was loaded from.
 
-- **Standard board orientation**, 24 points, white moving high→low toward home 1..6. Keep the viewport **compact** — no horizontal overflow at 1280×800 and 1440×900.
-- Render from the serialized state: checkers on points/bar/off, dice, cube, pip counts, score, turn indicator, messages.
-- **Talk to the API on the page's own origin.** Every request the page makes MUST use a root-relative
-  path — `fetch('/api/state', …)` — never an absolute base such as `http://127.0.0.1:8002/api/state`.
-  An absolute base pins the page to one host name, so it works when the user reaches it by that name
-  and silently fails at every other (`localhost` and `127.0.0.1` are different names to a browser,
-  even though they are the same machine). A relative path always follows whatever address the user
-  actually loaded the page from, which is the only thing that works everywhere.
-- **Move interaction:** clicking a movable checker shows legal destinations as hints; each hint shows the die value (or "off" for bear-off); clicking a hint executes that move and consumes that die. Selecting a bar checker with two playable entry dice shows two hints, one per die. When the player has no legal move, show a clear no-legal-move / pass notice.
-- **Pip counts:** display both players' integer pip counts, matching the API's `pip.white` / `pip.black`.
-- **Doubling cube UI:** show the cube's integer value and its owner (human / AI / centered), a working double button, and a way to answer an AI-offered double.
-- **Animation:** each checker element animates position changes via a CSS `transition` whose `transition-property` includes `transform` (or `all`) with a non-zero duration, OR via a CSS `animation` (non-`none` name, non-zero duration); each move-hint element uses a CSS `animation` (non-`none` name, non-zero duration). Dice visibly roll.
-- **Win flow:** win / gammon / backgammon end the game with a banner (the win message contains "You win" when the human wins; a modal, if used, is titled with "Win") and allow starting a new game WITHOUT a page reload.
+What the game should feel like to play:
+
+- Clicking one of your checkers shows you where it can go, and clicking one of those destinations plays that move.
+- Checkers slide between points rather than jumping; dice visibly roll; hints catch the eye. Animate with CSS transitions and CSS animations — each checker animates position changes through a `transition` covering `transform` (or `all`) with a non-zero duration, or through a CSS `animation`; each hint uses a CSS `animation`.
+- Hitting sends the opponent's checker to the bar, and you can see it land there; a checker re-entering from the bar travels back onto the board; a checker borne off appears in the off tray.
+- Pip counts, cube value, cube owner, score and whose turn it is are all on screen and match the API.
+- When you have no legal move, the page says so plainly.
+- The board fits the window with no sideways scrolling on ordinary laptop screens (1280×800 and 1440×900).
+- Winning ends the game with a banner, and you can start a new game without reloading the page.
+
+Wording the page uses: a hint's visible text is the die value it would use, or "off" for bearing off. The cube owner reads as the human ("you", "your" or "white"), the AI ("ai", "opponent" or "black"), or centered ("center", "centered" or "centre") when nobody owns it. The win banner says "You win" when the human wins; if you show an end-of-game modal, its title contains "Win" and it is shown by toggling the `hidden` class off `modalOverlay`.
 
 Required `data-testid` hooks (EXACT — the UI automation selects on these; static elements keep their existing `id` and ALSO carry a `data-testid` with the same string):
 
@@ -26,12 +24,9 @@ Required `data-testid` hooks (EXACT — the UI automation selects on these; stat
 
 - Each board point: `data-testid="point"` and `data-point="<1..24>"` — exactly 24 points.
 - Each checker: `data-testid="checker"`, `data-color="white|black"`, `data-loc="<1..24>|bar|off"` — exactly 30 checkers (15 per colour), positioned at their board/bar/off location.
-- Each move hint: `data-testid="hint"` (visible text = the die value(s), or `"off"` for bear-off).
+- Each move hint: `data-testid="hint"`.
 - Each die: `data-testid="die"` (classes `used` / `rolling` convey state).
 - The bar column: `data-testid="bar"`.
 - The off tray: `data-testid="off-tray"`, with halves `data-testid="off-ai"` and `data-testid="off-you"`.
-- The end-of-game modal is shown by toggling the `hidden` class off `modalOverlay`.
-- `cubeVal` displays the cube integer; `cubeOwner` displays owner wording ("you"/"white" for the human, "ai"/"black" for the AI, "center"/"centered" when unowned).
-- `pipWhite` / `pipBlack` show integer pip counts equal to the API's `pip.white` / `pip.black`.
 
 **Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.

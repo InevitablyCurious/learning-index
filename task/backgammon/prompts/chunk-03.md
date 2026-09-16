@@ -12,33 +12,30 @@ type CubeDecision = { action: "double" | "no-double"; reasoning: string };
 export function evaluate(b: Board, player: Player): number;
 
 /** Choose the AI's full-turn move sequence for the given `dice` at `difficulty`, returning the
- *  chosen moves and resulting board. Every returned move MUST be legal (REQ-AILEGAL). Difficulty
- *  selects strength (REQ-AISTRENGTH: hard is stronger than easy). */
+ *  chosen moves and resulting board. */
 export function chooseMoves(b: Board, player: Player, dice: number[], difficulty: "easy" | "medium" | "hard"): AiMoveResult;
 
-/** Estimate `player`'s probability of winning from board `b`, in [0,1]. See REQ-WINPROB:
- *  ≈0.5 at equal pip counts, monotonically increasing in the player's pip lead, approaching its
- *  bounds at the extremes. */
+/** Estimate `player`'s probability of winning from board `b`, in [0,1]. */
 export function winProbability(b: Board, player: Player): number;
 
 /** Decide whether the AI (`player`) should OFFER a double, given the cube state and difficulty.
- *  `action:"double"` = offer, `"no-double"` = hold. See REQ-CUBE-AI. */
+ *  `action:"double"` = offer, `"no-double"` = hold. */
 export function shouldAiDouble(b: Board, player: Player, cube: { value: number; owner: Player | null }, difficulty: "easy" | "medium" | "hard"): CubeDecision;
 
 /** Decide whether the AI (`player`) should ACCEPT a double the human just offered.
- *  `action:"double"` = TAKE (accept), `"no-double"` = PASS (decline/concede). See REQ-CUBE-AI. */
+ *  `action:"double"` = TAKE (accept), `"no-double"` = PASS (decline). */
 export function shouldAiAccept(b: Board, player: Player, difficulty: "easy" | "medium" | "hard"): CubeDecision;
 ```
 
 Requirements:
 
-- **REQ-AILEGAL.** Every move the AI makes must be legal — build candidates with the engine's `legalMovesNow`/`singleMoves`, never by constructing moves directly.
-- **REQ-AISTRENGTH.** `difficulty` selects real strength: over repeated self-play, **hard wins more games than easy**. (Typical shape: easy ≈ random/legal-simple, medium ≈ one-ply `evaluate`, hard ≈ deeper search or richer evaluation — any mechanism that truly orders strength is acceptable.)
-- **REQ-WINPROB — win-probability semantics.** `winProbability(b, player) ∈ [0, 1]`, and MUST: be ≈ 0.5 (within ±0.01) at equal pip counts; be monotonically non-decreasing in the player's pip lead (`opponentPip − playerPip`); be below 0.24 for a hopelessly-behind position (e.g. opponent ~2 pips, player ~350) and above 0.90 for a nearly-certain win. Any function meeting these properties is accepted.
-- **REQ-CUBE-AI — doubling-cube policy (exact published thresholds).**
-  - **Take point** — `shouldAiAccept` returns `"double"` (TAKE) iff `winProbability ≥ take point`, else `"no-double"` (PASS). Take points: **easy 0.32, medium 0.27, hard 0.24**.
-  - **Offer window** — `shouldAiDouble` returns `"double"` (offer) iff `lower ≤ winProbability ≤ 0.90`, else `"no-double"`. Lower bound: **medium 0.72, hard 0.68**. **Easy never offers a double.** A position above 0.90 is "too good" → hold (play on for a gammon), not double.
-  - The AI only offers when it may double (cube centered or owned by the AI); it never offers when the opponent owns the cube.
+- **Difficulty is real.** `difficulty` selects genuine strength: over repeated play, hard wins more games than easy. Every move the AI makes is legal.
+- **Speed.** The AI answers promptly — choosing a move must never leave a player waiting, however many ways there are to play the dice.
+- **Win probability.** `winProbability(b, player)` returns a number in [0, 1] that is ≈ 0.5 (within ±0.01) when both players have equal pip counts, never decreases as the player's pip lead grows, sits below 0.24 for a hopelessly lost position (say, opponent ~2 pips to the player's ~350), and above 0.90 for a nearly certain win. Any function with those properties is fine.
+- **Doubling-cube policy — these are our house numbers, use them exactly.**
+  - *Accepting.* `shouldAiAccept` takes the cube (returns `"double"`) when `winProbability` is at or above the take point, and passes (`"no-double"`) below it. Take points: **easy 0.32, medium 0.27, hard 0.24**.
+  - *Offering.* `shouldAiDouble` offers (returns `"double"`) when `winProbability` is inside the offer window, else holds. Window: **medium 0.72 to 0.90, hard 0.68 to 0.90**. Above 0.90 it is too good to double — hold and play on. **Easy never offers.**
+  - The AI only offers when it may double: the cube is centered or the AI owns it, never when the opponent owns it.
   - Both cube functions return a human-readable `reasoning` string explaining the decision.
 
 **Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.

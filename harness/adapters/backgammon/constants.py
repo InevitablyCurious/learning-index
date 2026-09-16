@@ -459,7 +459,7 @@ ERROR_CAP_PER_TYPE = 20
 _WORKER_AGENTS_MD = """\
 # Notes
 
-- CONTRACT.md is the full spec. Everything you need is in this folder; stay in it.
+- Everything you need is in this folder; stay in it.
 - If a tool call is denied, accept it and find another way.
 - Keep each write or edit under ~150 lines; build big files in several passes.
 - Start servers detached: `node -e "require('node:child_process').spawn('node',['src/server.ts'],{stdio:'ignore',detached:true}).unref()"`. Stop them with `kill <pid>`.

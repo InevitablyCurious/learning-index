@@ -55,12 +55,14 @@ describe("the start command travels with its runtime flags", () => {
     const golden = JSON.parse(
       fs.readFileSync(path.join(BENCH, "task", "backgammon", "golden", "package.json"), "utf-8"),
     );
+    // The start command is published in chunk-01 (the spec file left the
+    // scaffold on 2026-09-15; the prompts are what the model is given).
     const contract = fs.readFileSync(
-      path.join(BENCH, "task", "backgammon", "scaffold", "CONTRACT.md"),
+      path.join(BENCH, "task", "backgammon", "prompts", "chunk-01.md"),
       "utf-8",
     );
     const published = /Start command[^`]*`([^`]+)`/.exec(contract);
-    expect(published, "CONTRACT.md no longer publishes a start command").toBeTruthy();
+    expect(published, "chunk-01 no longer publishes a start command").toBeTruthy();
     expect(golden.scripts.start).toBe(published![1]);
   });
 

@@ -69,6 +69,11 @@ from .paths import REPO_ROOT
 # at all. The port line was already shipped in the scaffold as working code, so
 # the model inherits the behaviour and this widens the required surface by one
 # published clause, not by any new work.
+# RE-FROZEN 2026-09-15 (spec out of the scaffold). CONTRACT.md moved to
+# task/backgammon/reference/: the model is given the six build prompts and
+# nothing else, so the spec file is no longer copied into its work folder.
+# Prior: e1628129a751556e43cd5e700b3ebcec969af14f9797ded5cf77cd5f0dd94f29
+#        (2026-09-10, WO-CONTRACT-CHUNK-12)
 # Re-frozen 2026-09-10 (WO-CONTRACT-CHUNK-12): three DERIVABLE facts were cut
 # from the published surface — REQ-INIT's literal 26-element opening array,
 # REQ-PIP's "167 each at the opening", and REQ-WINCLASS's single/gammon/
@@ -80,7 +85,7 @@ from .paths import REPO_ROOT
 # carried a human symptom line that could never fire while the answer was in
 # the prompt.
 FROZEN_TASK_TEMPLATE_HASH = (
-    "e1628129a751556e43cd5e700b3ebcec969af14f9797ded5cf77cd5f0dd94f29"
+    "d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee"
 )
 
 

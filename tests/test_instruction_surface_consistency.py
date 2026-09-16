@@ -31,7 +31,7 @@ WRONG = "BENCH_DEBUG"
 
 # Files the model reads, and files the grader runs. Both must agree.
 SOURCES = [
-    TASK / "scaffold" / "CONTRACT.md",
+    TASK / "reference" / "CONTRACT.md",
     TASK / "prompts" / "chunk-04.md",
     TASK / "prompts" / "chunk-06.md",
     TASK / "scaffold" / "src" / "server.ts",
@@ -91,10 +91,9 @@ def test_the_orphaned_sxe_candidate_pair_stays_deleted() -> None:
 # BOARD") stated the unpublished rule outright. The gate therefore measured
 # whether the model got a second attempt, not whether it could build the thing.
 #
-# AGENTS.md tells the worker CONTRACT.md "is the spec … it is complete, so you
-# should not need anything outside this folder". This test is what makes that
-# sentence true: any function a gate invokes on the candidate's modules must be
-# published in the spec the candidate is given.
+# The build prompts are the only specification the model is given. This test is
+# what keeps them sufficient: any function a gate invokes on the candidate's
+# modules must be published in those prompts.
 #
 # NOTE the deliberate narrowness. This asserts the SURFACE is published, not
 # that every assertion is published. Publishing rules is the spec's job;
@@ -130,7 +129,11 @@ def _functions_the_gates_call() -> set[str]:
 
 
 def test_every_graded_function_is_published_in_the_contract() -> None:
-    contract = (TASK / "scaffold" / "CONTRACT.md").read_text(encoding="utf-8")
+    # The published surface is the six build prompts: CONTRACT.md moved out of
+    # the scaffold on 2026-09-15 and is no longer seeded into the work folder.
+    contract = "\n".join(
+        p.read_text(encoding="utf-8") for p in sorted((TASK / "prompts").glob("chunk-*.md"))
+    )
     called = _functions_the_gates_call()
     assert called, (
         "found no candidate-module calls in the gate files — the scan is broken"
@@ -140,7 +143,7 @@ def test_every_graded_function_is_published_in_the_contract() -> None:
         fn for fn in called if f"export function {fn}(" not in contract
     )
     assert not unpublished, (
-        "these functions are graded but never published in CONTRACT.md: "
+        "these functions are graded but never published in the build prompts: "
         f"{unpublished}. A gate that calls a function the spec does not declare "
         "cannot be passed by reading the spec — it can only be passed after the "
         "repair loop names it, which measures attempt count, not capability. "

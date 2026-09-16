@@ -6,7 +6,7 @@ TASK: Establish the project structure and the shared type foundation that every 
 
 The complete file list for the product (all inside the current working directory):
 
-- `package.json` — already present; `"start": "node src/server.ts"`. Leave as is unless a script is missing.
+- `package.json` — already present; leave as is unless a script is missing.
 - `src/game.ts` — backgammon core engine, pure logic, no I/O.
 - `src/ai.ts` — AI: evaluation, move choice, win probability, doubling-cube policy.
 - `src/server.ts` — HTTP server + API, serves `public/`.
@@ -56,14 +56,18 @@ export interface GameState {
 }
 ```
 
-Board convention (applies everywhere): points numbered 1..24. **White** (the human) moves HIGH→LOW (24→1), home = 1..6, bears off past point 1. **Black** (the AI) moves LOW→HIGH (1→24), home = 19..24, bears off past 24. `points[p] > 0` = that many white checkers; `points[p] < 0` = that many black checkers (abs value).
+Board convention (applies everywhere): points numbered 1..24. **White** is the human and **black** is the AI. White moves HIGH→LOW (24→1), home = 1..6, bears off past point 1. Black moves LOW→HIGH (1→24), home = 19..24, bears off past 24. `points[p] > 0` = that many white checkers; `points[p] < 0` = that many black checkers (abs value). A roll of doubles is carried as four dice.
 
 3. Leave function bodies for later chunks — export stubs that throw or return safe defaults, so every file parses and the server file can be filled in chunk 4.
 
-Requirements for this chunk:
+Runtime and startup:
 
-- Language/runtime: **Node + TypeScript**, zero external runtime deps. Node ≥ 22.12 runs the `.ts` files with the `--experimental-strip-types` flag (already wired into the `npm start` script); engine imports use explicit `./x.ts` specifiers.
-- Start command (from the implementation dir): `node --experimental-strip-types src/server.ts` (also `npm start`).
-- The HTTP server MUST listen on the port given by the `PORT` environment variable, falling back to **8002** when `PORT` is not set — `const PORT = Number(process.env.PORT ?? 8002)`. The stub `src/server.ts` already does this; leave it that way. Running on the default, the game MUST be reachable at both `http://localhost:8002/` and `http://127.0.0.1:8002/` — the same page and the same API, whichever of the two host names a user types. If the port is already in use, the process MUST exit non-zero after printing a clear, single-line message that names that port and states it is already in use (not a raw unhandled-exception stack). On successful boot it MUST print a startup line containing the URL it is serving. (A minimal server boot is fine in this chunk; routes arrive in chunk 4.)
+- **Node + TypeScript**, zero external runtime deps. Node ≥ 22.12 runs the `.ts` files with the `--experimental-strip-types` flag (already wired into the `npm start` script); engine imports use explicit `./x.ts` specifiers.
+- Start command: `node --experimental-strip-types src/server.ts` (also `npm start`).
+- The server listens on the `PORT` environment variable, and **8002** when `PORT` is not set. The stub already does this; leave it that way. On the default port the game must be reachable at both `http://localhost:8002/` and `http://127.0.0.1:8002/`.
+- On boot, print a startup line containing the URL it is serving.
+- If the port is already taken, exit non-zero after printing a clear, single-line message that names the port and says it is already in use — never a raw stack, never a hang, never a silent switch to another port.
+
+(A minimal server boot is fine in this chunk; routes arrive in chunk 4.)
 
 **Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.

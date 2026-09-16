@@ -572,8 +572,13 @@ vector; token accounting with **injected-memory-block tokens counted separately 
 the injection observability values; extraction-attempt observability; and the terminal outcome with
 its reason.
 
-**RC-5a · Task-template freeze (scaffold hash).** The frozen task-template hash for the benchmark
-campaign is `d2d2f0b798f586101bb34a698235eb1dea691b1ed760f66a316a53fd6ae42928` (re-baselined
+**RC-5a · Task-template freeze (scaffold hash).** Re-frozen 2026-09-15 to
+`d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee`: CONTRACT.md left the scaffold
+for `task/backgammon/reference/`, so the model is given the six build prompts and nothing else, and
+the prompts were rewritten to carry the graded contact points without the rules and design hints
+a candidate should supply itself. The published-surface guard
+(`tests/test_instruction_surface_consistency.py`) now reads the prompts. Prior freeze history:
+the hash was `d2d2f0b798f586101bb34a698235eb1dea691b1ed760f66a316a53fd6ae42928` (re-baselined
 2026-08-30 by `2314693`: gate E08's `allSequences` + `REQ-SEQ-DEDUP` requirement published into
 `scaffold/CONTRACT.md` + `prompts/chunk-02.md`, superseding the `9391d77d…` freeze — the
 ease-of-use calibration that cut `public/style.css` to a placeholder and moved package.json +
