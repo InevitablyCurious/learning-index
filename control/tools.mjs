@@ -96,6 +96,48 @@ function builtinTools(benchRoot) {
         },
       ],
     },
+    // THE INSTRUMENT, same treatment as the substrate. Grading runs only in
+    // this image, and it bakes a digest of grader/ at build time; preflight
+    // reads that back. A stale one grades against gate code that is not the
+    // code on disk and nothing in the report would say so — which is why the
+    // refusal that names it now comes with this button instead of a command.
+    {
+      id: "grader-image-rebuild",
+      name: "Rebuild grader",
+      blurb:
+        "Press when preflight says the grading image is stale or missing, and after any edit " +
+        "under grader/ or images/grader. Grading runs only in this image, so until you rebuild, " +
+        "every attempt is graded by the gate code the image was built with.",
+      seams: [
+        "computes a digest of the gate suite and the grader Dockerfile",
+        "docker build -t bench-grader:v1 images/grader, with that digest as a label",
+        "preflight reads the label back and compares it to the gates on disk — a content check, not a timestamp",
+      ],
+      args: [],
+      // Rebuilding the instrument under a running cell changes what the
+      // attempt is measured by, mid-measurement.
+      refuse_while_running: true,
+      invoke: {
+        kind: "script",
+        command: controlPython(benchRoot),
+        argv: [join(benchRoot, "scripts", "rebuild_grader_image.py")],
+        timeoutMs: 900000,
+      },
+      preconditions: [
+        {
+          ok: existsSync(join(benchRoot, "images", "grader", "Dockerfile")),
+          reason: `no grader Dockerfile at ${join(benchRoot, "images", "grader", "Dockerfile")}`,
+        },
+        {
+          ok: existsSync(join(benchRoot, "scripts", "rebuild_grader_image.py")),
+          reason: `the rebuild script is missing — ${join(benchRoot, "scripts", "rebuild_grader_image.py")}`,
+        },
+        {
+          ok: existsSync(controlPython(benchRoot)),
+          reason: `no python to run the rebuild with — ${controlPython(benchRoot)}`,
+        },
+      ],
+    },
   ];
 }
 

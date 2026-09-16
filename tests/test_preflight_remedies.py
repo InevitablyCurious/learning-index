@@ -43,6 +43,23 @@ def test_a_failing_check_carries_its_remedy_tool_id() -> None:
     assert row["remedy_tool"] == "worker-image-rebuild"
 
 
+def test_the_grader_image_failures_carry_the_grader_rebuild_button() -> None:
+    """A stale or missing grading image is one press, exactly like the worker.
+
+    Before this the refusal printed `python3 scripts/rebuild_grader_image.py`
+    and offered nothing, so a launch blocked by the instrument sent the operator
+    to a shell for something the board can do.
+    """
+    pf = _preflight()
+    c = pf.Check()
+    c.add("grader image", False, "STALE", remedy=pf.TOOL_GRADER_REBUILD)
+    c.add("grader resources", False, "not asked", remedy=pf.TOOL_GRADER_REBUILD)
+    assert [r["remedy_tool"] for r in c.as_rows()] == [
+        "grader-image-rebuild",
+        "grader-image-rebuild",
+    ]
+
+
 def test_a_passing_check_never_carries_a_remedy() -> None:
     """A green row with a button attached invites a press that changes a bench
     which was already correct."""
@@ -134,7 +151,7 @@ def test_every_remedy_a_check_names_is_one_of_the_declared_tool_ids() -> None:
     declared = {
         v for k, v in vars(pf).items() if k.startswith("TOOL_") and isinstance(v, str)
     }
-    assert declared == {"worker-image-rebuild"}
+    assert declared == {"worker-image-rebuild", "grader-image-rebuild"}
 
     src = (REPO / "scripts" / "bench_preflight.py").read_text(encoding="utf-8")
     for line in src.splitlines():

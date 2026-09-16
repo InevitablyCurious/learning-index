@@ -102,6 +102,7 @@ from preflight.live import check_live_stream  # noqa: E402
 # BENCH_TOOLS_URL, which a given installation may not have. Every detail below
 # still names its own fix in words.
 TOOL_WORKER_REBUILD = "worker-image-rebuild"
+TOOL_GRADER_REBUILD = "grader-image-rebuild"
 
 
 def port_open(port: int, host: str = "127.0.0.1", timeout: float = 2.0) -> bool:

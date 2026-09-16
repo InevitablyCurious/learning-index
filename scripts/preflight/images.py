@@ -109,6 +109,10 @@ def check_grader_image(c: Check) -> None:
         sys.path.insert(0, str(REPO))
     from harness.grader_image import IMAGE, image_digest, source_digest
 
+    # Function-local, like the worker's (see check_image): the id is a literal
+    # in bench_preflight.py, regex-pinned by the control-plane seam test.
+    from bench_preflight import TOOL_GRADER_REBUILD
+
     gates = REPO / "grader"
     dockerfile = REPO / "images" / "grader" / "Dockerfile"
     baked = image_digest(IMAGE)
@@ -118,6 +122,7 @@ def check_grader_image(c: Check) -> None:
             False,
             f"{IMAGE} is not built (or carries no source digest). "
             "Build: python3 scripts/rebuild_grader_image.py",
+            remedy=TOOL_GRADER_REBUILD,
         )
         return
     live = source_digest(gates, dockerfile)
@@ -128,6 +133,7 @@ def check_grader_image(c: Check) -> None:
             f"{IMAGE} is STALE — built from {baked[:12]}, gates on disk are {live[:12]}. "
             "It would grade against gate code that is not the code on disk. "
             "Rebuild: python3 scripts/rebuild_grader_image.py",
+            remedy=TOOL_GRADER_REBUILD,
         )
         return
     c.add("grader image", True, f"{IMAGE} current ({live[:12]})")
@@ -155,7 +161,14 @@ def check_grader_resources(c: Check) -> None:
 
     if image_digest(IMAGE) is None:
         # The image row above already says this, in the words that fix it.
-        c.add("grader resources", False, "not asked — the grading image is not built")
+        from bench_preflight import TOOL_GRADER_REBUILD
+
+        c.add(
+            "grader resources",
+            False,
+            "not asked — the grading image is not built",
+            remedy=TOOL_GRADER_REBUILD,
+        )
         return
     try:
         out = subprocess.run(  # noqa: S603 - fixed argv

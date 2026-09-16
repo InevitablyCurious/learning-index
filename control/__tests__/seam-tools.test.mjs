@@ -108,9 +108,9 @@ test("SEAM: with no custom-tools service the drawer serves only the benchmark's 
   delete process.env.BENCH_TOOLS_URL;
   try {
     const tools = await describeTools(BENCH);
-    assert.deepEqual(tools.map((t) => t.id), ["worker-image-rebuild"]);
+    assert.deepEqual(tools.map((t) => t.id), ["worker-image-rebuild", "grader-image-rebuild"]);
     assert.equal(tools.filter((t) => t.external).length, 0, "no service means no custom rows at all");
-    assert.equal(tools[0].success_note, null, "a built-in's own output is its report");
+    for (const t of tools) assert.equal(t.success_note, null, "a built-in's own output is its report");
   } finally {
     if (saved === undefined) delete process.env.BENCH_TOOLS_URL;
     else process.env.BENCH_TOOLS_URL = saved;
@@ -198,7 +198,7 @@ test("SEAM: preflight's fix buttons never contact the custom-tools service", asy
   let hits = 0;
   await withToolsService((req, res) => { hits += 1; sendJson(res, 200, { tools: [SERVED] }); }, async () => {
     const ids = describeBuiltinTools(BENCH).map((t) => t.id);
-    assert.deepEqual(ids, ["worker-image-rebuild"]);
+    assert.deepEqual(ids, ["worker-image-rebuild", "grader-image-rebuild"]);
     assert.equal(hits, 0, "resolving preflight remedies must not depend on the service");
   });
 });
