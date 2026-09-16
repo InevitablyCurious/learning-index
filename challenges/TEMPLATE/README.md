@@ -41,6 +41,13 @@ Two rules for everything in `prompts/`:
 
 ## grader/
 
+Two scripts, by name, are the contract:
+
+- `roster.mjs --out <file>` — list every check you would run, without running
+  any of them.
+- `report.mjs --target <dir> --out <file>` — run them against a built candidate
+  and report each check as pass or fail. The grading image runs this one.
+
 The benchmark needs three things from your suite:
 
 - **A roster.** It can list every check it would run, before running any.
@@ -52,6 +59,19 @@ The benchmark needs three things from your suite:
 
 The example's suite lives in the benchmark repo (`grader/`) and its sentences in
 `grader/feedback.json`.
+
+## Freeze your starting files
+
+Once `scaffold/` settles, record its fingerprint so two runs of your challenge
+are comparable:
+
+```
+BENCH_TASK_DIR=$(pwd) python3 <benchmark>/scripts/freeze_challenge.py --write
+```
+
+That writes `scaffold_hash` into `challenge.json`. A run refuses to start
+without it, and refuses again if the starting files change afterwards — change
+them deliberately, then re-freeze.
 
 ## Still to come
 

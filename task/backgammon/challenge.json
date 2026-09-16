@@ -3,10 +3,18 @@
   "run_label": "backgammon-cumulative-primary",
   "summary": "build a complete playable backgammon game with Node + TypeScript and backend APIs",
   "language": "typescript",
-  "stack": ["backgammon", "node", "typescript"],
+  "stack": [
+    "backgammon",
+    "node",
+    "typescript"
+  ],
   "app_port": 8002,
   "grader_dir": "../../grader",
-  "grader_phases": ["conformance", "backend", "frontend"],
+  "grader_phases": [
+    "conformance",
+    "backend",
+    "frontend"
+  ],
   "test_commands": [
     "node report.mjs",
     "npx vitest",
@@ -17,5 +25,10 @@
     "playwright test"
   ],
   "stub_sentinel": "throw new Error(\"not implemented\")",
-  "chunk_stub_files": { "2": "src/game.ts", "3": "src/ai.ts", "4": "src/server.ts" }
+  "chunk_stub_files": {
+    "2": "src/game.ts",
+    "3": "src/ai.ts",
+    "4": "src/server.ts"
+  },
+  "scaffold_hash": "d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee"
 }

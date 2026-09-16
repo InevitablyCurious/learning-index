@@ -26,6 +26,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from harness.challenge_spec import default_spec
+
 REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
@@ -33,7 +35,7 @@ if str(REPO) not in sys.path:
 from harness.grader_image import IMAGE  # noqa: E402
 
 GOLDEN = REPO / "task" / "backgammon" / "golden"
-GATES = REPO / "grader"
+GATES = default_spec().grader_dir
 
 
 def grade(workers: int, out_dir: Path, roster: Path) -> dict:

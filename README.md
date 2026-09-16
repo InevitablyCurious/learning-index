@@ -107,7 +107,7 @@ tests/      The harness's own pytest suite — grades the instrument, not the ca
 ## Naming
 
 `bench` / `BENCH_` / `bench-*` is the benchmark's own neutral identity — the
-image names (`bench-worker:v1`, `bench-grader:v1`), the env prefix, and the
+image names (`bench-worker:v1`, `bench-grader:<challenge>`), the env prefix, and the
 harness package. Backend-specific tokens are deliberately absent from the
 public surface: a memory plugin enters the tree only at build time, through
 the `BENCH_PLUGIN_DIR` pointer, and the benchmark is generic over whatever

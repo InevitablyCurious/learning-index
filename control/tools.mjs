@@ -110,7 +110,7 @@ function builtinTools(benchRoot) {
         "every attempt is graded by the gate code the image was built with.",
       seams: [
         "computes a digest of the gate suite and the grader Dockerfile",
-        "docker build -t bench-grader:v1 images/grader, with that digest as a label",
+        "docker build of images/grader against the challenge's gate suite, with that digest as a label",
         "preflight reads the label back and compares it to the gates on disk — a content check, not a timestamp",
       ],
       args: [],

@@ -40,9 +40,9 @@ system.
 2. **Cell (executed).** One scheduled session per cell. The sequencer phase
    machine runs `PREPARE_FIXTURE → RUN_SESSION → DONE` (`HALTED_ON_GATE` on a
    gate failure). The worker container builds the task in chunks via a chunked
-   opencode serve drive (`harness/adapters/backgammon.py`).
+   opencode serve drive (`harness/adapters/challenge.py`).
 3. **Grading.** `harness/grader_run.py` runs the candidate's worktree through
-   `bench-grader:v1` (`grader/`, `ENTRYPOINT ["node", "report.mjs"]`), read-only
+   `bench-grader:<challenge>` (the challenge's gate suite, `ENTRYPOINT ["node", "report.mjs"]`), read-only
    and `--network none`, producing `report.json` (verdict, problems, failed
    gates).
 4. **Scorecard.** `run_artifacts.build_scorecard` aggregates the write-once

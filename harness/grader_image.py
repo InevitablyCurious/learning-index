@@ -26,7 +26,11 @@ import hashlib
 import subprocess
 from pathlib import Path
 
-IMAGE = "bench-grader:v1"
+from harness.challenge_spec import default_spec
+
+# ONE IMAGE PER CHALLENGE. The image bakes the challenge's gate suite, so a
+# shared tag would let one challenge's instrument grade another's candidate.
+IMAGE = f"bench-grader:{default_spec().name}"
 LABEL = "okp.grader.source_digest"
 
 #: Never baked, and never hashed. ``node_modules`` is the point: the toolchain

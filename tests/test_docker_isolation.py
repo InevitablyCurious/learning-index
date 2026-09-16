@@ -896,7 +896,7 @@ def test_gate_oracle_runs_in_its_own_image_never_the_cell_s() -> None:
     unpinned axes, and `compute_grader_hash` excludes node_modules, so nothing
     recorded which toolchain produced a result.
 
-    Grading now runs in its OWN image (`bench-grader:v1`). The invariant is
+    Grading now runs in its OWN image (`bench-grader:<challenge>`). The invariant is
     unchanged and is asserted here directly:
 
       * the cell cannot reach the gates or the golden — its config mounts only

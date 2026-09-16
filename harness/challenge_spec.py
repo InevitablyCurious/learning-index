@@ -48,6 +48,9 @@ class ChallengeSpec:
     test_commands: tuple[str, ...]
     stub_sentinel: str
     chunk_stub_files: dict[int, str]
+    #: SHA-256 of the starting files, frozen so two runs of this challenge are
+    #: comparable. None until the author freezes it (scripts/freeze_challenge.py).
+    scaffold_hash: str | None
 
     @property
     def prompts_dir(self) -> Path:
@@ -133,6 +136,7 @@ def load(task_dir: Path | str) -> ChallengeSpec:
         test_commands=_tuple("test_commands", required=False),
         stub_sentinel=str(raw.get("stub_sentinel", "")),
         chunk_stub_files=chunk_stub_files,
+        scaffold_hash=(str(raw["scaffold_hash"]) if raw.get("scaffold_hash") else None),
     )
 
 

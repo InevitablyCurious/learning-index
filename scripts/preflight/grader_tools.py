@@ -7,7 +7,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from preflight.core import REPO, Check
+from harness.challenge_spec import default_spec
+from preflight.core import Check
 
 INSTALL_CMD = "(cd grader && npm ci)"
 
@@ -39,7 +40,23 @@ def check_grader_tools(
     `vitest list` and `playwright test --list`, so no test runs and no port binds.
     """
     name = "grader tools"
-    gdir = grader_dir if grader_dir is not None else REPO / "grader"
+    gdir = grader_dir if grader_dir is not None else default_spec().grader_dir
+
+    # THE CONTRACT A CHALLENGE'S SUITE HAS TO MEET. Two scripts: one that lists
+    # the checks without running them, one the grading image runs against a
+    # candidate. Named here rather than discovered, because a suite missing
+    # either produces an empty roster or an ungradeable cell — both of which
+    # look like a quiet zero rather than a broken challenge.
+    absent = [s for s in ("roster.mjs", "report.mjs") if not (gdir / s).is_file()]
+    if absent:
+        c.add(
+            name,
+            False,
+            f"the grading suite at {gdir} is missing {', '.join(absent)} — a "
+            "challenge's suite must provide roster.mjs (list the checks) and "
+            "report.mjs (run them against a candidate)",
+        )
+        return
 
     missing = [t for t in _TOOLS if not (gdir / "node_modules" / ".bin" / t).exists()]
     if missing:

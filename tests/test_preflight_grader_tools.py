@@ -25,6 +25,9 @@ from preflight.grader_tools import check_grader_tools  # noqa: E402
 def _installed(tmp_path: Path) -> Path:
     bin_dir = tmp_path / "node_modules" / ".bin"
     bin_dir.mkdir(parents=True)
+    # A stand-in suite still meets the contract: a lister and a runner.
+    for script in ("roster.mjs", "report.mjs"):
+        (tmp_path / script).write_text("// stand-in\n", encoding="utf-8")
     for tool in ("vitest", "playwright"):
         (bin_dir / tool).write_text("")
     return tmp_path
@@ -45,6 +48,10 @@ def _only_row(c: Check) -> dict:
 
 
 def test_missing_tools_refuse_without_running_the_lister(tmp_path: Path) -> None:
+    # A real suite, missing only its installed tools — that is the branch here.
+    for script in ("roster.mjs", "report.mjs"):
+        (tmp_path / script).write_text("// stand-in\n", encoding="utf-8")
+
     def run(*_args, **_kwargs):
         raise AssertionError("the lister must not run when the tools are absent")
 

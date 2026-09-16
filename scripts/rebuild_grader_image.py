@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from harness.challenge_spec import default_spec
+
 REPO = Path(__file__).resolve().parent.parent
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
@@ -27,7 +29,7 @@ from harness.grader_image import (  # noqa: E402
     source_digest,
 )
 
-GATES = REPO / "grader"
+GATES = default_spec().grader_dir
 DOCKERFILE = REPO / "images" / "grader" / "Dockerfile"
 
 

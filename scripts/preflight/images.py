@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 
+from harness.challenge_spec import default_spec
 from preflight.core import REBUILD_CMD, REPO, Check
 
 
@@ -107,13 +108,13 @@ def check_grader_image(c: Check) -> None:
         return
     if str(REPO) not in sys.path:
         sys.path.insert(0, str(REPO))
-    from harness.grader_image import IMAGE, image_digest, source_digest
-
     # Function-local, like the worker's (see check_image): the id is a literal
     # in bench_preflight.py, regex-pinned by the control-plane seam test.
     from bench_preflight import TOOL_GRADER_REBUILD
 
-    gates = REPO / "grader"
+    from harness.grader_image import IMAGE, image_digest, source_digest
+
+    gates = default_spec().grader_dir
     dockerfile = REPO / "images" / "grader" / "Dockerfile"
     baked = image_digest(IMAGE)
     if baked is None:

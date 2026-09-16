@@ -71,7 +71,35 @@ def test_a_grading_suite_that_is_not_there_is_loud(tmp_path: Path) -> None:
 
 
 def test_the_template_declares_a_complete_manifest() -> None:
-    """What an author copies must load, or their first run fails on our shape."""
+    """What an author copies must load, or their first run fails on our shape.
+
+    `scaffold_hash` is the one exception: it is the fingerprint of starting
+    files that do not exist yet, and the author writes it with
+    `scripts/freeze_challenge.py --write` once theirs settle.
+    """
     template = REPO / "challenges" / "TEMPLATE"
     raw = json.loads((template / "challenge.json").read_text(encoding="utf-8"))
-    assert set(_manifest()) <= set(raw), "the template is missing a declared key"
+    required = set(_manifest()) - {"scaffold_hash"}
+    assert required <= set(raw), "the template is missing a declared key"
+    assert "scaffold_hash" not in raw
+
+
+def test_an_unfrozen_challenge_refuses_to_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a frozen fingerprint two runs of a challenge are not comparable,
+    so the run path stops and says how to freeze rather than scoring anyway."""
+    import sys
+
+    sys.path.insert(0, str(REPO / "scripts"))
+    from run_cumulative.template import verify_task_template_frozen
+
+    challenge = tmp_path / "unfrozen"
+    (challenge / "scaffold").mkdir(parents=True)
+    (challenge / "scaffold" / "start.txt").write_text("x\n", encoding="utf-8")
+    raw = _manifest() | {"grader_dir": str(REPO / "grader")}
+    raw.pop("scaffold_hash")
+    (challenge / "challenge.json").write_text(json.dumps(raw), encoding="utf-8")
+
+    monkeypatch.setenv("BENCH_TASK_DIR", str(challenge))
+    with pytest.raises(RuntimeError) as err:
+        verify_task_template_frozen()
+    assert "freeze_challenge.py" in str(err.value)

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import sys
 
+from harness.challenge_spec import default_spec
 from preflight.core import REPO, Check
 
 
@@ -29,7 +30,7 @@ def check_feedback_completeness(c: Check) -> None:
         c.add("feedback completeness", False, f"could not import harness: {exc}")
         return
 
-    gates_dir = REPO / "grader"
+    gates_dir = default_spec().grader_dir
     try:
         missing = sorted(missing_feedback_overrides(gates_dir))
     except Exception as exc:  # noqa: BLE001

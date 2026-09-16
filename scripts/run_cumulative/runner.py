@@ -914,7 +914,7 @@ class RealSessionRunner:
         if roster_path is None or roster_path.exists():
             return
 
-        script = self._repo_root / "grader" / "roster.mjs"
+        script = default_spec().grader_dir / "roster.mjs"
         if not script.is_file():
             _LOG.warning("run_cumulative.gate_roster_missing_script path=%s", script)
             return

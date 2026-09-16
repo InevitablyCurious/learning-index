@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from .paths import REPO_ROOT
+from harness.challenge_spec import default_spec
 
 # FROZEN_TASK_TEMPLATE_HASH — WO-FREEZE-1 template freeze.
 #
@@ -84,9 +84,12 @@ from .paths import REPO_ROOT
 # transcription. Gates at risk: G01, G02, G10 (and only those). Each already
 # carried a human symptom line that could never fire while the answer was in
 # the prompt.
-FROZEN_TASK_TEMPLATE_HASH = (
-    "d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee"
-)
+# THE CHALLENGE DECLARES ITS OWN FREEZE (challenge.json: scaffold_hash). It
+# lived here as one literal, which is one challenge's fact sitting in the
+# benchmark — a second challenge would have been measured against the example's
+# starting files. None means the author has not frozen theirs yet, and the guard
+# below refuses to run rather than assume.
+FROZEN_TASK_TEMPLATE_HASH = default_spec().scaffold_hash
 
 
 def compute_task_template_hash(scaffold: Path) -> str | None:
@@ -123,18 +126,24 @@ def verify_task_template_frozen() -> None:
     they differ OR the live hash cannot be computed. Purposely touches no model
     endpoint/proxy. Must be called before any scaffold copy or cell scoring.
     """
-    repo_root = REPO_ROOT
-    scaffold = repo_root / "task" / "backgammon" / "scaffold"
+    spec = default_spec()
+    scaffold = spec.scaffold_dir
+    if not spec.scaffold_hash:
+        raise RuntimeError(
+            f"task template freeze FAILED: {spec.name} declares no scaffold_hash "
+            f"in {spec.dir / 'challenge.json'}. Freeze it first: "
+            "python3 scripts/freeze_challenge.py --write"
+        )
     live_hash = compute_task_template_hash(scaffold)
     if live_hash is None:
         raise RuntimeError(
             "task template freeze FAILED: scaffold unavailable at "
-            f"{scaffold}; expected frozen hash {FROZEN_TASK_TEMPLATE_HASH}, "
+            f"{scaffold}; expected frozen hash {spec.scaffold_hash}, "
             "could not compute live hash"
         )
-    if live_hash != FROZEN_TASK_TEMPLATE_HASH:
+    if live_hash != spec.scaffold_hash:
         raise RuntimeError(
             "task template freeze FAILED: scaffold mismatch at "
-            f"{scaffold}; expected (frozen) {FROZEN_TASK_TEMPLATE_HASH}, "
+            f"{scaffold}; expected (frozen) {spec.scaffold_hash}, "
             f"actual (live) {live_hash}"
         )
