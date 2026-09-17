@@ -186,7 +186,18 @@ export async function read(ctx) {
     }
     if (kind === "attempt.end") {
       const a = int(r.attempt);
-      if (a !== null) attempts.set(a, { attempt: a, verdict: str(r.verdict), failed: int(r.failed), ts: int(r.ts) });
+      if (a !== null) {
+        attempts.set(a, {
+          attempt: a,
+          verdict: str(r.verdict),
+          failed: int(r.failed),
+          ts: int(r.ts),
+          // PLAYER ORDER: the stage the round reached; null on older streams.
+          stage: int(r.stage),
+          stage_name: str(r.stage_name),
+          withheld: int(r.withheld),
+        });
+      }
       continue;
     }
     if (kind === "backend") {

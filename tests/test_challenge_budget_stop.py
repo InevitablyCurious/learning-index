@@ -259,10 +259,13 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     def _fake_gate(**kwargs: Any) -> dict[str, Any]:
         gate_calls["count"] += 1
         if gate_calls["count"] == 1:
+            # PLAYER ORDER: G01 and G02 are stage 2 (a new game looks right),
+            # G03 is stage 3 (rolling and moving) — so round 1 tells the model
+            # about G01 and G02 only, and G03 is withheld.
             return {
                 "verdict": "FAIL",
                 "conformed": True,
-                "problems": [{"check": REAL_CHECK}],
+                "problems": [{"check": REAL_PASS1}, {"check": REAL_CHECK}, {"check": REAL_PASS2}],
                 "failed_gates": [REAL_PASS1, REAL_CHECK, REAL_PASS2],
             }
         if gate_calls["count"] == 2:
@@ -331,7 +334,10 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
 
     # WO-FEEDBACK-VOICE-3: grader tokens are stripped from delivered text. The
     # pass verdict names the human symptom sentences of the newly-passing gates.
-    pass_verdict = runner._build_pass_verdict(newly_passing=[REAL_PASS1, REAL_PASS2])
+    # PLAYER ORDER: only a check the model was TOLD about can be reported fixed.
+    # REAL_PASS2 (G03, stage 3) was withheld in round 1, so its passing is not
+    # news to the model and is not named.
+    pass_verdict = runner._build_pass_verdict(newly_passing=[REAL_PASS1])
     # REAL_CHECK failed in BOTH of the last two attempts, so it is a repeat and
     # renders as that gate's second-sighting line — the gradient, per gate.
     failure_feedback = runner._build_feedback_prompt(
@@ -361,7 +367,10 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     # Feedback 1 — the player's FIRST report, so the first-pass opener. Nothing
     # newly passed after attempt 1, so no pass verdict rides along.
     assert prompt_texts[1] == runner._build_feedback_prompt(
-        checks=[REAL_CHECK], had_prior_feedback=False
+        checks=[REAL_PASS1, REAL_CHECK], had_prior_feedback=False
+    )
+    assert runner._humanize_check(REAL_PASS2) not in prompt_texts[1], (
+        "a stage-3 problem is withheld while stage 2 still fails"
     )
     # Feedback 2 — the FOLDED message (WO-FEEDBACK-ONEPHASE): REAL_PASS1 and
     # REAL_PASS2 newly passed after attempt 2, so the pass verdict opens the
@@ -492,8 +501,8 @@ def test_hard_attempt_ceiling_sets_fail_termination_label(
         lambda **kwargs: {
             "verdict": "FAIL",
             "conformed": conformed,
-            "problems": [{"check": "x"}],
-            "failed_gates": ["x"],
+            "problems": [{"check": "[G02] REQ-PIP — pip count"}],
+            "failed_gates": ["[G02] REQ-PIP — pip count"],
         },
     )
 
@@ -702,8 +711,8 @@ def test_non_budget_nonzero_worker_exit_classifies_as_harness_error(
         lambda **kwargs: {
             "verdict": "FAIL",
             "conformed": True,
-            "problems": [{"check": "x"}],
-            "failed_gates": ["x"],
+            "problems": [{"check": "[G02] REQ-PIP — pip count"}],
+            "failed_gates": ["[G02] REQ-PIP — pip count"],
         },
     )
 

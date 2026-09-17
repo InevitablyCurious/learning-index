@@ -159,7 +159,7 @@ function phaseRow(p, state, r, board, verdict, stated, ended) {
             : ""
         }>${esc(
           `${verdict.verdict ?? "?"}${Number.isFinite(verdict.failed) ? ` · ${verdict.failed} failed` : ""}`,
-        )}</span>${churn(verdict)}`
+        )}</span>${churn(verdict)}${stageChip(verdict)}`
       : state === "stopped"
         ? `<span class="ph-verdict bad" title="${esc(`the cell stopped (${ended?.terminal_reason ?? "reason not recorded"}) before this phase was graded`)}">${esc(
           `NOT GRADED${ended?.terminal_reason ? ` — ${END_WORD[ended.terminal_reason] ?? ended.terminal_reason}` : ""}`,
@@ -171,6 +171,19 @@ function phaseRow(p, state, r, board, verdict, stated, ended) {
       <div class="ph-top"><span>${esc(title)}</span>${outcome ? `<span class="ph-out">${outcome}</span>` : ""}<span class="ph-state">${word}</span></div>
       ${ticks}
     </div>`;
+}
+
+/**
+ * PLAYER ORDER: the stage this round reached — the model was told only that
+ * stage's problems. The count past it were graded and not told.
+ */
+function stageChip(v) {
+  if (!Number.isFinite(v.stage)) return "";
+  const past = Number.isFinite(v.withheld) && v.withheld ? ` · ${v.withheld} held back` : "";
+  return `<span class="ph-stage" title="${esc(
+    `the model was told only the problems of stage ${v.stage} (${v.stage_name ?? ""}); `
+    + `${v.withheld ?? 0} failing checks in later stages were graded but not told`,
+  )}">${esc(`stage ${v.stage}${v.stage_name ? ` · ${v.stage_name}` : ""}${past}`)}</span>`;
 }
 
 /**

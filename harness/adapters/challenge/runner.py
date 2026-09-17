@@ -69,6 +69,7 @@ from ..docker_worker import (
 from ..mapping import write_session_mapping
 from ..transcript import write_session_transcript
 from .bootstrap import BootstrapMixin
+from .stages import Stage, load_stages, player_view
 from .constants import (
     _GRADER_DIR,
     _HARNESS_LIMIT_REASONS,
@@ -823,6 +824,11 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         # CONTEXT EXHAUSTED ends the cell where it happens: during the build
         # nothing is graded; during a repair round the last graded round stands.
         context_stop = False
+        # PLAYER ORDER (stages.py): the checks the model was told about — last
+        # round, and ever. "That fixed it" names only checks it was told about;
+        # the second-sighting line goes only to checks it has heard before.
+        told_last_round: set[str] = set()
+        told_ever: set[str] = set()
         _worker_exit_annot: str | None = None
         first_run: _OpencodeRunStats | None = None
         # Monotonic clock start of the chunked build, for the attempt-1
@@ -1431,6 +1437,10 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 # the runner's own published `gate_results` rows, passed through
                 # untouched. There is no in-flight or provisional square — a
                 # gate appears only once it has a real recorded verdict.
+                # THE STAGE A PLAYER HAS REACHED: the earliest one still failing.
+                stage_view = player_view(
+                    problems, self._player_stages(), is_infra=self._is_harness_infra_check
+                )
                 live = getattr(self, "_live", None)
                 if live is not None:
                     # No `phase.start` here: this site is where an attempt
@@ -1457,6 +1467,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         verdict=attempt_verdict,
                         conformed=conformed,
                         failed=len(failed_gates),
+                        stage=stage_view.stage.number if stage_view.stage else None,
+                        stage_name=stage_view.stage.name if stage_view.stage else None,
+                        withheld=len(stage_view.withheld),
                     )
 
                 if _worker_exit_annot != "harness_error":
@@ -1477,6 +1490,11 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                             "attempt_cost_usd": float(
                                 attempt_costs_usd.get(attempt, 0.0)
                             ),
+                            # PLAYER ORDER: the stage this round reached, and how
+                            # many failing checks lay beyond it (graded, not told).
+                            "player_stage": stage_view.stage.number if stage_view.stage else None,
+                            "player_stage_name": stage_view.stage.name if stage_view.stage else None,
+                            "withheld_checks": len(stage_view.withheld),
                             # Scored cell whose metering awaits parity confirmation against the
                             # first scored cell / the proxy log before it is treated as data.
                             "parity_pending": True,
@@ -1620,14 +1638,13 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 # Never pass tool_choice="required" via worker config/CLI for these
                 # runs; provider path rejects it and the harness guard test enforces this.
 
-                newly_passing = (
-                    sorted(
-                        set(attempt_reports[-2]["failed_gates"])
-                        - set(attempt_reports[-1]["failed_gates"])
-                    )
-                    if len(attempt_reports) >= 2
-                    else []
-                )
+                # PLAYER ORDER: only what the player reported last round can be
+                # reported fixed — a check the model never heard about passing
+                # is not news to it.
+                now_failing = set(attempt_reports[-1]["failed_gates"]) | {
+                    str(p.get("check", "")).strip() for p in problems if isinstance(p, dict)
+                }
+                newly_passing = sorted(c for c in told_last_round if c not in now_failing)
                 still_failing = sorted(set(attempt_reports[-1]["failed_gates"]))
                 self._progress(
                     f"PROGRESS run_label={run_label} step=feedback-verdict-composed attempt={attempt} "
@@ -1654,19 +1671,24 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 # check names are excluded on BOTH sides: they are not gates,
                 # and a repeat infra failure must not leak into the prompt as
                 # if it were model-repairable work.
-                infra = {c for c in feedback_checks if self._is_harness_infra_check(c)}
-                repeat_checks = (
-                    {
-                        c
-                        for c in set(attempt_reports[-2]["failed_gates"])
-                        & set(attempt_reports[-1]["failed_gates"])
-                        if c not in infra
-                    }
-                    if len(attempt_reports) >= 2
-                    else set()
+                # PLAYER ORDER: the message carries only the earliest failing
+                # stage's problems. A check gets its second-sighting line only
+                # if the model has been told about it before — first time it
+                # appears (a later stage just unlocked) it is a first report.
+                visible_checks = {
+                    str(p.get("check", "")).strip() for p in stage_view.visible
+                }
+                repeat_checks = {c for c in visible_checks if c in told_ever}
+                self._progress(
+                    f"PROGRESS run_label={run_label} step=player-stage attempt={attempt} "
+                    f"stage={stage_view.stage.number if stage_view.stage else 'none'} "
+                    f"told={len(visible_checks)} withheld={len(stage_view.withheld)} "
+                    f"failing_total={len(feedback_checks)}"
                 )
+                told_last_round = visible_checks
+                told_ever |= visible_checks
                 feedback = self._build_feedback_prompt(
-                    problems=problems,
+                    problems=stage_view.visible,
                     # WHICH OPENER. "I've checked your resolution for the
                     # problems that were given before" is only true once the
                     # model has actually been given a list before — which is
@@ -2132,6 +2154,15 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
     # REQ-RESPONSIVE is a FREEZE — the most player-visible symptom there is, and
     # one an integrator reading API responses would never phrase. Tester, always.
     _TESTER_CONF_PREFIXES = ("REQ-RENDER/", "REQ-HINT/", "REQ-RESPONSIVE/")
+
+    @classmethod
+    def _player_stages(cls) -> list[Stage]:
+        """The challenge's player order (grader/checks.json), loaded once."""
+        cached = getattr(cls, "_PLAYER_STAGES_CACHE", None)
+        if cached is None:
+            cached = load_stages(_GRADER_DIR / "checks.json")
+            cls._PLAYER_STAGES_CACHE = cached
+        return cached
     _TESTER_CONF_EXACT = ("REQ-BIND/boot",)
 
     # HARNESS-INFRA CHECK NAMES (WO-FEEDBACK-VOICE-3 follow-up, 2026-08-30).

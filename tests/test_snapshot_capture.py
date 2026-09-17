@@ -229,8 +229,8 @@ def test_no_snapshot_beyond_attempt_one(
             return {
                 "verdict": "FAIL",
                 "conformed": True,
-                "problems": [{"check": "x"}],
-                "failed_gates": ["x"],
+                "problems": [{"check": "[G02] REQ-PIP — pip count"}],
+                "failed_gates": ["[G02] REQ-PIP — pip count"],
                 "gate_results": [],
                 "gate_totals": {},
             }

@@ -79,3 +79,10 @@ test("the stream reader counts fixed and broke per attempt and reports how the c
   assert.equal(out.patch.live.ended.terminal_reason, "context_exhausted");
   rmSync(root, { recursive: true, force: true });
 });
+
+test("each graded round names the stage it reached and how much was held back", () => {
+  const html = spine(STOPPED, board([
+    { attempt: 1, verdict: "FAIL", failed: 27, stage: 2, stage_name: "A new game looks right", withheld: 24 },
+  ], null));
+  assert.match(html, /stage 2 · A new game looks right · 24 held back/);
+});

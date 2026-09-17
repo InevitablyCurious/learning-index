@@ -794,6 +794,11 @@ class RealSessionRunner:
                         attempt.get("aborted_runners", []) or []
                     )
                     attempt_record["attempt_cost_usd"] = attempt.get("attempt_cost_usd")
+                    # PLAYER ORDER: the stage this round reached and how many
+                    # failing checks lay past it — where a model gets stuck.
+                    attempt_record["player_stage"] = attempt.get("player_stage")
+                    attempt_record["player_stage_name"] = attempt.get("player_stage_name")
+                    attempt_record["withheld_checks"] = attempt.get("withheld_checks")
                 else:
                     attempt_record["attempt"] = idx
                     attempt_record["verdict"] = result.verdict

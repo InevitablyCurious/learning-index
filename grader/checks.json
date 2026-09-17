@@ -367,5 +367,113 @@
       "what": "The setup checks run to the end.",
       "how": "Fails only when the setup phase itself could not complete."
     }
-  ]
+  ],
+  "stages": [
+    {
+      "stage": 1,
+      "name": "The game opens",
+      "checks": [
+        "G16",
+        "F01",
+        "F02",
+        "F08",
+        "F13",
+        "F15",
+        "REQ-BIND/",
+        "REQ-API/",
+        "REQ-STATE/",
+        "REQ-DEBUG/",
+        "REQ-TESTID/",
+        "REQ-RENDER/point",
+        "REQ-RENDER/checker",
+        "REQ-RENDER/bar",
+        "REQ-RENDER/off-tray",
+        "REQ-RESPONSIVE/startup"
+      ]
+    },
+    {
+      "stage": 2,
+      "name": "A new game looks right",
+      "checks": [
+        "G01",
+        "G02",
+        "F06"
+      ]
+    },
+    {
+      "stage": 3,
+      "name": "Rolling and moving",
+      "checks": [
+        "G03",
+        "E01",
+        "F03",
+        "F04",
+        "G04",
+        "G05",
+        "E09",
+        "F14",
+        "REQ-RENDER/die",
+        "REQ-TESTID/die",
+        "REQ-HINT/",
+        "REQ-RESPONSIVE/moving",
+        "REQ-RESPONSIVE/playing"
+      ]
+    },
+    {
+      "stage": 4,
+      "name": "Hitting and the bar",
+      "checks": [
+        "G07",
+        "F09",
+        "G06",
+        "E05",
+        "F10",
+        "E04",
+        "G13",
+        "F05",
+        "E06",
+        "E07",
+        "REQ-RESPONSIVE/awkwardroll"
+      ]
+    },
+    {
+      "stage": 5,
+      "name": "Bearing off",
+      "checks": [
+        "G09",
+        "G08",
+        "E02",
+        "E03",
+        "F11",
+        "REQ-RESPONSIVE/bearingoff"
+      ]
+    },
+    {
+      "stage": 6,
+      "name": "Winning",
+      "checks": [
+        "G10",
+        "F12"
+      ]
+    },
+    {
+      "stage": 7,
+      "name": "The doubling cube",
+      "checks": [
+        "G11",
+        "F07",
+        "G12"
+      ]
+    },
+    {
+      "stage": 8,
+      "name": "Playing the computer",
+      "checks": [
+        "G14",
+        "E08",
+        "REQ-RESPONSIVE/aiturn"
+      ]
+    }
+  ],
+  "stages_note": "Player order. The model hears only the failing checks of the earliest stage that has any: a player cannot reach a later stage past an earlier one that is broken. Every check is still graded every round. A key ending in / matches every setup check under it; the most specific key wins."
 }
