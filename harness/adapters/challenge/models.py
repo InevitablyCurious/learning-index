@@ -79,6 +79,12 @@ class _OpencodeRunStats:
     # transient retry. Non-zero means the cell was measured blind and must be
     # gated VOID-INSTRUMENT rather than scored.
     observation_lost_turns: int = 0
+    # CONTEXT EXHAUSTED (harness/context_budget.py): the session reached the
+    # size at which opencode would have compacted, or a request overflowed.
+    # The cell stops here; it is a result, not an instrument fault.
+    context_exhausted: bool = False
+    context_tokens: int = 0
+    context_limit_tokens: int | None = None
 
 
 @dataclass(frozen=True)

@@ -30,6 +30,12 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
+from harness.context_budget import (
+    CONTEXT_EXHAUSTED,
+    context_exhausted,
+    context_limit_tokens,
+    latest_context_tokens,
+)
 from harness.serve_client import (
     LOOP_KILL_WAIT_REASON,
     REASON_LOOP_GUARD,
@@ -44,6 +50,13 @@ from harness.serve_client import (
 
 from ..docker_worker import LOOP_KILL_MARKER_DIRNAME, DockerCell
 from .constants import (
+    _COMPACT_SETTLE_GRACE_S,
+    _COMPACT_SETTLE_TIMEOUT_S,
+    _FINALIZE_RECOVERY_NUDGE,
+    _LOOP_RECOVERY_NUDGE,
+    _MAX_SERVE_RECOVERY_NUDGES,
+    _PROVIDER_RECOVERY_NUDGE,
+    _STALL_RECOVERY_NUDGE,
     DEFAULT_TURN_STALL_TIMEOUT_S,
     REASON_OBSERVATION_LOST,
     REASON_TOOL_CALL_TIMEOUT,
@@ -53,13 +66,6 @@ from .constants import (
     TURN_TERMINAL_STALLED,
     TURN_TERMINAL_TRANSPORT_ERROR,
     TURN_TERMINAL_TRUNCATED,
-    _COMPACT_SETTLE_GRACE_S,
-    _COMPACT_SETTLE_TIMEOUT_S,
-    _FINALIZE_RECOVERY_NUDGE,
-    _LOOP_RECOVERY_NUDGE,
-    _MAX_SERVE_RECOVERY_NUDGES,
-    _PROVIDER_RECOVERY_NUDGE,
-    _STALL_RECOVERY_NUDGE,
 )
 from .exceptions import ServeTransportError
 from .models import _OpencodeRunStats
@@ -257,6 +263,14 @@ class ServeMixin:
         # kills; the count is carried separately and added to the guard-aborted
         # delta for the scoring exclusion below.
         loop_killed_turns = 0
+        # The size at which this session is out of room — opencode's own
+        # compaction line (harness/context_budget.py). A model with no declared
+        # limit raises here rather than running unguarded.
+        context_limit = context_limit_tokens(
+            self.model, output_token_max=getattr(self, "max_output_tokens", None)
+        )
+        context_hit = False
+        context_size = 0
         prompt_to_send = prompt
         turn_anomaly_list: list[dict[str, Any]] = []
         killed_reason: str | None = None
@@ -352,6 +366,7 @@ class ServeMixin:
                     stall_timeout_s=DEFAULT_TURN_STALL_TIMEOUT_S,
                     loop_kill_marker_dir=loop_kill_marker_dir,
                     turn_start_ts_ms=turn_start_ts_ms,
+                    context_limit_tokens=context_limit,
                 )
             if not idle:
                 # WO-LOOPKILL-1: a fresh loop-kill marker ended the wait. The
@@ -364,8 +379,13 @@ class ServeMixin:
                 # killed_reason/exit_code stay clean so the recovery gate passes.
                 loop_killed_this_turn = wait_reason == LOOP_KILL_WAIT_REASON
                 stalled_this_turn = wait_reason == "stalled"
+                context_hit = wait_reason == CONTEXT_EXHAUSTED
                 if loop_killed_this_turn:
                     loop_killed_turns += 1
+                elif context_hit:
+                    # Out of room mid-turn: stop generation (abort below) and
+                    # end the phase. Not a harness limit and not an error.
+                    killed_reason = CONTEXT_EXHAUSTED
                 elif not stalled_this_turn:
                     # Distinguish "the cell's whole budget ran out" from "this
                     # turn stopped progressing". Both end the drive; only the
@@ -471,6 +491,50 @@ class ServeMixin:
                         "retry_kind": None,
                         "session_id": session_id,
                     }
+                )
+                break
+
+            # ── CONTEXT EXHAUSTED: STOP, NEVER NUDGE ────────────────────────
+            #
+            # Checked on every turn end, before any recovery classification: a
+            # session out of room cannot be nudged back into room, and an
+            # overflowed request would otherwise read as a transport error and
+            # be re-driven into the same wall.
+            if not context_hit:
+                try:
+                    context_hit, context_size = context_exhausted(
+                        serve_client.get_messages(session_id), context_limit
+                    )
+                except ServeClientError:
+                    context_hit = False
+                if context_hit:
+                    killed_reason = CONTEXT_EXHAUSTED
+            if context_hit:
+                if not context_size:
+                    try:
+                        context_size = latest_context_tokens(
+                            serve_client.get_messages(session_id)
+                        )
+                    except ServeClientError:
+                        context_size = 0
+                live = getattr(self, "_live", None)
+                if live is not None:
+                    live.notice(
+                        "harness",
+                        "context_exhausted",
+                        level="error",
+                        cell_seq=getattr(self, "_cell_seq", None),
+                        session_id=session_id,
+                        detail={
+                            "phase": phase,
+                            "context_tokens": context_size,
+                            "limit_tokens": context_limit,
+                        },
+                    )
+                self._progress(
+                    f"PROGRESS run_label={run_label} step=context-exhausted "
+                    f"phase={phase} context_tokens={context_size} "
+                    f"limit_tokens={context_limit} session_id={session_id}"
                 )
                 break
 
@@ -922,6 +986,9 @@ class ServeMixin:
             guard_aborted_turns=d_guard_aborted,
             finalize_timeout_turns=d_finalize_timeouts,
             observation_lost_turns=1 if observation_lost else 0,
+            context_exhausted=context_hit,
+            context_tokens=context_size,
+            context_limit_tokens=context_limit,
         )
 
     def _run_opencode_serve_chunked(
@@ -970,7 +1037,10 @@ class ServeMixin:
         chunk_reports: list[dict[str, Any]] = []
 
         def _aggregate(
-            *, exit_code: int | None, killed_reason: str | None
+            *,
+            exit_code: int | None,
+            killed_reason: str | None,
+            context: _OpencodeRunStats | None = None,
         ) -> _OpencodeRunStats:
             return _OpencodeRunStats(
                 input_tokens=sum_input,
@@ -990,6 +1060,9 @@ class ServeMixin:
                 guard_aborted_turns=sum_guard_aborted,
                 finalize_timeout_turns=sum_finalize_timeouts,
                 observation_lost_turns=sum_observation_lost,
+                context_exhausted=bool(context and context.context_exhausted),
+                context_tokens=context.context_tokens if context else 0,
+                context_limit_tokens=context.context_limit_tokens if context else None,
             )
 
         def _drive(phase: str, prompt: str) -> _OpencodeRunStats:
@@ -1064,6 +1137,12 @@ class ServeMixin:
                 killed_reason=stats.killed_reason,
             )
             chunk_reports.append(report)
+            if stats.context_exhausted:
+                # The build stops where it ran out of room: no settle, no next
+                # chunk. The runner ends the cell as CONTEXT EXHAUSTED.
+                return _aggregate(
+                    exit_code=0, killed_reason=CONTEXT_EXHAUSTED, context=stats
+                )
             if stats.exit_code != 0:
                 return _aggregate(
                     exit_code=stats.exit_code, killed_reason=stats.killed_reason

@@ -449,6 +449,10 @@ export async function collectCells(runsRoot) {
         // otherwise cry wolf on every historical cell.
         build_chunks: meas?.build_chunks ?? null,
         terminal_reason: meas?.terminal_reason ?? null,
+        // CONTEXT EXHAUSTED (harness/context_budget.py): the session ran out of
+        // room and the harness stopped the cell there. A RESULT, not an
+        // instrument fault — the last graded round is the cell's measurement.
+        context_exhausted: meas?.terminal_reason === "context_exhausted",
         created_at: str(manifest.created_at),
       });
     }
@@ -467,7 +471,15 @@ export async function collectCells(runsRoot) {
  */
 export function baselineFor(model, offCells) {
   const mine = offCells.filter((c) => c.model === model);
-  const scorable = mine.filter((c) => c.state === "complete" && !c.void_instrument && !c.seeded_from_snapshot);
+  // Out of room with NOTHING graded (it stopped during the build) is not a
+  // floor: there is no measurement to subtract a run from.
+  const exhaustedUngraded = (c) => c.context_exhausted === true && !c.gates;
+  const scorable = mine.filter(
+    (c) => c.state === "complete" && !c.void_instrument && !c.seeded_from_snapshot && !exhaustedUngraded(c),
+  );
+  const exhausted = mine.filter(
+    (c) => c.state === "complete" && !c.void_instrument && !c.seeded_from_snapshot && exhaustedUngraded(c),
+  );
   const seeded = mine.filter((c) => c.state === "complete" && Boolean(c.seeded_from_snapshot));
   const voids = mine.filter((c) => c.state === "complete" && c.void_instrument);
   const running = mine.filter((c) => c.state !== "complete");
@@ -491,6 +503,7 @@ export function baselineFor(model, offCells) {
       wall_seconds: b.wall_seconds,
       gates: b.gates,
       verdict: b.verdict,
+      context_exhausted: b.context_exhausted === true,
       // A second valid OFF cell is not an error, but it IS a fact the operator
       // should see: only one of them is the floor.
       candidates: scorable.length,
@@ -543,6 +556,25 @@ export function baselineFor(model, offCells) {
         `the last OFF cell for ${model} is void-instrument (${voids[voids.length - 1].terminal_reason ?? "instrument fault"}) — ` +
         "it produced numbers, but they measure the harness rather than the model, so every Δ " +
         "computed against them would be invalid. Run a new baseline.",
+    };
+  }
+
+  if (exhausted.length) {
+    const x = exhausted[exhausted.length - 1];
+    return {
+      exists: false,
+      scorable: false,
+      exhausted: true,
+      id: x.id,
+      run_dir: x.run_dir,
+      sequence_index: x.sequence_index,
+      kind: x.kind,
+      provider: x.provider,
+      model_slug: x.model_slug,
+      candidates: 0,
+      reason:
+        `the last OFF cell for ${model} ran out of context during the build and was stopped before `
+        + "anything was graded — there is no measurement to compare a run against. Run a new baseline.",
     };
   }
 
@@ -617,7 +649,15 @@ function baselineList(offCells) {
   const rows = [];
   for (const [model, cells] of byModel) {
     const b = baselineFor(model, cells);
-    const state = b.scorable ? "complete" : b.voided ? "void" : b.pending ? "running" : "none";
+    const state = b.scorable
+      ? "complete"
+      : b.voided
+        ? "void"
+        : b.exhausted
+          ? "exhausted"
+          : b.pending
+            ? "running"
+            : "none";
     if (state === "none") continue;
 
     // Identity comes from the RESOLVED baseline where there is one, and from
@@ -642,6 +682,9 @@ function baselineList(offCells) {
       wall_seconds: b.wall_seconds ?? null,
       gates: b.gates ?? null,
       verdict: b.verdict ?? null,
+      // Stopped at the context limit — on a floor (graded) or on a row that
+      // is not one (state "exhausted", nothing graded).
+      context_exhausted: b.context_exhausted === true || state === "exhausted",
       // How many OFF cells for this model were found at all, and how many of
       // them were valid. The second number is the one that decides the state;
       // the first is what an operator checks when they expected a floor and
@@ -711,6 +754,7 @@ async function buildBaselineIndex({ runsRoot, models }) {
       complete: list.filter((b) => b.state === "complete").length,
       running: list.filter((b) => b.state === "running").length,
       void: list.filter((b) => b.state === "void").length,
+      exhausted: list.filter((b) => b.state === "exhausted").length,
     },
     note:
       "one floor per model. A model with no scorable floor may always start a baseline; a model "

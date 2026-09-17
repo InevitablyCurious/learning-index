@@ -53,6 +53,14 @@ def build_worker_opencode_config(
                 "enabled": False,
             }
         }
+    # REPAIR NEVER COMPACTS, AND NOW NOTHING SLIPS PAST THAT. opencode compacts
+    # by itself when a session nears the model's limit; three of four
+    # Learning-Index runs had repair rounds summarised that way. Off here, the
+    # session instead stops at the limit and the harness ends the cell as
+    # CONTEXT EXHAUSTED (harness/context_budget.py). The plugin's own build-
+    # boundary compaction calls /summarize, which this setting does not gate —
+    # verified in bench-worker:v1.
+    config["compaction"] = {"auto": False}
     config["permission"] = {
         "*": "allow",
         "external_directory": {"*": "deny"},

@@ -33,18 +33,19 @@ importing it directly is correct -- same rationale as serve.py
 
 from __future__ import annotations
 
-from contextlib import nullcontext
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import time
+from contextlib import nullcontext
+from pathlib import Path
 from typing import Any, Callable
 
 from harness.backends.base import NeedCard
 from harness.checkpoint import checkpoint_root, record_checkpoint
+from harness.context_budget import CONTEXT_EXHAUSTED
 from harness.egress import egress_container_name
 from harness.live_stream import Heartbeat, LiveStream
 from harness.outcomes.predicate_emitter import STATE_ALG
@@ -61,16 +62,22 @@ from ...cell_isolation import (
     assert_seeded_from_snapshot,
 )
 from ..docker_worker import (
-    ImageFingerprint,
     WORKER_IMAGE,
+    ImageFingerprint,
     image_plugin_present,
 )
 from ..mapping import write_session_mapping
 from ..transcript import write_session_transcript
 from .bootstrap import BootstrapMixin
 from .constants import (
+    _GRADER_DIR,
+    _HARNESS_LIMIT_REASONS,
     _NO_CHANGE_NOTE,
+    _REASONING_EFFORT_ENV,
+    _REPO_ROOT,
+    _RESERVATION_SAFETY_FACTOR,
     _SPEC,
+    _WORKER_AGENTS_MD,
     DEFAULT_ATTEMPT_HARD_CEILING,
     DEFAULT_GATE_TIMEOUT_S,
     DEFAULT_RUN_TIMEOUT_S,
@@ -78,12 +85,6 @@ from .constants import (
     TURN_TERMINAL_OBSERVATION_LOST,
     TURN_TERMINAL_STALLED,
     TURN_TERMINAL_TRANSPORT_ERROR,
-    _GRADER_DIR,
-    _HARNESS_LIMIT_REASONS,
-    _REASONING_EFFORT_ENV,
-    _REPO_ROOT,
-    _RESERVATION_SAFETY_FACTOR,
-    _WORKER_AGENTS_MD,
 )
 from .exceptions import (
     GateTimeoutError,
@@ -93,8 +94,8 @@ from .exceptions import (
 )
 from .feedback import (
     FeedbackMixin,
-    build_chunk_completion,
     _default_progress,
+    build_chunk_completion,
 )
 from .grading import GradingMixin
 from .hold_ui import _hold_for_ui_review
@@ -120,7 +121,6 @@ from .transport import (
 )
 from .utils import UtilsMixin
 from .worker_config import bench_session_title
-
 
 # WO-77: the first pass is a sequence of chunk prompts (task/backgammon/prompts/
 # chunk-NN.md), driven one per user message over the one serve session.
@@ -820,6 +820,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         verdict = "FAIL"
         attempts_to_green: int | str = "FAIL"
         termination_reason = "pending"
+        # CONTEXT EXHAUSTED ends the cell where it happens: during the build
+        # nothing is graded; during a repair round the last graded round stands.
+        context_stop = False
         _worker_exit_annot: str | None = None
         first_run: _OpencodeRunStats | None = None
         # Monotonic clock start of the chunked build, for the attempt-1
@@ -1137,7 +1140,12 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         f"cell_cost_usd={cell_cost_usd:.4f}"
                     )
 
-                    if first_run.budget_stop_detected:
+                    if first_run.context_exhausted:
+                        verdict = "FAIL"
+                        attempts_to_green = "CONTEXT_EXHAUSTED"
+                        termination_reason = CONTEXT_EXHAUSTED
+                        context_stop = True
+                    elif first_run.budget_stop_detected:
                         verdict = "BUDGET_STOP"
                         attempts_to_green = "BUDGET_STOP"
                         termination_reason = "budget_stop_mid_attempt"
@@ -1204,6 +1212,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
             if (
                 first_run is not None
                 and build_chunk_expected
+                and not first_run.context_exhausted
                 and not first_run.budget_stop_detected
                 and not first_run.zero_tool_turn_honest_fail
                 and first_run.resume_count == 0
@@ -1229,6 +1238,13 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
             # harness_error is an ANNOTATION on the cell, not a skip.
             _can_feedback = _worker_exit_annot is None
             for attempt in range(1, self.max_attempts + 1):
+                if context_stop:
+                    # Out of room during the build: stop the run, grade nothing.
+                    self._progress(
+                        f"PROGRESS run_label={run_label} step=context-exhausted-stop "
+                        f"phase=build graded=0"
+                    )
+                    break
                 report_json = run_dir / f"attempt-{attempt}-report.json"
                 gate_log = run_dir / f"attempt-{attempt}-gate.log"
                 self._progress(
@@ -1745,6 +1761,17 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     f"output={feedback_run.output_tokens} reasoning={feedback_run.reasoning_tokens} "
                     f"cost_usd={feedback_run.cost_usd:.4f} cell_cost_usd={cell_cost_usd:.4f}"
                 )
+                if feedback_run.context_exhausted:
+                    # Out of room mid-repair: stop the run. The round graded
+                    # before this one is the cell's result.
+                    verdict = "FAIL"
+                    attempts_to_green = "CONTEXT_EXHAUSTED"
+                    termination_reason = CONTEXT_EXHAUSTED
+                    self._progress(
+                        f"PROGRESS run_label={run_label} step=context-exhausted-stop "
+                        f"phase=feedback-{attempt} graded={len(attempt_reports)}"
+                    )
+                    break
                 if feedback_run.budget_stop_detected:
                     verdict = "BUDGET_STOP"
                     attempts_to_green = "BUDGET_STOP"

@@ -550,7 +550,7 @@ test("BASELINE: the list is rooted in cells, so a cloud floor appears without a 
   assert.equal(row.turns, 31);
   assert.equal(row.gates.total, 71);
   assert.match(row.id, /^base-[0-9a-f]{4}$/);
-  assert.deepEqual(idx.counts, { complete: 1, running: 0, void: 0 });
+  assert.deepEqual(idx.counts, { complete: 1, running: 0, void: 0, exhausted: 0 });
   rmSync(root, { recursive: true, force: true });
 });
 

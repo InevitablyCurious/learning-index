@@ -54,6 +54,7 @@ from typing import Any
 # THIS module's namespace at call time — which is exactly why ``ServeClient``
 # stays defined here and why these two bindings are imported here rather than
 # referenced through ``serve_transport.`` at the call sites.
+from harness.context_budget import CONTEXT_EXHAUSTED, context_exhausted
 from harness.loop_kill_marker import (
     LOOP_KILL_WAIT_REASON,
     loop_kill_marker_name,
@@ -86,6 +87,14 @@ from harness.serve_transport import (
     set_read_retry_observer,
 )
 
+
+def progress_token_of(messages: list) -> tuple[int, int]:
+    """``(messages, parts)`` for an already-read message list."""
+    parts = 0
+    for msg in messages:
+        if isinstance(msg, dict):
+            parts += len(_as_list(msg.get("parts")))
+    return (len(messages), parts)
 
 class ServeClient:
     """Thin stdlib-urllib client for a running ``opencode serve``.
@@ -248,12 +257,7 @@ class ServeClient:
         generation keeps advancing this token and is never mistaken for a
         stall; a turn wedged inside a tool call advances neither.
         """
-        messages = _as_list(self.get_messages(session_id))
-        parts = 0
-        for msg in messages:
-            if isinstance(msg, dict):
-                parts += len(_as_list(msg.get("parts")))
-        return (len(messages), parts)
+        return progress_token_of(_as_list(self.get_messages(session_id)))
 
     def wait_idle(self, session_id: str, *, timeout_s: float = 600.0, **kwargs) -> bool:
         """Poll :meth:`session_busy` until idle or timeout.
@@ -274,11 +278,18 @@ class ServeClient:
         progress_interval_s: float = 30.0,
         loop_kill_marker_dir: str | None = None,
         turn_start_ts_ms: int | None = None,
+        context_limit_tokens: int | None = None,
     ) -> tuple[bool, str]:
         """Poll until idle, the budget runs out, or the turn stops progressing.
 
         Returns ``(reached_idle, reason)`` where reason is one of ``idle``,
-        ``timeout``, ``stalled`` or ``loop_killed``.
+        ``timeout``, ``stalled``, ``loop_killed`` or ``context_exhausted``.
+
+        CONTEXT EXHAUSTED (harness/context_budget.py). A turn is one agent loop
+        and can run for many model calls, so the size check rides the same
+        infrequent progress probe as the stall bound: when the newest assistant
+        message reaches ``context_limit_tokens``, or a request overflowed, the
+        wait ends with ``context_exhausted`` instead of letting the turn run on.
 
         A probe that fails even after retries is treated as STILL BUSY, never
         as idle. Reading "idle" from a failed probe is the dangerous direction:
@@ -333,8 +344,19 @@ class ServeClient:
                 return True, "idle"
 
             now = time.monotonic()
-            if stall_timeout_s is not None and now >= next_progress_check:
+            if (
+                stall_timeout_s is not None or context_limit_tokens is not None
+            ) and now >= next_progress_check:
                 next_progress_check = now + progress_interval_s
+                if context_limit_tokens is not None:
+                    try:
+                        exhausted, _size = context_exhausted(
+                            _as_list(self.get_messages(session_id)), context_limit_tokens
+                        )
+                    except ServeClientError:
+                        exhausted = False  # a failed read is not evidence of anything
+                    if exhausted:
+                        return False, CONTEXT_EXHAUSTED
                 try:
                     token = self.session_progress_token(session_id)
                 except ServeClientError:
@@ -342,7 +364,7 @@ class ServeClient:
                     # existing deadline alone rather than start counting down
                     # against a session we simply cannot see.
                     token = None
-                if token is not None:
+                if token is not None and stall_timeout_s is not None:
                     if token != last_token:
                         last_token = token
                         stall_deadline = now + stall_timeout_s

@@ -164,6 +164,7 @@ function countWords(c) {
   const bits = [`${c.complete} complete`];
   if (c.running) bits.push(`${c.running} running`);
   if (c.void) bits.push(`${c.void} void`);
+  if (c.exhausted) bits.push(`${c.exhausted} context exhausted`);
   return bits.join(" · ");
 }
 
@@ -257,10 +258,11 @@ function baselineRow(board, ledger, b) {
         <span class="blmodel" title="${esc(b.model_slug ?? b.model ?? "")}">${esc(b.model ?? "unknown model")}${b.provider ? esc(` · ${b.provider}`) : ""}</span>
         <span>${b.turns === null || b.turns === undefined ? nul("— pending") : esc(String(b.turns))}</span>
         <span>${gatesCell(b.gates)}</span>
-        <span class="blstate ${esc(b.state)}">${esc(stateWord(b, n))}</span>
+        <span class="blstate ${esc(b.state)}${b.context_exhausted ? " ctx" : ""}">${esc(stateWord(b, n))}</span>
         <span class="blact">${feedMark(ledger, b)}${runBtn(b)}</span>
       </div>
       ${voidNote(b)}
+      ${exhaustedNote(b)}
       ${b.can_run?.allowed === false && b.can_run?.reason ? `<div class="blwhy"><span class="null">${esc(b.can_run.reason)}</span></div>` : ""}
       ${open ? drawer(board, ledger, b) : ""}
     </div>`;
@@ -282,6 +284,10 @@ function stateWord(b, n) {
   // it anyway — it belongs on the run rows, where the event is in the past.
   if (b.state === "running") return `RUNNING${b.campaign_started_at ? ` · ${elapsed(b.campaign_started_at)}` : ""}`;
   if (b.state === "void") return "VOID — NOT A FLOOR";
+  // CONTEXT EXHAUSTED takes the state column on a floor too: the run stopped
+  // at the limit, and that is the first thing to know about its numbers. The
+  // run count is still in the drawer.
+  if (b.context_exhausted) return "CONTEXT EXHAUSTED";
   if (!n) return "NO RUNS";
   return `${n} RUN${n === 1 ? "" : "S"}`;
 }
@@ -297,6 +303,20 @@ function stateWord(b, n) {
 function voidNote(b) {
   if (b.state !== "void" || !b.reason) return "";
   return `<div class="blwhy"><span class="null">${esc(b.reason)}</span></div>`;
+}
+
+/**
+ * CONTEXT EXHAUSTED, said on the row. The session ran out of room and the
+ * harness stopped the run there instead of letting opencode summarise it. On a
+ * floor the last graded round is the result; on a row that is not a floor,
+ * nothing was graded and the reason says so.
+ */
+function exhaustedNote(b) {
+  if (!b.context_exhausted) return "";
+  const text = b.state === "exhausted" && b.reason
+    ? b.reason
+    : "ran out of context and was stopped at the limit — the last graded round is its result.";
+  return `<div class="blwhy"><span class="null">${esc(text)}</span></div>`;
 }
 
 /** GATES: a real ratio when the suite total was recorded, and never a fake one. */
@@ -462,6 +482,7 @@ function detail(c) {
   bits.push(c.state === "complete" ? `${ph.done ?? 0} of ${ph.total ?? 5}` : `phase ${ph.done ?? 0} of ${ph.total ?? 5} · running`);
   if (c.gates?.total) bits.push(`${c.gates.passed ?? c.gates.total - (c.gates.failed ?? 0)}/${c.gates.total} gates`);
   if (c.void_instrument) bits.push("VOID INSTRUMENT");
+  if (c.context_exhausted) bits.push("CONTEXT EXHAUSTED");
   if (c.verdict) bits.push(c.verdict);
   return `${esc(bits.join(" · "))}${buildStrip(c)}`;
 }

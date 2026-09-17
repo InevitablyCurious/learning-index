@@ -1505,6 +1505,10 @@ a:hover{color:var(--type)}
 .blrow.feeding{background:color-mix(in srgb, var(--fg) 7%, transparent)}
 .blstate.running{color:var(--type)}
 .blstate.void{color:var(--danger)}
+/* Stopped at the context limit. Amber, not red: a result, not a fault. Allowed
+   to wrap — the 128px state column holds "CONTEXT" and "EXHAUSTED" on two lines
+   rather than clipping the word the row exists to show. */
+.blstate.exhausted,.blstate.ctx{color:var(--warn,#e0b34d);white-space:normal;line-height:1.25}
 /* THE VOID REASON AND THE LAUNCH REFUSAL, printed under the row they belong to.
    Never a tooltip: a void floor's numbers look ordinary, so the sentence
    explaining them has to be on screen beside them — and a disabled [+ run] that

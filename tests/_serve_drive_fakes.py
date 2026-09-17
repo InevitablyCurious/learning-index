@@ -158,7 +158,7 @@ class _FakeServeClient:
             info: dict[str, Any] = {
                 "role": "assistant",
                 "error": {
-                    "name": "UnknownError",
+                    "name": terminal.get("error_name") or "UnknownError",
                     "data": {"message": terminal["info_error"]},
                 },
             }
@@ -174,12 +174,12 @@ class _FakeServeClient:
                 parts.append({"type": "step-finish", "reason": terminal["step_finish"]})
             if terminal and terminal.get("error_part"):
                 parts.append({"type": "error", "message": terminal["error_part"]})
-            self._messages.append(
-                {
-                    "info": {"role": "assistant"},
-                    "parts": parts,
-                }
-            )
+            info_ok: dict[str, Any] = {"role": "assistant"}
+            if terminal and terminal.get("tokens"):
+                # The size opencode records on a finished message; the
+                # CONTEXT EXHAUSTED check reads it (harness/context_budget.py).
+                info_ok["tokens"] = terminal["tokens"]
+            self._messages.append({"info": info_ok, "parts": parts})
         if self.compaction_during_drive and self.compaction_on_idle is not None:
             info: dict[str, Any] = {
                 "role": "assistant",
@@ -333,7 +333,9 @@ def _make_runner(tmp_path: Path, *, compact: bool = False) -> ChallengeRunner:
     return ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
-        model="local-llm-proxy/kimi/kimi-k3",
+        # A model the registry declares limits for: the serve drive computes
+        # the CONTEXT EXHAUSTED line from them (harness/context_budget.py).
+        model="local-llm-proxy/qwen3.6-35b-a3b-bench",
         memory_mode="off",
         run_timeout_s=30,
         completion_grace_s=2,

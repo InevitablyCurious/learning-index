@@ -185,7 +185,7 @@ export async function readModelsLedger({ runsRoot, benchModels, runInFlight, blo
       allCells,
       serialBlock: serialNote,
     }),
-    counts: baselines.counts ?? { complete: 0, running: 0, void: 0 },
+    counts: baselines.counts ?? { complete: 0, running: 0, void: 0, exhausted: 0 },
     // ── WHAT A NEW BASELINE COULD BE STARTED ON ──────────────────────────
     //
     // Every model on both substrates, each carrying its own resolved gate. This
@@ -403,6 +403,7 @@ function onRunsFor(baseline, allCells) {
         verdict: cell.verdict,
         void_instrument: cell.void_instrument === true,
         terminal_reason: cell.terminal_reason,
+        context_exhausted: cell.context_exhausted === true,
         build_chunks: cell.build_chunks ?? null,
       },
       delta: deltaOf(cell, baseline),
