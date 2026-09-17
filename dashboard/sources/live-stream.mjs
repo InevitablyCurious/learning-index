@@ -86,6 +86,11 @@ export async function read(ctx) {
   const phaseLog = [];
   const gates = new Map(); // gate id -> newest verdict, per the LAST attempt seen
   const attempts = new Map(); // attempt -> {verdict, failed, ts}
+  // attempt -> (gate id -> status). Kept so each closed attempt can say what it
+  // FIXED and what it BROKE against the one before: a round that fixes two and
+  // breaks two keeps the same failing count and otherwise reads as no change.
+  const byAttempt = new Map();
+  let ended = null; // the producer's cell.end: how the cell stopped
   const byNs = new Map();
   let backends = new Map();
 
@@ -101,6 +106,10 @@ export async function read(ctx) {
 
     if (kind === "cell.start") {
       arm = str(r.arm) ?? arm;
+      continue;
+    }
+    if (kind === "cell.end") {
+      ended = { verdict: str(r.verdict), terminal_reason: str(r.terminal_reason), ts: int(r.ts) };
       continue;
     }
     if (kind === "gate.result") {
@@ -156,6 +165,10 @@ export async function read(ctx) {
           prev.first_pass_attempt === null ? a : Math.min(prev.first_pass_attempt, a);
       }
       if (status === "fail") prev.ever_failed = true;
+      if (a !== null && status) {
+        if (!byAttempt.has(a)) byAttempt.set(a, new Map());
+        byAttempt.get(a).set(gid, status);
+      }
 
       gates.set(gid, prev);
       continue;
@@ -195,6 +208,22 @@ export async function read(ctx) {
     }
   }
 
+  // FIXED / BROKE per closed attempt, against the attempt before it.
+  for (const entry of attempts.values()) {
+    const now = byAttempt.get(entry.attempt);
+    const before = byAttempt.get(entry.attempt - 1);
+    if (!now || !before) continue;
+    let fixed = 0;
+    let broke = 0;
+    for (const [gid, status] of now) {
+      const was = before.get(gid);
+      if (was === "fail" && status === "pass") fixed += 1;
+      if (was === "pass" && status === "fail") broke += 1;
+    }
+    entry.fixed = fixed;
+    entry.broke = broke;
+  }
+
   const gateList = [...gates.values()];
   const counts = { pass: 0, fail: 0, other: 0 };
   for (const g of gateList) {
@@ -225,6 +254,8 @@ export async function read(ctx) {
         gates: gateList,
         gate_counts: counts,
         attempts: [...attempts.values()].sort((a, b) => a.attempt - b.attempt),
+        // How the cell stopped, as the producer said it (null while running).
+        ended,
         backends: [...backends.values()],
         // Namespaces are reported whether or not any panel knows them: an
         // unrecognised backend must still be visibly ALIVE rather than absent.

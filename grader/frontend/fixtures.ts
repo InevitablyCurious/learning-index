@@ -70,22 +70,64 @@ export { expect, PORT, BASE_URL };
 // click is the page's own business.
 export async function playerClick(target: Locator): Promise<void> {
   await expect(target).toBeVisible();
-  // Pages redraw checkers by replacing their elements, so an element found a
-  // moment ago can be gone by the time it is measured. Each try looks it up
-  // afresh; the position is read in the page, in the same coordinates the
-  // mouse uses.
+  // WAIT FOR IT TO HOLD STILL, THEN CLICK WHERE IT IS. A checker slides into
+  // place after a redraw; reading its position mid-slide clicks where it WAS.
+  // That is the stability wait `locator.click()` does for itself, and leaving
+  // it out made the reference solution fail F10 and F14 (grader image of
+  // 2026-09-16). The position must match on two consecutive animation frames.
+  //
+  // Pages also redraw checkers by replacing their elements, so an element found
+  // a moment ago can be gone: each try looks it up afresh, and a replaced
+  // element (zero size, or never still) simply gets another try.
   let box: { x: number; y: number; width: number; height: number } | null = null;
   for (let tries = 0; tries < 20 && !box; tries++) {
     try {
-      box = await target.evaluate((el) => {
-        el.scrollIntoView({ block: "center", inline: "center" });
-        const r = el.getBoundingClientRect();
-        return { x: r.x, y: r.y, width: r.width, height: r.height };
-      }, undefined, { timeout: 1000 });
+      box = await target.evaluate(
+        async (el) => {
+          el.scrollIntoView({ block: "center", inline: "center" });
+          const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+          let prev = "";
+          for (let i = 0; i < 120; i++) {
+            await frame();
+            if (!el.isConnected) return null;
+            const r = el.getBoundingClientRect();
+            const cur = [r.x, r.y, r.width, r.height].map((v) => v.toFixed(1)).join(",");
+            if (cur === prev && r.width > 0 && r.height > 0) {
+              return { x: r.x, y: r.y, width: r.width, height: r.height };
+            }
+            prev = cur;
+          }
+          return null;
+        },
+        undefined,
+        { timeout: 5000 },
+      );
     } catch {
-      await target.page().waitForTimeout(100);
+      box = null;
     }
+    if (!box) await target.page().waitForTimeout(100);
   }
   if (!box) throw new Error("the element never held still on screen long enough to click");
   await target.page().mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
+
+/**
+ * Click a checker the way a player does when the game is not ready yet: click,
+ * look for the move hints, and click again if none came up. The reference
+ * solution makes a checker clickable only after the dice finish rolling — a
+ * player just clicks again, and `locator.click()` used to hide that by waiting
+ * for the element to accept clicks. Stops as soon as `shown` appears; if it
+ * never does, the caller's own assertion reports it.
+ */
+export async function playerClickUntilShown(target: Locator, shown: Locator, tries = 8): Promise<void> {
+  for (let i = 0; i < tries; i++) {
+    await playerClick(target);
+    try {
+      await expect(shown.first()).toBeAttached({ timeout: 1500 });
+      return;
+    } catch {
+      // not ready yet — a player would click again
+    }
+  }
+}
+

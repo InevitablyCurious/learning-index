@@ -1625,6 +1625,15 @@ a:hover{color:var(--type)}
 .ph.running{border-color:var(--fg);border-left-width:3px;background:var(--bg)}
 .ph.done{border-color:var(--border)}
 .ph.pending{border-color:var(--hairline);color:var(--dim)}
+/* The cell stopped inside this phase (STOPPED) or before it (NOT RUN): never DONE. */
+.ph.stopped{border-color:var(--warn,#e0b34d);border-left-width:3px}
+.ph.stopped .ph-top{color:var(--type)}
+.ph.notrun{border-color:var(--hairline);color:var(--dim)}
+/* Verdict plus what the round changed, kept together on the row. */
+.ph-out{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;justify-content:flex-end;min-width:0}
+.ph-churn{font:700 10px var(--font);letter-spacing:.08em;white-space:nowrap;color:var(--dim)}
+.ph-churn.good{color:var(--check)}
+.ph-churn.bad{color:var(--danger)}
 .ph-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font:700 12px var(--font);color:var(--dim)}
 .ph.running .ph-top,.ph.done .ph-top{color:var(--type)}
 .ph-state{letter-spacing:.14em;flex:none}

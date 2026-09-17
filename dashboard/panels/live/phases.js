@@ -104,16 +104,29 @@ export function spine(r, board) {
     if (Number.isFinite(a?.attempt)) verdicts.set(a.attempt, a);
   }
 
+  const ended = board?.live?.ended ?? null;
   return `<div class="spine">${PHASES.map((p) => {
-    const state =
+    let state =
       active === null ? "pending" : p.n < active ? "done" : p.n === active ? (stopped ? "done" : "running") : "pending";
-    return phaseRow(p, state, r, board, verdicts.get(p.n), stated);
+    // A PHASE THE CELL NEVER FINISHED IS NOT DONE. When the cell has stopped,
+    // a phase with no closed attempt was cut off (the one it was in) or never
+    // reached (every one after it) — saying DONE there claims a grade that
+    // never ran.
+    if (stopped && !verdicts.has(p.n)) state = p.n <= (active ?? 0) ? "stopped" : "notrun";
+    return phaseRow(p, state, r, board, verdicts.get(p.n), stated, ended);
   }).join("")}</div>`;
 }
 
-function phaseRow(p, state, r, board, verdict, stated) {
+const END_WORD = { context_exhausted: "CONTEXT EXHAUSTED" };
+
+function phaseRow(p, state, r, board, verdict, stated, ended) {
   const title = p.n === 1 ? `${p.n} — ${p.name}` : `${p.n} — ${p.name} · ${p.label}`;
-  const word = state === "running" ? "RUNNING" : state === "done" ? "DONE" : "PENDING";
+  const word =
+    state === "running" ? "RUNNING"
+      : state === "done" ? "DONE"
+        : state === "stopped" ? "STOPPED"
+          : state === "notrun" ? "NOT RUN"
+            : "PENDING";
 
   // Chunks are internal to phase 1 and are drawn ONLY while it is the phase.
   const ticks =
@@ -146,14 +159,32 @@ function phaseRow(p, state, r, board, verdict, stated) {
             : ""
         }>${esc(
           `${verdict.verdict ?? "?"}${Number.isFinite(verdict.failed) ? ` · ${verdict.failed} failed` : ""}`,
+        )}</span>${churn(verdict)}`
+      : state === "stopped"
+        ? `<span class="ph-verdict bad" title="${esc(`the cell stopped (${ended?.terminal_reason ?? "reason not recorded"}) before this phase was graded`)}">${esc(
+          `NOT GRADED${ended?.terminal_reason ? ` — ${END_WORD[ended.terminal_reason] ?? ended.terminal_reason}` : ""}`,
         )}</span>`
-      : "";
+        : "";
 
   return `
     <div class="ph ${state}"${state === "running" && !stated ? ` title="phase recovered from the launch log — the harness's own phase.start record was not readable"` : ""}>
-      <div class="ph-top"><span>${esc(title)}</span>${outcome}<span class="ph-state">${word}</span></div>
+      <div class="ph-top"><span>${esc(title)}</span>${outcome ? `<span class="ph-out">${outcome}</span>` : ""}<span class="ph-state">${word}</span></div>
       ${ticks}
     </div>`;
+}
+
+/**
+ * What a closed attempt changed against the one before it. Without this a
+ * round that fixed two gates and broke two reads "27 failed" like the round
+ * before it, and looks as if nothing moved.
+ */
+function churn(v) {
+  if (!Number.isFinite(v.fixed) || !Number.isFinite(v.broke)) return "";
+  if (!v.fixed && !v.broke) return `<span class="ph-churn">no change</span>`;
+  const bits = [];
+  if (v.fixed) bits.push(`<span class="ph-churn good">${esc(`${v.fixed} fixed`)}</span>`);
+  if (v.broke) bits.push(`<span class="ph-churn bad">${esc(`${v.broke} broke`)}</span>`);
+  return bits.join("");
 }
 
 /**

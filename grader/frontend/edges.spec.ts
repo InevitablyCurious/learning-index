@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, playerClick, test } from "./fixtures.ts";
+import { expect, playerClickUntilShown, test } from "./fixtures.ts";
 import { checkerAnimates, hintAnimates } from "../lib/acceptance.ts";
 import { BASE_URL } from "../lib/harness.ts";
 
@@ -120,9 +120,8 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
     '[data-testid="checker"][data-color="white"][data-loc="bar"]',
   );
   await expect(whiteBarChecker).toHaveCount(1);
-  await playerClick(whiteBarChecker);
-
   const hints = page.locator('[data-testid="hint"]');
+  await playerClickUntilShown(whiteBarChecker, hints);
   await expect(hints).toHaveCount(2);
   await hints.first().click({ force: true });
 
@@ -309,7 +308,7 @@ test("[F14] REQ-ANIM — animation present", async ({ page }) => {
     '[data-testid="checker"][data-color="white"][data-loc="bar"]',
   );
   await expect(whiteBarChecker).toHaveCount(1);
-  await playerClick(whiteBarChecker);
+  await playerClickUntilShown(whiteBarChecker, page.locator('[data-testid="hint"]'));
 
   const hint = page.locator('[data-testid="hint"]').first();
   await expect(hint).toBeVisible();
