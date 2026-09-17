@@ -21,6 +21,7 @@ the previous image in place and lists the checks the reference failed.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -39,7 +40,10 @@ from harness.grader_image import (  # noqa: E402
 )
 from harness.grader_run import gate_argv  # noqa: E402
 
-CANDIDATE = f"{IMAGE}-candidate"
+# ONE CANDIDATE TAG PER RUN. A shared name let two overlapping rebuilds delete
+# each other's candidate: one promoted and removed it, and the other's promote
+# then failed with "No such image" (2026-09-17) although its own proof passed.
+CANDIDATE = f"{IMAGE}-candidate-{os.getpid()}"
 GOLDEN = default_spec().golden_dir
 GATES = default_spec().grader_dir
 DOCKERFILE = REPO / "images" / "grader" / "Dockerfile"
