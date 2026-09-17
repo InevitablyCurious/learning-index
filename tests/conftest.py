@@ -37,6 +37,36 @@ def _isolate_runs_root(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("BENCH_RUNS_DIR", str(runs_root))
 
 
+# The proxy's bench rows as `GET /v1/models` serves them (captured 2026-09-17).
+PROXY_BENCH_ROWS = [
+    {"id": "okp-bench-worker", "name": "Local LLM Proxy (auto-resident)", "purpose": "okp-bench",
+     "upstream_model": "auto", "context_length": 262_144, "max_output_tokens": 32_768, "reasoning": True},
+    {"id": "qwen3.6-35b-a3b-bench", "name": "Qwen3.6 35B-A3B 8bit via Proxy (bench)", "purpose": "okp-bench",
+     "upstream_model": "Qwen3.6-35B-A3B-MLX-8bit", "context_length": 262_144, "max_output_tokens": 32_768, "reasoning": True},
+    {"id": "deepseek-v4-flash-bench", "name": "DeepSeek V4 Flash 0731 MXFP4 via Proxy (bench)", "purpose": "okp-bench",
+     "upstream_model": "Vontra--DeepSeek-V4-Flash-0731-MXFP4-MLX", "context_length": 256_512, "max_output_tokens": 32_768, "reasoning": True},
+    {"id": "nemotron-3-nano-30b-bench", "name": "Nemotron-3 Nano 30B-A3B 4bit via Proxy (bench)", "purpose": "okp-bench",
+     "upstream_model": "NVIDIA-Nemotron-3-Nano-30B-A3B-MLX-4bit", "context_length": 262_144, "max_output_tokens": 32_768, "reasoning": True},
+    {"id": "gemma-4-26b-a4b-bench", "name": "Gemma 4 26B-A4B QAT 4bit VLM via Proxy (bench)", "purpose": "okp-bench",
+     "upstream_model": "gemma-4-26B-A4B-it-QAT-MLX-4bit", "context_length": 262_144, "max_output_tokens": 32_768, "reasoning": True},
+    {"id": "qwen3.6-35b-a3b (Local LLM Proxy - oMLX)", "name": "Qwen3.6 35B-A3B 8bit via Proxy", "purpose": "interactive-pinned",
+     "upstream_model": "Qwen3.6-35B-A3B-MLX-8bit", "context_length": 262_144, "max_output_tokens": 16_384, "reasoning": True},
+]
+
+
+@pytest.fixture(autouse=True)
+def _fake_model_proxy(monkeypatch):
+    """Tests never reach the real model proxy. The local model list is served
+    from PROXY_BENCH_ROWS; a test that needs the proxy down patches
+    `harness.model_catalog.fetch_proxy_models` itself."""
+    from harness import model_catalog
+
+    monkeypatch.setattr(model_catalog, "fetch_proxy_models", lambda *a, **k: [dict(r) for r in PROXY_BENCH_ROWS])
+    model_catalog.worker_model_registry.cache_clear()
+    yield
+    model_catalog.worker_model_registry.cache_clear()
+
+
 def pytest_report_header(config):
     """Print usage guidance on every test run."""
     lines = []

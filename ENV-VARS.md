@@ -87,7 +87,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_INGRESS_PORT | 4096 | egress ingress port | env |
 | OKP_CONTROL_PORT | 8718 | control-plane port | env |
 | OKP_CONTROL_BENCH_ROOT | .. | control bench root | env |
-| OKP_CONTROL_PROXY_URL | http://127.0.0.1:4545 | model proxy | env |
+| OKP_CONTROL_PROXY_URL | http://127.0.0.1:4545 | model proxy: the control roster AND the harness model list (`GET /v1/models`) | env |
 | OKP_CONTROL_RUNTIME_URL | http://127.0.0.1:1234 | LM Studio runtime | env |
 | OKP_CONTROL_SERVE_URL | http://127.0.0.1:8719 | serve API | env |
 | OKP_CONTROL_PYTHON | null | python binary | env |

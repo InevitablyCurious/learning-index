@@ -64,7 +64,7 @@ def _apply_model_override(
 ) -> list[str]:
     """Apply the operator's --model selection to the roster slug list.
 
-    The override names a proxy bench alias present in WORKER_MODEL_REGISTRY
+    The override names a bench alias the model proxy serves (harness.model_catalog)
     (e.g. ``qwen3.6-35b-a3b-bench``); the resulting roster slug is
     ``local-llm-proxy/<alias>``. The proxy makes that exact model resident on
     the first request (exclusive load on call). Valid only against the
@@ -99,7 +99,13 @@ def _apply_model_override(
             raise SystemExit(2)
         return [cloud_slug]
     override = str(model_override or "").strip()
-    registry = getattr(config, "WORKER_MODEL_REGISTRY", {})
+    from harness.model_catalog import ModelCatalogUnavailable, worker_model_registry
+
+    try:
+        registry = worker_model_registry()
+    except ModelCatalogUnavailable as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2)
     retired = getattr(config, "RETIRED_MODEL_ALIASES", {})
     available = (
         ", ".join(sorted(str(k) for k in registry if k not in retired)) or "none"

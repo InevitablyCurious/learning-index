@@ -31,7 +31,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from harness.config import CLOUD_ORCAROUTER_PROVIDER, WORKER_MODEL_REGISTRY
+from harness.config import CLOUD_ORCAROUTER_PROVIDER
+from harness.model_catalog import worker_model_registry
 
 CONTEXT_EXHAUSTED = "context_exhausted"
 CONTEXT_OVERFLOW_ERROR_NAME = "ContextOverflowError"
@@ -42,7 +43,7 @@ def model_limits(model: str) -> dict[str, int]:
     """The context and output limits the worker's opencode.json declares."""
     provider_id, _, model_id = str(model).partition("/")
     if provider_id == "local-llm-proxy":
-        entry = WORKER_MODEL_REGISTRY.get(model_id)
+        entry = worker_model_registry().get(model_id)
     else:
         entry = CLOUD_ORCAROUTER_PROVIDER.get("models", {}).get(model)
         if entry is None:

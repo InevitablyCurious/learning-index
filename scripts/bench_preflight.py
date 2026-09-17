@@ -15,7 +15,7 @@ Run this instead. It prints a GO / NO-GO verdict and, on GO, the exact
 launch command with `< /dev/null` and the flag ordering already correct.
 
 Local cell (default — the resident model behind the :4545 relay proxy;
-`--model` is a bench alias from WORKER_MODEL_REGISTRY):
+`--model` is a bench alias served by the model proxy, purpose okp-bench):
 
     .venv/bin/python scripts/bench_preflight.py --model qwen3.6-35b-a3b-bench
 
@@ -132,7 +132,7 @@ def main() -> int:
         "--model",
         default="qwen3.6-35b-a3b-bench",
         help="local mode: subject bench alias pinned for the run "
-        "(WORKER_MODEL_REGISTRY); --cloud mode: the MODEL HALF of the "
+        "(served by the model proxy); --cloud mode: the MODEL HALF of the "
         "'{provider}/{model}' roster key (e.g. deepseek-chat with "
         "--provider deepseek), not a bench alias",
     )

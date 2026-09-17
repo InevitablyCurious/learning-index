@@ -209,7 +209,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Pin the run's subject to a named proxy bench alias present in "
-            "WORKER_MODEL_REGISTRY (e.g. qwen3.6-35b-a3b-bench). The proxy makes "
+            "the model proxy's bench list (e.g. qwen3.6-35b-a3b-bench). The proxy makes "
             "that exact model resident on the first request (exclusive load on "
             "call); identity is still observed from API responses and recorded "
             "(RC-7). Omit to keep the neutral auto-resident slug. Changing the "

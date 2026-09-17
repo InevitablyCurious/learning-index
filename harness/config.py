@@ -300,106 +300,11 @@ class LadderRung:
     recorded_class: str | None = None
 
 
-# Worker opencode model declarations mirror manager session provider blocks
-# (name/reasoning/tool_call/limit shape). Any worker-only additions
-# (interleaved + optional headers) are layered by
-# adapters.challenge.build_worker_opencode_config.
-WORKER_MODEL_REGISTRY: dict[str, dict[str, Any]] = {
-    # Local proxy declarations. These are opencode MODEL BLOCKS used by
-    # build_worker_opencode_config — NOT scored-roster rungs (the roster is now a
-    # single subject under D4). Model ids are the bench aliases served by the
-    # Local LLM Proxy (its config/models.yaml, bench aliases); the worker reaches
-    # it via BENCH_WORKER_SPEND_PROXY_BASE_URL=http://host.docker.internal:4545/v1
-    # (or --proxy-base-url). Shape mirrors Walter's daily opencode model block
-    # for the oMLX alias (2026-08-09 directive): no options block (no
-    # temperature pin, no reasoning effort) so the worker puts the same
-    # request shape on the wire as the daily driver that never stalls.
-    # Context is 262144 (256K, 2026-08-10 directive) matching the proxy bench
-    # alias's contextLength; output 16384 mirrors the daily block.
-    # RETIRED (2026-08-14) — see RETIRED_MODEL_ALIASES below. Kept as a block so
-    # `--model okp-bench-worker` is refused with the RETIREMENT reason rather
-    # than "unknown alias", which would send the operator looking for a typo.
-    # The proxy still advertises this alias; the bench refuses it regardless.
-    "okp-bench-worker": {
-        # Display name only — deliberately NOT a model identity (RC-7): the
-        # alias serves whichever model is resident behind the proxy.
-        "name": "Local LLM Proxy (auto-resident)",
-        "reasoning": True,
-        "tool_call": True,
-        "temperature": True,
-        "attachment": False,
-        "modalities": {"input": ["text"], "output": ["text"]},
-        "limit": {
-            "context": 262_144,
-            "output": 16_384,
-        },
-    },
-    # Pinned bench alias (2026-08-10, WO model-flag): selecting this model via
-    # `run_cumulative.py run --model qwen3.6-35b-a3b-bench` makes the proxy
-    # load exactly Qwen3.6-35B-A3B-MLX-8bit (exclusive load on call). The block
-    # mirrors Walter's daily opencode.json `qwen3.6-35b-a3b (Local LLM Proxy -
-    # oMLX)` entry; the ONE deliberate difference is limit.output 32768 (the
-    # bench-alias output budget — reasoning must never be able to eat the
-    # whole completion, RUNBOOK §6), where the daily block declares 16384.
-    "qwen3.6-35b-a3b-bench": {
-        "name": "Qwen3.6 35B-A3B 8bit via Proxy (bench)",
-        "reasoning": True,
-        "tool_call": True,
-        "temperature": True,
-        "attachment": False,
-        "modalities": {"input": ["text"], "output": ["text"]},
-        "limit": {
-            "context": 262_144,
-            "output": 32_768,
-        },
-    },
-    # Pinned bench aliases (2026-08-13, WO roster-sync): one per additional
-    # model served through the Local LLM Proxy and added to the bench roster.
-    # Each mirrors the qwen3.6-35b-a3b-bench shape (bench output budget 32768
-    # so reasoning can never eat the whole completion, RUNBOOK §6). Selected
-    # via `run_cumulative.py run --model <alias>` (exclusive load on call).
-    "deepseek-v4-flash-bench": {
-        "name": "DeepSeek V4 Flash 0731 MXFP4 via Proxy (bench)",
-        "reasoning": True,
-        "tool_call": True,
-        "temperature": True,
-        "attachment": False,
-        "modalities": {"input": ["text"], "output": ["text"]},
-        "limit": {
-            # 256512, NOT 262144 — DSV4F's real oMLX ceiling
-            # (max_context_window on /v1/models/status). Must match the proxy's
-            # deepseek-v4-flash-bench profile exactly; overstating the window
-            # spends tokens the model will refuse at the far end of a
-            # multi-hour cell.
-            "context": 256_512,
-            "output": 32_768,
-        },
-    },
-    "nemotron-3-nano-30b-bench": {
-        "name": "Nemotron-3 Nano 30B-A3B 4bit via Proxy (bench)",
-        "reasoning": True,
-        "tool_call": True,
-        "temperature": True,
-        "attachment": False,
-        "modalities": {"input": ["text"], "output": ["text"]},
-        "limit": {
-            "context": 262_144,
-            "output": 32_768,
-        },
-    },
-    "gemma-4-26b-a4b-bench": {
-        "name": "Gemma 4 26B-A4B QAT 4bit VLM via Proxy (bench)",
-        "reasoning": True,
-        "tool_call": True,
-        "temperature": True,
-        "attachment": False,
-        "modalities": {"input": ["text"], "output": ["text"]},
-        "limit": {
-            "context": 262_144,
-            "output": 32_768,
-        },
-    },
-}
+# Local worker models are NOT declared here any more. They are read from the
+# model proxy's own list (GET /v1/models, purpose "okp-bench") by
+# harness/model_catalog.py, so alias, name, context window and output budget
+# can never drift from what the proxy actually serves. ``WORKER_MODEL_REGISTRY``
+# below is still importable by name for callers that read it lazily.
 
 
 def scored_ladder_roster() -> tuple[LadderRung, ...]:
@@ -463,8 +368,13 @@ _ROSTER_REEXPORTS = frozenset(
 
 
 def __getattr__(name: str) -> Any:
-    """Lazily re-export the roster data that moved to harness/rosters.py."""
+    """Lazily re-export the roster data that moved to harness/rosters.py, and
+    resolve the local worker model registry from the proxy on first use."""
 
+    if name == "WORKER_MODEL_REGISTRY":
+        from harness.model_catalog import worker_model_registry
+
+        return worker_model_registry()
     if name in _ROSTER_REEXPORTS:
         from harness import rosters
 

@@ -794,21 +794,23 @@ that way: the bench's request shape is byte-identical across cells, arms, and mo
 do — a mid-campaign change makes the arms differ in something other than injection (rule 5.18
 walk-back class).
 
-*Benching a new model — the two-block pattern.* One proxy alias + one registry entry, nothing else:
+*Benching a new model — ONE block, in the proxy.* The benchmark has no model list of its own: it reads
+the proxy's `GET /v1/models` (`harness/model_catalog.py` for the worker's opencode.json and context budget,
+`control/roster.mjs` for the board). Every row with `purpose: okp-bench` is a runnable worker model, named
+and sized exactly as the proxy serves it.
 
 1. **Proxy** (`Local LLM Proxy/config/models.yaml`): copy the `qwen3.6-35b-a3b-bench` block, set
-   `upstreamModel` to the model's exact oMLX id and the card samplers in `requestDefaults`
-   (oMLX cannot store `top_k` per-model — the proxy must fill it). Keep the bench contract
-   untouched: `limits.output: 32768`, `preserve_thinking: false`, the `forbiddenRequestParams`
-   pair, `concurrency.queueDepth: 0`, `streamHeartbeatMs: 0`, `loopPolicy.failOnFinishReasonLength:
-   true`. **The proxy reads this file once at boot — adding an alias requires a proxy restart
-   (operator step).** Never point the bench at an interactive alias: it inherits the 15 s SSE
-   heartbeat the bench's undici worker hangs on, clamps output to 16384, and queues behind
-   interactive traffic.
-2. **Bench** (`harness/config.py` `WORKER_MODEL_REGISTRY`): mirror the maintainer's daily
-   `opencode.json` model block, with the ONE deliberate difference `limit.output: 32768` (the bench
-   budget; opencode clamps `max_tokens` to the declared limit, and the alias default is fill-only —
-   a 16384 declaration silently halves the cell's budget).
+   `upstreamModel` to the model's exact oMLX id and `displayName` to the name the worker config should
+   carry. Keep the bench contract untouched: `guarded: true`, `limits.output: 32768`,
+   `preserve_thinking: false`, the `forbiddenRequestParams` pair, `concurrency.queueDepth: 0`,
+   `loopPolicy.failOnFinishReasonLength: true`. The context window is not typed anywhere: the proxy
+   reports the model's oMLX `max_context_window` as `context_length`. **The proxy reads this file once
+   at boot: rebuild and restart it with an idle gate (operator step).** Never point the bench at an
+   interactive alias: those are lean pass-throughs without the loop guard, clamp output to 16384, and
+   queue behind interactive traffic.
+2. Confirm it appears: `curl -s localhost:4545/v1/models` lists the alias with `purpose: okp-bench`, and
+   the board's roster shows it. The proxy being unreachable is a hard error for the harness, never a
+   fallback.
 3. Run with `--model <alias>`. Roster hash changes → tree-reset archive (§0 step 3a), rerun.
 
 **The maintainer's personal opencode sessions are deliberately UNCAPPED** (OMLX-REASON-1, proxy

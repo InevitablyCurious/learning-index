@@ -129,7 +129,7 @@ BACKGAMMON_SCORED_LADDER_ROSTER: tuple[LadderRung, ...] = (
 #   wrong endpoint    the proxy posts to /v1/chat/completions; a model reachable
 #                     only through another endpoint shape is not reachable here.
 #   context < 262144  the LOCAL bench aliases are pinned at 262144
-#                     (WORKER_MODEL_REGISTRY above). A cloud model with a
+#                     (the proxy model catalog, harness/model_catalog.py). A cloud model with a
 #                     smaller window would be measured under a tighter budget
 #                     than the models it is compared against — a confound that
 #                     presents as a capability difference and is invisible in

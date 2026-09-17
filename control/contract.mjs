@@ -109,7 +109,7 @@ export const RESUME_UNSUPPORTED = {
  * @property {string|null} purpose        — "okp-bench" | "interactive-*"
  * @property {boolean}     bench_eligible — purpose === "okp-bench"
  * @property {boolean}     resident       — currently loaded in the runtime
- * @property {number|null} declared_context — from WORKER_MODEL_REGISTRY
+ * @property {number|null} declared_context — the proxy's context_length for the alias
  * @property {number|null} max_context    — runtime ceiling, null if unobserved
  * @property {number|null} loaded_context — actual loaded ctx, null if unloaded
  * @property {boolean}     context_match  — declared === loaded (null-safe)

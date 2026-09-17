@@ -5,32 +5,37 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { confirmationToken, restatement, refuse } from "../contract.mjs";
-import { DECLARED_CONTEXT, RETIRED_ALIASES, readRoster } from "../roster.mjs";
+import { RETIRED_ALIASES, readRoster } from "../roster.mjs";
 import { COMPACT_DEFAULT_CEILING, CONTEXT_ADVISORY_FLOOR } from "../cloud.mjs";
 
 import { HERE, BENCH } from "./_shared.mjs";
 
-test("DRIFT: declared context matches WORKER_MODEL_REGISTRY in config.py", () => {
-  const src = readFileSync(join(BENCH, "harness", "config.py"), "utf8");
-  for (const [alias, ctx] of Object.entries(DECLARED_CONTEXT)) {
-    const idx = src.indexOf(`"${alias}"`);
-    assert.ok(idx > -1, `alias '${alias}' is not present in config.py WORKER_MODEL_REGISTRY`);
-    // READ THE VALUE, NEVER SEARCH THE BLOCK. A substring match is defeated by
-    // any occurrence of the number, and config.py's own warning comment on
-    // DSV4F names the WRONG value (`# 256512, NOT 262144`) — so the block
-    // contained `262144` while the data said `256_512`, and the mirror's drift
-    // passed this test for as long as both lines existed. Comments are stripped
-    // and the `"context":` literal itself is compared.
-    const block = src
-      .slice(idx, idx + 800)
-      .replace(/#[^\n]*/g, "");
-    const found = block.match(/"context"\s*:\s*([\d_]+)/);
-    assert.ok(found, `alias '${alias}' has no "context" in its config.py registry block`);
-    assert.equal(
-      Number(found[1].replace(/_/g, "")),
-      ctx,
-      `alias '${alias}' declares context ${ctx} here but config.py says ${found[1]}`,
-    );
+test("ROSTER: declared context comes from the proxy, never a local table", async () => {
+  // The bench used to keep its own copy of each alias's window, and that copy
+  // drifted. The proxy now reports context_length live from the runtime, and
+  // the roster must show exactly that value.
+  const proxy = {
+    object: "list",
+    data: [
+      { id: "qwen3.6-35b-a3b-bench", upstream_model: "Qwen3.6-35B-A3B-MLX-8bit", purpose: "okp-bench", context_length: 262144, max_output_tokens: 32768 },
+      { id: "deepseek-v4-flash-bench", upstream_model: "Vontra--DeepSeek-V4-Flash-0731-MXFP4-MLX", purpose: "okp-bench", context_length: 256512, max_output_tokens: 32768 },
+      { id: "no-window", upstream_model: "x", purpose: "okp-bench" },
+    ],
+  };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) =>
+    new Response(JSON.stringify(String(url).includes("/v1/models") ? proxy : { data: [] }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  try {
+    const roster = await readRoster({ proxyUrl: "http://x", runtimeUrl: "http://y" });
+    const byId = Object.fromEntries(roster.models.map((m) => [m.id, m]));
+    assert.equal(byId["qwen3.6-35b-a3b-bench"].declared_context, 262144);
+    assert.equal(byId["deepseek-v4-flash-bench"].declared_context, 256512);
+    assert.equal(byId["no-window"].declared_context, null, "an unreported window stays unknown, never guessed");
+  } finally {
+    globalThis.fetch = realFetch;
   }
 });
 
@@ -86,11 +91,8 @@ test("DRIFT: retired aliases match RETIRED_MODEL_ALIASES in config.py", () => {
   );
 });
 
-test("ROSTER: a retired alias declares no bench context", () => {
-  // The two maps must not disagree: a declared context is a promise the bench
-  // will run the alias at that window.
+test("ROSTER: every retirement states its reason", () => {
   for (const id of Object.keys(RETIRED_ALIASES)) {
-    assert.equal(DECLARED_CONTEXT[id], undefined, `${id} is retired but still declares a bench context`);
     assert.match(RETIRED_ALIASES[id], /retired/i, "a retirement states its reason");
   }
 });

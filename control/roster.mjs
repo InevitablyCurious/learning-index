@@ -3,7 +3,8 @@
 //
 // TWO SOURCES, NEVER MERGED INTO ONE CLAIM:
 //
-//   proxy   :4545/v1/models       the aliases the bench can address
+//   proxy   :4545/v1/models       the aliases the bench can address, and the
+//                                 context window each one is served at
 //   runtime :1234/api/v0/models   what is loaded, and at what context length
 //
 // The proxy answers "can I name this model?". The runtime answers "is it in
@@ -26,28 +27,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { BENCH_PURPOSE } from "./contract.mjs";
-
-/**
- * Declared context per alias, mirroring harness/config.py
- * WORKER_MODEL_REGISTRY. This is a MIRROR, and the mirror is deliberate: the
- * control plane is JS and the registry is Python, so there is no shared import.
- * The DRIFT test in `control.test.mjs` pins these values against the Python
- * source so drift fails a test rather than silently offering a context the
- * worker will not use.
- *
- * THE PIN IS ONLY AS GOOD AS ITS MATCH. It read a substring of the registry
- * block once, and `256_512`'s own warning comment names the wrong value
- * (`# 256512, NOT 262144`) — so the block contained the literal the mirror was
- * wrong about, and DSV4F's drift passed the guard for as long as both existed.
- * The test now reads the `"context":` value itself, with comments stripped.
- */
-export const DECLARED_CONTEXT = {
-  "qwen3.6-35b-a3b-bench": 262144,
-  // 256512, NOT 262144 — DSV4F's real oMLX ceiling. See config.py's own note.
-  "deepseek-v4-flash-bench": 256512,
-  "nemotron-3-nano-30b-bench": 262144,
-  "gemma-4-26b-a4b-bench": 262144,
-};
 
 /**
  * RETIRED BENCH ALIASES — advertised by the proxy, refused by the bench.
@@ -163,7 +142,9 @@ export async function readRoster({ proxyUrl, runtimeUrl }) {
     const purpose = typeof r?.purpose === "string" ? r.purpose : null;
     const rt = runtimeRes.ok ? matchRuntime(upstream, runtimeIndex) : null;
 
-    const declared = DECLARED_CONTEXT[id] ?? null;
+    // The proxy reports each alias's window live from the runtime — the same
+    // value harness/model_catalog.py writes into the worker's opencode.json.
+    const declared = Number.isFinite(r?.context_length) ? r.context_length : null;
     const loaded = rt?.loaded_context ?? null;
 
     const retired = RETIRED_ALIASES[id] ?? null;

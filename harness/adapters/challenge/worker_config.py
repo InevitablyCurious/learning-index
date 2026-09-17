@@ -3,7 +3,7 @@
 Extracted verbatim from harness/adapters/challenge/__init__.py
 (WO-LI15-I1C STAGE 1C) and re-exported there, so every name stays
 resolvable as harness.adapters.challenge.<name>. None of the names
-these functions read (CLOUD_ORCAROUTER_PROVIDER, WORKER_MODEL_REGISTRY)
+these functions read (CLOUD_ORCAROUTER_PROVIDER, the proxy model catalog)
 is monkeypatched anywhere — tests and scripts read them from
 harness.config directly — so importing them here is correct and no
 late-binding seam is needed. worker_image_fingerprint is NOT called
@@ -15,7 +15,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from harness.config import CLOUD_ORCAROUTER_PROVIDER, WORKER_MODEL_REGISTRY
+from harness.config import CLOUD_ORCAROUTER_PROVIDER
+from harness.model_catalog import worker_model_registry
 
 
 def build_worker_opencode_config(
@@ -96,7 +97,7 @@ def build_worker_opencode_config(
         }
         return config
 
-    model_registry = WORKER_MODEL_REGISTRY.get(model_id)
+    model_registry = worker_model_registry().get(model_id)
     if model_registry is None:
         raise ValueError(
             f"unsupported worker model_id for opencode config: {model_id!r}"

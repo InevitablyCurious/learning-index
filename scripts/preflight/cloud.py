@@ -83,12 +83,18 @@ def check_cloud_model(c: Check, bench_config, args) -> None:
 
 def check_local_model(c: Check, bench_config, args) -> None:
     """Blocking in local mode. Mirrors `_apply_model_override`: the alias must be
-    in WORKER_MODEL_REGISTRY, and RETIRED_MODEL_ALIASES are refused by their
+    served by the model proxy (harness.model_catalog), and RETIRED_MODEL_ALIASES are refused by their
     RETIREMENT reason, not as 'unknown' (a spelled-right name is not a typo)."""
     if bench_config is None:
         c.add("local model", False, "skipped — harness import failed")
         return
-    registry = getattr(bench_config, "WORKER_MODEL_REGISTRY", {})
+    from harness.model_catalog import ModelCatalogUnavailable, worker_model_registry
+
+    try:
+        registry = worker_model_registry()
+    except ModelCatalogUnavailable as exc:
+        c.add("local model", False, str(exc))
+        return
     retired = getattr(bench_config, "RETIRED_MODEL_ALIASES", {})
     available = ", ".join(sorted(k for k in registry if k not in retired)) or "none"
     alias = str(args.model or "").strip()
