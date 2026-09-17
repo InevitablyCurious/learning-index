@@ -16,8 +16,8 @@
     },
     "G02": {
       "name": "Pip counts",
-      "what": "Pip counts — how far each side still has to travel — are right, with a checker on the bar counting as 25.",
-      "how": "Counts pips on the opening position (167 each), on a white position with checkers on the bar and on point 4 (29), a black position with two on the bar (55), and a nearly finished white position (2)."
+      "what": "Pip counts — how far each side still has to travel — are right on a new game.",
+      "how": "Counts pips on the opening position: 167 for each side."
     },
     "G03": {
       "name": "Dice give the right number of moves",
@@ -112,7 +112,7 @@
     "E06": {
       "name": "Bar counts 25 pips",
       "what": "A checker on the bar counts as 25 pips, and borne-off checkers count nothing.",
-      "how": "One white checker on the bar → 25. Add one on 6 → 31. Add three borne off → still 31."
+      "how": "One white checker on the bar → 25. Add one on 6 → 31. Add three borne off → still 31. White on the bar and on 4 → 29. Black with two on the bar and one on 20 → 55."
     },
     "E07": {
       "name": "On the bar means not all home",

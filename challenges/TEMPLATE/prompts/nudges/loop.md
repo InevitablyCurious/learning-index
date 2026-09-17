@@ -1,1 +1,1 @@
-You were going in circles, so I stopped you. Write what you had worked out into the code now. No recap.
+You started going in circles there and repeating yourself, so I stopped it. Don't rewrite anything you've already done — just pick up from the next thing that still needs doing. No recap, just carry on.

@@ -65,32 +65,15 @@ describe("Backgammon backend gates 01-08", () => {
   });
 
   it("[G02] REQ-PIP — pip count", () => {
+    // THE OPENING POSITION ONLY. This is a stage-2 check ("a new game looks
+    // right"), and its complaint describes a fresh board. It used to also count
+    // bar positions and a nearly finished game; once the opening was fixed the
+    // model kept being told the fresh board was wrong while the failure was on
+    // the bar (run 1789655638). Bar counts live in [E06], stage 4. The nearly
+    // finished case added nothing: the opening already tests both formulas.
     const start = bd([...game.startingPoints()], { white: 0, black: 0 }, { white: 0, black: 0 });
     expect(game.pipCount(start, "white")).toBe(167);
     expect(game.pipCount(start, "black")).toBe(167);
-
-    const whiteBarAndPoint = emptyPoints();
-    whiteBarAndPoint[4] = 1;
-    const whiteBoard = bd(
-      whiteBarAndPoint,
-      { white: 1, black: 0 },
-      { white: 0, black: 0 },
-    );
-    expect(game.pipCount(whiteBoard, "white")).toBe(29);
-
-    const blackBarAndPoint = emptyPoints();
-    blackBarAndPoint[20] = -1;
-    const blackBoard = bd(
-      blackBarAndPoint,
-      { white: 0, black: 2 },
-      { white: 0, black: 0 },
-    );
-    expect(game.pipCount(blackBoard, "black")).toBe(55);
-
-    const oneLeftBoardPts = emptyPoints();
-    oneLeftBoardPts[2] = 1;
-    const oneLeftBoard = bd(oneLeftBoardPts, { white: 0, black: 0 }, { white: 14, black: 0 });
-    expect(game.pipCount(oneLeftBoard, "white")).toBe(2);
   });
 
   it("[G03] REQ-DICE — dice → moves", () => {

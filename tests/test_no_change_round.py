@@ -26,4 +26,6 @@ def test_an_unknown_hash_never_counts_as_unchanged() -> None:
 
 def test_the_texts_the_model_receives() -> None:
     assert _NO_CHANGE_NOTE.strip() == "You didn't change any code since my last message."
-    assert "Write what you had worked out into the code now." in _LOOP_RECOVERY_NUDGE
+    # Bench's original meaning, restored after run 1789655638: "write what you
+    # worked out" sent a model with nothing left to write round in circles.
+    assert "Don't rewrite anything you've already done" in _LOOP_RECOVERY_NUDGE

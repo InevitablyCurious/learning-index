@@ -144,6 +144,19 @@ describe("Backgammon edge gates", () => {
     // Borne-off checkers contribute nothing.
     b.off.white = 3;
     expect(game.pipCount(b, "white")).toBe(31);
+
+    // Moved here from [G02] (stage 2 → stage 4, where bar positions belong):
+    // white on the bar and on point 4, and black with two on the bar and one
+    // on point 20.
+    const w = emptyBoard();
+    w.bar.white = 1;
+    w.points[4] = 1;
+    expect(game.pipCount(w, "white")).toBe(29);
+
+    const k = emptyBoard();
+    k.bar.black = 2;
+    k.points[20] = -1;
+    expect(game.pipCount(k, "black")).toBe(55);
   });
 
   it("[E07] REQ-ALLINHOME-BAR — a checker on the bar means NOT all in home", () => {
