@@ -410,34 +410,30 @@ test("STATS/delta: a source that is down at queue time does not block the launch
   }
 });
 
-test("STATS: STREAM ERRORS reads the whole stream-failure family, not one kind", () => {
+// The error slots count from the live streams (control/__tests__/turn-errors
+// .test.mjs); the scorecard is their fallback for runs with no stream. The
+// fallback table still has to hold: one distinct counter per slot, and the
+// stream slot on the whole stream-failure family.
+function scorecardErrorFields() {
   const src = readFileSync(join(HERE, "runstats.mjs"), "utf-8");
-  const block = /id: "stream_errors"[\s\S]*?\n    \},/.exec(src);
-  assert.ok(block, "the stream_errors provider has moved");
-  assert.match(
-    block[0],
-    /error_totals\?\.instrument_anomaly_turns/,
-    "STREAM ERRORS must read instrument_anomaly_turns — every anomalous turn " +
-      "except the loop guard's, which has its own slot. finalize_timeout_turns " +
-      "is a subset and misses the common case.",
-  );
-  assert.ok(
-    !/error_totals\?\.finalize_timeout_turns/.test(block[0]),
-    "reading the narrow field alone is the defect this replaced",
+  const table = /const SCORECARD_ERROR_FIELD = \{([\s\S]*?)\};/.exec(src);
+  assert.ok(table, "the scorecard fallback table has moved");
+  return Object.fromEntries([...table[1].matchAll(/(\w+): "(\w+)"/g)].map((m) => [m[1], m[2]]));
+}
+
+test("STATS: STREAM ERRORS falls back to the whole stream-failure family, not one kind", () => {
+  const fields = scorecardErrorFields();
+  assert.equal(
+    fields.stream,
+    "instrument_anomaly_turns",
+    "STREAM ERRORS must fall back to instrument_anomaly_turns — finalize_timeout_turns is a subset",
   );
 });
 
 test("STATS: each error slot reads a DIFFERENT counter", () => {
-  // Three slots, three failure families. Two slots reading one field would make
-  // one family permanently invisible — which is exactly what happened.
-  const src = readFileSync(join(HERE, "runstats.mjs"), "utf-8");
-  const fields = [...src.matchAll(/error_totals\?\.(\w+)/g)].map((m) => m[1]);
-  assert.equal(
-    new Set(fields).size,
-    fields.length,
-    `two error slots read the same counter: ${fields.join(", ")}`,
-  );
-  assert.ok(fields.length >= 3, `expected three error counters, found ${fields.join(", ")}`);
+  const fields = Object.values(scorecardErrorFields());
+  assert.equal(fields.length, 3, `expected three error counters, found ${fields.join(", ")}`);
+  assert.equal(new Set(fields).size, 3, `two error slots read the same counter: ${fields.join(", ")}`);
 });
 
 test("STATS: every counter a slot reads is one the scorecard actually writes", () => {
@@ -451,7 +447,8 @@ test("STATS: every counter a slot reads is one the scorecard actually writes", (
   );
   const emitted = /error_totals = \{([\s\S]*?)\n    \}/.exec(py);
   assert.ok(emitted, "build_scorecard no longer builds error_totals");
-  for (const field of [...src.matchAll(/error_totals\?\.(\w+)/g)].map((m) => m[1])) {
+  void src;
+  for (const field of Object.values(scorecardErrorFields())) {
     assert.match(
       emitted[1],
       new RegExp(`"${field}"`),

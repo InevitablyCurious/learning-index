@@ -31,8 +31,8 @@
 // concatenated here and must never be concatenated there. The separation IS the
 // contract: a custom number is not a benchmark result.
 
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, readFile, writeFile } from "node:fs/promises";
+import { isAbsolute, join } from "node:path";
 
 import { readWall } from "./wall.mjs";
 
@@ -222,17 +222,17 @@ function benchProviders() {
       id: "loop_errors",
       label: "LOOP ERRORS",
       /**
-       * Turns the run's guard aborted, aggregated by the harness into the
-       * scorecard's `error_totals` (same artifact SCORED/VOIDED read). This is
-       * the honest per-benchmark replacement for the relay's lifetime loop-guard
-       * counter, which counted fires across ALL relay traffic and is retired.
+       * Turns the relay's loop guard killed in the run in view.
+       *
+       * LIVE, FROM THE STREAM (2026-09-17). This read the scorecard's
+       * `error_totals`, and the harness writes the scorecard only when a run
+       * completes normally — so the slot read "—" through every live run and
+       * stayed "—" after a run that stopped or errored (run 1789658586: 21
+       * loop kills, no scorecard, nothing shown). Every kill is stated as it
+       * happens in the cell's live.jsonl; see `turnErrors`.
        */
       async read(ctx) {
-        if (!ctx?.runDir) return { state: "absent", value: null };
-        const card = await readScorecard(ctx);
-        if (!card) return { state: "unavailable", value: null };
-        const n = card.error_totals?.guard_aborted_turns;
-        return Number.isFinite(n) ? { state: "ok", value: n } : { state: "unavailable", value: null };
+        return turnErrorSlot(ctx, "loop");
       },
     },
     {
@@ -240,42 +240,107 @@ function benchProviders() {
       label: "STREAM ERRORS",
       /**
        * Turns the stream failed on — every anomalous turn EXCEPT the loop
-       * guard's, which has its own slot beside this one.
-       *
-       * Covers the transport_error / stream_died_open / truncated_no_signal /
-       * unclassified_finish family, including the narrow finalize-timeout kind
-       * this used to read ALONE. That narrowness is why it stayed 0 through a
-       * run whose stream died mid-turn (measured 2026-09-11): the common case
-       * was not the one kind being counted.
+       * guard's and the stall watchdog's, which have their own slots: stream
+       * deaths, finalize timeouts, provider outages, truncations.
        */
       async read(ctx) {
-        if (!ctx?.runDir) return { state: "absent", value: null };
-        const card = await readScorecard(ctx);
-        if (!card) return { state: "unavailable", value: null };
-        // `instrument_anomaly_turns`, not `finalize_timeout_turns`. The latter
-        // is one narrow kind — a turn killed while the stream FINALIZED — so a
-        // plain transport_error (the stream dying mid-turn, the common case)
-        // left this slot reading 0 through a run that had one. Measured
-        // 2026-09-11. The broader field already contains the narrow one.
-        const n = card.error_totals?.instrument_anomaly_turns;
-        return Number.isFinite(n) ? { state: "ok", value: n } : { state: "unavailable", value: null };
+        return turnErrorSlot(ctx, "stream");
       },
     },
     {
       id: "stalled_errors",
       label: "STALLED ERRORS",
-      /**
-       * Turns the run's stalled turns, from `error_totals`.
-       */
+      /** Turns the harness's stall watchdog ended (a command that stopped progressing). */
       async read(ctx) {
-        if (!ctx?.runDir) return { state: "absent", value: null };
-        const card = await readScorecard(ctx);
-        if (!card) return { state: "unavailable", value: null };
-        const n = card.error_totals?.stalled_turns;
-        return Number.isFinite(n) ? { state: "ok", value: n } : { state: "unavailable", value: null };
+        return turnErrorSlot(ctx, "stalled");
       },
     },
   ];
+}
+
+/**
+ * TURN ERRORS, COUNTED FROM THE CELLS' LIVE STREAMS.
+ *
+ * The harness states each killed or stalled turn the moment it happens, as a
+ * `notice` in the cell's live.jsonl:
+ *   turn_truncated_retried     a kill it recovered from (nudged)
+ *   recovery_budget_exhausted  the kill that ran the nudge budget out
+ * Both carry `detail.terminal`: `guard_abort` (loop), `turn_stalled` (stall),
+ * anything else (the stream failed). Summed over every cell of the run.
+ *
+ * Null when the run has no live stream at all (a run from before streams
+ * existed) — the caller then falls back to the scorecard.
+ */
+export async function turnErrors(runDir) {
+  const counts = { loop: 0, stream: 0, stalled: 0 };
+  let streams = 0;
+  let arms = [];
+  try {
+    arms = await readdir(runDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const arm of arms) {
+    if (!arm.isDirectory() || !/^memory/i.test(arm.name)) continue;
+    let cells = [];
+    try {
+      cells = await readdir(join(runDir, arm.name), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const cell of cells) {
+      if (!cell.isDirectory() || !/^cell-/i.test(cell.name)) continue;
+      let raw;
+      try {
+        raw = await readFile(join(runDir, arm.name, cell.name, "live.jsonl"), "utf8");
+      } catch {
+        continue;
+      }
+      streams += 1;
+      for (const line of raw.split("\n")) {
+        if (!line.includes('"notice"')) continue;
+        let r;
+        try {
+          r = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (r?.kind !== "notice") continue;
+        if (r.event !== "turn_truncated_retried" && r.event !== "recovery_budget_exhausted") continue;
+        const terminal = String(r.detail?.terminal ?? "");
+        if (terminal === "guard_abort") counts.loop += 1;
+        else if (terminal === "turn_stalled") counts.stalled += 1;
+        else counts.stream += 1;
+      }
+    }
+  }
+  return streams ? counts : null;
+}
+
+const SCORECARD_ERROR_FIELD = {
+  loop: "guard_aborted_turns",
+  stream: "instrument_anomaly_turns",
+  stalled: "stalled_turns",
+};
+
+/**
+ * The run in view as a full path. The control plane hands providers the run
+ * dir RELATIVE to the runs root (`1789658586/local/…`, as `readRunState`
+ * reports it); read as-is it resolved against the control plane's working
+ * directory, so no scorecard or stream of any live run was ever found.
+ */
+export function runPath(ctx) {
+  if (!ctx?.runDir) return null;
+  return isAbsolute(ctx.runDir) || !ctx.runsRoot ? ctx.runDir : join(ctx.runsRoot, ctx.runDir);
+}
+
+async function turnErrorSlot(ctx, kind) {
+  if (!ctx?.runDir) return { state: "absent", value: null };
+  const live = await turnErrors(runPath(ctx));
+  if (live) return { state: "ok", value: live[kind] };
+  const card = await readScorecard(ctx);
+  const n = card?.error_totals?.[SCORECARD_ERROR_FIELD[kind]];
+  return Number.isFinite(n) ? { state: "ok", value: n } : { state: "unavailable", value: null };
 }
 
 /**
@@ -292,7 +357,7 @@ function benchProviders() {
 async function readScorecard(ctx) {
   if (!ctx?.runDir) return null;
   try {
-    const parsed = JSON.parse(await readFile(join(ctx.runDir, SCORECARD_NAME), "utf8"));
+    const parsed = JSON.parse(await readFile(join(runPath(ctx), SCORECARD_NAME), "utf8"));
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
