@@ -81,8 +81,8 @@
       "repeat": "It happened again — I took one of the moves it offered me and landed somewhere my opponent clearly already holds."
     },
     "G05": {
-      "first": "When i roll two dice and only one of them can be played because the other move is blocked, my piece by the smaller number die is moveable",
-      "repeat": "Again on a roll where only one of my two numbers had anywhere to go, the move it left me was the wrong one of the two."
+      "first": "I rolled two numbers where I could play one or the other but not both, and the game let me move with the smaller number even though the bigger one had a move too.",
+      "repeat": "Got another roll where only one of my two numbers could be used — it still let me play the smaller number while the bigger one also had a move."
     },
     "G06": {
       "first": "When my piece is on the bar the game doesn't force me to bring it back in before i do anything else",

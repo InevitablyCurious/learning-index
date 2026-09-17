@@ -141,7 +141,7 @@ def test_first_failure_is_the_players_first_report() -> None:
         "I've checked your work thoroughly, and I want to list the issues that "
         "I've encountered while playing the game:" in text
     )
-    assert "smaller number die is moveable" in text
+    assert "let me move with the smaller number even though the bigger one had a move too" in text
     assert "jump from spot to spot" in text
     # Grader vocabulary a player would never use.
     assert "FAILING" not in text
@@ -227,8 +227,8 @@ def test_repeat_matching_is_keyed_on_the_raw_gate_id() -> None:
         problems=problems, repeat_checks={"use higher die"}
     )
     # A repeat that failed to match leaves every gate on its FIRST line.
-    assert "smaller number die is moveable" in text
-    assert "on a roll where only one of my two numbers" not in text
+    assert "let me move with the smaller number even though the bigger one had a move too" in text
+    assert "while the bigger one also had a move" not in text
 
 
 def test_empty_checks_never_claims_a_clean_run() -> None:
