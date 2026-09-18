@@ -1,28 +1,12 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// RESULTS HISTORY — durable, past-run record of completed scored cells.
-//
-// The rest of the board is live-only by construction (WO-42): once a run
-// concludes and the tree is swept, its results vanish from the board. This
-// panel reads the durable ledger (WO-43) instead — one line per completed
-// scored cell, accumulated across runs and surviving reset (the ledger itself
-// is archived into the same backup folder as the tree on every reset).
-//
-// WHAT A ROW IS: one completed scored cell. The column that matters is the
-// help→harm delta: `problems_before → problems_after`. That is the number the
-// whole campaign exists to watch, so it gets the emphasis.
-//
-// DEFENSIVE BY CONSTRUCTION: the ledger is parsed tolerantly upstream, and the
-// schema is the writer's contract — but a reader must not trust a file it does
-// not write. Every field goes through `esc`/`nul`; a record with nothing
-// readable renders as an explicit null row, never a blank line.
-// ─────────────────────────────────────────────────────────────────────────────
+// RESULTS HISTORY — completed scored cells from past runs, read from the
+// durable results ledger (it survives reset, archived with each backup). The
+// emphasised column is problems_before → problems_after. Every field is escaped
+// or rendered as an explicit null; an unreadable record is a null row, never a
+// blank line.
 
 import { esc, nul } from "../board.js";
 
-/**
- * Short wall-clock stamp. The writer emits ISO-8601; a non-string or a string
- * that fails to parse renders as an explicit null — never "Invalid Date".
- */
+/** Short wall-clock stamp; an unparseable one is an explicit null. */
 function when(r) {
   const t = typeof r.timestamp === "string" ? r.timestamp : null;
   if (!t) return nul("unstamped");
@@ -37,8 +21,8 @@ function f(v, kind = "unrecorded") {
 }
 
 /**
- * Verdict chip. PASS green, FAIL in the fg colour (fail is normal mid-campaign
- * and must not read as an alarm), anything else neutral. Unknown → null.
+ * Verdict chip: PASS green, FAIL plain (normal mid-campaign, not an alarm),
+ * anything else neutral.
  */
 function chip(v) {
   const s = typeof v === "string" ? v.toLowerCase() : "";

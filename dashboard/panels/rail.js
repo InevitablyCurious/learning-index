@@ -1,27 +1,11 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// HONESTY RAIL — permanent, bottom.
-//
-// This is the panel that buys credibility for everything above it. It answers
-// the questions an engineer is already forming, before they have to ask.
-//
-// SIX FIELDS:
-//   coverage        % of episodes reaching an observable conclusion, carrying
-//                   the literal statement that uncovered episodes count as
-//                   NEITHER positive nor negative.
-//   unresolved      running count, never hidden.
-//   guard           detections by type. the safety pipeline being live IS a
-//                   result, so zero detections after a real scan is reported as
-//                   a measured zero, not as absence.
-//   recall overhead p50/p95. NEVER synthesized — an unmeasured latency seam is
-//                   VOID-INSTRUMENT, so unmeasured stays visibly unmeasured.
-//   cost            TWO different costs, never summed:
-//                     pre-trigger — turns burned before the gated trigger fired
-//                     recovered   — turns that happened and were excluded from
-//                                   scoring (guard + finalize kills)
-//   serves          delivery ONLY. labelled as such. this box is deliberately
-//                   the quietest of the six so it can never read as a win
-//                   metric.
-// ─────────────────────────────────────────────────────────────────────────────
+// HONESTY RAIL — permanent, at the bottom. Six fields:
+//   coverage         % of episodes reaching a conclusion (uncovered ones count
+//                    as neither positive nor negative)
+//   unresolved       running count, never hidden
+//   guard            detections by type; zero after a real scan is a result
+//   recall overhead  p50/p95, never synthesised; unmeasured stays unmeasured
+//   cost             pre-trigger turns and recovered turns, never summed
+//   serves           delivery only, and the quietest box on purpose
 
 import { esc, nul, pct } from "../board.js";
 
@@ -72,8 +56,7 @@ function guard(h) {
   const keys = Object.keys(g);
   const total = keys.reduce((a, k) => a + (g[k] ?? 0), 0);
 
-  // A measured zero is a RESULT (the pipeline ran and found nothing). It is not
-  // the same as never having scanned, and the note distinguishes them.
+  // Zero after a scan is a result; no scan is a different fact.
   const val = !keys.length ? nul("no scan observed") : String(total);
   const note = keys.length
     ? esc(keys.map((k) => `${k} ${g[k]}`).join(" · "))
@@ -97,9 +80,8 @@ function latency(h) {
 }
 
 /**
- * The two costs, side by side and explicitly NOT summed. They are different
- * facts: one is the price of the gated trigger, the other is the price of
- * transport recovery.
+ * Two costs side by side, not summed: the gated trigger's price and
+ * transport recovery's.
  */
 function cost(h) {
   const w = h.wasted_turns;

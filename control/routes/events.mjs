@@ -57,8 +57,8 @@ export const routes = [
           promptRows = [];
         }
 
-        // Order rebuilt by time (`at`), not admission: otherwise every prompt would
-        // file at the bottom of the transcript.
+        // Prompts are slotted into the transcript in arrival order (interleaveByArrival),
+        // not appended at the bottom and not time-sorted (many agent rows have no time).
         const histRing = new EventRing(Number.MAX_SAFE_INTEGER);
         // Agent rows are appended (a streaming part legitimately repeats its id);
         // prompt rows are admitted once by identity. Same as the live path.

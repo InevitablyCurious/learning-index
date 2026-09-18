@@ -1,25 +1,10 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// LIVE SSE PROBE — real socket, real frames, no mocks
+// LIVE SSE PROBE — a real socket, no mocks.
 //
 //   node sse-probe.mjs
 //
-// The unit tests cover the event MAPPING. This covers the thing a unit test
-// cannot: that the subscriber correctly parses SSE off a real TCP socket,
-// including the two failure shapes that actually occur in this system —
-//
-//   1. FRAME SPLITTING ACROSS TCP CHUNKS. An SSE frame is not guaranteed to
-//      arrive whole. A parser that assumes one chunk == one frame works
-//      perfectly in a mock and drops events on a real network. This probe
-//      deliberately writes a frame in two pieces with a delay between them.
-//
-//   2. RECONNECTION AFTER THE SERVE DIES. A cell's `opencode serve` is killed
-//      at teardown and restarted for the next cell. The board must recover
-//      without an operator action, so the probe kills the server mid-stream and
-//      asserts the ring reconnects and keeps ingesting.
-//
-// Event payloads are the VERIFIED shapes taken from the worker image's own
-// OpenAPI document (opencode 1.18.1, probed 2026-08-12), not invented ones.
-// ─────────────────────────────────────────────────────────────────────────────
+// Checks what unit tests can't: a frame split across TCP writes is parsed
+// whole, and the subscriber reconnects after the server dies mid-stream (as a
+// cell's serve does at teardown). Payloads are the worker's real schema shapes.
 
 import { createServer } from "node:http";
 import { EventRing, subscribe } from "./events.mjs";
@@ -80,7 +65,7 @@ async function main() {
         properties: { file: "/work/src/game.ts" },
       });
 
-      // ── SPLIT FRAME ── written in two TCP writes with a gap between them.
+      // ── SPLIT FRAME ── two TCP writes with a gap.
       const frame = `data: ${JSON.stringify({
         id: "evt_split",
         type: "session.next.reasoning.delta",
@@ -96,10 +81,10 @@ async function main() {
       res.write(frame.slice(0, cut));
       setTimeout(() => res.write(frame.slice(cut)), 120);
 
-      // Kill the stream shortly after, to force a reconnect.
+      // Kill the stream to force a reconnect.
       setTimeout(() => res.destroy(), 400);
     } else {
-      // Post-reconnect traffic proves recovery is real.
+      // Traffic after the reconnect proves recovery.
       sse(res, {
         id: "evt_after",
         type: "session.next.step.ended",
@@ -146,7 +131,7 @@ async function main() {
     `unmapped=${ring.unmapped}`,
   );
 
-  // Wait out the backoff and confirm recovery.
+  // Wait out the backoff.
   await sleep(1400);
   const after = ring.snapshot({ limit: 50 });
 
@@ -157,7 +142,7 @@ async function main() {
     after.events.some((e) => e.type === "session.next.step.ended"),
   );
 
-  // Bounding must hold on a real feed, not just in a unit test.
+  // Bounding must hold on a real feed.
   const small = new EventRing(3);
   for (let i = 0; i < 10; i += 1) {
     small.push({ id: `e${i}`, type: "file.edited", properties: { file: `/f${i}` } });
