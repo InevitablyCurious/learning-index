@@ -1,1 +1,1 @@
-My connection dropped. Continue from where you stopped. No recap.
+My connection dropped. Continue from where you stopped.

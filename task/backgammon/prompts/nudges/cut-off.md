@@ -1,1 +1,1 @@
-Your last message got cut off. Continue from where it stopped. {write_limit} No recap.
+Your last message got cut off. Continue from where you left off. 

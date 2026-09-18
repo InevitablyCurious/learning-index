@@ -54,14 +54,11 @@ def test_a_challenge_with_no_build_steps_is_loud(tmp_path: Path) -> None:
         PromptPack(tmp_path).chunks()
 
 
-def test_the_write_limit_has_one_source() -> None:
-    """The limit appears in the notes, the build steps and the cut-off nudge.
-    The nudge carries a placeholder so the number cannot drift between voices."""
+def test_no_nudge_reaches_the_model_with_a_raw_placeholder() -> None:
+    """A nudge may carry `{write_limit}`; the model must only ever see it resolved."""
     pack = default_pack()
-    limit = pack.text("nudges/write-limit.md")
-    assert "{write_limit}" in pack.text("nudges/cut-off.md")
-    assert "{write_limit}" not in pack.nudge("nudges/cut-off.md")
-    assert limit in pack.nudge("nudges/cut-off.md")
+    for name in ("connection", "cut-off", "loop", "stall"):
+        assert "{write_limit}" not in pack.nudge(f"nudges/{name}.md")
 
 
 def test_the_template_skeleton_still_loads() -> None:
