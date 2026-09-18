@@ -1,62 +1,23 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// PANEL: STARTUP FEED — the one surface that says what the benchmark is doing
+// PANEL: STARTUP FEED — every background process behind a benchmark start,
+// each with a state and, when not ok, the reason in the publisher's own words (so
+// "it silently did nothing" can't happen). startupFeed(board) is the one pure
+// derivation; the renderer is a thin projection of it.
 //
-// ── THE DEFECT THIS EXISTS TO KILL ──────────────────────────────────────────
-//
-// The operator clicked [+ baseline] and the benchmark did not start. That is
-// half the failure. The other half — the half that made it expensive — is that
-// NOTHING ON THE BOARD SAID SO. Every background process the startup depends on
-// published its state somewhere in the board payload, and no surface collected
-// them, so "it silently did nothing" was indistinguishable from "it is working
-// and slow", from "the control plane is down", and from "the server refused".
-//
-// A refusal that reaches only `console.error` has not been reported. A run that
-// arms and never confirms is invisible. This module is the answer: ONE
-// derivation of EVERY background process behind a benchmark start, each with a
-// state, and — when it is not ok — the REASON, in the publisher's own words.
-//
-// ── ONE DERIVATION, MANY READERS ────────────────────────────────────────────
-//
-// `startupFeed(board)` is pure: board payload in, process list out.
-// It renders nothing and touches no DOM, so it is unit-testable under `node
-// --test` and cannot drift from what the board shows. The renderer below is a
-// thin projection of it. Any future surface that needs this answer calls the
-// same function rather than re-deriving it — a second derivation is a second
-// source of truth, and two of those disagree eventually.
-//
-// ── ABSENT IS NOT OK, AND NEVER SILENT ──────────────────────────────────────
-//
-// The shape follows `control/live-surface.mjs`, which already publishes
-// `unwired` + `unwired_reasons` for exactly this reason: a surface that cannot
-// report is reported AS not reporting, with the reason attached. Nothing here
-// invents an "ok". A process whose state the board does not carry is `unknown`
-// with that fact stated — never a green light by omission.
-//
-// ── STATES ──────────────────────────────────────────────────────────────────
-//
+// States:
 //   ok       running / reachable / healthy
-//   busy     working right now (a live cell, an in-flight request)
-//   idle     wired and reachable, nothing to do — the NORMAL resting state
-//   off      not running, and that is expected/optional (never an alarm)
-//   bad      broken, refused, or unreachable — the operator must act
-//   unknown  the board does not carry this fact; said out loud, never assumed ok
-//
-// `bad` is the only state that raises the feed on its own. `off` and `idle` are
-// deliberately quiet: a board that cries wolf about an optional lane teaches the
-// operator to ignore it, and then the real failure scrolls past unread.
-// ─────────────────────────────────────────────────────────────────────────────
+//   busy     working right now
+//   idle     wired, nothing to do (normal)
+//   off      not running, and that's expected (never an alarm)
+//   bad      broken, refused or unreachable — act on it
+//   unknown  the board doesn't carry this fact (never assumed ok)
+// Only `bad` raises the feed on its own.
 
 import { esc, nul } from "../board.js";
 
-/** Ranked worst-first. Drives ordering and the single headline verdict. */
+/** Worst first; drives ordering and the headline verdict. */
 const SEVERITY = { bad: 0, unknown: 1, busy: 2, ok: 3, idle: 4, off: 5 };
 
-/**
- * THE SINGLE DERIVATION.
- *
- * @param {object} board      the board payload
- * @returns {{processes: Array, verdict: string, blocking: Array, ok: boolean}}
- */
+/** The single derivation: board payload in, process list out. */
 export function startupFeed(board) {
   const b = board ?? {};
   const processes = [
@@ -68,9 +29,7 @@ export function startupFeed(board) {
     holdGate(b),
   ];
 
-  // Blocking = anything that must be fixed before a benchmark can start. It is
-  // derived from `bad`, never hand-listed, so a new process cannot be added and
-  // silently forgotten by the summary.
+  // Blocking is derived from `bad`, never hand-listed.
   const blocking = processes.filter((p) => p.state === "bad");
   return {
     processes,
@@ -93,16 +52,12 @@ function verdict(processes, blocking) {
   return "all wired · idle and ready to start a benchmark";
 }
 
-// ── THE PROCESSES ────────────────────────────────────────────────────────────
-// Each returns the SAME shape so the renderer never special-cases one:
-//   { id, name, state, detail, reason, why }
-// `why` states what this process does for a benchmark start — an operator who
-// has to ask "what is a live lane" has not been told anything by a status dot.
+// ── THE PROCESSES ── each { id, name, state, detail, reason, why }, where
+// `why` says what the process does for a start.
 
 /**
- * THE CONTROL PLANE — the only thing that can start a run. The browser posts
- * to the dashboard, which relays to it. `control` is null when the dashboard's
- * read of it failed; the source's reason says why (it may be running but slow).
+ * The control plane — the only thing that can start a run. null control means
+ * the dashboard's read failed; the source's reason says why.
  */
 function controlPlane(b) {
   if (b.control) {
@@ -118,11 +73,8 @@ function controlPlane(b) {
 }
 
 /**
- * THE RUNNER — the python child the control plane spawns, and the cell it runs.
- * `control.run` is the control plane's own view of its launcher; `board.run` is
- * the manifest's view of the cell. They answer different questions and both are
- * shown, because a launcher that exited while a manifest still claims a live
- * cell is precisely the disagreement worth seeing.
+ * The runner: the control plane's view of its launcher and the manifest's view
+ * of the cell, both shown (disagreement is worth seeing).
  */
 function runner(b) {
   const r = b.control?.run ?? null;
@@ -148,9 +100,8 @@ function runner(b) {
 }
 
 /**
- * THE MODEL PROXY + ROSTER. `/api/run/start` refuses outright when the proxy is
- * unreachable, so a dead proxy is a hard block on starting — and an empty
- * bench-eligible roster is the same block wearing a different hat.
+ * The model proxy and roster: a dead proxy or an empty bench roster blocks
+ * starting.
  */
 function modelProxy(b) {
   const roster = b.control?.roster ?? null;
@@ -175,11 +126,7 @@ function modelProxy(b) {
     resident.length ? null : "no bench model is resident right now — the first call will load one, which takes time but is not a failure.");
 }
 
-/**
- * THE EVENT FEED (SSE). This is the board's live narrative. Disconnected, the
- * board goes quiet and looks wedged while the run may be perfectly healthy —
- * so the distinction has to be stated rather than inferred from silence.
- */
+/** The event feed: disconnected looks like a wedge, so it's stated. */
 function eventFeed(b) {
   const e = b.events ?? null;
   const why =
@@ -189,8 +136,7 @@ function eventFeed(b) {
       "the board carries no event section");
   }
   if (e.connected === false) {
-    // NOT `bad`: with no cell running there is no session to stream, which is
-    // the normal resting state. Calling it broken here would cry wolf.
+    // No cell running means no session to stream: normal, not bad.
     const running = b.control?.run?.state === "running";
     return proc("event-feed", "event feed (SSE)", running ? "bad" : "off",
       "disconnected", null, why,
@@ -202,11 +148,7 @@ function eventFeed(b) {
     `${e.total ?? 0} events`, null, why);
 }
 
-/**
- * THE TUI MIRROR — the pty capture whose window hosts this very feed.
- * Included deliberately: the feed lives inside the mirror, so the mirror's own
- * health is the one thing the operator cannot infer from looking at it.
- */
+/** The TUI mirror, whose window hosts this feed. */
 function tuiMirror(b) {
   const t = b.tui ?? null;
   const why =
@@ -230,7 +172,7 @@ function tuiMirror(b) {
     t.reason ?? "no session observed yet — the mirror attaches when a run opens one");
 }
 
-/** THE HOLD GATE. A hold BLOCKS the run by design, and must never look like a crash. */
+/** A hold blocks the run by design and must never look like a crash. */
 function holdGate(b) {
   const h = b.hold ?? null;
   const why = "a deliberate stop the harness places on a run — it blocks progress on purpose and waits for a human.";
@@ -243,15 +185,9 @@ function proc(id, name, state, detail, _unused, why, reason = null) {
   return { id, name, state, detail: detail ?? null, reason, why };
 }
 
-// ── RENDER ───────────────────────────────────────────────────────────────────
+// ── RENDER ──
 
-/**
- * THE FEED, AS DRAWN INSIDE THE TUI MIRROR.
- *
- * Ordered worst-first so the thing blocking a start is the first line read —
- * never sorted alphabetically or by declaration order, either of which buries a
- * `bad` under six healthy rows.
- */
+/** The feed as drawn inside the TUI mirror, worst first. */
 export function renderStartupFeed(board) {
   const feed = startupFeed(board);
   const rows = [...feed.processes].sort((a, b2) => SEVERITY[a.state] - SEVERITY[b2.state]);

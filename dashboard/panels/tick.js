@@ -1,39 +1,11 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// PAINTER: LIVE NUMBER MOTION — climbing counters and spend floaters
+// PAINTER: LIVE NUMBER MOTION — counters climb to their new reading and the
+// delta rises off the row, so it's visible which number moved.
 //
-// A running cell moves four or five numbers every couple of seconds, and until
-// now every one of them just swapped from one string to another. Nothing said
-// WHICH number moved, by HOW MUCH, or that anything had happened at all — an
-// operator watching the board could not tell a live cell from a stalled one
-// without reading the clock. This makes the change itself legible: the value
-// climbs to its new reading, and the delta rises off the row and fades.
-//
-// ── IT ANIMATES THE READING, NEVER THE MEASUREMENT ──────────────────────────
-// The number in the DOM is always the server's number. This only controls how
-// the display TRAVELS to it: `data-v` carries the authoritative value, the text
-// is interpolated toward it, and every animation ends exactly on `data-v`. A
-// counter that eased toward a value it then rounded, or that kept its own
-// running total, would be a second source of truth for a measurement — which is
-// the one thing this board does not permit. Interrupting an animation mid-flight
-// (a faster tick) snaps the arithmetic to the newest value and re-aims; it never
-// queues, so the display cannot fall behind the truth.
-//
-// ── WHY `data-preserve` ─────────────────────────────────────────────────────
-// dom.js syncs attributes and then leaves a preserved subtree's children alone.
-// That is exactly the split needed here: `patch()` keeps `data-v` current on
-// every board tick while this painter owns the text node. Without it the morpher
-// would overwrite the interpolated text ~5 times a second and no animation could
-// survive a single frame.
-//
-// The element still renders its final value as ordinary text, so a board with
-// this painter broken or absent shows the correct number, unanimated. Motion is
-// an enhancement; the reading is not.
-//
-// ── REDUCED MOTION IS HONOURED, AND STILL TELLS YOU ─────────────────────────
-// Under `prefers-reduced-motion` nothing travels: values snap and the delta
-// appears in place and fades. The information is the delta, not the movement, so
-// it is not withheld from someone who cannot watch things fly.
-// ─────────────────────────────────────────────────────────────────────────────
+// It animates the display, never the value: `data-v` holds the server's number
+// and every animation ends exactly on it; a faster tick re-aims rather than
+// queueing. The element is data-preserve, so patch() keeps data-v current while
+// this owns the text; without the painter the correct number still shows.
+// Under prefers-reduced-motion values snap and the delta fades in place.
 
 import { tok } from "../board.js";
 
@@ -41,12 +13,8 @@ import { tok } from "../board.js";
 const CLIMB_MS = 620;
 
 /**
- * Format a raw number the way its row wants it.
- *
- * The formatter is named on the element rather than inferred, because the same
- * value is shown two ways on this board — the headline rounds to `1.5M`, the
- * breakdown prints every digit — and a counter that picked its own format could
- * disagree with the row above it.
+ * The formatter is named on the element (the headline rounds, the breakdown
+ * prints every digit), so a counter can't disagree with its row.
  */
 function format(el, n) {
   switch (el.dataset.fmt) {
@@ -59,7 +27,7 @@ function format(el, n) {
   }
 }
 
-/** Deltas are always shown as exact counts — a rounded `+0.1M` says nothing. */
+/** Deltas are exact counts. */
 function formatDelta(d) {
   return `+${Math.round(d).toLocaleString()}`;
 }
@@ -73,10 +41,8 @@ function prefersReducedMotion() {
 }
 
 /**
- * Bring every `.odo` on the board to its current `data-v`.
- *
- * Called after each patch, alongside the other out-of-band painters. Cheap on
- * the common path: an element already sitting on its value does nothing at all.
+ * Bring every `.odo` to its data-v; called after each patch. A counter
+ * already on its value does nothing.
  */
 export function paintTicks(root) {
   const scope = root ?? document;
@@ -86,9 +52,7 @@ export function paintTicks(root) {
     const to = Number(el.dataset.v);
     if (!Number.isFinite(to)) continue;
 
-    // FIRST SIGHT IS NOT A CHANGE. A counter that animated from zero on the
-    // first paint would show a spend that never happened — and would do it
-    // again on every reload, which is how a board teaches people to distrust it.
+    // First sight is not a change: never animate from zero on load.
     if (!Number.isFinite(el._odoAt)) {
       el._odoAt = to;
       el.textContent = format(el, to);
@@ -99,20 +63,11 @@ export function paintTicks(root) {
     if (from === to) continue;
     el._odoAt = to;
 
-    // Only growth is a spend. A total that fell is a new cell, a reset or a
-    // correction — none of which is "+N spent", so none of them float.
+    // Only growth floats a delta; a drop is a reset or a new cell, not a spend.
     if (to > from && el.dataset.float === "on") floater(el, to - from, reduced);
 
-    // ── A HIDDEN TAB SNAPS. THIS IS A CORRECTNESS RULE, NOT AN OPTIMISATION ──
-    //
-    // `requestAnimationFrame` does not fire in a background tab, but the board's
-    // stream does — so a value arriving while hidden would start a climb that
-    // never runs a frame, and the element would sit on whatever partial figure
-    // the last visible frame had painted. The number on screen would be one this
-    // board never measured, and nothing about it would look wrong.
-    //
-    // Snapping costs an animation nobody is watching and removes the only path
-    // by which this painter could display a fabricated reading.
+    // A hidden tab snaps: requestAnimationFrame doesn't run there, so a climb
+    // would freeze on a partial number the board never measured.
     if (reduced || isHidden()) {
       el.textContent = format(el, to);
       continue;
@@ -129,14 +84,7 @@ function isHidden() {
   }
 }
 
-/**
- * Coming back from a hidden tab, land every counter on its published value.
- *
- * Belt to the brace above: any climb that was in flight when the tab went away
- * had its frames cancelled by the browser, and this is what guarantees the board
- * is showing `data-v` and not the frame it stopped on — without waiting for the
- * next tick, which for an idle bench may be a long way off.
- */
+/** Back from a hidden tab: land every counter on its published value now. */
 export function snapTicks(root) {
   for (const el of (root ?? document).querySelectorAll(".odo")) {
     const to = Number(el.dataset.v);
@@ -148,12 +96,7 @@ export function snapTicks(root) {
   }
 }
 
-/**
- * Interpolate the displayed value.
- *
- * Ease-out: the jump is most legible at the start, and settling slowly onto the
- * final digits is what makes the number readable rather than a blur.
- */
+/** Interpolate with ease-out, so the final digits are readable. */
 function climb(el, from, to) {
   cancelAnimationFrame(el._odoRaf ?? 0);
   const t0 = performance.now();
@@ -165,7 +108,7 @@ function climb(el, from, to) {
       el._odoRaf = requestAnimationFrame(step);
       return;
     }
-    // ALWAYS LAND ON THE EXACT VALUE, never on the last interpolated one.
+    // Always land on the exact value.
     el.textContent = format(el, to);
     el._odoRaf = 0;
   };
@@ -173,12 +116,8 @@ function climb(el, from, to) {
 }
 
 /**
- * The rising delta.
- *
- * Parented to the row rather than the value so it cannot be clipped by the
- * number's own box, and removed on `animationend` so a long run does not
- * accumulate thousands of dead nodes. If several land at once they stack
- * naturally — each is its own element with its own lifetime.
+ * The rising delta, parented to the row (not clipped by the number's box) and
+ * removed on animationend.
  */
 function floater(el, delta, reduced) {
   const host = el.closest(".tkrow, .big, .ph, .odo-host") ?? el.parentElement;
@@ -188,16 +127,13 @@ function floater(el, delta, reduced) {
   chip.textContent = formatDelta(delta);
   chip.addEventListener("animationend", () => chip.remove(), { once: true });
   host.appendChild(chip);
-  // A browser that reports no animation (a hidden tab, a stripped stylesheet)
-  // never fires `animationend`, so nothing would ever clean these up.
+  // Fallback cleanup where animationend never fires.
   setTimeout(() => chip.remove(), 4000);
 }
 
 /**
- * Markup helper — the one place the `.odo` contract is written down.
- *
- * `value` is the authoritative number and is rendered as text as well as
- * `data-v`, so the row is correct before this painter has ever run.
+ * Markup helper for the `.odo` contract: the value is rendered as text and
+ * data-v, so the row is right before the painter runs.
  */
 export function odo(value, { fmt = "exact", float = false, cls = "" } = {}) {
   if (value === null || value === undefined || !Number.isFinite(value)) return null;
