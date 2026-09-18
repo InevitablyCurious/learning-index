@@ -1,16 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// LIVE PANEL — BACKEND FEED HELPERS
-//
-// The SYSTEM feed, beside the agent: the harness, the gate runner, the control
-// plane, the campaign layer, and any backend that joined the stream. These are
-// the non-anchored helpers — chips, head, tabs, note, the merged/condensed row
-// set, and the source/severity facet controls. The row renderers themselves
-// (bRow/bBody) and the paint (paintBackend) stay in the entry because they are
-// source-scrape anchors; this module imports state.js, facet.js and the board's
-// `esc` only — it never imports the entry, so the graph stays acyclic.
-//
-// Split from panels/live.js (LI-14) with no behaviour change.
-// ─────────────────────────────────────────────────────────────────────────────
+// DATA FEED — backend feed helpers: the system beside the agent (harness, gate
+// runner, control plane, campaign layer, any backend). Chips, head, tabs, note,
+// the merged and condensed rows, and the facet controls. The row renderers and
+// paint stay in ../live.js; this imports only state.js, facet.js and esc.
 
 import { esc } from "../../board.js";
 import { toggleFacet, clearFacet, facetState, facetActive } from "../facet.js";
@@ -32,14 +23,8 @@ export function clearBackendFilters() {
 }
 
 /**
- * Chips for both axes.
- *
- * THE SOURCE ROW GROWS TO FIT WHAT ARRIVED. The five native sources are always
- * drawn — a stranger's board should show the same controls as yours, and a chip
- * that appears only once its process has spoken teaches nothing about what can
- * speak. Any EXTERNAL namespace present in the rows is appended: a backend's
- * telemetry is not a benchmark source and never merges into one, but it must be
- * filterable or the merged list is unreadable.
+ * Chips for both axes. The five native sources always show; any external
+ * namespace present is appended (filterable, never merged into a native one).
  */
 function backendChips() {
   const all = backendRows();
@@ -58,8 +43,7 @@ function backendChips() {
     )
     .join("");
 
-  // A NON-ZERO ERROR COUNT KEEPS THE DANGER HUE whatever the filter state — the
-  // same rule the event feed's error kind has always had, for the same reason.
+  // A non-zero error count keeps the danger colour whatever the filter.
   const lev = levelFacet.values
     .map(
       (v) =>
@@ -93,13 +77,7 @@ export function feedTabs() {
     </span>`;
 }
 
-/**
- * WHICH STREAMS ANSWERED, stated rather than implied.
- *
- * A feed missing the control plane's half and a control plane with nothing to
- * say render identically without this — which is the failure this whole surface
- * exists to remove, reappearing inside the surface itself.
- */
+/** Which streams answered, stated. */
 function backendNote() {
   const backend = backendFeed();
   if (backend.unreachable) return "control plane unreachable — this feed is not live";
@@ -108,55 +86,30 @@ function backendNote() {
   const missing = [];
   if (s.live && !s.live.attached) missing.push("cell stream");
   if (s.notices && !s.notices.attached) missing.push("run notices");
-  // SAY WHICH HALF IS COMPLETE. "Older records exist beyond the window" is an
-  // honest thing to say about activity and a frightening thing to leave hanging
-  // over failures — the reader has no way to know the errors are all there.
+  // Say that the error list is complete even when activity is windowed.
   const errs = backend.errors_total ?? 0;
   const win = backend.windowed
     ? ` · activity windowed, older records lie beyond it — ${errs} error${errs === 1 ? "" : "s"}, complete`
     : "";
   if (missing.length) return `${missing.join(" and ")} not readable${win}`;
-  // THE COUNT IS THE MERGED LIST\'S OWN LENGTH. `returned` is the server\'s
-  // window figure, taken before errors[] and rows[] are unioned and deduped —
-  // so it can name a number the list beneath it does not contain. The number a
-  // reader checks against the rows must come from the rows.
+  // The count is the merged list's own length (the server's figure predates the
+  // union and dedupe).
   return `${backendRows().length} of ${backend.total} records${win}`;
 }
 
 /**
- * RECENT ACTIVITY, PLUS EVERY ERROR.
- *
- * The activity rows are a WINDOW — the last stretch of two append-only streams
- * that grow without bound. That is right for "what is happening" and wrong for
- * "what went wrong": an error from three hours ago is precisely the record
- * someone reviewing a finished run came for, and it is the first thing a tail
- * drops.
- *
- * So the server sends the complete error set separately and they are unioned
- * here. DEDUPED, because an error inside the window arrives on both lists and
- * showing it twice would make one failure look like two.
+ * Recent activity (a window) plus every error (complete, sent separately),
+ * unioned and deduped.
  */
 export function backendRows() {
   return mergeBackendRows(backendFeed());
 }
 
 /**
- * UNION errors[] + rows[], dedupe, oldest first. EXPORTED and the only
- * definition: the live card and the BASELINES card's concluded-run drawer read
- * the same feed, and two merges of one record set would be two claims.
- *
- * ── THE KEY IDENTIFIES A RECORD, NOT A TIME BUCKET ──────────────────────────
- *
- * It was `${ts}|${kind}|${source}|${event}` — which is not an identity. A gate
- * suite reports every result in the same second, from the same source, under
- * the same `gate.result` event name, differing ONLY in `detail.id`. Measured on
- * a real run: 600 backend records collapsed to 53, and the header above them
- * went on saying "600 records" — 547 rows dropped, silently, with the count
- * still claiming they were there.
- *
- * `detail` is therefore part of the key. It is the only field that distinguishes
- * one gate result from the next, so a merge that ignores it is not deduplicating
- * duplicates — it is discarding evidence.
+ * Union errors + rows, dedupe, oldest first — the one definition, shared with
+ * the concluded-run view. The key includes `detail`: a gate suite's results
+ * share second, source and event and differ only there (without it 600 records
+ * became 53).
  */
 export function mergeBackendRows(feed) {
   const seen = new Set();
@@ -167,58 +120,28 @@ export function mergeBackendRows(feed) {
     seen.add(key);
     out.push(r);
   }
-  // NUMERIC, and stable within a tie. `ts` is a number by contract
-  // (control/backend-feed.mjs toRow), and a whole gate suite shares one
-  // millisecond — so equal stamps must keep the order the producer wrote them
-  // in rather than being reshuffled by an unstable comparison.
+  // Numeric and stable, so a suite sharing one millisecond keeps producer order.
   return out.sort((a, b) => (Number(a.ts) || 0) - (Number(b.ts) || 0));
 }
 
-/**
- * A group's stable identity across rebuilds — the fold state must survive the
- * 2s poll, and a positional index would move under the operator the moment a
- * new record landed or a chip changed.
- */
+/** A group's stable identity, so fold state survives the 2s rebuild. */
 export function groupKeyOf(g) {
   const r = g.row ?? g.children[0] ?? null;
   return `${r?.ts ?? "?"}|${r?.kind ?? "?"}|${r?.source ?? "?"}|${r?.event ?? ""}`;
 }
 
-// ── CONDENSING: A BIRD'S-EYE VIEW, WITH THE DATA ONE CLICK AWAY ─────────────
-//
-// A 2h19m cell produces ~630 backend records, and 585 of them are `gate.result`
-// — one per gate, per attempt, all landing in the same second. Rendered flat,
-// the forty-five records that actually describe what the harness DID (phase
-// starts, attempt verdicts, truncation warnings, the cell's own start and end)
-// are unfindable underneath them, and the 600-row window meant you saw almost
-// nothing but the final grading burst.
-//
-// SO GATE RESULTS FOLD INTO THE ATTEMPT THEY BELONG TO. Nothing is discarded:
-// the gates are children of the `attempt.end` that closed them, one click away,
-// and every other row keeps its place. `gate_phase_duration` notices stay
-// TOP-LEVEL by operator ruling — grading slowness is a thing to watch, not a
-// detail to bury.
-//
-// THE SAME VIEW LIVE AND CONCLUDED. One surface, one behaviour: a gate burst
-// scrolling past is not more readable while it happens than afterwards, and a
-// card that reorganised itself the moment a run ended would teach the operator
-// that what they watched is not what they can review.
+// ── CONDENSING ── gate.result records (most of a cell's backend rows) fold
+// into the attempt.end that closed them, one click away; every other row keeps
+// its place. gate_phase_duration notices stay top-level. Same view live and
+// concluded.
 
 /** Records that fold into the attempt that closed them. */
 const FOLDS_INTO_ATTEMPT = new Set(["gate.result"]);
 
 /**
- * Group merged backend rows into a birds-eye list, oldest first.
- *
- * Returns `[{ row, children }]` — `children` empty for an ordinary record, and
- * for an `attempt.end` the gate results that preceded it since the last attempt
- * closed. Gate results with no attempt after them (a cell still grading, or one
- * that died mid-attempt) are NOT dropped: they are handed back under a synthetic
- * open group so a run that never closed its last attempt still shows them.
- * Losing rows because the run ended untidily would hide exactly the run worth
- * looking at.
- *
- * PURE. Exported for tests and used by the paint.
+ * Group rows oldest first into [{ row, children }]: an attempt.end carries the
+ * gate results since the previous attempt closed. Gate results with no closing
+ * attempt go under a synthetic open group, never dropped. Pure.
  */
 export function condenseBackend(rows) {
   const out = [];
