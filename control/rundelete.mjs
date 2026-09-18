@@ -7,8 +7,10 @@
 // Deleting the archived folder removes that one run and its ledger rows.
 //
 // Not touched: runs/baselines.json (derived; regenerates), docker session-db
-// volumes (named by model, not run, so they can't be attributed — reported only),
-// runs/snapshots/ (no reliable link to a tree).
+// volumes (named by model, not run, so they can't be attributed — reported
+// only), and snapshots seeded from this run downstream (no cascade). The
+// snapshots this run PRODUCED — manifest session_records[].produced_snapshot_id
+// — are hard-deleted with it.
 
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
@@ -69,6 +71,34 @@ async function strandedVolumes() {
       .filter((s) => /^bench-cell-.*-session-db$/.test(s));
   } catch {
     // No docker: report nothing.
+    return [];
+  }
+}
+
+/**
+ * Every snapshot id this run produced, read from the campaign manifest(s)
+ * nested under the target (<tree>/<substrate>/<router>/<provider>/<model>/
+ * manifest.json). Missing or malformed manifests yield nothing: a run with no
+ * readable produced_snapshot_id deletes as before — no error, no guessing.
+ */
+async function producedSnapshotIds(target) {
+  try {
+    const entries = await fs.readdir(target, { recursive: true });
+    const ids = [];
+    for (const rel of entries) {
+      if (basename(rel) !== "manifest.json") continue;
+      try {
+        const raw = JSON.parse(await fs.readFile(join(target, rel), "utf8"));
+        for (const rec of Array.isArray(raw?.session_records) ? raw.session_records : []) {
+          const id = rec?.produced_snapshot_id;
+          if (typeof id === "string" && id !== "") ids.push(id);
+        }
+      } catch {
+        // One unreadable manifest never stops the walk.
+      }
+    }
+    return [...new Set(ids)];
+  } catch {
     return [];
   }
 }
@@ -164,14 +194,23 @@ export async function planRunDelete(runsRoot, benchmarkId, cell, opts = {}) {
 
   const { files, bytes } = await measure(target);
   const volumes = await strandedVolumes();
+  const snapshot_ids = await producedSnapshotIds(target);
 
-  const token = ["delete-run", treeId, `files=${files}`, `bytes=${bytes}`].join("|");
+  const token =
+    ["delete-run", treeId, `files=${files}`, `bytes=${bytes}`].join("|") +
+    (snapshot_ids.length ? `|snaps=${snapshot_ids.join(",")}` : "");
   const restatement = [
     `Permanently delete run ${treeId}.`,
     `${files} file${files === 1 ? "" : "s"} (${human(bytes)}) under ${target} will be REMOVED FROM DISK.`,
     archived
       ? "That is the archived tree plus the baselines and ledger recorded when it was retired."
       : "That is the whole tree: its cells, worktrees, transcripts and checkpoints.",
+    ...(snapshot_ids.length
+      ? [
+          `This run's produced snapshot${snapshot_ids.length === 1 ? "" : "s"} will ALSO be removed from disk: runs/snapshots/${snapshot_ids.join(", ")}.`,
+          "Snapshots seeded from it downstream are kept.",
+        ]
+      : []),
     "THIS IS NOT A RESET. Nothing is moved to a backup — it is gone.",
     "runs/baselines.json is derived from the cells and rebuilds itself; it is not edited here.",
     volumes.length
@@ -190,6 +229,7 @@ export async function planRunDelete(runsRoot, benchmarkId, cell, opts = {}) {
     bytes,
     bytes_human: human(bytes),
     stranded_volumes: volumes,
+    snapshot_ids,
     token,
     restatement,
   };
@@ -215,6 +255,20 @@ export async function deleteRun(runsRoot, benchmarkId, cell, confirm, opts = {})
     return refuse("delete_failed", `${plan.target}: ${err?.message ?? err}`, {}, 500);
   }
 
+  // The snapshots this run produced go with it — hard delete, no cascade:
+  // snapshots seeded from them downstream are never touched. The run folder is
+  // already gone, so a stuck snapshot lowers the count instead of failing the op.
+  let snapshots_deleted = 0;
+  for (const id of plan.snapshot_ids) {
+    if (id.includes("/") || id.includes("\\") || id === "." || id === "..") continue;
+    try {
+      await fs.rm(join(runsRoot, "snapshots", id), { recursive: true, force: true });
+      snapshots_deleted += 1;
+    } catch {
+      // Counted by omission; the run delete itself already succeeded.
+    }
+  }
+
   // Remove the emptied archive folder — only if truly empty, never recursively.
   if (plan.archived) {
     const parent = dirname(plan.target);
@@ -235,5 +289,6 @@ export async function deleteRun(runsRoot, benchmarkId, cell, confirm, opts = {})
     bytes: plan.bytes,
     bytes_human: plan.bytes_human,
     stranded_volumes: plan.stranded_volumes,
+    snapshots_deleted,
   };
 }

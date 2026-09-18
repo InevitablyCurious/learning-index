@@ -42,6 +42,7 @@ const PLAN = {
   bytes: 90_000,
   bytes_human: "88 KB",
   token: "delete-run|1788976174|files=412|bytes=90000",
+  snapshot_ids: [],
   restatement:
     "Permanently delete run 1788976174. 412 files (88 KB) under /runs/backups/1789023699 " +
     "will be REMOVED FROM DISK. THIS IS NOT A RESET.",
@@ -72,6 +73,17 @@ test("preview shows the SERVER's restatement verbatim — the browser never rewo
       assert.match(html, /data-del-cancel="1"/);
     },
   );
+});
+
+test("the heading flags a produced snapshot at a glance — the blast radius stays server-side", () => {
+  const withSnap = renderDeleteConfirm({ plan: { ...PLAN, snapshot_ids: ["1788976174"] } });
+  assert.match(
+    withSnap,
+    /<div class="hist-confirm-head">delete run 1788976174 — permanent \(\+ produced snapshot\)<\/div>/,
+  );
+  const noSnap = renderDeleteConfirm({ plan: PLAN });
+  assert.match(noSnap, /<div class="hist-confirm-head">delete run 1788976174 — permanent<\/div>/);
+  assert.ok(!noSnap.includes("(+ produced snapshot)"), "no produced snapshot, no flag");
 });
 
 test("nothing is confirmable until a preview has been taken", async () => {

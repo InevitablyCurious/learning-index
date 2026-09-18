@@ -262,7 +262,7 @@ export function renderDeleteConfirm(state) {
   if (!p) return "";
   return (
     `<div class="hist-confirm" role="alertdialog">` +
-      `<div class="hist-confirm-head">delete run ${esc(p.tree_id)} — permanent</div>` +
+      `<div class="hist-confirm-head">delete run ${esc(p.tree_id)} — permanent${p.snapshot_ids?.length ? " (+ produced snapshot)" : ""}</div>` +
       `<div class="hist-confirm-body">${esc(p.restatement)}</div>` +
       `<div class="hist-confirm-actions">` +
         `<button type="button" class="hist-play on" data-del-go="1">delete permanently</button>` +
