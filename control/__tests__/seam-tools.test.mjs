@@ -108,13 +108,44 @@ test("SEAM: with no custom-tools service the drawer serves only the benchmark's 
   delete process.env.BENCH_TOOLS_URL;
   try {
     const tools = await describeTools(BENCH);
-    assert.deepEqual(tools.map((t) => t.id), ["worker-image-rebuild", "grader-image-rebuild"]);
+    assert.deepEqual(tools.map((t) => t.id), [
+      "worker-image-rebuild",
+      "grader-image-rebuild",
+      "control-restart",
+      "board-rebuild",
+    ]);
     assert.equal(tools.filter((t) => t.external).length, 0, "no service means no custom rows at all");
     for (const t of tools) assert.equal(t.success_note, null, "a built-in's own output is its report");
   } finally {
     if (saved === undefined) delete process.env.BENCH_TOOLS_URL;
     else process.env.BENCH_TOOLS_URL = saved;
   }
+});
+
+test("REFRESH: the control plane restarts itself only when launchd owns it", async () => {
+  const { describeBuiltinTools } = await import("../tools.mjs");
+  const saved = process.env.BENCH_LAUNCHD_LABEL;
+  try {
+    delete process.env.BENCH_LAUNCHD_LABEL;
+    const byHand = describeBuiltinTools(BENCH).find((t) => t.id === "control-restart");
+    assert.equal(byHand.status, "blocked", "a hand-started process has nothing to restart it");
+    assert.match(byHand.blocked_reason, /started by hand/);
+
+    process.env.BENCH_LAUNCHD_LABEL = "com.example.bench-control";
+    const agent = describeBuiltinTools(BENCH).find((t) => t.id === "control-restart");
+    assert.equal(agent.status, "wired");
+    assert.equal(agent.refuse_while_running, true, "a restart would kill the running cell");
+  } finally {
+    if (saved === undefined) delete process.env.BENCH_LAUNCHD_LABEL;
+    else process.env.BENCH_LAUNCHD_LABEL = saved;
+  }
+});
+
+test("REFRESH: the board refresh is allowed during a run and reloads the page", async () => {
+  const { describeBuiltinTools } = await import("../tools.mjs");
+  const board = describeBuiltinTools(BENCH).find((t) => t.id === "board-rebuild");
+  assert.equal(board.refuse_while_running, false, "the board is not part of the measurement");
+  assert.equal(board.reload_page, true);
 });
 
 test("SEAM: a service that is down or off-contract is REPORTED, never silently skipped", async () => {
@@ -198,7 +229,7 @@ test("SEAM: preflight's fix buttons never contact the custom-tools service", asy
   let hits = 0;
   await withToolsService((req, res) => { hits += 1; sendJson(res, 200, { tools: [SERVED] }); }, async () => {
     const ids = describeBuiltinTools(BENCH).map((t) => t.id);
-    assert.deepEqual(ids, ["worker-image-rebuild", "grader-image-rebuild"]);
+    assert.deepEqual(ids, ["worker-image-rebuild", "grader-image-rebuild", "control-restart", "board-rebuild"]);
     assert.equal(hits, 0, "resolving preflight remedies must not depend on the service");
   });
 });

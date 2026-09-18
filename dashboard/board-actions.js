@@ -89,9 +89,8 @@ export async function doRunTool(id) {
   render();
   await runTool(id);
   render();
-  // Re-read the registry after every run: a tool can change the others (and
-  // bench-ready restarts the control plane). A failed re-read keeps the rows and
-  // says they may be stale.
+  // Re-read the registry after every run: a tool can change the others. A
+  // failed re-read keeps the rows and says they may be stale.
   await loadTools();
   render();
 }

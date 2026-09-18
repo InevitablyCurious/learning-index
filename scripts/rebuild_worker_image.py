@@ -49,7 +49,7 @@ def main() -> int:
 
     # ── THE SEAM IS THE DEFAULT; THE FLAG IS AN OVERRIDE ────────────────────
     #
-    # The board's REBUILD WORKER button invokes this script with NO arguments,
+    # The board's Refresh worker button invokes this script with NO arguments,
     # so before the seam existed, pressing it replaced a plugin-bearing image
     # with a vanilla one. Nothing said so: the label flipped to
     # `plugin_present=0`, and opencode swallows a missing plugin without a word,

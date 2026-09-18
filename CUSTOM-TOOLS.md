@@ -2,8 +2,10 @@
 
 The board's tool drawer (the menu button) shows two kinds of tool:
 
-- **Built-in** — the benchmark's own, defined in `control/tools.mjs`. Today
-  that is **Rebuild worker**.
+- **Built-in** — the benchmark's own, defined in `control/tools.mjs`: the four
+  refresh buttons (**Refresh worker**, **Refresh grader**, **Refresh control
+  plane**, **Refresh board**), one for each part that keeps running old code
+  after an edit. Preflight names the one to press.
 - **Custom** — served by a separate custom-tools service that you run: for
   example a memory system's own operations, such as joining an org or
   restarting its services. The benchmark ships none of them and knows none of

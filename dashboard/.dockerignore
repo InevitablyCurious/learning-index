@@ -1,6 +1,4 @@
-# Nothing in the build context should ever reach the image except source.
-# The bench artifacts arrive via a read-only MOUNT, never baked into a layer —
-# a run's artifacts are a measurement record, not image content.
+# Only the board's own source goes into the image; it reads no run data.
 **/node_modules
 **/.git
 **/runs

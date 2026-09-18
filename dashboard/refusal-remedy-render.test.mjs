@@ -47,10 +47,10 @@ const NO_GO = {
       name: "control plane",
       status: "fail",
       detail: "started before control/server.mjs was edited",
-      remedy_tool: "bench-ready",
+      remedy_tool: "control-restart",
       remedy: {
-        id: "bench-ready",
-        name: "Prepare bench",
+        id: "control-restart",
+        name: "Refresh control plane",
         status: "wired",
         blocked_reason: null,
         refuse_while_running: true,
@@ -76,8 +76,8 @@ test("a refused launch renders the button, what it fixes, and what it does not",
     assert.match(html, /PREFLIGHT REFUSED — NOTHING STARTED/);
 
     // THE BUTTON, carrying the tool id the click handler routes on.
-    assert.match(html, /data-preflight-fix="bench-ready"/);
-    assert.match(html, /Prepare bench/);
+    assert.match(html, /data-preflight-fix="control-restart"/);
+    assert.match(html, /Refresh control plane/);
     // Named, so one press reads as the fix for a named check rather than a
     // hopeful retry.
     assert.match(html, /fixes control plane/);
@@ -87,7 +87,7 @@ test("a refused launch renders the button, what it fixes, and what it does not",
     assert.match(html, /No button for: campaign slot/);
 
     // The note must send the operator to the button rather than to a terminal.
-    assert.match(html, /Press the tool below/);
+    assert.match(html, /Press the button below/);
   } finally {
     server.close();
   }

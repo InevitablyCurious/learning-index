@@ -47,7 +47,7 @@ def test_a_control_plane_started_after_the_source_is_fresh() -> None:
     )
     ok, detail = verdict
     assert ok is True
-    assert "no restart needed" in detail
+    assert "after the last change" in detail
 
 
 def test_a_control_plane_older_than_the_source_is_stale_and_names_the_fix() -> None:
@@ -59,8 +59,8 @@ def test_a_control_plane_older_than_the_source_is_stale_and_names_the_fix() -> N
         newest_path="control/server.mjs",
     )
     assert ok is False
-    assert "control/server.mjs is NEWER" in detail
-    assert "restart the control plane" in detail, "a failure must name its remedy"
+    assert "control/server.mjs changed" in detail
+    assert "Refresh control plane" in detail, "a failure must name its button"
 
 
 def test_a_control_plane_with_no_started_at_is_stale_by_definition() -> None:
@@ -75,8 +75,8 @@ def test_a_control_plane_with_no_started_at_is_stale_by_definition() -> None:
         newest_path="control/server.mjs",
     )
     assert ok is False
-    assert "DEFINITELY stale" in detail
-    assert "restart the control plane" in detail
+    assert "needs a refresh" in detail
+    assert "Refresh control plane" in detail
 
 
 def test_the_check_is_blocking() -> None:
@@ -100,3 +100,44 @@ def test_the_control_plane_actually_serves_started_at() -> None:
     src = (REPO / "control" / "routes" / "meta.mjs").read_text(encoding="utf-8")
     assert "const PROCESS_STARTED_AT = new Date().toISOString();" in src
     assert "started_at: PROCESS_STARTED_AT," in src
+
+
+# ── the board ────────────────────────────────────────────────────────────────
+
+
+def _board_dir(tmp_path: Path) -> Path:
+    (tmp_path / "panels").mkdir()
+    (tmp_path / "server.mjs").write_text("server")
+    (tmp_path / "panels" / "tools.js").write_text("tools")
+    return tmp_path
+
+
+def _sha(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+def test_a_board_serving_the_files_on_disk_is_fresh(tmp_path: Path) -> None:
+    served = {"server.mjs": _sha("server"), "panels/tools.js": _sha("tools")}
+    ok, detail = _preflight().board_freshness_verdict(served, _board_dir(tmp_path))
+    assert ok is True, detail
+
+
+def test_a_board_behind_the_disk_names_the_file_and_the_button(tmp_path: Path) -> None:
+    served = {"server.mjs": _sha("server"), "panels/tools.js": _sha("old tools")}
+    ok, detail = _preflight().board_freshness_verdict(served, _board_dir(tmp_path))
+    assert ok is False
+    assert "dashboard/panels/tools.js" in detail
+    assert "Refresh board" in detail
+
+
+def test_a_board_that_reports_no_files_predates_the_report(tmp_path: Path) -> None:
+    ok, detail = _preflight().board_freshness_verdict(None, _board_dir(tmp_path))
+    assert ok is False
+    assert "Refresh board" in detail
+
+
+def test_the_board_actually_serves_its_file_report() -> None:
+    src = (REPO / "dashboard" / "server.mjs").read_text(encoding="utf-8")
+    assert "started_at: STARTED_AT, files: FILES" in src

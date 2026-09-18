@@ -48,7 +48,7 @@ def check_image(c: Check) -> None:
         c.add(
             "worker image",
             False,
-            f"{IMAGE} MISSING -> {REBUILD_CMD}",
+            f"{IMAGE} is not built — {REBUILD_CMD}",
             remedy=TOOL_WORKER_REBUILD,
         )
         return
@@ -68,7 +68,7 @@ def check_image(c: Check) -> None:
             "worker image",
             False,
             f"{IMAGE} carries no source digest — it was not built by the rebuild "
-            f"path, so nothing recorded what it was built from -> {REBUILD_CMD}",
+            f"path, so nothing recorded what it was built from — {REBUILD_CMD}",
             remedy=TOOL_WORKER_REBUILD,
         )
         return
@@ -80,11 +80,11 @@ def check_image(c: Check) -> None:
     c.add(
         "worker image",
         ok,
-        f"built from source {baked[:12]}"
-        + (
-            f" but images/worker {flavour} is now {want[:12]} -> {REBUILD_CMD}"
+        (
+            f"needs a refresh: the worker source changed since it was built "
+            f"({baked[:12]} → {want[:12]}, {flavour}) — {REBUILD_CMD}"
             if not ok
-            else f" — matches images/worker byte for byte, {flavour}"
+            else f"built from source {baked[:12]} — matches images/worker byte for byte, {flavour}"
         ),
         remedy=TOOL_WORKER_REBUILD,
     )
@@ -121,8 +121,8 @@ def check_grader_image(c: Check) -> None:
         c.add(
             "grader image",
             False,
-            f"{IMAGE} is not built (or carries no source digest). "
-            "Build: python3 scripts/rebuild_grader_image.py",
+            f"{IMAGE} is not built (or carries no source digest) — "
+            "press Refresh grader in the ☰ menu",
             remedy=TOOL_GRADER_REBUILD,
         )
         return
@@ -131,9 +131,8 @@ def check_grader_image(c: Check) -> None:
         c.add(
             "grader image",
             False,
-            f"{IMAGE} is STALE — built from {baked[:12]}, gates on disk are {live[:12]}. "
-            "It would grade against gate code that is not the code on disk. "
-            "Rebuild: python3 scripts/rebuild_grader_image.py",
+            f"needs a refresh: grader/ changed since {IMAGE} was built "
+            f"({baked[:12]} → {live[:12]}) — press Refresh grader in the ☰ menu",
             remedy=TOOL_GRADER_REBUILD,
         )
         return

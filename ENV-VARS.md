@@ -96,6 +96,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_AGENT_PRIVATE_KEY | (none) | agent key fallback fp (log-only) | env |
 | OKP_EPOCH | (none) | epoch fp (log-only) | env |
 | BENCH_TOOLS_URL | (none) | address of a custom-tools service whose tools the board's drawer lists and runs; never consulted by preflight or a run — see CUSTOM-TOOLS.md (control/tools.mjs) | env |
+| BENCH_LAUNCHD_LABEL | (none) | the launchd job the control plane runs as; set, it lets the board's Refresh control plane button restart it (control/tools.mjs) | env |
 | BENCH_STATS_MANIFEST | (none) | run-stats manifest path (control/runstats.mjs:182) | env |
 | OKP_DASHBOARD_CONFIG | (none) | dashboard shared-config path (control/routers.mjs:71 + harness/spend_key.py:48) | env |
 

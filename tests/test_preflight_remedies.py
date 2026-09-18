@@ -151,7 +151,12 @@ def test_every_remedy_a_check_names_is_one_of_the_declared_tool_ids() -> None:
     declared = {
         v for k, v in vars(pf).items() if k.startswith("TOOL_") and isinstance(v, str)
     }
-    assert declared == {"worker-image-rebuild", "grader-image-rebuild"}
+    assert declared == {
+        "worker-image-rebuild",
+        "grader-image-rebuild",
+        "control-restart",
+        "board-rebuild",
+    }
 
     src = (REPO / "scripts" / "bench_preflight.py").read_text(encoding="utf-8")
     for line in src.splitlines():

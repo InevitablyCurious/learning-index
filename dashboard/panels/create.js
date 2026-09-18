@@ -875,7 +875,7 @@ function launchProgress(board) {
     note:
       failed && failed.id === "preflight"
         ? ((ui.launch?.remedies ?? []).length
-            ? "No cell was started. Press the tool below — this closes and opens it in Settings — then start again."
+            ? "No cell was started. Press the button below — it opens the ☰ menu at the refresh that fixes it — press run there, then start again."
             : "No cell was started. Fix what preflight named, then start again.")
         : "Closing this leaves the run alone — the cell keeps going and the board tracks it from here.",
     cta: "CLOSE",

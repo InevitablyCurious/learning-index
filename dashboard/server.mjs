@@ -17,6 +17,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -94,6 +96,17 @@ const STATIC = {
 
 const relay = createControlRelay({ controlUrl: CONTROL_URL });
 
+// What this board is running, file by file, read once at start. Preflight
+// compares it with dashboard/ on disk to tell when the board needs a refresh.
+const STARTED_AT = new Date().toISOString();
+const FILES = Object.fromEntries(
+  [
+    "server.mjs",
+    ...readdirSync(join(HERE, "lib")).filter((f) => f.endsWith(".mjs")).map((f) => `lib/${f}`),
+    ...new Set(Object.values(STATIC).map((e) => e.file)),
+  ].map((f) => [f, createHash("sha256").update(readFileSync(join(HERE, f))).digest("hex")]),
+);
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
 
@@ -118,7 +131,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (url.pathname === "/api/health") {
-    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true }));
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, started_at: STARTED_AT, files: FILES }));
     return;
   }
 

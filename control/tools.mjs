@@ -4,10 +4,11 @@
 //   custom    served by a separate service at BENCH_TOOLS_URL (CUSTOM-TOOLS.md);
 //             the benchmark knows none by name and never checks them
 //
-// The benchmark runs the same with or without a service: preflight's fix buttons
-// resolve against built-ins only. A tool is a data row, not a branch; an unknown
-// or misconfigured tool errors loudly; an unreadable service shows as one blocked
-// row with its address and reason.
+// The built-ins are the four refresh buttons. The benchmark runs the same with
+// or without a service: preflight's fix buttons resolve against built-ins only.
+// A tool is a data row, not a branch; an unknown or misconfigured tool errors
+// loudly; an unreadable service shows as one blocked row with its address and
+// reason.
 
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -30,83 +31,126 @@ function controlPython(benchRoot) {
   return process.env.OKP_CONTROL_PYTHON ?? join(benchRoot, ".venv", "bin", "python");
 }
 
+/** The launchd job this control plane runs as, or "" when started by hand. */
+function launchdLabel(env = process.env) {
+  return String(env.BENCH_LAUNCHD_LABEL ?? "").trim();
+}
+
+function pythonScript(benchRoot, script) {
+  return {
+    kind: "script",
+    command: controlPython(benchRoot),
+    argv: [join(benchRoot, "scripts", script)],
+    timeoutMs: 900000,
+  };
+}
+
+function needsFile(path, what) {
+  return { ok: existsSync(path), reason: `${what} is missing — ${path}` };
+}
+
+/**
+ * THE REFRESH BUTTONS. Four parts of the benchmark keep running old code after
+ * an edit; each has one button, and preflight names the button when that part
+ * is behind. Everything else (harness, prompts, challenges, scripts) is read
+ * fresh by every run.
+ */
 function builtinTools(benchRoot) {
+  const label = launchdLabel();
   return [
-    // Refuses while a cell is in flight: rebuilding the worker mid-cell changes the
-    // substrate under the measurement.
     {
       id: "worker-image-rebuild",
-      name: "Rebuild worker",
+      name: "Refresh worker",
       blurb:
-        "Press when preflight says the worker image is stale, and after any edit under " +
-        "images/worker. The image bakes its sources at build time, so until you rebuild, " +
-        "every cell runs the old ones without saying so.",
+        "After editing images/worker, images/sidecar or the opencode plugin. The worker " +
+        "image the model runs in is built once; until it is rebuilt, every run uses the old one.",
       seams: [
-        "computes a digest of everything images/worker bakes in",
-        "docker build -t bench-worker:v1 images/worker, with that digest as a label",
-        "preflight reads the label back and compares it to the source — a content check, not a timestamp",
+        "rebuilds the worker image from images/worker, images/sidecar and the plugin",
+        "stamps it with a fingerprint of those files, which preflight compares with the disk",
+      ],
+      args: [],
+      // Changing the worker mid-run would change what is being measured.
+      refuse_while_running: true,
+      invoke: pythonScript(benchRoot, "rebuild_worker_image.py"),
+      preconditions: [
+        needsFile(join(benchRoot, "images", "worker", "Dockerfile"), "the worker Dockerfile"),
+        needsFile(join(benchRoot, "scripts", "rebuild_worker_image.py"), "the rebuild script"),
+        needsFile(controlPython(benchRoot), "the python that runs the rebuild"),
+      ],
+    },
+    {
+      id: "grader-image-rebuild",
+      name: "Refresh grader",
+      blurb:
+        "After editing grader/ or images/grader. Grading runs in an image that is built once; " +
+        "until it is rebuilt, every attempt is graded by the old gates.",
+      seams: [
+        "rebuilds the grading image from grader/ and images/grader",
+        "stamps it with a fingerprint of those files, which preflight compares with the disk",
       ],
       args: [],
       refuse_while_running: true,
-      // Not a bare docker build: it records what it was built from, so freshness can
-      // be checked (a cached rebuild keeps the old image's creation time).
+      invoke: pythonScript(benchRoot, "rebuild_grader_image.py"),
+      preconditions: [
+        needsFile(join(benchRoot, "images", "grader", "Dockerfile"), "the grader Dockerfile"),
+        needsFile(join(benchRoot, "scripts", "rebuild_grader_image.py"), "the rebuild script"),
+        needsFile(controlPython(benchRoot), "the python that runs the rebuild"),
+      ],
+    },
+    {
+      id: "control-restart",
+      name: "Refresh control plane",
+      blurb:
+        "After editing control/. The control plane reads its code once, when it starts. " +
+        "The board goes quiet for a few seconds while it restarts, then reconnects.",
+      seams: [
+        "answers first, then asks macOS (launchd) to restart this control plane",
+        "launchd stops it and starts it again on the code on disk",
+      ],
+      args: [],
+      // Runs are children of the control plane; restarting it would kill one.
+      refuse_while_running: true,
       invoke: {
         kind: "script",
-        command: controlPython(benchRoot),
-        argv: [join(benchRoot, "scripts", "rebuild_worker_image.py")],
-        timeoutMs: 900000,
+        after: {
+          command: "/bin/sh",
+          argv: ["-c", `sleep 1; exec launchctl kickstart -k "gui/$(id -u)/$0"`, label],
+        },
+        stdout: "Restarting. The board reconnects in a few seconds.",
       },
       preconditions: [
         {
-          ok: existsSync(join(benchRoot, "images", "worker", "Dockerfile")),
-          reason: `no worker Dockerfile at ${join(benchRoot, "images", "worker", "Dockerfile")}`,
-        },
-        {
-          ok: existsSync(join(benchRoot, "scripts", "rebuild_worker_image.py")),
-          reason: `the rebuild script is missing — ${join(benchRoot, "scripts", "rebuild_worker_image.py")}`,
-        },
-        {
-          ok: existsSync(controlPython(benchRoot)),
-          reason: `no python to run the rebuild with — ${controlPython(benchRoot)}`,
+          ok: Boolean(label),
+          reason:
+            "this control plane was started by hand, not as a login agent, so nothing can " +
+            "restart it from here — stop it and run node control/server.mjs again",
         },
       ],
     },
-    // The grader image, same treatment: it bakes a digest of grader/ that
-    // preflight reads back, so a stale grader is caught and fixed from here.
     {
-      id: "grader-image-rebuild",
-      name: "Rebuild grader",
+      id: "board-rebuild",
+      name: "Refresh board",
       blurb:
-        "Press when preflight says the grading image is stale or missing, and after any edit " +
-        "under grader/ or images/grader. Grading runs only in this image, so until you rebuild, " +
-        "every attempt is graded by the gate code the image was built with.",
+        "After editing dashboard/. The board's page is baked into a container; this rebuilds " +
+        "it and reloads this page when the new one is up. Safe during a run.",
       seams: [
-        "computes a digest of the gate suite and the grader Dockerfile",
-        "docker build of images/grader against the challenge's gate suite, with that digest as a label",
-        "preflight reads the label back and compares it to the gates on disk — a content check, not a timestamp",
+        "docker compose build, in dashboard/ — its output is shown here",
+        "then swaps the running board for the new one and this page reloads itself",
       ],
       args: [],
-      // Rebuilding the grader mid-cell changes what the attempt is measured by.
-      refuse_while_running: true,
+      refuse_while_running: false,
+      reload_page: true,
       invoke: {
         kind: "script",
-        command: controlPython(benchRoot),
-        argv: [join(benchRoot, "scripts", "rebuild_grader_image.py")],
-        timeoutMs: 900000,
+        command: "docker",
+        argv: ["compose", "build"],
+        cwd: join(benchRoot, "dashboard"),
+        timeoutMs: 600000,
+        // Detached: the swap replaces the container relaying this very request.
+        after: { command: "docker", argv: ["compose", "up", "-d", "--force-recreate"] },
       },
       preconditions: [
-        {
-          ok: existsSync(join(benchRoot, "images", "grader", "Dockerfile")),
-          reason: `no grader Dockerfile at ${join(benchRoot, "images", "grader", "Dockerfile")}`,
-        },
-        {
-          ok: existsSync(join(benchRoot, "scripts", "rebuild_grader_image.py")),
-          reason: `the rebuild script is missing — ${join(benchRoot, "scripts", "rebuild_grader_image.py")}`,
-        },
-        {
-          ok: existsSync(controlPython(benchRoot)),
-          reason: `no python to run the rebuild with — ${controlPython(benchRoot)}`,
-        },
+        needsFile(join(benchRoot, "dashboard", "docker-compose.yml"), "the board's compose file"),
       ],
     },
   ];
@@ -223,6 +267,8 @@ function describe(t) {
     blurb: t.blurb,
     // What to say on success when "it worked" isn't the whole truth.
     success_note: t.success_note ?? null,
+    // The board reloads itself once the tool's work is live (Refresh board).
+    reload_page: t.reload_page === true,
     seams: t.seams ?? [],
     args: (t.args ?? []).map((a) => ({ ...a })),
     status: failed.length === 0 ? "wired" : "blocked",
@@ -272,10 +318,28 @@ export function attachRemedies(checks, registry) {
 /**
  * Run a declared command as an argv array, never a shell string. Command and
  * args come from the registry row, not the request. Output returned verbatim.
+ * `after`, when present, is started detached once the command succeeds — for
+ * work that would cut off this very reply (restarting the control plane or the
+ * board's container).
  */
-async function runScript({ command, argv, timeoutMs = 120000, benchRoot }) {
+async function runScript({ command, argv, cwd, after, stdout = "", timeoutMs = 120000, benchRoot }) {
+  const out = command
+    ? await runCommand({ command, argv, cwd: cwd ?? benchRoot, timeoutMs })
+    : { ok: true, code: "ok", reason: null, stdout, stderr: "" };
+  if (out.ok && after) {
+    spawn(after.command, after.argv ?? [], {
+      cwd: cwd ?? benchRoot,
+      env: { ...process.env },
+      detached: true,
+      stdio: "ignore",
+    }).unref();
+  }
+  return out;
+}
+
+async function runCommand({ command, argv, cwd, timeoutMs }) {
   return await new Promise((resolveP) => {
-    const child = spawn(command, argv ?? [], { cwd: benchRoot, env: { ...process.env } });
+    const child = spawn(command, argv ?? [], { cwd, env: { ...process.env } });
     let out = "";
     let err = "";
     const timer = setTimeout(() => {

@@ -1,8 +1,8 @@
-// CUSTOM TOOLS — the drawer behind the hamburger. A custom tool is a command
-// plus config that adapts the bench to a memory system; this is where they are
-// visible and runnable. A drawer, because it is neither a decision (modal) nor
-// part of the board's fixed layout (panel). The registry is served by GET
-// /api/tools, never held here, and results are shown in the tool's own words.
+// SETTINGS — the drawer behind the hamburger. It holds the four REFRESH buttons
+// (the benchmark's own tools, one per part that keeps running old code after an
+// edit), the modes, the router keys and any custom tools a memory system adds.
+// The registry is served by GET /api/tools, never held here, and results are
+// shown in the tool's own words.
 
 import { esc } from "../board.js";
 // Credentials live in this drawer too.
@@ -133,9 +133,8 @@ export async function runTool(id) {
     const data = await res.json().catch(() => null);
     ui.results[id] =
       data ?? { ok: false, code: `HTTP ${res.status}`, reason: "the control plane returned nothing readable" };
+    if (data?.ok && ui.tools?.find((t) => t.id === id)?.reload_page) reloadWhenReplaced();
   } catch (err) {
-    // Usually a restart, not a breakage: bench-ready restarts the control plane
-    // last.
     ui.results[id] = {
       ok: false,
       code: "unreachable",
@@ -148,11 +147,34 @@ export async function runTool(id) {
   }
 }
 
+/**
+ * Refresh board swaps the container serving this page. Wait for the new one
+ * (a different start time on /api/health), then reload onto its files.
+ */
+async function reloadWhenReplaced() {
+  const startedAt = async () => {
+    try {
+      return (await (await fetch("/api/health", { cache: "no-store" })).json())?.started_at ?? null;
+    } catch {
+      return null;
+    }
+  };
+  const before = await startedAt();
+  for (let i = 0; i < 90; i += 1) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const now = await startedAt();
+    if (now && now !== before) {
+      location.reload();
+      return;
+    }
+  }
+}
+
 // ── render ──
 
 /** The hamburger. Lives at the far right of the top bar. */
 export function renderToolsButton() {
-  return `<button class="hamburger" data-tools-open="1" aria-label="Custom tools"
+  return `<button class="hamburger" data-tools-open="1" aria-label="Settings"
     aria-expanded="${ui.open ? "true" : "false"}"><span></span><span></span><span></span></button>`;
 }
 
@@ -165,12 +187,22 @@ export function renderToolsDrawer(board) {
         <div class="dw-head">
           <div class="dw-titles">
             <span class="dw-title">SETTINGS</span>
-            <span class="dw-sub">mode, credentials and custom tools — everything you configure, in one place</span>
+            <span class="dw-sub">refresh buttons, modes, credentials and custom tools</span>
           </div>
           <button class="dw-x" data-tools-close="1" aria-label="Close">✕</button>
         </div>
 
         <div class="dw-body">
+          <section class="mn-sec">
+            <span class="mn-h">REFRESH</span>
+            <p class="dw-lede">
+              After code changes, press the button for the part that changed. Preflight names
+              the one you need when a run is refused. Everything else — harness, prompts,
+              challenges, scripts — picks up changes by itself at the next run.
+            </p>
+            ${body((t) => !t.external)}
+          </section>
+
           ${renderGradingSection()}
 
           <section class="mn-sec">
@@ -202,18 +234,15 @@ export function renderToolsDrawer(board) {
           <section class="mn-sec">
             <span class="mn-h">CUSTOM TOOLS</span>
             <p class="dw-lede">
-              One-click operations on the bench itself. Each shows exactly what it did —
-              the command's own output — and fails loudly rather than quietly doing nothing.
+              Added by this installation for its memory system, not part of the benchmark.
             </p>
 
-            ${body()}
+            ${body((t) => t.external)}
           </section>
         </div>
 
         <div class="dw-foot">
-          <span class="dw-note">${
-            ui.tools === null ? "reading registry…" : `${ui.tools.length} tool${ui.tools.length === 1 ? "" : "s"} registered`
-          }</span>
+          <span class="dw-note">${ui.tools === null ? "reading tools…" : ""}</span>
         </div>
       </aside>`;
 }
@@ -255,7 +284,7 @@ function renderGradingSection() {
     </section>`;
 }
 
-function body() {
+function body(keep) {
   if (ui.loading && ui.tools === null) return `<div class="dw-empty">reading registry…</div>`;
   // Above the list, never instead of it: a stale list says it is stale.
   const banner = ui.error
@@ -267,13 +296,9 @@ function body() {
           : "close and reopen this drawer to try again"
       }</span></div>`
     : "";
-  if (!ui.tools || !ui.tools.length) {
-    return (
-      banner ||
-      `<div class="dw-empty">No tools are registered. A tool is a row in the harness registry — see control/tools.mjs.</div>`
-    );
-  }
-  return `${banner}<div class="dw-list">${ui.tools.map(toolCard).join("")}</div>`;
+  const tools = (ui.tools ?? []).filter(keep);
+  if (!tools.length) return banner || `<div class="dw-empty">none</div>`;
+  return `${banner}<div class="dw-list">${tools.map(toolCard).join("")}</div>`;
 }
 
 function toolCard(t) {
@@ -331,7 +356,7 @@ function toolCard(t) {
         busy
           ? `<div class="tool-result">
                <span class="tr-code">RUNNING</span>
-               <span class="tr-lines">no output until it finishes — a rebuild can take several minutes</span>
+               <span class="tr-lines">no output until it finishes — a refresh can take several minutes</span>
              </div>`
           : ""
       }

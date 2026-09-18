@@ -1,45 +1,38 @@
-"""Control-plane freshness — is the RUNNING host process older than control/ on
-disk? Same discipline as the worker image: code on disk but not in the process."""
+"""Are the two long-running processes running the code on disk?
+
+The control plane (control/) and the board (dashboard/) read their code once,
+when they start. An edit after that sits inert until the matching refresh
+button is pressed, and a launch from old code measures something other than
+what was configured (2026-09-02: a compaction flag present on disk was absent
+from the running control plane, and the run looked entirely normal).
+
+Down is not stale: a process that is not running is not running old code.
+"""
 
 from __future__ import annotations
 
+import datetime as dt
+import hashlib
 import json
 import urllib.request
 
 from preflight.core import REPO, Check
 
+CONTROL_FIX = "press Refresh control plane in the ☰ menu"
+BOARD_FIX = "press Refresh board in the ☰ menu"
+
+
+def _health(port: int) -> dict | None:
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=3) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception:  # noqa: BLE001 - any failure to reach it means it is down
+        return None
+
 
 def check_control_plane_freshness(c: Check) -> None:
-    """Is the RUNNING control plane older than the control-plane source?
+    from bench_preflight import TOOL_CONTROL_RESTART
 
-    THE FAILURE THIS EXISTS FOR (2026-09-02). The control plane is a long-lived
-    HOST process, and `make control-start` is a deliberate no-op when :8718 is
-    already listening — so `make up` never restarts it. A compaction launch ran
-    with the flag present in `control/server.mjs` and absent from the argv the
-    running process built, because that process had been up since before the
-    edit. The run looked completely normal: no error, no warning, just a cell
-    that quietly did not compact.
-
-    SAME DISCIPLINE AS THE WORKER IMAGE. That check compares the image's build
-    time against the newest file baked into it; this compares the process's
-    start time against the newest file it would have parsed. A process cannot
-    report which version of a file it read, but it can report when it started,
-    and a start that predates the source proves the source is not what is
-    running.
-
-    BLOCKING. A stale control plane does not corrupt a run after launch — it
-    shapes the argv AT launch and nothing after — but that is precisely the
-    damage: the cell runs to completion, looks entirely normal, and measured
-    something other than what was configured. The bench fails loud and aborts
-    rather than salvaging; a run launched from a process that is not this code
-    is exactly the kind of quietly-different experiment that rule exists for.
-
-    This is self-diagnosing by construction: the board asks the control plane
-    for preflight, so a stale control plane runs the check that names its own
-    staleness and refuses the launch.
-
-    DOWN IS NOT STALE, and is not a failure here — see below.
-    """
     control_dir = REPO / "control"
     if not control_dir.is_dir():
         c.add("control plane", True, "no control/ directory — CLI-only bench")
@@ -54,63 +47,55 @@ def check_control_plane_freshness(c: Check) -> None:
         if mtime > newest:
             newest, newest_path = mtime, str(path.relative_to(REPO))
 
-    try:
-        with urllib.request.urlopen(
-            "http://127.0.0.1:8718/api/health", timeout=3
-        ) as resp:
-            health = json.loads(resp.read().decode("utf-8"))
-    except Exception:  # noqa: BLE001 - any failure to reach it means it is down
-        # DOWN IS NOT STALE. A board-launched run cannot start at all without
-        # it, and a CLI run does not need it; either way "not running" is a
-        # different fact from "running old code" and must not be reported as one.
-        c.add(
-            "control plane",
-            True,
-            "not running on :8718 — board launches unavailable "
-            "(start it: node control/server.mjs)",
-        )
+    health = _health(8718)
+    if health is None:
+        c.add("control plane", True, "not running on :8718 — board launches unavailable")
         return
-
     ok, detail = control_plane_freshness_verdict(
         started_at=str(health.get("started_at") or ""),
         newest_mtime=newest,
         newest_path=newest_path,
     )
-    # NO BUTTON. The fix is restarting this long-lived host process, and a
-    # process cannot supervise its own replacement; the detail names the fix.
-    c.add("control plane", ok, detail)
+    c.add("control plane", ok, detail, remedy=TOOL_CONTROL_RESTART)
 
 
 def control_plane_freshness_verdict(
     *, started_at: str, newest_mtime: float, newest_path: str
 ) -> tuple[bool, str]:
-    """The decision, split out so it can be tested without a live service.
-
-    Returns ``(ok, detail)``. Three cases, and the middle one is the one that
-    actually fired: a control plane old enough to have no ``started_at`` field
-    cannot be newer than the source that introduced the field, so it is stale by
-    definition rather than by comparison.
-    """
+    """(ok, detail). A process with no started_at predates the field, so it is
+    older than the source that added it."""
     if not started_at:
+        return False, f"needs a refresh: it is older than its own start-time report — {CONTROL_FIX}"
+    started_ts = dt.datetime.fromisoformat(started_at.replace("Z", "+00:00")).timestamp()
+    if newest_mtime > started_ts:
         return (
             False,
-            "running, but reports no started_at — it predates the freshness "
-            "field entirely, so it is DEFINITELY stale -> restart the control plane (node control/server.mjs)",
+            f"needs a refresh: {newest_path} changed after it started ({started_at[:19]}) — {CONTROL_FIX}",
         )
+    return True, f"started {started_at[:19]}, after the last change to control/"
 
-    import datetime as _dt
 
-    started_ts = _dt.datetime.fromisoformat(
-        started_at.replace("Z", "+00:00")
-    ).timestamp()
-    stale = newest_mtime > started_ts
-    return (
-        not stale,
-        f"started {started_at[:19]}"
-        + (
-            f" but {newest_path} is NEWER -> the running process is not this "
-            "code; restart the control plane (node control/server.mjs)"
-            if stale
-            else " (newer than control/ — no restart needed)"
-        ),
-    )
+def check_board_freshness(c: Check) -> None:
+    from bench_preflight import TOOL_BOARD_REBUILD
+
+    health = _health(8717)
+    if health is None:
+        c.add("board", True, "not running on :8717")
+        return
+    c.add("board", *board_freshness_verdict(health.get("files"), REPO / "dashboard"), remedy=TOOL_BOARD_REBUILD)
+
+
+def board_freshness_verdict(files, dashboard_dir) -> tuple[bool, str]:
+    """Compare the board's own file fingerprints with dashboard/ on disk."""
+    if not isinstance(files, dict) or not files:
+        return False, f"needs a refresh: it is older than its own file report — {BOARD_FIX}"
+    changed = []
+    for rel, served in sorted(files.items()):
+        path = dashboard_dir / rel
+        on_disk = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+        if on_disk != served:
+            changed.append(rel)
+    if changed:
+        more = f" and {len(changed) - 1} more" if len(changed) > 1 else ""
+        return False, f"needs a refresh: dashboard/{changed[0]}{more} changed since it was built — {BOARD_FIX}"
+    return True, f"serving the dashboard/ on disk ({len(files)} files)"

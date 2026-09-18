@@ -15,10 +15,7 @@ REPO = Path(__file__).resolve().parents[2]
 # THE ONE SANCTIONED REBUILD. Named identically everywhere a check tells an
 # operator to rebuild, because it is the only build that records what the image
 # was made from — see harness/worker_image.py.
-REBUILD_CMD = (
-    "rebuild: press REBUILD WORKER on the board, "
-    "or .venv/bin/python scripts/rebuild_worker_image.py"
-)
+REBUILD_CMD = "press Refresh worker in the ☰ menu"
 
 
 class Check:
@@ -37,7 +34,7 @@ class Check:
 
         ``remedy`` names the CUSTOM TOOL that repairs this failure, by tool id.
         It is set per FAILURE BRANCH, never per check name: "the worker image is
-        stale" is repaired by pressing Rebuild worker, but "docker not on PATH"
+        stale" is repaired by pressing Refresh worker, but "docker not on PATH"
         is the same check failing for a reason no button can fix, and offering
         one there would be a lie the operator pays for by pressing it.
 

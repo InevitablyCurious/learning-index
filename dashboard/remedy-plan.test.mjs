@@ -24,8 +24,8 @@ const REBUILD = {
   refuse_while_running: true,
 };
 const READY = {
-  id: "bench-ready",
-  name: "Prepare bench",
+  id: "control-restart",
+  name: "Refresh control plane",
   status: "wired",
   blocked_reason: null,
   refuse_while_running: true,
@@ -55,7 +55,7 @@ test("distinct tools stay distinct buttons, in the order they were named", () =>
     { name: "control plane", remedy_tool: READY.id, remedy: READY },
     { name: "worker image", remedy_tool: REBUILD.id, remedy: REBUILD },
   ]);
-  assert.deepEqual(remedies.map((r) => r.id), ["bench-ready", "worker-image-rebuild"]);
+  assert.deepEqual(remedies.map((r) => r.id), ["control-restart", "worker-image-rebuild"]);
 });
 
 test("a failure with no tool is reported, never silently dropped", () => {
@@ -75,7 +75,7 @@ test("a tool this installation does not have is unfixable, not a dead button", (
   // named a tool that is not registered here" — a bare clone of bench/ has no
   // dev-contributed tools. The check's own detail still names the fix in words.
   const { remedies, unfixable } = remedyPlan([
-    { name: "control plane", remedy_tool: "bench-ready", remedy: null },
+    { name: "control plane", remedy_tool: "control-restart", remedy: null },
   ]);
   assert.equal(remedies.length, 0);
   assert.deepEqual(unfixable.map((c) => c.name), ["control plane"]);

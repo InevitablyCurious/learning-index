@@ -72,8 +72,10 @@ from preflight.cloud import (  # noqa: E402
     check_roster_drift,
 )
 from preflight.control_plane import (  # noqa: E402
+    check_board_freshness,
     check_control_plane_freshness,
-    control_plane_freshness_verdict,  # noqa: F401 — re-exported for tests/test_preflight_control_plane_freshness.py
+    board_freshness_verdict,  # noqa: F401 — re-exported for tests
+    control_plane_freshness_verdict,  # noqa: F401 — re-exported for tests
 )
 from preflight.core import REPO, Check  # noqa: E402
 from preflight.disk import check_disk  # noqa: E402
@@ -103,6 +105,8 @@ from preflight.live import check_live_stream  # noqa: E402
 # still names its own fix in words.
 TOOL_WORKER_REBUILD = "worker-image-rebuild"
 TOOL_GRADER_REBUILD = "grader-image-rebuild"
+TOOL_CONTROL_RESTART = "control-restart"
+TOOL_BOARD_REBUILD = "board-rebuild"
 
 
 def port_open(port: int, host: str = "127.0.0.1", timeout: float = 2.0) -> bool:
@@ -202,6 +206,7 @@ def main() -> int:
         check_local_model(c, bench_config, args)
     check_roster_drift(c, bench_config)
     check_control_plane_freshness(c)
+    check_board_freshness(c)
     check_self_compact_tool(c, args)
     check_feedback_completeness(c)
     check_run_dir(c, args)
