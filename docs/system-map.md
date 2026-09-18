@@ -40,7 +40,7 @@ system.
 2. **Cell (executed).** One scheduled session per cell. The sequencer phase
    machine runs `PREPARE_FIXTURE → RUN_SESSION → DONE` (`HALTED_ON_GATE` on a
    gate failure). The worker container builds the task in chunks via a chunked
-   opencode serve drive (`harness/adapters/challenge.py`).
+   opencode serve drive (`harness/adapters/challenge/serve.py`).
 3. **Grading.** `harness/grader_run.py` runs the candidate's worktree through
    `bench-grader:<challenge>` (the challenge's gate suite, `ENTRYPOINT ["node", "report.mjs"]`), read-only
    and `--network none`, producing `report.json` (verdict, problems, failed
@@ -101,3 +101,43 @@ benchmark names no backend and is agnostic to which plugin is plugged in.
   reads can fail it. Grep the tests for `read("…")` before editing.
 - **`dashboard/check/board-check.mjs`** is the end-to-end check: it runs on
   every `dashboard/redeploy.sh` against 127.0.0.1 and the LAN address.
+
+## 7. Build snapshots — the dev-mode chain
+
+Snapshots are **dev-mode tooling, never a measurement surface**: a worktree is
+copied to `runs/snapshots/<id>/{tree/,snapshot.json}` (`capture_snapshot`,
+`harness/snapshot.py`) so a later cell can seed from it and skip the build. Full
+procedure in RUNBOOK §18.
+
+**Two capture triggers.** (1) **Attempt-1 build-completion** — every baseline
+captures its finished worktree at the first grade boundary
+(`harness/adapters/challenge/runner.py:1602-1603`). (2) **End-of-run chaining**
+— a *seeded* run that exhausts its attempts promotes its final worktree to a new
+snapshot (`_capture_end_of_run_snapshot`, `runner.py:565`), gated on
+`_seed_snapshot_tree is not None` (`runner.py:1641-1642`), so a dev-mode chain
+carries its accumulated fixes forward instead of discarding them.
+
+**The depth field is `snapshot_depth`, never `cell_seq`.** `snapshot.json` carries
+`cell_seq` (the authoring cell's per-campaign `sequence_index` — 0 for the first
+cell), which is NOT a chain depth and must never be read as "n". The depth field
+is `snapshot_depth`: the attempt-1 capture omits it (read as 1 by default), while
+the end-of-run capture writes `seed_depth + 1` (`runner.py:595`). The control
+plane exposes `snapshot_depth ?? 1` and drops `cell_seq` (`control/snapshots.mjs:89`).
+
+**The run→snapshot join key is end-of-run-only.** `produced_snapshot_id` on
+`manifest.session_records[]` (`harness/cumulative/types.py:582`) is populated ONLY
+by the end-of-run capture (`runner.py:629`), never the attempt-1 capture — so a
+normal unseeded baseline reports null even though its snapshot exists on disk. It
+is the durable link the run-delete path consumes.
+
+**The manifest is campaign-nested, not at run root.** The manifest holding
+`session_records[].produced_snapshot_id` lives at
+`<runs_root>/<treeId>/<substrate>/<router>/<provider>/<model>/manifest.json`
+(`control/campaign.mjs:72-73`); archives nest deeper under
+`runs/backups/<newTreeId>/<oldTreeId>/<…>/manifest.json`.
+
+**Cleanup asymmetry.** Run deletion hard-deletes the snapshot(s) its manifest
+names via `produced_snapshot_id` (no cascade). A RESET does **not** sweep
+`runs/snapshots/` — `isBenchmarkData` has no `snapshots` case
+(`control/tree.mjs:271-296`), so snapshots survive a reset with no recorded
+owner.

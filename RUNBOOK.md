@@ -1027,6 +1027,8 @@ The bench board (dashboard `:8717`) drives two run-tree operations through the c
   half-reset reading as clean. `POST /api/tree/reset` (preview: `POST /api/tree/reset/preview`).
   Two-step confirm-token flow: `POST /api/tree/reset/preview` returns `token` + `restatement` +
   `moves`/`keeps`; the commit `POST /api/tree/reset` requires the body `{"confirm": "<token>"}`.
+  **`runs/snapshots/` is NOT swept** — `isBenchmarkData` (`control/tree.mjs:271-296`) has no
+  `snapshots` case, so snapshots survive a reset unarchived and owner-less (§18 cleanup).
 - **RESTORE** — parks the live bench first, then restores. The current live tree is swept into its
   own fresh backup (so nothing is overwritten), then the chosen backup's contents are moved up into
   `runs/` and the emptied folder is removed. Reversible: the state you leave becomes the newest
@@ -1192,8 +1194,8 @@ with code `launch_crashed` carrying the log tail (`control/server.mjs:1262-1280`
 **Do not re-silence this.** The startup liveness check — `confirmAlive` wired into
 `/api/run/start` BEFORE `launcher = {` — must stay wired in the control plane. It exists precisely
 because a crash-only log renders as "no run observed": returning `ok:true` over a process that
-already died is the lie that hid this defect. The regression tests (`control.test.mjs`
-`confirmAlive` death→tail / survive→ok) pin it; do not remove them.
+already died is the lie that hid this defect. The regression tests
+(`control/__tests__/terminal-notices.test.mjs` `confirmAlive` death→tail / survive→ok) pin it; do not remove them.
 
 ### data/ — centralized telemetry sink and retention layer
 
@@ -1208,7 +1210,7 @@ latency) are unanswerable from OFF runs — and even ON-cell telemetry is lost w
 `worktree/.okp/state/funnel-snapshot.json` on ON cells, from the dedicated blind mount
 (`<cell>/extraction-state/funnel-snapshot.json`, container `/okp-state`) on OFF cells — plus
 `.okp/logs/okp-plugin-errors.log` host-side into
-`data/cells/<unix_ts>-<run_label>/` (`_export_cell_telemetry`, `harness/adapters/challenge.py`).
+`data/cells/<unix_ts>-<run_label>/` (`_export_cell_telemetry`, `harness/adapters/challenge/telemetry.py:133`).
 It runs for **BOTH arms** — an OFF cell is the baseline the ON arm is measured against, so exporting
 only on injection-record cells would rebuild the blind spot this sink exists to close. Fail-open by
 contract: a missing surface is a silent no-op and an unwritable sink is logged and swallowed, so
@@ -1443,7 +1445,7 @@ Fixed defects are not listed. They are in git.
 | **INTEGRATION-SUITE-QUARANTINE** | 🟡 OPEN — post-campaign | The dev integration suite is scoped out of the pre-campaign TEST stage (§2): it POSTs `/v1/test/reset`, a route the hub build does not register (`cmd/hub/main.go:390-397` vs `dev/tests/lib/hub-client.ts:95`), and its mutating e2e tests would write orgs and memories to the live campaign hub and chain — the same hazard class as a second wipe. The reset route must not be registered to accommodate it. Restored behind a guard after the campaign (2026-08-07). | nothing while quarantined — pre-campaign TEST is the bench pytest suite |
 | **SERVE-MESSAGE-500** | 🟢 ROOT-CAUSED + FIXED 2026-08-11 | **NOT an opencode bug — the worker's SQLite session DB was CORRUPT.** `PRAGMA integrity_check` on the preserved DBs of BOTH 500-failing cells reports `database disk image is malformed`, with damaged pages in **tree 27 = the `part` table** — exactly the table in the failing `select … from "part" where "message_id" in (?×N)`. The 11:14 cell that never 500'd is **clean**. The IN-list size (36→50) was a **red herring**: a larger list touches more pages, so it meets a corrupt page sooner. **Cause:** the DB was bind-mounted from the macOS filesystem (osxfs/gRPC-FUSE), whose locking + fsync semantics SQLite cannot rely on. Pinning opencode never helped because the image was ALREADY pinned (`images/worker/Dockerfile:4`, 1.18.1). **Fix:** the session DB now lives on a **named Docker volume** (ext4 in the Linux VM), exported via `docker cp` at teardown to the same published host path; a per-cell volume is chowned to the worker uid (needs `--user 0:0` — the image bakes `USER worker`) and removed in a `finally` so a failed teardown cannot leak volumes. **Second defect closed:** extraction previously accepted any `is_file()` DB. SQLite corruption is PARTIAL — the corrupt DB answered `count(*)`=492 fine — so a corrupt substrate **silently under-reported memories** instead of failing. `harness/session_db_integrity.py` defines the fail-closed guard `require_sound_session_db` (`session_db_integrity.py:154-167`), which EXISTS but has NO non-test caller today — it is not wired into the run path, so a corrupt substrate is NOT caught. | was: intermittently, cell-voiding — now: cause removed, but a corrupt substrate is NOT caught today (the fail-closed guard `require_sound_session_db` exists but has no non-test caller — it is not on the run path) |
 | **RECALL-SELECTION-BIAS** | 🟡 OPEN — known, stated limitation | Recall fires only after a repeat — the second failure under the same stable `failureKey` while still red — so every serve is conditioned on an already-hard problem. Standing therefore measures **"works on stuck problems," not "works."** Defensible, and arguably the population that matters, but a further departure from the sim's uniform-serving assumption (recorded 2026-08-08; claim and limit travel together — the §1.1/§1.2 dual-carriage principle). | every standing/recall conclusion — disclosed, not blocking |
-| **CLOUD-MIRROR-DRIFT** | 🟢 CLOSED (reconciled, verified 2026-09-04) | The `control/cloud.mjs` `CLOUD_MODELS` mirror (`:114`) and `harness/config.py` `CLOUD_ORCAROUTER_PROVIDER["models"]` are now both **117** entries with identical key sets and matching context/output limits; the drift test `control.test.mjs:2104` (`DRIFT: the cloud catalogue matches CLOUD_ORCAROUTER_PROVIDER`) **passes**. The prior "87 mirrored vs 117" drift (30 refused models) is reconciled. Keep the drift test live — it is the guard that caught this class. | — |
+| **CLOUD-MIRROR-DRIFT** | 🟢 CLOSED (reconciled, verified 2026-09-04) | The `control/cloud.mjs` `CLOUD_MODELS` mirror (`:114`) and `harness/config.py` `CLOUD_ORCAROUTER_PROVIDER["models"]` are now both **117** entries with identical key sets and matching context/output limits; the drift test `control/__tests__/models-ledger.test.mjs:329` (`DRIFT: the cloud catalogue matches CLOUD_ORCAROUTER_PROVIDER in config.py`) **passes**. The prior "87 mirrored vs 117" drift (30 refused models) is reconciled. Keep the drift test live — it is the guard that caught this class. | — |
 
 **Memory is not a constraint — CLOSED, do not re-investigate.** Zero swap, ~211 GB wired headroom.
 The trap that misled two sessions is `top`'s "unused" line, which excludes inactive pages macOS
@@ -1650,15 +1652,59 @@ worktree after the first grade so a later cell can skip the build and iterate on
 the prompt gradient fast. **A seeded cell is never a scorable floor** — it is a
 fast-iteration tool, not a data point.
 
-### Capture — automatic, every baseline
+### Capture — two triggers
 
-At the attempt-1 grade boundary every baseline run captures its whole worktree
-into `runs/snapshots/<id>/{tree/,snapshot.json}` (`capture_snapshot`,
-`harness/snapshot.py`; boundary at `harness/adapters/challenge.py:3079-3080`).
+**Attempt-1 build-completion (automatic, every baseline).** At the attempt-1
+grade boundary every baseline run captures its whole worktree into
+`runs/snapshots/<id>/{tree/,snapshot.json}` (`capture_snapshot`,
+`harness/snapshot.py`; boundary at `harness/adapters/challenge/runner.py:1602-1603`).
 Capture can never fail the run: on failure it writes no `snapshot.json` (so the
 snapshot is structurally ineligible) and emits a `notice`. Excluded: `.git/`,
 `.okp/`, `AGENTS.md`, `opencode.json`, `test-results/`; `test/*.cjs` are included
 (genuinely model-authored).
+
+**End-of-run chaining (seeded runs only).** A *seeded* dev-mode run that reaches
+the attempt ceiling (`attempt_ceiling_reached`, regardless of verdict/void)
+promotes its final worktree into a NEW snapshot — `_capture_end_of_run_snapshot`
+(`harness/adapters/challenge/runner.py:565`, call site `:1641-1642` gated on
+`self._seed_snapshot_tree is not None`) — so a chain carries its accumulated
+fixes forward instead of discarding them. Exits that leave no final checkpoint
+(`harness_error`, `transport_incomplete`) skip chaining entirely. The new
+snapshot's depth is the seed's depth + 1 (`runner.py:595`).
+
+### The chain model — `snapshot_depth`, not `cell_seq`
+
+- **`cell_seq`** is the *authoring cell's per-campaign `sequence_index`* (0 for
+  the first cell of a campaign), carried in `snapshot.json` — NOT a chain depth.
+  It must never be repurposed as "n".
+- **`snapshot_depth`** is the chain-depth field. The attempt-1 capture omits it;
+  only the end-of-run chaining capture writes it (`seed_depth + 1`,
+  `runner.py:595`). The read side defaults it to 1 when absent
+  (`harness/snapshot.py:165`); the control plane exposes
+  `snapshot_depth: manifest.snapshot_depth ?? 1` and drops `cell_seq` on read
+  (`control/snapshots.mjs:89`). The board sorts the armable seed list by depth
+  descending and labels each row `n=<depth>`; the `n=` counter is the armed
+  snapshot's real depth, not a hardcoded 1.
+- **`produced_snapshot_id`** is the durable run→snapshot join key, written onto
+  `manifest.session_records[]` (`harness/cumulative/types.py:582`) ONLY by the
+  end-of-run chaining capture (`runner.py:629`) — a normal unseeded baseline
+  reports null even though its attempt-1 snapshot exists on disk. The run
+  manifest is **campaign-nested**, NOT at run root:
+  `<runs_root>/<treeId>/<substrate>/<router>/<provider>/<model>/manifest.json`
+  (`control/campaign.mjs:72-73`), and under
+  `runs/backups/<newTreeId>/<oldTreeId>/<…>/manifest.json` once archived.
+
+### Cleanup — run deletion removes the produced snapshot, reset does not sweep
+
+- **Run deletion** hard-deletes the snapshot(s) its manifest names via
+  `session_records[].produced_snapshot_id` (`control/rundelete.mjs`), with NO
+  cascade — downstream snapshots seeded from them are left untouched. A run with
+  no `produced_snapshot_id` deletes only the run folder, no error, no guessing.
+- **Reset** archives the run but leaves its snapshot behind permanently: the
+  sweep is an allow-list (`isBenchmarkData`, `control/tree.mjs:271-296`) with NO
+  `snapshots` case, so `runs/snapshots/` is neither swept into `runs/backups/`
+  nor owner-recorded. Orphaned snapshots survive resets and must be reconciled by
+  hand if undesired.
 
 ### Dev mode — control-plane state
 
@@ -1711,6 +1757,10 @@ A seeded run's status record carries `seeded_from_snapshot` (the id),
 `dev_mode:true` — declared at one write seam (`scripts/run_cumulative.py:1400-1417`)
 and carried through `SessionRecord` / `ConvergencePoint`
 (`harness/cumulative/types.py:578-581`, `harness/cumulative/convergence.py:92-95`).
+The chaining additions ride the same single-writer seam: `produced_snapshot_id`
+(the run→snapshot join key, `SessionRecord`, `types.py:582`, end-of-run capture
+only) and the seed's `snapshot_depth` threaded into the cell
+(`scripts/run_cumulative/runner.py:1115`).
 
 ### The two env vars (also in ENV-VARS.md)
 
