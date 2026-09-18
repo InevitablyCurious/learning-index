@@ -27,8 +27,7 @@ kill $PID
 ## Stopping a server
 - Stop it by its PID: `kill $PID`.
 - Never stop processes by matching a name. `pkill -f node` also kills the shell your command is running in, and `pkill -f server.ts` matches the very command that contains it — either way the command hangs for two minutes and does nothing.
-- If port 8002 is still taken, find the server's PID with `ps -eo pid,args | grep "[s]rc/server.ts"` and kill that PID.
-- To run a second copy alongside, set another port: `PORT=8003 node --experimental-strip-types src/server.ts`.
+- If port 8002 is still taken, run this copy on another port: `PORT=8003 node --experimental-strip-types src/server.ts`.
 
 ## Checking the page in a browser
 - Playwright and Chromium are installed globally. Load them with `require('playwright')` and run with plain `node`, not `npx`.

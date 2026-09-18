@@ -46,6 +46,7 @@ from typing import Any, Callable
 from harness.backends.base import NeedCard
 from harness.checkpoint import checkpoint_root, record_checkpoint
 from harness.context_budget import CONTEXT_EXHAUSTED
+from harness.serve_client import WORKER_DIED
 from harness.egress import egress_container_name
 from harness.live_stream import Heartbeat, LiveStream
 from harness.outcomes.predicate_emitter import STATE_ALG
@@ -676,7 +677,10 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
             # is a different kind of fact. Writing `KeyboardInterrupt` into a
             # field whose other values are `gates_green` and
             # `attempt_ceiling_reached` is how a vocabulary stops being one.
-            terminal_reason = "harness_error"
+            # THE BOARD'S STOP IS NOT A HARNESS FAULT. It sends SIGINT, which
+            # arrives as KeyboardInterrupt; recording it as harness_error voided
+            # runs an operator had simply stopped (1789710421, 1789711588).
+            terminal_reason = "stopped" if isinstance(exc, KeyboardInterrupt) else "harness_error"
             terminal_exception = type(exc).__name__
             raise
         finally:
@@ -1146,7 +1150,12 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         f"cell_cost_usd={cell_cost_usd:.4f}"
                     )
 
-                    if first_run.context_exhausted:
+                    if first_run.killed_reason == WORKER_DIED:
+                        verdict = "FAIL"
+                        attempts_to_green = "WORKER_DIED"
+                        termination_reason = WORKER_DIED
+                        context_stop = True  # grade nothing: the worker is gone
+                    elif first_run.context_exhausted:
                         verdict = "FAIL"
                         attempts_to_green = "CONTEXT_EXHAUSTED"
                         termination_reason = CONTEXT_EXHAUSTED
@@ -1219,6 +1228,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 first_run is not None
                 and build_chunk_expected
                 and not first_run.context_exhausted
+                and first_run.killed_reason != WORKER_DIED
                 and not first_run.budget_stop_detected
                 and not first_run.zero_tool_turn_honest_fail
                 and first_run.resume_count == 0
@@ -1783,6 +1793,13 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     f"output={feedback_run.output_tokens} reasoning={feedback_run.reasoning_tokens} "
                     f"cost_usd={feedback_run.cost_usd:.4f} cell_cost_usd={cell_cost_usd:.4f}"
                 )
+                if feedback_run.killed_reason == WORKER_DIED:
+                    # The worker container stopped mid-round. The round graded
+                    # before this one stands; nothing more can run.
+                    verdict = "FAIL"
+                    attempts_to_green = "WORKER_DIED"
+                    termination_reason = WORKER_DIED
+                    break
                 if feedback_run.context_exhausted:
                     # Out of room mid-repair: stop the run. The round graded
                     # before this one is the cell's result.

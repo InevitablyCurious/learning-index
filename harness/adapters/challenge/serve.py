@@ -38,6 +38,7 @@ from harness.context_budget import (
 )
 from harness.serve_client import (
     LOOP_KILL_WAIT_REASON,
+    WORKER_DIED,
     REASON_LOOP_GUARD,
     REASON_PROVIDER_UNAVAILABLE,
     RECOVERABLE_STREAM_DEATH_REASONS,
@@ -271,6 +272,21 @@ class ServeMixin:
         )
         context_hit = False
         context_size = 0
+        # WORKER DIED: asked only when the serve stops answering. A cell with no
+        # liveness check (a test fake) never reports a death.
+        worker_state = getattr(active_cell, "worker_state", None)
+        worker_exit: dict[str, Any] | None = None
+
+        def _worker_alive() -> bool:
+            nonlocal worker_exit
+            if worker_state is None:
+                return True
+            state = worker_state()
+            if not state.get("running", True):
+                worker_exit = state
+                return False
+            return True
+
         prompt_to_send = prompt
         turn_anomaly_list: list[dict[str, Any]] = []
         killed_reason: str | None = None
@@ -367,6 +383,7 @@ class ServeMixin:
                     loop_kill_marker_dir=loop_kill_marker_dir,
                     turn_start_ts_ms=turn_start_ts_ms,
                     context_limit_tokens=context_limit,
+                    worker_alive=_worker_alive,
                 )
             if not idle:
                 # WO-LOOPKILL-1: a fresh loop-kill marker ended the wait. The
@@ -380,6 +397,36 @@ class ServeMixin:
                 loop_killed_this_turn = wait_reason == LOOP_KILL_WAIT_REASON
                 stalled_this_turn = wait_reason == "stalled"
                 context_hit = wait_reason == CONTEXT_EXHAUSTED
+                if wait_reason == WORKER_DIED:
+                    # Nothing to abort or kill: the container is gone. Say so
+                    # and end the phase; the runner ends the cell.
+                    live = getattr(self, "_live", None)
+                    if live is not None:
+                        live.notice(
+                            "harness",
+                            "worker_died",
+                            level="error",
+                            cell_seq=getattr(self, "_cell_seq", None),
+                            session_id=session_id,
+                            detail={"phase": phase, **(worker_exit or {})},
+                        )
+                    self._progress(
+                        f"PROGRESS run_label={run_label} step=worker-died phase={phase} "
+                        f"exit_code={(worker_exit or {}).get('exit_code')} "
+                        f"detail={(worker_exit or {}).get('detail')} session_id={session_id}"
+                    )
+                    return _OpencodeRunStats(
+                        input_tokens=0,
+                        output_tokens=0,
+                        reasoning_tokens=0,
+                        turns=0,
+                        session_id=session_id,
+                        killed_reason=WORKER_DIED,
+                        exit_code=1,
+                        cost_usd=0.0,
+                        turn_anomalies=tuple(turn_anomaly_list),
+                        recovery_nudges=recovery_nudges,
+                    )
                 if loop_killed_this_turn:
                     loop_killed_turns += 1
                 elif context_hit:
@@ -1137,6 +1184,8 @@ class ServeMixin:
                 killed_reason=stats.killed_reason,
             )
             chunk_reports.append(report)
+            if stats.killed_reason == WORKER_DIED:
+                return _aggregate(exit_code=1, killed_reason=WORKER_DIED)
             if stats.context_exhausted:
                 # The build stops where it ran out of room: no settle, no next
                 # chunk. The runner ends the cell as CONTEXT EXHAUSTED.

@@ -44,7 +44,7 @@ import urllib.parse
 # seam), so the submodule is imported explicitly rather than left to ride in
 # transitively on serve_transport's import.
 import urllib.request
-from typing import Any
+from typing import Any, Callable
 
 # ── EXPLICIT RE-EXPORTS (never ``import *``) ────────────────────────────────
 # Every externally-imported name is listed individually so nothing silently
@@ -55,6 +55,8 @@ from typing import Any
 # stays defined here and why these two bindings are imported here rather than
 # referenced through ``serve_transport.`` at the call sites.
 from harness.context_budget import CONTEXT_EXHAUSTED, context_exhausted
+
+WORKER_DIED = "worker_died"
 from harness.loop_kill_marker import (
     LOOP_KILL_WAIT_REASON,
     loop_kill_marker_name,
@@ -279,6 +281,7 @@ class ServeClient:
         loop_kill_marker_dir: str | None = None,
         turn_start_ts_ms: int | None = None,
         context_limit_tokens: int | None = None,
+        worker_alive: Callable[[], bool] | None = None,
     ) -> tuple[bool, str]:
         """Poll until idle, the budget runs out, or the turn stops progressing.
 
@@ -290,6 +293,12 @@ class ServeClient:
         infrequent progress probe as the stall bound: when the newest assistant
         message reaches ``context_limit_tokens``, or a request overflowed, the
         wait ends with ``context_exhausted`` instead of letting the turn run on.
+
+        WORKER DIED. A failed busy probe counts as busy (above) — right for a
+        blip, wrong when the worker container itself has stopped: run 1789712833
+        waited out the whole 90-minute budget on a container the model had
+        killed. So on a failed probe ``worker_alive`` is asked, and a dead worker
+        ends the wait at once with ``worker_died``.
 
         A probe that fails even after retries is treated as STILL BUSY, never
         as idle. Reading "idle" from a failed probe is the dangerous direction:
@@ -340,6 +349,8 @@ class ServeClient:
                 busy = self.session_busy(session_id)
             except ServeClientError:
                 busy = True
+                if worker_alive is not None and not worker_alive():
+                    return False, WORKER_DIED
             if not busy:
                 return True, "idle"
 

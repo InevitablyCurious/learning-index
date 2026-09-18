@@ -86,3 +86,10 @@ test("each graded round names the stage it reached and how much was held back", 
   ], null));
   assert.match(html, /stage 2 · A new game looks right · 24 held back/);
 });
+
+test("a round cut off by a dead worker or a board stop says which", () => {
+  const died = spine(STOPPED, board([{ attempt: 1, verdict: "FAIL", failed: 20 }], { terminal_reason: "worker_died" }));
+  assert.match(died, /NOT GRADED — WORKER DIED/);
+  const stopped = spine(STOPPED, board([{ attempt: 1, verdict: "FAIL", failed: 20 }], { terminal_reason: "stopped" }));
+  assert.match(stopped, /NOT GRADED — STOPPED FROM THE BOARD/);
+});

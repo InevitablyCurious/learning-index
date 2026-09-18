@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import json
 import logging
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import time
-from typing import Callable
+from typing import Any, Callable
 import urllib.error
 import urllib.request
 
@@ -563,6 +564,36 @@ class DockerCell:
 
     def exec_argv(self, inner_argv: list[str]) -> list[str]:
         return ["docker", "exec", "-i", "-w", "/work", self.container_name, *inner_argv]
+
+    def worker_state(self) -> dict[str, Any]:
+        """Is the worker container still running, and if not, how did it exit.
+
+        Asked only when the harness has lost contact with the worker's serve.
+        A container that is gone entirely (inspect fails) is not running.
+        """
+        try:
+            done = subprocess.run(  # noqa: S603 - fixed argv
+                ["docker", "inspect", "-f", "{{json .State}}", self.container_name],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            # Docker itself could not be asked: that is not evidence the worker
+            # died, so report it running and let the normal wait continue.
+            return {"running": True, "exit_code": None, "detail": f"inspect failed: {exc}"}
+        if done.returncode != 0:
+            return {"running": False, "exit_code": None, "detail": done.stderr.strip()[:200]}
+        try:
+            state = json.loads(done.stdout)
+        except ValueError:
+            return {"running": True, "exit_code": None, "detail": "unreadable inspect output"}
+        return {
+            "running": bool(state.get("Running")),
+            "exit_code": state.get("ExitCode"),
+            "detail": state.get("Status"),
+        }
 
     def kill_worker_processes(self) -> None:
         if not self.container_name:

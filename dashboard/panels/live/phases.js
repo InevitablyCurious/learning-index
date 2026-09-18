@@ -80,7 +80,12 @@ export function spine(r, board) {
   }).join("")}</div>`;
 }
 
-const END_WORD = { context_exhausted: "CONTEXT EXHAUSTED" };
+const END_WORD = {
+  context_exhausted: "CONTEXT EXHAUSTED",
+  stopped: "STOPPED FROM THE BOARD",
+  worker_died: "WORKER DIED",
+  harness_error: "HARNESS ERROR",
+};
 
 function phaseRow(p, state, r, board, verdict, stated, ended) {
   const title = p.n === 1 ? `${p.n} — ${p.name}` : `${p.n} — ${p.name} · ${p.label}`;

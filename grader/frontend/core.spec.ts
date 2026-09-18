@@ -97,8 +97,12 @@ function expectOwnerLabelToMatchState(ownerText: string, owner: Player | null): 
 }
 
 async function readInt(locator: Locator): Promise<number> {
+  // A player reads the counter once it shows a number. Pages that fill it after
+  // the game state arrives from the server show an empty box for a moment, and
+  // reading it at that instant failed F06 for three rounds in two runs
+  // (1789664067, 1789712833) while the page showed the right number.
+  await expect(locator).toHaveText(/^\s*-?\d+\s*$/);
   const text = (await locator.innerText()).trim();
-  expect(text).toMatch(/^-?\d+$/);
   return Number.parseInt(text, 10);
 }
 
