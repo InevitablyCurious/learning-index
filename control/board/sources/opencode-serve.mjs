@@ -1,30 +1,12 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// SOURCE: opencode-serve  [OPT-IN — network]
+// SOURCE: opencode-serve — the live agent session API (the control plane's
+// --serve-url, default http://127.0.0.1:8719): turn count and token burn while a
+// chunk is still running. Unreachable = unwired; the board loses only this
+// liveness. Read-only, GET /session only: counters, never the transcript (the
+// model's raw output; everything on the board is public).
 //
-// The live agent session API (default http://127.0.0.1:8719). This is the
-// fastest-moving truth on the board: turn count and token burn update while a
-// chunk is still running, long before the status stream records anything.
-//
-// OPT-IN because it is the only source that makes a network call. Enable it in
-// the control plane's --serve-url. If the port is closed, this module reports unwired and
-// the board loses nothing but liveness.
-//
-// READ-ONLY: GET /session only. This module never posts, never mutates a
-// session, and never touches the agent's message content — only the counters.
-// The transcript is deliberately NOT read: it contains the model's raw working
-// output, and everything rendered on this board is public forever.
-//
-// ── WHY THE BOARD CANNOT SHOW THE TUI'S "CONTEXT" NUMBER ────────────────────
-// opencode's TUI status line shows a DIFFERENT quantity: the context-window
-// occupancy of the LAST assistant message —
-//   msg.tokens.input + output + reasoning + cache.read + cache.write
-// — which is a stock ("how full is the window right now"), not the cumulative
-// flow this session object carries. Reproducing it needs per-message data from
-// GET /session/{id}/message, and that payload carries the transcript. The rule
-// above wins: the board does not fetch it. The panel names the difference in
-// words instead, so the two surfaces reconcile without the board reading
-// content it must never render.
-// ─────────────────────────────────────────────────────────────────────────────
+// The TUI's "context" figure is a different quantity (occupancy of the last
+// message) and would need the per-message transcript, so the board doesn't show
+// it and says so in words.
 
 import { int, str } from "../contract.mjs";
 
@@ -59,7 +41,7 @@ export async function read(ctx) {
     return { ok: false, reason: "agent serve has no sessions" };
   }
 
-  // newest by updated time
+  // Newest by updated time.
   const s = sessions
     .slice()
     .sort((a, b) => (b?.time?.updated ?? 0) - (a?.time?.updated ?? 0))[0];
@@ -75,27 +57,9 @@ export async function read(ctx) {
         session_id: str(s?.id),
         elapsed_s: created ? Math.round((Date.now() - created) / 1000) : null,
         idle_s: updated ? Math.round((Date.now() - updated) / 1000) : null,
-        // ALL FIVE CATEGORIES, NEVER JUST input+output.
-        //
-        // This source used to read `input` and `output` alone and the board
-        // summed those two into one figure labelled as the cell's tokens. Two
-        // categories were silently on the floor, and both matter:
-        //
-        //   `reasoning`  On a reasoning model this is not a rounding error, it
-        //                is most of the generation. A live deepseek-v4-flash
-        //                cell carried input 87,567 · output 114,201 ·
-        //                reasoning 239,381 — the omitted category was larger
-        //                than the two that were shown.
-        //
-        //   `cache.read` 41.5M on that same cell, ~99% of everything the run
-        //                put through the provider. It is BILLED, and it is
-        //                where the cost of a larger injected prompt lands:
-        //                memory makes the prompt bigger and the prompt is
-        //                re-read every turn. A token total that excludes it
-        //                cannot answer whether memory saved tokens, which is
-        //                the only question this bench exists to answer.
-        //
-        // The panel sums all five and dims none of them.
+        // All five categories. Reasoning is often most of the generation, and cache
+        // read (~99% of tokens, billed) is where the cost of a bigger injected prompt
+        // lands. The panel sums all five.
         tokens: {
           input: int(s?.tokens?.input),
           output: int(s?.tokens?.output),

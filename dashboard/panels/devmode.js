@@ -1,50 +1,19 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// DEV MODE — the settings-drawer section that toggles the control plane's mode
-//
-// ── WHAT THIS GATES, AND WHY IT IS A MODE RATHER THAN A CHECKBOX ────────────
-//
-// Dev mode unlocks capabilities that help while ITERATING ON the benchmark and
-// are wrong for MEASURING with it. The first is build-snapshot seeding: starting
-// a cell from an already-built worktree instead of rebuilding the scaffolding,
-// which turns a multi-hour build into nothing and produces a cell that is NOT a
-// scorable floor.
-//
-// That last clause is why this is a mode and not a per-run checkbox. The
-// capability is safe because a seeded cell can never become a floor; the mode
-// exists so the capability cannot be reached by an operator who did not go
-// looking for it.
-//
-// ── THE STATE IS THE SERVER'S, AND THIS PANEL ONLY RENDERS IT ───────────────
-//
-// Nothing here holds a local opinion of whether dev mode is on. The value comes
-// from the board payload (`control.capabilities.dev_mode`, refreshed by every
-// poll) and a toggle POSTs and then re-reads. A panel that optimistically
-// flipped its own copy would show ON for a server that had refused.
-//
-// ── UNREACHABLE IS NOT OFF ──────────────────────────────────────────────────
-//
-// When the control plane does not answer, the board's whole `control` block is
-// absent. This renders UNKNOWN, never OFF. Drawing a confident OFF for a service
-// that did not reply is the same defect as reporting a stalled cell from
-// silence — the answer to "no signal" is "no signal".
-// ─────────────────────────────────────────────────────────────────────────────
+// DEV MODE — the drawer section that toggles the control plane's mode. It
+// unlocks snapshot seeding (never a scorable floor); a mode, not a per-run
+// checkbox, so it can't be reached by accident. The state is the server's
+// (control.capabilities.dev_mode): a toggle POSTs and re-reads. Unreachable
+// renders UNKNOWN, never OFF.
 
 import { esc } from "../board.js";
 import { renderSwitch } from "./switches.js";
 
 const ui = {
   busy: false,
-  // The server's last word on a WRITE — a refusal, most importantly. Cleared on
-  // the next successful toggle.
+  // The server's last answer to a write (a refusal, mostly).
   result: null,
 };
 
-/**
- * Read dev-mode state out of the board payload.
- *
- * Returns `null` when the control plane is unreachable, which every caller must
- * treat as UNKNOWN rather than falsy-off.
- */
+/** Dev mode from the board payload; null when unreachable (unknown, not off). */
 export function devModeState(board) {
   const caps = board?.control?.capabilities;
   if (!caps || typeof caps !== "object") return null;
@@ -62,12 +31,7 @@ export function isDevModeBusy() {
   return ui.busy;
 }
 
-/**
- * Toggle the mode.
- *
- * Sends the value we want, not a flip of a local copy: the server owns the
- * current value, and a flip computed here would race the poll that refreshes it.
- */
+/** Send the wanted value, not a local flip (which would race the poll). */
 export async function setDevMode(enabled) {
   ui.busy = true;
   ui.result = null;
@@ -87,7 +51,7 @@ export async function setDevMode(enabled) {
   }
 }
 
-// ── render ───────────────────────────────────────────────────────────────────
+// ── render ──
 
 function sourceWord(source) {
   return (
@@ -104,7 +68,7 @@ function sourceWord(source) {
 export function renderDevModeSection(board) {
   const dm = devModeState(board);
 
-  // UNKNOWN is its own switch position — never a styled OFF. See switches.js.
+  // Unknown is its own switch position (see switches.js).
   if (dm === null) {
     return renderSwitch({
       name: "DEV MODE",

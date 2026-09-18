@@ -1,10 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// BOARD ASSEMBLY — source registry, ordered merge, poll cache.
-//
-// Every source runs isolated with a 2s timeout; one that throws or hangs is
-// reported `unwired` and the board renders without it. Results are cached for
-// cfg.pollMs and concurrent requests share one in-flight refresh.
-// ─────────────────────────────────────────────────────────────────────────────
+// BOARD ASSEMBLY — the source list, ordered merge and poll cache. Each source
+// runs isolated with a timeout; one that throws or hangs is reported unwired and
+// the board renders without it. Results are cached for cfg.pollMs; concurrent
+// requests share one refresh.
 
 import { emptyBoard } from "../contract.mjs";
 import { runSource, mergePatch } from "../sources/_runtime.mjs";
@@ -35,12 +32,13 @@ const MODS = [
 // ── board assembly ───────────────────────────────────────────────────────────
 
 /**
- * MERGE ORDER MATTERS. Later modules win on conflict, and null never
- * overwrites a value (see mergePatch). Ordering rationale:
+ * Merge order: later sources win on conflict, and null never overwrites (see
+ * mergePatch).
  *   run-manifest   provenance floor
- *   status-stream  AUTHORITATIVE for gates/arm/verdict (RC-5)
- *   run-log        live pulse, refines phase/turns between attempt records
- *   opencode-serve freshest token counters, last word on liveness
+ *   status-stream  authoritative for gates, arm, verdict
+ *   run-log        live pulse between attempt records
+ *   live-stream    fresher than anything written at cell end
+ *   opencode-serve last: freshest tokens and liveness
  */
 const ORDER = [
   "control-plane",
@@ -50,19 +48,12 @@ const ORDER = [
   "plugin-log",
   "learning",
   "run-log",
-  // AFTER the artifact sources and BEFORE opencode-serve: the stream is a
-  // fresher account of the same run than anything written at cell end, and
-  // opencode-serve stays last as the live token/liveness authority.
   "live-stream",
-  // Durable completed-cells ledger (WO-43): owns `results`, conflicts with
-  // nothing. BEFORE opencode-serve so the live token/liveness authority
-  // stays last, per the merge-order rationale above.
+  // Owns `results`, conflicts with nothing.
   "results-ledger",
   "opencode-serve",
-  // Split out of `control-plane` (2026-09-05) so a gate suite that is slow to
-  // enumerate, or absent before the first cell, cannot hold the TUI mirror —
-  // they shared a source and therefore shared a fate. Owns `suite` alone and
-  // overlaps nothing, so its position here is not load-bearing.
+  // Owns `suite` alone (split from control-plane so a slow suite can't hold the
+  // TUI); position not load-bearing.
   "gate-suite",
 ];
 
@@ -74,22 +65,8 @@ async function buildBoard(cfg) {
     (a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id),
   );
 
-  // ── SOURCES RUN IN PARALLEL, MERGE IN ORDER ───────────────────────────────
-  //
-  // This was `for (const mod of ordered) { await runSource(...) }` — every
-  // source awaited in series, so the board's latency was the SUM of eleven
-  // independent reads (measured 3,171ms: stack-ledger 680 + status-stream 655 +
-  // run-manifest 576 + learning 555 + live-stream 536 + control-plane 159 + …).
-  // Nothing in that loop needed to be sequential: each source reads its own
-  // artifacts and returns a patch. One slow read delayed every OTHER section of
-  // the board behind it, which is how a slow read of one thing becomes a board
-  // that appears blank.
-  //
-  // ORDER IS STILL LOAD-BEARING and is preserved exactly. `mergePatch` applies
-  // later sources over earlier ones, so the merge stays sequential in `ORDER`
-  // — only the READS overlap. Execution order and merge order were conflated;
-  // they are now separate, and the board's latency is the slowest source rather
-  // than the sum of all of them.
+  // Reads run in parallel (latency = the slowest source, not the sum); the merge
+  // stays sequential in ORDER.
   const results = await Promise.all(ordered.map((mod) => runSource(mod, ctx)));
   for (const r of results) {
     if (r.ok) mergePatch(board, r.patch);
