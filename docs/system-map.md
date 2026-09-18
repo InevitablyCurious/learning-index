@@ -25,7 +25,7 @@ system.
 | Task | `task/backgammon/` | The instrument's task: `scaffold/` (stubs the model builds from), `golden/` (reference solution, never shown), `prompts/` (chunked build prompts). |
 | Grader | `grader/` | `report.mjs` + the gate suite (conformance / backend / frontend, plus `meta/` and `quarantine/`). The only component that sees the golden. |
 | Control plane | `control/` | Node stdlib-only `server.mjs` — the only write-capable surface; spawns the harness, one run at a time. |
-| Dashboard | `dashboard/` | Read-only board (containerized) at :8717; renders, never acts. |
+| Dashboard | `dashboard/` | Board at :8717; renders, never acts directly — every write goes through the same-origin control relay (`dashboard/lib/control-relay.mjs`); `REMOTE_VIEWING` switch + fail-closed bind (`lib/remote-viewing.mjs`, `lib/net-policy.mjs`). |
 | Images | `images/` | `worker/Dockerfile`, `grader/Dockerfile`, `sidecar/` (egress + loop-kill scanner + supervised shell). |
 | Scripts | `scripts/` | Entrypoints: `run_cumulative.py` (canonical), `rebuild_worker_image.py`, `rebuild_grader_image.py`, `bench_preflight.py`. |
 | Config | `config/` | `bench.env`; the bench-owned env surface is documented in `ENV-VARS.md`. |
@@ -92,3 +92,23 @@ benchmark names no backend and is agnostic to which plugin is plugged in.
    answer is withheld.
 4. **One-way observability.** Host→cell SSE + sidecar ingress; the cell cannot
    reach out (permission denies, no outbound route).
+
+## 6. Dashboard testing conventions — hard-won
+
+Two pitfalls from the remote-viewing work, worth knowing before touching the
+dashboard:
+
+- **Source-pin tests.** Several `dashboard/*.test.mjs` files READ the live
+  source of `server.mjs` / `sources/*.mjs` and `assert.match` on it — so an
+  expression or comment edit in a file a test merely reads can fail a test in a
+  file you never meant to touch. Pinned at `restart-recovery.test.mjs:67-68`,
+  `dom-patch.test.mjs:212`, `event-window.test.mjs:147`. Before editing
+  `dashboard/server.mjs` or `dashboard/sources/*.mjs`, grep
+  `dashboard/*.test.mjs` for `read("…")` / `assert.match` pins.
+- **Relay checks the allowlist before the origin gate.** The control relay
+  (`dashboard/lib/control-relay.mjs`) tests exact-allowlist membership BEFORE
+  the origin/CSRF check, so a cross-origin-rejection probe must target an
+  ALLOWLISTED route (`POST /api/routers/key`). An unwired path (e.g.
+  `/api/roster/key`) returns `404 upstream_unwired` before the origin gate can
+  fire. The credential-write route is `POST /api/routers/key`, not
+  `/api/roster/key` (roster is GET-only).

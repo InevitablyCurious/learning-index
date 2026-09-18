@@ -57,6 +57,31 @@ Runs are started from the board (or `POST /api/run/start`). Each cell spawns the
 canonical entrypoint `.venv/bin/python scripts/run_cumulative.py run --mode
 off|on` — argv only, never a shell. `RUNBOOK.md` is the operative run card.
 
+## Remote viewing (LAN access)
+
+The board is loopback-only by default. To view AND operate it from a phone or
+tablet on your local network, use one switch plus one address:
+
+```bash
+# Docker (recommended), from dashboard/:
+REMOTE_VIEWING=enabled OKP_BIND_HOST=192.168.50.140 docker compose up -d
+# Host process (no container):
+REMOTE_VIEWING=enabled node server.mjs --host 192.168.50.140
+# then open on the device:  http://192.168.50.140:8717/
+```
+
+`REMOTE_VIEWING` is a strict switch — `disabled` (the default) or `enabled`;
+any other value refuses to start. `enabled` also requires the LAN address to be
+supplied **once** (the existing bind knob: `OKP_BIND_HOST` for Docker,
+`OKP_DASH_HOST`/`--host` for a bare process). The server refuses a wildcard
+(`0.0.0.0`) or loopback address rather than guessing one, so "enabled" never
+silently widens to every interface. The write-capable control plane stays
+loopback-locked behind a same-origin relay inside the dashboard; writes from the
+device go through the dashboard, never directly to the control plane. Enabling
+this trusts every device that can reach your LAN — the bind is a *network*
+boundary, not a login. The full security statement and the env-file precedence
+live in [dashboard/README.md](./dashboard/README.md).
+
 ## Plug in a memory plugin
 
 opencode IS the socket. Any memory system bolts on through opencode's own

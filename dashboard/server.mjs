@@ -8,15 +8,26 @@
 // ZERO DEPENDENCIES. Node stdlib only. No build step, no npm install.
 //
 // SAFETY PROPERTIES (deliberate, do not weaken):
-//   - READ-ONLY. Nothing here opens a file for write.
-//   - Binds 127.0.0.1 by default. --host must be passed explicitly to expose it.
+//   - READ-ONLY FILESYSTEM. Nothing here opens a file for write and the bench
+//     mount stays `:ro`. The board does carry writes, but it never performs
+//     them: it RELAYS them same-origin to the loopback control plane, which
+//     alone writes. The relay (lib/control-relay.mjs) is an exact-allowlist +
+//     origin-check gate, and EVERY request additionally passes the peer policy
+//     (lib/net-policy.mjs), so a public peer gets nothing even if the bind is
+//     wide.
+//   - Binds 127.0.0.1 unless REMOTE_VIEWING=enabled (lib/remote-viewing.mjs).
+//     An invalid switch value refuses startup rather than guessing, and a
+//     --host that contradicts the switch is refused out loud, never silently
+//     honoured.
 //   - Every source module runs isolated with a 2s timeout; a module that throws
 //     or hangs is reported `unwired` and the board renders without it.
 //   - Log reads are tail-bounded (256KB), so a multi-hour run costs the same as
 //     a fresh one.
 //   - Poll results are cached; concurrent requests share one in-flight refresh.
-//   - Serves exactly three routes and no filesystem path traversal is possible:
-//     the static file map is a fixed allowlist.
+//   - Serves the fixed static allowlist, four dashboard-owned GET APIs and the
+//     relay's exact route table — no filesystem path traversal is possible:
+//     the static file map is a fixed allowlist, and the relay builds its
+//     upstream target only from a pathname that matched its own exact set.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createServer } from "node:http";
@@ -24,8 +35,9 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { proxyHistory, HISTORY_PROXY_PATHS } from "./sources/history-proxy.mjs";
-import { publicControlBase } from "./sources/control-plane.mjs";
+import { resolveRemoteViewing, resolveBind, REMOTE_VIEWING_ENV_VAR, CONTAINER_ENV_VAR } from "./lib/remote-viewing.mjs";
+import { guardPeer } from "./lib/net-policy.mjs";
+import { createControlRelay } from "./lib/control-relay.mjs";
 
 import { streamClients } from "./lib/state.mjs";
 import { loadModules, getBoard } from "./lib/board-build.mjs";
@@ -89,15 +101,12 @@ const DEFAULT_CONFIG = {
   // The host-side control plane. Opt-in like every other network source: the
   // board must come up with nothing else running.
   //
-  // TWO URLs, DELIBERATELY. `controlUrl` is how THIS PROCESS reaches the
-  // control plane; `controlPublicUrl` is what the BROWSER is told to POST to.
-  // In the container these are different hosts — the server crosses the
-  // container boundary via host.docker.internal, while the browser is already
-  // on the host and must use a host address. Publishing the server's own URL
-  // to the browser would make every write fail with a connection error that
-  // looks like the control plane is down when it is running fine.
+  // ONE URL. `controlUrl` is how THIS PROCESS reaches the loopback control
+  // plane — it is the RELAY's upstream (lib/control-relay.mjs). There is no
+  // separate "public" URL anymore: the browser posts SAME-ORIGIN to the
+  // dashboard, which relays, so the browser never needs to know where the
+  // control plane lives.
   controlUrl: "http://127.0.0.1:8718",
-  controlPublicUrl: null, // defaults to controlUrl when not set
     sources: {
       "run-manifest": true,
       "status-stream": true,
@@ -149,7 +158,6 @@ function applyEnv(cfg) {
   if (env.OKP_DASH_POLL_MS) cfg.pollMs = Number(env.OKP_DASH_POLL_MS);
   if (env.OKP_DASH_OPENCODE_URL) cfg.opencodeServeUrl = env.OKP_DASH_OPENCODE_URL;
   if (env.OKP_DASH_CONTROL_URL) cfg.controlUrl = env.OKP_DASH_CONTROL_URL;
-  if (env.OKP_DASH_CONTROL_PUBLIC_URL) cfg.controlPublicUrl = env.OKP_DASH_CONTROL_PUBLIC_URL;
 
   // Per-source toggles: OKP_DASH_SOURCE_HUB_DB=1, ..._OPENCODE_SERVE=0, etc.
   for (const name of Object.keys(cfg.sources)) {
@@ -200,11 +208,15 @@ async function loadConfig() {
 //      frame masking, continuation frames, ping/pong and close handshakes. Both
 //      break "no dependencies, no build step" — the stated invariant this image
 //      is built on (README, Dockerfile: there is no package.json by design).
-//   2. A WEBSOCKET IS BIDIRECTIONAL, AND THIS SERVER IS READ-ONLY BY
-//      CONSTRUCTION. Every non-GET is 405 (see below) and the bench mount is
-//      `:ro`. Opening a duplex channel would hand the browser a write path into
-//      a process whose entire safety argument is that it has none. SSE is a
-//      GET that never closes — the read-only property is preserved verbatim.
+//   2. A WEBSOCKET IS BIDIRECTIONAL, AND THIS SERVER PERFORMS NO WRITES BY
+//      CONSTRUCTION. It opens no file for write, the bench mount is `:ro`, and
+//      the only write path it carries is the same-origin control relay — an
+//      exact allowlist of requests forwarded to the loopback control plane,
+//      which alone performs them, behind the peer policy and an origin check.
+//      Opening a duplex channel would add a SECOND, ungated write path beside
+//      that relay, in a process whose safety argument is that every write it
+//      carries is allowlisted and gated. SSE is a GET that never closes — the
+//      push semantics arrive without touching that argument.
 //   3. IT IS ALREADY THE HOUSE IDIOM. The control plane consumes the worker's
 //      `opencode serve` over SSE (control/events.mjs), and control/sse-probe.mjs
 //      is a live socket test for exactly this framing. One streaming protocol in
@@ -296,140 +308,175 @@ const STATIC = {
 
 const main = async () => {
   const cfg = await loadConfig();
+
+  // ── REMOTE VIEWING — the LAN switch (lib/remote-viewing.mjs) ──────────────
+  // An invalid REMOTE_VIEWING value refuses startup rather than coercing to a
+  // default: a switch that guesses will eventually guess "exposed" when
+  // "disabled" was typed. resolveBind then owns the bind address — FAIL-CLOSED
+  // (WO-RV03): inside a container (CONTAINER_ENV_VAR) the internal bind is
+  // always 0.0.0.0 and OKP_BIND_HOST (the compose publish host) is validated
+  // against the mode; on the host, enabled requires a specific LAN address.
+  // Any contradiction returns bind.error and startup is refused, never coerced.
+  const rv = resolveRemoteViewing();
+  if (rv.error) {
+    console.error(`[remote-viewing] invalid ${REMOTE_VIEWING_ENV_VAR}=${JSON.stringify(rv.error.value)} — accepted: ${rv.error.accepted.join(", ")}. Refusing to start.`);
+    process.exit(1);
+  }
+  const bindHost = process.env.OKP_BIND_HOST === "" ? undefined : process.env.OKP_BIND_HOST;
+  const bind = resolveBind({ mode: rv.mode, dashHost: args.host, container: process.env[CONTAINER_ENV_VAR] === "1", bindHost });
+  if (bind.error) {
+    console.error(`[remote-viewing] ${bind.error}`);
+    process.exit(1);
+  }
+  if (bind.note) console.warn(`[remote-viewing] ${bind.note}`);
+  const relay = createControlRelay({ controlUrl: cfg.controlUrl });
+
   const { mods, broken } = await loadModules(cfg);
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
 
-    if (req.method !== "GET") {
-      res.writeHead(405, { "content-type": "text/plain" }).end("read-only");
+    // ── PEER POLICY ────────────────────────────────────────────────────────
+    // Reject public/internet peers (loopback/private/link-local trusted).
+    // Applied to EVERY request, not just the relay, so an accidentally
+    // internet-exposed board serves nothing to a public peer. (In Docker the
+    // peer is the gateway, a private address, so this is best-effort there —
+    // the compose publish bind is the real boundary.)
+    const peer = guardPeer(req.socket?.remoteAddress);
+    if (!peer.ok) {
+      res.writeHead(403, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false, code: "untrusted_peer", reason: peer.reason }));
       return;
     }
 
-    if (url.pathname === "/api/board") {
-      try {
-        const board = await getBoard(cfg, mods, broken);
-        const body = JSON.stringify(board);
-        res.writeHead(200, {
-          "content-type": "application/json; charset=utf-8",
-          "cache-control": "no-store",
-          "content-length": Buffer.byteLength(body),
-        });
-        res.end(body);
-      } catch (err) {
-        res.writeHead(500, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: String(err?.message ?? err) }));
-      }
-      return;
-    }
-
-    // ── GET /api/stream ──────────────────────────────────────────────────
-    // The push channel. A GET that never ends, so the read-only property of
-    // this server is preserved exactly (see the SSE rationale above).
-    //
-    // The client sends its event cursor as `?since=`. On connect it receives
-    // the full board and every event newer than that cursor, so a reconnect
-    // after a dropped connection resumes without a gap and without refetching
-    // the whole ring.
-    if (url.pathname === "/api/stream") {
-      res.writeHead(200, {
-        "content-type": "text/event-stream; charset=utf-8",
-        "cache-control": "no-store",
-        connection: "keep-alive",
-        // Defeats proxy buffering, which otherwise holds frames until a buffer
-        // fills and makes a live stream look dead.
-        "x-accel-buffering": "no",
-      });
-      // Tell EventSource to back off to 2s on reconnect rather than its
-      // 3s default — this is a local socket, and a run in flight should not
-      // wait longer than the old poll interval to recover.
-      res.write("retry: 2000\n\n");
-
-      streamClients.add(res);
-      const drop = () => streamClients.delete(res);
-      req.on("close", drop);
-      req.on("error", drop);
-      res.on("error", drop);
-
-      // Does this client's TUI popout want full terminal frames? The frame is
-      // the largest section on the board and is withheld unless asked for.
-      res.okpWantsTui = url.searchParams.get("tui") === "1";
-
-      try {
-        const board = await getBoard(cfg, mods, broken);
-        const requested = Number(url.searchParams.get("since") ?? 0) || 0;
-        // A client reconnecting with a cursor AHEAD of the ring has a stale
-        // watermark from before a control-plane restart (the ring re-based its
-        // seq counter at 0). Replay from scratch — otherwise every re-admitted
-        // row (low seq) is filtered out and the reconnect delivers nothing.
-        const ringCursor = board.events?.cursor ?? null;
-        const since = typeof ringCursor === "number" && requested > ringCursor ? 0 : requested;
-        const rows = (board.events?.events ?? []).filter((e) => (e.seq ?? -1) > since);
-        // The cursor this client has been brought up to. The push loop sends
-        // each client only what is newer than ITS OWN cursor, so a client that
-        // connected mid-run is never replayed rows it already has, and a
-        // reconnecting client is never skipped past a gap.
-        res.okpCursor = rows.length ? (rows[rows.length - 1].seq ?? since) : since;
-        const full = boardWithoutEvents(board);
-        full.tui = tuiForClient(full.tui, res.okpWantsTui);
-        res.write(`event: board\ndata: ${JSON.stringify(full)}\n\n`);
-        res.write(`event: events\ndata: ${JSON.stringify({ events: rows, cursor: board.events?.cursor ?? null })}\n\n`);
-      } catch (err) {
-        // Never swallow: the client is told why its first frame is missing.
-        res.write(`event: error\ndata: ${JSON.stringify({ reason: String(err?.message ?? err) })}\n\n`);
-      }
-      return;
-    }
-
-    if (url.pathname === "/api/health") {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(
-        JSON.stringify({
-          ok: true,
-          benchRoot: cfg.benchRoot,
-          runsRoot: cfg.runsRoot,
-          sources: mods.map((m) => m.id),
-          disabled: Object.entries(cfg.sources).filter(([, v]) => !v).map(([k]) => k),
-        }),
-      );
-      return;
-    }
-
-    // ── GET /api/history* — SAME-ORIGIN PROXY ────────────────────────────
-    // The /history page fetches its data from the board's own origin; this
-    // branch relays the four control-plane history endpoints via
-    // cfg.controlUrl, so no client-side code hardcodes where the control
-    // plane lives. EXACT paths only (HISTORY_PROXY_PATHS.has, never a prefix
-    // match): an unknown /api/history/* subpath falls through to the 404
-    // below, exactly as the control plane itself would answer it. Status and
-    // content-type are forwarded verbatim — see sources/history-proxy.mjs.
-    // ── GET /api/control-base ────────────────────────────────────────────
-    // Where the BROWSER should post. The /history page has to reach the
-    // control plane directly for "view result" (the board is read-only and
-    // proxies GETs only), and a page that inferred :8718 from the board's
-    // :8717 would be deriving a fact this process can simply state.
-    if (url.pathname === "/api/control-base") {
-      const base = publicControlBase(cfg);
-      res
-        .writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
-        .end(JSON.stringify({ ok: true, base_url: base }));
-      return;
-    }
-
-    if (HISTORY_PROXY_PATHS.has(url.pathname)) {
-      const r = await proxyHistory(url.pathname, url.search, cfg.controlUrl);
-      res.writeHead(r.status, { "content-type": r.contentType, "cache-control": "no-store" }).end(r.body);
-      return;
-    }
-
+    // ── STATIC FILES (GET only) ────────────────────────────────────────────
     const entry = STATIC[url.pathname];
     if (entry) {
+      if (req.method !== "GET") { res.writeHead(405, { "content-type": "text/plain" }).end("read-only"); return; }
       try {
         const body = await readFile(join(HERE, entry.file));
         res.writeHead(200, { "content-type": entry.type, "cache-control": "no-store" });
         res.end(body);
       } catch {
         res.writeHead(404, { "content-type": "text/plain" }).end("not found");
+      }
+      return;
+    }
+
+    // ── DASHBOARD-OWNED API ROUTES (GET) ───────────────────────────────────
+    // These take precedence over the relay.
+    if (req.method === "GET") {
+      if (url.pathname === "/api/board") {
+        try {
+          const board = await getBoard(cfg, mods, broken);
+          const body = JSON.stringify(board);
+          res.writeHead(200, {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+            "content-length": Buffer.byteLength(body),
+          });
+          res.end(body);
+        } catch (err) {
+          res.writeHead(500, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: String(err?.message ?? err) }));
+        }
+        return;
+      }
+
+      // ── GET /api/stream ──────────────────────────────────────────────────
+      // The push channel. A GET that never ends, so the read-only property of
+      // this server is preserved exactly (see the SSE rationale above).
+      //
+      // The client sends its event cursor as `?since=`. On connect it receives
+      // the full board and every event newer than that cursor, so a reconnect
+      // after a dropped connection resumes without a gap and without refetching
+      // the whole ring.
+      if (url.pathname === "/api/stream") {
+        res.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-store",
+          connection: "keep-alive",
+          // Defeats proxy buffering, which otherwise holds frames until a buffer
+          // fills and makes a live stream look dead.
+          "x-accel-buffering": "no",
+        });
+        // Tell EventSource to back off to 2s on reconnect rather than its
+        // 3s default — this is a local socket, and a run in flight should not
+        // wait longer than the old poll interval to recover.
+        res.write("retry: 2000\n\n");
+
+        streamClients.add(res);
+        const drop = () => streamClients.delete(res);
+        req.on("close", drop);
+        req.on("error", drop);
+        res.on("error", drop);
+
+        // Does this client's TUI popout want full terminal frames? The frame is
+        // the largest section on the board and is withheld unless asked for.
+        res.okpWantsTui = url.searchParams.get("tui") === "1";
+
+        try {
+          const board = await getBoard(cfg, mods, broken);
+          const requested = Number(url.searchParams.get("since") ?? 0) || 0;
+          // A client reconnecting with a cursor AHEAD of the ring has a stale
+          // watermark from before a control-plane restart (the ring re-based its
+          // seq counter at 0). Replay from scratch — otherwise every re-admitted
+          // row (low seq) is filtered out and the reconnect delivers nothing.
+          const ringCursor = board.events?.cursor ?? null;
+          const since = typeof ringCursor === "number" && requested > ringCursor ? 0 : requested;
+          const rows = (board.events?.events ?? []).filter((e) => (e.seq ?? -1) > since);
+          // The cursor this client has been brought up to. The push loop sends
+          // each client only what is newer than ITS OWN cursor, so a client that
+          // connected mid-run is never replayed rows it already has, and a
+          // reconnecting client is never skipped past a gap.
+          res.okpCursor = rows.length ? (rows[rows.length - 1].seq ?? since) : since;
+          const full = boardWithoutEvents(board);
+          full.tui = tuiForClient(full.tui, res.okpWantsTui);
+          res.write(`event: board\ndata: ${JSON.stringify(full)}\n\n`);
+          res.write(`event: events\ndata: ${JSON.stringify({ events: rows, cursor: board.events?.cursor ?? null })}\n\n`);
+        } catch (err) {
+          // Never swallow: the client is told why its first frame is missing.
+          res.write(`event: error\ndata: ${JSON.stringify({ reason: String(err?.message ?? err) })}\n\n`);
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/health") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            benchRoot: cfg.benchRoot,
+            runsRoot: cfg.runsRoot,
+            sources: mods.map((m) => m.id),
+            disabled: Object.entries(cfg.sources).filter(([, v]) => !v).map(([k]) => k),
+          }),
+        );
+        return;
+      }
+
+      // ── GET /api/control-base ──────────────────────────────────────────
+      // Where the BROWSER should post: its OWN origin. The base is empty
+      // because every control write goes same-origin to this dashboard and is
+      // relayed to the loopback control plane — no client-side code ever needs
+      // to know where the control plane lives, so no address of ours can be
+      // unreachable from the browser.
+      if (url.pathname === "/api/control-base") {
+        res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
+          .end(JSON.stringify({ ok: true, base_url: "", base_url_relayed: true }));
+        return;
+      }
+    }
+
+    // ── CONTROL RELAY ──────────────────────────────────────────────────────
+    // Every other /api/* path, GET and POST, allowlisted. The relay
+    // (lib/control-relay.mjs) 404s unknown routes, 403s cross-origin POSTs
+    // and forwards body/status/content-type verbatim to cfg.controlUrl. It
+    // never throws; this catch is the belt to its braces.
+    if (url.pathname.startsWith("/api/")) {
+      try { await relay(req, res, url); } catch (err) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, reason: String(err?.message ?? err) }));
       }
       return;
     }
@@ -455,9 +502,10 @@ const main = async () => {
   // had `cfg.port ?? args.port`, which let an env var silently win over a flag
   // the operator typed — the opposite of what a flag means.
   const port = args.portExplicit ? args.port : (cfg.port ?? args.port);
-  server.listen(port, args.host, () => {
+  server.listen(port, bind.host, () => {
     const port = server.address().port;
-    console.log(`bench dashboard → http://${args.host}:${port}`);
+    console.log(`bench dashboard → http://${bind.host}:${port}`);
+    console.log(`  viewing    : REMOTE_VIEWING=${rv.mode} (${rv.source}) — ${bind.host === "127.0.0.1" ? "loopback only" : `LAN-bound on ${bind.host}`}`);
     console.log(`  bench root : ${cfg.benchRoot}`);
     console.log(`  runs root  : ${cfg.runsRoot}`);
     console.log(`  sources    : ${mods.map((m) => m.id).join(", ") || "(none)"}`);

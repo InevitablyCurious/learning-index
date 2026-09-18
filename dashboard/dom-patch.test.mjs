@@ -173,9 +173,10 @@ test("every root-level module STATIC serves is COPYd into the image", async () =
 // ── CONTROL REACHABILITY ────────────────────────────────────────────────────
 // The control plane binds 127.0.0.1 with no --host flag, as a stated safety
 // property (control/server.mjs:23-25) — it spawns processes, so it is never
-// published on a network. The board may be viewed from the LAN. Those two facts
-// together mean a browser can legitimately be unable to reach the control
-// plane, and the board must SAY so rather than render controls that fail.
+// published on a network. The board may be viewed from the LAN. The relay
+// resolves the tension: the browser posts SAME-ORIGIN to the dashboard, which
+// forwards over its own loopback socket, so reachability no longer depends on
+// where the browser is — and the published contract must SAY that.
 
 test("isLoopback classifies the addresses that actually occur", async () => {
   const { isLoopback } = await import("./sources/control-plane.mjs");
@@ -203,12 +204,21 @@ test("isLoopback classifies the addresses that actually occur", async () => {
   assert.equal(isLoopback("not a url"), false);
 });
 
-test("the control-plane source publishes the reachability flag", async () => {
-  const src = await read("sources/control-plane.mjs");
+test("the control-plane source publishes the relay contract", async () => {
+  // Under the same-origin relay the published base is EMPTY: writes never
+  // leave the browser's origin, so the legacy "is the published base a
+  // loopback address the browser cannot reach" question is dead. Pinned from
+  // comment-stripped source so prose ABOUT the contract cannot satisfy it.
+  const src = code(await read("sources/control-plane.mjs"));
   assert.match(
     src,
-    /base_url_is_loopback:\s*isLoopback\(publicBase\)/,
-    "control.base_url_is_loopback must be derived from the published base url",
+    /base_url_relayed:\s*true/,
+    "control.base_url_relayed must be published true — the browser posts same-origin and the dashboard relays",
+  );
+  assert.match(
+    src,
+    /base_url_is_loopback:\s*false/,
+    "control.base_url_is_loopback must be pinned false — under the relay no published address can be unreachable",
   );
 });
 

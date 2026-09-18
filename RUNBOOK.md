@@ -901,7 +901,7 @@ config while keeping test-mode auto-approve. That is the clean way; changing the
 After a reboot or power failure, bring the stack back up in this order. Do NOT run `make redeploy` for recovery — it wipes the bench MCP and identity.
 
 - **(a) Bench MCP `:4550`** — `dev/scripts/bench-mcp.sh start` (managed service). Never `make redeploy`.
-- **(b) Control plane `:8718`** — `cd control && nohup node server.mjs --port 8718 > /tmp/okp-control-plane.log 2>&1 < /dev/null &`.
+- **(b) Control plane `:8718`** — `cd control && env -u BENCH_PLUGIN_DIR nohup node server.mjs --port 8718 > ../../dev/.logs/bench-control.log 2>&1 < /dev/null &`. `env -u BENCH_PLUGIN_DIR` keeps the control plane from inheriting a bench plugin pointer; add `BENCH_TOOLS_URL=http://127.0.0.1:8720` for the custom-tools drawer and `BENCH_STATS_MANIFEST` for the run-stats manifest when those surfaces are used.
 - **(c) Live-view `:8719`** — the host port is published by the egress sidecar (worker image `bench-worker:v1`, ingress forward host `:8719` → cell `:4096`); the worker cell itself stays on the internal-only network and publishes no host ports. If `:8719` is unreachable, the worker image is stale — rebuild with `.venv/bin/python scripts/rebuild_worker_image.py` from the repo root and relaunch the run.
 - **(d) Stale session-db volumes** — `docker volume rm -f` on any leaked `{container}-session-db` volumes (manual only; the harness does not auto-purge them).
 
@@ -1059,6 +1059,47 @@ a new reader module (`dashboard/sources/*.mjs`), and ONLY reader source requires
 `data/results-ledger.jsonl`) is picked up live with no rebuild. The `:ro` is deliberate: the
 dashboard never writes, and the run artifacts under `runs/` are the authoritative record (RC-5) — a
 read-only mount makes "the dashboard corrupted a run" structurally impossible.
+
+### Remote viewing (LAN access) — the operator procedure
+
+The dashboard and control plane are loopback-only by default. To view AND
+operate the board from a phone/tablet on the LAN, set the strict
+`REMOTE_VIEWING` switch **plus** one specific LAN address. There is no env file
+for the dashboard — both knobs reach the process only through the launching
+shell's exported environment (or the inline `VAR=x` prefix). One toggle, one
+address, no hidden setup:
+
+```bash
+# Docker (recommended), from dashboard/:
+REMOTE_VIEWING=enabled OKP_BIND_HOST=192.168.50.140 docker compose up -d
+# Host process (no container), from dashboard/:
+REMOTE_VIEWING=enabled node server.mjs --host 192.168.50.140
+# then on the device:  http://192.168.50.140:8717/
+```
+
+- `REMOTE_VIEWING` ∈ {`disabled` (default), `enabled`}; any other value refuses
+  startup (exit 1, no silent coercion).
+- `enabled` requires the address — `OKP_BIND_HOST` (Docker publish) or
+  `OKP_DASH_HOST`/`--host` (host bind). Fail-closed refusals: `enabled` +
+  unset/loopback/wildcard → refused; `disabled` + a wide `OKP_BIND_HOST` →
+  refused. There is no "expose every interface" fallback; the address is a
+  required companion to the switch, not a hidden extra.
+- Writes go through the dashboard's same-origin relay to the loopback-locked
+  control plane (:8718); the device never talks to :8718 directly. The control
+  plane's wildcard CORS is gone (browser never calls it cross-origin).
+
+**Boundary honesty — "LAN-only" is a topology boundary, not a login.** The bind
+narrows which interface listens, and a peer classifier
+(`dashboard/lib/net-policy.mjs`) trusts loopback/private/link-local source
+addresses and refuses public ones — but it validates the source address
+**syntactically**, so it cannot tell a genuine LAN device from a router/NAT
+forward or a VPN peer carrying a private address, and binding a private IP does
+not by itself stop a router port-forwarding that interface. Enabling this
+trusts every device that can reach that interface (the operator's explicit
+"trust every LAN device" ruling). The **play preview** spawns a separate
+dynamic port bound to all interfaces with no auth and no peer/origin gate —
+outside the `REMOTE_VIEWING` contract, reachable unauthenticated while a
+preview is live. Full security statement: `dashboard/README.md`.
 
 ### Worker isolation boundary
 

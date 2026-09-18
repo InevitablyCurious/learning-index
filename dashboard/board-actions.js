@@ -18,7 +18,10 @@
 // controlReachability(board) at CALL time rather than trusting that its button
 // was only rendered while reachable — the board can go unreachable between
 // render and click, and a POST into the void would leave a dialog looking
-// armed. dom-patch.test.mjs pins the gate on every path in this file.
+// armed. When control.base_url_relayed is true the board reaches the control
+// plane same-origin through the dashboard relay and controlReachability
+// returns ok — a relayed write is never blocked by the guard.
+// dom-patch.test.mjs pins the gate on every path in this file.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { board, render, controlReachability } from "./board.js";
@@ -143,11 +146,13 @@ export async function pointFeedAt(board, b) {
     label: `${b.id} · ${b.model ?? "unknown model"}`,
   };
   // THE SAME REACHABILITY GATE EVERY OTHER CONTROL CARRIES, and this one needs
-  // it for a reason the writes do not: both feed reads go CLIENT-DIRECT to the
-  // control plane at `base_url`, which is a loopback address. Opened from
-  // another device on the LAN — the documented case — that address means the
-  // VIEWING machine, so the fetch dies before it leaves the browser. Refusing
-  // with the reason on screen beats two feeds that silently read as empty.
+  // it for a reason the writes do not: both feed reads go to the control plane
+  // at `base_url` — same-origin through the dashboard relay when relayed, and
+  // CLIENT-DIRECT on the legacy path, where `base_url` is a loopback address.
+  // Opened from another device on the LAN — the documented case — loopback
+  // means the VIEWING machine, so the fetch dies before it leaves the browser.
+  // Refusing with the reason on screen beats two feeds that silently read as
+  // empty.
   const reach = controlReachability(board);
   if (!reach.ok) {
     selectHistoricalRunUnreachable(sel, `${reach.code}: ${reach.reason}`);
@@ -158,7 +163,7 @@ export async function pointFeedAt(board, b) {
   if (read) render();
 }
 
-/** The board never posts. The browser posts DIRECTLY to the control plane. */
+/** The board posts same-origin to the dashboard relay, which forwards to the control plane. */
 export async function releaseHold() {
   const reach = controlReachability(board);
   if (!reach.ok) {

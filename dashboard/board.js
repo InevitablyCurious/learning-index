@@ -860,30 +860,50 @@ function onKeydown(e) {
   if (isToolsOpen()) { closeTools(render); render(); }
 }
 
-/** The board never posts. The browser posts DIRECTLY to the control plane. */
+/** The board posts same-origin to the dashboard relay, which forwards to the control plane. */
 
 /**
  * CAN THIS BROWSER REACH THE CONTROL PLANE AT ALL?
  *
- * `base_url` is a loopback address, and loopback resolves to whichever machine
- * dereferences it. Browsing the board from the host, that is the host and every
- * control POST works. Browsing it from another device on the LAN — the
+ * WHEN RELAYED, THE ANSWER IS ALWAYS YES. If the dashboard publishes
+ * `control.base_url_relayed = true`, the browser posts same-origin to the
+ * dashboard, which relays to the loopback control plane. The board reaches
+ * the control plane from wherever it is served — there is no loopback/remote
+ * split left to adjudicate.
+ *
+ * The loopback/remote guard below only matters for the LEGACY non-relayed
+ * path, where `base_url` is published as a loopback address and the browser
+ * posts cross-origin to it. Loopback resolves to whichever machine
+ * dereferences it. Browsing the board from the host, that is the host and
+ * every control POST works. Browsing it from another device on the LAN — the
  * documented remote-viewing case — `127.0.0.1:8718` is THAT DEVICE, so the
  * request dies before it leaves the laptop and surfaces as a transport error
  * with no obvious cause.
  *
- * The control plane deliberately cannot be published on the LAN to fix this: it
- * binds 127.0.0.1 with no --host flag as a stated safety property
- * (control/server.mjs:23-25), because it spawns processes. The read-only board
- * may be exposed; the thing that can change the world may not.
+ * The control plane deliberately cannot be published on the LAN: it binds
+ * 127.0.0.1 with no --host flag as a stated safety property
+ * (control/server.mjs:23-25), because it spawns processes. The board may be
+ * exposed; the thing that can change the world may not — the relay keeps that
+ * property: the control plane still answers only on the host's loopback, and
+ * the dashboard forwards to it.
  *
  * So the honest answer is to say so. This returns the reason a write is
  * impossible, or null when it is possible — one derivation, consumed by every
  * control path, so no button can disagree with another about whether it works.
  */
 export function controlReachability(b) {
+  // SAME-ORIGIN RELAY: the browser posts to the dashboard that served this
+  // board, and the dashboard relays to the loopback control plane. The board
+  // reaches the control plane from wherever it is served — there is no
+  // loopback/remote split left to adjudicate.
+  if (b?.control?.base_url_relayed === true) {
+    return { ok: true, code: null, reason: null, fix: null };
+  }
   const base = b?.control?.base_url ?? null;
-  if (!base) {
+  // AN EMPTY STRING IS A VALID BASE — it makes every `${base}/api/...` fetch
+  // same-origin relative. Only null/undefined means the board was never told
+  // where the control plane is.
+  if (base === null || base === undefined) {
     return {
       ok: false,
       code: "control_plane_unwired",

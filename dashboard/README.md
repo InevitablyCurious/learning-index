@@ -135,9 +135,16 @@ Most of a real run is null. The empty states are designed, not incidental.
 
 ```
 contract.mjs          the versioned JSON contract + null-safe helpers
-server.mjs            zero-dep read-only HTTP server
+server.mjs            zero-dep HTTP server: peer guard → static GET → dashboard
+                      GET APIs → same-origin control relay → 404
+lib/
+  remote-viewing.mjs  the REMOTE_VIEWING switch + fail-closed bind resolution
+  net-policy.mjs      peer classifier (loopback/private/link-local trusted) +
+                      same-origin check
+  control-relay.mjs   exact METHOD/path allowlist relay to the loopback control
+                      plane (origin gate on POSTs, 64KB cap, never logs bodies)
 Dockerfile            single stage — there is nothing to build
-docker-compose.yml    read-only mount, host-only port, opt-in hub-db
+docker-compose.yml    read-only mount, loopback-or-specific publish, opt-in hub-db
 sources/
   _runtime.mjs        module isolation: timeouts, tail-bounded reads, merge
   run-manifest.mjs    provenance: policy anchor, levers, org, model
@@ -150,7 +157,7 @@ sources/
   results-ledger.mjs  completed scored cells across runs (append-only JSONL)
   stack-ledger.mjs    longitudinal transfer curve; spans run directories
   opencode-serve.mjs  live token burn             (opt-in, host API)
-  control-plane.mjs   roster, run control, event feed (opt-in, network)
+  control-plane.mjs   roster, run control, event feed (relayed, same-origin)
   hub-db.mjs          candidate relevance/standing (opt-in, DISABLED default)
 index.html + board.js + panels/   the board
 ```
@@ -162,17 +169,46 @@ Env vars override the config file, so the container is reconfigured with
 
 | Var | Default | Purpose |
 |---|---|---|
-| `OKP_DASH_HOST` | `127.0.0.1` (image: `0.0.0.0`) | bind address |
+| `REMOTE_VIEWING` | `disabled` | the LAN-access switch — `disabled` (loopback only) or `enabled` (one specific LAN address); any other value refuses startup |
+| `OKP_DASH_HOST` | `127.0.0.1` (image: `0.0.0.0`) | host-process bind address (`--host` overrides); with `REMOTE_VIEWING=enabled` this must be a specific LAN IP |
+| `OKP_BIND_HOST` | `127.0.0.1` | Docker publish host (compose `ports:`); with `REMOTE_VIEWING=enabled` this must be a specific LAN IP, and `disabled` refuses a wide publish |
 | `OKP_DASH_PORT` | `8717` | port |
 | `OKP_DASH_BENCH_ROOT` | `..` (image: `/bench`) | bench repo root |
 | `OKP_DASH_POLL_MS` | `2000` | refresh cadence |
 | `OKP_DASH_OPENCODE_URL` | `http://127.0.0.1:8719` | live agent API |
+| `OKP_DASH_CONTROL_URL` | `http://127.0.0.1:8718` | the relay's upstream control plane (always loopback) |
 | `OKP_DASH_SOURCE_<NAME>` | — | force a source on/off |
 | `OKP_DASH_HUBDB` | off | enable the hub-db source |
 | `OKP_HUB_DB_{HOST,PORT,USER,NAME,PASSWORD}` | — | hub postgres |
 
 The password is read from the environment at query time. It is never written to
 config, never logged, and never returned by `/api/health`.
+
+### Remote viewing — one switch, one address
+
+The dashboard is loopback-only by default. To view and operate it from a phone
+or tablet on the LAN, set `REMOTE_VIEWING=enabled` **and** supply the machine's
+specific LAN address once. The two knobs travel together by contract — the
+server refuses to start (fail-closed) rather than guess:
+
+- **Docker:** `REMOTE_VIEWING=enabled OKP_BIND_HOST=<LAN-IP> docker compose up -d`
+  — the container binds internally on all interfaces but the host publish maps
+  only `<LAN-IP>:8717`. `OKP_BIND_HOST` is passed into the container so the
+  process validates the publish at startup.
+- **Host process:** `REMOTE_VIEWING=enabled node server.mjs --host <LAN-IP>`
+  (equivalently `OKP_DASH_HOST=<LAN-IP>`).
+
+Then open `http://<LAN-IP>:8717/` on the device. All board reads are
+same-origin/relative, and every write action goes through a **same-origin
+relay** in this dashboard — the control plane (:8718) stays loopback-locked and
+the device never talks to it directly. There is no env *file* for the dashboard:
+there is no shared-file mechanism, so both knobs reach the process only through
+the launching shell's exported environment (or the inline `VAR=x` prefix above).
+
+Fail-closed refusals: `enabled` + unset/loopback/wildcard bind → refused;
+`disabled` + a wide `OKP_BIND_HOST` → refused; any value other than
+`disabled`/`enabled` → refused. The address is required, not hidden — there is no
+"expose everything" fallback.
 
 ### Adding a source
 
@@ -220,11 +256,12 @@ Written to be run by anyone, out of the box, without wrecking their machine:
 - **The docker socket is never mounted.** `hub-db` connects to postgres over
   TCP. Handing a read-only dashboard control of the host docker daemon in order
   to read four tables is an absurd trade, so it isn't made.
-- **Host-only port by default.** `OKP_BIND_HOST=0.0.0.0` to expose on the
-  LAN — a deliberate act. That reaches your local network only: an RFC1918
-  address is not routable from the internet, so it exposes nothing outward
-  unless you separately add a router port-forward. Verified surface when
-  exposed: `POST → 405`, traversal → `404`, non-allowlisted file → `404`,
+- **Loopback-only by default; LAN access is a deliberate, fail-closed act.**
+  `REMOTE_VIEWING=enabled` plus a specific LAN address (`OKP_BIND_HOST` in
+  Docker, `OKP_DASH_HOST`/`--host` on the host) exposes the board on that one
+  interface. The server refuses a wildcard (`0.0.0.0`) or loopback address
+  rather than guessing, and `disabled` refuses a wide publish. Verified surface
+  when exposed: `POST → 405`, traversal → `404`, non-allowlisted file → `404`,
   `touch /bench/…` → `Read-only file system`, container `uid=1000(node)`.
   Anyone already on the LAN can read gate ids, token counts and run metadata —
   no plaintext, no keys.
@@ -237,6 +274,35 @@ Written to be run by anyone, out of the box, without wrecking their machine:
 - **Privacy:** memory plaintext, raw queries and full CIDs never reach the
   board. `query_log.query_text` is never selected. Everything rendered is
   assumed public forever.
+
+### What "LAN-only" does and does not mean
+
+`REMOTE_VIEWING=enabled` is a **network-topology boundary, not peer-identity
+proof.** Two mechanisms enforce it:
+
+1. **A specific bind.** The server binds/publishes exactly one non-loopback,
+   non-wildcard address, so it listens on one interface rather than all of
+   them.
+2. **A peer classifier.** Every request's source address is classified —
+   loopback/private/link-local trusted, public/unparseable refused, fail-closed
+   (`lib/net-policy.mjs`).
+
+The classifier checks the source address **syntactically**: it cannot tell a
+genuine LAN device from a packet a router/NAT forwards or a VPN peer that
+happens to carry a private source address, and binding a private IP does not by
+itself stop a router from port-forwarding that interface to the internet. In a
+container the peer is the Docker gateway (a private address), so the classifier
+is best-effort there and the publish bind is the real boundary. Anyone already
+able to reach that interface is trusted — the operator's explicit "trust every
+LAN device" ruling.
+
+**Play-preview bypass, stated plainly.** Starting a *play* preview spawns the
+candidate's build on the host on a separate dynamic port, bound to all
+interfaces with no auth and no peer/origin gate. That port is **outside** the
+`REMOTE_VIEWING` bind contract: its URL is rewritten to the dashboard's
+hostname so it opens from the device, but the preview port itself is reachable
+unauthenticated by any device that can reach it. Consistent with trusting LAN
+devices, but it is a separate boundary from the dashboard's own bind.
 
 ---
 

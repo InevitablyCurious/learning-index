@@ -13,6 +13,8 @@ import test from "node:test";
 import {
   boot,
   loadControlBase,
+  loadPlaying,
+  playUrl,
   renderPlayNote,
   renderRunRow,
   startPlay,
@@ -90,6 +92,22 @@ const json = (status, body) => ({
   text: async () => JSON.stringify(body),
 });
 
+// The play URL is rebuilt from the browser's own hostname, so a test that
+// drives that path has to say which host the "browser" is on. Node has no
+// location; install one for the call and put things back afterward, the same
+// way withFetch swaps fetch.
+function withLocation(hostname, fn) {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, "location");
+  const real = globalThis.location;
+  globalThis.location = { hostname };
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => {
+      if (had) globalThis.location = real;
+      else delete globalThis.location;
+    });
+}
+
 test("startPlay: posts to the control plane the BOARD named, not a guessed port", async () => {
   await withFetch(
     async (url) => {
@@ -110,7 +128,8 @@ test("startPlay: posts to the control plane the BOARD named, not a guessed port"
         run: "1789023699",
         cell: "cell-0000",
       });
-      // The URL comes from the spawner: only it knows the port it assigned.
+      // Node has no location, so there is no hostname to swap in: the
+      // spawner's url passes through verbatim — the playUrl fallback.
       assert.deepEqual(opened, ["http://localhost:51234/"]);
     },
   );
@@ -159,6 +178,84 @@ test("stopPlay: posts stop and never throws when the control plane is unreachabl
     async () => {
       await stopPlay(); // must resolve
     },
+  );
+});
+
+// ── the url must be openable from the device the operator is on ─────────────
+//
+// The control plane reports http://localhost:<port>/ — correct on the bench
+// host, and on an iPad it is the iPad. The artifact binds every interface, so
+// the browser's own hostname plus the spawner's port is the reachable address.
+
+test("playUrl: keeps the spawner's port, swaps in the browser's host", async () => {
+  await withLocation("192.168.50.140", () => {
+    assert.equal(playUrl(51234, "http://localhost:51234/"), "http://192.168.50.140:51234/");
+  });
+});
+
+test("playUrl: an IPv6 host is bracketed exactly once", async () => {
+  await withLocation("fe80::1", () => {
+    assert.equal(playUrl(5, "http://localhost:5/"), "http://[fe80::1]:5/");
+  });
+  await withLocation("[fe80::1]", () => {
+    assert.equal(playUrl(5, "http://localhost:5/"), "http://[fe80::1]:5/");
+  });
+});
+
+test("playUrl: no usable port, or no hostname, falls back to the spawner's url", async () => {
+  await withLocation("192.168.50.140", () => {
+    // A refusal carries no port; anything undialable is not a port either.
+    assert.equal(playUrl(undefined, "http://localhost:5/"), "http://localhost:5/");
+    assert.equal(playUrl(null, "http://localhost:5/"), "http://localhost:5/");
+    assert.equal(playUrl("nope", "http://localhost:5/"), "http://localhost:5/");
+  });
+  // No location at all (Node, or a page with no hostname to trust): verbatim.
+  assert.equal(playUrl(5, "http://localhost:5/"), "http://localhost:5/");
+});
+
+test("startPlay: the tab it opens is reachable from the operator's device", async () => {
+  await withLocation("192.168.50.140", () =>
+    withFetch(
+      async (url) =>
+        url.endsWith("/api/control-base")
+          ? json(200, { ok: true, base_url: "http://c:7718" })
+          : json(200, { ok: true, url: "http://localhost:51234/", port: 51234, pid: 7 }),
+      async () => {
+        const opened = [];
+        await startPlay("r", "c", (u) => opened.push(u));
+        // The spawner said localhost — but the device this page was opened
+        // on is not the bench host, so the tab must carry the LAN host.
+        assert.deepEqual(opened, ["http://192.168.50.140:51234/"]);
+      },
+    ),
+  );
+});
+
+test("loadPlaying: the stored game keeps the spawner's port but this browser's host", async () => {
+  await withLocation("192.168.50.140", () =>
+    withFetch(
+      async () =>
+        json(200, {
+          ok: true,
+          playing: {
+            pid: 7,
+            port: 51234,
+            url: "http://localhost:51234/",
+            run: "r",
+            cell: "c",
+            started_at: "2026-09-17T00:00:00Z",
+          },
+        }),
+      async () => {
+        const p = await loadPlaying("");
+        assert.equal(p.url, "http://192.168.50.140:51234/");
+        assert.equal(p.port, 51234);
+        assert.equal(p.pid, 7);
+        // The anchor and the re-open-saved-url path both read this stored
+        // url, so the LAN host has to be what they render and re-open.
+        assert.match(renderPlayNote({ playing: p }), /href="http:\/\/192\.168\.50\.140:51234\/"/);
+      },
+    ),
   );
 });
 

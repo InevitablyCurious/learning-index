@@ -459,12 +459,36 @@ export async function loadControlBase(base) {
   return playUi.base;
 }
 
+/**
+ * The address the OPERATOR's device can actually open.
+ *
+ * The control plane spawns the artifact on the bench host and reports
+ * `http://localhost:<port>/` — true on that host, false from every other
+ * device on the LAN (an iPad's localhost is the iPad). The artifact binds
+ * every interface, so the port is reachable at the hostname this page itself
+ * was served from; only the host needs swapping, and only the browser knows
+ * it. Falls back to the spawner's url verbatim when there is no usable port
+ * or no hostname to swap in (a refusal carries no port; Node has no location).
+ */
+export function playUrl(port, serverUrl) {
+  const hostname = globalThis.location?.hostname;
+  const p = Number(port);
+  if (!hostname || !Number.isInteger(p) || p < 1 || p > 65535) return serverUrl;
+  // A browser hands back an IPv6 hostname already bracketed; anything else
+  // carrying a colon needs brackets before a port can follow it.
+  const host = hostname.includes(":") && !hostname.startsWith("[") ? `[${hostname}]` : hostname;
+  return `http://${host}:${p}/`;
+}
+
 /** GET /api/play → what is being played right now, or null. Same-origin proxy. */
 export async function loadPlaying(base) {
   try {
     const res = await fetch(`${base}/api/play`);
     const data = await res.json().catch(() => null);
-    playUi.playing = data?.playing ?? null;
+    const playing = data?.playing ?? null;
+    // The spawner's url names the bench host; the operator may be elsewhere
+    // on the LAN. Same port, this browser's host — see playUrl.
+    playUi.playing = playing ? { ...playing, url: playUrl(playing.port, playing.url) } : null;
   } catch {
     playUi.playing = null;
   }
@@ -475,10 +499,12 @@ export async function loadPlaying(base) {
 /**
  * Boot one built result and open it.
  *
- * The POST goes to the control plane directly: the board is read-only and
- * proxies GETs only, exactly as it does for starting a run. `open()` is called
- * with the URL the control plane reports — never one composed here, because the
- * port was assigned at spawn and only the spawner knows it.
+ * The POST rides the same-origin relay: the dashboard proxies BOTH GETs and
+ * POSTs to the loopback control plane — writes are proxied, not performed by
+ * the dashboard — exactly as it does for starting a run. The PORT comes from
+ * the spawner (only it knows what it assigned); the HOST comes from this
+ * page's own address, so an operator on an iPad opens the bench's LAN name
+ * and not the iPad itself — see playUrl.
  */
 export async function startPlay(run, cell, openTab) {
   playUi.error = null;
@@ -512,10 +538,13 @@ export async function startPlay(run, cell, openTab) {
       });
       return null;
     }
+    // One rewritten url feeds the stored state, the toast, and the tab, so
+    // every surface the operator sees names a host their device can reach.
+    const url = playUrl(data.port, data.url);
     playUi.playing = {
       run,
       cell,
-      url: data.url,
+      url,
       port: data.port,
       pid: data.pid,
       page_status: data.page_status ?? null,
@@ -543,13 +572,13 @@ export async function startPlay(run, cell, openTab) {
         code: "page_not_served",
         reason:
           data.page_status == null
-            ? `the build is running at ${data.url} but its page could not be read`
-            : `the build is running at ${data.url} but its page answered HTTP ${data.page_status}`,
+            ? `the build is running at ${url} but its page could not be read`
+            : `the build is running at ${url} but its page answered HTTP ${data.page_status}`,
         where: `${run} · ${cell}`,
         detail: data.page_excerpt ?? null,
       });
     }
-    if (typeof openTab === "function") openTab(data.url);
+    if (typeof openTab === "function") openTab(url);
     return data;
   } catch (err) {
     playUi.error = String(err?.message ?? err);

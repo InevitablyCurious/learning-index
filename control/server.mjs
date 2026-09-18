@@ -105,15 +105,14 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const path = url.pathname;
 
-  // CORS for the dashboard origin only. The board runs on :8717 and this
-  // service on :8718, so a browser treats them as cross-origin.
-  res.setHeader("access-control-allow-origin", "*");
-  res.setHeader("access-control-allow-headers", "content-type");
-  res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
-  if (req.method === "OPTIONS") {
-    res.writeHead(204).end();
-    return;
-  }
+  // NO CORS HEADERS, DELIBERATELY. The browser reaches the control plane only
+  // SAME-ORIGIN through the dashboard relay; the client of this service is the
+  // dashboard process itself (server-side fetch, which never needs CORS), and
+  // a browser never talks to :8718 directly anymore. Wildcard CORS here would
+  // let any webpage on the operator's host drive cross-site mutations against
+  // the loopback control plane and read the responses. An OPTIONS request now
+  // falls through to the 404 below — no preflight should ever target this
+  // service.
 
   try {
     const h = routes[req.method + " " + path];

@@ -101,14 +101,23 @@ function verdict(processes, blocking) {
 
 /**
  * THE CONTROL PLANE — the only thing on the board that can start a run.
- * The board is read-only by construction; the BROWSER posts to :8718 directly.
- * So if this is not reachable FROM THE BROWSER, no button on the board works,
- * and that must be the first line the operator reads.
+ * The browser posts same-origin to the dashboard, which relays to the loopback
+ * control plane (:8718) — on the legacy non-relayed path it posts to the
+ * published loopback base directly. Either way, if this is not reachable FROM
+ * THE BROWSER, no button on the board works, and that must be the first line
+ * the operator reads.
  */
 function controlPlane(b) {
   const c = b.control ?? null;
+  // SAME-ORIGIN RELAY: the dashboard forwards to the loopback control plane,
+  // so the browser's post reaches it from wherever the board is served.
+  if (c?.base_url_relayed === true) {
+    return proc("control-plane", "control plane", "ok", "same-origin relay", null,
+      "the browser posts same-origin to the dashboard, which relays to the loopback control plane.");
+  }
   const base = c?.base_url ?? null;
-  if (!base) {
+  // "" IS A VALID SAME-ORIGIN BASE; only null/undefined means never published.
+  if (base === null || base === undefined) {
     // WHY IT IS ABSENT MATTERS, AND THE BOARD ALREADY KNOWS.
     //
     // `control` is null for two very different reasons, and collapsing them
@@ -142,7 +151,7 @@ function controlPlane(b) {
       `this board is open at ${location.hostname}, but the control plane is published as ${base}. That address means THIS device, not the bench host, so a start request would never leave your machine. Tunnel it: ssh -L 8717:127.0.0.1:8717 -L 8718:127.0.0.1:8718 <user>@${location.hostname}`);
   }
   return proc("control-plane", "control plane", "ok", base, null,
-    "the only surface that can start a run; the browser posts to it directly.");
+    "the only surface that can start a run; the browser posts same-origin to the dashboard relay.");
 }
 
 /**

@@ -5,12 +5,12 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 ## Summary
 | Bucket | Count |
 |---|---|
-| read+documented | 35 |
-| read+undocumented | 58 |
-| read by sibling/runtime (reclassified) | 18 |
+| read+documented | 36 |
+| read+undocumented | 59 |
+| read by sibling/runtime (reclassified) | 17 |
 | documented+unread (dead) | 0 |
 | dead-and-undocumented | 0 |
-| total read | 92 |
+| total read | 93 |
 | total documented | 51 |
 
 ## read+documented
@@ -29,13 +29,14 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_GUARD_BIN | {root}/okp-guard/target/release/okp-guard | YARA guard binary | env |
 | BENCH_TARGET | task/backgammon/golden | gates target dir | env |
 | DEBUG_API | off | debug endpoints on task servers | env =1 |
-| OKP_DASH_HOST | 127.0.0.1 (image 0.0.0.0) | dashboard bind addr | env |
+| REMOTE_VIEWING | disabled | LAN-access switch (disabled=enabled); invalid non-empty → refuse startup; read dashboard/lib/remote-viewing.mjs | env |
+| OKP_DASH_HOST | 127.0.0.1 (image 0.0.0.0) | dashboard bind addr; with REMOTE_VIEWING=enabled must be a specific LAN IP | env or --host |
 | OKP_DASH_PORT | 8717 | dashboard port | env or --port |
 | OKP_DASH_BENCH_ROOT | .. (image /bench) | bench root | env |
 | OKP_DASH_POLL_MS | 2000 | refresh cadence | env |
 | OKP_DASH_OPENCODE_URL | http://127.0.0.1:8719 | live agent API | env |
-| OKP_DASH_CONTROL_URL | http://127.0.0.1:8718 | server-to-control URL | env |
-| OKP_DASH_CONTROL_PUBLIC_URL | controlUrl | browser-to-control URL | env |
+| OKP_DASH_CONTROL_URL | http://127.0.0.1:8718 | the same-origin relay's upstream control plane (always loopback) | env |
+| OKP_BIND_HOST | 127.0.0.1 | Docker publish host; with REMOTE_VIEWING=enabled must be a specific LAN IP, disabled refuses a wide publish — read by the dashboard process for fail-closed validation AND compose interpolation | env |
 | OKP_DASH_SOURCE_<NAME> | per config | per-source toggle | env OKP_DASH_SOURCE_<NAME>=1/0 |
 | OKP_DASH_HUBDB | off | enable hub-db source | env =1 |
 | OKP_HUB_DB_HOST | okp-postgres | postgres host | env |
@@ -92,6 +93,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_CONTROL_SERVE_URL | http://127.0.0.1:8719 | serve API | env |
 | OKP_CONTROL_PYTHON | null | python binary | env |
 | OKP_DASH_RUNS_ROOT | <benchRoot>/runs | dashboard runs root | env |
+| OKP_DASH_CONTAINER | unset (compose: "1") | internal marker: container-mode, so the fail-closed bind treats OKP_BIND_HOST as the publish host | set by docker-compose/Dockerfile |
 | OKP_IDENTITY_SEED_HEX | (none) | leader-signer seed | env or --seed-hex |
 | OKP_ENV | local | base-URL switch | env =production |
 | OKP_CHAIN_ID | okp-local-1 | chain id | env |
@@ -123,7 +125,7 @@ Re-verified: none of these has a bench-code reader, but each IS read — either 
 | NODE_ENV | production (image) | test-mode logger gating | hub/dashboard (logger.ts:89) + client/packages/core (logger.ts:89) |
 | XDG_CONFIG_HOME | ~/.config | installer config-dir fallback | client/packages/plugin (install-opencode.ts:173) |
 | OPENCODE_CONFIG_DIR | (falls to XDG_CONFIG_HOME then ~/.config/opencode) | where installer writes opencode.json | client/packages/plugin (install-opencode.ts:170) |
-| OKP_BIND_HOST | 127.0.0.1 | host port-bind address for all infra services | docker-compose interpolation (hub/infra) |
+
 | NODE_PATH | /usr/local/lib/node_modules | global node_modules resolution | node runtime |
 | OPENCODE_CONFIG | (none) | opencode binary config file | opencode binary runtime |
 | PLAYWRIGHT_BROWSERS_PATH | /opt/ms-playwright | browser install root | playwright runtime |

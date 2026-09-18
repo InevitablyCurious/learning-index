@@ -7,41 +7,28 @@
 //
 // ── WHY THIS IS A SOURCE MODULE AND NOT A SERVER CHANGE ──────────────────────
 //
-// The dashboard is read-only by construction: GET only, bench repo mounted
-// `:ro`, no docker socket, uid 1000. Those are kernel-enforced properties, and
-// they are what make "the dashboard corrupted a run" impossible rather than
-// merely unlikely. Adding write routes here would trade that for convenience.
+// The dashboard performs no writes by construction: it opens no file for
+// write, the bench repo is mounted `:ro`, no docker socket, uid 1000. Those
+// are kernel-enforced properties, and they are what make "the dashboard
+// corrupted a run" impossible rather than merely unlikely. Adding write
+// routes here would trade that for convenience.
 //
-// So the board READS the control plane exactly like any other source, and the
-// browser posts to the control plane DIRECTLY for the two write actions. The
-// dashboard server never proxies a write, never spawns a process, and keeps
-// every safety property it had before this feature existed.
+// So the board READS the control plane exactly like any other source. Writes
+// travel a separate road: the browser posts SAME-ORIGIN to the dashboard,
+// which relays to the loopback control plane (lib/control-relay.mjs) under an
+// exact allowlist, a peer policy and an origin check. This module itself
+// never posts, never spawns a process, and keeps every safety property it had
+// before this feature existed.
 //
 // If the control plane is not running, this module reports `unwired` with a
 // reason and the board loses its control affordances while every measurement
 // panel renders exactly as before. That degradation is the designed behaviour,
 // not a failure path.
 //
-// READ-ONLY: GET only, against three endpoints. This module never posts.
+// READ-ONLY: this module GETs and nothing else. The browser's writes are
+// forwarded by the dashboard's relay (server.mjs + lib/control-relay.mjs),
+// never by this source.
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * What the BROWSER is told to POST to.
- *
- * Inside a container `controlUrl` is a container-side address the browser
- * cannot reach, so the public URL is configured separately and only falls back
- * to it when they are the same host (the bare `node server.mjs` case).
- *
- * Exported because the /history page needs the same answer for its "view
- * result" POST, and a page that derived :8718 from the board's :8717 would be
- * deriving a fact the producer can state — which is the one rule everything
- * else here is built on.
- */
-export function publicControlBase(config) {
-  const base = config?.controlUrl ?? "http://127.0.0.1:8718";
-  return config?.controlPublicUrl ?? base;
-}
-
 
 export const id = "control-plane";
 export const fields = ["control", "events", "hold", "tui", "models_ledger", "tree"];
@@ -154,7 +141,6 @@ export function ringRestarted(data, cursor) {
 
 export async function read(ctx) {
   const base = ctx.config?.controlUrl ?? "http://127.0.0.1:8718";
-  const publicBase = publicControlBase(ctx.config);
 
   // Capabilities first: it is the cheapest call and its failure is the whole
   // answer — if the control plane is down, nothing else is worth asking.
@@ -246,26 +232,19 @@ export async function read(ctx) {
     provenance: { path: base, mtime: Date.now(), bytes: null },
     patch: {
       control: {
-        // The base url is published so the browser knows where to POST. The
-        // dashboard server itself never posts anywhere.
-        base_url: publicBase,
-        // ── IS THAT ADDRESS REACHABLE FROM THE BROWSER? ───────────────────
-        // `base_url` is a LOOPBACK address, and loopback means "the machine
-        // running the browser". That is correct only when the operator is
-        // browsing from the host. Open the board from another device — the
-        // documented LAN case — and every control POST resolves to that
-        // DEVICE's own loopback, so it fails before leaving it.
-        //
-        // The control plane cannot simply be published on the LAN instead: it
-        // binds 127.0.0.1 with no --host flag as a deliberate safety property
-        // (control/server.mjs:23-25). It spawns processes; the read-only board
-        // may be exposed, the control plane may not.
-        //
-        // So the board must be able to SAY this rather than render controls
-        // that are guaranteed to fail. The browser resolves the verdict — only
-        // it knows its own origin — and this flag tells it what to compare
-        // against, so the rule lives in one place.
-        base_url_is_loopback: isLoopback(publicBase),
+        // SAME-ORIGIN — the browser posts to the dashboard, which relays to
+        // the loopback control plane (lib/control-relay.mjs). The base is
+        // empty because the browser never needs to know where the control
+        // plane lives, so no address published from here can be unreachable
+        // from the browser.
+        base_url: "",
+        // The legacy client-direct gate asked whether the published base was
+        // a loopback address a LAN browser could not reach. Under the relay
+        // that question is dead — writes never leave the browser's own origin
+        // — so the flag is pinned false and base_url_relayed names the mode
+        // the browser-side reachability rule branches on.
+        base_url_is_loopback: false,
+        base_url_relayed: true,
         contract_version: caps.data?.contract_version ?? null,
         capabilities: caps.data ?? null,
         roster: roster.ok ? roster.data : null,

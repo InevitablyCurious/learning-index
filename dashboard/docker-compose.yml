@@ -22,8 +22,15 @@ services:
     restart: unless-stopped
 
     ports:
-      # Host-only by default, matching the rest of the Okp stack. Set
-      # OKP_BIND_HOST=0.0.0.0 to expose it on the LAN — a deliberate act.
+      # FAIL-CLOSED publish contract (the process validates it at startup via
+      # OKP_BIND_HOST in environment: below — a mismatch refuses to boot):
+      # the container binds 0.0.0.0 internally (marker OKP_DASH_CONTAINER);
+      # this publish host is the real exposure boundary.
+      #   REMOTE_VIEWING=disabled (default) — OKP_BIND_HOST must be unset or
+      #     loopback; a wildcard (0.0.0.0/::) or any LAN IP is REFUSED.
+      #   REMOTE_VIEWING=enabled — OKP_BIND_HOST must be a SPECIFIC physical
+      #     LAN address (e.g. 192.168.50.140); wildcard, loopback and unset
+      #     are all REFUSED. All-interfaces is never "LAN-only".
       - "${OKP_BIND_HOST:-127.0.0.1}:8717:8717"
 
     volumes:
@@ -35,6 +42,19 @@ services:
       - ..:/bench:ro
 
     environment:
+      # LAN switch: disabled (default) = loopback publish only; enabled =
+      # publish on a SPECIFIC LAN IP (OKP_BIND_HOST below), gated by the
+      # same-origin relay + peer policy. Any other value is rejected and the
+      # dashboard refuses to start.
+      REMOTE_VIEWING: "${REMOTE_VIEWING:-disabled}"
+      # The publish host, passed IN so the process can validate the publish
+      # contract above and refuse a mismatch at startup (fail-closed):
+      # disabled + wide publish, or enabled + wildcard/loopback/unset
+      # publish, both stop the boot instead of silently exposing or hiding.
+      OKP_BIND_HOST: "${OKP_BIND_HOST:-127.0.0.1}"
+      # Marker: the in-container 0.0.0.0 bind is internal; the compose
+      # publish bind (OKP_BIND_HOST above) is the real exposure boundary.
+      OKP_DASH_CONTAINER: "1"
       OKP_DASH_BENCH_ROOT: /bench
       OKP_DASH_POLL_MS: "2000"
 
@@ -46,15 +66,13 @@ services:
 
       # ── OPT-IN: host-side control plane ─────────────────────────────────
       # The control plane is the ONLY write-capable surface. This dashboard
-      # stays read-only: it merely READS state from the control plane, and the
-      # browser POSTs to it directly.
+      # performs no writes: it READS state from the control plane and RELAYS
+      # the browser's same-origin writes to it.
       #
-      # TWO URLs BECAUSE THERE ARE TWO CLIENTS ON DIFFERENT SIDES OF THE
-      # CONTAINER BOUNDARY:
-      #   CONTROL_URL        this container -> the host  (host.docker.internal)
-      #   CONTROL_PUBLIC_URL the browser    -> the host  (already on the host)
-      # Using one for both breaks the other, and the failure looks exactly like
-      # "the control plane is down" while it is running perfectly.
+      # ONE URL: OKP_DASH_CONTROL_URL is the RELAY's upstream to the loopback
+      # control plane (host.docker.internal crosses the container boundary).
+      # The browser no longer needs a public control URL — it only ever talks
+      # to the dashboard, which relays.
       #
       # The control plane binds 127.0.0.1 with no --host flag, by design.
       # Docker Desktop's proxy presents host.docker.internal traffic to the
@@ -64,7 +82,6 @@ services:
       # absent roster cannot hold the TUI mirror. Same service, own row.
       OKP_DASH_SOURCE_GATE_SUITE: "1"
       OKP_DASH_CONTROL_URL: "http://host.docker.internal:8718"
-      OKP_DASH_CONTROL_PUBLIC_URL: "http://127.0.0.1:8718"
 
       # ── OPT-IN: hub recall tables ───────────────────────────────────────
       # Off by default. The board must come up on a machine with no database
