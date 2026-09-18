@@ -1,24 +1,9 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
+import { statOrNull, listDir } from "./lib/fs.mjs";
 
 const HOLD_FILE = "hold-ui.json";
 const MAX_DEPTH = 6;
-
-async function statOrNull(path) {
-  try {
-    return await fs.stat(path);
-  } catch {
-    return null;
-  }
-}
-
-async function listDir(path) {
-  try {
-    return await fs.readdir(path, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
 
 async function findHoldFiles(root, depth = 0, out = []) {
   if (depth > MAX_DEPTH) return out;

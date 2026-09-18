@@ -38,7 +38,8 @@
 
 import { join } from "node:path";
 import { int, str } from "../contract.mjs";
-import { readTail, listDir, statOrNull, activeTreeId } from "./_runtime.mjs";
+import { readTail } from "./_runtime.mjs";
+import { newestLog } from "../../runstate.mjs";
 
 export const id = "run-log";
 export const fields = ["run.phase", "run.chunk", "run.turns", "run.state", "run.elapsed_s"];
@@ -56,83 +57,8 @@ function parseKV(line) {
   return out;
 }
 
-/**
- * The newest LIVE cell launch log under the runs root.
- *
- * ORPHAN LOGS ARE SKIPPED — see control/runstate.mjs newestLog for the measured
- * defect. Cell logs live at the runs ROOT while the run state they describe
- * lives in `runs/<run_dir>/`, so archiving or wiping a run leaves the log
- * behind describing data that is gone. This source is the board's LIVE PULSE;
- * reading a dead log here paints a wiped bench as a running one.
- *
- * Kept deliberately identical in behaviour to the control plane's copy: the two
- * surfaces must never disagree about which run is live.
- */
-function runDirOf(text) {
-  // A RUN DIR IS A PATH, NOT A NAME — the campaign home is nested under the
-  // tree, so a capture that stops at the first slash yields the tree id (a
-  // directory that exists for every retired tree, making a dead log resolve as
-  // live). Mirrors control/runstate.mjs:runDirOf.
-  // Three rules, most precise first — mirrors control/runstate.mjs:runDirOf.
-  const s = String(text ?? "");
-  // ── THE CAPTURE MUST NOT CROSS WHITESPACE (measured defect, 2026-09-05) ──
-  //
-  // `[^\s]`, not `.`. A run directory is a path and can never contain a space,
-  // so the old `(.+?)` was always wrong — it had nothing to bite on until a log
-  // line carried TWO `/runs/` paths, which seeding produced:
-  //
-  //   src=…/runs/snapshots/<id>/tree dst=…/runs/<tree>/…/memoryOFF/…
-  //
-  // Starting at the FIRST `/runs/`, the lazy quantifier grew across the space to
-  // reach `/memoryOFF/` and captured both paths as one directory name. Nothing
-  // matched it on disk, so this source reported "no cell launch log under runs
-  // root" and every `run.*` field went null for a run that was mid-flight.
-  //
-  // Fixed identically in control/runstate.mjs. TWO COPIES OF ONE RULE is the
-  // real defect underneath this one — they are separate deployables and cannot
-  // share a module today, so the mirror note above is load-bearing: a change to
-  // either must be made to both.
-  const anchored = /\/runs\/([^\s]+?)\/(?:sessions|memoryON|memoryOFF|memoryUNKNOWN)\//.exec(s);
-  if (anchored) return anchored[1];
-  const tree = /\/runs\/(\d{9,11}\/[^/]+\/[^/]+\/[^/]+\/[^/]+)\//.exec(s);
-  if (tree) return tree[1];
-  const flat = /\/runs\/([A-Za-z0-9._-]+)\//.exec(s);
-  return flat ? flat[1] : null;
-}
-
-async function newestLog(runsRoot) {
-  const candidates = [];
-  // Launch logs are written INSIDE the live tree, so retiring a tree retires
-  // its debris. The runs root is still read for pre-tree logs.
-  let treeId = null;
-  try {
-    treeId = await activeTreeId(runsRoot);
-  } catch {
-    treeId = null;
-  }
-  const bases = treeId ? [join(runsRoot, treeId), runsRoot] : [runsRoot];
-  for (const base of bases) {
-    for (const ent of await listDir(base)) {
-      if (!ent.isFile() || !ent.name.endsWith(".log")) continue;
-      if (!/^(off|on)-cell-|^cell-/.test(ent.name)) continue;
-      const p = join(base, ent.name);
-      const st = await statOrNull(p);
-      if (st?.isFile()) {
-        candidates.push({ path: p, mtime: st.mtimeMs, size: st.size, name: ent.name });
-      }
-    }
-  }
-
-  candidates.sort((a, b) => b.mtime - a.mtime);
-  for (const cand of candidates) {
-    const runDir = runDirOf(await readTail(cand.path));
-    // Not yet named: a fresh log that has not printed an artifact path.
-    if (runDir === null) return cand;
-    const st = await statOrNull(join(runsRoot, runDir));
-    if (st?.isDirectory()) return { ...cand, run_dir: runDir };
-  }
-  return null;
-}
+// The newest live launch log is the control plane's call (control/runstate.mjs),
+// so the board and the control plane can never disagree about which run is live.
 
 /** "initial-chunk-5" -> 5 ; "feedback-2" -> null (no longer a build chunk) */
 function chunkOf(phase) {

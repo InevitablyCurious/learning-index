@@ -30,20 +30,13 @@ import fs from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 
 import { BACKUPS_DIR, isBenchmarkData, isTreeId, sweepToBackup } from "./tree.mjs";
+import { listDir } from "./lib/fs.mjs";
 
 async function readJsonOrNull(path) {
   try {
     return JSON.parse(await fs.readFile(path, "utf8"));
   } catch {
     return null;
-  }
-}
-
-async function listDir(path) {
-  try {
-    return await fs.readdir(path, { withFileTypes: true });
-  } catch {
-    return [];
   }
 }
 

@@ -78,8 +78,6 @@ test("READER: a retired tree is not read, and legacy flat history still is", asy
     // while its files sit untouched on disk.
     assert.deepEqual(names, ["cumulative-legacy-model", "new-model"]);
 
-    // liveOnly:false is the audit view — everything on disk, including retired.
-    assert.equal((await listCampaignDirs(runs, { liveOnly: false })).length, 3);
     assert.equal(await activeTreeId(runs), "1787320000");
   } finally {
     rmSync(root, { recursive: true, force: true });

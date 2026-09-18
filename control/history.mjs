@@ -31,6 +31,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve, relative, sep, isAbsolute } from "node:path";
 
 import { BACKUPS_DIR, listCampaignDirs } from "./tree.mjs";
+import { statOrNull } from "./lib/fs.mjs";
 
 // ── internal helpers (never exported) ───────────────────────────────────────
 
@@ -44,15 +45,6 @@ const INVALID_RUN = Object.freeze({
   reason: "run or cell identifier is invalid",
   status: 400,
 });
-
-/** stat that degrades to null: absence and unreadability are the same answer. */
-async function statOrNull(path) {
-  try {
-    return await stat(path);
-  } catch {
-    return null;
-  }
-}
 
 /**
  * The absolute cell directory for a (benchmarkId, cell) pair, or null.

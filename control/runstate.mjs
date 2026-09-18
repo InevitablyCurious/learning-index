@@ -34,22 +34,7 @@ import { activeTreeRoot } from "./tree.mjs";
 // run. Importing the designated resolver is the contract; a second copy here
 // would be that defect waiting to happen again. It imports only node builtins.
 import { liveStreamPath } from "./board/sources/_runtime.mjs";
-
-async function statOrNull(path) {
-  try {
-    return await fs.stat(path);
-  } catch {
-    return null;
-  }
-}
-
-async function listDir(path) {
-  try {
-    return await fs.readdir(path, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
+import { statOrNull, listDir } from "./lib/fs.mjs";
 
 /**
  * AGE OF THE NEWEST HEARTBEAT in this run's live stream, in ms — or `null`
@@ -320,7 +305,8 @@ export async function newestLog(runsRoot) {
   // Newest first, then take the first whose run directory still exists.
   candidates.sort((a, b) => b.mtime - a.mtime);
   for (const cand of candidates) {
-    const runDir = runDirOf(await readTail(cand.path));
+    // 256KB: a long log's first artifact path can sit well back from the end.
+    const runDir = runDirOf(await readTail(cand.path, 256 * 1024));
     // Not yet named: a fresh log that has not printed an artifact path. Live by
     // default — refusing it would blind the board to a run that just started.
     if (runDir === null) return cand;

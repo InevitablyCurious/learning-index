@@ -23,28 +23,13 @@ import { promises as fs } from "node:fs";
 import { join } from "node:path";
 
 import { resolveRunDir } from "./wall.mjs";
+import { statOrNull, listDir } from "./lib/fs.mjs";
 
 /** The contract version the board can assert against. */
 export const FEEDBACK_CONTRACT_VERSION = 1;
 
 /** Messages are large (a chunk prompt ran 33KB); bound the read like every other. */
 const DEFAULT_BYTES = 2 * 1024 * 1024;
-
-async function statOrNull(path) {
-  try {
-    return await fs.stat(path);
-  } catch {
-    return null;
-  }
-}
-
-async function listDir(path) {
-  try {
-    return await fs.readdir(path, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-}
 
 /**
  * Read one sidecar file into message records.

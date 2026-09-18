@@ -16,6 +16,9 @@
 import { promises as fs } from "node:fs";
 import { createReadStream } from "node:fs";
 import { join } from "node:path";
+import { isTreeId, activeTreeId as treeActiveId, listLiveCampaignDirs } from "../../tree.mjs";
+import { statOrNull, listDir } from "../../lib/fs.mjs";
+export { statOrNull, listDir };
 
 /** Never read more than this from the tail of any log. */
 export const TAIL_BYTES = 256 * 1024;
@@ -46,15 +49,6 @@ export async function withTimeout(promise, ms, label) {
     return await Promise.race([promise, timeout]);
   } finally {
     clearTimeout(timer);
-  }
-}
-
-/** Stat without throwing. Returns null when absent. */
-export async function statOrNull(path) {
-  try {
-    return await fs.stat(path);
-  } catch {
-    return null;
   }
 }
 
@@ -109,14 +103,6 @@ export function parseJsonl(text) {
     }
   }
   return out;
-}
-
-export async function listDir(path) {
-  try {
-    return await fs.readdir(path, { withFileTypes: true });
-  } catch {
-    return [];
-  }
 }
 
 // ── THE ACTIVE RUN ───────────────────────────────────────────────────────────
@@ -185,73 +171,37 @@ export async function listDir(path) {
 // final tie. Both orderings are pinned by tests in arm-delta-validity.test.mjs.
 //
 // ─────────────────────────────────────────────────────────────────────────────
-// BENCHMARK TREE — the READER half
-//
-// ⚠ DELIBERATE DUPLICATE OF `control/tree.mjs`, and the duplication is forced
-// rather than chosen: this board ships as a container whose Dockerfile copies
-// `dashboard/` alone, so an import of `../../control/tree.mjs` resolves on the
-// host and is absent in the image. The rule is kept small enough to state twice
-// — "a campaign is a directory holding a manifest; retired trees are not read" —
-// and both copies are pinned by tests in their own suites.
-//
-// THE WRITER HALF IS NOT HERE, AND MUST NOT BE. The repo is mounted READ-ONLY at
-// /bench; minting a tree is the control plane's act, on the host. This file only
-// ever decides which directories to READ.
+// BENCHMARK TREE — the rules live in control/tree.mjs; these are the readers'
+// views of them.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Unix-seconds directory names, and nothing else, are trees. */
-export function isTreeId(name) {
-  return /^\d{9,11}$/.test(String(name ?? ""));
-}
+export { isTreeId };
 
-/** The live tree id, or null when this bench has no pointer (pre-tree layout). */
+/** The live tree id, or null when there is no pointer or it is unreadable. */
 export async function activeTreeId(runsRoot) {
-  const raw = await readJson(join(runsRoot, "active-tree.json"));
-  return raw && isTreeId(raw.active) ? String(raw.active) : null;
+  try {
+    return await treeActiveId(runsRoot);
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Every campaign directory that a board should read.
- *
- * Depth-bounded at five so the walk reaches
- * `<tree>/<substrate>/<router>/<provider>/<model>` and stops — an unbounded walk
- * would descend into every cell's worktree and its node_modules, and this runs
- * on a 2s poll.
- *
- * Retired trees are filtered out here, which is the whole mechanism behind a
- * reset that wipes the board without unlinking a measurement. Legacy flat
- * campaigns (`runs/cumulative-<model>`) still resolve, because the test is for a
- * manifest rather than for a position.
+ * Campaign directories in the live tree (plus legacy flat ones), each with
+ * stats for its two manifests — what a board reader needs to rank them.
  */
-export async function listCampaignDirs(runsRoot, { liveOnly = true, maxDepth = 5 } = {}) {
-  const active = liveOnly ? await activeTreeId(runsRoot) : null;
-  const found = [];
-
-  async function walk(dir, head, depth) {
-    for (const ent of await listDir(dir)) {
-      if (!ent.isDirectory() || ent.name.startsWith(".")) continue;
-      const child = join(dir, ent.name);
-      const top = head ?? ent.name;
-
-      // A retired tree is skipped whole, before any I/O inside it.
-      if (depth === 0 && active && isTreeId(ent.name) && ent.name !== active) continue;
-      // THE BACKUP FOLDER IS NOT THE BENCH. Reading into it would repopulate the
-      // board from the very data a reset just moved out of the way.
-      if (depth === 0 && ent.name === "backups") continue;
-
-      const status = await statOrNull(join(child, "manifest.status.jsonl"));
-      const manifest = await statOrNull(join(child, "manifest.json"));
-      if (status?.isFile() || manifest?.isFile()) {
-        found.push({ name: ent.name, dir: child, top, status, manifest });
-        continue; // a campaign never contains another campaign
-      }
-      if (depth + 1 < maxDepth) await walk(child, top, depth + 1);
-    }
+export async function listCampaignDirs(runsRoot) {
+  const out = [];
+  for (const c of await listLiveCampaignDirs(runsRoot)) {
+    out.push({
+      ...c,
+      status: await statOrNull(join(c.dir, "manifest.status.jsonl")),
+      manifest: await statOrNull(join(c.dir, "manifest.json")),
+    });
   }
-
-  await walk(runsRoot, null, 0);
-  return found;
+  return out;
 }
+
 
 // A source that legitimately spans runs must say so explicitly; only
 // stack-ledger.mjs does, and it says so in its header. Cross-run aggregation is
