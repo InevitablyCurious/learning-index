@@ -24,7 +24,6 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BENCH="$(cd "$HERE/.." && pwd)"
 PORT="${OKP_DASH_PORT:-8717}"
-CONTROL_PORT="${OKP_CONTROL_PORT:-8718}"
 
 cd "$HERE"
 
@@ -73,56 +72,9 @@ for s in d.get('sources',[]):
 if [ "${1:-}" = "--control" ]; then
   echo
   echo "── restarting control plane ───────────────────────────────────────"
-  # KILL WHATEVER HOLDS THE PORT, by asking the kernel who holds it.
-  #
-  # Two argv patterns have now failed here. "control/server.mjs" missed a
-  # process started from inside control/; "server.mjs --port 8718" missed one
-  # started WITHOUT the flag (`node control/server.mjs`, the default port). Both
-  # failures are identical and silent: the old process survives, the new one
-  # dies on EADDRINUSE, and the health check below passes AGAINST THE STALE
-  # PROCESS — so redeploy reports success while serving pre-edit code.
-  #
-  # `lsof -ti` is the only check that cannot drift from how the process was
-  # launched, because the question it answers is the one that actually matters:
-  # who is listening on this port.
-  holders="$(lsof -ti "tcp@127.0.0.1:${CONTROL_PORT}" -sTCP:LISTEN 2>/dev/null || true)"
-  [ -n "$holders" ] && kill $holders 2>/dev/null || true
-  for i in $(seq 1 10); do
-    lsof -ti "tcp@127.0.0.1:${CONTROL_PORT}" -sTCP:LISTEN >/dev/null 2>&1 || break
-    sleep 1
-  done
-  # Still held after SIGTERM: escalate once, then verify again.
-  if lsof -ti "tcp@127.0.0.1:${CONTROL_PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
-    kill -9 $(lsof -ti "tcp@127.0.0.1:${CONTROL_PORT}" -sTCP:LISTEN) 2>/dev/null || true
-    sleep 1
-  fi
-  if lsof -ti "tcp@127.0.0.1:${CONTROL_PORT}" -sTCP:LISTEN >/dev/null 2>&1; then
-    echo "  FAILED: a control plane on :${CONTROL_PORT} would not die - refusing to"
-    echo "          start a second one that would serve stale code."
-    exit 1
-  fi
-
-  cd "$BENCH/control"
-  # `< /dev/null` is mandatory: without it the shell suspends the job the
-  # instant the process touches stdin.
-  nohup node server.mjs --port "${CONTROL_PORT}" > /tmp/okp-control-plane.log 2>&1 < /dev/null &
-  control_pid=$!
-  disown || true
-  sleep 3
-  # THE PID WE STARTED MUST BE THE ONE ANSWERING. A bare health check is not
-  # enough — it is exactly what passed against the stale process last time.
-  if ! kill -0 "$control_pid" 2>/dev/null; then
-    echo "  FAILED: the control plane exited immediately (likely EADDRINUSE)"
-    tail -20 /tmp/okp-control-plane.log || true
-    exit 1
-  fi
-  if curl -fsS -m 3 "http://127.0.0.1:${CONTROL_PORT}/api/health" >/dev/null 2>&1; then
-    echo "  control plane up on :${CONTROL_PORT}  pid ${control_pid}  (log: /tmp/okp-control-plane.log)"
-  else
-    echo "  FAILED: control plane did not answer on :${CONTROL_PORT}"
-    tail -20 /tmp/okp-control-plane.log || true
-    exit 1
-  fi
+  # One way to (re)start it: dev/Makefile, which hands it to its login agent
+  # (dev/scripts/install-services.sh) so it does not belong to this shell.
+  make --no-print-directory -C "$BENCH/../dev" control-restart < /dev/null
 fi
 
 echo
