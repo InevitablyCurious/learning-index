@@ -1,48 +1,18 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// ROSTER — what models exist, and what is actually resident
-//
-// TWO SOURCES, NEVER MERGED INTO ONE CLAIM:
-//
-//   proxy   :4545/v1/models       the aliases the bench can address, and the
-//                                 context window each one is served at
-//   runtime :1234/api/v0/models   what is loaded, and at what context length
-//
-// The proxy answers "can I name this model?". The runtime answers "is it in
-// memory, and how much context did it actually get?". Those are different
-// questions and a mismatch between them has voided cells before:
-//
-//   - the proxy's /control/load cannot set `parallel` (the SDK drops
-//     maxParallelPredictions) and once shipped a 1h TTL that auto-unloaded a
-//     model mid-campaign;
-//   - the RUNBOOK therefore requires preflighting loaded_context_length ==
-//     262144 after EVERY swap, via the runtime endpoint, not the proxy.
-//
-// So this module reports both and computes `context_match` rather than picking
-// a winner. The UI must show the discrepancy BEFORE a run can start.
-//
-// UNREACHABLE IS A STATE, NOT AN ERROR. If either endpoint is down the roster
-// still returns, with that side null and a reason attached. The board then
-// renders an explicit unwired state instead of an empty dropdown that looks
-// like "no models exist".
-// ─────────────────────────────────────────────────────────────────────────────
+// ROSTER — which models exist, and which are resident. Two sources, kept
+// apart:
+//   proxy   :4545/v1/models       aliases the bench can name, and their window
+//   runtime :1234/api/v0/models   what is loaded, and at what context
+// A mismatch between them has voided cells, so both are reported and
+// context_match computed. An unreachable side is null with a reason, never an
+// empty list that looks like "no models".
 
 import { BENCH_PURPOSE } from "./contract.mjs";
 
 /**
- * RETIRED BENCH ALIASES — advertised by the proxy, refused by the bench.
- *
- * `okp-bench-worker` is the auto-detect slug: it maps upstream to `auto`, so
- * a cell run on it measures WHICHEVER model happened to be resident and records
- * no model identity. That design is retired — every cell now names its subject —
- * and the alias must not appear as a bench-eligible model on any surface.
- *
- * IT IS EXCLUDED HERE RATHER THAN WISHED AWAY. The proxy still advertises it
- * with purpose=okp-bench (its roster lives in the local-llm-proxy service,
- * not this repo), so eligibility computed from `purpose` alone would keep
- * offering it a [+ baseline] button. Naming the retirement in one place means
- * the ledger, the run-start gate and the baseline modal all refuse it for the
- * same stated reason, and the entry can be deleted outright the day the proxy
- * stops serving it.
+ * Retired aliases: advertised by the proxy (which lives outside this repo),
+ * refused by the bench. `okp-bench-worker` maps to whatever model is resident, so
+ * a cell on it names no model. Named once here so every surface refuses it for
+ * the same reason.
  */
 export const RETIRED_ALIASES = {
   "okp-bench-worker":
@@ -66,11 +36,7 @@ async function getJson(url, timeoutMs = 2000) {
   }
 }
 
-/**
- * Normalise the runtime's model list into a lookup by upstream model id.
- * The runtime reports `state` ("loaded" | "not-loaded"), `max_context_length`,
- * and — when loaded — `loaded_context_length`.
- */
+/** The runtime's model list by upstream id (state, max and loaded context). */
 function indexRuntime(data) {
   const out = new Map();
   const rows = Array.isArray(data?.data) ? data.data : [];
@@ -87,16 +53,9 @@ function indexRuntime(data) {
 }
 
 /**
- * Match a proxy alias's upstream model to a runtime entry.
- *
- * The two services name the same model DIFFERENTLY: the proxy reports
- * `Qwen3.6-35B-A3B-MLX-8bit` while the runtime reports `qwen/qwen3.6-35b-a3b`.
- * Matching is therefore normalised (lowercased, separators and quant/format
- * suffixes stripped) rather than exact.
- *
- * A FAILED MATCH RETURNS NULL AND STAYS NULL. It is never guessed at, because a
- * wrong match would report a context length belonging to a different model —
- * exactly the confusion the preflight rule exists to catch.
+ * Match a proxy alias's upstream model to a runtime entry; the two name it
+ * differently, so matching is normalised. No match stays null — a wrong match
+ * would report another model's context.
  */
 export function matchRuntime(upstreamModel, runtimeIndex) {
   if (!upstreamModel) return null;
@@ -119,10 +78,7 @@ export function matchRuntime(upstreamModel, runtimeIndex) {
   return null;
 }
 
-/**
- * Build the roster. Never throws — an unreachable upstream is reported as a
- * null side with a reason, so the caller always has something honest to render.
- */
+/** Build the roster. Never throws: an unreachable side is null with a reason. */
 export async function readRoster({ proxyUrl, runtimeUrl }) {
   const [proxyRes, runtimeRes] = await Promise.all([
     getJson(`${proxyUrl}/v1/models`),
@@ -142,8 +98,8 @@ export async function readRoster({ proxyUrl, runtimeUrl }) {
     const purpose = typeof r?.purpose === "string" ? r.purpose : null;
     const rt = runtimeRes.ok ? matchRuntime(upstream, runtimeIndex) : null;
 
-    // The proxy reports each alias's window live from the runtime — the same
-    // value harness/model_catalog.py writes into the worker's opencode.json.
+    // The alias's window as the proxy reports it (the same value the worker's
+    // opencode.json gets).
     const declared = Number.isFinite(r?.context_length) ? r.context_length : null;
     const loaded = rt?.loaded_context ?? null;
 
@@ -153,19 +109,15 @@ export async function readRoster({ proxyUrl, runtimeUrl }) {
       id,
       upstream_model: upstream,
       purpose,
-      // A retired alias is NOT bench-eligible however the proxy labels it. The
-      // reason travels with the row so a surface that wants to explain the
-      // absence can, rather than the model simply vanishing.
+      // A retired alias is never bench-eligible; the reason travels with the row.
       bench_eligible: purpose === BENCH_PURPOSE && !retired,
       retired_reason: retired,
-      // `resident` is null (unobserved) when the runtime is unreachable —
-      // NOT false. "We cannot see whether it is loaded" and "it is not loaded"
-      // are different facts and must not collapse.
+      // null when the runtime is unreachable — unknown, not "not loaded".
       resident: runtimeRes.ok ? rt?.state === "loaded" : null,
       declared_context: declared,
       max_context: rt?.max_context ?? null,
       loaded_context: loaded,
-      // null when either side is unobserved — never a false "match".
+      // null when either side is unobserved.
       context_match:
         declared === null || loaded === null ? null : declared === loaded,
       runtime_id: rt?.id ?? null,
@@ -179,7 +131,7 @@ export async function readRoster({ proxyUrl, runtimeUrl }) {
     context_choices: CONTEXT_CHOICES,
     proxy_ok: proxyRes.ok,
     runtime_ok: runtimeRes.ok,
-    // Verbatim, human-readable, rendered in the control region.
+    // Verbatim, for the control region.
     notes,
     reason: proxyRes.ok ? null : proxyRes.reason,
   };

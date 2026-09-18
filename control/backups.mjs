@@ -1,29 +1,11 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// BACKUPS — what a reset parked, and putting one back
+// BACKUPS — what a reset parked, and putting one back. Each reset moves the
+// live bench into runs/backups/<unix-seconds>/ with its names intact.
 //
-// Every reset moves the live bench into `runs/backups/<unix-seconds>/` with the
-// names it had at the runs root, so a backup is browsable as the runs directory
-// it used to be. This module reads them, CHECKS them, and restores one.
-//
-// ── RESTORE IS A SWEEP PLUS A MOVE, NEVER AN OVERWRITE ──────────────────────
-//
-// Restoring parks whatever is live NOW into its own backup first, then moves the
-// chosen one in. That is not politeness — it is the only ordering that has no
-// destructive step. Copying a backup over a live runs root would have to
-// overwrite `active-tree.json` and `baselines.json` and would silently lose any
-// measurement taken since the reset, which is exactly the class of loss this
-// whole tree exists to prevent. It also makes restore reversible: the state you
-// just left is now the newest entry in the same list you restored from.
-//
-// ── WHY THE CHECK EXISTS ────────────────────────────────────────────────────
-//
-// A backup is a directory an operator can rename, half-copy off a drive, or
-// hand-edit. Moving a malformed one into the runs root does not fail loudly — it
-// produces a bench that LOOKS restored and reads wrong: a pointer naming a tree
-// that is not there renders as an empty bench holding results, and a result
-// folder with an unparseable manifest drops off every reader with no error. The
-// check runs BEFORE anything moves, and a hard error refuses the restore.
-// ─────────────────────────────────────────────────────────────────────────────
+// Restore parks whatever is live into its own backup first, then moves the
+// chosen one in: nothing is ever overwritten, and the restore is itself undoable.
+// A backup is checked before anything moves, because a malformed one (a pointer
+// naming a missing tree, an unreadable manifest) would restore into a bench that
+// looks fine and reads wrong.
 
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
@@ -41,11 +23,8 @@ async function readJsonOrNull(path) {
 }
 
 /**
- * Resolve a backup id to a path, safely.
- *
- * The id reaches an fs path and arrives from a request body, so it is confined
- * to a direct child of the backups directory: unix-seconds only, then the
- * containment check that every path built from user input needs regardless.
+ * A backup id → its path: unix seconds only, and it must stay inside the
+ * backups folder (the id comes from a request).
  */
 export function resolveBackupDir(runsRoot, id) {
   const name = String(id ?? "").trim();
@@ -71,7 +50,7 @@ async function dirBytes(dir, budget = { files: 20000 }) {
         try {
           total += (await fs.stat(p)).size;
         } catch {
-          /* a file that vanished mid-walk is not a reason to fail a listing */
+          /* A file vanishing mid-walk doesn't fail the listing. */
         }
       }
     }
@@ -81,10 +60,8 @@ async function dirBytes(dir, budget = { files: 20000 }) {
 }
 
 /**
- * Everything a result folder can tell an operator at a glance.
- *
- * Read from the manifest the harness wrote, never guessed from the folder name:
- * the name is a convention and the manifest is a record.
+ * What a result folder shows at a glance, read from its manifest (never the
+ * folder name).
  */
 async function describeResult(dir, name) {
   const manifest = await readJsonOrNull(join(dir, "manifest.json"));
@@ -123,13 +100,8 @@ async function describeResult(dir, name) {
 }
 
 /**
- * Does this backup look like something the bench can take back?
- *
- * ERRORS REFUSE THE RESTORE. WARNINGS DO NOT. The split matters: an operator
- * restoring a backup that is merely incomplete (a run log whose result folder
- * was pruned) should be told and allowed to proceed, while one whose pointer
- * names a tree that is not in the directory would get a bench that renders as
- * empty and is not obviously broken. Only the second kind blocks.
+ * Can the bench take this backup back? Errors refuse the restore; warnings
+ * (e.g. a run log whose result folder was pruned) are shown and allowed.
  */
 export async function checkBackup(dir) {
   const errors = [];
@@ -143,16 +115,14 @@ export async function checkBackup(dir) {
   const names = entries.map((e) => e.name).filter((n) => !n.startsWith("."));
   if (names.length === 0) errors.push("the backup folder is empty");
 
-  // NOTHING FOREIGN. Everything here is about to be moved into the runs root,
-  // so anything the bench would not recognise there does not belong here either.
+  // Nothing foreign: all of it is about to land in the runs root.
   const foreign = names.filter((n) => !isBenchmarkData(n));
   if (foreign.length) {
     errors.push(`contains ${foreign.length} item(s) the bench does not recognise: ${foreign.join(", ")}`);
   }
 
-  // THE POINTER MUST NAME A TREE THAT IS PRESENT. A pointer naming an absent
-  // tree restores to a bench that reads as empty while holding results — the
-  // failure is invisible, which is why it is an error and not a warning.
+  // The pointer must name a tree that is present (otherwise the bench reads
+  // empty while holding results).
   if (names.includes("active-tree.json")) {
     const pointer = await readJsonOrNull(join(dir, "active-tree.json"));
     if (!pointer) {
@@ -166,8 +136,7 @@ export async function checkBackup(dir) {
     warnings.push("no active-tree.json — the bench will start a fresh tree beside the restored results");
   }
 
-  // RESULT FOLDERS MUST BE READABLE. An unparseable manifest drops the folder
-  // off every reader silently, so it is named here instead.
+  // Result folders must be readable, or they drop off every reader silently.
   for (const n of names.filter((x) => x.startsWith("cumulative"))) {
     if (!(await readJsonOrNull(join(dir, n, "manifest.json")))) {
       warnings.push(`${n} has no readable manifest.json — it will not appear on the board`);
@@ -188,7 +157,7 @@ export async function describeBackup(runsRoot, id) {
   const results = [];
   for (const n of names) {
     if (isTreeId(n)) {
-      // A tree holds its result folders nested by substrate/router/provider/model.
+      // A tree nests result folders by substrate/router/provider/model.
       for (const found of await treeResults(join(dir, n), n)) results.push(found);
     } else if (n.startsWith("cumulative")) {
       results.push(await describeResult(join(dir, n), n));
@@ -201,7 +170,7 @@ export async function describeBackup(runsRoot, id) {
 
   return {
     id: String(id),
-    // The id IS the moment it was taken — unix seconds, by construction.
+    // The id is the moment it was taken.
     created_at: new Date(Number(id) * 1000).toISOString(),
     items: names.sort(),
     results,
@@ -247,12 +216,8 @@ export async function listBackups(runsRoot) {
 }
 
 /**
- * RESTORE: park what is live, then move the chosen backup back in.
- *
- * The chosen backup's folder is REMOVED once emptied, because its contents are
- * no longer history — they are the bench. Leaving an empty directory behind
- * would show as a backup holding nothing, which an operator would reasonably
- * read as data loss.
+ * RESTORE: park what is live, move the chosen backup in, then remove its
+ * emptied folder (an empty backup would read as data loss).
  */
 export async function restoreBackup(runsRoot, id, { now = Date.now() } = {}) {
   const dir = resolveBackupDir(runsRoot, id);
@@ -263,10 +228,10 @@ export async function restoreBackup(runsRoot, id, { now = Date.now() } = {}) {
     throw new Error(`this backup did not pass the check: ${check.errors.join("; ")}`);
   }
 
-  // 1. Park the live bench. Nothing is overwritten because nothing is left.
+  // 1. Park the live bench.
   const parked = await sweepToBackup(runsRoot, { now });
 
-  // 2. Move the chosen backup's contents up to the runs root.
+  // 2. Move the backup's contents to the runs root.
   const restored = [];
   for (const ent of await listDir(dir)) {
     if (ent.name.startsWith(".")) continue;
@@ -274,9 +239,7 @@ export async function restoreBackup(runsRoot, id, { now = Date.now() } = {}) {
     restored.push(ent.name);
   }
 
-  // 3. Consume the now-empty folder. Non-fatal: a leftover empty directory is
-  //    cosmetic, and failing here after the data is already home would report a
-  //    restore that actually succeeded as a failure.
+  // 3. Remove the emptied folder. Non-fatal: the data is already home.
   let consumed = true;
   try {
     await fs.rmdir(dir);
