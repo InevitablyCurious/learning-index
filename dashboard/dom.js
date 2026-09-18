@@ -1,49 +1,10 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// DOM PATCH — replace the wholesale innerHTML swap with an in-place morph
+// DOM PATCH — morph the board in place instead of replacing innerHTML, so
+// scroll positions inside panes, focus and caret, and text selection survive the
+// 2s refresh. Panels still emit HTML strings; this is only the apply step.
 //
-// ── THE DEFECT THIS EXISTS TO FIX ───────────────────────────────────────────
-//
-// `render()` ran `root.innerHTML = ...` every 2 seconds. That destroys and
-// rebuilds EVERY node on the board, which costs three things the operator was
-// losing constantly:
-//
-//   1. SCROLL POSITION. Not the window's — the browser restores that — but
-//      every scrollable pane INSIDE the board. A destroyed element has no
-//      scrollTop to restore, so any list the operator had scrolled snapped
-//      back to the top twice a second. That is the "keeps jumping me around"
-//      complaint, and it is why the page could not be navigated while a run
-//      was live.
-//   2. FOCUS AND CARET. A half-typed org id in the run form was wiped mid-word
-//      because the input element it lived in no longer existed.
-//   3. SELECTION. Text the operator was highlighting to copy — a cid, an error
-//      string — was deselected before it could be copied.
-//
-// ── WHY MORPH AND NOT "RENDER LESS OFTEN" ───────────────────────────────────
-//
-// Slowing the poll trades one defect for another: the board's whole job is to
-// show a live run. The problem was never the frequency, it was that a re-render
-// was indistinguishable from a rebuild. Morphing makes an unchanged panel a
-// no-op, so a 2s cadence costs nothing and the data stays live.
-//
-// ── THE CONTRACT ────────────────────────────────────────────────────────────
-//
-// Panels still emit HTML STRINGS. Nothing about how a panel is written changes
-// — this module is purely the application step. That matters: the panels are
-// the reviewed surface, and a rewrite into imperative DOM calls would have
-// re-opened every one of them.
-//
-// Reconciliation is BY POSITION, with tag+key identity. The board's structure
-// is static (the same panels in the same order every frame), so positional
-// matching is correct and cheap. Where a list's rows genuinely reorder, the
-// row carries `data-k` and is matched by key instead — see keyedChildren().
-//
-// `data-preserve` marks a subtree this module MUST NOT touch. The event feed
-// owns its own children (append-only, scroll-compensated, seq-watermarked in
-// live.js paintFeed) and a morph would fight it. The TUI screen is likewise
-// painted from a run-length frame. Both are opted out by attribute rather than
-// by a hardcoded id list here, so a future pane can opt out without editing
-// this file.
-// ─────────────────────────────────────────────────────────────────────────────
+// Reconciliation is by position with tag identity (the board's structure is
+// static), or by `data-k` key where rows reorder. `data-preserve` marks a
+// subtree whose children another painter owns (the event feed, the TUI).
 
 /** Attribute marking a subtree whose children are managed elsewhere. */
 export const PRESERVE_ATTR = "data-preserve";
@@ -52,11 +13,8 @@ export const PRESERVE_ATTR = "data-preserve";
 export const KEY_ATTR = "data-k";
 
 /**
- * Patch `container`'s children to match `html`.
- *
- * The parse happens in a detached <template>, so nothing partially-built is
- * ever attached to the live document — no flash of half-rendered board, and no
- * layout work on intermediate states.
+ * Patch `container`'s children to match `html`, parsed in a detached
+ * <template> so nothing half-built is ever attached.
  */
 export function patch(container, html) {
   const tpl = document.createElement("template");
@@ -65,12 +23,8 @@ export function patch(container, html) {
 }
 
 /**
- * Reconcile one level of children, then recurse.
- *
- * Keyed and positional matching are chosen per-parent, not globally: a parent
- * whose children all carry `data-k` is reordered by key, everything else is
- * matched by index. Mixing the two within one parent is treated as positional,
- * because a partially-keyed list has no coherent identity to match on.
+ * Reconcile one level, then recurse: keyed when every child has data-k,
+ * otherwise positional.
  */
 function patchChildren(oldParent, newParent) {
   const newNodes = [...newParent.childNodes];
@@ -87,7 +41,7 @@ function patchChildren(oldParent, newParent) {
     const newNode = newNodes[i];
 
     if (!newNode) {
-      // Surplus old node. Remove it.
+      // Surplus old node.
       oldNode?.remove();
       continue;
     }
@@ -106,8 +60,8 @@ function isKeyed(nodes) {
 }
 
 /**
- * Keyed reconciliation. Existing rows are MOVED rather than rebuilt, so a row
- * that merely changed position keeps its scroll, focus and selection.
+ * Keyed: existing rows are moved, not rebuilt, so they keep scroll, focus and
+ * selection.
  */
 function patchKeyed(parent, oldNodes, newNodes) {
   const byKey = new Map();
@@ -127,8 +81,7 @@ function patchKeyed(parent, oldNodes, newNodes) {
       target = n.cloneNode(true);
     }
 
-    // Insert after the cursor, which walks the reconciled prefix. This is a
-    // no-op DOM call when the node is already in place.
+    // Insert after the cursor (a no-op when already in place).
     const next = cursor ? cursor.nextSibling : parent.firstChild;
     if (next !== target) parent.insertBefore(target, next);
     cursor = target;
@@ -141,15 +94,14 @@ function patchKeyed(parent, oldNodes, newNodes) {
 
 /** Patch a single node in place, or replace it if it cannot be reconciled. */
 function patchNode(parent, oldNode, newNode) {
-  // Different node kind, or a different tag: not the same thing. Replace.
+  // Different kind or tag: replace.
   if (oldNode.nodeType !== newNode.nodeType || oldNode.nodeName !== newNode.nodeName) {
     parent.replaceChild(newNode.cloneNode(true), oldNode);
     return;
   }
 
   if (oldNode.nodeType === Node.TEXT_NODE || oldNode.nodeType === Node.COMMENT_NODE) {
-    // Assigning an identical string still invalidates layout in some engines,
-    // and would collapse a live text selection. Compare first.
+    // Compare first: assigning an identical string can collapse a selection.
     if (oldNode.nodeValue !== newNode.nodeValue) oldNode.nodeValue = newNode.nodeValue;
     return;
   }
@@ -160,8 +112,7 @@ function patchNode(parent, oldNode, newNode) {
 function patchElement(oldEl, newEl) {
   patchAttrs(oldEl, newEl);
 
-  // The subtree is owned by another painter. Attributes are still synced above
-  // (so a class change on the container lands) but the children are its own.
+  // Owned by another painter: attributes synced above, children left alone.
   if (oldEl.hasAttribute(PRESERVE_ATTR)) return;
 
   patchFormState(oldEl, newEl);
@@ -178,14 +129,8 @@ function patchAttrs(oldEl, newEl) {
 }
 
 /**
- * Form state lives in PROPERTIES, not attributes — setting `value=` on an
- * element the user has typed into does nothing to what they see. So it is
- * synced explicitly, and ONLY when that element is not the one being typed in.
- *
- * THE FOCUSED ELEMENT IS NEVER OVERWRITTEN. Rewriting the value of a focused
- * input moves the caret to the end mid-word, which is exactly the defect that
- * made the org field unusable while the board polled. The server is not the
- * authority on a field the operator is still editing.
+ * Form state lives in properties, synced explicitly — never on the focused
+ * element, whose value is the operator's until they leave it.
  */
 function patchFormState(oldEl, newEl) {
   const tag = oldEl.nodeName;

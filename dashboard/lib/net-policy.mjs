@@ -1,44 +1,19 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// NET POLICY — who counts as a trusted peer, and is this request same-origin?
-// (used by the board server on every request.)
-//
-// Pure functions, no side effects, no I/O. Once the dashboard can be bound to
-// a LAN interface, two questions
-// arrive per request and both must be answered from the socket, not from
-// anything the client says about itself:
-//
-//   1. guardPeer / isTrustedPeer / classifyAddress — is the peer on a
-//      loopback, private (RFC 1918 / ULA) or link-local address? The LAN
-//      trust model is "same house, same wire": anything routable from the
-//      internet is refused even if the bind is wide.
-//   2. isSameOrigin — a browser on the LAN may be pointed at a malicious
-//      page; the Origin header is the browser's own (unforgeable-by-JS)
-//      statement of where the request came from. Writes must come from the
-//      dashboard's own origin, or from no browser at all.
-//
-// Fail-closed throughout: anything unparseable, unexpected or ambiguous is
-// refused. A classifier that guesses "trusted" on weird input is a hole; one
-// that guesses "untrusted" is an inconvenience.
-// ─────────────────────────────────────────────────────────────────────────────
+// NET POLICY — used by the board server on every request. Pure, no I/O; both
+// answers come from the socket and headers, never from what the client claims.
+//   guardPeer / classifyAddress: only loopback, private (RFC 1918 / ULA) and
+//     link-local peers are served; anything internet-routable is refused.
+//   isSameOrigin: writes must come from the dashboard's own origin, or from no
+//     browser at all.
+// Fail-closed: anything unparseable or ambiguous is refused.
 
 import { isIP } from "node:net";
 
-/**
- * Classifications that count as "on the local wire" for peer trust.
- * Deliberately EXCLUDES "unspecified" (0.0.0.0/:: is a bind wildcard, not a
- * peer identity — a socket claiming it is lying or broken) and "public".
- */
+/** Trusted classes. Not "unspecified" (a bind wildcard, not a peer) or public. */
 const TRUSTED_CLASSES = new Set(["loopback", "private", "link-local"]);
 
 /**
- * Expand a syntactically valid IPv6 address (net.isIP() === 6 — syntax is
- * guaranteed before this is called) into its eight 16-bit hextets.
- *
- * Handles "::" compression and a trailing embedded IPv4 ("fe80::1.2.3.4"),
- * which is rewritten to its two-hextet form first so the rest of the parser
- * sees only hex. Zero dependencies, ~15 lines, and it means classification
- * never depends on the canonical spelling an address arrived in —
- * "0:0:0:0:0:0:0:1" is loopback exactly like "::1".
+ * Expand a valid IPv6 address into eight hextets, handling "::" and a trailing
+ * embedded IPv4, so classification never depends on spelling.
  */
 function expandIPv6(addr) {
   let s = addr.toLowerCase();
@@ -83,18 +58,9 @@ function classifyIPv6(ip) {
 }
 
 /**
- * Classify an IP address string into exactly one of:
- * "loopback" | "private" | "link-local" | "unspecified" | "public" |
- * "unparseable".
- *
- * IPv4-mapped IPv6 ("::ffff:a.b.c.d", and the "::ffff:0:a.b.c.d" SIIT form)
- * is classified by its EMBEDDED IPv4 — the mapping is a rendering of a v4
- * peer, not a different peer. Only the compressed "::ffff:" spellings are
- * special-cased because that is what OS sockets actually report; a fully
- * expanded "0:0:0:0:0:ffff:a.b.c.d" falls through to generic IPv6 rules,
- * which can only ever classify it MORE conservatively (public, refused) —
- * never less. Everything unparseable is its own class so callers can tell
- * "internet" apart from "garbage" in logs.
+ * Classify an IP string: loopback | private | link-local | unspecified |
+ * public | unparseable. IPv4-mapped IPv6 ("::ffff:a.b.c.d") is classified by
+ * its IPv4; other spellings fall to the IPv6 rules, which can only be stricter.
  */
 export function classifyAddress(ip) {
   if (typeof ip !== "string" || ip === "") return "unparseable";
@@ -104,8 +70,7 @@ export function classifyAddress(ip) {
   if (lower.startsWith("::ffff:")) {
     let rest = ip.slice("::ffff:".length);
     if (rest.toLowerCase().startsWith("0:")) rest = rest.slice(2);
-    // Only strip when a real IPv4 is underneath; "::ffff:<anything else>"
-    // stays whole and takes the generic IPv6 path.
+    // Strip only when a real IPv4 is underneath.
     if (isIP(rest) === 4) candidate = rest;
   }
 
@@ -115,31 +80,17 @@ export function classifyAddress(ip) {
   return "unparseable";
 }
 
-/**
- * Is this peer on the local wire (loopback, RFC 1918 / ULA private, or
- * link-local)? Public, unspecified and unparseable addresses are NOT trusted:
- * the LAN switch widens the bind, it does not adopt the internet.
- */
+/** Loopback, private or link-local. Public, unspecified and unparseable are not. */
 export function isTrustedPeer(ip) {
   return TRUSTED_CLASSES.has(classifyAddress(ip));
 }
 
 /**
- * CSRF/origin check for state-changing requests.
- *
- *   - No Origin header (null/undefined/"") → true. curl, SSE reconnects and
- *     other non-browser clients never send one, and under the LAN trust model
- *     a non-browser client on a trusted peer address is allowed. (Browsers
- *     CANNOT omit Origin on POST — so "absent" reliably means "not a
- *     browser".)
- *   - Origin "null" → false, always. That is a sandboxed/opaque origin (a
- *     file:// page, a cross-origin iframe) — exactly the shape an embedded
- *     attacker page wears, and it must never write.
- *   - Otherwise compare URL-normalized origins: protocol + host + port,
- *     case- and default-port-insensitive, per the URL spec. Any parse
- *     failure on either side → false. A missing/empty hostHeader can't
- *     produce a meaningful origin either — refused rather than string-
- *     concatenated into "http://undefined".
+ * Origin check for writes:
+ *   no Origin header → true (non-browser clients; browsers always send one on POST)
+ *   Origin "null"    → false (sandboxed or file:// pages)
+ *   otherwise        → protocol + host + port must match the Host header;
+ *                      any parse failure or empty host → false
  */
 export function isSameOrigin(originHeader, hostHeader) {
   if (originHeader == null || originHeader === "") return true;
@@ -153,12 +104,8 @@ export function isSameOrigin(originHeader, hostHeader) {
 }
 
 /**
- * The one call a request handler needs: may this socket's peer proceed?
- *
- * Returns `{ ok, reason }` — reason is null when ok, and when refused it
- * NAMES the address and its classification, because "403 forbidden" in a log
- * tells an operator nothing about whether the refusal was correct. The
- * address is echoed from the socket, never from client-supplied data.
+ * May this socket's peer proceed? { ok, reason }; a refusal names the address
+ * (from the socket) and its class.
  */
 export function guardPeer(remoteAddress) {
   const klass = classifyAddress(remoteAddress);

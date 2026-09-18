@@ -1,34 +1,9 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// SOURCE: status-stream
-//
-// Reads the append-only per-attempt status stream (RC-5), which is the
-// AUTHORITATIVE record for gates, arm, verdict and token accounting.
-//
-//   <runs_root>/<run_dir>/manifest.status.jsonl
-//
-// Record shapes actually observed on disk (verified against
-// runs/cumulative.rebaseline-contract-20260810/manifest.status.jsonl):
-//
-//   type:"attempt"       — per attempt. carries memory_mode, failed_gates,
-//                          verdict, progress{problems_before/after,
-//                          resolved_count, turns, ...}
-//   type:"turn_terminal" — per anomalous turn ending. carries phase, terminal,
-//                          reason, retried.
-//
-// CADENCE WARNING (measured, not assumed): attempt records are appended at
-// ATTEMPT END — roughly every 30 minutes. This module is the source of truth,
-// but it is NOT the live pulse. run-log and opencode-serve carry that.
-//
-// THIS MODULE DOES NOT BUILD THE GATE WALL. It used to, from `failed_gates`,
-// which could only ever describe gates OBSERVED FAILING — no suite total, so a
-// gate that passed was never drawn at all. That derivation was a second,
-// weaker implementation of a fold the control plane already does properly from
-// the write-once roster plus per-gate `gate_results` (GET /api/wall), and it
-// rendered nowhere for months while still costing a walk of every cell on every
-// board tick. The wall has ONE source; this is not it.
-//
-// `failed_gates` is still read here, for `resolved_gates` and the arm delta.
-// ─────────────────────────────────────────────────────────────────────────────
+// SOURCE: status-stream — the active run's manifest.status.jsonl, the
+// authoritative per-attempt record (gates, arm, verdict, tokens). Records:
+// `attempt` (memory_mode, failed_gates, verdict, progress) and `turn_terminal`
+// (per anomalous turn). Appended at attempt end (~30 min), so it is not the live
+// pulse. It does not build the gate wall (that is GET /api/wall); failed_gates is
+// used here for resolved gates and the arm delta.
 
 import { parseGate, int, str, median, finalizeDelta, cellValidity } from "../contract.mjs";
 import { readTail, parseJsonl, activeRun } from "./_runtime.mjs";
@@ -40,10 +15,7 @@ export function describe() {
 }
 
 export async function read(ctx) {
-  // SCOPED TO ONE RUN. This module previously globbed every
-  // `<runs_root>/*/manifest.status.jsonl` and folded them all together, which
-  // unioned gates across abandoned runs onto one wall (see activeRun). The
-  // board shows the active run and nothing else.
+  // One run only (activeRun), never a fold across run folders.
   const run = await activeRun(ctx.runsRoot);
   if (!run?.statusPath) {
     return {
@@ -106,9 +78,7 @@ export async function read(ctx) {
           finalize_timeout_turns: sum(cells, "finalize_timeout_turns"),
           guard_aborts: sum(cells, "guard_aborted_turns"),
         },
-        // The honest cost of transport recovery: turns that really happened,
-        // burned real tokens, and are correctly excluded from the measurement.
-        // Sourced from RC-5 artifacts here rather than from the PROGRESS log.
+        // Real turns, excluded from the measurement, from the status records.
         recovered_turns:
           sum(cells, "guard_aborted_turns") + sum(cells, "finalize_timeout_turns"),
         serves: {
@@ -133,8 +103,8 @@ function nullSum(cells, key) {
 }
 
 /**
- * Fold a stream's records into per-cell state, keyed by sequence_index.
- * A cell's gate history is ordered by attempt so red→green is derivable.
+ * Fold a stream's records into per-cell state by sequence_index, gate history
+ * ordered by attempt.
  */
 function cellsFromRecords(records, dirName) {
   const by = new Map();
@@ -167,7 +137,7 @@ function cellsFromRecords(records, dirName) {
         served_failed: null,
         problems_before: null,
         problems_after: null,
-        // VOID-INSTRUMENT inputs (RUNBOOK rule 5.10) — see contract.cellValidity.
+        // Void-instrument inputs (RUNBOOK 5.10; see contract.cellValidity).
         full_green: false,
         terminal_reason: null,
         length_truncations: 0,
@@ -179,10 +149,7 @@ function cellsFromRecords(records, dirName) {
     const c = by.get(key);
 
     if (r.type === "turn_terminal") {
-      // BOTH RELAY STREAM DEATHS, one tile. `relay_stream_incomplete` joined
-      // the recoverable set on 2026-09-09 and is the same class of event as
-      // the finalize watchdog — counting only one of them would under-report
-      // the stream-death rate the operator is watching for.
+      // Both relay stream-death kinds count in one tile.
       const reason = str(r.reason);
       if (reason === "stream_finalize_timeout" || reason === "relay_stream_incomplete") {
         c.finalize_timeouts += 1;
@@ -190,13 +157,8 @@ function cellsFromRecords(records, dirName) {
       continue;
     }
 
-    // Only `attempt` records carry gate/progress state. The stream also carries
-    // `extraction` records (and may gain more types), which have no attempt,
-    // verdict or progress and must not be folded in as if they did. This was
-    // previously an unguarded fall-through that happened to be harmless only
-    // because the extraction record carries none of the keys read below —
-    // safety by luck. A record whose type is absent is an ARCHIVED
-    // first-generation attempt record and is still accepted.
+    // Only `attempt` records (or legacy ones with no type) carry gate/progress
+    // state; other types are skipped.
     if (r.type !== undefined && r.type !== "attempt") continue;
     const gates = Array.isArray(r.failed_gates)
       ? r.failed_gates
@@ -230,10 +192,7 @@ function cellsFromRecords(records, dirName) {
     c.injected_block_est_tokens = int(r.injected_block_est_tokens) ?? c.injected_block_est_tokens;
     c.truncated_turns = Math.max(c.truncated_turns, int(r.truncated_turns) ?? 0);
     c.guard_aborted_turns = Math.max(c.guard_aborted_turns, int(r.guard_aborted_turns) ?? 0);
-    // WO-NUDGE-INF-1 wiring fix: the second scoring-turn subtrahend is now
-    // carried on the authoritative status stream, so the exclusion is
-    // reconstructable from RC-5 artifacts alone rather than only from a log
-    // line. Absent on records written before that fix — stays 0, never null.
+    // Carried on the status stream; absent on older records stays 0.
     c.finalize_timeout_turns = Math.max(
       c.finalize_timeout_turns,
       int(r.finalize_timeout_turns) ?? 0,
@@ -243,17 +202,12 @@ function cellsFromRecords(records, dirName) {
     c.served_failed = int(p.served_failed) ?? c.served_failed;
     c.problems_before = int(p.problems_before) ?? c.problems_before;
     c.problems_after = int(p.problems_after) ?? c.problems_after;
-    // Terminal-attempt validity inputs. Read from the LAST attempt record seen
-    // for the cell, which is the terminal one — matching the scorecard, which
-    // takes the last attempt record carrying a progress dict.
+    // Validity inputs from the last (terminal) attempt, as the scorecard does.
     c.full_green = p.full_green === true;
     c.terminal_reason = str(r.terminal_reason) ?? c.terminal_reason;
     c.length_truncations = Math.max(c.length_truncations, int(r.length_truncations) ?? 0);
-    // The unrecovered-anomaly subset — every anomalous turn the harness did
-    // NOT recover — and the one cellValidity's void rule reads. The
-    // `truncated_turns` fold above stays: it is real data feeding
-    // honesty.transport.truncations, but it counts a looping model the
-    // harness caught and recovered too and must never decide validity.
+    // The unrecovered subset decides validity; truncated_turns (which counts
+    // recovered loops too) feeds only the transport honesty figure.
     c.unrecovered_anomaly_turns = Math.max(
       c.unrecovered_anomaly_turns,
       int(r.unrecovered_anomaly_turns) ?? 0,
@@ -266,9 +220,8 @@ function cellsFromRecords(records, dirName) {
 }
 
 /**
- * Gates that were red in an earlier attempt and are absent in the latest.
- * This is the ONLY defensible definition of "resolved" from this stream: a gate
- * never observed red cannot be evidence that anything was fixed.
+ * Gates red in an earlier attempt and absent in the latest — the only
+ * defensible "resolved" from this stream.
  */
 function resolvedGates(cell) {
   const attempts = [...cell.attempts.keys()].sort((a, b) => a - b);
@@ -279,17 +232,9 @@ function resolvedGates(cell) {
 }
 
 /**
- * Per-arm resolution: resolved gates / gates ever red, aggregated over cells.
- * Cells are the unit; `cells` is reported at equal weight to the rate, because
- * gates cluster within cell (see contract note).
- *
- * ONLY SCORED CELLS ENTER. `cellValidity` (contract.mjs) mirrors the
- * scorecard's canonical VOID-INSTRUMENT rule. Without this filter an aborted
- * or single-attempt cell contributed 0 to the numerator and its FULL gate
- * count to the denominator — a guaranteed 0% that is an artifact of how the
- * cell ended, not a measurement. On the control arm that manufactures apparent
- * lift for the memory arm at exactly the moment MIN_CELLS_PER_ARM unlocks the
- * delta. Excluded cells are counted and reported, never silently dropped.
+ * Per-arm resolution (resolved / ever red) over scored cells only
+ * (cellValidity); excluded cells are counted, never silently dropped. An
+ * unscored cell would add a guaranteed 0% and fake lift for the memory arm.
  */
 function buildDelta(cells) {
   const build = (arm) => {
@@ -347,7 +292,7 @@ function buildDelta(cells) {
   });
 }
 
-/** Build phase vs error phase, from what the stream actually distinguishes. */
+/** Build phase vs error phase. */
 function segmentsFor(cell) {
   const total = cell.wall_seconds ?? 0;
   if (!total) return [];
