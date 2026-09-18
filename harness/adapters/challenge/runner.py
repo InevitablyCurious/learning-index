@@ -201,6 +201,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         source_commit: str | None = None,
         seed_snapshot_tree: Path | None = None,
         seed_snapshot_drift: list[dict[str, str | None]] | None = None,
+        seed_snapshot_depth: int | None = None,
     ) -> None:
         # WO-GATE-ROSTER: the campaign's gate roster, written once at cell start
         # by the sequencer. Passed to `report.mjs` so it can report which gates
@@ -266,6 +267,8 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         self._seed_snapshot_drift = (
             list(seed_snapshot_drift) if seed_snapshot_drift else []
         )
+        self._seed_snapshot_depth = seed_snapshot_depth
+        self._produced_snapshot_id: str | None = None
         requested_max_attempts = int(max_attempts)
         if requested_max_attempts < 1:
             raise ValueError("max_attempts must be >= 1")
@@ -558,6 +561,75 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         except Exception:
             # Instrumentation never kills a run: swallow, the cell carries on.
             pass
+
+    def _capture_end_of_run_snapshot(
+        self,
+        *,
+        worktree: Path,
+        state_hash: str | None,
+        run_label: str,
+        session_id: str | None,
+        attempt: int,
+    ) -> str | None:
+        """Promote an exhausted seeded cell's final attempt into a new snapshot.
+
+        Dev-mode only: fires at the attempt ceiling, copies the final attempt's
+        checkpoint tree (already excluded + frozen) into runs/snapshots/ with
+        snapshot_depth = seed depth + 1, and records the new id on self so the
+        cell result can carry it back to the campaign (the run->snapshot join key).
+
+        Instrumentation: never raises, never fails a cell. Failure degrades to
+        "no snapshot" plus one warn notice.
+        """
+        import harness.adapters.challenge as _pkg
+
+        capture_snapshot = _pkg.capture_snapshot
+        try:
+            runs_root = Path(
+                os.environ.get("BENCH_RUNS_DIR") or (self._repo_root / "runs")
+            )
+            snapshot_root = runs_root / "snapshots"
+            snapshot_id = str(int(time.time() * 1000))
+            seed_depth = self._seed_snapshot_depth if self._seed_snapshot_depth else 1
+            provenance: dict[str, Any] = {
+                "snapshot_depth": seed_depth + 1,
+                "chunk_plan_hash": self._chunk_plan_hash,
+                "template_hash": self._template_hash,
+                "source_commit": self._source_commit,
+                "author_model": self.model,
+                "provider": self.model.partition("/")[0],
+                "memory_mode": self.memory_mode,
+                "run_id": run_label,
+                "cell_seq": getattr(self, "_cell_seq", None),
+            }
+            captured = capture_snapshot(
+                worktree=worktree,
+                snapshot_root=snapshot_root,
+                snapshot_id=snapshot_id,
+                state_hash=state_hash,
+                state_alg=STATE_ALG,
+                provenance=provenance,
+            )
+            if captured is None:
+                live = getattr(self, "_live", None)
+                if live is not None:
+                    live.notice(
+                        "harness",
+                        "snapshot_capture_failed",
+                        level="warn",
+                        cell_seq=getattr(self, "_cell_seq", None),
+                        session_id=session_id,
+                        detail={
+                            "snapshot_id": snapshot_id,
+                            "attempt": attempt,
+                            "kind": "end_of_run",
+                        },
+                    )
+                return None
+            self._produced_snapshot_id = snapshot_id
+            return snapshot_id
+        except Exception:
+            return None
 
     def _record_checkpoint(
         self,
@@ -1561,6 +1633,21 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         termination_reason = "transport_incomplete"
                     else:
                         termination_reason = "attempt_ceiling_reached"
+                        # WO-LI-SNAPSHOT-CHAIN: dev-mode only. A seeded cell that
+                        # exhausts its attempts promotes its FINAL attempt's
+                        # checkpoint tree into a new snapshot (snapshot_depth =
+                        # seed depth + 1). Skipped on harness_error (no checkpoint)
+                        # and transport_incomplete (breaks earlier, never here).
+                        if self._seed_snapshot_tree is not None:
+                            self._capture_end_of_run_snapshot(
+                                worktree=(
+                                    run_dir / "checkpoints" / f"cp-{attempt:02d}" / "tree"
+                                ),
+                                state_hash=attempt_state_hash,
+                                run_label=run_label,
+                                session_id=session_id,
+                                attempt=attempt,
+                            )
                     break
 
                 if worker_killed_reason in _HARNESS_LIMIT_REASONS:
@@ -1984,6 +2071,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
             problems_final=problems_final,
             attempt_reports=attempt_reports,
             worktree=str(worktree),
+            produced_snapshot_id=self._produced_snapshot_id,
             session_id=session_id,
             session_title=self._session_title,
             memory_mode=self.memory_mode,

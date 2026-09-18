@@ -579,6 +579,7 @@ class SessionRecord:
     build_phase_ran: bool = False
     skipped_build_cost: dict[str, Any] | None = None
     dev_mode: bool = False
+    produced_snapshot_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -608,6 +609,7 @@ class SessionRecord:
             "build_phase_ran": self.build_phase_ran,
             "skipped_build_cost": self.skipped_build_cost,
             "dev_mode": self.dev_mode,
+            "produced_snapshot_id": self.produced_snapshot_id,
         }
 
     @classmethod
@@ -652,6 +654,7 @@ class SessionRecord:
             if isinstance(d.get("skipped_build_cost"), Mapping)
             else None,
             dev_mode=bool(d.get("dev_mode", False)),
+            produced_snapshot_id=d.get("produced_snapshot_id"),
         )
 
     def set_phase(self, phase: SessionPhase) -> None:

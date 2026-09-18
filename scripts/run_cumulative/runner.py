@@ -1112,6 +1112,7 @@ class RealSessionRunner:
             # a copy so later sessions' revalidation cannot mutate what an
             # already-constructed runner holds.
             runner_kwargs["seed_snapshot_drift"] = list(self._seed_snapshot_drift)
+            runner_kwargs["seed_snapshot_depth"] = seed_snapshot.snapshot_depth
         if max_steps_per_attempt is not None:
             runner_kwargs["max_steps_per_attempt"] = max_steps_per_attempt
         if run_timeout_s is not None:
@@ -1138,6 +1139,7 @@ class RealSessionRunner:
         # argument so an adapter that predates the live stream still works.
         runner._cell_seq = int(session.sequence_index)
         result = runner.run_cell(state.run_label, state.run_dir)
+        session.produced_snapshot_id = getattr(result, "produced_snapshot_id", None)
         state.last_session_id = result.session_id or state.last_session_id
 
         # WO-ERRDATA-20-CAP: accumulate per-cell error counts into the

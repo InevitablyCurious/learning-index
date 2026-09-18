@@ -216,3 +216,4 @@ class ChallengeCellResult:
     # surfaced to the run-manifest status stream so the prod dashboard can
     # join exported session-DB rows to bench cells.
     session_title: str | None = None
+    produced_snapshot_id: str | None = None
