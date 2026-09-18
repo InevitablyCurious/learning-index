@@ -1,55 +1,18 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// SOURCE: learning
+// SOURCE: learning — behind the LEARNING panel: the model's own in-session
+// account of what it learned (the plugin's mark-keyed master), the gate ×
+// attempt matrix, and the harness's learning ledger.
 //
-// The in-session extraction capture — the model's OWN account of what it learned
-// this cell, merged by the vendored plugin into a mark-keyed master
-// (`reassembler-master/3.0`), plus the per-attempt gate matrix and the
-// harness-produced learning ledger. This is the surface behind the LEARNING
-// panel (panels/learning.js): MATRIX (gate × attempt), CLAIMS (trajectories +
-// knowledge + evidence + code-derived edit ranges), LIVE (capture bookkeeping +
-// session history).
+//   predicate-outcomes.jsonl  run-level, pass AND fail per (gate, attempt)
+//   gate-roster.json          the gate universe (rows)
+//   learning-ledger.json      harness-produced at cell end: window labels,
+//                             claim distribution — never derived here
+//   data/cells/<ts>-<label>/insession/<sid>/master.json + changed-lines.json
+//                             the plugin capture, exported at teardown
 //
-// ── WHAT IS READ, AND FROM WHERE ────────────────────────────────────────────
-//
-//   predicate-outcomes.jsonl        run-level, appended per (gate, attempt).
-//                                   The MATRIX's only source: pass AND fail, so
-//                                   a gate that passed is drawn, unlike the
-//                                   status stream which carries failures only.
-//   gate-roster.json                run-level, write-once. The gate universe
-//                                   (id, phase, title) the matrix rows come from.
-//   learning-ledger.json            cell-level, produced by the harness at cell
-//                                   end. Window labels + claim distribution +
-//                                   mark→window attribution. NEVER derived here.
-//   data/cells/<unix_ts>-<run_label>/insession/<sid>/master.json +
-//   changed-lines.json                  the plugin's in-session capture,
-//                                   exported host-side at teardown by
-//                                   backgammon.py (`_export_cell_telemetry`).
-//                                   ON cells export from the worktree state
-//                                   dir; OFF cells from the blind mount outside
-//                                   the worktree — an absent OFF export is
-//                                   stated, never patched with a synthesis.
-//
-// ── THE HONESTY RULES THIS MODULE CARRIES ────────────────────────────────────
-//
-//   1. THE MATRIX DENOMINATOR IS THE ENUMERATED ROSTER, or it is null. The
-//      roster is written once at run start; a run predating it has none, and
-//      that renders as a stated reason, never a fabricated count.
-//   2. WINDOW LABELS COME FROM learning-ledger.json, never computed here. Two
-//      definitions of "which window did this claim appear in" is exactly the
-//      drift the board exists to expose. Absent ledger = unobserved.
-//   3. session_goal.text in the master is a MOCKED placeholder (the plugin does
-//      not capture the real goal yet). The panel renders the goal from the task
-//      manifest, never from the master.
-//   4. The master is append-only in effect (first-seen-wins, evidence extends).
-//      A shrink across polls is a capture anomaly; it is reported in
-//      capture_state, never smoothed.
-//
-// OFF-CELL CAPTURE GAP: the OFF worktree is deliberately unbound for arm
-// comparability (backgammon.py removes .okp at cell start), so the plugin
-// routes state to a blind mount outside the worktree; the teardown export
-// copies that tree into data/cells/ when present. OFF rows read `unwired`
-// with that reason. No OFF master is ever synthesised.
-// ─────────────────────────────────────────────────────────────────────────────
+// The matrix denominator is the roster or null. The master's session_goal is a
+// placeholder; the goal comes from the manifest. A master that shrinks between
+// polls is reported as a capture anomaly. OFF cells have no persisted capture
+// and read unwired; nothing is synthesised.
 
 import { int, str } from "../contract.mjs";
 import {
@@ -69,18 +32,13 @@ export function describe() {
   return "in-session extraction master + gate×attempt matrix + learning ledger";
 }
 
-/** Phases per cell: 1 build + 4 repair/troubleshooting rounds (max_attempts 5). */
+/** 1 build + 4 repair rounds (max_attempts 5). */
 export const PHASES_PER_CELL = 5;
 
-/**
- * The four capture states, in the words the panel renders them. Every state is
- * carried; the panel shows all four and the CURRENT one is what varies.
- */
+/** The four capture states, in the panel's words. */
 export const CAPTURE_STATES = ["unwired", "unobserved", "captured", "anomaly"];
 
-// Cross-poll state for ANOMALY detection: the master is append-only in effect,
-// so a mark count that shrank across polls is a capture defect. Keyed by
-// session id, reset on session rotation.
+// Cross-poll mark count for anomaly detection, per session id.
 let lastMarks = null;
 
 export async function read(ctx) {
@@ -89,25 +47,15 @@ export async function read(ctx) {
     return { ok: false, reason: "no active run directory — nothing to learn from yet" };
   }
 
-  // ── THE MATRIX: roster (denominator + rows) × outcomes (pass AND fail) ─────
+  // ── THE MATRIX ── roster (rows) × outcomes (pass and fail).
   const rosterPath = join(run.dir, "gate-roster.json");
   const roster = await readJson(rosterPath);
   const outcomesPath = join(run.dir, "predicate-outcomes.jsonl");
   const outcomes = parseJsonl(await readTail(outcomesPath));
 
-  // ── THE DURING-THE-RUN HALF OF THE MATRIX ─────────────────────────────────
-  // `predicate-outcomes.jsonl` is written in run_cumulative.py's `finally`
-  // block — AFTER the whole campaign exits. Reading only it meant that for the
-  // entire life of a run this panel rendered the roster skeleton with every
-  // cell null and the session `unresolved`, which is precisely the defect
-  // LIVE-STREAM.md says the live stream exists to close. It was never wired up
-  // here. This is that wiring.
-  //
-  // The post-mortem file stays AUTHORITATIVE: live rows are laid down first and
-  // predicate-outcome rows overwrite them per (gate, attempt), so a completed
-  // run reads exactly as it did before. Nothing is inferred — a `gate.result`
-  // is the runner's own recorded verdict, the same fact the post-mortem row
-  // carries, published at the moment it became true.
+  // During the run, gate.result records from the live stream fill the matrix
+  // (predicate-outcomes.jsonl is written only when the campaign exits). The
+  // post-mortem file stays authoritative and overwrites per (gate, attempt).
   const livePath = await liveStreamPath(run.dir);
   const liveRecs = livePath ? parseJsonl(await readTail(livePath)) : [];
   const liveOutcomes = [];
@@ -136,29 +84,26 @@ export async function read(ctx) {
   const mergedOutcomes = [...liveOutcomes, ...outcomes];
   const matrix = mergedOutcomes.length || roster ? buildMatrix(roster, mergedOutcomes) : null;
 
-  // ── SESSION RESOLUTION ────────────────────────────────────────────────────
-  // The newest predicate-outcome line names the session once the run is over;
-  // while it runs, `cell.start` named it before the model took a single turn.
+  // ── SESSION ── from the newest predicate outcome, or cell.start while running.
   const newest = outcomes[outcomes.length - 1] ?? null;
   const sessionId = str(newest?.session_id) ?? liveSession ?? null;
   const manifest = await readJson(join(run.dir, "manifest.json"));
   const cell = {
     memory_mode: str(newest?.memory_mode) ?? liveArm ?? null,
     sequence_index: int(newest?.sequence_index) ?? liveCellSeq ?? null,
-    // The model is a manifest fact (roster[0]), never an outcome field.
+    // The model is a manifest fact.
     model: str(manifest?.roster?.[0]?.model) ?? null,
     org_id: str(newest?.org_id) ?? str(manifest?.org_id) ?? null,
-    // The real session goal reads from the manifest task — the master's
-    // session_goal.text is a MOCKED placeholder and is never the goal.
+    // The goal is the manifest task (the master's goal is a placeholder).
     task: str(manifest?.task) ?? null,
   };
   const attemptCurrent =
     mergedOutcomes.reduce((m, o) => Math.max(m, int(o.attempt) ?? 0), 0) || null;
 
-  // ── IN-SESSION CAPTURES: teardown-exported cells under data/cells/ ─────────
+  // ── IN-SESSION CAPTURES ── under data/cells/.
   const sessions = await collectSessions(join(ctx.benchRoot, "data", "cells"));
 
-  // ── THE ACTIVE SESSION'S MASTER + EDIT LOG ─────────────────────────────────
+  // ── THE ACTIVE SESSION'S MASTER + EDIT LOG ──
   let master = null;
   let changedLines = null;
   let captureState = "unobserved";
@@ -178,9 +123,7 @@ export async function read(ctx) {
         valid,
         validation_errors: errors,
       };
-      // ANOMALY DETECTION: the master is append-only in effect (first-seen-wins,
-      // evidence only extends), so a mark count that SHRANK since the last poll
-      // is a capture defect — reported in words, never silently re-baselined.
+      // A mark count that shrank since the last poll is a capture defect, reported.
       const marks = Array.isArray(m.merge?.marks_seen) ? m.merge.marks_seen.length : 0;
       if (lastMarks && lastMarks.sessionId === sessionId && marks < lastMarks.marks) {
         captureState = "anomaly";
@@ -199,11 +142,11 @@ export async function read(ctx) {
       };
     }
   } else if (active && active.arm === "off") {
-    // The OFF-cell gap: a capture exists upstream but never reached the host.
+    // The OFF-cell gap: the capture never reached the host.
     captureState = "unwired";
   }
 
-  // ── THE LEARNING LEDGER (harness-produced; absent = unobserved) ────────────
+  // ── THE LEARNING LEDGER ── harness-produced; absent = unobserved.
   const ledger = await findLedger(run.dir);
 
   return {
@@ -234,17 +177,12 @@ export async function read(ctx) {
   };
 }
 
-// ── MATRIX ──────────────────────────────────────────────────────────────────
+// ── MATRIX ──
 
 /**
- * Join the write-once roster (rows) with per-attempt outcomes (cells).
- *
- * Returns null when neither exists — a null matrix is a designed state, never
- * an empty grid. The roster provides `id`, `phase`, `title`; the outcomes
- * provide `pass`/`fail` per (gate_id, attempt). When the roster is absent the
- * matrix still builds from outcome gate_ids (grouped by gate_phase), with the
- * title falling back to the id — the denominator is then null, because the
- * true suite size is unknowable without a roster.
+ * Join the roster (rows) with per-attempt outcomes; null when neither exists.
+ * Without a roster the rows come from the outcomes (grouped by phase, titled by
+ * id) and the denominator is null.
  */
 export function buildMatrix(roster, outcomes) {
   const rosterGates = Array.isArray(roster?.gates) ? roster.gates : null;
@@ -324,22 +262,17 @@ function attemptsOutcomes(perAttempt) {
   return out;
 }
 
-// ── INSESSION CAPTURE READ (teardown export under data/cells/) ──────────────
+// ── IN-SESSION CAPTURE READ ──
 
 /**
- * Read the teardown-exported cell dirs under `data/cells/` (one level) for
- * `insession/<sid>/` captures — backgammon.py `_export_cell_telemetry` copies
- * the tree host-side before container teardown. Each cell dir is named
- * `<unix_ts>-<run_label>` and the label is itself hyphenated, so the arm is
- * derived from the part after the FIRST hyphen. Returns one entry per session
- * found, newest first, capped at 20.
+ * Read teardown-exported cell folders under data/cells/ for
+ * insession/<sid>/ captures; newest first, capped at 20.
  */
 export async function collectSessions(cellsDir) {
   const found = [];
   for (const ent of await listDir(cellsDir)) {
     if (!ent.isDirectory() || ent.name.startsWith(".")) continue;
-    // The export layer holds finished cells only, but the skip is kept so a
-    // stray agent-grown tree can never make a 2s-tick read unbounded.
+    // Skipped so a stray tree can never make a 2s read unbounded.
     if (ent.name === "node_modules" || ent.name === "session-db") continue;
     const arm = armFromLabel(ent.name);
     const insessionDir = join(cellsDir, ent.name, "insession");
@@ -353,12 +286,8 @@ export async function collectSessions(cellsDir) {
 }
 
 /**
- * The arm from a cell dir name `<unix_ts>-<run_label>`. The label is itself
- * hyphenated, so it is the part after the FIRST hyphen only; within it, `on`
- * and `off` match as whole tokens delimited by `-`/`_`/start/end — never as
- * bare substrings, because labels contain other words (e.g.
- * `cumulative-0000-off-orcarouter-...` → "off", legacy `backgammon-on` →
- * "on", `session-0731` → null).
+ * The arm from `<unix_ts>-<run_label>`: on/off as whole tokens after the first
+ * hyphen (`cumulative-0000-off-…` → off, `session-0731` → null).
  */
 export function armFromLabel(cellDirName) {
   const name = String(cellDirName ?? "");
@@ -415,7 +344,7 @@ async function describeSession(sessionId, sessionDir, arm) {
   };
 }
 
-// ── LEARNING LEDGER ─────────────────────────────────────────────────────────
+// ── LEARNING LEDGER ──
 
 async function findLedger(runDir) {
   async function walk(dir, depth) {
@@ -438,13 +367,11 @@ async function findLedger(runDir) {
   return walk(runDir, 0);
 }
 
-// ── MASTER VALIDATION (mirrors the plugin's validateMaster — three checks) ──
+// ── MASTER VALIDATION ── the plugin's own three checks.
 
 /**
- * The same three deterministic checks the plugin runs on every capture:
- * duplicate normalized trajectory slugs, unresolved parent labels, parent-chain
- * cycles. Carried so a disagreement between this board and the plugin's own log
- * is surfaced, never smoothed.
+ * Duplicate trajectory slugs, unresolved parent labels, parent cycles —
+ * carried so a disagreement with the plugin's log shows.
  */
 export function normalizeLabel(label) {
   return String(label ?? "").toLowerCase().trim().replace(/\s+/g, "_").replace(/[^\w]/g, "");
