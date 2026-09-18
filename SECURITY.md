@@ -53,6 +53,5 @@ Out of scope:
 - Issues that require physical access to a machine already running the software
 - Findings that depend on the documented development defaults (the local
   `docker compose` stack ships deliberately weak credentials and is bound to
-  loopback by default; LAN exposure is opt-in via `REMOTE_VIEWING=enabled` plus
-  an explicit LAN address, per the dashboard README — see the repository's
-  environment documentation)
+  loopback by default; LAN exposure is opt-in, per the dashboard README's
+  "Remote viewing" section)

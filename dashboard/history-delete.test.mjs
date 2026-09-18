@@ -32,9 +32,6 @@ function withFetch(handler, fn) {
   return fn(calls).finally(() => { globalThis.fetch = real; });
 }
 const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
-const base = (url) => url.endsWith("/api/control-base")
-  ? json(200, { ok: true, base_url: "http://c:7718" })
-  : null;
 
 const PLAN = {
   ok: true,
@@ -60,7 +57,7 @@ test("the row offers delete, carrying the resolvable pair", () => {
 test("preview shows the SERVER's restatement verbatim — the browser never rewords it", async () => {
   clear();
   await withFetch(
-    async (url) => base(url) ?? json(200, PLAN),
+    async (url) => json(200, PLAN),
     async (calls) => {
       const p = await previewDelete("backups", "1789023699/1788976174/x");
       assert.equal(p.token, PLAN.token);
@@ -81,7 +78,7 @@ test("nothing is confirmable until a preview has been taken", async () => {
   clear();
   cancelDelete();
   await withFetch(
-    async (url) => base(url) ?? json(200, { ok: true }),
+    async (url) => json(200, { ok: true }),
     async (calls) => {
       assert.equal(await confirmDelete(), null);
       assert.equal(calls.length, 0, "no request at all without a plan");
@@ -93,7 +90,6 @@ test("confirm sends the preview's token, and reports what was removed", async ()
   clear();
   await withFetch(
     async (url) =>
-      base(url) ??
       (url.endsWith("/preview")
         ? json(200, PLAN)
         : url.endsWith("/api/history/delete")
@@ -120,7 +116,7 @@ test("confirm sends the preview's token, and reports what was removed", async ()
 test("cancel drops the plan and deletes nothing", async () => {
   clear();
   await withFetch(
-    async (url) => base(url) ?? json(200, PLAN),
+    async (url) => json(200, PLAN),
     async (calls) => {
       await previewDelete("backups", "x");
       cancelDelete();
@@ -135,7 +131,6 @@ test("a refused preview toasts the reason and offers NO confirmation", async () 
   clear();
   await withFetch(
     async (url) =>
-      base(url) ??
       json(422, {
         ok: false,
         code: "unrecognised_layout",
@@ -158,7 +153,6 @@ test("the live-tree refusal reaches the operator with what to do instead", async
   clear();
   await withFetch(
     async (url) =>
-      base(url) ??
       json(409, {
         ok: false,
         code: "active_tree",
@@ -179,7 +173,6 @@ test("a stale token is refused at confirm and surfaces as its own toast", async 
   clear();
   await withFetch(
     async (url) =>
-      base(url) ??
       (url.endsWith("/preview")
         ? json(200, PLAN)
         : json(400, {

@@ -59,8 +59,7 @@ export function maybeAutoSelect(board) {
   }
   if (autoSuppressed) return;
 
-  const base = board?.control?.base_url;
-  if (!base) return;
+  if (!board?.control) return;
 
   const rows = board?.models_ledger?.baseline_rows ?? [];
   const b = rows.find(
@@ -73,7 +72,7 @@ export function maybeAutoSelect(board) {
   const key = `${b.run_dir}::${b.sequence_index}`;
   if (autoTried === key) return;
   setAutoTried(key);
-  void selectHistoricalRun(base, {
+  void selectHistoricalRun({
     run_dir: b.run_dir,
     sequence_index: b.sequence_index,
     label: `${b.id} · ${b.model ?? "unknown model"}`,
@@ -115,8 +114,8 @@ export function clearHistoricalRun() {
  * Returns true when it actually read — the caller re-renders on true, and a
  * re-selection of what is already shown reports false and does nothing.
  */
-export async function selectHistoricalRun(base, sel) {
-  if (!base || !sel || typeof sel.run_dir !== "string" || !sel.run_dir) return false;
+export async function selectHistoricalRun(sel) {
+  if (!sel || typeof sel.run_dir !== "string" || !sel.run_dir) return false;
   if (!Number.isInteger(sel.sequence_index) || sel.sequence_index < 0) return false;
   if (hist && histKey(hist.sel) === histKey(sel)) return false;
 
@@ -125,8 +124,8 @@ export async function selectHistoricalRun(base, sel) {
   const run = encodeURIComponent(sel.run_dir);
   const seq = sel.sequence_index;
   const [events, backendRes] = await Promise.all([
-    histFetch(`${base}/api/events?run_dir=${run}&sequence_index=${seq}`),
-    histFetch(`${base}/api/backend-feed?run_dir=${run}&sequence_index=${seq}`),
+    histFetch(`/api/events?run_dir=${run}&sequence_index=${seq}`),
+    histFetch(`/api/backend-feed?run_dir=${run}&sequence_index=${seq}`),
   ]);
   // The operator may have switched away or gone back to live while this was in
   // flight. Landing a stale read on top of their choice is how a card ends up
@@ -173,12 +172,12 @@ const BACKEND_MIN_INTERVAL_MS = 2000;
  * the ledger's stats strip uses, and for the same reason: the panel must draw
  * from what is already known rather than block the board on a fetch.
  */
-export function maybeRefreshBackend(base) {
-  if (!base || backendInFlight) return;
+export function maybeRefreshBackend() {
+  if (backendInFlight) return;
   const now = Date.now();
   if (backend.loaded && now - backendAt < BACKEND_MIN_INTERVAL_MS) return;
   setBackendInFlight(true);
-  fetch(`${base}/api/backend-feed`)
+  fetch(`/api/backend-feed`)
     .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
     .then((body) => {
       setBackend({ ...body, loaded: true, unreachable: false });

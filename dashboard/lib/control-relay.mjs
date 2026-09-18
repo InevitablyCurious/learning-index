@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // CONTROL RELAY — SAME-ORIGIN CONTROL-PLANE PROXY FOR THE BOARD
-// (WO-RV02, the REMOTE_VIEWING LAN switch.)
+// (WO-RV02.)
 //
 // Once the dashboard can be reached from the LAN, the browser board can no
 // longer talk to the loopback control plane (:8718) directly — a page served

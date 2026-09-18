@@ -13,9 +13,6 @@
 // The ONLY caller of boot() is the inline module script in history.html.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Same-origin base: the board proxies /api/history* to the control plane. */
-export const CONTROL_BASE = "";
-
 /** Escape everything that reaches the DOM. Paths and reasons are data, not HTML. */
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({
@@ -28,9 +25,7 @@ function esc(s) {
 
 const runsUi = { runs: [], loading: false, error: null };
 // "view result": which row is booting, what is playing, and the last refusal.
-// `base` is the control plane's PUBLIC address, stated by the board at
-// /api/control-base — never inferred from this page's own port.
-const playUi = { base: null, busy: null, playing: null, error: null };
+const playUi = { busy: null, playing: null, error: null };
 // Delete is PERMANENT and is two steps: a preview that restates exactly what
 // goes, and a confirm carrying the token that binds to what is on disk. `plan`
 // holds the pending preview; nothing is removed until it is confirmed.
@@ -355,16 +350,16 @@ function paint() {
 }
 
 // ── loaders ─────────────────────────────────────────────────────────────────
-// House pattern (panels/restore.js): take `base` as a param, mutate module
-// state, re-paint. Errors surface the server's `reason` — never a spinner.
+// Every request is same-origin; the dashboard relays it to the control plane.
+// Loaders mutate module state and re-paint. Errors surface the server's `reason` — never a spinner.
 
 /** GET /api/history → the run list, most-recent-first. */
-export async function loadRuns(base) {
+export async function loadRuns() {
   runsUi.loading = true;
   runsUi.error = null;
   paint();
   try {
-    const res = await fetch(`${base}/api/history`);
+    const res = await fetch(`/api/history`);
     const data = await res.json().catch(() => null);
     if (!res.ok || data?.ok === false) {
       runsUi.error = data?.reason ?? `HTTP ${res.status}`;
@@ -384,14 +379,14 @@ export async function loadRuns(base) {
 }
 
 /** GET /api/history/checkpoints → check-points + stored diffs for one run's cell. */
-export async function loadCheckpoints(base, run, cell) {
+export async function loadCheckpoints(run, cell) {
   cpsUi.loading = true;
   cpsUi.error = null;
   cpsUi.checkpoints = null;
   cpsUi.diffs = null;
   paint();
   try {
-    const url = `${base}/api/history/checkpoints?run=${encodeURIComponent(run)}&cell=${encodeURIComponent(cell)}`;
+    const url = `/api/history/checkpoints?run=${encodeURIComponent(run)}&cell=${encodeURIComponent(cell)}`;
     const res = await fetch(url);
     const data = await res.json().catch(() => null);
     if (!res.ok || data?.ok === false) {
@@ -415,14 +410,14 @@ export async function loadCheckpoints(base, run, cell) {
 }
 
 /** GET /api/history/diff → raw unified-diff text for one stored diff file. */
-export async function loadDiff(base, run, cell, diffPath) {
+export async function loadDiff(run, cell, diffPath) {
   diffUi.loading = true;
   diffUi.error = null;
   diffUi.diffText = null;
   diffUi.diffPath = diffPath;
   paint();
   try {
-    const url = `${base}/api/history/diff?run=${encodeURIComponent(run)}&cell=${encodeURIComponent(cell)}&path=${encodeURIComponent(diffPath)}`;
+    const url = `/api/history/diff?run=${encodeURIComponent(run)}&cell=${encodeURIComponent(cell)}&path=${encodeURIComponent(diffPath)}`;
     const res = await fetch(url);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -441,22 +436,6 @@ export async function loadDiff(base, run, cell, diffPath) {
     diffUi.loading = false;
   }
   paint();
-}
-
-/**
- * Where the browser posts. Stated by the board at /api/control-base, because a
- * page that guessed :8718 from its own :8717 would be deriving a fact the
- * producer can state — and would guess wrong the moment either is remapped.
- */
-export async function loadControlBase(base) {
-  try {
-    const res = await fetch(`${base}/api/control-base`);
-    const data = await res.json().catch(() => null);
-    playUi.base = typeof data?.base_url === "string" ? data.base_url : null;
-  } catch {
-    playUi.base = null;
-  }
-  return playUi.base;
 }
 
 /**
@@ -481,9 +460,9 @@ export function playUrl(port, serverUrl) {
 }
 
 /** GET /api/play → what is being played right now, or null. Same-origin proxy. */
-export async function loadPlaying(base) {
+export async function loadPlaying() {
   try {
-    const res = await fetch(`${base}/api/play`);
+    const res = await fetch(`/api/play`);
     const data = await res.json().catch(() => null);
     const playing = data?.playing ?? null;
     // The spawner's url names the bench host; the operator may be elsewhere
@@ -511,15 +490,7 @@ export async function startPlay(run, cell, openTab) {
   playUi.busy = `${run}::${cell}`;
   paint();
   try {
-    const base = playUi.base ?? (await loadControlBase(CONTROL_BASE));
-    if (!base) {
-      playUi.error =
-        "the board does not know where the control plane is, so it cannot start anything — " +
-        "it is not running, or the dashboard was started without it.";
-      toast({ code: "control_plane_unknown", reason: playUi.error, where: `${run} · ${cell}` });
-      return null;
-    }
-    const res = await fetch(`${base}/api/play/start`, {
+    const res = await fetch(`/api/play/start`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ run, cell }),
@@ -598,8 +569,7 @@ export async function startPlay(run, cell, openTab) {
 export async function stopPlay() {
   playUi.error = null;
   try {
-    const base = playUi.base ?? (await loadControlBase(CONTROL_BASE));
-    if (base) await fetch(`${base}/api/play/stop`, { method: "POST" });
+    await fetch(`/api/play/stop`, { method: "POST" });
     playUi.playing = null;
   } catch (err) {
     playUi.error = String(err?.message ?? err);
@@ -620,16 +590,7 @@ export async function previewDelete(run, cell) {
   delUi.busy = `${run}::${cell}`;
   paint();
   try {
-    const base = playUi.base ?? (await loadControlBase(CONTROL_BASE));
-    if (!base) {
-      toast({
-        code: "control_plane_unknown",
-        reason: "the board does not know where the control plane is, so it cannot delete anything.",
-        where: `${run} · ${cell}`,
-      });
-      return null;
-    }
-    const res = await fetch(`${base}/api/history/delete/preview`, {
+    const res = await fetch(`/api/history/delete/preview`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ run, cell }),
@@ -666,8 +627,7 @@ export async function confirmDelete() {
   delUi.busy = `${plan.run}::${plan.cell}`;
   paint();
   try {
-    const base = playUi.base ?? (await loadControlBase(CONTROL_BASE));
-    const res = await fetch(`${base}/api/history/delete`, {
+    const res = await fetch(`/api/history/delete`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ run: plan.run, cell: plan.cell, confirm: plan.token }),
@@ -688,7 +648,7 @@ export async function confirmDelete() {
       bad: false,
     });
     delUi.plan = null;
-    await loadRuns(CONTROL_BASE);
+    await loadRuns();
     return data;
   } catch (err) {
     toast({
@@ -730,7 +690,7 @@ function onRunClick(run, cell) {
   selection.cp = null;
   clearDiff();
   // loadCheckpoints paints the loading state (and the cleared diff pane) first.
-  loadCheckpoints(CONTROL_BASE, selection.run, selection.cell);
+  loadCheckpoints(selection.run, selection.cell);
 }
 
 function onCpClick(cpId) {
@@ -742,7 +702,7 @@ function onCpClick(cpId) {
 
 function onFileClick(diffPath) {
   if (!diffPath || !selection.run) return;
-  loadDiff(CONTROL_BASE, selection.run, selection.cell, diffPath);
+  loadDiff(selection.run, selection.cell, diffPath);
 }
 
 /**
@@ -806,7 +766,6 @@ export function boot() {
     });
   }
 
-  loadRuns(CONTROL_BASE);
-  loadControlBase(CONTROL_BASE);
-  loadPlaying(CONTROL_BASE);
+  loadRuns();
+  loadPlaying();
 }

@@ -12,7 +12,6 @@ import test from "node:test";
 
 import {
   boot,
-  loadControlBase,
   loadPlaying,
   playUrl,
   renderPlayNote,
@@ -108,12 +107,9 @@ function withLocation(hostname, fn) {
     });
 }
 
-test("startPlay: posts to the control plane the BOARD named, not a guessed port", async () => {
+test("startPlay: posts same-origin to /api/play/start", async () => {
   await withFetch(
     async (url) => {
-      if (url.endsWith("/api/control-base")) {
-        return json(200, { ok: true, base_url: "http://bench-host:7718" });
-      }
       return json(200, { ok: true, url: "http://localhost:51234/", port: 51234, pid: 7 });
     },
     async (calls) => {
@@ -122,7 +118,7 @@ test("startPlay: posts to the control plane the BOARD named, not a guessed port"
       assert.equal(r.port, 51234);
       const post = calls.find((c) => c.url.endsWith("/api/play/start"));
       assert.ok(post, "must post to /api/play/start");
-      assert.equal(post.url, "http://bench-host:7718/api/play/start");
+      assert.equal(post.url, "/api/play/start");
       assert.equal(post.init.method, "POST");
       assert.deepEqual(JSON.parse(post.init.body), {
         run: "1789023699",
@@ -138,9 +134,7 @@ test("startPlay: posts to the control plane the BOARD named, not a guessed port"
 test("startPlay: a refusal reason reaches the page and no tab is opened", async () => {
   await withFetch(
     async (url) =>
-      url.endsWith("/api/control-base")
-        ? json(200, { ok: true, base_url: "http://c:7718" })
-        : json(409, { ok: false, code: "port_ignored", reason: "this build ignores the PORT" }),
+      json(409, { ok: false, code: "port_ignored", reason: "this build ignores the PORT" }),
     async () => {
       const opened = [];
       const r = await startPlay("r", "c", (u) => opened.push(u));
@@ -151,28 +145,9 @@ test("startPlay: a refusal reason reaches the page and no tab is opened", async 
   );
 });
 
-test("startPlay: says so plainly when the board cannot name a control plane", async () => {
-  await withFetch(
-    async () => json(500, {}),
-    async (calls) => {
-      // Clear any base learned by an earlier test: a failed read sets it to
-      // null, which is exactly the state this case is about.
-      await loadControlBase("");
-      calls.length = 0;
-      const r = await startPlay("r", "c", () => {});
-      assert.equal(r, null);
-      assert.ok(
-        !calls.some((c) => c.url.includes("/api/play/start")),
-        "must not post into the void",
-      );
-    },
-  );
-});
-
 test("stopPlay: posts stop and never throws when the control plane is unreachable", async () => {
   await withFetch(
     async (url) => {
-      if (url.endsWith("/api/control-base")) return json(200, { ok: true, base_url: "http://c:7718" });
       throw new Error("connection refused");
     },
     async () => {
@@ -217,9 +192,7 @@ test("startPlay: the tab it opens is reachable from the operator's device", asyn
   await withLocation("192.168.50.140", () =>
     withFetch(
       async (url) =>
-        url.endsWith("/api/control-base")
-          ? json(200, { ok: true, base_url: "http://c:7718" })
-          : json(200, { ok: true, url: "http://localhost:51234/", port: 51234, pid: 7 }),
+        json(200, { ok: true, url: "http://localhost:51234/", port: 51234, pid: 7 }),
       async () => {
         const opened = [];
         await startPlay("r", "c", (u) => opened.push(u));
@@ -247,7 +220,7 @@ test("loadPlaying: the stored game keeps the spawner's port but this browser's h
           },
         }),
       async () => {
-        const p = await loadPlaying("");
+        const p = await loadPlaying();
         assert.equal(p.url, "http://192.168.50.140:51234/");
         assert.equal(p.port, 51234);
         assert.equal(p.pid, 7);
@@ -296,9 +269,7 @@ test("boot: clicking the play control starts a play and does NOT select the row"
   try {
     await withFetch(
       async (url) =>
-        url.endsWith("/api/control-base")
-          ? json(200, { ok: true, base_url: "http://c:7718" })
-          : json(200, { ok: true, playing: null, url: "http://localhost:1/", port: 1, pid: 2 }),
+        json(200, { ok: true, playing: null, url: "http://localhost:1/", port: 1, pid: 2 }),
       async (calls) => {
         boot();
         assert.equal(handlers.length, 1, "exactly one delegated listener on the page");

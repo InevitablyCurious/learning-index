@@ -24,12 +24,12 @@ let inFlight = false;
 let lastAt = 0;
 
 /** Fire-and-forget, read on the next render — the seed step's shape. */
-export function refreshChallenges(base) {
-  if (!base || inFlight) return;
+export function refreshChallenges() {
+  if (inFlight) return;
   const now = Date.now();
   if (state.loaded && now - lastAt < MIN_INTERVAL_MS) return;
   inFlight = true;
-  fetch(`${base}/api/challenges`)
+  fetch(`/api/challenges`)
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
     .then((body) => {
       state = {

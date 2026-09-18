@@ -50,13 +50,14 @@ done
 # stale image being restarted instead of rebuilt.
 echo
 echo "── verifying served content ───────────────────────────────────────"
-BRAND="$(curl -fsS -m 3 "http://127.0.0.1:${PORT}/panels/chrome.js" \
-  | grep -o 'class="brand">[^<]*<u>[^<]*</u>[^<]*' || true)"
-if [ -n "$BRAND" ]; then
-  echo "  brand served: ${BRAND#class=\"brand\">}"
-else
-  echo "  WARNING: brand string not found in the served chrome.js"
-fi
+stale=0
+for f in board.js board-actions.js history.js panels/chrome.js panels/create.js; do
+  if ! curl -fsS -m 3 "http://127.0.0.1:${PORT}/${f}" | cmp -s - "$HERE/$f"; then
+    echo "  STALE: the served ${f} differs from the file on disk"
+    stale=1
+  fi
+done
+[ "$stale" = 0 ] && echo "  served files match disk"
 
 echo
 echo "── source health ──────────────────────────────────────────────────"

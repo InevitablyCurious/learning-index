@@ -68,11 +68,11 @@ export function isDevModeBusy() {
  * Sends the value we want, not a flip of a local copy: the server owns the
  * current value, and a flip computed here would race the poll that refreshes it.
  */
-export async function setDevMode(base, enabled) {
+export async function setDevMode(enabled) {
   ui.busy = true;
   ui.result = null;
   try {
-    const res = await fetch(`${base}/api/devmode`, {
+    const res = await fetch(`/api/devmode`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ enabled: Boolean(enabled) }),

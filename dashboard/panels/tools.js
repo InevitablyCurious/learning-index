@@ -139,11 +139,11 @@ export function toggleToolDetail(id) {
 
 
 /** Load the registry. Called on open, so the drawer is never stale on screen. */
-export async function loadTools(base) {
+export async function loadTools() {
   ui.loading = true;
   ui.error = null;
   try {
-    const res = await fetch(`${base}/api/tools`);
+    const res = await fetch(`/api/tools`);
     const data = await res.json().catch(() => null);
     if (!res.ok || data?.ok === false) {
       ui.error = data?.reason ?? `HTTP ${res.status}`;
@@ -176,11 +176,11 @@ export function setToolArg(id, name, value) {
 }
 
 /** Fire one tool. The result — success or failure — is kept on its card. */
-export async function runTool(base, id) {
+export async function runTool(id) {
   ui.busy[id] = true;
   ui.results[id] = null;
   try {
-    const res = await fetch(`${base}/api/tools/run`, {
+    const res = await fetch(`/api/tools/run`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id, args: ui.args[id] ?? {} }),

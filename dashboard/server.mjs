@@ -15,7 +15,8 @@
 //     origin-check gate, and EVERY request additionally passes the peer policy
 //     (lib/net-policy.mjs), so a public peer gets nothing even if the bind is
 //     wide.
-//   - Binds 127.0.0.1 unless REMOTE_VIEWING=enabled (lib/remote-viewing.mjs).
+//   - Binds 127.0.0.1 on the host; in the container, docker-compose decides
+//     which addresses are published (see docker-compose.lan.yml).
 //     An invalid switch value refuses startup rather than guessing, and a
 //     --host that contradicts the switch is refused out loud, never silently
 //     honoured.
@@ -35,7 +36,6 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { resolveRemoteViewing, resolveBind, REMOTE_VIEWING_ENV_VAR, CONTAINER_ENV_VAR } from "./lib/remote-viewing.mjs";
 import { guardPeer } from "./lib/net-policy.mjs";
 import { createControlRelay } from "./lib/control-relay.mjs";
 
@@ -309,26 +309,6 @@ const STATIC = {
 const main = async () => {
   const cfg = await loadConfig();
 
-  // ── REMOTE VIEWING — the LAN switch (lib/remote-viewing.mjs) ──────────────
-  // An invalid REMOTE_VIEWING value refuses startup rather than coercing to a
-  // default: a switch that guesses will eventually guess "exposed" when
-  // "disabled" was typed. resolveBind then owns the bind address — FAIL-CLOSED
-  // (WO-RV03): inside a container (CONTAINER_ENV_VAR) the internal bind is
-  // always 0.0.0.0 and OKP_BIND_HOST (the compose publish host) is validated
-  // against the mode; on the host, enabled requires a specific LAN address.
-  // Any contradiction returns bind.error and startup is refused, never coerced.
-  const rv = resolveRemoteViewing();
-  if (rv.error) {
-    console.error(`[remote-viewing] invalid ${REMOTE_VIEWING_ENV_VAR}=${JSON.stringify(rv.error.value)} — accepted: ${rv.error.accepted.join(", ")}. Refusing to start.`);
-    process.exit(1);
-  }
-  const bindHost = process.env.OKP_BIND_HOST === "" ? undefined : process.env.OKP_BIND_HOST;
-  const bind = resolveBind({ mode: rv.mode, dashHost: args.host, container: process.env[CONTAINER_ENV_VAR] === "1", bindHost });
-  if (bind.error) {
-    console.error(`[remote-viewing] ${bind.error}`);
-    process.exit(1);
-  }
-  if (bind.note) console.warn(`[remote-viewing] ${bind.note}`);
   const relay = createControlRelay({ controlUrl: cfg.controlUrl });
 
   const { mods, broken } = await loadModules(cfg);
@@ -454,18 +434,6 @@ const main = async () => {
         );
         return;
       }
-
-      // ── GET /api/control-base ──────────────────────────────────────────
-      // Where the BROWSER should post: its OWN origin. The base is empty
-      // because every control write goes same-origin to this dashboard and is
-      // relayed to the loopback control plane — no client-side code ever needs
-      // to know where the control plane lives, so no address of ours can be
-      // unreachable from the browser.
-      if (url.pathname === "/api/control-base") {
-        res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
-          .end(JSON.stringify({ ok: true, base_url: "", base_url_relayed: true }));
-        return;
-      }
     }
 
     // ── CONTROL RELAY ──────────────────────────────────────────────────────
@@ -502,10 +470,9 @@ const main = async () => {
   // had `cfg.port ?? args.port`, which let an env var silently win over a flag
   // the operator typed — the opposite of what a flag means.
   const port = args.portExplicit ? args.port : (cfg.port ?? args.port);
-  server.listen(port, bind.host, () => {
+  server.listen(port, args.host, () => {
     const port = server.address().port;
-    console.log(`bench dashboard → http://${bind.host}:${port}`);
-    console.log(`  viewing    : REMOTE_VIEWING=${rv.mode} (${rv.source}) — ${bind.host === "127.0.0.1" ? "loopback only" : `LAN-bound on ${bind.host}`}`);
+    console.log(`bench dashboard → http://${args.host}:${port}`);
     console.log(`  bench root : ${cfg.benchRoot}`);
     console.log(`  runs root  : ${cfg.runsRoot}`);
     console.log(`  sources    : ${mods.map((m) => m.id).join(", ") || "(none)"}`);

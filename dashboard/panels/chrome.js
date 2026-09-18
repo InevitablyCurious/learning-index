@@ -228,16 +228,12 @@ function stopSlot(run, reach) {
 /**
  * Why the controls are dead, stated ONCE at the top of the board rather than
  * per-button. The operator learns it before clicking, not after a failure.
- *
- * The remedy is included because this condition is fixable by the operator in
- * one command — and a diagnosis with no remedy leaves them exactly as stuck.
  */
 function reachBanner(reach) {
   return `
   <div class="reach-warn" role="alert">
-    <span class="rw-head">CONTROL PLANE NOT REACHABLE FROM THIS BROWSER</span>
+    <span class="rw-head">CONTROL PLANE NOT REACHABLE</span>
     <span class="rw-body">${esc(reach.reason)}</span>
-    ${reach.fix ? `<span class="rw-fix">${esc(reach.fix)}</span>` : ""}
     <span class="rw-note">${esc("The board itself is fully live — everything you can see is real and current. Only the controls that write are unavailable.")}</span>
   </div>`;
 }

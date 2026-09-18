@@ -13,7 +13,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  CONTROL_BASE,
   renderRuns,
   renderRunRow,
   renderCheckpoints,
@@ -174,7 +173,7 @@ test("loadCheckpoints: encodeURIComponent applied to run and cell", async () => 
     return { ok: true, json: async () => ({ checkpoints: [], diffs: [] }) };
   };
   try {
-    await loadCheckpoints("http://127.0.0.1:9999", "1788672514", "local/x/cell-0000");
+    await loadCheckpoints("1788672514", "local/x/cell-0000");
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -182,11 +181,7 @@ test("loadCheckpoints: encodeURIComponent applied to run and cell", async () => 
   assert.ok(capturedUrl.includes("run=1788672514"), capturedUrl);
 });
 
-// ── same-origin base — the board proxies /api/history* (WO-HISTFIX-01) ──────
-
-test("CONTROL_BASE is same-origin: the empty string", () => {
-  assert.equal(CONTROL_BASE, "");
-});
+// ── same-origin — the dashboard relays /api/history* ────────────────────────
 
 test("loadRuns: fetches same-origin /api/history — no hardcoded host", async () => {
   const realFetch = globalThis.fetch;
@@ -196,7 +191,7 @@ test("loadRuns: fetches same-origin /api/history — no hardcoded host", async (
     return { ok: true, json: async () => ({ runs: [] }) };
   };
   try {
-    await loadRuns(CONTROL_BASE);
+    await loadRuns();
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -214,7 +209,7 @@ test("loadDiff: fetches the same-origin encoded diff URL — no host", async () 
     return { ok: true, text: async () => "@@ -1 +1 @@" };
   };
   try {
-    await loadDiff(CONTROL_BASE, "run1", "cell1", "a/b.txt");
+    await loadDiff("run1", "cell1", "a/b.txt");
   } finally {
     globalThis.fetch = realFetch;
   }

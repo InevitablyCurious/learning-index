@@ -1,0 +1,16 @@
+# Remote viewing: also publish the board on this Mac's LAN address, so an
+# iPad on the same network can open http://<LAN_ADDRESS>:8717.
+#
+# Turned on by two lines in dashboard/.env (compose reads that file itself,
+# so every `docker compose` command and redeploy.sh pick it up):
+#
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.lan.yml
+#   LAN_ADDRESS=192.168.50.140
+#
+# Delete both lines and redeploy to turn it off. The board still refuses
+# peers outside the private network ranges, and the control plane itself
+# never leaves this Mac's loopback — the board relays to it.
+services:
+  learning-index-dashboard:
+    ports:
+      - "${LAN_ADDRESS:?set LAN_ADDRESS in dashboard/.env to this Mac's LAN address}:8717:8717"

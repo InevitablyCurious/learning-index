@@ -18,8 +18,7 @@
 // (tool/file/thinking/error/lifecycle).
 //
 // Importing sources/control-plane.mjs is side-effect-free — its top level is
-// declarations only, and dom-patch.test.mjs already imports `isLoopback` from
-// it on every run.
+// declarations only.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from "node:test";

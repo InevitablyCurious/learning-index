@@ -36,7 +36,6 @@ import {
 } from "./panels/live.js";
 import { renderLedger } from "./panels/ledger.js";
 
-const BASE_URL = "http://127.0.0.1:7718";
 const RUN_DIR = "1788717847/local/omlx/model-a";
 const SEL = { run_dir: RUN_DIR, sequence_index: 0, label: "base-a · model-a" };
 
@@ -83,19 +82,19 @@ test("selectHistoricalRun — the source switch", async (t) => {
   await t.test("reads BOTH feeds once, keyed on run_dir + sequence_index", async () => {
     await withFetch(async (seen) => {
       clearHistoricalRun();
-      const read = await selectHistoricalRun(BASE_URL, SEL);
+      const read = await selectHistoricalRun(SEL);
       assert.equal(read, true, "an actual read reports true");
       assert.equal(seen.length, 2, "exactly two reads, in parallel, once");
       const run = encodeURIComponent(RUN_DIR);
-      assert.ok(seen.includes(`${BASE_URL}/api/events?run_dir=${run}&sequence_index=0`), "events URL carries the cell address");
-      assert.ok(seen.includes(`${BASE_URL}/api/backend-feed?run_dir=${run}&sequence_index=0`), "backend URL carries the cell address");
+      assert.ok(seen.includes(`/api/events?run_dir=${run}&sequence_index=0`), "events URL carries the cell address");
+      assert.ok(seen.includes(`/api/backend-feed?run_dir=${run}&sequence_index=0`), "backend URL carries the cell address");
       assert.deepEqual(historicalSelection(), SEL, "the selection is readable by the card that renders it");
     });
   });
 
   await t.test("re-selecting what is already shown re-reads nothing", async () => {
     await withFetch(async (seen) => {
-      const read = await selectHistoricalRun(BASE_URL, { ...SEL });
+      const read = await selectHistoricalRun({ ...SEL });
       assert.equal(read, false);
       assert.equal(seen.length, 0, "a frozen record already on screen is not re-fetched");
     });
@@ -114,9 +113,8 @@ test("selectHistoricalRun — the source switch", async (t) => {
         { run_dir: RUN_DIR, sequence_index: null },
         { run_dir: RUN_DIR, sequence_index: -1 },
       ]) {
-        assert.equal(await selectHistoricalRun(BASE_URL, bad), false, JSON.stringify(bad));
+        assert.equal(await selectHistoricalRun(bad), false, JSON.stringify(bad));
       }
-      assert.equal(await selectHistoricalRun(null, SEL), false, "no base url");
       assert.equal(seen.length, 0, "not one read was attempted");
       assert.equal(historicalSelection(), null, "and nothing was selected");
     });
@@ -134,7 +132,7 @@ test("selectHistoricalRun — the source switch", async (t) => {
       },
     });
     try {
-      const read = await selectHistoricalRun(BASE_URL, SEL);
+      const read = await selectHistoricalRun(SEL);
       assert.equal(read, false, "a read whose selection moved reports false");
       assert.equal(historicalSelection(), null, "and does not resurrect the abandoned selection");
     } finally {
@@ -147,7 +145,7 @@ test("the card renders whichever source it is pointed at", async (t) => {
   const liveBoard = {
     run: { arm: "off", cell_label: "cell 0" },
     events: { connected: true, counts: {}, events: [], retained: 0, returned: 0, total: 0 },
-    control: { base_url: BASE_URL },
+    control: {},
     models_ledger: { run_in_flight: false },
   };
 
@@ -162,7 +160,7 @@ test("the card renders whichever source it is pointed at", async (t) => {
 
   await t.test("a selected record is NAMED and marked CONCLUDED, with a way back", async () => {
     await withFetch(async () => {
-      await selectHistoricalRun(BASE_URL, SEL);
+      await selectHistoricalRun(SEL);
     });
     const html = renderLive(liveBoard);
     assert.ok(html.includes("base-a · model-a"), "the record is named on the card");
@@ -182,7 +180,7 @@ test("the card renders whichever source it is pointed at", async (t) => {
     await withFetch(async () => {
       clearHistoricalRun();
       resetAutoSelect();
-      await selectHistoricalRun(BASE_URL, SEL);
+      await selectHistoricalRun(SEL);
     });
     assert.notEqual(historicalSelection(), null, "precondition: a record is selected");
 
@@ -192,7 +190,7 @@ test("the card renders whichever source it is pointed at", async (t) => {
     assert.equal(historicalSelection(), null, "the rising edge of a run takes the card");
 
     // Now select a record DURING the run and hold it across many renders.
-    await withFetch(async () => { await selectHistoricalRun(BASE_URL, SEL); });
+    await withFetch(async () => { await selectHistoricalRun(SEL); });
     const running = { ...liveBoard, models_ledger: { run_in_flight: true } };
     for (let k = 0; k < 5; k += 1) renderLive(running);
     assert.notEqual(historicalSelection(), null,
@@ -203,7 +201,7 @@ test("the card renders whichever source it is pointed at", async (t) => {
 
   await t.test("an unreachable control plane states its reason on the card", () => {
     clearHistoricalRun();
-    selectHistoricalRunUnreachable(SEL, "control_plane_not_reachable_from_here: opened at 192.168.1.9");
+    selectHistoricalRunUnreachable(SEL, "control_plane_unreachable: timed out");
     const html = renderLive(liveBoard);
     assert.ok(html.includes("base-a · model-a"), "the attempted selection is still named");
     assert.ok(html.includes("CONCLUDED"), "the card admits which mode it is in");
@@ -227,7 +225,7 @@ test("the BASELINE ROW is the feed selector, and it cannot un-select", async (t)
     can_run: { allowed: true, reason: null },
   };
   const board = (over = {}) => ({
-    control: { base_url: BASE_URL, roster: null },
+    control: { roster: null },
     models_ledger: { baseline_rows: [row], counts: { complete: 1, running: 0, void: 0 }, startable: [], run_in_flight: false, ...over },
   });
 
@@ -242,7 +240,7 @@ test("the BASELINE ROW is the feed selector, and it cannot un-select", async (t)
   });
 
   await t.test("the selected row marks itself — a readout, not a control", async () => {
-    await withFetch(async () => { await selectHistoricalRun(BASE_URL, SEL); });
+    await withFetch(async () => { await selectHistoricalRun(SEL); });
     const html = renderLedger(board());
     assert.ok(html.includes("blfeed on"), "the row says the card is pointed at it");
     assert.ok(html.includes("feeding"), "and the row itself is marked");
@@ -254,7 +252,7 @@ test("the BASELINE ROW is the feed selector, and it cannot un-select", async (t)
 
   await t.test("a running cell's row reads LIVE — its feed is the live one", () => {
     const html = renderLedger({
-      control: { base_url: BASE_URL, roster: null },
+      control: { roster: null },
       models_ledger: {
         baseline_rows: [{ ...row, state: "running", can_run: { allowed: false, reason: "still running" } }],
         counts: { complete: 0, running: 1, void: 0 }, startable: [], run_in_flight: true,
@@ -266,7 +264,7 @@ test("the BASELINE ROW is the feed selector, and it cannot un-select", async (t)
 
   await t.test("an unaddressable row says so and offers nothing", () => {
     const html = renderLedger({
-      control: { base_url: BASE_URL, roster: null },
+      control: { roster: null },
       models_ledger: {
         baseline_rows: [{ ...row, run_dir: null, sequence_index: null }],
         counts: { complete: 1, running: 0, void: 0 }, startable: [], run_in_flight: false,
@@ -292,20 +290,20 @@ test("the paint signature changes with the SOURCE, not just the filters", async 
   const liveBoard = {
     run: { arm: "off", cell_label: "cell 0" },
     events: { connected: true, counts: {}, events: [], retained: 0, returned: 0, total: 0 },
-    control: { base_url: BASE_URL },
+    control: {},
     models_ledger: { run_in_flight: false },
   };
 
   await t.test("switching records re-points the card, and says so", async () => {
     await withFetch(async () => {
       clearHistoricalRun();
-      await selectHistoricalRun(BASE_URL, SEL);
+      await selectHistoricalRun(SEL);
     });
     assert.ok(renderLive(liveBoard).includes("base-a · model-a"));
 
     const other = { run_dir: "1788717847/local/omlx/model-b", sequence_index: 3, label: "base-b · model-b" };
     await withFetch(async (seen) => {
-      const read = await selectHistoricalRun(BASE_URL, other);
+      const read = await selectHistoricalRun(other);
       assert.equal(read, true, "a DIFFERENT record is a real read, never a cache hit");
       assert.equal(seen.length, 2, "and it re-reads both feeds");
     });
@@ -319,7 +317,7 @@ test("the paint signature changes with the SOURCE, not just the filters", async 
   await t.test("a complete record is never described as capped", async () => {
     await withFetch(async () => {
       clearHistoricalRun();
-      await selectHistoricalRun(BASE_URL, SEL);
+      await selectHistoricalRun(SEL);
     });
     const html = renderLive(liveBoard);
     // "cap 400" is the LIVE path's server-side window. The persisted read does
@@ -539,7 +537,7 @@ test("an idle bench must not impersonate the run that just finished", async (t) 
     // those want opposite words on screen.
     const board = {
       run: { state: "complete", arm: "off" },
-      control: { base_url: BASE_URL },
+      control: {},
       models_ledger: { run_in_flight: false },
       events: { connected: false, reason: "event feed disconnected: fetch failed", cell_in_flight: false, events: [], counts: {}, retained: 0, returned: 0, total: 0 },
     };
@@ -555,7 +553,7 @@ test("an idle bench must not impersonate the run that just finished", async (t) 
     // `cell_in_flight: true` with `connected: false` is a real failure.
     const board = {
       run: { state: "running", arm: "off", cell_label: "cell 0" },
-      control: { base_url: BASE_URL },
+      control: {},
       models_ledger: { run_in_flight: true },
       events: { connected: false, reason: "socket hang up", cell_in_flight: true, events: [], counts: {}, retained: 0, returned: 0, total: 0 },
     };
@@ -594,7 +592,7 @@ test("the PAINT path runs — the class of bug the suite could not see", async (
   try {
     const board = {
       run: { state: "complete", arm: "off" },
-      control: { base_url: BASE_URL },
+      control: {},
       models_ledger: { run_in_flight: false },
       events: { connected: false, reason: "fetch failed", cell_in_flight: false, events: [], counts: {}, retained: 0, returned: 0, total: 0 },
     };
@@ -616,7 +614,7 @@ test("the PAINT path runs — the class of bug the suite could not see", async (
     await t.test("a loaded historical record paints its rows", async () => {
       await withFetch(async () => {
         clearHistoricalRun();
-        await selectHistoricalRun(BASE_URL, SEL);
+        await selectHistoricalRun(SEL);
       });
       paintFeed(board);
       const html = boxes["sc-events"].innerHTML;
@@ -646,7 +644,7 @@ test("with nothing live, the last concluded run opens by itself", async (t) => {
   };
   const board = (over = {}) => ({
     run: { state: "complete" },
-    control: { base_url: BASE_URL },
+    control: {},
     events: { connected: false, cell_in_flight: false, events: [], counts: {}, retained: 0, returned: 0, total: 0 },
     models_ledger: { run_in_flight: false, baseline_rows: [row] },
     ...over,

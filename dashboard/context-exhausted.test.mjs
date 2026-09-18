@@ -12,7 +12,7 @@ const row = (over = {}) => ({
   can_run: { allowed: true, reason: null }, ...over,
 });
 const board = (rows, counts) => ({
-  control: { base_url: "http://127.0.0.1:8718", roster: null },
+  control: { roster: null },
   models_ledger: { baseline_rows: rows, counts, startable: [], run_in_flight: false },
 });
 

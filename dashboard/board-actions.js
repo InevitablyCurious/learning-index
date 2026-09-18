@@ -18,9 +18,8 @@
 // controlReachability(board) at CALL time rather than trusting that its button
 // was only rendered while reachable — the board can go unreachable between
 // render and click, and a POST into the void would leave a dialog looking
-// armed. When control.base_url_relayed is true the board reaches the control
-// plane same-origin through the dashboard relay and controlReachability
-// returns ok — a relayed write is never blocked by the guard.
+// armed. Every request is same-origin; the dashboard relays it to the
+// control plane.
 // dom-patch.test.mjs pins the gate on every path in this file.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -43,7 +42,7 @@ export async function doPreviewStop() {
   const reach = controlReachability(board);
   if (!reach.ok) { console.error(`stop unavailable — ${reach.code}`); render(); return; }
   render();
-  await previewStop(board.control.base_url);
+  await previewStop();
   render();
 }
 
@@ -51,14 +50,14 @@ export async function doCommitStop() {
   const reach = controlReachability(board);
   if (!reach.ok) { console.error(`stop unavailable — ${reach.code}`); render(); return; }
   render();
-  await commitStop(board.control.base_url);
+  await commitStop();
   render();
 }
 
 export async function doLoadRouters() {
   const reach = controlReachability(board);
   if (!reach.ok) { console.error(`routers unavailable — ${reach.code}`); render(); return; }
-  await loadRouters(board.control.base_url);
+  await loadRouters();
   render();
 }
 
@@ -66,7 +65,7 @@ export async function doSaveRouterKey(id) {
   const reach = controlReachability(board);
   if (!reach.ok) { console.error(`routers unavailable — ${reach.code}`); render(); return; }
   render();
-  await saveRouterKey(board.control.base_url, id);
+  await saveRouterKey(id);
   render();
 }
 
@@ -77,7 +76,7 @@ export async function doToggleDevMode(desired) {
   // a finally, so this is a real double-POST guard, not a dead condition.
   if (isDevModeBusy()) { render(); return; }
   render();
-  await setDevMode(board.control.base_url, desired === "on");
+  await setDevMode(desired === "on");
   render();
 }
 
@@ -91,14 +90,14 @@ export async function doLaunchBaseline(opts) {
   // The frame is switched INSIDE launchBaseline before the first await, so the
   // checklist is on screen while preflight runs rather than after it returns.
   render();
-  await launchCell(board.control.base_url, opts);
+  await launchCell(opts);
   render();
 }
 
 export async function doLoadTools() {
   const reach = controlReachability(board);
   if (!reach.ok) { console.error(`tools unavailable — ${reach.code}`); render(); return; }
-  await loadTools(board.control.base_url);
+  await loadTools();
   render();
 }
 
@@ -106,7 +105,7 @@ export async function doRunTool(id) {
   const reach = controlReachability(board);
   if (!reach.ok) { console.error(`tools unavailable — ${reach.code}`); render(); return; }
   render();
-  await runTool(board.control.base_url, id);
+  await runTool(id);
   render();
   // RE-READ THE REGISTRY AFTER EVERY RUN. A tool can change what the other
   // tools can do — restarting the bench MCP unblocks `join org`, and
@@ -114,7 +113,7 @@ export async function doRunTool(id) {
   // is a copy of a registry that no longer exists. Pressing a stale row sends a
   // tool id at a server mid-restart and reads as a broken button. A failed
   // re-read keeps the rows on screen and says they may be out of date.
-  await loadTools(board.control.base_url);
+  await loadTools();
   render();
 }
 
@@ -145,21 +144,15 @@ export async function pointFeedAt(board, b) {
     sequence_index: b.sequence_index,
     label: `${b.id} · ${b.model ?? "unknown model"}`,
   };
-  // THE SAME REACHABILITY GATE EVERY OTHER CONTROL CARRIES, and this one needs
-  // it for a reason the writes do not: both feed reads go to the control plane
-  // at `base_url` — same-origin through the dashboard relay when relayed, and
-  // CLIENT-DIRECT on the legacy path, where `base_url` is a loopback address.
-  // Opened from another device on the LAN — the documented case — loopback
-  // means the VIEWING machine, so the fetch dies before it leaves the browser.
-  // Refusing with the reason on screen beats two feeds that silently read as
-  // empty.
+  // Same gate as every write: with the control plane down, both feed reads
+  // would silently come back empty. Refusing with the reason is clearer.
   const reach = controlReachability(board);
   if (!reach.ok) {
     selectHistoricalRunUnreachable(sel, `${reach.code}: ${reach.reason}`);
     render();
     return;
   }
-  const read = await selectHistoricalRun(board.control.base_url, sel);
+  const read = await selectHistoricalRun(sel);
   if (read) render();
 }
 
@@ -170,9 +163,8 @@ export async function releaseHold() {
     console.error(`hold release unavailable — ${reach.code}: ${reach.reason}`);
     return;
   }
-  const base = board.control.base_url;
   try {
-    const res = await fetch(`${base}/api/hold/release`, { method: "POST" });
+    const res = await fetch(`/api/hold/release`, { method: "POST" });
     if (!res.ok) console.error(`hold release refused: HTTP ${res.status}`);
     // The next poll observes the file vanish, which IS the success signal.
   } catch (err) {
@@ -188,9 +180,8 @@ export async function detachTui() {
     render();
     return;
   }
-  const base = board.control.base_url;
   try {
-    const res = await fetch(`${base}/api/tui/detach`, { method: "POST" });
+    const res = await fetch(`/api/tui/detach`, { method: "POST" });
     if (!res.ok) console.error(`tui detach refused: HTTP ${res.status}`);
   } catch (err) {
     console.error("tui detach failed:", err);
@@ -212,7 +203,7 @@ export async function detachTui() {
 export async function doLoadBackups() {
   const reach = controlReachability(board);
   if (!reach.ok) { console.error(`restore unavailable — ${reach.code}`); render(); return; }
-  await loadBackups(board.control.base_url);
+  await loadBackups();
   render();
 }
 
@@ -220,7 +211,7 @@ export async function doArmRestore(id) {
   const reach = controlReachability(board);
   if (!reach.ok) { console.error(`restore unavailable — ${reach.code}`); render(); return; }
   render();
-  await armRestore(board.control.base_url, id);
+  await armRestore(id);
   render();
 }
 
@@ -228,7 +219,7 @@ export async function doCommitRestore() {
   const reach = controlReachability(board);
   if (!reach.ok) { console.error(`restore unavailable — ${reach.code}`); render(); return; }
   // Reloads the page on success — see commitRestore.
-  await commitRestore(board.control.base_url);
+  await commitRestore();
   render();
 }
 
@@ -247,7 +238,7 @@ export async function doArmReset() {
     return;
   }
   render();
-  await armReset(board.control.base_url);
+  await armReset();
   render();
 }
 
@@ -261,6 +252,6 @@ export async function doCommitReset() {
   // On success this reloads the page outright — see commitReset. Nothing after
   // it runs, which is the point: no panel keeps a selection that outlives the
   // data it referred to.
-  await commitReset(board.control.base_url);
+  await commitReset();
   render();
 }

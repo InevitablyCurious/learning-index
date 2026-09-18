@@ -536,7 +536,7 @@ function compactDefaultFor(m) {
 function baselineSeed(ledger, board) {
   // Fired on render, read on the next one — the same fire-and-forget shape the
   // ledger's stats strip uses, so a slow control plane cannot block the frame.
-  refreshSnapshots(board?.control?.base_url, ui.model);
+  refreshSnapshots(ui.model);
   const armed = armedSnapshotId();
   return shell({
     step: "BASELINE · 2b",
@@ -556,7 +556,7 @@ function baselineSeed(ledger, board) {
 function baselineChallenge(board) {
   // Fired on render, read on the next one — the seed step's shape, so a slow
   // control plane cannot block the frame.
-  refreshChallenges(board?.control?.base_url);
+  refreshChallenges();
   // One ready challenge is still a choice, but not one worth making twice: it
   // starts selected and the operator continues. Two or more, nothing is
   // pre-picked — the benchmark does not decide what is being measured.
@@ -743,12 +743,12 @@ function compactOffWarning(defaultWasOn) {
  * swallows plugin load errors — so a stale image reports nothing wrong right up
  * until the model is told to call a tool that is not there.
  */
-async function runPreflight(base, { model = null, compact = false } = {}) {
+async function runPreflight({ model = null, compact = false } = {}) {
   const params = new URLSearchParams();
   if (model) params.set("model", model);
   if (compact) params.set("compact", "1");
   const query = params.toString();
-  const res = await fetch(`${base}/api/preflight${query ? `?${query}` : ""}`);
+  const res = await fetch(`/api/preflight${query ? `?${query}` : ""}`);
   const data = await res.json().catch(() => null);
   if (!res.ok || !data) throw new Error(`preflight unreadable (HTTP ${res.status})`);
   const failed = (data.checks ?? []).filter((c) => c.status !== "pass");
@@ -830,7 +830,7 @@ export function openCellConfirm({ model, kind, arm = "off", org = null } = {}) {
   ui.step = "b3";
 }
 
-export async function launchCell(base, { model, kind, arm = null, org = null } = {}) {
+export async function launchCell({ model, kind, arm = null, org = null } = {}) {
   // Called for the [+ run] path too, where the selection comes from a baseline
   // row rather than this flow's own frames.
   if (model) { ui.model = model; ui.kind = kind ?? ui.kind; }
@@ -842,7 +842,7 @@ export async function launchCell(base, { model, kind, arm = null, org = null } =
 
   try {
     ui.launch.preflight = { state: ROW.running };
-    const pf = await runPreflight(base, {
+    const pf = await runPreflight({
       model: ui.model,
       // CHECKED UNLESS EXPLICITLY DISABLED. The tri-state's `null` means the
       // server's default stands, and that default is ON for every model narrow
@@ -901,7 +901,7 @@ export async function launchCell(base, { model, kind, arm = null, org = null } =
     // whatever the drawer happened to say later.
     payload.graderWorkerTarget = graderWorkerTarget();
 
-    const pv = await fetch(`${base}/api/run/preview`, {
+    const pv = await fetch(`/api/run/preview`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
@@ -915,7 +915,7 @@ export async function launchCell(base, { model, kind, arm = null, org = null } =
       return;
     }
 
-    const res = await fetch(`${base}/api/run/start`, {
+    const res = await fetch(`/api/run/start`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...payload, confirm: pvData.token }),

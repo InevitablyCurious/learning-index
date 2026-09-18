@@ -22,16 +22,9 @@ services:
     restart: unless-stopped
 
     ports:
-      # FAIL-CLOSED publish contract (the process validates it at startup via
-      # OKP_BIND_HOST in environment: below — a mismatch refuses to boot):
-      # the container binds 0.0.0.0 internally (marker OKP_DASH_CONTAINER);
-      # this publish host is the real exposure boundary.
-      #   REMOTE_VIEWING=disabled (default) — OKP_BIND_HOST must be unset or
-      #     loopback; a wildcard (0.0.0.0/::) or any LAN IP is REFUSED.
-      #   REMOTE_VIEWING=enabled — OKP_BIND_HOST must be a SPECIFIC physical
-      #     LAN address (e.g. 192.168.50.140); wildcard, loopback and unset
-      #     are all REFUSED. All-interfaces is never "LAN-only".
-      - "${OKP_BIND_HOST:-127.0.0.1}:8717:8717"
+      # This machine only. Remote viewing adds the LAN address on top — see
+      # docker-compose.lan.yml.
+      - "127.0.0.1:8717:8717"
 
     volumes:
       # The bench repo, READ-ONLY. `:ro` is not decoration — the dashboard has
@@ -42,19 +35,6 @@ services:
       - ..:/bench:ro
 
     environment:
-      # LAN switch: disabled (default) = loopback publish only; enabled =
-      # publish on a SPECIFIC LAN IP (OKP_BIND_HOST below), gated by the
-      # same-origin relay + peer policy. Any other value is rejected and the
-      # dashboard refuses to start.
-      REMOTE_VIEWING: "${REMOTE_VIEWING:-disabled}"
-      # The publish host, passed IN so the process can validate the publish
-      # contract above and refuse a mismatch at startup (fail-closed):
-      # disabled + wide publish, or enabled + wildcard/loopback/unset
-      # publish, both stop the boot instead of silently exposing or hiding.
-      OKP_BIND_HOST: "${OKP_BIND_HOST:-127.0.0.1}"
-      # Marker: the in-container 0.0.0.0 bind is internal; the compose
-      # publish bind (OKP_BIND_HOST above) is the real exposure boundary.
-      OKP_DASH_CONTAINER: "1"
       OKP_DASH_BENCH_ROOT: /bench
       OKP_DASH_POLL_MS: "2000"
 

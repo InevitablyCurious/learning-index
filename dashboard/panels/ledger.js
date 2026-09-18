@@ -99,7 +99,7 @@ export function expandedBaselineId() {
 }
 
 export function renderLedger(board) {
-  maybeRefreshStats(board?.control?.base_url);
+  maybeRefreshStats();
   const ledger = board.models_ledger ?? null;
   const rows = ledger?.baseline_rows ?? null;
 
@@ -649,12 +649,12 @@ const STATS_MIN_INTERVAL_MS = 5000;
  * slow or absent. The board re-renders on its own poll, so a reading taken now
  * appears a beat later.
  */
-function maybeRefreshStats(base) {
-  if (!base || statsInFlight) return;
+function maybeRefreshStats() {
+  if (statsInFlight) return;
   const now = Date.now();
   if (stats.loaded && now - statsAt < STATS_MIN_INTERVAL_MS) return;
   statsInFlight = true;
-  fetch(`${base}/api/stats`)
+  fetch(`/api/stats`)
     .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
     .then((body) => {
       stats = { ...body, loaded: true };

@@ -204,11 +204,7 @@ export function renderLive(board) {
   // selection is exactly the one [feed] would have made, made without requiring
   // the operator to ask for the only thing there is to see.
   maybeAutoSelect(board);
-  // THE SAME BASE THE LEDGER'S STATS STRIP USES. This read `board.base`, which
-  // no board object has — so the fetch returned immediately, `backend.rows`
-  // stayed empty, and the tab showed "no backend records yet" for the whole of
-  // a run that was publishing records the API served correctly the whole time.
-  maybeRefreshBackend(board?.control?.base_url);
+  maybeRefreshBackend();
 
   return `
     <section class="panel live">

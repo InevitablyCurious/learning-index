@@ -65,12 +65,12 @@ export function armedSnapshot() {
  * later. The model is part of the request because the same-model rule is
  * applied per row by the server — this panel never decides seedability itself.
  */
-export function refreshSnapshots(base, model) {
-  if (!base || inFlight) return;
+export function refreshSnapshots(model) {
+  if (inFlight) return;
   const now = Date.now();
   if (state.loaded && state.model === model && now - lastAt < MIN_INTERVAL_MS) return;
   inFlight = true;
-  const url = `${base}/api/snapshots${model ? `?model=${encodeURIComponent(model)}` : ""}`;
+  const url = `/api/snapshots${model ? `?model=${encodeURIComponent(model)}` : ""}`;
   fetch(url)
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
     .then((body) => {
@@ -95,9 +95,8 @@ export function refreshSnapshots(base, model) {
 }
 
 /** Arm or disarm, then re-read. The POST's own answer is not trusted as state. */
-export function armSnapshot(base, id, model) {
-  if (!base) return;
-  fetch(`${base}/api/snapshots/arm`, {
+export function armSnapshot(id, model) {
+  fetch(`/api/snapshots/arm`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ snapshot_id: id, model }),
@@ -106,7 +105,7 @@ export function armSnapshot(base, id, model) {
     .then(({ ok, b }) => {
       if (!ok) state = { ...state, error: b?.reason ?? "the control plane refused the selection" };
       lastAt = 0; // force the next refresh
-      refreshSnapshots(base, model);
+      refreshSnapshots(model);
     })
     .catch((err) => {
       state = { ...state, error: String(err?.message ?? err) };

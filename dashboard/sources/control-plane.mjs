@@ -51,34 +51,6 @@ async function get(url, timeoutMs = 1500) {
 }
 
 /**
- * Is this URL a loopback address — i.e. one that only resolves to whichever
- * machine dereferences it?
- *
- * Parsed rather than string-matched: `127.0.0.1`, `localhost` and `::1` are all
- * loopback, and the whole 127/8 block counts.
- *
- * The 127/8 test requires FOUR NUMERIC OCTETS and is anchored at both ends. A
- * looser `/^127\./` also matches the hostname `127.0.0.1.evil.example`, which
- * is an ordinary DNS name someone else controls — it would be classified as
- * loopback and the board would suppress its own warning. Caught by test.
- */
-export function isLoopback(url) {
-  let host;
-  try {
-    host = new URL(url).hostname;
-  } catch {
-    return false;
-  }
-  const h = host.replace(/^\[|\]$/g, "").toLowerCase();
-  if (h === "localhost" || h === "::1") return true;
-  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!v4) return false;
-  const octets = v4.slice(1).map(Number);
-  if (octets.some((o) => o > 255)) return false;
-  return octets[0] === 127;
-}
-
-/**
  * THE EVENT CURSOR.
  *
  * Module-level, and deliberately so: the ring is append-only and monotonic, so
@@ -232,19 +204,6 @@ export async function read(ctx) {
     provenance: { path: base, mtime: Date.now(), bytes: null },
     patch: {
       control: {
-        // SAME-ORIGIN — the browser posts to the dashboard, which relays to
-        // the loopback control plane (lib/control-relay.mjs). The base is
-        // empty because the browser never needs to know where the control
-        // plane lives, so no address published from here can be unreachable
-        // from the browser.
-        base_url: "",
-        // The legacy client-direct gate asked whether the published base was
-        // a loopback address a LAN browser could not reach. Under the relay
-        // that question is dead — writes never leave the browser's own origin
-        // — so the flag is pinned false and base_url_relayed names the mode
-        // the browser-side reachability rule branches on.
-        base_url_is_loopback: false,
-        base_url_relayed: true,
         contract_version: caps.data?.contract_version ?? null,
         capabilities: caps.data ?? null,
         roster: roster.ok ? roster.data : null,

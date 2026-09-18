@@ -29,14 +29,12 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_GUARD_BIN | {root}/okp-guard/target/release/okp-guard | YARA guard binary | env |
 | BENCH_TARGET | task/backgammon/golden | gates target dir | env |
 | DEBUG_API | off | debug endpoints on task servers | env =1 |
-| REMOTE_VIEWING | disabled | LAN-access switch (disabled=enabled); invalid non-empty → refuse startup; read dashboard/lib/remote-viewing.mjs | env |
-| OKP_DASH_HOST | 127.0.0.1 (image 0.0.0.0) | dashboard bind addr; with REMOTE_VIEWING=enabled must be a specific LAN IP | env or --host |
+| OKP_DASH_HOST | 127.0.0.1 (image 0.0.0.0) | dashboard bind addr | env or --host |
 | OKP_DASH_PORT | 8717 | dashboard port | env or --port |
 | OKP_DASH_BENCH_ROOT | .. (image /bench) | bench root | env |
 | OKP_DASH_POLL_MS | 2000 | refresh cadence | env |
 | OKP_DASH_OPENCODE_URL | http://127.0.0.1:8719 | live agent API | env |
 | OKP_DASH_CONTROL_URL | http://127.0.0.1:8718 | the same-origin relay's upstream control plane (always loopback) | env |
-| OKP_BIND_HOST | 127.0.0.1 | Docker publish host; with REMOTE_VIEWING=enabled must be a specific LAN IP, disabled refuses a wide publish — read by the dashboard process for fail-closed validation AND compose interpolation | env |
 | OKP_DASH_SOURCE_<NAME> | per config | per-source toggle | env OKP_DASH_SOURCE_<NAME>=1/0 |
 | OKP_DASH_HUBDB | off | enable hub-db source | env =1 |
 | OKP_HUB_DB_HOST | okp-postgres | postgres host | env |
@@ -93,7 +91,6 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_CONTROL_SERVE_URL | http://127.0.0.1:8719 | serve API | env |
 | OKP_CONTROL_PYTHON | null | python binary | env |
 | OKP_DASH_RUNS_ROOT | <benchRoot>/runs | dashboard runs root | env |
-| OKP_DASH_CONTAINER | unset (compose: "1") | internal marker: container-mode, so the fail-closed bind treats OKP_BIND_HOST as the publish host | set by docker-compose/Dockerfile |
 | OKP_IDENTITY_SEED_HEX | (none) | leader-signer seed | env or --seed-hex |
 | OKP_ENV | local | base-URL switch | env =production |
 | OKP_CHAIN_ID | okp-local-1 | chain id | env |

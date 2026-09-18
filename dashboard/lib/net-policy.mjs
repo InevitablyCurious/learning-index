@@ -1,9 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // NET POLICY — who counts as a trusted peer, and is this request same-origin?
-// (WO-RV02, the shared contract for the REMOTE_VIEWING LAN switch.)
+// (used by the board server on every request.)
 //
 // Pure functions, no side effects, no I/O. Once the dashboard can be bound to
-// a LAN interface (see ./remote-viewing.mjs for THAT decision), two questions
+// a LAN interface, two questions
 // arrive per request and both must be answered from the socket, not from
 // anything the client says about itself:
 //

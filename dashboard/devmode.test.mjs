@@ -24,13 +24,12 @@ import assert from "node:assert/strict";
 const { setDevMode, renderDevModeSection } = await import("./panels/devmode.js");
 const { renderTopbar } = await import("./panels/chrome.js");
 
-const BASE = "http://127.0.0.1:7718";
 
 /** A board whose control plane answered, carrying a dev_mode capability. */
 function boardWithDevMode(devMode) {
   return {
     run: {},
-    control: { base_url: BASE, capabilities: { dev_mode: devMode } },
+    control: { capabilities: { dev_mode: devMode } },
     sources: [],
   };
 }
@@ -44,10 +43,10 @@ test("setDevMode POSTs the DESIRED value — on", async () => {
     return { ok: true, status: 200, json: async () => ({ ok: true }) };
   };
 
-  await setDevMode(BASE, true);
+  await setDevMode(true);
 
   assert.equal(seen.length, 1, "the toggle must hit the control plane exactly once");
-  assert.equal(seen[0].url, `${BASE}/api/devmode`);
+  assert.equal(seen[0].url, `/api/devmode`);
   assert.equal(seen[0].opts.method, "POST");
   assert.deepEqual(
     JSON.parse(seen[0].opts.body),
@@ -63,10 +62,10 @@ test("setDevMode POSTs the DESIRED value — off", async () => {
     return { ok: true, status: 200, json: async () => ({ ok: true }) };
   };
 
-  await setDevMode(BASE, false);
+  await setDevMode(false);
 
   assert.equal(seen.length, 1);
-  assert.equal(seen[0].url, `${BASE}/api/devmode`);
+  assert.equal(seen[0].url, `/api/devmode`);
   assert.equal(seen[0].opts.method, "POST");
   assert.deepEqual(JSON.parse(seen[0].opts.body), { enabled: false });
 });

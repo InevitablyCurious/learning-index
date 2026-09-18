@@ -178,53 +178,8 @@ test("every root-level module STATIC serves is COPYd into the image", async () =
 // forwards over its own loopback socket, so reachability no longer depends on
 // where the browser is — and the published contract must SAY that.
 
-test("isLoopback classifies the addresses that actually occur", async () => {
-  const { isLoopback } = await import("./sources/control-plane.mjs");
-
-  for (const u of [
-    "http://127.0.0.1:7718",
-    "http://localhost:7718",
-    "http://127.1.2.3:7718", // all of 127/8 is loopback
-    "http://[::1]:7718",
-  ]) {
-    assert.equal(isLoopback(u), true, `${u} should be loopback`);
-  }
-
-  for (const u of [
-    "http://192.168.50.14:7718",
-    "http://10.0.0.5:7718",
-    "http://host.docker.internal:7718",
-    "http://bench.local:7718",
-  ]) {
-    assert.equal(isLoopback(u), false, `${u} should NOT be loopback`);
-  }
-
-  // A substring test would call this loopback because it contains "127.0.0.1".
-  assert.equal(isLoopback("http://127.0.0.1.evil.example:7718"), false);
-  assert.equal(isLoopback("not a url"), false);
-});
-
-test("the control-plane source publishes the relay contract", async () => {
-  // Under the same-origin relay the published base is EMPTY: writes never
-  // leave the browser's origin, so the legacy "is the published base a
-  // loopback address the browser cannot reach" question is dead. Pinned from
-  // comment-stripped source so prose ABOUT the contract cannot satisfy it.
-  const src = code(await read("sources/control-plane.mjs"));
-  assert.match(
-    src,
-    /base_url_relayed:\s*true/,
-    "control.base_url_relayed must be published true — the browser posts same-origin and the dashboard relays",
-  );
-  assert.match(
-    src,
-    /base_url_is_loopback:\s*false/,
-    "control.base_url_is_loopback must be pinned false — under the relay no published address can be unreachable",
-  );
-});
-
 test("every control write path is gated on reachability", async () => {
-  // A path that reads base_url directly bypasses the gate and reintroduces the
-  // silent failure: the operator clicks, the fetch dies, nothing is said.
+  // A path without the gate fails silently: the click goes nowhere.
   // The handlers live in board-actions.js (LI-14 split); the gate lives with
   // them. board.js keeps render/connect and is pinned by the tests above.
   const src = code(await read("board-actions.js"));
@@ -249,7 +204,7 @@ test("every control write path is gated on reachability", async () => {
       body,
       /controlReachability\(board\)/,
       `${name} does not check controlReachability — it would fail silently ` +
-        `when the board is opened from a LAN address`,
+        `when the control plane is down`,
     );
   }
 });
@@ -292,7 +247,7 @@ test("STOP is dead and says why when the control plane cannot be reached", async
   );
   assert.match(
     unreachable,
-    /CONTROL PLANE NOT REACHABLE FROM THIS BROWSER/,
+    /CONTROL PLANE NOT REACHABLE/,
     "the operator must be told why before clicking, not after",
   );
 });

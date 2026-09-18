@@ -120,11 +120,11 @@ export function disarmStop() {
 }
 
 /** Ask what stopping would do. Nothing is signalled until the answer is confirmed. */
-export async function previewStop(base) {
+export async function previewStop() {
   ui.stopBusy = true;
   ui.stopError = null;
   try {
-    const res = await fetch(`${base}/api/run/stop/preview`, { method: "POST" });
+    const res = await fetch(`/api/run/stop/preview`, { method: "POST" });
     const data = await res.json().catch(() => null);
     if (!res.ok || data?.ok === false) {
       ui.stopError = data?.reason ?? `HTTP ${res.status}`;
@@ -142,12 +142,12 @@ export async function previewStop(base) {
 }
 
 /** Send the interrupt. The server reports whether anything is still alive. */
-export async function commitStop(base) {
+export async function commitStop() {
   if (!ui.stopArmed) return;
   ui.stopBusy = true;
   ui.stopError = null;
   try {
-    const res = await fetch(`${base}/api/run/stop`, {
+    const res = await fetch(`/api/run/stop`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ confirm: ui.stopArmed }),

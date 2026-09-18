@@ -135,9 +135,7 @@ test("a play refusal reaches a toast with its code, reason and row", async () =>
   clearToasts();
   await withFetch(
     async (url) =>
-      url.endsWith("/api/control-base")
-        ? json(200, { ok: true, base_url: "http://c:7718" })
-        : json(404, {
+      json(404, {
             ok: false,
             code: "no_build",
             reason: "no build to play at /runs/x/worktree — this cell produced no source tree",
@@ -156,9 +154,7 @@ test("a build that boots but cannot serve its page toasts too, with the body", a
   clearToasts();
   await withFetch(
     async (url) =>
-      url.endsWith("/api/control-base")
-        ? json(200, { ok: true, base_url: "http://c:7718" })
-        : json(200, {
+      json(200, {
             ok: true,
             url: "http://localhost:5/",
             port: 5,
@@ -192,9 +188,7 @@ test("an open debug seam is toasted, and says why no gate caught it", async () =
   clearToasts();
   await withFetch(
     async (url) =>
-      url.endsWith("/api/control-base")
-        ? json(200, { ok: true, base_url: "http://c:7718" })
-        : json(200, {
+      json(200, {
             ok: true, url: "http://localhost:5/", port: 5, pid: 1,
             page_status: 200, page_excerpt: "<html>",
             debug_seam_open: true, debug_seam_status: 200,
@@ -212,9 +206,7 @@ test("a closed debug seam is silent", async () => {
   clearToasts();
   await withFetch(
     async (url) =>
-      url.endsWith("/api/control-base")
-        ? json(200, { ok: true, base_url: "http://c:7718" })
-        : json(200, {
+      json(200, {
             ok: true, url: "http://localhost:5/", port: 5, pid: 1,
             page_status: 200, debug_seam_open: false, debug_seam_status: 404,
           }),

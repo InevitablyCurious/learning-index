@@ -571,7 +571,7 @@ function onClick(e) {
   // it is the same kind of choice and must not be harder to make.
   if (t.hasAttribute("data-seed-pick")) {
     const id = t.getAttribute("data-seed-pick") || null;
-    armSnapshot(board?.control?.base_url, id, createModel());
+    armSnapshot(id, createModel());
     render();
     return;
   }
@@ -860,76 +860,21 @@ function onKeydown(e) {
   if (isToolsOpen()) { closeTools(render); render(); }
 }
 
-/** The board posts same-origin to the dashboard relay, which forwards to the control plane. */
-
 /**
- * CAN THIS BROWSER REACH THE CONTROL PLANE AT ALL?
- *
- * WHEN RELAYED, THE ANSWER IS ALWAYS YES. If the dashboard publishes
- * `control.base_url_relayed = true`, the browser posts same-origin to the
- * dashboard, which relays to the loopback control plane. The board reaches
- * the control plane from wherever it is served — there is no loopback/remote
- * split left to adjudicate.
- *
- * The loopback/remote guard below only matters for the LEGACY non-relayed
- * path, where `base_url` is published as a loopback address and the browser
- * posts cross-origin to it. Loopback resolves to whichever machine
- * dereferences it. Browsing the board from the host, that is the host and
- * every control POST works. Browsing it from another device on the LAN — the
- * documented remote-viewing case — `127.0.0.1:8718` is THAT DEVICE, so the
- * request dies before it leaves the laptop and surfaces as a transport error
- * with no obvious cause.
- *
- * The control plane deliberately cannot be published on the LAN: it binds
- * 127.0.0.1 with no --host flag as a stated safety property
- * (control/server.mjs:23-25), because it spawns processes. The board may be
- * exposed; the thing that can change the world may not — the relay keeps that
- * property: the control plane still answers only on the host's loopback, and
- * the dashboard forwards to it.
- *
- * So the honest answer is to say so. This returns the reason a write is
- * impossible, or null when it is possible — one derivation, consumed by every
- * control path, so no button can disagree with another about whether it works.
+ * Can the board act right now? Every control request is same-origin: the
+ * dashboard relays it to the control plane on this machine's loopback. So the
+ * only question is whether the dashboard's last read of the control plane
+ * succeeded — `board.control` is rebuilt every tick and is null when it failed.
+ * One answer, used by every control path, so no two buttons disagree.
  */
 export function controlReachability(b) {
-  // SAME-ORIGIN RELAY: the browser posts to the dashboard that served this
-  // board, and the dashboard relays to the loopback control plane. The board
-  // reaches the control plane from wherever it is served — there is no
-  // loopback/remote split left to adjudicate.
-  if (b?.control?.base_url_relayed === true) {
-    return { ok: true, code: null, reason: null, fix: null };
-  }
-  const base = b?.control?.base_url ?? null;
-  // AN EMPTY STRING IS A VALID BASE — it makes every `${base}/api/...` fetch
-  // same-origin relative. Only null/undefined means the board was never told
-  // where the control plane is.
-  if (base === null || base === undefined) {
-    return {
-      ok: false,
-      code: "control_plane_unwired",
-      reason: "the board does not know where the control plane is — it is not running, or the dashboard was started without it.",
-      fix: null,
-    };
-  }
-  // Only the browser knows its own origin, which is why the comparison happens
-  // here and not in the source module that published the URL.
-  const remote =
-    b?.control?.base_url_is_loopback === true &&
-    !["localhost", "127.0.0.1", "[::1]", "::1"].includes(location.hostname);
-  if (remote) {
-    return {
-      ok: false,
-      code: "control_plane_not_reachable_from_here",
-      reason:
-        `this board is open at ${location.hostname}, but the control plane is published as ${base}. ` +
-        "That address means THIS device, not the bench host, so the request would never leave your machine. " +
-        "The control plane binds loopback only, on purpose — it starts runs and spawns processes, so it is never exposed on a network.",
-      fix:
-        `ssh -L 8717:127.0.0.1:8717 -L 8718:127.0.0.1:8718 <user>@${location.hostname}\n` +
-        "then open http://127.0.0.1:8717 in this browser. Both ports tunnel to the bench host's loopback, so the controls work and nothing is exposed on the network.",
-    };
-  }
-  return { ok: true, code: null, reason: null, fix: null };
+  if (b?.control) return { ok: true, code: null, reason: null };
+  const src = (b?.sources ?? []).find((x) => x.id === "control-plane");
+  return {
+    ok: false,
+    code: "control_plane_unreachable",
+    reason: src?.reason ?? "the control plane is not running, or the dashboard was started without it.",
+  };
 }
 
 // FIRST PAINT, THEN THE STREAM. render() draws the "connecting to feed…" state

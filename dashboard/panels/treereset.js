@@ -77,12 +77,12 @@ export function clearResetResult() {
 }
 
 /** ARM. The server validates and mints a token bound to the tree on disk. */
-export async function armReset(base) {
+export async function armReset() {
   ui.pending = true;
   ui.refusal = null;
   ui.result = null;
   try {
-    const res = await fetch(`${base}/api/tree/reset/preview`, {
+    const res = await fetch(`/api/tree/reset/preview`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: "{}",
@@ -106,14 +106,14 @@ export async function armReset(base) {
 }
 
 /** CONFIRM. Carries the token; any drift is rejected server-side. */
-export async function commitReset(base) {
+export async function commitReset() {
   if (!ui.token) {
     disarmReset();
     return;
   }
   ui.pending = true;
   try {
-    const res = await fetch(`${base}/api/tree/reset`, {
+    const res = await fetch(`/api/tree/reset`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ confirm: ui.token }),
@@ -150,7 +150,7 @@ export async function commitReset(base) {
  * clears. RED, because unlike everything else on that row it acts on all of it.
  */
 export function renderResetButton(board) {
-  if (!board?.control?.base_url) return "";
+  if (!board?.control) return "";
   return `<button class="btn sm blreset" data-reset-open="1" ${ui.pending ? "disabled" : ""}
     title="reset all benchmark data — everything is backed up first">${ui.pending ? "…" : "RESET"}</button>`;
 }

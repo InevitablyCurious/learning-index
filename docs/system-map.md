@@ -25,7 +25,7 @@ system.
 | Task | `task/backgammon/` | The instrument's task: `scaffold/` (stubs the model builds from), `golden/` (reference solution, never shown), `prompts/` (chunked build prompts). |
 | Grader | `grader/` | `report.mjs` + the gate suite (conformance / backend / frontend, plus `meta/` and `quarantine/`). The only component that sees the golden. |
 | Control plane | `control/` | Node stdlib-only `server.mjs` — the only write-capable surface; spawns the harness, one run at a time. |
-| Dashboard | `dashboard/` | Board at :8717; renders, never acts directly — every write goes through the same-origin control relay (`dashboard/lib/control-relay.mjs`); `REMOTE_VIEWING` switch + fail-closed bind (`lib/remote-viewing.mjs`, `lib/net-policy.mjs`). |
+| Dashboard | `dashboard/` | Board at :8717; renders, never acts directly — every write goes through the same-origin control relay (`dashboard/lib/control-relay.mjs`); optional LAN publish (`docker-compose.lan.yml`) with a peer check (`lib/net-policy.mjs`). |
 | Images | `images/` | `worker/Dockerfile`, `grader/Dockerfile`, `sidecar/` (egress + loop-kill scanner + supervised shell). |
 | Scripts | `scripts/` | Entrypoints: `run_cumulative.py` (canonical), `rebuild_worker_image.py`, `rebuild_grader_image.py`, `bench_preflight.py`. |
 | Config | `config/` | `bench.env`; the bench-owned env surface is documented in `ENV-VARS.md`. |
@@ -95,7 +95,7 @@ benchmark names no backend and is agnostic to which plugin is plugged in.
 
 ## 6. Dashboard testing conventions — hard-won
 
-Two pitfalls from the remote-viewing work, worth knowing before touching the
+Two pitfalls worth knowing before touching the
 dashboard:
 
 - **Source-pin tests.** Several `dashboard/*.test.mjs` files READ the live

@@ -1060,46 +1060,10 @@ a new reader module (`dashboard/sources/*.mjs`), and ONLY reader source requires
 dashboard never writes, and the run artifacts under `runs/` are the authoritative record (RC-5) — a
 read-only mount makes "the dashboard corrupted a run" structurally impossible.
 
-### Remote viewing (LAN access) — the operator procedure
+### Remote viewing (LAN access)
 
-The dashboard and control plane are loopback-only by default. To view AND
-operate the board from a phone/tablet on the LAN, set the strict
-`REMOTE_VIEWING` switch **plus** one specific LAN address. There is no env file
-for the dashboard — both knobs reach the process only through the launching
-shell's exported environment (or the inline `VAR=x` prefix). One toggle, one
-address, no hidden setup:
-
-```bash
-# Docker (recommended), from dashboard/:
-REMOTE_VIEWING=enabled OKP_BIND_HOST=192.168.50.140 docker compose up -d
-# Host process (no container), from dashboard/:
-REMOTE_VIEWING=enabled node server.mjs --host 192.168.50.140
-# then on the device:  http://192.168.50.140:8717/
-```
-
-- `REMOTE_VIEWING` ∈ {`disabled` (default), `enabled`}; any other value refuses
-  startup (exit 1, no silent coercion).
-- `enabled` requires the address — `OKP_BIND_HOST` (Docker publish) or
-  `OKP_DASH_HOST`/`--host` (host bind). Fail-closed refusals: `enabled` +
-  unset/loopback/wildcard → refused; `disabled` + a wide `OKP_BIND_HOST` →
-  refused. There is no "expose every interface" fallback; the address is a
-  required companion to the switch, not a hidden extra.
-- Writes go through the dashboard's same-origin relay to the loopback-locked
-  control plane (:8718); the device never talks to :8718 directly. The control
-  plane's wildcard CORS is gone (browser never calls it cross-origin).
-
-**Boundary honesty — "LAN-only" is a topology boundary, not a login.** The bind
-narrows which interface listens, and a peer classifier
-(`dashboard/lib/net-policy.mjs`) trusts loopback/private/link-local source
-addresses and refuses public ones — but it validates the source address
-**syntactically**, so it cannot tell a genuine LAN device from a router/NAT
-forward or a VPN peer carrying a private address, and binding a private IP does
-not by itself stop a router port-forwarding that interface. Enabling this
-trusts every device that can reach that interface (the operator's explicit
-"trust every LAN device" ruling). The **play preview** spawns a separate
-dynamic port bound to all interfaces with no auth and no peer/origin gate —
-outside the `REMOTE_VIEWING` contract, reachable unauthenticated while a
-preview is live. Full security statement: `dashboard/README.md`.
+Two lines in `dashboard/.env`, then `dashboard/redeploy.sh`. Procedure and
+security notes: `dashboard/README.md` → "Remote viewing".
 
 ### Worker isolation boundary
 

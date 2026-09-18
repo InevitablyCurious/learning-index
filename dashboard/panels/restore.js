@@ -64,11 +64,11 @@ export function clearSelection() {
 }
 
 /** Load the list. Called on open, so the list is never stale on screen. */
-export async function loadBackups(base) {
+export async function loadBackups() {
   ui.loading = true;
   ui.error = null;
   try {
-    const res = await fetch(`${base}/api/backups`);
+    const res = await fetch(`/api/backups`);
     const data = await res.json().catch(() => null);
     if (!res.ok || data?.ok === false) {
       ui.error = data?.reason ?? `HTTP ${res.status}`;
@@ -85,12 +85,12 @@ export async function loadBackups(base) {
 }
 
 /** Pick one: the server re-runs its checks and mints a token. */
-export async function armRestore(base, id) {
+export async function armRestore(id) {
   ui.pending = true;
   ui.refusal = null;
   ui.selected = String(id);
   try {
-    const res = await fetch(`${base}/api/backups/restore/preview`, {
+    const res = await fetch(`/api/backups/restore/preview`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id: String(id) }),
@@ -111,11 +111,11 @@ export async function armRestore(base, id) {
   }
 }
 
-export async function commitRestore(base) {
+export async function commitRestore() {
   if (!ui.token || !ui.selected) return;
   ui.pending = true;
   try {
-    const res = await fetch(`${base}/api/backups/restore`, {
+    const res = await fetch(`/api/backups/restore`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id: ui.selected, confirm: ui.token }),
@@ -209,7 +209,7 @@ function cellLine(b) {
 // ── render ───────────────────────────────────────────────────────────────────
 
 export function renderRestoreButton(board) {
-  if (!board?.control?.base_url) return "";
+  if (!board?.control) return "";
   return `<button class="btn sm blrestore" data-restore-open="1">RESTORE</button>`;
 }
 

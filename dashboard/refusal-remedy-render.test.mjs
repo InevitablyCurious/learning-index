@@ -17,6 +17,8 @@ import { createServer } from "node:http";
 
 import { launchCell, renderCreate, openCreate } from "./panels/create.js";
 
+const nodeFetch = globalThis.fetch;
+
 /** The launch frame reads only the ledger off the board; nothing here needs it. */
 const BOARD = { models_ledger: null };
 
@@ -27,7 +29,12 @@ function fakeControlPlane(payload) {
     res.end(JSON.stringify(payload));
   });
   return new Promise((done) => {
-    server.listen(0, "127.0.0.1", () => done({ server, base: `http://127.0.0.1:${server.address().port}` }));
+    server.listen(0, "127.0.0.1", () => {
+      const base = `http://127.0.0.1:${server.address().port}`;
+      // The board fetches same-origin paths; point them at this server.
+      globalThis.fetch = (url, opts) => nodeFetch(`${base}${url}`, opts);
+      done({ server, base });
+    });
   });
 }
 
@@ -63,7 +70,7 @@ test("a refused launch renders the button, what it fixes, and what it does not",
   const { server, base } = await fakeControlPlane(NO_GO);
   try {
     openCreate();
-    await launchCell(base, { model: "qwen3.6-35b-a3b-bench", kind: "local" });
+    await launchCell({ model: "qwen3.6-35b-a3b-bench", kind: "local" });
     const html = renderCreate(BOARD);
 
     assert.match(html, /PREFLIGHT REFUSED — NOTHING STARTED/);
@@ -96,7 +103,7 @@ test("a refusal nothing can repair offers no button and says so", async () => {
   });
   try {
     openCreate();
-    await launchCell(base, { model: "qwen3.6-35b-a3b-bench", kind: "local" });
+    await launchCell({ model: "qwen3.6-35b-a3b-bench", kind: "local" });
     const html = renderCreate(BOARD);
 
     assert.ok(!/data-preflight-fix=/.test(html), "there is no tool for a dead hub");
@@ -120,7 +127,7 @@ test("a passing preflight renders no remedy block at all", async () => {
     // The launch proceeds past preflight and fails at /api/run/preview (this
     // fake answers every path with the preflight body), which is enough: the
     // remedy block is gated on the PREFLIGHT row failing, not on any failure.
-    await launchCell(base, { model: "qwen3.6-35b-a3b-bench", kind: "local" });
+    await launchCell({ model: "qwen3.6-35b-a3b-bench", kind: "local" });
     const html = renderCreate(BOARD);
     assert.ok(!/FIX IT FROM HERE/.test(html));
     assert.ok(!/data-preflight-fix=/.test(html));

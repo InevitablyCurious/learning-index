@@ -53,11 +53,11 @@ export function setRouterDraft(id, value) {
 }
 
 /** Load router state. Called on open, so the panel is never stale on screen. */
-export async function loadRouters(base) {
+export async function loadRouters() {
   ui.loading = true;
   ui.error = null;
   try {
-    const res = await fetch(`${base}/api/routers`);
+    const res = await fetch(`/api/routers`);
     const data = await res.json().catch(() => null);
     if (!res.ok || data?.ok === false) {
       ui.error = data?.reason ?? `HTTP ${res.status}`;
@@ -80,7 +80,7 @@ export async function loadRouters(base) {
  * or survive a re-render, and the registry is reloaded so what the panel shows
  * is what the server now resolves — not what this function hoped it wrote.
  */
-export async function saveRouterKey(base, id) {
+export async function saveRouterKey(id) {
   const key = String(ui.drafts[id] ?? "").trim();
   if (!key) {
     ui.results[id] = { ok: false, code: "key_empty", reason: "nothing typed — no key was sent" };
@@ -89,7 +89,7 @@ export async function saveRouterKey(base, id) {
   ui.busy[id] = true;
   ui.results[id] = null;
   try {
-    const res = await fetch(`${base}/api/routers/key`, {
+    const res = await fetch(`/api/routers/key`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ router: id, key }),
@@ -99,7 +99,7 @@ export async function saveRouterKey(base, id) {
       data ?? { ok: false, code: `HTTP ${res.status}`, reason: "the control plane returned nothing readable" };
     if (ui.results[id].ok) {
       ui.drafts[id] = "";
-      await loadRouters(base);
+      await loadRouters();
     }
   } catch (err) {
     ui.results[id] = { ok: false, code: "unreachable", reason: String(err?.message ?? err) };

@@ -100,58 +100,21 @@ function verdict(processes, blocking) {
 // has to ask "what is a live lane" has not been told anything by a status dot.
 
 /**
- * THE CONTROL PLANE — the only thing on the board that can start a run.
- * The browser posts same-origin to the dashboard, which relays to the loopback
- * control plane (:8718) — on the legacy non-relayed path it posts to the
- * published loopback base directly. Either way, if this is not reachable FROM
- * THE BROWSER, no button on the board works, and that must be the first line
- * the operator reads.
+ * THE CONTROL PLANE — the only thing that can start a run. The browser posts
+ * to the dashboard, which relays to it. `control` is null when the dashboard's
+ * read of it failed; the source's reason says why (it may be running but slow).
  */
 function controlPlane(b) {
-  const c = b.control ?? null;
-  // SAME-ORIGIN RELAY: the dashboard forwards to the loopback control plane,
-  // so the browser's post reaches it from wherever the board is served.
-  if (c?.base_url_relayed === true) {
-    return proc("control-plane", "control plane", "ok", "same-origin relay", null,
-      "the browser posts same-origin to the dashboard, which relays to the loopback control plane.");
+  if (b.control) {
+    return proc("control-plane", "control plane", "ok", "reachable", null,
+      "the only surface that can start a run; the dashboard relays the board's requests to it.");
   }
-  const base = c?.base_url ?? null;
-  // "" IS A VALID SAME-ORIGIN BASE; only null/undefined means never published.
-  if (base === null || base === undefined) {
-    // WHY IT IS ABSENT MATTERS, AND THE BOARD ALREADY KNOWS.
-    //
-    // `control` is null for two very different reasons, and collapsing them
-    // sends the operator to the wrong fix. Either the service is genuinely not
-    // running, OR it is running and the dashboard's own read of it FAILED —
-    // which is what `sources[control-plane]` records, with the reason.
-    //
-    // Observed live: the control plane answered every endpoint in ~2ms from
-    // inside the container while the aggregate source timed out at 2000ms,
-    // because /api/wall alone took 2062ms. "It is not running" would have been
-    // a lie, and would have sent the operator to restart a healthy service.
-    const src = (b.sources ?? []).find((s) => s.id === "control-plane");
-    if (src && src.ok === false && src.reason) {
-      return proc("control-plane", "control plane", "bad", "read failed", null,
-        "the board cannot start a run itself — every start is posted by the browser to the control service.",
-        `${src.reason}. The service may be running and healthy — this is the DASHBOARD's read of it failing, so the board has no control surface to offer and no button on it can act.`);
-    }
-    return proc("control-plane", "control plane", "bad", "not wired", null,
-      "the board cannot start a run itself — every start is posted by the browser to the control service. Without it, no control on this board can do anything.",
-      "the board does not know where the control plane is — it is not running, or the dashboard was started without it.");
-  }
-  // The loopback/remote split is the documented LAN failure: 127.0.0.1 from
-  // another device is THAT device, so the POST never leaves the browser.
-  const remote =
-    c?.base_url_is_loopback === true &&
-    typeof location !== "undefined" &&
-    !["localhost", "127.0.0.1", "[::1]", "::1"].includes(location.hostname);
-  if (remote) {
-    return proc("control-plane", "control plane", "bad", base, null,
-      "the board cannot start a run itself — every start is posted by the browser to the control service.",
-      `this board is open at ${location.hostname}, but the control plane is published as ${base}. That address means THIS device, not the bench host, so a start request would never leave your machine. Tunnel it: ssh -L 8717:127.0.0.1:8717 -L 8718:127.0.0.1:8718 <user>@${location.hostname}`);
-  }
-  return proc("control-plane", "control plane", "ok", base, null,
-    "the only surface that can start a run; the browser posts same-origin to the dashboard relay.");
+  const src = (b.sources ?? []).find((s) => s.id === "control-plane");
+  return proc("control-plane", "control plane", "bad", src?.reason ? "read failed" : "not wired", null,
+    "the board cannot start a run itself — every start goes through the control service. Without it, no control on this board can do anything.",
+    src?.reason
+      ? `${src.reason}. It may be running and healthy — this is the dashboard's read of it failing.`
+      : "the control plane is not running, or the dashboard was started without it.");
 }
 
 /**
