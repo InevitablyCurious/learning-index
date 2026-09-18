@@ -1,47 +1,15 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// CUSTOM TOOLS — the drawer behind the hamburger
-//
-// ── WHAT THIS SURFACE IS FOR ────────────────────────────────────────────────
-//
-// The benchmark is meant to be a composable service that any memory system can
-// point at, not an Okp-specific harness. A "custom tool" is the unit of that
-// adaptation: a small module that registers a command plus a config blob, and
-// then either works or fails loudly. This drawer is where those tools become
-// visible to an operator instead of living only in a CLI someone has to know
-// about.
-//
-// ── WHY A DRAWER AND NOT A MODAL OR A PANEL ─────────────────────────────────
-//
-// A modal is for a DECISION — it takes the screen because it must be answered
-// before anything else continues (reset, restore). This is not a decision; it is
-// a place you go to look at what is available and act on one thing. A board
-// panel is wrong for the opposite reason: the board's argument is a fixed layout
-// the eye learns, and a tool list that grows with every integration would push
-// the measurement surfaces around. A drawer stays out of the layout entirely,
-// opens over the right edge, and leaves the board exactly where it was.
-//
-// ── THE REGISTRY IS SERVED, NOT HELD HERE ───────────────────────────────────
-//
-// The harness owns the list — it is what knows which tools are registered and
-// whether each one's preconditions hold. This module renders `GET /api/tools`
-// and nothing else. A UI keeping its own copy is a second source of truth that
-// would eventually offer a tool that does not exist.
-//
-// ── THE RESULT IS THE TOOL'S OWN WORDS ──────────────────────────────────────
-//
-// On success and on failure alike, what comes back from the server is shown as
-// it arrived. Rewriting it would hide which layer refused — the CLI, the hub, or
-// the control plane — which is the first thing anyone debugging a join needs.
-// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOM TOOLS — the drawer behind the hamburger. A custom tool is a command
+// plus config that adapts the bench to a memory system; this is where they are
+// visible and runnable. A drawer, because it is neither a decision (modal) nor
+// part of the board's fixed layout (panel). The registry is served by GET
+// /api/tools, never held here, and results are shown in the tool's own words.
 
 import { esc } from "../board.js";
-// Credentials live in this same drawer — see renderToolsDrawer.
+// Credentials live in this drawer too.
 import { renderRoutersSection } from "./routers.js";
-// So does the dev-mode toggle. It takes `board` because the mode is SERVER
-// state carried on the poll, never a copy this drawer keeps.
+// So does dev mode (server state, read from the board).
 import { renderDevModeSection } from "./devmode.js";
-// The require-todos switch is a LAUNCH PREFERENCE for this browser, not server
-// state — see switches.js for why only one of these two persists locally.
+// Require-todos is a local launch preference (see switches.js).
 import {
   GRADER_TARGET_CHOICES,
   graderWorkerTarget,
@@ -57,22 +25,14 @@ const ui = {
   loading: false,
   tools: null,
   error: null,
-  // Per-tool argument values, keyed by tool id. Prefilled from the server's
-  // declared defaults so the common case is one click.
+  // Per-tool argument values, prefilled from the server's declared defaults.
   args: {},
-  // Per-tool in-flight + outcome, so one tool running never blanks another.
+  // Per-tool in-flight state and outcome.
   busy: {},
   results: {},
-  // ── ARRIVED HERE FROM A REFUSAL ────────────────────────────────────────
-  //
-  // When preflight refuses a launch it now names the tool that repairs it, and
-  // that button opens this drawer pointed AT that tool. The drawer is long
-  // enough that "it is in here somewhere" is not routing — so the row is
-  // highlighted, told why it is highlighted, and scrolled to.
-  //
-  // `focusScrolled` makes the scroll happen ONCE. The board re-renders twice a
-  // second; scrolling on every pass would pin the drawer to that row and the
-  // operator could not read anything else.
+  // Arrived from a refusal: preflight named this tool as the fix, so its row is
+  // highlighted, explained and scrolled to — once (focusScrolled), or the
+  // re-render would pin the drawer there.
   focus: null,
   focusReason: null,
   focusScrolled: false,
@@ -83,11 +43,8 @@ export function isToolsOpen() {
 }
 
 /**
- * Open the drawer.
- *
- * `focus` optionally names a tool to point at — the id preflight named as the
- * remedy for a failed check — and `reason` is the check that sent us here, so
- * the highlighted row can say why rather than just glowing.
+ * Open the drawer, optionally pointed at the tool preflight named (`reason` is
+ * the check that sent us here).
  */
 export function openTools({ focus = null, reason = null } = {}) {
   ui.open = true;
@@ -98,11 +55,8 @@ export function openTools({ focus = null, reason = null } = {}) {
 }
 
 /**
- * Scroll the focused row into view, once, AFTER the drawer is in the DOM.
- *
- * Called by the overlay because only it knows when the patch has landed; a
- * render that returns a string cannot scroll to something that does not exist
- * yet.
+ * Scroll the focused row into view once, after the drawer is in the DOM (the
+ * overlay knows when that is).
  */
 export function settleToolsFocus() {
   if (!ui.open || !ui.focus || ui.focusScrolled) return;
@@ -112,13 +66,7 @@ export function settleToolsFocus() {
   el.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
-/**
- * Close with the exit animation.
- *
- * The drawer is kept in the DOM for the length of the slide-out and only then
- * removed. Dropping the node immediately would make close a POP while open is a
- * slide — an asymmetry that reads as a glitch rather than a transition.
- */
+/** Close with the slide-out, then remove the node. */
 export function closeTools(onDone) {
   if (!ui.open || ui.closing) return;
   ui.closing = true;
@@ -147,14 +95,11 @@ export async function loadTools() {
     const data = await res.json().catch(() => null);
     if (!res.ok || data?.ok === false) {
       ui.error = data?.reason ?? `HTTP ${res.status}`;
-      // KEEP WHAT IS ON SCREEN. A refresh that fails is not evidence the tools
-      // went away, and blanking the list would also take every result card with
-      // it — including the one whose run just restarted the control plane.
+      // A failed refresh keeps the list (and its result cards) on screen.
       ui.tools = ui.tools ?? [];
     } else {
       ui.tools = Array.isArray(data?.tools) ? data.tools : [];
-      // Prefill from the SERVER's declared defaults, without clobbering
-      // anything the operator has already typed.
+      // Prefill from the server's defaults without clobbering typed values.
       for (const t of ui.tools) {
         ui.args[t.id] = ui.args[t.id] ?? {};
         for (const a of t.args ?? []) {
@@ -189,9 +134,8 @@ export async function runTool(id) {
     ui.results[id] =
       data ?? { ok: false, code: `HTTP ${res.status}`, reason: "the control plane returned nothing readable" };
   } catch (err) {
-    // THE COMMON CAUSE IS A RESTART, NOT A BREAKAGE. `bench-ready` converges the
-    // control plane last, so for a few seconds there is nothing on :8718 to
-    // answer — and a bare "Failed to fetch" reads like the tool is broken.
+    // Usually a restart, not a breakage: bench-ready restarts the control plane
+    // last.
     ui.results[id] = {
       ok: false,
       code: "unreachable",
@@ -204,7 +148,7 @@ export async function runTool(id) {
   }
 }
 
-// ── render ───────────────────────────────────────────────────────────────────
+// ── render ──
 
 /** The hamburger. Lives at the far right of the top bar. */
 export function renderToolsButton() {
@@ -275,32 +219,11 @@ export function renderToolsDrawer(board) {
 }
 
 /**
- * GRADING — how much of the machine the grading pass may use.
- *
- * ── WHY IT IS FIRST, AND WHY IT IS NOT A "MODE" ─────────────────────────────
- *
- * Everything under MODES changes WHAT THE AGENT DOES, which makes each one a
- * measurement variable: a run with it on and a run with it off are not
- * comparable. This changes nothing about the run. It sets how many test workers
- * the GRADING container starts, after the model has finished, and the gates and
- * their verdicts are identical either way.
- *
- * That is a claim, so it is checked rather than asserted:
- * `scripts/verify_worker_parity.py` grades the golden at one worker and at the
- * maximum and requires agreement gate for gate. If that ever fails, this stops
- * being a preference and becomes a defect.
- *
- * ── WHY A FRACTION AND NOT A WORKER COUNT ───────────────────────────────────
- *
- * A count would be a number tuned to whoever typed it. The container reads its
- * OWN limits and works out how many workers fit; this only says what share of
- * them to take. The same setting therefore means the same thing on a laptop and
- * on a build server, and nobody's hardware is written into the code.
- *
- * The share is of what is FREE at grading time, not of what exists — the
- * operator may already have containers running, and sizing against the total
- * would start browsers into memory that is already spoken for and let the OOM
- * killer decide which gate fails.
+ * GRADING — how much of the machine the grading pass may use. Not a mode: it
+ * changes how long grading takes, never the verdicts (scripts/
+ * verify_worker_parity.py checks this). A share of what is free at grading time,
+ * not a worker count, so it means the same on any hardware and never starts
+ * browsers into memory already in use.
  */
 function renderGradingSection() {
   const current = graderWorkerTarget();
@@ -334,9 +257,7 @@ function renderGradingSection() {
 
 function body() {
   if (ui.loading && ui.tools === null) return `<div class="dw-empty">reading registry…</div>`;
-  // ABOVE the list, never instead of it. What is on screen may be a registry
-  // read before a restart — stale, and it must SAY so rather than silently
-  // offering rows the server may no longer serve.
+  // Above the list, never instead of it: a stale list says it is stale.
   const banner = ui.error
     ? `<div class="tool-result bad"><span class="tr-code">registry unavailable</span>` +
       `<span class="tr-lines">${esc(ui.error)}</span>` +
@@ -431,26 +352,15 @@ function argField(t, a) {
 }
 
 /**
- * The outcome — the TOOL's, not a template's.
- *
- * WHAT WAS WRONG HERE. This block hardcoded one tool's vocabulary, so every
- * tool that succeeded reported SENT and a caveat about an org leader approving
- * it. A worker-image rebuild that ran a real docker build for ten seconds said
- * it was waiting on a human, and the build log — which the control plane
- * returns in full — was thrown away. From the board, a working button was
- * indistinguishable from a dead one.
- *
- * So: the verdict is generic, the caveat is the tool's own `success_note`, and
- * the command's output is shown verbatim. Rewriting output would hide which
- * layer refused, which is the first thing anyone debugging needs.
+ * The outcome in the tool's own terms: a generic verdict, the tool's own
+ * success_note, and the command output verbatim.
  */
 function resultBlock(t, r) {
   const out = [r.stdout, r.stderr].filter((x) => String(x ?? "").trim()).join("\n").trim();
   const log = out ? `<pre class="tool-log">${esc(out)}</pre>` : "";
 
   if (r.ok) {
-    // Structured fields, when the tool returned any (a custom tool may return a
-    // structured `result`; a built-in script does not).
+    // Structured fields, when a custom tool returned any.
     const res = r.result && typeof r.result === "object" ? r.result : {};
     const lines = Object.entries(res)
       .filter(([, v]) => v !== null && v !== undefined && typeof v !== "object")

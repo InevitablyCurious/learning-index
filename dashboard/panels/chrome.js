@@ -1,76 +1,31 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// CHROME — top bar + provenance strip
+// CHROME — the top bar and the provenance strip.
 //
-// ── WHAT THE BAR IS FOR (v3) ────────────────────────────────────────────────
-//
-// One line, three facts, one control: WHAT is running, HOW LONG it has been
-// running, and STOP. Everything else moved out.
-//
-// The previous bar carried a brand line, the stack id, the attestation label,
-// a READ-ONLY claim and the tree chip. All of it was true and none of it was
-// being read — an operator watching a three-hour cell looks at this strip for
-// the cell's state and nothing else, and six chips competing for that glance is
-// how the one that matters gets missed. The removed facts are not deleted from
-// the board: attestation, org, leader and seed remain in the provenance strip
-// directly below, which is where a provenance question is actually answered.
-//
-// NON-NEGOTIABLES THAT SURVIVED THE TRIM:
-//  - A cell that has stopped must NEVER imply motion. The spinner animates for
-//    running and grading only; every terminal state renders a static mark.
-//  - STALLED stays its own loud branch — a wedged cell must never fall through
-//    to "no run observed". The state is PRODUCER-STATED: it arrives from the
-//    control plane's heartbeat liveness via reconcileRunLiveness, never from
-//    the launch log's mtime (WO-HDR-FIX-01 — that proxy printed CELL STALLED
-//    over a mid-turn cell whose own heartbeat never stopped).
-//  - A stall is not a verdict. The chip says what the PRODUCER measured — the
-//    harness's own heartbeat silence, and for how long — and never
-//    FAILED / DEAD / ABORTED / CRASHED.
-//  - The control-plane reach banner stays. STOP is a write, so when the browser
-//    cannot reach :8718 the button is dead and the operator must be told why
-//    BEFORE clicking, not after.
-// ─────────────────────────────────────────────────────────────────────────────
+// The bar: what is running, how long, and STOP (provenance lives in the strip
+// below). A stopped cell never implies motion. STALLED is its own loud state,
+// stated by the control plane from the harness heartbeat (never log mtime), and
+// names only what was measured — never FAILED or DEAD. The reach banner explains
+// a dead STOP before anyone clicks it.
 
 import { esc, dur, nul, controlReachability } from "../board.js";
-// STOP lives here now. The state and both legs of the protocol stay in
-// runstart.js — this renders the control, it does not own it.
+// STOP renders here; its state and protocol live in runstart.js.
 import { stopState } from "./runstart.js";
-// The hamburger is the LAST thing in the bar, on purpose: it opens a surface
-// that is not part of the measurement, so it sits past everything that is.
+// The tools menu is last: it is not part of the measurement.
 import { renderToolsButton } from "./tools.js";
-// The dev-mode FACT belongs in the bar, not only in the drawer: the marker
-// below reads it on every poll, before any surface is opened.
+// Dev mode is shown in the bar on every poll.
 import { devModeState } from "./devmode.js";
 
 /**
- * WHAT THE SPINNER IS SAYING.
- *
- * Four states, and the distinction that matters is MOTION vs NO MOTION: only a
- * cell that is actually doing work animates. Colour separates the four; the
- * animation separates "still going" from "over", because that is the question
- * being asked from across a room.
- *
- *   running   — the agent is working                    animated
- *   grading   — the gate suite is executing              animated, second hue
- *   failure   — stalled, or ended on a non-ok status     static, danger
- *   stopped   — ended cleanly, or nothing running        static, dim
- *
- * GRADING IS READ FROM THE PHASE, and the phase vocabulary is the harness's:
- * `conformance`, `backend` and `frontend` are the three gate runners, and
- * `verdict-*` is the scoring pass that follows them. Everything else
- * (`initial*`, `feedback-*`) is the agent's own work.
+ * What the spinner says: only a cell doing work animates.
+ *   running  the agent is working           animated
+ *   grading  the gate suite is executing     animated, second hue
+ *   failure  stalled, or ended not-ok        static, danger
+ *   stopped  ended cleanly, or idle          static, dim
+ * Grading is read from the phase: conformance, backend, frontend and verdict-*.
  */
 /**
- * The four class names, written out in full.
- *
- * Interpolating the suffix into the class attribute would be shorter and is the
- * wrong shape: the style-coverage guard blanks template holes before reading
- * class attributes, so an interpolated suffix reaches it as a bare prefix
- * fragment that matches no rule. That guard exists because a missing CSS rule
- * renders SILENTLY — it once dropped the entire gate wall with every check
- * green — so the fix is to emit whole names rather than to weaken the reader.
- *
- * (This comment deliberately does not spell out the interpolated form: the
- * guard reads comments too, and an example of the bad shape would trip it.)
+ * Whole class names, written out: the style-coverage test cannot see an
+ * interpolated suffix. (Deliberately no example of that shape here: the test
+ * reads comments too.)
  */
 const PULSE_CLASS = {
   running: "pulse-running",
@@ -89,25 +44,13 @@ export function runPulse(run) {
     phase.startsWith("verdict-");
 
   if (r.state === "running") return grading ? "grading" : "running";
-  // A stall is not a failure verdict — but it is the one terminal-looking state
-  // that needs the eye pulled to it, so it takes the danger mark.
+  // Not a verdict, but the one state that should pull the eye.
   if (r.state === "stalled") return "failure";
-  // `failed` arrives from the control plane's liveness probe (server.mjs
-  // reconcileRunLiveness): the harness is gone and left no terminal record.
-  // Without this branch it fell to the default and rendered as `stopped`, which
-  // reads as a clean ending for a cell that did not have one.
+  // `failed` (from the control plane): the harness is gone with no terminal record.
   if (r.state === "failed") return "failure";
   if (r.state === "complete") {
-    // THE CONTROL PLANE STATES THIS; THE BOARD DOES NOT DERIVE IT.
-    //
-    // This read `t === "ok" || t === "complete"` off `terminal_status` — a
-    // second copy of the Python terminal vocabulary, and neither string is
-    // emitted by any Python file in the repo. It was dead only because the
-    // control plane had the SAME drift and never let `state` reach `complete`;
-    // repairing that alone would have turned every clean cell's pulse to
-    // failure. `terminal_ok` is the producer's own answer: `true` clean,
-    // `false` ended adversely (a walk-gate halt), `null` ended without saying
-    // how — unknown is not ok, but it is not a failure verdict either.
+    // The control plane states whether the ending was good (terminal_ok):
+    // true clean, false adverse, null unvouched (not ok, not a failure).
     return r.terminal_ok === false ? "failure" : "stopped";
   }
   return "stopped";
@@ -116,17 +59,13 @@ export function runPulse(run) {
 export function renderTopbar(board, { stale, lastError }) {
   const r = board.run ?? {};
 
-  // The feed being stale is information. Say it plainly rather than freezing a
-  // number that looks live.
+  // A stale feed says so rather than freezing a number that looks live.
   const feed = stale
     ? `<span class="chip danger">FEED STALE — ${esc(lastError ?? "poll failed")}</span>`
     : "";
 
-  // ENDED WITHOUT AN ENDING. The process is gone and the log carries no terminal
-  // record — an interrupt, a STOP, or a crash that unwound through a traceback.
-  // It is NOT "complete" (nothing concluded) and NOT "stalled" (nothing is
-  // wedged; there is no process left to wedge). Naming it as either would be a
-  // claim the board cannot support.
+  // Ended without an ending: no process, no terminal record. Neither complete
+  // nor stalled.
   const state =
     r.state === "failed"
       ? `<span class="chip danger">CELL ENDED — NO RESULT${r.terminal_status ? ` · ${esc(r.terminal_status)}` : ""}</span>`
@@ -134,12 +73,8 @@ export function renderTopbar(board, { stale, lastError }) {
       ? `<span class="tag">CELL COMPLETE${r.terminal_status ? ` · ${esc(r.terminal_status)}` : ""}</span>`
       : r.state === "stalled"
         ? `<span class="chip danger">CELL STALLED${
-            // THE PRODUCER'S MEASUREMENT RIDES WITH ITS VERDICT
-            // (run-liveness.mjs carries heartbeat_age_s from /api/run). The
-            // stall is stated by the harness's own heartbeat, so the duration
-            // shown is the heartbeat's silence — rendering log_silent_s here
-            // would cite evidence the verdict was not based on, and that proxy
-            // is the measured false-positive (WO-HDR-FIX-01).
+            // The duration shown is the heartbeat's silence — the evidence the stall
+            // verdict was actually based on.
             r.heartbeat_age_s === null || r.heartbeat_age_s === undefined
               ? ""
               : ` — SILENT ${esc(dur(r.heartbeat_age_s))}`
@@ -148,16 +83,11 @@ export function renderTopbar(board, { stale, lastError }) {
           ? `<span class="tag on">RUNNING${r.elapsed_s !== null && r.elapsed_s !== undefined ? ` ${esc(dur(r.elapsed_s))}` : ""}</span>`
           : `<span class="chip dimchip">${nul("no run observed")}</span>`;
 
-  // WRITES → CONTROL PLANE was a CLAIM, and it is false when the browser cannot
-  // reach the control plane. The claim is gone from the bar; the CONSEQUENCE
-  // (the banner, and a dead STOP) is what remains, which is the half that
-  // changes what an operator does.
+  // When the control plane is unreachable, the banner and a dead STOP say so.
   const reach = controlReachability(board);
   const pulse = runPulse(r);
 
-  // DEV MODE, IN THE BAR. Tri-state, and UNKNOWN must NEVER render as OFF:
-  // `null` (control plane unreachable, or no dev_mode capability) says "?" —
-  // silence and a confident "off" are different facts. OFF renders as nothing.
+  // Tri-state: null (unknown) shows "?", never OFF. OFF renders nothing.
   const dm = devModeState(board);
   const devModeMark = dm === null
     ? `<span class="devmode-unknown">DEV MODE ?</span>`
@@ -182,21 +112,9 @@ export function renderTopbar(board, { stale, lastError }) {
 }
 
 /**
- * STOP, IN THE BAR.
- *
- * Rendered only while a cell is actually in flight — a STOP button with nothing
- * to stop is a control that teaches the operator its clicks do not matter.
- *
- * BOTH LEGS RENDER HERE. The arm→confirm protocol is unchanged, but the confirm
- * leg has to appear on THIS surface: `previewStop` mints a restatement into
- * module state, and if the surface that paints it is not on screen the operator
- * sees nothing happen and the cell keeps running. That exact dead end already
- * cost a session on the run-start path (see overlay.js) — it is not repeated
- * here.
- *
- * The server's restatement is shown VERBATIM. It names the pid and what is
- * discarded, and paraphrasing it would be a second, drifting description of an
- * irreversible act.
+ * STOP, only while a cell is in flight. Both legs render here, so the
+ * confirmation appears where the button was pressed. The server's restatement
+ * is shown verbatim.
  */
 function stopSlot(run, reach) {
   const live = run?.state === "running" || run?.state === "stalled";
@@ -225,10 +143,7 @@ function stopSlot(run, reach) {
     </span>`;
 }
 
-/**
- * Why the controls are dead, stated ONCE at the top of the board rather than
- * per-button. The operator learns it before clicking, not after a failure.
- */
+/** Why the controls are dead, stated once at the top. */
 function reachBanner(reach) {
   return `
   <div class="reach-warn" role="alert">
@@ -242,8 +157,7 @@ export function renderProvenance(board) {
   const p = board.provenance ?? {};
   const anchor = p.policy_anchor_status;
 
-  // anchor_verified is the only good state; anything else means the run should
-  // not be trusted, and it is shown in the one off-hue rather than quietly.
+  // Anything but anchor_verified is shown in the off-hue.
   const anchorHtml =
     anchor === null || anchor === undefined
       ? nul("anchor unobserved")
@@ -252,9 +166,7 @@ export function renderProvenance(board) {
   const bit = (label, v) =>
     `${label} ${v === null || v === undefined ? nul("—") : esc(String(v))}`;
 
-  // ATTESTATION MOVED HERE FROM THE TOP BAR, and it is still PLAIN LABEL TEXT —
-  // never a badge, never a tier. It is provenance, not a credential, and this
-  // strip is where the rest of the provenance already lives.
+  // Attestation is plain label text, never a badge or tier.
   return `
   <div class="prov">
     <span>${bit("policy", p.policy_version)} · ${anchorHtml}</span>
@@ -270,11 +182,7 @@ export function renderProvenance(board) {
   </div>`;
 }
 
-/**
- * Source health. An unwired source is NOT an error — it is a panel that will
- * stay null, and saying which one prevents a viewer reading an empty panel as
- * a broken board.
- */
+/** Source health: an unwired source is a panel that stays null, not an error. */
 function renderSourceHealth(board) {
   const s = board.sources ?? [];
   if (!s.length) return nul("no sources");
