@@ -1,96 +1,32 @@
-// ── STATS — the board's one numbers surface ──────────────────────────────────
+// STATS — every number in the ledger's stat strip, through GET /api/stats. The
+// board derives none of them.
 //
-// WHAT THIS IS. Every number the ledger footer draws comes from here, through
-// ONE route (`GET /api/stats`). The board fetches once and renders; it derives
-// nothing of its own. A second derivation board-side is how two copies of the
-// same number come to disagree.
-//
-// ── TWO POPULATIONS, ONE SHAPE, NEVER MERGED ────────────────────────────────
-//
-//   BENCH  — native to the benchmark. True for anyone who clones this repo and
-//            runs a campaign: derived from the bench's own artefacts and
-//            nothing else.
-//
-//   CUSTOM — pluggable. True only on a machine that also runs the contributor's
-//            own surroundings. The relay loop-guard counter is the founding
-//            case: it comes from the Local LLM Proxy, a repo the bench does not
-//            ship, does not depend on and cannot assume. A stranger has no
-//            relay, so a relay stat on their board would be a permanently blank
-//            slot advertising something their clone cannot do. That founding
-//            case is retired — replaced by the BENCH-side `error_totals`
-//            providers; the CUSTOM seam itself remains for genuinely external
-//            counters.
-//
-// The bench declares NONE of the custom ones and does not know they exist. An
-// external manifest names them and `BENCH_STATS_MANIFEST` points at it —
-// for the same reason custom tools reach the board only through
-// `BENCH_TOOLS_URL` (tools.mjs). Unset, which is what a fresh clone gets, contributes nothing.
-//
-// The two arrive as two ARRAYS under two keys. Same entry shape either side, so
-// the board renders one slot renderer for both — but they are never
-// concatenated here and must never be concatenated there. The separation IS the
-// contract: a custom number is not a benchmark result.
+// Two populations, same entry shape, never merged:
+//   BENCH  — native: derived from the bench's own artifacts, true for anyone
+//            who clones the repo.
+//   CUSTOM — pluggable: named by an external manifest ($BENCH_STATS_MANIFEST),
+//            true only where the contributor's services run. Unset = none.
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 
 import { readWall } from "./wall.mjs";
 
-/**
- * The scorecard artifact's filename beside the run's other artifacts, mirroring
- * `harness/cumulative/run_artifacts.py::default_scorecard_path`. Sibling of the
- * mutable manifest, so retiring a run tree retires it in the same act.
- */
+/** The scorecard's filename (mirrors run_artifacts.py default_scorecard_path). */
 const SCORECARD_NAME = "manifest.scorecard.json";
 
 /** How long a provider may take before it is reported as unavailable. */
 const PROVIDER_TIMEOUT_MS = 2500;
 
 /**
- * THE ENTRY SHAPE — the whole contract, both sides:
+ * Entry shape: { id, label, state, value }, state one of ok, unavailable (the
+ * source could not be read) or absent (does not apply to this run). A provider
+ * never throws and never returns a made-up zero.
  *
- *   { id, label, state, value }
- *
- * `state` is one of:
- *   · "ok"          — `value` is a real reading
- *   · "unavailable" — the source could not be reached; `value` is null
- *   · "absent"      — this stat does not apply to this run; `value` is null
- *
- * A provider NEVER throws and NEVER returns a fabricated zero. "Unavailable"
- * and "zero" are different facts and the board draws them differently: a relay
- * that is down must not read as a run with no loop-guard fires.
- *
- * There is no `unit` and no `detail`. The footer is a readout strip — label and
- * number — and prose there was what this surface replaced.
- *
- * ── MONOTONIC SOURCES AND THE `delta` MODE ──────────────────────────────────
- *
- * Some sources count for the life of THEIR process, not for the life of a run.
- * The relay's loop-guard counter is the founding case and says so in its own
- * source: "Monotonic since process start; never reset by any request… A
- * consumer that wants 'did the guard fire during MY run' reads this endpoint
- * once at the start of the run and once at the end, and subtracts."
- *
- * Nothing implemented that subtraction, so the board drew a 13-hour lifetime
- * total next to a 40-minute run and the operator read it as this run's number.
- * A cumulative counter on a per-run board misreads every run after the first.
- *
- * `"mode": "delta"` in the manifest says the source is monotonic. The control
- * plane snapshots it when a run is QUEUED (see captureStatsBaseline) and this
- * module reports `now - snapshot`. The subtraction lives here, in the thing
- * that knows what a run is, and NOT in the source — the relay stays stateless
- * about runs, which is its own stated invariant and not ours to break.
- *
- * TWO WAYS A DELTA HAS NO ANSWER, AND BOTH SAY SO:
- *
- *   · No baseline for this run — a run this control plane never queued (a CLI
- *     launch), or one that predates the feature. Reporting the raw lifetime
- *     number here is precisely the bug; reporting zero invents a clean run.
- *     It reads `unavailable`.
- *   · The counter went BACKWARDS (`now < baseline`) — the source process
- *     restarted and its count began again, so the snapshot describes a
- *     generation that no longer exists. Also `unavailable`. Clamping to zero
- *     would silently show a fresh relay as a clean run.
+ * mode "delta": the source counts for its own process lifetime, so the control
+ * plane snapshots it when a run is queued (captureStatsBaseline) and reports
+ * now − snapshot. With no snapshot, or a counter that went backwards (the source
+ * restarted), the reading is unavailable, never raw or zero.
  */
 
 async function withTimeout(promise, ms) {
@@ -107,39 +43,13 @@ async function withTimeout(promise, ms) {
   }
 }
 
-// ── THE BENCH SIDE ───────────────────────────────────────────────────────────
+// ── THE BENCH SIDE ──
 
 /**
- * Benchmark-native providers.
- *
- * ── WHICH NUMBERS BELONG HERE, AND WHY ONLY THESE ───────────────────────────
- *
- * This returned `[]` for as long as the question "which numbers belong in the
- * footer" was open. It is now settled by one rule: EVERY OTHER CARD ALREADY
- * OWNS A QUESTION. The GATE WALL owns correctness, the TRANSFER CURVE owns
- * efficiency (every field of ConvergencePoint — tokens, turns, cycles, cost,
- * wall time, attempts-to-green), chrome owns liveness, the ledger rows own
- * verdicts.
- *
- * Nothing owned: **did this run produce usable measurement at all?** That is
- * this strip's job, and these three answer it. A cell ran three hours, passed
- * five verdict passes, published 265 gate verdicts and contributed ZERO data
- * points — and from the board it was indistinguishable from a cell still
- * working, because `void_instrument` appeared in a scorecard nobody rendered.
- *
- * DELIBERATELY NOT HERE: gate pass/fail counts (the wall headline), tokens,
- * cost, turns, cycles, attempts-to-green (the curve), liveness (chrome),
- * verdicts (ledger rows). A number computed in two places is two numbers that
- * can disagree, and this module exists to stop that.
- *
- * ERROR COUNTS NOW LIVE HERE: the harness publishes per-run error totals into
- * the scorecard's `error_totals` (guard_aborted_turns, instrument_anomaly_turns,
- * stalled_turns), and the three error providers below read them as the honest
- * per-benchmark error totals — replacing the relay's shared loop-guard
- * counter, which counted fires across ALL relay traffic and is retired.
- *
- * ALL SIX SLOTS CLAIMED. The strip held its geometry before its numbers were
- * chosen; six providers now fill all six slots.
+ * Benchmark-native providers. They answer the one question no other card owns:
+ * did this run produce usable measurement at all? Gate counts, tokens, turns,
+ * cost and verdicts belong to other cards and are deliberately not repeated
+ * here. All six slots are claimed.
  */
 function benchProviders() {
   return [
@@ -147,24 +57,14 @@ function benchProviders() {
       id: "scored",
       label: "SCORED",
       /**
-       * Cells that produced a convergence point.
-       *
-       * READ FROM THE AUTHORITY'S OWN ARTIFACT. The scored/void split is decided
-       * by `build_scorecard` in Python; this reads what that published. The
-       * alternative — folding the run manifest and status stream here — is a
-       * SECOND implementation of the VOID-INSTRUMENT rule, and the two are
-       * already known to disagree: the mutable manifest holds a complete
-       * progress record for a cell the scorecard correctly voids.
+       * Cells that produced a convergence point, read from the scorecard Python
+       * published (the scored/void split lives there, not re-derived here).
        */
       async read(ctx) {
-        // NO RUN IN VIEW is `absent`, not `unavailable` — nothing failed to be
-        // read, there is simply no run for the stat to describe. The two are
-        // different facts and the same distinction the entry shape draws
-        // everywhere else.
+        // No run in view: absent, not unavailable.
         if (!ctx?.runDir) return { state: "absent", value: null };
         const card = await readScorecard(ctx);
-        // A RUN WITH NO SCORECARD YET. Normal before the first cell completes,
-        // and NOT zero: "no cell has finished" is not "no cell scored".
+        // No scorecard yet (normal before the first cell completes): not zero.
         if (!card) return { state: "unavailable", value: null };
         const n = card.scored_sessions;
         return Number.isFinite(n) ? { state: "ok", value: n } : { state: "unavailable", value: null };
@@ -173,23 +73,12 @@ function benchProviders() {
     {
       id: "voided",
       label: "VOIDED",
-      /**
-       * Cells dropped from the scored set as INSTRUMENT failures — a truncated
-       * attempt is never recorded as a capability FAIL.
-       *
-       * Zero is the healthy reading and is a real answer, not an absent one.
-       * This is the number whose absence let a voided cell and a running cell
-       * look the same on screen.
-       */
+      /** Cells voided as instrument failures. Zero is the healthy reading. */
       async read(ctx) {
-        // NO RUN IN VIEW is `absent`, not `unavailable` — nothing failed to be
-        // read, there is simply no run for the stat to describe. The two are
-        // different facts and the same distinction the entry shape draws
-        // everywhere else.
+        // No run in view: absent.
         if (!ctx?.runDir) return { state: "absent", value: null };
         const card = await readScorecard(ctx);
-        // A RUN WITH NO SCORECARD YET. Normal before the first cell completes,
-        // and NOT zero: "no cell has finished" is not "no cell scored".
+        // No scorecard yet: not zero.
         if (!card) return { state: "unavailable", value: null };
         const list = card.void_instrument;
         return Array.isArray(list) ? { state: "ok", value: list.length } : { state: "unavailable", value: null };
@@ -199,12 +88,8 @@ function benchProviders() {
       id: "unmeasured",
       label: "UNMEASURED",
       /**
-       * Gates the runner reported reaching and produced no verdict for.
-       *
-       * NOT "gates with no result" — that is the whole suite for the first
-       * minutes of every healthy cell. `control/wall.mjs` draws the distinction
-       * and states the count; this reads it rather than re-folding the roster,
-       * so the footer and the wall cannot disagree about the same gates.
+       * Gates the runner reached and produced no verdict for — read from
+       * control/wall.mjs so the strip and the wall agree.
        */
       async read(ctx) {
         if (!ctx?.runDir) return { state: "absent", value: null };
@@ -222,14 +107,8 @@ function benchProviders() {
       id: "loop_errors",
       label: "LOOP ERRORS",
       /**
-       * Turns the relay's loop guard killed in the run in view.
-       *
-       * LIVE, FROM THE STREAM (2026-09-17). This read the scorecard's
-       * `error_totals`, and the harness writes the scorecard only when a run
-       * completes normally — so the slot read "—" through every live run and
-       * stayed "—" after a run that stopped or errored (run 1789658586: 21
-       * loop kills, no scorecard, nothing shown). Every kill is stated as it
-       * happens in the cell's live.jsonl; see `turnErrors`.
+       * Turns the loop guard killed, counted live from the stream (turnErrors), so
+       * the slot works during a run and after one that never wrote a scorecard.
        */
       async read(ctx) {
         return turnErrorSlot(ctx, "loop");
@@ -238,11 +117,7 @@ function benchProviders() {
     {
       id: "stream_errors",
       label: "STREAM ERRORS",
-      /**
-       * Turns the stream failed on — every anomalous turn EXCEPT the loop
-       * guard's and the stall watchdog's, which have their own slots: stream
-       * deaths, finalize timeouts, provider outages, truncations.
-       */
+      /** Turns the stream failed on (every anomaly except loop and stall). */
       async read(ctx) {
         return turnErrorSlot(ctx, "stream");
       },
@@ -259,17 +134,11 @@ function benchProviders() {
 }
 
 /**
- * TURN ERRORS, COUNTED FROM THE CELLS' LIVE STREAMS.
- *
- * The harness states each killed or stalled turn the moment it happens, as a
- * `notice` in the cell's live.jsonl:
- *   turn_truncated_retried     a kill it recovered from (nudged)
- *   recovery_budget_exhausted  the kill that ran the nudge budget out
- * Both carry `detail.terminal`: `guard_abort` (loop), `turn_stalled` (stall),
- * anything else (the stream failed). Summed over every cell of the run.
- *
- * Null when the run has no live stream at all (a run from before streams
- * existed) — the caller then falls back to the scorecard.
+ * Turn errors counted from the cells' live.jsonl notices
+ * (turn_truncated_retried, recovery_budget_exhausted), split by
+ * detail.terminal: guard_abort (loop), turn_stalled (stall), anything else (the
+ * stream failed). null when the run has no stream; the caller falls back to the
+ * scorecard.
  */
 export async function turnErrors(runDir) {
   const counts = { loop: 0, stream: 0, stalled: 0 };
@@ -324,10 +193,8 @@ const SCORECARD_ERROR_FIELD = {
 };
 
 /**
- * The run in view as a full path. The control plane hands providers the run
- * dir RELATIVE to the runs root (`1789658586/local/…`, as `readRunState`
- * reports it); read as-is it resolved against the control plane's working
- * directory, so no scorecard or stream of any live run was ever found.
+ * The run in view as a full path (providers are given it relative to the
+ * runs root).
  */
 export function runPath(ctx) {
   if (!ctx?.runDir) return null;
@@ -344,15 +211,8 @@ async function turnErrorSlot(ctx, kind) {
 }
 
 /**
- * The published scorecard for the run in view, or null.
- *
- * NULL IS `unavailable`, NEVER ZERO. Before the first cell completes there is no
- * scorecard, and "no cell has finished" is not "no cell scored" — a fabricated 0
- * beside a healthy run in its first hour would read as a run producing nothing.
- *
- * Read fresh on every call rather than cached: the harness republishes this
- * after every cell, and a cached scorecard is a footer that stops moving mid
- * campaign without saying so.
+ * The run's scorecard, read fresh every call (republished after every cell);
+ * null reads unavailable, never zero.
  */
 async function readScorecard(ctx) {
   if (!ctx?.runDir) return null;
@@ -364,19 +224,13 @@ async function readScorecard(ctx) {
   }
 }
 
-// ── THE CUSTOM SIDE ──────────────────────────────────────────────────────────
+// ── THE CUSTOM SIDE ──
 
 /**
- * Load externally contributed providers. Unset env, unreadable file, or bad
- * JSON all yield an EMPTY list — never an error and never a partial read. A dev
- * shim that cannot load must not be able to take the board down.
- *
- * Manifest shape:
- *   { "stats": [ { "id": "…", "label": "…", "url": "https://…", "pick": "a.b.c" } ] }
- *
- * `url` is fetched as JSON and `pick` is a dotted path into the response. That
- * is the whole contract: a custom stat is a reading off an HTTP endpoint the
- * contributor already runs. It buys no code execution inside the control plane.
+ * Externally contributed providers. Unset env, unreadable file or bad JSON all
+ * yield an empty list. Manifest: { "stats": [ { id, label, url, pick } ] } —
+ * `url` is fetched as JSON and `pick` is a dotted path into it. No code runs
+ * inside the control plane.
  */
 async function customProviders() {
   const path = manifestPath();
@@ -417,13 +271,7 @@ export function pick(body, path) {
     .reduce((acc, k) => (acc == null ? acc : acc[k]), body);
 }
 
-/**
- * Turn a lifetime reading into this run's reading. Exported because it is the
- * whole of the delta contract and is worth asserting on directly.
- *
- * Both failure modes report `unavailable` rather than a number — see the entry
- * shape above for why neither may be papered over with a zero.
- */
+/** A lifetime reading → this run's reading; either failure mode is unavailable. */
 export function scopeToRun(now, baseline) {
   if (typeof now !== "number" || !Number.isFinite(now)) return { state: "ok", value: now };
   if (typeof baseline !== "number" || !Number.isFinite(baseline)) {
@@ -453,16 +301,11 @@ async function runAll(providers, ctx) {
 }
 
 /**
- * The whole surface. `custom_manifest_attached` says which of the two empties a
- * bare `custom: []` is: a clone with no surroundings, or an attached manifest
- * that contributed nothing.
+ * The whole surface. `custom_manifest_attached` tells a clone with no
+ * surroundings from a manifest that contributed nothing.
  */
 export async function collectStats({ baselines = {}, runDir = null, runsRoot = null, benchRoot = null } = {}) {
-  // THE RUN IN VIEW travels to every provider. Native readouts are run-scoped
-  // facts read off that run's own artifacts; a provider that had to resolve the
-  // run itself would be a second answer to "which run is this", and the wall
-  // already learned what that costs — a stale default served `0/71 passing` over
-  // a run whose artifacts recorded 16 passing and 2 failing.
+  // The run in view travels to every provider, so none resolves it on its own.
   const ctx = { baselines, runDir, runsRoot, benchRoot };
   const [bench, custom] = await Promise.all([
     runAll(benchProviders(), ctx),
@@ -471,20 +314,9 @@ export async function collectStats({ baselines = {}, runDir = null, runsRoot = n
   return { bench, custom, custom_manifest_attached: Boolean(manifestPath()) };
 }
 
-// ── THE BASELINE — a run's zero for every monotonic source ───────────────────
-//
-// WHERE IT LIVES, AND WHY THERE. Beside the run's own log, named after it:
-// `<log>.stats-baseline.json`. That is the same reasoning that moved the launch
-// log into the tree (server.mjs, "THE LOG GOES IN THE TREE") — retiring a tree
-// retires its baselines in the same act, and no cleanup step has to be
-// remembered. A baseline that outlived its run would be worse than none: it
-// would silently scope the NEXT run to the wrong zero.
-//
-// KEYED BY THE LOG, NOT BY THE TREE. One launch writes one log, and the log is
-// what `readRunState` resolves to when the board asks what is running. Keying
-// the baseline the same way means the number in the footer is scoped to exactly
-// the run named above it — never to the campaign around it, and never to a
-// sibling cell that happened to share a tree.
+// ── THE BASELINE ── a run's zero for every monotonic source, stored beside the
+// run's log as <log>.stats-baseline.json: retiring the tree retires it, and it
+// is scoped to exactly the run the board names.
 
 const BASELINE_SUFFIX = ".stats-baseline.json";
 
@@ -493,13 +325,8 @@ export function baselinePathFor(logPath) {
 }
 
 /**
- * SNAPSHOT EVERY MONOTONIC SOURCE — this is the "reset" for the run about to
- * start. Called at QUEUE time, before the harness is spawned, so no fire the
- * run itself produces can land inside its own zero.
- *
- * Never throws and never blocks a launch. A relay that is down at queue time
- * costs the tile for that run (it reads `unavailable`, which is true — nothing
- * knows that run's zero); it must not cost the run.
+ * Snapshot every monotonic source at queue time, before the harness spawns.
+ * Never throws or blocks a launch; an unreachable source just has no zero.
  */
 export async function captureStatsBaseline({ logPath }) {
   let providers;
@@ -517,7 +344,6 @@ export async function captureStatsBaseline({ logPath }) {
         const v = await withTimeout(p.readRaw(), PROVIDER_TIMEOUT_MS);
         if (typeof v === "number" && Number.isFinite(v)) captured[p.id] = v;
       } catch {
-        /* a source that cannot be read has no zero; see the entry shape */
       }
     }),
   );
@@ -529,7 +355,6 @@ export async function captureStatsBaseline({ logPath }) {
       "utf8",
     );
   } catch {
-    /* an unwritable baseline reads as absent, which is the honest answer */
   }
   return captured;
 }
