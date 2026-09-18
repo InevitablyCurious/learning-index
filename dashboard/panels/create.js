@@ -1,36 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// PANEL: [+ BASELINE] — a three-step sequence, then the launch
-//
-// ── WHAT THIS REPLACED ──────────────────────────────────────────────────────
-//
-//   [+ baseline]  on a model row → straight to a launch checklist, with the
-//                 model decided by whichever row was clicked
-//   [+ profile]   on a model row → a single tall form asking both frozen facts
-//                 at once (profile.js)
-//
-// The card carries a single [+ BASELINE]. It asks the substrate, then the
-// model, then confirms — in the order the answers matter, and with the model
-// stated on the confirmation rather than implied by a click target.
-//
-// Forward advances, back retreats, escape closes, and every frame before the
-// last is free. Only the final frame commits, because that one spends hours of
-// compute and, on cloud, real money.
-//
-// ── THE PROFILE BRANCH IS GONE (2026-09-07) ─────────────────────────────────
-//
-// This flow used to open on a CHOOSER — "start a baseline" or "create benchmark
-// profile" — and the second branch ran three more frames (PROFILE·1–3) asking
-// which floor the profile was measured against and whose memories it could
-// read. That experiment is not the one this bench runs: the measurement is
-// self-paired, one model against its own floor, so there is no producer roster
-// to declare and no transfer edge to preview. The branch, its frames and the
-// chooser that offered them were removed together — a chooser with one option
-// is a click that asks nothing.
-//
-// STARTING AN ON RUN IS NOT HERE EITHER. It begins at [+ run] on the baseline
-// row it will be measured against, and lands in this file's own confirmation
-// frame (openCellConfirm) so both arms are configured through one surface.
-// ─────────────────────────────────────────────────────────────────────────────
+// PANEL: [+ BASELINE] — local or cloud → model → (dev mode: seed) → challenge →
+// confirm → launch. Every frame before the last is free; only START commits.
+// An ON run starts at [+ run] on a baseline row and lands in this file's confirm
+// frame (openCellConfirm), so both arms are configured through one surface.
 
 import { esc } from "../board.js";
 import { graderWorkerTarget, requireTodosOn } from "./switches.js";
@@ -44,10 +15,8 @@ import {
 } from "./challenge.js";
 
 /**
- * THE WHOLE FLOW'S STATE, in one object.
- *
- * Module-local and never on the board payload: it describes what the OPERATOR is
- * part-way through choosing, which no poll can know and every poll would erase.
+ * The flow's state: what the operator is part-way through choosing. Local,
+ * never on the board payload (a poll would erase it).
  */
 const ui = {
   open: false,
@@ -57,34 +26,23 @@ const ui = {
   // ── the cell being configured ──
   kind: null,        // "local" | "cloud"
   model: null,       // the id from `startable`
-  // Which challenge this baseline is measured on. null until the step resolves
-  // it (one ready challenge pre-selects; two or more are the operator's call).
+  // null until the challenge step resolves it (one ready challenge pre-selects).
   challenge: null,
   query: "",
   provider: "all",
-  // Which arm this cell runs. Set by this flow's own frames (always "off" — a
-  // baseline IS the control) and by [+ run] on a baseline row ("on").
+  // "off" for a baseline; "on" when entered from [+ run].
   arm: "off",
   org: null,
-  // TRI-STATE, AND IT MATTERS. `null` means the operator has not touched the
-  // toggle, so the SERVER's default stands (it knows the model's window).
-  // `true`/`false` are a deliberate override. Seeding this with a boolean at
-  // open time would make every run carry a client-side opinion of a rule the
-  // server owns, and the two would drift the first time the ceiling moved.
+  // Tri-state: null = the server's default stands (it knows the context window);
+  // true/false = the operator's override.
   compact: null,
 
-  // The launch POST's own state. `pending` and `refusal` are never conflated:
-  // "working" and "refused" are different facts and a surface that shows one for
-  // the other sends the operator to fix the wrong thing.
+  // "Working" and "refused" are different facts; never shown as each other.
   pending: false,
   refusal: null,
 
-  // ── launch (frame b4) ──
-  //
-  // Everything the LAUNCH ITSELF learned, which no board poll can reconstruct
-  // afterwards: whether preflight passed, whether the server accepted the start,
-  // and the pid it returned. The rows that follow are derived from the live
-  // board instead — see launchRows.
+  // ── launch (frame b4) ── what the launch itself learned (preflight, accepted,
+  // pid). The rows after it are derived from the live board (launchRows).
   launch: null,
 };
 
@@ -114,13 +72,8 @@ export function openCreate() {
 }
 
 /**
- * Close the dialog.
- *
- * CLOSING NEVER STOPS A RUN. By the time the checklist is on screen the cell is
- * already live on the host; this dialog is a view of it, not a handle on it.
- * `ui.launch` is cleared because it describes one launch attempt and a stale
- * copy would reappear over the next one — the run itself is unaffected, and the
- * board behind this dialog carries it from here.
+ * Close the dialog. Closing never stops a run; it only drops this launch's
+ * view of it.
  */
 export function closeCreate() {
   ui.open = false;
@@ -156,23 +109,10 @@ export function setCreateRefusal(code, reason) {
   ui.pending = false;
 }
 
-// ── NAVIGATION ──────────────────────────────────────────────────────────────
-//
-// THE ORDER IS FIXED AND SHORT. One sequence of three, and `back` on the first
-// step has nowhere to go — the dialog opens there, so retreating from it would
-// be closing it, which is what escape and cancel are for.
+// ── NAVIGATION ── back on the first step has nowhere to go; escape closes.
 
-// ── THE SEED STEP IS CONDITIONAL, SO THE MAP IS A FUNCTION ────────────────
-//
-// `b2s` (seed from a build snapshot) sits between the model picker and the
-// confirmation, and EXISTS ONLY IN DEV MODE. A static map would have to either
-// carry a step that silently does nothing when the mode is off, or be mutated
-// at runtime — and a step machine you cannot read as a machine is how a flow
-// grows a state nobody can reach.
-//
-// Dev mode is read from the SERVER's answer on the board payload, never from a
-// local flag: the control plane refuses to arm a snapshot when the mode is off,
-// so a board that offered the step anyway would be offering a dead end.
+// The seed step (b2s) exists only in dev mode, so the step map is a function.
+// Dev mode comes from the server's answer on the board, never a local flag.
 const NEXT_BASE = { b1: "b2", b2: "bc", bc: "b3", b3: null, b4: null };
 const BACK_BASE = { b2: "b1", bc: "b2", b3: "bc" };
 const NEXT_DEV = { ...NEXT_BASE, b2: "b2s", b2s: "bc" };
@@ -193,8 +133,7 @@ export function createBack(devOn = false) {
   ui.refusal = null;
 }
 
-/** The model this sequence is for. Read by the seed step's arming call, which
- *  must name the model so the server can apply the same-model rule. */
+/** The model this sequence is for (the seed step's arming call names it). */
 export function createModel() {
   return ui.model;
 }
@@ -205,8 +144,7 @@ export function setCreateChallenge(id) {
 
 export function setCreateKind(kind) {
   ui.kind = kind;
-  // The model list is filtered by substrate, so a model chosen on one substrate
-  // is meaningless on the other and must not survive the change.
+  // A model picked on one substrate is meaningless on the other.
   ui.model = null;
   ui.provider = "all";
   ui.compact = null;
@@ -214,21 +152,13 @@ export function setCreateKind(kind) {
 
 export function setCreateModel(id) {
   ui.model = ui.model === id ? null : id;
-  // AN OVERRIDE BELONGS TO THE MODEL IT WAS MADE FOR. The default follows the
-  // model's context window, so carrying a deliberate "off" from a 1M model onto
-  // a freshly-picked 200k one would silently disable compaction on exactly the
-  // model that needs it most.
+  // An override belongs to the model it was made for (defaults follow the window).
   ui.compact = null;
 }
 
 /**
- * Flip the compaction toggle, resolving the tri-state against what is CURRENTLY
- * shown rather than against `null`.
- *
- * `null` means "the server's default stands", and the operator is looking at
- * that default rendered as on or off. A first click has to move away from what
- * they can see — not from an internal placeholder — or the toggle appears not
- * to respond on whichever half of the roster defaults the other way.
+ * Flip the compaction toggle relative to what is shown, not to null, so the
+ * first click always changes what the operator sees.
  */
 export function toggleCreateCompact(shown) {
   ui.compact = !(ui.compact ?? shown);
@@ -264,21 +194,12 @@ function frame(board, ledger) {
     case "bc": return baselineChallenge(board);
     case "b3": return baselineConfirm(ledger);
     case "b4": return launchProgress(board);
-    // The sequence opens on b1 and every transition is from the map above, so
-    // an unknown step is a bug in the map rather than an operator's doing.
-    // Falling back to the FIRST frame is the only recovery that cannot show a
-    // control the flow has not established the inputs for.
+    // An unknown step is a map bug; fall back to the first frame.
     default: return baselineKind(ledger);
   }
 }
 
-/**
- * THE FRAME SHELL — step label, branch, title, body, note, and the two controls.
- *
- * Every frame is drawn through here so the sequence cannot develop a different
- * geometry, a different back-affordance or a different place for its CTA
- * depending on which branch an operator took.
- */
+/** Every frame goes through one shell: same geometry, back and CTA placement. */
 function shell({ step, branch, title, body, note, back = "‹ back", cta, ctaAttr, ctaOk = true, final = false, headRight = "" }) {
   return `
     <div class="cframe${final ? " final" : ""}">
@@ -306,13 +227,8 @@ function shell({ step, branch, title, body, note, back = "‹ back", cta, ctaAtt
 }
 
 /**
- * THE REFUSAL, IN THE OPERATOR'S FACE, directly above the control that caused
- * it — the answer appears where the question was asked.
- *
- * Both halves are shown and they are different things: `code` is the machine
- * reason, greppable and the thing to quote in a report; `reason` is the server's
- * own prose, verbatim and never paraphrased here. A paraphrase would be a SECOND
- * definition of why the server refused, free to drift from the first.
+ * The refusal, above the control that caused it: the machine code (quote this)
+ * and the server's own words, never paraphrased.
  */
 function refusalBlock() {
   if (!ui.refusal) return "";
@@ -436,23 +352,14 @@ function baselineModel(ledger) {
 }
 
 /**
- * ONE MODEL. A model that cannot be baselined is drawn dead WITH ITS REASON,
- * never hidden.
- *
- * Hiding it would answer the operator's actual question — "where is the model I
- * wanted" — with silence, and the most common reason (it already has a floor) is
- * the one they most need to see, because it means the thing they wanted is
- * already done.
+ * One model. One that cannot be baselined is drawn dead with its reason, never
+ * hidden (usually: it already has a floor).
  */
 function modelLine(m) {
   const ok = m.can_baseline?.allowed === true;
   const on = ui.model === m.id;
-  // THE CONTEXT CAVEAT BELONGS WHERE THE MODEL IS CHOSEN, not only on the
-  // confirmation later. Every model the provider lists is offered — the
-  // benchmark measures a delta WITHIN one model, so a narrow window does not
-  // bias its own result — but a window narrower than the local aliases run at
-  // can end the cell early against the provider's ceiling, and that is the
-  // operator's call to make with the number in front of them.
+  // The context caveat shows where the model is chosen: a window narrower than the
+  // local aliases can end the cell early. Offered anyway; the operator decides.
   const narrow = m.below_advisory_floor === true && Number.isFinite(m.context);
   const meta = ok
     ? [
@@ -474,14 +381,8 @@ function modelLine(m) {
 }
 
 /**
- * THE KEY, REPORTED — never requested.
- *
- * There is no field here and there must never be one. The credential is resolved
- * server-side from the same places the harness reads (the environment, then
- * `config/cloud.env`), and what reaches this browser is presence, source and an
- * eight-character fingerprint. A key typed into this modal would live in page
- * memory, in a POST body and in the browser's autofill store, to configure a
- * file that already sits on the same disk as the service that reads it.
+ * The key is reported (presence, source, fingerprint), never requested: it is
+ * resolved server-side from the environment or config/cloud.env.
  */
 function keyLine(cloud) {
   const k = cloud?.key ?? null;
@@ -503,16 +404,8 @@ function keyLine(cloud) {
 // ── BASELINE · 3 — confirm ──────────────────────────────────────────────────
 
 /**
- * WHERE COMPACTION DEFAULTS ON — the panel's MIRROR of the server rule.
- *
- * The server decides (control/server.mjs `compactDefaultFor`), and the token is
- * minted from ITS answer. This exists so the toggle can be drawn in the right
- * position before the preview round-trip, and so the operator sees the state
- * they are about to confirm rather than a placeholder that flips under them.
- *
- * A mirror is a second copy and can drift, which is why it decides NOTHING: if
- * these ever disagree the server's answer is the one that runs, and the
- * confirmation frame shows the server's restatement, not this.
+ * Where compaction defaults on — a mirror of the server rule, used only to draw
+ * the toggle before the preview returns. It decides nothing.
  */
 const COMPACT_DEFAULT_CEILING = 524288;
 
@@ -523,19 +416,13 @@ function compactDefaultFor(m) {
 }
 
 /**
- * BASELINE · 2b — start from a captured build instead of building one.
- *
- * DEV MODE ONLY, and reached only because `steps()` inserted it. The list, the
- * seedability of each row and the armed selection are all the control plane's
- * answers; this frame renders them and posts the operator's choice back. See
- * panels/snapshot.js for why none of that is decided here.
- *
- * The CTA is always enabled: "build from scratch" is a valid outcome of this
- * step and is the one an operator who opened it by accident needs.
+ * BASELINE · 2b (dev mode only) — start from a captured build. The list,
+ * seedability and the armed choice are all the control plane's answers. The CTA
+ * is always enabled: "build from scratch" is a valid answer.
  */
 function baselineSeed(ledger, board) {
-  // Fired on render, read on the next one — the same fire-and-forget shape the
-  // ledger's stats strip uses, so a slow control plane cannot block the frame.
+  // Fire-and-forget: read on the next render, so a slow control plane never
+  // blocks the frame.
   refreshSnapshots(ui.model);
   const armed = armedSnapshotId();
   return shell({
@@ -554,12 +441,9 @@ function baselineSeed(ledger, board) {
 }
 
 function baselineChallenge(board) {
-  // Fired on render, read on the next one — the seed step's shape, so a slow
-  // control plane cannot block the frame.
+  // Fire-and-forget, as above.
   refreshChallenges();
-  // One ready challenge is still a choice, but not one worth making twice: it
-  // starts selected and the operator continues. Two or more, nothing is
-  // pre-picked — the benchmark does not decide what is being measured.
+  // One ready challenge starts selected; with two or more nothing is pre-picked.
   if (ui.challenge === null) ui.challenge = soleReadyChallenge();
   const picked = ui.challenge ? challengeById(ui.challenge) : null;
   return shell({
@@ -637,12 +521,8 @@ function baselineConfirm(ledger) {
     title: "Confirm",
     body,
     headRight: compactControl(compactOn, compactDefault),
-    // NO BACK ON THE ON ARM. It was entered from a baseline row, not from this
-    // flow's frames — there is no b2 model picker behind it to return to, and
-    // offering one would drop the operator into a half-built baseline sequence.
+    // No back on the ON arm: it was entered from a baseline row.
     back: isOn ? null : "‹ back",
-    // NO NOTE. This frame is the confirmation, and START starts the cell —
-    // there is no second dialog to warn about any more.
     cta: "START →",
     ctaAttr: `data-create-baseline-continue="1"`,
     ctaOk: Boolean(ui.model),
@@ -650,18 +530,7 @@ function baselineConfirm(ledger) {
   });
 }
 
-/**
- * THE HEADER COMPACTION TOGGLE, under `esc` at the card's top-right.
- *
- * A single button showing the current state; clicking it flips it. "COMPACT:
- * ON" → "COMPACT: OFF" in one click, nothing else.
- *
- * RED WHEN OFF OVERRIDES A DEFAULT-ON PRECONDITION. The model's context window
- * says compaction should be on (the "measured precondition"); turning it off is
- * an active removal of what the window asked for. That is the one case the
- * button turns red — the same `--danger` the summary warning below uses, so the
- * colour means the same thing in both places.
- */
+/** The compaction toggle. Red when it is off against a default-on window. */
 function compactControl(compactOn, compactDefault) {
   const overrideOff = compactOn === false && compactDefault === true;
   return `
@@ -671,18 +540,8 @@ function compactControl(compactOn, compactDefault) {
 }
 
 /**
- * WHAT TURNING COMPACTION OFF COSTS, said at the moment it is turned off.
- *
- * Shown only when the toggle is off, and worded harder when off is an OVERRIDE
- * of a default that wanted it on — because that is the case where the operator
- * has actively removed something the model's own context window asked for.
- *
- * This is a warning, not a refusal. The operator may have a reason to want an
- * uncompacted run (measuring the compaction effect itself, most obviously), and
- * the panel does not get to decide that. What it does get to do is make sure
- * nobody turns this off without being told what happens — the failure it
- * prevents is silent and only shows up hours later, as a repair phase that has
- * forgotten what it already tried.
+ * What turning compaction off costs, shown when it is off (harder when that
+ * overrides a default). A warning, not a refusal.
  */
 function compactOffWarning(defaultWasOn) {
   return `
@@ -713,35 +572,14 @@ function compactOffWarning(defaultWasOn) {
     </div>`;
 }
 
-// ── LAUNCH (frame BASELINE · 4) ─────────────────────────────────────────────
-//
-// ── WHY THE SECOND DIALOG IS GONE ───────────────────────────────────────────
-//
-// START used to arm the cell and hand off to a separate run-control screen that
-// asked the same question again. Two dialogs meaning "confirm this run" is one
-// too many: the operator learns to click through whichever they see more often,
-// and the three frames before this one have already established the model, the
-// substrate and the arm. This frame is what the second dialog should have been —
-// not another question, but the ANSWER arriving.
-//
-// The server's validation did NOT go with it. `preview` still runs and still
-// mints the token that `start` must carry, so the parameters are checked by the
-// server exactly as before; the difference is that a refusal now lands as a red
-// row here instead of as a fresh modal, and it lands in the SERVER'S OWN WORDS.
-//
-// ── WHAT THIS SURFACE IS FOR ────────────────────────────────────────────────
-//
-// So nobody has to ask an agent whether the run is actually working. Every row
-// is a real observation with a named source. Nothing is inferred, nothing is
-// optimistic, and a row that cannot be observed says `unobserved` rather than
-// showing a checkmark it did not earn.
+// ── LAUNCH (frame BASELINE · 4) ── START runs preflight, preview (which mints
+// the token) and start; a refusal lands as a red row in the server's own words.
+// Every row is a real observation; one that cannot be observed says so.
 
 /** Preflight is the one gate that runs BEFORE the launch and can refuse it. */
 /**
- * `compact` is passed so preflight checks the things THIS run will actually
- * use. Compaction depends on a tool baked into the worker image, and opencode
- * swallows plugin load errors — so a stale image reports nothing wrong right up
- * until the model is told to call a tool that is not there.
+ * `compact` so preflight checks what this run uses: compaction needs a tool
+ * baked into the worker image, and a stale image fails silently.
  */
 async function runPreflight({ model = null, compact = false } = {}) {
   const params = new URLSearchParams();
@@ -762,31 +600,15 @@ async function runPreflight({ model = null, compact = false } = {}) {
 }
 
 /**
- * WHICH BUTTON FIXES THIS.
- *
- * "Fix what preflight named, then start again" was the whole of the guidance,
- * and what preflight named was a shell command — so a refusal on the board sent
- * the operator to a terminal for something the board itself can do. Every
- * failure that a custom tool repairs now carries that tool, resolved by the
- * control plane against the real registry (`remedy`), and this turns the list of
- * failures into the SHORT list of distinct buttons to press.
- *
- * GROUPED BY TOOL, not one button per failed check: a stale image trips several
- * checks at once and they are all repaired by one press.
- *
- * WHAT HAS NO BUTTON IS STILL SAID. A campaign slot to archive, a dead hub, a
- * roster that disagrees with itself — none of those are a button, and quietly
- * dropping them would turn "press these two things" into a promise that the
- * launch will then succeed.
+ * Which buttons fix a preflight refusal: failures grouped by the custom tool
+ * that repairs them. Failures with no tool are still listed.
  */
 export function remedyPlan(failed) {
   const byTool = new Map();
   const unfixable = [];
   for (const c of failed) {
     const r = c?.remedy;
-    // `remedy_tool` present but `remedy` null means preflight named a tool this
-    // installation does not have — a bare clone of bench/ has no dev tools. That
-    // is not a button, and the check's own detail already names the fix in words.
+    // A tool this installation doesn't have (a bare clone has no dev tools).
     if (!r?.id) {
       unfixable.push(c);
       continue;
@@ -798,26 +620,13 @@ export function remedyPlan(failed) {
 }
 
 /**
- * START. Preflight, then preview, then start — in that order, stopping at the
+ * START: preflight (a hard gate), then preview, then start, stopping at the
  * first refusal.
- *
- * PREFLIGHT FIRST AND IT IS A HARD GATE. It is the only step here that can
- * refuse cheaply: everything it checks (ports, images, identity, disk) is a
- * precondition whose failure would otherwise surface hours in, or — as with a
- * stale worker image — not surface at all and quietly measure the wrong
- * substrate.
  */
 /**
- * Open the CONFIRM frame for a cell — either arm.
- *
- * THE ON ARM GETS THE SAME FRAME, and that is the whole point of this function.
- * [+ run] used to jump straight to the launch checklist,
- * skipping confirmation entirely, which meant an ON cell could never be told
- * anything about how it was configured — including whether it would compact.
- * Since a compacted cell and an uncompacted one sit on different turn and token
- * scales, an ON cell that silently took a different setting from its OFF floor
- * would produce a delta measuring compaction rather than memory. One frame,
- * both arms, the toggle visible in each.
+ * Open the confirm frame for a cell, either arm. The ON arm gets the same frame
+ * so its compaction setting is visible: a different setting from its floor
+ * would make the delta measure compaction, not memory.
  */
 export function openCellConfirm({ model, kind, arm = "off", org = null } = {}) {
   if (model) { ui.model = model; ui.kind = kind ?? ui.kind; }
@@ -831,8 +640,7 @@ export function openCellConfirm({ model, kind, arm = "off", org = null } = {}) {
 }
 
 export async function launchCell({ model, kind, arm = null, org = null } = {}) {
-  // Called for the [+ run] path too, where the selection comes from a baseline
-  // row rather than this flow's own frames.
+  // The [+ run] path: the selection comes from a baseline row.
   if (model) { ui.model = model; ui.kind = kind ?? ui.kind; }
   ui.open = true;
   if (arm !== null) ui.arm = arm;
@@ -844,11 +652,7 @@ export async function launchCell({ model, kind, arm = null, org = null } = {}) {
     ui.launch.preflight = { state: ROW.running };
     const pf = await runPreflight({
       model: ui.model,
-      // CHECKED UNLESS EXPLICITLY DISABLED. The tri-state's `null` means the
-      // server's default stands, and that default is ON for every model narrow
-      // enough to need it — so the safe reading of "not decided" is "will
-      // probably compact". Checking when it turns out not to is ~15s wasted;
-      // NOT checking when it does is a cell that silently never compacts.
+      // Checked unless explicitly off: "not decided" probably compacts.
       compact: ui.compact !== false,
     });
     ui.launch.preflight = pf.ok
@@ -857,48 +661,25 @@ export async function launchCell({ model, kind, arm = null, org = null } = {}) {
           state: ROW.fail,
           detail: `${pf.verdict.toUpperCase()} — ${pf.failed.map((c) => `${c.id ?? c.name}: ${c.detail ?? "failed"}`).join(" · ")}`,
         };
-    // Held on the launch, not on the row: the checklist row renders the reason,
-    // and this renders the way out of it.
     ui.launch.remedies = pf.ok ? [] : pf.remedies;
     ui.launch.unfixable = pf.ok ? [] : pf.unfixable;
     if (!pf.ok) {
-      // Nothing is launched. The remaining rows stay pending rather than being
-      // marked failed — they were never attempted, and that is a different fact.
+      // Nothing launched: the later rows stay pending, not failed.
       ui.launch.start = { state: ROW.pending, detail: "not attempted — preflight refused" };
       return;
     }
 
     ui.launch.start = { state: ROW.running };
-    // ORG IS NOT INVENTED HERE. An ON cell needs one and this flow has no way
-    // to know it; the server refuses with `org_required` in its own words, and
-    // that refusal lands on the checklist rather than being pre-empted by a
-    // guess.
+    // Org is never guessed; the server refuses with org_required.
     const payload = { model: ui.model, arm: ui.arm ?? "off", kind: ui.kind };
     if ((ui.arm ?? "off") === "on" && ui.org) payload.org = ui.org;
-    // ONLY SENT WHEN THE OPERATOR TOUCHED IT. `null` means they did not, and
-    // omitting the key is how the server is told to apply its own default —
-    // sending `false` for "untouched" would strip compaction from every model
-    // whose window asked for it.
+    // Sent only when touched; an absent key applies the server's default.
     if (ui.compact !== null) payload.compact = ui.compact;
-    // PLAN BEFORE WORK — read from the settings drawer at SEND time, not held
-    // in `ui`. It is a browser preference set on a different surface, and the
-    // operator can flip it while this wizard is open.
-    //
-    // Unconditional, unlike compaction: compaction has a server-side default
-    // that "unspecified" must reach, so omitting the key is meaningful there.
-    // This has no server default — off is off — so always stating it is the
-    // honest form, and a missing key would silently mean off anyway.
-    // WHICH CHALLENGE. The server resolves the id and refuses an unknown or
-    // unrunnable one; it also refuses a second challenge on a baseline that
-    // already built something else.
+    // The challenge: the server refuses an unknown one, or a second challenge on a
+    // baseline that already built another.
     if (ui.challenge) payload.challenge = ui.challenge;
     payload.requireTodos = requireTodosOn();
-    // MACHINE SHARE for grading. Read at SEND time like the one above, but not
-    // the same KIND of setting: that changes what the agent does and make two
-    // runs incomparable, this only changes how many test workers the grading
-    // container starts once the model is done. It travels with the run so the
-    // value that graded a cell is the one recorded against it, rather than
-    // whatever the drawer happened to say later.
+    // Grading machine share, read at send time and recorded with the run.
     payload.graderWorkerTarget = graderWorkerTarget();
 
     const pv = await fetch(`/api/run/preview`, {
@@ -939,16 +720,8 @@ export async function launchCell({ model, kind, arm = null, org = null } = {}) {
 }
 
 /**
- * THE ROWS AFTER THE LAUNCH ARE DERIVED FROM THE LIVE BOARD, not remembered.
- *
- * The board already streams over SSE, so these re-evaluate on every frame with
- * no polling of their own. Deriving rather than recording also means the
- * checklist cannot drift from what the rest of the board is showing — there is
- * one account of the run, and this is a view of it.
- *
- * PENDING vs FAILED. A row that has not happened YET is pending, not failed. A
- * cell takes minutes to reach its first phase, and marking those minutes red
- * would train the operator to ignore red.
+ * The rows after the launch, derived from the live board (one account of the
+ * run). Not yet happened = pending, not failed.
  */
 export function launchRows(board) {
   const L = ui.launch;
@@ -977,9 +750,7 @@ export function launchRows(board) {
       id: "harness",
       label: "Harness alive",
       src: "process probe",
-      // The start response ALREADY proves this: the control plane confirms the
-      // child survived its startup window before returning ok, which is what
-      // catches a harness that dies on a usage error seconds after spawn.
+      // Start returns ok only after the child survives its startup window.
       ...(!launched
         ? { state: ROW.pending, detail: "not attempted" }
         : ctl && ctl.running === false && !dead
@@ -1011,11 +782,7 @@ export function launchRows(board) {
   ];
 }
 
-/**
- * Whole class names per state — the style-coverage guard blanks template holes
- * before reading class attributes, so an interpolated suffix reaches it as a
- * bare prefix that matches no rule, and a missing rule renders silently.
- */
+/** Whole class names: the style-coverage guard cannot see interpolated suffixes. */
 const ROW_CLASS = {
   pending: "ck-row ck-pending",
   running: "ck-row ck-running",
@@ -1044,16 +811,8 @@ function checkRow(r) {
 }
 
 /**
- * THE WAY OUT OF A REFUSAL.
- *
- * Rendered only under a preflight refusal, and only when the control plane
- * resolved at least one failure to a tool that this installation actually has.
- *
- * ONE BUTTON PER TOOL, each naming the checks it repairs, because a stale image
- * trips several checks at once and pressing rebuild three times is not three
- * fixes. A blocked tool is shown DISABLED with its own reason rather than
- * hidden: "the button that would fix this cannot run, and here is why" is
- * information; a missing button is not.
+ * The way out of a refusal: one button per tool, naming the checks it repairs.
+ * A blocked tool is shown disabled with its reason.
  */
 function remedyBlock() {
   const remedies = ui.launch?.remedies ?? [];
@@ -1075,8 +834,7 @@ function remedyBlock() {
     })
     .join("");
 
-  // Named, never silently dropped — otherwise pressing the buttons above reads
-  // as a promise that the next launch will go through.
+  // Named, so pressing the buttons above doesn't read as a promise.
   const rest = unfixable.length
     ? `<div class="fx-manual">No button for: ${esc(
         unfixable.map((c) => c.name).join(", "),
@@ -1091,15 +849,7 @@ function remedyBlock() {
     </div>`;
 }
 
-/**
- * BASELINE · 4 — the launch, as it happens.
- *
- * NO CTA. There is nothing left to confirm and nothing here to decide: the cell
- * is running (or it was refused, and the reason is on screen). The only control
- * is CLOSE, and it says what closing does — because a dialog over a live run
- * that offers a bare ✕ leaves the operator guessing whether dismissing it kills
- * the cell.
- */
+/** BASELINE · 4 — the launch as it happens. No CTA; CLOSE says what closing does. */
 function launchProgress(board) {
   const rows = launchRows(board);
   const failed = rows.find((r) => r.state === "fail") ?? null;
