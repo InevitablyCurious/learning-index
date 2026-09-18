@@ -1,10 +1,5 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// CONTROL PLANE — RESET / RESTORE GATES
-//
-// Split out of server.mjs (LI-14 phase 1), byte-verbatim: MAY THE TREE BE
-// RESET RIGHT NOW, and MAY THIS BACKUP BE RESTORED RIGHT NOW. The routes that
-// call these stay in server.mjs until phase 2.
-// ─────────────────────────────────────────────────────────────────────────────
+// CONTROL PLANE — RESET / RESTORE GATES: may the tree be reset, and may this
+// backup be restored, right now — and what exactly would each do.
 
 import { refuse } from "../contract.mjs";
 import { readRunState } from "../runstate.mjs";
@@ -13,35 +8,21 @@ import { describeBackup, checkBackup, resolveBackupDir } from "../backups.mjs";
 import { RUNS_ROOT, getLauncher } from "../state.mjs";
 
 /**
- * MAY THE TREE BE RESET RIGHT NOW, and what exactly would that retire?
- *
- * ── THE ONE HARD REFUSAL: A CELL IN FLIGHT ──────────────────────────────────
- *
- * Rolling the tree forward mid-run would leave the running harness writing into
- * a tree no reader resolves into any more. The cell would keep burning hours,
- * the board would show an empty bench, and the measurement would be findable
- * only by someone who knew the old timestamp. That is a silent loss of exactly
- * the kind this tree exists to prevent, so it is refused rather than warned
- * about — the operator can reset the moment the cell lands.
+ * May the tree be reset now, and what would it move? A cell in flight is
+ * stopped first (its partial data lands in the backup), and the restatement
+ * says so.
  */
 export async function treeResetGate() {
   const run = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
-  // A run in flight no longer hard-refuses a reset: the reset now STOPS it
-  // first (see stopRun) so its partial data lands in the backup rather than
-  // being moved out from under a live process. The operator is told, verbatim,
-  // that a stop will happen before they confirm.
   const willStop = run.can_start !== true;
 
   const { moves, keeps } = await planReset(RUNS_ROOT);
 
-  // THE TOKEN BINDS TO WHAT WILL ACTUALLY MOVE. If a run lands between the
-  // confirmation appearing and the operator pressing continue, the list changes,
-  // the token changes, and they are re-shown the new list instead of silently
-  // backing up a measurement they never saw named.
+  // The token binds to what will move: a run landing in between changes it, and
+  // the operator is shown the new list.
   const token = ["reset-all", `items=${moves.length}`, `sig=${moves.join(",")}`].join("|");
 
-  // PLAIN WORDS. This is the sentence an operator agrees to, and it is the one
-  // place where precise-but-opaque costs the most.
+  // Plain words: this is the sentence the operator agrees to.
   const restatement = [
     "Reset ALL benchmark data.",
     willStop
@@ -52,10 +33,7 @@ export async function treeResetGate() {
       : "there is nothing to back up — the bench is already empty",
     "That clears results, baselines and run logs. The board goes back to zero.",
     "NOTHING IS DELETED. Everything moves into runs/backups/ and can be moved back.",
-    // KEPT ITEMS ARE COUNTED, NOT LISTED. There are two dozen pytest and
-    // redeploy logs down there, and printing them buried the one line that
-    // decides whether this is safe to press. The live process files are named
-    // because they are the ones an operator would worry about.
+    // Kept items are counted, not listed; the live process files are named.
     keeps.length
       ? `Left alone: ${keeps.length} tooling/live file${keeps.length === 1 ? "" : "s"}` +
         (keeps.some((k) => k.startsWith("mcp4550.")) ? " (including the running bench MCP)" : "")
@@ -68,12 +46,9 @@ export async function treeResetGate() {
 }
 
 /**
- * MAY THIS BACKUP BE RESTORED RIGHT NOW, and what exactly would that do?
- *
- * Three refusals, in the order an operator would hit them: a run in flight, an
- * id that names nothing, and a backup that fails the conformance check. The
- * third is the one worth having — a malformed backup restores QUIETLY WRONG
- * rather than loudly, so it is caught before anything moves.
+ * May this backup be restored now? Refused while a run is in flight, for an
+ * unknown id, or when the backup fails its check (a malformed backup restores
+ * quietly wrong).
  */
 export async function restoreGate(id) {
   const run = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
@@ -102,8 +77,7 @@ export async function restoreGate(id) {
 
   const { moves } = await planReset(RUNS_ROOT);
 
-  // The token binds to the backup AND to what is about to be parked, so a cell
-  // landing between preview and confirm re-shows the operator the new picture.
+  // Bound to the backup and to what will be parked.
   const token = ["restore", `id=${summary.id}`, `items=${summary.counts.items}`, `park=${moves.length}`].join("|");
 
   const when = new Date(Number(summary.id) * 1000).toISOString().replace("T", " ").replace(/\..*/, " UTC");

@@ -1,15 +1,5 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// BENCH CONTROL PLANE — SNAPSHOT + DEV-MODE ROUTES (LI-14 phase 2)
-//
-// Handler bodies moved here BYTE-VERBATIM from server.mjs; the route paths are
-// wire contract — the board calls them byte-identically — and must not change.
-// Shared state comes from ../state.mjs and the non-route helpers from ../lib/:
-// imported, never redefined.
-//
-// Each entry is { method, path, handle(req, res, url) }. server.mjs builds its
-// dispatch table from these at startup and hands each handler the URL it
-// already parsed for the dispatch key, so the bodies stay verbatim.
-// ─────────────────────────────────────────────────────────────────────────────
+// BENCH CONTROL PLANE — SNAPSHOT + DEV-MODE ROUTES. Each entry is { method,
+// path, handle(req, res, url) }; paths are wire contract.
 
 import { listSnapshots, readSnapshot, seedableBy, resolveArmed, writeArmed } from "../snapshots.mjs";
 import { readDevMode, resolveDevMode, writeDevMode } from "../devmode.mjs";
@@ -18,12 +8,8 @@ import { sendJson, readBody } from "../lib/http.mjs";
 
 export const routes = [
   {
-    // ── GET /api/devmode ─────────────────────────────────────────────────
-    //
-    // The control plane's own mode. Also folded into /api/capabilities so the
-    // board carries it on every poll without a second request — BOTH call
-    // `resolveDevMode`, so there is one producer and two exposures rather than
-    // two answers that can disagree.
+    // ── GET /api/devmode ── also folded into /api/capabilities; both call
+    // resolveDevMode, so they can't disagree.
     method: "GET",
     path: "/api/devmode",
     async handle(req, res, url) {
@@ -33,11 +19,7 @@ export const routes = [
   },
 
   {
-    // ── POST /api/devmode ────────────────────────────────────────────────
-    //
-    // REFUSES when the environment pins the mode. Writing the file anyway would
-    // return a success the next read contradicts, and the operator would have to
-    // discover it by watching the toggle snap back.
+    // ── POST /api/devmode ── refuses when the environment pins the mode.
     method: "POST",
     path: "/api/devmode",
     async handle(req, res, url) {
@@ -49,17 +31,9 @@ export const routes = [
   },
 
   {
-    // ── GET /api/snapshots ───────────────────────────────────────────────
-    //
-    // Every captured snapshot, with the armed selection alongside it so the
-    // board never has to make two requests to draw one picker and never has to
-    // decide which of two answers is current.
-    //
-    // `?model=` applies the same-model rule (§6) per row rather than filtering
-    // the list: a snapshot an operator captured and cannot find teaches them
-    // nothing by its absence, so the ineligible ones are listed and REFUSED,
-    // each in its own words. Filtering is the board's choice to make, not this
-    // endpoint's to impose.
+    // ── GET /api/snapshots ── every snapshot plus the armed one, in one call.
+    // `?model=` applies the same-model rule per row: ineligible snapshots are
+    // listed with their reason, never filtered out.
     method: "GET",
     path: "/api/snapshots",
     async handle(req, res, url) {
@@ -77,13 +51,8 @@ export const routes = [
   },
 
   {
-    // ── POST /api/snapshots/arm ──────────────────────────────────────────
-    //
-    // GATED ON DEV MODE, HERE. The board hides the picker when dev mode is off,
-    // but a hidden control is not a closed door — a stale tab or a curl can
-    // still post. The mode is read from this process, never from the payload,
-    // for exactly the reason the confirmation-token design already states: the
-    // server must not trust the browser's claim about what mode it is in.
+    // ── POST /api/snapshots/arm ── gated on dev mode here, from this process (a
+    // hidden picker is not a closed door).
     method: "POST",
     path: "/api/snapshots/arm",
     async handle(req, res, url) {
@@ -100,9 +69,7 @@ export const routes = [
         return;
       }
       const id = body?.snapshot_id ?? null;
-      // DISARM IS ALWAYS ALLOWED and needs no snapshot to exist. Refusing to
-      // disarm because the armed id has since been deleted would leave the
-      // operator armed to something unreachable with no way to clear it.
+      // Disarm is always allowed, even if the armed snapshot has since vanished.
       if (id !== null) {
         const row = await readSnapshot(RUNS_ROOT, String(id));
         const check = seedableBy(row, body?.model ?? row?.author_model ?? null);
