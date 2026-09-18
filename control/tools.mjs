@@ -1,35 +1,13 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// TOOLS — the registry the board's tool drawer renders, and the one way a tool
-// is invoked
+// TOOLS — the registry the board's drawer renders, and the one way a tool runs.
 //
-// Two kinds of tool, and only two:
+//   built-in  the benchmark's own, declared here
+//   custom    served by a separate service at BENCH_TOOLS_URL (CUSTOM-TOOLS.md);
+//             the benchmark knows none by name and never checks them
 //
-//   · BUILT-IN   the benchmark's own, declared in this file. Today: Rebuild
-//                worker.
-//   · CUSTOM     served by a separate custom-tools service at BENCH_TOOLS_URL —
-//                for example a memory system's own operations. The benchmark
-//                ships none of them, knows none of them by name, and never
-//                checks them. The contract is CUSTOM-TOOLS.md.
-//
-// THE BENCHMARK RUNS THE SAME WITH OR WITHOUT A SERVICE. Nothing here is on the
-// run path or the preflight path: preflight's fix buttons resolve against the
-// built-ins only (describeBuiltinTools), so a slow, broken or absent service can
-// cost the drawer a row and nothing else.
-//
-// Doctrine:
-//   · SPEC-AS-DATA   a tool declares itself as a row, not as a branch in the
-//                    dispatcher.
-//   · FAIL LOUD      an unknown or misconfigured tool ERRORS. It never returns a
-//                    cheerful no-op, because a tool that silently does nothing is
-//                    indistinguishable from one that worked.
-//   · HONEST ABSENCE a service that cannot be read is shown as one blocked row
-//                    naming the address and the reason — never silently skipped.
-//
-// ── WHY THE REGISTRY LIVES HERE AND NOT IN THE BOARD ────────────────────────
-//
-// A UI holding its own copy is a second source of truth that will eventually
-// claim a tool is available when it is not. The board renders what this serves.
-// ─────────────────────────────────────────────────────────────────────────────
+// The benchmark runs the same with or without a service: preflight's fix buttons
+// resolve against built-ins only. A tool is a data row, not a branch; an unknown
+// or misconfigured tool errors loudly; an unreadable service shows as one blocked
+// row with its address and reason.
 
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -54,9 +32,8 @@ function controlPython(benchRoot) {
 
 function builtinTools(benchRoot) {
   return [
-    // It REFUSES while a cell is in flight. Rebuilding the worker image
-    // underneath a running cell changes the substrate mid-measurement, which
-    // produces a result that looks valid and is not.
+    // Refuses while a cell is in flight: rebuilding the worker mid-cell changes the
+    // substrate under the measurement.
     {
       id: "worker-image-rebuild",
       name: "Rebuild worker",
@@ -71,10 +48,8 @@ function builtinTools(benchRoot) {
       ],
       args: [],
       refuse_while_running: true,
-      // NOT A BARE `docker build`. The build has to record what it was built
-      // FROM, or freshness has nothing to compare: docker is content-addressed,
-      // so a content-identical rebuild is a cache hit that keeps the old image's
-      // creation time, and an mtime check stays red through every rebuild.
+      // Not a bare docker build: it records what it was built from, so freshness can
+      // be checked (a cached rebuild keeps the old image's creation time).
       invoke: {
         kind: "script",
         command: controlPython(benchRoot),
@@ -96,11 +71,8 @@ function builtinTools(benchRoot) {
         },
       ],
     },
-    // THE INSTRUMENT, same treatment as the substrate. Grading runs only in
-    // this image, and it bakes a digest of grader/ at build time; preflight
-    // reads that back. A stale one grades against gate code that is not the
-    // code on disk and nothing in the report would say so — which is why the
-    // refusal that names it now comes with this button instead of a command.
+    // The grader image, same treatment: it bakes a digest of grader/ that
+    // preflight reads back, so a stale grader is caught and fixed from here.
     {
       id: "grader-image-rebuild",
       name: "Rebuild grader",
@@ -114,8 +86,7 @@ function builtinTools(benchRoot) {
         "preflight reads the label back and compares it to the gates on disk — a content check, not a timestamp",
       ],
       args: [],
-      // Rebuilding the instrument under a running cell changes what the
-      // attempt is measured by, mid-measurement.
+      // Rebuilding the grader mid-cell changes what the attempt is measured by.
       refuse_while_running: true,
       invoke: {
         kind: "script",
@@ -169,12 +140,9 @@ function cleanArgs(declared) {
 }
 
 /**
- * The custom tools the attached service serves, or `[]` when none is attached.
- *
- * AN UNREADABLE SERVICE IS REPORTED, NEVER SKIPPED. Set but unreachable, or not
- * answering the contract, becomes ONE blocked row naming the address and the
- * reason. Returning `[]` would make a typo in the address indistinguishable from
- * a service that legitimately serves nothing.
+ * The attached service's tools, or [] when none is attached. Unreachable or
+ * off-contract becomes one blocked row, never [] (a typo'd address must not look
+ * like an empty service).
  */
 async function serviceTools(benchRoot) {
   const url = toolsServiceUrl();
@@ -208,8 +176,7 @@ async function serviceTools(benchRoot) {
   for (const entry of declared) {
     const id = String(entry?.id ?? "").trim();
     if (!id) continue;
-    // BUILT-INS WIN A COLLISION. A service cannot make `worker-image-rebuild`
-    // mean something else on one installation, and the attempt is shown.
+    // Built-ins win a name collision, and the attempt is shown.
     if (builtinIds.has(id)) {
       out.push(
         blockedRow({
@@ -254,16 +221,14 @@ function describe(t) {
     id: t.id,
     name: t.name,
     blurb: t.blurb,
-    // What to say when it SUCCEEDS, when "it worked" is not the whole truth.
-    // Absent for most tools: their own output is the report.
+    // What to say on success when "it worked" isn't the whole truth.
     success_note: t.success_note ?? null,
     seams: t.seams ?? [],
     args: (t.args ?? []).map((a) => ({ ...a })),
     status: failed.length === 0 ? "wired" : "blocked",
-    // The board needs this to explain a refusal BEFORE the click, not after.
+    // So the board can explain a refusal before the click.
     refuse_while_running: t.refuse_while_running === true,
-    // WHOSE TOOL THIS IS: a custom tool is not part of the benchmark anyone else
-    // clones.
+    // A custom tool is not part of the benchmark others clone.
     external: t.external === true,
     blocked_reason: failed.length ? failed.map((p) => p.reason).join("; ") : null,
   };
@@ -280,17 +245,9 @@ export function describeBuiltinTools(benchRoot) {
 }
 
 /**
- * Resolve each preflight check's remedy TOOL ID into the button that repairs it.
- *
- * Preflight names the remedy by id and stops there, because this side knows
- * the registry: a board holding its own id->name table would be a second source
- * of truth. Callers pass the BUILT-IN registry — preflight is the benchmark's
- * own and never names a custom tool.
- *
- * AN UNRESOLVED ID BECOMES `null`, NOT A BUTTON. Every preflight detail already
- * names its own fix in words.
- *
- * Mutates the checks in place and returns them.
+ * Resolve each preflight check's remedy id to the built-in tool that fixes it;
+ * an unresolved id becomes null (the check's detail already says the fix in
+ * words). Mutates and returns the checks.
  */
 export function attachRemedies(checks, registry) {
   for (const check of checks ?? []) {
@@ -310,14 +267,11 @@ export function attachRemedies(checks, registry) {
   return checks;
 }
 
-// ── handlers ─────────────────────────────────────────────────────────────────
+// ── handlers ──
 
 /**
- * Run a declared command as an ARGV ARRAY — never a shell string.
- *
- * The command and its arguments come from the registry row, not from the
- * request, so a caller cannot compose one. Output is returned verbatim on
- * success and failure alike: rewriting it would hide which layer refused.
+ * Run a declared command as an argv array, never a shell string. Command and
+ * args come from the registry row, not the request. Output returned verbatim.
  */
 async function runScript({ command, argv, timeoutMs = 120000, benchRoot }) {
   return await new Promise((resolveP) => {
@@ -354,11 +308,8 @@ async function runScript({ command, argv, timeoutMs = 120000, benchRoot }) {
 }
 
 /**
- * Ask the custom-tools service to run one of its tools.
- *
- * The service's own verdict and output are forwarded, never rewritten. A
- * service that cannot be reached, times out, or answers outside the contract is
- * a named failure — never a quiet ok.
+ * Ask the custom-tools service to run one of its tools. Its verdict and output
+ * are forwarded as-is; unreachable, timed out or off-contract is a named failure.
  */
 async function runService({ url, id, timeoutMs = RUN_TIMEOUT_DEFAULT_MS, args }) {
   let res;
@@ -406,11 +357,8 @@ async function runService({ url, id, timeoutMs = RUN_TIMEOUT_DEFAULT_MS, args })
 const HANDLERS = { script: runScript, service: runService };
 
 /**
- * Invoke a tool by id.
- *
- * FAIL LOUD AT EVERY STEP: unknown id, unknown handler kind, missing required
- * arg, failed precondition. None of these return ok — a tool that cannot run
- * says so.
+ * Invoke a tool by id. Unknown id, unknown handler, missing argument and
+ * failed precondition all fail loudly.
  */
 export async function invokeTool(benchRoot, id, args = {}) {
   const tool = (await toolRegistry(benchRoot)).find((t) => t.id === String(id));
@@ -436,13 +384,13 @@ export async function invokeTool(benchRoot, id, args = {}) {
     };
   }
 
-  // ONLY DECLARED ARGUMENTS, AS STRINGS.
+  // Only declared arguments, as strings.
   const picked = {};
   for (const a of tool.args ?? []) {
     const v = args?.[a.name];
     if (v !== undefined && v !== null && String(v) !== "") picked[a.name] = String(v);
   }
 
-  // Spread first so a row can never override `benchRoot` or the validated `args`.
+  // Spread first so a row can't override benchRoot or the validated args.
   return await handler({ ...tool.invoke, benchRoot, args: picked });
 }
