@@ -1,25 +1,10 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// GATE DETAIL — what each square on the wall checked, how, and what happened
-//
-// The wall's squares carried a short test title and a colour. Reading a red
-// square meant opening the test file, the grading report and feedback.json side
-// by side. This joins them, per gate, into one record the board's hover card
-// renders as it is:
-//
-//   name / what / how   the challenge's own plain description (grader/checks.json)
-//   rounds              pass / fail / not run, per grading round, oldest first
-//   last_failure        the grading report's own words for the latest failure
-//   told                the complaint sentences the model was sent for it
-//
-// VERBATIM, NOT INTERPRETED. The failure line is the assertion's first line with
-// the stack trace dropped. Rewriting "expected 2 to be +0" into a sentence would
-// need per-check knowledge this module does not have, and a paraphrase that is
-// wrong is worse than a technical line that is right.
-//
-// ABSENT IS STATED. A gate the descriptions do not cover gets `description:
-// null`, never a guess; a run with no reports yet has no `last_failure`.
-// READ-ONLY: reads JSON. Never writes, never spawns.
-// ─────────────────────────────────────────────────────────────────────────────
+// GATE DETAIL — per gate, one record for the wall's hover card:
+//   name / what / how  the challenge's own description (grader/checks.json)
+//   rounds             pass / fail / not run per grading round, oldest first
+//   last_failure       the grading report's words for the latest failure
+//   told               the complaint sentences the model was sent
+// The failure line is the assertion's first line, verbatim (no stack, no
+// paraphrase). Missing descriptions are null. Read-only.
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -99,14 +84,14 @@ export async function attachGateDetail({ gates, attempts, runPath, graderDir }) 
   const descriptions = graderDir ? await readJson(join(graderDir, "checks.json")) : null;
   const feedback = graderDir ? (await readJson(join(graderDir, "feedback.json")))?.gates ?? {} : {};
 
-  // Per round: gate id -> status.
+  // Per round: gate id → status.
   const rounds = (attempts ?? []).map((a) => {
     const byId = new Map();
     for (const r of Array.isArray(a.gate_results) ? a.gate_results : []) byId.set(r.id, r.status);
     return { attempt: a.attempt, byId };
   });
 
-  // The grading reports, newest round first, for the failure text.
+  // Grading reports, newest round first.
   const cell = runPath ? await latestCellDir(runPath) : null;
   const reports = [];
   if (cell) {

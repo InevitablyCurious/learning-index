@@ -1,31 +1,9 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// SOURCE: funnel-cells
-//
-// The recall funnel counters the agent plugin writes per session, exported
-// host-side before container teardown into:
-//
-//   <bench_root>/data/cells/<unix_ts>-<run_label>/funnel-snapshot.json
-//
-// Shape: { "<sessionId>": FunnelCounters, ... } — counts and ms ONLY. The
-// plugin is explicit that this file never carries secrets or plaintext memory
-// content, which is why it is safe to render on a public stream.
-//
-// FunnelCounters fields (verified against plugins/funnel-counters.ts):
-//   episode_opened, episode_armed, recall_fired, gate_shown, gate_decided,
-//   serve_sent, serve_rejected, confirmed_on_chain, gate_decision_ms,
-//   predicate_mode, distinct_failure_keys
-//
-// ARM ASYMMETRY (by construction, not a bug): on an OFF cell the harness
-// deletes the worktree `.okp` directory, so this file never exists. Absence
-// here on a control cell is the CORRECT state and the UI says so in words.
-//
-// WHAT THIS PROVES AND WHAT IT DOESN'T:
-//   serve_sent            — delivery. NOT a win.
-//   episode_armed         — a second failure under one key. the trigger beat.
-//   gate_decision_ms      — how long the approval gate took. in bench mode it
-//                           auto-approves, so a tiny value here is EXPECTED and
-//                           must never be presented as a human decision.
-// ─────────────────────────────────────────────────────────────────────────────
+// SOURCE: funnel-cells — the recall funnel counters the memory plugin writes
+// per session, exported at teardown to
+// data/cells/<ts>-<label>/funnel-snapshot.json (counts and ms only; no memory
+// content). OFF cells never have one (by construction). serve_sent is delivery,
+// not a win; gate_decision_ms is tiny in bench mode because the gate
+// auto-approves.
 
 import { join } from "node:path";
 import { int, str } from "../contract.mjs";
@@ -90,9 +68,8 @@ export async function read(ctx) {
     return { ok: false, reason: "funnel snapshot present but carries no sessions" };
   }
 
-  // Coverage: episodes that reached an observable conclusion. An episode that
-  // armed but whose gate never decided has NOT concluded — it counts as
-  // neither positive nor negative, which is the whole point of the panel.
+  // Coverage: episodes whose gate decided. Armed but undecided counts as
+  // neither.
   const concluded = totals.gate_decided;
   const total = totals.episode_opened;
 
@@ -113,8 +90,7 @@ export async function read(ctx) {
           confirmed_on_chain: totals.confirmed_on_chain,
         },
         coverage: { concluded, total },
-        // Wasted turns = the honest cost of the gated trigger. Episodes that
-        // opened but never armed burned turns before any recall could fire.
+        // Episodes that opened but never armed: turns burned before recall could fire.
         wasted_turns: Math.max(0, totals.episode_opened - totals.episode_armed),
       },
     },
