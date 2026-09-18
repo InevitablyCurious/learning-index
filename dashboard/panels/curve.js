@@ -1,37 +1,12 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// PANEL: TRANSFER CURVE
-//
-// THE HEADLINE. It replaces the old hero, and it answers the only question the
-// board exists to answer: does memory make this model cheaper — and where does
+// PANEL: TRANSFER CURVE — does memory make this model cheaper, and where does
 // it stop?
 //
-// FIVE STATES, each a designed answer rather than a degraded version of the
-// last (see `stackState()` in sources/stack-ledger.mjs). The state is DECIDED
-// UPSTREAM by that module and consumed here; this panel never re-derives it,
-// because two definitions of "is this a regression" is exactly the drift the
-// board exists to expose.
-//
-// THE LINE RULE. A line is drawn ONLY at n≥2 ON runs. At n=1 the point is drawn
-// alone: a segment from the baseline to a single ON run draws a TREND, and one
-// run cannot support a trend. This is the difference between plotting data and
-// implying a finding.
-//
-// CORRECTNESS RIDES EVERY POINT. Each point carries its gate ratio ABOVE it.
-// That is what makes a faster-and-worse cell legible as faster-and-worse: the
-// turn count falls while the gate ratio also falls, both visible at the same
-// point, neither folded into the other. A hollow point with a danger stroke
-// marks a cell that costs more than the floor.
-//
-// CORPUS SIZE USED TO RIDE BELOW EACH POINT AND NO LONGER DOES. Its producer
-// was deleted in the recall-only pivot (2026-08-14); the reader survived and
-// every point read "corpus unknown" for the life of every run. A label that can
-// only ever say "unknown" is not honest absence — it is a dimension the board
-// claims to measure and does not. Stripped until a real corpus level exists.
-// See `sources/stack-ledger.mjs` ruling 2.
-//
-// NO TREND LINE THROUGH THE BASELINE. n=1 by design; the floor is a dashed
-// reference line labelled at the line itself, never a series.
-// ─────────────────────────────────────────────────────────────────────────────
+// The curve's state is decided by stackState() in sources/stack-ledger.mjs and
+// only consumed here. A line is drawn only at n≥2 ON runs (one run cannot
+// support a trend). Every point carries its gate ratio, so faster-and-worse
+// reads as exactly that; a point that costs more than the floor is hollow with a
+// danger stroke. The floor is a dashed reference line labelled n=1, never a
+// series. Corpus size is not shown (not measured).
 
 import { esc, nul, tok, dur } from "../board.js";
 import { renderLearningBody } from "./learning.js";
@@ -45,14 +20,12 @@ const Y_BOT_INSET = 58;
 
 const METRICS = {
   turns: { key: "turns", label: "TURNS — LOWER IS BETTER", fmt: (v) => String(v), unit: "" },
-  // STACKED, not a line. A token total is a SUM OF CATEGORIES whose mix is
-  // the finding: on a cached provider cache read is ~99% of it, so a single
-  // plotted height hides the one thing worth seeing. See `bars()`.
+  // Stacked, not a line: the category mix is the finding (see bars()).
   tokens: { key: "tokens", label: "TOKENS — LOWER IS BETTER", fmt: (v) => tok(v) ?? "—", unit: "", stacked: true },
   time: { key: "wall_seconds", label: "WALL TIME — LOWER IS BETTER", fmt: (v) => dur(v) ?? "—", unit: "" },
 };
 
-/** Which metric the curve is showing. Client-side only — never refetches. */
+/** Client-side only; never refetches. */
 let metric = "turns";
 export function setCurveMetric(m) {
   if (METRICS[m]) metric = m;
@@ -62,20 +35,9 @@ export function curveMetric() {
 }
 
 /**
- * THE TOP-LEVEL TAB — three views of one running cell, one card, one header.
- *
- *   TRANSFER CURVE  the WHAT — where it stopped, across runs.
- *   LEARNING        the WHY  — how the model learned, inside one session.
- *   TUI MIRROR      the RAW  — the terminal the cell is actually printing.
- *
- * The mirror joined them here because it was a floating dock covering the
- * board, and because it is a view of the same subject the other two argue
- * about. Curve is still the default.
- *
- * THIS SELECTION IS ALSO A SUBSCRIPTION. board.js reads `curveTab()` to decide
- * whether to ask the server for terminal frames (`?tui=1`), so a tab that is
- * not on screen costs nothing on the wire — the property the old minimized
- * dock had, kept.
+ * The card's tabs: TRANSFER CURVE (across runs), LEARNING (inside one session),
+ * TUI MIRROR (the raw terminal). The selection is also a subscription: board.js
+ * asks for terminal frames only when the TUI tab is on screen.
  */
 const TABS = new Set(["curve", "learning", "tui"]);
 let tab = "curve";
@@ -110,27 +72,14 @@ function tabBtn(id, label) {
   return `<button class="${tab === id ? "on" : ""}" data-curve-tab="${id}">${label}</button>`;
 }
 
-/**
- * WHICH BODY. Kept as one switch rather than nested ternaries, because there
- * are three of them now and a reader should be able to see all three.
- */
+/** Which body, as one switch. */
 function body_for(board, s, state, M) {
   if (tab === "learning") return renderLearningBody(board);
   if (tab === "tui") return renderTuiBody(board);
   return curveBody(s, state, M);
 }
 
-/**
- * THE SUBHEAD.
- *
- * The curve tab used to carry "cross-run degradation point · the stack
- * headline", and the header carried an ARM A · MEMORY ON / ARM B · CONTROL
- * legend beside it. Both are DELETED. The curve's axes and its verdict foot
- * already say what the plot is, the arms are named in words on every learning
- * cell-info row and in the plot's own labels, and a three-tab header has no
- * room to restate either. An empty string keeps the flex spacer that separates
- * the tab strip from the right edge.
- */
+/** An empty subhead keeps the flex spacer after the tab strip. */
 function subhead(board) {
   if (tab === "learning") {
     return "intra-cell mechanism · one session, five phases at one task · two timescales, never conflated";
@@ -167,11 +116,7 @@ function body(s, state, M) {
   }
 
   if (state === "baseline_pending") {
-    // NOT A FAILURE. The floor exists and has not reported a measurement yet —
-    // either scheduled and not started, or running with its first attempt still
-    // open. Rendered as the designed "not measured yet" state, never as the
-    // void-instrument state: claiming an instrument failure about a healthy
-    // running cell is the exact defect this state was split out to fix.
+    // Not a failure: the floor hasn't reported yet (scheduled or running).
     const b = s.baseline ?? {};
     const running = b.state === "running";
     return frame(
@@ -184,9 +129,7 @@ function body(s, state, M) {
   }
 
   if (state === "baseline_void") {
-    // A floor exists, TERMINATED, and the harness itself refuses to score it.
-    // Drawing a curve against it would measure every ON run against a
-    // transport failure.
+    // A finished floor the harness refuses to score (void).
     const b = s.baseline ?? {};
     return frame(
       "baseline is void-instrument · no valid floor",
@@ -197,11 +140,8 @@ function body(s, state, M) {
   }
 
   if (state === "baseline_seeded") {
-    // The newest OFF cell was SEEDED from a build snapshot — a dev-mode run.
-    // It is not a floor, and the reason is nothing like the void one: nothing
-    // failed. It skipped the build, so its turns, tokens and wall time sit on
-    // a scale no unseeded cell shares, and a delta against it would measure
-    // the absence of a build rather than the presence of memory.
+    // A seeded floor: nothing failed, but it skipped the build, so a delta against
+    // it would measure the missing build rather than memory.
     const b = s.baseline ?? {};
     return frame(
       "baseline was seeded from a snapshot · not a floor",
@@ -212,11 +152,8 @@ function body(s, state, M) {
   }
 
   const pts = plottable(s);
-  // THE BAR PATH DOES ITS OWN FILTERING. `plottable` gates on the legacy scalar
-  // `row.tokens`; a stacked bar is drawable from the category breakdown alone,
-  // so gating it on the scalar would silently drop a cell that has everything
-  // the chart needs. `bars` keeps only the void-instrument exclusion (RUNBOOK
-  // 5.10) and then drops whatever sums to nothing.
+  // Bars filter themselves: a bar can be drawn from the category breakdown alone.
+  // Only void cells are excluded, then anything that sums to nothing.
   if (M.stacked) return bars(s, (s.runs ?? []).filter((r) => !r.void_instrument), M);
   return svg(s, pts, M, state);
 }
@@ -239,41 +176,13 @@ function frame(headline, line, note, bad = false) {
     </div>`;
 }
 
-// ── STACKED BARS — THE TOKENS METRIC ────────────────────────────────────────
-//
-// A line chart plots ONE height per cell. For tokens that height is a sum of
-// five categories whose PROPORTIONS are the actual finding, and the dominant
-// one is invisible in a total: on a caching provider cache read is ~99% of
-// every token processed. A memory system that injects into the prompt can bust
-// the prefix cache on every operation — the token COUNT barely moves while the
-// price per token multiplies. On a line that is a flat, reassuring graph. As a
-// stack it is a segment changing shape, which is the whole point.
-//
-// ONE BAR PER SESSION, baseline included. The OFF floor is a bar here rather
-// than the dashed reference line the other metrics use, because the comparison
-// being made is compositional: ON versus OFF, segment against segment. It stays
-// visually marked as the floor (`is-base`), and n=1 is still stated.
-//
-// STACK ORDER IS BY SIZE, LARGEST AT THE BOTTOM, and it is computed ONCE from
-// the totals across every bar rather than per bar. Ordering each bar by its own
-// magnitudes would reshuffle the colours between neighbours and destroy the
-// only thing a stack is good for — reading one band straight across.
-//
-// LEGACY BARS ARE DRAWN, NOT DROPPED. Cells recorded before cache capture have
-// no cache or reasoning fields. Their bar shows what was measured, carries a
-// hatch and a `pre-cache` label, and is NOT silently plotted as though its
-// smaller total were a saving. Absence is null everywhere, never 0 — 0 would
-// read as "no cache reads happened", and the truth is that nobody looked.
-//
-// HOVER IS CSS-ONLY, deliberately. The board rebuilds this panel every 2s, so
-// any JS-held hover state would flicker and drop. `:hover` is recomputed from
-// the cursor, so it survives the rebuild. Each segment also carries a <title>
-// for the native tooltip and for screen readers.
-//
-// `cls` IS SPELLED OUT rather than built as `cb-${key}`. A concatenated class
-// name leaves only the literal prefix `cb-` in the source, which is what the
-// style-coverage guard reads — it would chase a class that never exists while
-// the six that DO exist go unchecked. Whole names here keep that guard useful.
+// ── STACKED BARS — THE TOKENS METRIC ── one bar per session (the floor
+// included, marked is-base). The category mix is the finding: memory can break
+// the prompt cache so the count barely moves while the cost multiplies. Stack
+// order is by total size across all bars (largest at the bottom), the same for
+// every bar. Cells recorded before cache capture are drawn hatched and labelled
+// pre-cache, never as a saving. Hover is CSS-only (survives the rebuild), plus a
+// <title> per segment. Class names are spelled out for the style-coverage test.
 const SEG_DEFS = [
   { key: "cache_read", label: "cache read", cls: "cb-cache_read" },
   { key: "input", label: "input", cls: "cb-input" },
@@ -285,13 +194,8 @@ const SEG_DEFS = [
 const segDef = (key) => SEG_DEFS.find((d) => d.key === key);
 
 /**
- * Split one row into drawable segments.
- *
- * `output_and_reasoning` is the persisted `work_output_tokens`, which has
- * always had reasoning folded into it. When the reasoning share is recorded we
- * subtract to recover generation-only and draw both; when it is not, we draw
- * ONE segment honestly labelled `output + reasoning` rather than guessing a
- * split.
+ * Split a row into segments. work_output_tokens includes reasoning: split when
+ * the reasoning share is recorded, otherwise one `output + reasoning` segment.
  */
 function segsOf(row) {
   const b = row?.tokens_breakdown ?? {};
@@ -317,30 +221,12 @@ function segsOf(row) {
 }
 
 /**
- * TWO BANDS, TWO SCALES, NEITHER DISTORTED.
- *
- * A true-proportion stack of these five categories is, on a caching provider,
- * one solid block: cache read is ~99%, so input/output/reasoning render at
- * 0.3px — invisible, and too small to put a cursor on. The obvious fixes are
- * both lies. A minimum segment height draws a 0.18% band as 1.1% and
- * overstates it six-fold; a log axis breaks the one promise a stack makes,
- * that the parts visibly sum to the whole. This board does not draw either.
- *
- * So it draws the truth twice at two honest scales:
- *
- *   TOP BAND — all five categories, true proportion. Answers "what did this
- *   cell cost". Correctly reads as one dominant block, because that is what a
- *   cached agentic cell IS.
- *
- *   BOTTOM BAND — the same cells with cache read REMOVED, rescaled to their own
- *   maximum. Answers "what did the model actually do". Nothing is distorted:
- *   each band is internally proportional and each is labelled with its own
- *   scale, so no reader can mistake one for the other.
- *
- * Reading the two together is the cache-invalidation test the operator asked
- * for. Memory injection that busts the prompt prefix moves tokens out of cache
- * read and into input: the top band barely changes shape while the bottom band's
- * input segment grows sharply. Neither band alone shows that; the pair does.
+ * Two bands, each internally proportional and labelled with its own scale:
+ *   top    all five categories — what the cell cost (cache read dominates)
+ *   bottom the same cells without cache read, rescaled — what the model did
+ * Memory that breaks the prompt prefix moves tokens from cache read into input:
+ * the top barely changes while the bottom's input grows. No minimum heights and
+ * no log axis — both would misstate proportions.
  */
 function bars(s, pts, M) {
   const base = s.baseline ?? null;
@@ -357,10 +243,7 @@ function bars(s, pts, M) {
     );
   }
 
-  // ONE order for every bar, by total size across the whole chart. Ordering
-  // each bar by its own magnitudes would reshuffle the colours between
-  // neighbours and destroy the only thing a stack is good for — reading one
-  // band straight across.
+  // One order for every bar, by total size across the chart.
   const weight = new Map();
   for (const b of built) for (const g of b.segs) weight.set(g.key, (weight.get(g.key) ?? 0) + g.v);
   const order = SEG_DEFS.map((d) => d.key).filter((k) => weight.has(k));
@@ -376,7 +259,7 @@ function bars(s, pts, M) {
 
   bits.push(`<text x="2" y="14" class="c-axis">${esc(M.label)} — STACKED BY CATEGORY</text>`);
 
-  // Legend in stack order, so the swatch column reads like the bars do.
+  // Legend in stack order.
   bits.push(
     order
       .map((k, i) => {
@@ -409,9 +292,7 @@ function bars(s, pts, M) {
         if (!g) continue;
         const h = (g.v / tot) * full;
         y -= h;
-        // Percentages are always OF THE WHOLE CELL, never of the rescaled
-        // band — a band-relative percentage would read as a real share of the
-        // run and would be wrong by two orders of magnitude.
+        // Percentages are always of the whole cell, never of the rescaled band.
         const share = (g.v / b.total) * 100;
         const pctTxt = share.toFixed(share < 1 ? 2 : 1);
         bits.push(
@@ -486,15 +367,14 @@ function svg(s, pts, M, state) {
   }
   bits.push(`<line x1="${x0 - 18}" y1="${yBot + 10}" x2="${x1}" y2="${yBot + 10}" class="c-ax"/>`);
 
-  // THE FLOOR. Dashed, labelled AT THE LINE — n=1 is stated where it is read,
-  // not in a footnote a viewer has to hunt for.
+  // The floor, labelled n=1 at the line.
   if (base !== null) {
     const by = Y(base);
     bits.push(`<line x1="${x0 - 18}" y1="${by}" x2="${x1}" y2="${by}" class="c-base"/>`);
     bits.push(`<text x="2" y="${by + 4}" class="c-base-lbl">OFF ${esc(M.fmt(base))}</text>`);
   }
 
-  // THE LINE — n≥2 only. See the header.
+  // The line: n≥2 only.
   if (pts.length >= 2) {
     const d = pts
       .map((p, i) => `${i ? "L" : "M"}${X(i)} ${Y(val(p, metric))}`)
@@ -505,8 +385,7 @@ function svg(s, pts, M, state) {
   pts.forEach((p, i) => {
     const cx = X(i);
     const cy = Y(val(p, metric));
-    // A cell that costs MORE than the floor is hollow with a danger stroke —
-    // drawn at full weight, same size, same line. The finding is not hidden.
+    // Costs more than the floor: hollow with a danger stroke, full size.
     const worse = base !== null && val(p, metric) >= base;
     const g = p.gates ?? {};
     const gateTxt =
@@ -515,7 +394,7 @@ function svg(s, pts, M, state) {
         : g.total
           ? `${g.total - g.failed}/${g.total} obs`
           : `${g.failed} failed`;
-    // Gate ratio worsening is its OWN signal, independent of cost.
+    // A worsening gate ratio is its own signal.
     const gateBad = g.failed !== null && g.failed !== undefined && g.failed > 0;
     const delta =
       base === null ? "" : deltaLabel(val(p, metric) - base, metric);
@@ -554,11 +433,7 @@ function deltaLabel(d, m) {
 function footer(s, state, M) {
   const base = val(s.baseline ?? {}, metric);
   if (state === "baseline_seeded") {
-    // The newest OFF cell was SEEDED from a build snapshot — a dev-mode run.
-    // It is not a floor, and the reason is nothing like the void one: nothing
-    // failed. It skipped the build, so its turns, tokens and wall time sit on
-    // a scale no unseeded cell shares, and a delta against it would measure
-    // the absence of a build rather than the presence of memory.
+    // Seeded floor: see above.
     const b = s.baseline ?? {};
     return frame(
       "baseline was seeded from a snapshot · not a floor",
@@ -583,10 +458,7 @@ function footer(s, state, M) {
     verdict = "newest OFF cell was seeded — a development run, never a floor";
   else if (state === "baseline_only") verdict = "floor established · no ON run yet";
   else if (state === "n1_on") verdict = "one ON run — a single delta, stated as a single delta";
-  // THE VERDICT COUNTS ON RUNS, NOT MEMORIES. It used to end "at N memories",
-  // falling back to "at an unknown corpus size" — and that fallback was the only
-  // branch that ever ran once the corpus producer was deleted. How many ON runs
-  // are plotted is a fact this panel actually holds; a corpus level is not.
+  // The verdict counts ON runs (a fact this panel holds), not memories.
   else if (state === "regression" && newest && base !== null)
     verdict = `transfer stopped — ${deltaLabel(val(newest, metric) - base, metric)} by ON run ${pts.length}`;
   else if (newest && base !== null)

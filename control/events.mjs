@@ -1,48 +1,18 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// EVENT PROXY — the live agent activity stream
+// EVENT PROXY — subscribes to the worker's `opencode serve` GET /event and
+// re-publishes a mapped, bounded view to the board. Proxied rather than read by
+// the browser: retention is capped here (and reported), the serve's restarts are
+// absorbed with backoff and reported as state, and the harness's observation
+// channel has one predictable reader.
 //
-// Subscribes to the worker's `opencode serve` GET /event (text/event-stream)
-// and re-publishes a MAPPED, BOUNDED view to the board.
-//
-// ── WHY PROXY RATHER THAN LET THE BROWSER CONNECT DIRECTLY ───────────────────
-//
-// Three reasons, all structural:
-//
-//  1. BOUNDING. Reasoning deltas arrive token-by-token and are unbounded. A
-//     browser tab left open on a 12-hour run would accumulate every token the
-//     model ever emitted. The ring buffer caps retention HERE, and the cap is
-//     reported (`total` vs `returned`) rather than applied silently.
-//
-//  2. RECONNECTION. The worker's serve dies and restarts across a cell's life
-//     (teardown, the per-attempt process kills). A browser EventSource would
-//     surface each of those as a page-level error. This module reconnects with
-//     backoff and reports connection state as DATA, so the board renders an
-//     honest "feed down" instead of an empty panel that looks like silence.
-//
-//  3. ONE CONSUMER. The serve is the harness's own observation channel, and
-//     WO-OBS-1 established that a failure of that channel is what voids a cell.
-//     A single proxy connection is one predictable reader; N browser tabs are
-//     N. The control plane must never be the reason the harness goes blind.
-//
-// ── WHAT THIS MODULE MUST NEVER DO ───────────────────────────────────────────
-//
-// It is READ-ONLY against the serve: GET /event and nothing else. It never
-// posts a prompt, never aborts, never summarises. Driving the session is the
-// harness's job exclusively — a control plane that can inject a turn can
-// corrupt the measurement it is displaying.
-// ─────────────────────────────────────────────────────────────────────────────
+// Read-only against the serve: it never posts, aborts or summarises. A control
+// plane that could inject a turn could corrupt the measurement it displays.
 
 import { EVENT_MAP, EVENT_IGNORED, PART_KIND, EVENT_TEXT_MAX, EVENT_RING_MAX } from "./contract.mjs";
 
 /**
- * The harness's grading rows: `user` (the verbatim messages the model was
- * sent) and `harness` (gate activity). These kinds are PINNED in the ring —
- * never evicted. WHY: the board's user/harness filter chips count rows over
- * the WHOLE ring, but delivery is windowed; grading rows are admitted early
- * (between agent turns), so under plain oldest-first eviction they would be
- * the first to go — the chip count would zero out AND the rows it counts
- * would be unfilterable on the board. They are low-volume, so pinning them
- * costs the agent-event window almost nothing.
+ * Grading rows (`user` prompts, `harness` activity) are pinned in the ring,
+ * never evicted: the filter chips count the whole ring, and these low-volume
+ * rows arrive early, so plain eviction would drop them first.
  */
 export const GRADING_KINDS = new Set(["user", "harness"]);
 
@@ -55,8 +25,8 @@ function clipText(s) {
 }
 
 /**
- * Map one upstream event to the board shape. Returns null for an unmapped
- * type — the caller counts those rather than dropping them invisibly.
+ * Map one upstream event to the board shape; null for an unmapped type (the
+ * caller counts those).
  */
 export function mapEvent(raw) {
   const type = typeof raw?.type === "string" ? raw.type : null;
@@ -81,9 +51,7 @@ export function mapEvent(raw) {
   };
 
   switch (type) {
-    // The substantive channel. The ENVELOPE says only "a part changed" — the
-    // Part's own `type` is what makes it a tool call, a thought, or a step, so
-    // the kind is refined here rather than read off the envelope.
+    // The Part's own type (tool, reasoning, step…) decides the kind.
     case "message.part.updated":
       return fromPart(base, p.part, p.time);
 
@@ -110,8 +78,7 @@ export function mapEvent(raw) {
       base.detail = "context compacted";
       return base;
 
-    // Carries the run's own status line. Useful, but only when it actually
-    // says something — a status event with no status is not a row.
+    // Only when it actually carries a status.
     case "session.status": {
       const s = typeof p.status === "string" ? p.status : null;
       if (!s) return null;
@@ -127,11 +94,8 @@ export function mapEvent(raw) {
 }
 
 /**
- * Refine a `message.part.updated` into a feed row using the Part's own type.
- *
- * Returns null for parts that are real but must not become rows — `text` is
- * assistant prose that belongs in the TRANSCRIPT tab, and a part type we do not
- * recognise is counted as unmapped rather than rendered as a mystery row.
+ * A `message.part.updated` → a feed row by Part type. null for `text` (it
+ * belongs to the transcript) and for unknown types (counted as unmapped).
  */
 function fromPart(base, part, time) {
   if (!part || typeof part !== "object") return null;
@@ -152,8 +116,7 @@ function fromPart(base, part, time) {
       const st = part.state ?? {};
       const status = typeof st.status === "string" ? st.status : null;
 
-      // A failed tool call is an error the operator must see, even though it
-      // arrives on the tool channel.
+      // A failed tool call is an error row.
       if (status === "error") {
         base.kind = "error";
         Object.assign(base, clipText(errorText(st.error) ?? "tool failed"));
@@ -161,8 +124,7 @@ function fromPart(base, part, time) {
         return base;
       }
 
-      // Tool INPUT is deliberately summarised, not dumped: it can carry an
-      // entire file body. The board shows WHAT ran, not its payload.
+      // Tool input is summarised, never dumped (it can hold a whole file).
       const summary = summariseInput(st.input);
       Object.assign(base, clipText(summary));
       base.detail = [status, base.text].filter(Boolean).join(" · ") || status;
@@ -170,8 +132,7 @@ function fromPart(base, part, time) {
     }
 
     case "reasoning": {
-      // Reasoning text streams in via deltas we drop; the completed part is
-      // often empty at the moment it updates. Duration is the honest signal.
+      // Completed reasoning parts are often empty; duration is the signal.
       const ms = spanMs(part.time);
       base.name = "thinking";
       base.detail = ms == null ? "reasoning" : `reasoning ${Math.round(ms / 1000)}s`;
@@ -211,10 +172,8 @@ function fromPart(base, part, time) {
 }
 
 /**
- * Best-effort event time. Parts carry `time.start`/`time.end`; the envelope
- * carries its own `time`. Null is returned rather than Date.now() — stamping a
- * received-at time onto an event that never had one would fabricate ordering
- * evidence the feed then displays as fact.
+ * Event time from the part or the envelope; null rather than a made-up
+ * received-at time.
  */
 function partTime(part, envelopeTime) {
   const t = part?.time;
@@ -246,9 +205,8 @@ function errorText(err) {
 }
 
 /**
- * Summarise a tool input without dumping it. A `write` call's input contains
- * the whole file; rendering that on a public stream is both noise and a
- * disclosure risk.
+ * Summarise a tool input: a `write` input is a whole file (noise, and a
+ * disclosure risk on a public stream).
  */
 function summariseInput(input) {
   if (!input || typeof input !== "object") return null;
@@ -261,11 +219,8 @@ function summariseInput(input) {
 }
 
 /**
- * A bounded ring of mapped events plus connection state.
- *
- * `total` counts everything ever seen, `unmapped` counts what was recognised
- * but not rendered. Both are exposed so the board can state "showing last N of
- * M" honestly instead of implying the feed is complete.
+ * A bounded ring of mapped events plus connection state. `total` and
+ * `unmapped` are exposed so the board can say "showing last N of M".
  */
 export class EventRing {
   constructor(max = EVENT_RING_MAX) {
@@ -281,11 +236,7 @@ export class EventRing {
     this.sink = null;
   }
 
-  /**
-   * Evict oldest-first, but NEVER a grading row (see GRADING_KINDS for why).
-   * Non-grading rows are dropped in arrival order until the ring is back
-   * within `max`; grading rows are kept wherever they sit.
-   */
+  /** Evict oldest-first, but never a grading row. */
   _trim() {
     let excess = this.items.length - this.max;
     if (excess <= 0) return;
@@ -298,13 +249,9 @@ export class EventRing {
   }
 
   /**
-   * Clear every admitted row and the dedup set, WITHOUT resetting the seq
-   * cursor. Used when the active run changes (a tree wipe or a new cell): the
-   * previous run's rows are stale against the new one and must not be served,
-   * but `seq` stays monotonic so a board holding an old `since` cursor keeps
-   * receiving only genuinely-new rows rather than a cursor that moved
-   * backwards. User/harness rows are rebuilt from files and re-admitted on the
-   * next poll, so a reset never permanently loses grading rows.
+   * Clear rows and the dedup set when the active run changes, keeping `seq`
+   * monotonic so an old client cursor never moves backwards. Grading rows come
+   * back from files on the next poll.
    */
   reset() {
     this.items = [];
@@ -319,11 +266,8 @@ export class EventRing {
       return null;
     }
     this.seq += 1;
-    // `seq` counts MAPPED events only, so it doubles as the mapped total and
-    // is what `capped` is computed against. Using the raw total would report
-    // the ring as "capped" merely because unmapped events (server.connected,
-    // and every future upstream event type) were counted and discarded — a
-    // false claim of data loss on an idle feed.
+    // seq counts mapped events only; `capped` is judged against it (unmapped
+    // frames are not data loss).
     ev.seq = this.seq;
     this.last_event_at = Date.now();
     this.items.push(ev);
@@ -333,26 +277,9 @@ export class EventRing {
   }
 
   /**
-   * Append an ALREADY-MAPPED row, WITHOUT the admit-once dedupe.
-   *
-   * ── WHY THIS IS NOT `admit()` ──────────────────────────────────────────────
-   *
-   * `admit()` dedupes on `id` because the rows it exists for — grading rows and
-   * prompts — are REBUILT FROM FILES ON EVERY POLL, so the same row arrives
-   * again and again and must enter the ring once.
-   *
-   * Agent rows are the opposite case. They are read ONCE from a persisted
-   * transcript, and many of them legitimately SHARE an id: a streaming part
-   * emits `message.part.updated` repeatedly as it grows, every update carrying
-   * the same `prt_…`. `push()` keeps them all — which is what the live feed
-   * shows — and routing them through `admit()` instead collapsed each part to
-   * its first update. Measured on a real 4,312-row transcript: 2,116 rows
-   * survived, and the tool count fell from 2,181 to 468 while the response went
-   * on reporting the total it had just discarded.
-   *
-   * So a rebuild of an agent transcript appends; only the file-rebuilt families
-   * dedupe. Same ring, same counter, two admission rules, each matched to how
-   * its source arrives.
+   * Append an already-mapped agent row without dedup: a persisted transcript's
+   * streaming parts legitimately repeat an id (deduping collapsed 4,312 rows to
+   * 2,116). Only the file-rebuilt families (admit) dedupe.
    */
   append(ev) {
     if (!ev || typeof ev !== "object") return null;
@@ -365,35 +292,10 @@ export class EventRing {
   }
 
   /**
-   * Admit an ALREADY-MAPPED row into the ring, exactly once.
-   *
-   * ── WHY THIS EXISTS ────────────────────────────────────────────────────────
-   *
-   * `push()` is for RAW upstream events and runs them through `mapEvent()`.
-   * Two row families never come from upstream — the harness's grading rows
-   * (`control/gate-events.mjs`) and the verbatim messages the model was sent
-   * (`control/feedback.mjs`). Both are rebuilt FROM FILES on every poll, and
-   * both are already in BoardEvent shape, so they cannot go through `push()`.
-   *
-   * They were therefore given a `seq` at request time, computed from the ring's
-   * CURRENT cursor. That cursor moves. So the same row was re-sequenced on every
-   * poll, and the renderer — which appends anything with
-   *   rows.filter((e) => (e.seq ?? -1) > renderedSeq)      [live.js]
-   * — cleared that gate again each time and appended a fresh copy. Measured on a
-   * live run: one `task chunk (attempt 1)` row came back as seq 706, then 713,
-   * then higher, and the operator saw it repeated down the whole feed.
-   *
-   * ADMITTING ONCE FIXES IT AT THE SOURCE. The row enters the ring like any
-   * other event, takes a seq from the SAME counter (so a collision with a real
-   * upstream seq is structurally impossible, not merely unlikely), and every
-   * downstream mechanism — `since`, `cursor`, `capped` — works with no special
-   * case. The caller keeps no seq bookkeeping of its own.
-   *
-   * IDENTITY IS REQUIRED. A row with no `id` cannot be recognised on the next
-   * poll, so it is REFUSED rather than admitted repeatedly — silently letting it
-   * in is precisely the defect above.
-   *
-   * Returns the admitted event, or null if it was a duplicate or had no id.
+   * Admit an already-mapped row once, by id. Grading rows and prompts are rebuilt
+   * from files every poll; admitting them once gives each a stable seq from the
+   * ring's own counter (numbering them per request re-appended the same row every
+   * poll). A row with no id is refused. Returns the row, or null.
    */
   admit(ev) {
     if (!ev || typeof ev.id !== "string" || ev.id.length === 0) return null;
@@ -410,23 +312,11 @@ export class EventRing {
   }
 
   /**
-   * A window of the ring, plus the honest counters.
-   *
-   * ORDER IS OLDEST-FIRST, and that is a design decision, not an accident.
-   * The Episode ticker on the board is newest-first because each row is an
-   * independent event you scan for. This feed is different: it is a TRANSCRIPT
-   * of one continuous activity, so it must read top-to-bottom in the order the
-   * agent did the work — a reversed transcript is unreadable as narrative, and
-   * a reasoning delta above the tool call it preceded is actively misleading.
-   * The panel header states the order so a viewer never has to infer it.
-   *
-   * `counts` is computed over the WHOLE retained ring, never over the returned
-   * slice: the filter chips must keep showing "THINKING 768" while thinking is
-   * filtered OUT, otherwise turning a filter on makes its own count vanish and
-   * the operator loses the number that tells them what they are hiding.
+   * A window of the ring, oldest first (a transcript reads top to bottom), plus
+   * counters. `counts` covers the whole ring, not the returned slice, so a filter
+   * never hides its own count.
    */
   snapshot({ limit = 100, kinds = null, since = 0 } = {}) {
-    // Counts are per-kind over everything retained, independent of the filter.
     const counts = { tool: 0, file: 0, thinking: 0, error: 0, lifecycle: 0 };
     for (const e of this.items) {
       if (counts[e.kind] !== undefined) counts[e.kind] += 1;
@@ -436,8 +326,7 @@ export class EventRing {
     if (kinds && kinds.length) rows = rows.filter((e) => kinds.includes(e.kind));
     if (since > 0) rows = rows.filter((e) => e.seq > since);
 
-    // Take the TAIL (the most recent `limit`) but return it in chronological
-    // order — newest events, oldest-first within the window.
+    // The most recent `limit`, in chronological order.
     const returned = rows.slice(-limit);
     const filtered = kinds && kinds.length;
 
@@ -447,7 +336,7 @@ export class EventRing {
       connected_at: this.connected_at,
       last_event_at: this.last_event_at,
       order: "oldest_first",
-      // Silence is information: how long since anything arrived.
+      // How long since anything arrived.
       idle_s: this.last_event_at
         ? Math.round((Date.now() - this.last_event_at) / 1000)
         : null,
@@ -455,17 +344,12 @@ export class EventRing {
       counts,
       returned: returned.length,
       retained: this.items.length,
-      // `total` is every frame seen; `mapped` is how many were renderable.
+      // `total` = every frame; `mapped` = renderable ones.
       total: this.total,
       mapped: this.seq,
       unmapped: this.unmapped,
-      // `capped` means the RING dropped MAPPED events (real loss from this
-      // buffer). It is measured against mapped events only — counting
-      // unmapped frames here reported an idle feed as "capped" purely because
-      // `server.connected` had been received and discarded.
-      // `windowed` means this response merely returned fewer than the ring
-      // holds. The UI states them differently — a cap is "9,012 earlier events
-      // not rendered", a window is just paging.
+      // `capped`: the ring dropped mapped events (real loss). `windowed`: this
+      // response returned fewer than the ring holds (paging). Stated differently.
       capped: this.seq > this.items.length,
       windowed: rows.length > returned.length,
       hidden_by_filter: filtered ? this.items.length - rows.length : 0,
@@ -476,17 +360,9 @@ export class EventRing {
 }
 
 /**
- * Merge pinned grading rows that a delivery window left behind back into a
- * snapshot's events.
- *
- * WHY: a delta window (`since`/`limit`) returns the TAIL of the ring, so
- * grading rows admitted early in a run fall out of it even though the ring —
- * and therefore the filter chips' counts — still holds them. A fresh connect
- * must deliver the rows the chips count, or the board shows a count for rows
- * it cannot display. Pure: returns `events` untouched when nothing is missing.
- *
- * Grading rows are the OLDEST rows in the ring, so the merged result is sorted
- * ascending by `seq` to keep the transcript chronological.
+ * Merge pinned grading rows a delivery window left behind back into a
+ * snapshot, so a fresh connect delivers the rows the chips count. Sorted by seq.
+ * Pure.
  */
 export function mergeGrading(events, items) {
   const have = new Set(events.map((e) => e.id));
@@ -496,11 +372,8 @@ export function mergeGrading(events, items) {
 }
 
 /**
- * Subscribe to an SSE endpoint and feed a ring. Reconnects forever with
- * bounded backoff; every state change is recorded on the ring so the board can
- * render it.
- *
- * Returns a stop() function. Never throws.
+ * Subscribe to an SSE endpoint and feed a ring: reconnects forever with
+ * bounded backoff, recording every state change. Returns stop(); never throws.
  */
 export function subscribe(url, ring, { minBackoffMs = 1000, maxBackoffMs = 15000 } = {}) {
   let stopped = false;
@@ -533,9 +406,7 @@ export function subscribe(url, ring, { minBackoffMs = 1000, maxBackoffMs = 15000
         if (done) break;
         buf += decoder.decode(value, { stream: true });
 
-        // SSE frames are separated by a blank line. Parse only complete frames
-        // and leave a partial tail in the buffer — a half-arrived frame is
-        // normal, not an error.
+        // Parse complete frames only; a partial tail waits in the buffer.
         let idx;
         while ((idx = buf.indexOf("\n\n")) !== -1) {
           const frame = buf.slice(0, idx);
@@ -547,8 +418,7 @@ export function subscribe(url, ring, { minBackoffMs = 1000, maxBackoffMs = 15000
             try {
               ring.push(JSON.parse(payload));
             } catch {
-              // A malformed frame is skipped, not fatal. Upstream owns the
-              // format; we never crash the feed over one bad line.
+              // A malformed frame is skipped, never fatal.
             }
           }
         }

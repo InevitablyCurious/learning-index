@@ -1,81 +1,34 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// TUI MIRROR — read-only capture of an `opencode attach` screen
+// TUI MIRROR — read-only capture of an `opencode attach` screen.
 //
-// WHY A PTY AND NOT AN API
-// opencode exposes 13 /tui/* routes and every one is a POST *command*
-// (append-prompt, submit-prompt, execute-command). There is NO endpoint that
-// returns the rendered screen, so the only way to show the operator's actual
-// view is to run `opencode attach` against a real pseudo-terminal and interpret
-// what it paints. Verified against a live cell: 190KB of frames in 20s.
-//
-// STRICTLY READ-ONLY — THIS IS THE LOAD-BEARING RULE
-// We never write a single byte to the PTY master. The attached session is a
-// LIVE benchmark cell; injecting a keystroke could submit a prompt, switch a
-// model, or abort a run, corrupting a campaign that takes hours. The master fd
-// is opened, read, and closed. `stdin` of the child is the pty slave and
-// nothing ever reaches it.
-//
-// A SECOND ATTACH IS A SECOND CLIENT, NOT A PIXEL MIRROR
-// `opencode attach` opens its OWN view of the session. It shows the same
-// conversation, but its scroll position is independent of the operator's
-// terminal. The surface says so rather than implying it is a screen-share.
-//
-// WHY A HAND-WRITTEN EMULATOR IS THE RIGHT SIZE HERE
-// Measured over a real 190KB capture, the TUI uses exactly two sequences that
-// move or mark anything: SGR (9075 occurrences, colour) and CUP (3345, absolute
-// cursor position). No scroll regions, no insert/delete-line, no erase-display,
-// no DECALN — and only 72 distinct colour payloads. So a cursor-addressable
-// cell grid is sufficient and correct; a full VT100 (or a native node-pty
-// dependency, which would break the dashboard's zero-dependency guarantee) is
-// not needed. Sequences we do not implement are SKIPPED, never printed as
-// literal garbage.
-//
-// ON-DEMAND WITH A HARD IDLE STOP
-// The capture starts when the TUI tab is opened and stops itself once nothing
-// has polled for it. A resident attach client for a 12-hour run is a cost with
-// no reader, so idleness is the stop condition rather than trusting a UI to
-// send a close.
-// ─────────────────────────────────────────────────────────────────────────────
+// opencode has no endpoint that returns the rendered screen, so this runs
+// `opencode attach` in a pseudo-terminal and interprets what it paints. Strictly
+// read-only: nothing is ever written to the PTY (a keystroke could submit a
+// prompt or abort a live cell). A second attach is a second client with its own
+// scroll position, not a screen-share. The TUI uses only SGR (colour) and CUP
+// (cursor position) in practice, so a small cell-grid emulator suffices;
+// unimplemented sequences are skipped, never printed. The capture starts on
+// demand and stops itself when nothing has polled it for a while.
 
 import { spawn } from "node:child_process";
 
-/** Grid size. Fixed so the emitted frame is a predictable shape for the board. */
+/** Fixed grid, so the board gets a predictable frame shape. */
 const TUI_ROWS = 40;
 const TUI_COLS = 130;
 
 /**
- * How long the capture survives with no reader.
- *
- * This MUST exceed the TUI's time-to-first-paint, which is ~10s against a live
- * session (the client connects, loads history, then paints). An idle window
- * shorter than that produces a capture that is repeatedly killed just before it
- * renders anything — the surface shows `painted:false` forever while the
- * process churns, which looks exactly like a broken capture.
- *
- * 30s is comfortably past first paint and still short enough that a closed
- * drawer does not leave a client attached to a live benchmark session.
+ * How long a capture survives with no reader. Must exceed first paint (~10s),
+ * or the capture is killed just before it renders.
  */
 const TUI_IDLE_STOP_MS = 30000;
 
-/**
- * How long to wait for the first byte before reporting the capture as failed.
- * Startup is slow but not unbounded; silence past this is a real fault, and
- * saying so beats an empty screen with no explanation.
- */
+/** No first byte after this long is a real fault, and reported as one. */
 const TUI_FIRST_PAINT_TIMEOUT_MS = 25000;
 
-/** Frames are only re-serialised when the screen actually changed. */
 const DEFAULT_ATTACH_BIN = "opencode";
 
 // ── the screen ───────────────────────────────────────────────────────────────
 
-/**
- * A cursor-addressable cell grid.
- *
- * Each cell holds a character plus its foreground/background. Style is carried
- * per-cell rather than as spans because CUP lets the TUI paint anywhere at any
- * time — a span-based model would have to be rebuilt on every jump.
- */
+/** A cursor-addressable cell grid, style per cell (CUP can paint anywhere). */
 class Screen {
   constructor(rows = TUI_ROWS, cols = TUI_COLS) {
     this.rows = rows;
@@ -109,11 +62,7 @@ class Screen {
     this.dirty = true;
   }
 
-  /**
-   * Serialise to rows of runs. Adjacent cells sharing a style collapse into one
-   * run, which is what keeps a 40x130 frame small enough to poll: ~5200 cells
-   * become a few hundred runs.
-   */
+  /** Rows of runs: adjacent same-style cells collapse into one run. */
   serialise() {
     const out = [];
     for (let r = 0; r < this.rows; r += 1) {
@@ -128,8 +77,7 @@ class Screen {
           runs.push(cur);
         }
       }
-      // Trailing blank space carries no information and is a large share of a
-      // mostly-empty terminal row, so it is dropped rather than transmitted.
+      // Trailing blank space is dropped.
       while (runs.length && runs[runs.length - 1].t.trim() === "" && runs[runs.length - 1].bg === null) {
         runs.pop();
       }
@@ -142,11 +90,8 @@ class Screen {
 // ── the parser ───────────────────────────────────────────────────────────────
 
 /**
- * Feed bytes, mutate the screen.
- *
- * Kept as an explicit state machine over a chunk boundary: a PTY read can split
- * an escape sequence anywhere, so a partial sequence is retained and completed
- * by the next chunk rather than being emitted as literal text.
+ * Feed bytes, mutate the screen. A PTY read can split an escape sequence, so a
+ * partial one is kept for the next chunk.
  */
 class AnsiParser {
   constructor(screen) {
@@ -172,33 +117,24 @@ class AnsiParser {
       const next = buf[i + 1];
 
       if (next === "[") {
-        // A CSI sequence is: ESC [ params INTERMEDIATES final
-        // The intermediate bytes (0x20-0x2F: space ! " # $ % & ' ( ) * + , - . /)
-        // are easy to forget and fatal to omit. This TUI emits DECRQM as
-        // `ESC[?2026$p` — the `$` is an intermediate. A pattern that jumps
-        // straight from params to a final byte does not match it, so the parser
-        // treats the rest of the STREAM as one incomplete sequence and paints
-        // nothing at all. That failure is total, not partial: 183073 of 183123
-        // bytes were swallowed before this was fixed.
+        // CSI = ESC [ params intermediates final. The intermediate bytes matter:
+        // DECRQM (`ESC[?2026$p`) carries `$`, and missing it once swallowed the whole
+        // stream as one incomplete sequence.
         const m = /^\x1b\[([0-9;:?<>!]*)([ -\/]*)([@-~])/.exec(buf.slice(i));
         if (!m) {
-          // Genuinely incomplete only if it could still become valid; a bounded
-          // guard stops a malformed stream buffering without limit.
+          // Incomplete only if it could still become valid; bounded.
           if (buf.length - i < 32) { this.pending = buf.slice(i); return; }
           i += 2;
           continue;
         }
-        // A sequence carrying intermediates is a mode query/report, never
-        // something that paints. Consume and ignore it.
+        // Sequences with intermediates are queries/reports: ignore.
         if (m[2]) { i += m[0].length; continue; }
         this.csi(m[1], m[3]);
         i += m[0].length;
         continue;
       }
 
-      // OSC / DCS / APC: terminated by BEL or ST. These are queries and
-      // notifications (title, colour probes, capability strings) that paint
-      // nothing, so they are consumed and discarded.
+      // OSC/DCS/APC (terminated by BEL or ST) paint nothing: discard.
       if (next === "]" || next === "P" || next === "_" || next === "^") {
         const rest = buf.slice(i);
         const end = /\x07|\x1b\\/.exec(rest);
@@ -232,8 +168,7 @@ class AnsiParser {
 
   csi(params, final) {
     const s = this.s;
-    // `?` introduces a DEC private mode (h/l/$p). They toggle terminal
-    // behaviour and paint nothing, so they are ignored wholesale.
+    // DEC private modes paint nothing.
     if (params.startsWith("?")) return;
     const nums = params.split(";").map((x) => (x === "" ? null : Number.parseInt(x, 10)));
     const n = (idx, dflt) => (Number.isFinite(nums[idx]) ? nums[idx] : dflt);
@@ -294,7 +229,7 @@ class AnsiParser {
       if (v === 22) { s.bold = false; continue; }
       if (v === 39) { s.fg = null; continue; }
       if (v === 49) { s.bg = null; continue; }
-      // 24-bit colour is what this TUI actually emits (38;2;r;g;b).
+      // 24-bit colour (38;2;r;g;b), which is what this TUI emits.
       if ((v === 38 || v === 48) && nums[i + 1] === 2) {
         const hex = rgb(nums[i + 2], nums[i + 3], nums[i + 4]);
         if (v === 38) s.fg = hex; else s.bg = hex;
@@ -361,36 +296,12 @@ class Capture {
 
   start() {
     if (this.child) return;
-    // A fresh attach is not the detached one. Cleared here rather than at the
-    // stop site so the flag cannot outlive the mirror it described and label a
-    // live session as history.
+    // A fresh attach is not detached.
     this.detached = false;
-    // `script` gives us a pty without a native dependency. On darwin the form
-    // is `script -q /dev/null <cmd> …`, which allocates a tty and relays the
-    // child's output to OUR stdout pipe. We never write to the child's stdin —
-    // it is set to 'ignore' so there is no path for a keystroke to reach a live
-    // session even by accident.
-    //
-    // ── THE PTY MUST BE RESIZED FROM INSIDE (measured defect 2026-08-13) ────
-    //
-    // Setting COLUMNS/LINES in the environment DOES NOT SIZE A PTY. A terminal
-    // application asks the kernel via ioctl(TIOCGWINSZ); it does not read those
-    // variables. Our stdout is a PIPE, not a tty, so `script` allocates the pty
-    // at the default 80×24 and the attached client renders to 80×24 forever.
-    //
-    // Measured on this host:
-    //   script -q /dev/null sh -c 'stty size'   with COLUMNS/LINES set  ->  0 0
-    //   script -q /dev/null sh -c 'stty rows 40 cols 130; stty size'    -> 40 130
-    //
-    // The consequence the operator saw: the TUI MIRROR reserves a 130×40 box
-    // (GRID_W×GRID_H, derived from these constants) while the frame carried
-    // only 80 columns and 24 rows of content — the window looked half empty,
-    // and it was, because the pty on the other end really was that size.
-    //
-    // So the size is applied INSIDE the pty with `stty` before exec'ing the
-    // attach client, which is the only place a TIOCGWINSZ can be issued against
-    // the pty we just allocated. The env vars are kept as well: some clients do
-    // consult them as a fallback, and agreeing with the ioctl costs nothing.
+    // `script -q /dev/null <cmd>` gives a PTY without a native dependency; the
+    // child's stdin is ignored, so nothing can reach the session. The PTY size must
+    // be set inside it with `stty` before exec: apps read the size via ioctl, not
+    // from COLUMNS/LINES (kept anyway, harmlessly), and without stty the PTY is 80×24.
     const inner =
       `stty rows ${TUI_ROWS} cols ${TUI_COLS} 2>/dev/null; ` +
       `exec ${shQuote(this.bin)} attach ${shQuote(this.serveUrl)} --session ${shQuote(this.sessionId)}`;
@@ -403,8 +314,7 @@ class Capture {
           TERM: "xterm-256color",
           COLUMNS: String(TUI_COLS),
           LINES: String(TUI_ROWS),
-          // Stop the attached client from trying to be clever about the
-          // terminal it thinks it has.
+          // Stop the client adapting to the terminal it thinks it has.
           NO_COLOR: "",
           CI: "",
         },
@@ -421,7 +331,7 @@ class Capture {
       this.lastReadAt = Date.now();
       this.parser.write(chunk.toString("utf8"));
     });
-    // stderr is captured for diagnosis but never parsed as screen content.
+    // stderr is for diagnosis only, never screen content.
     this.child.stderr.on("data", (chunk) => {
       const s = chunk.toString("utf8").trim();
       if (s) this.error = s.slice(0, 300);
@@ -436,18 +346,11 @@ class Capture {
   stop() {
     const c = this.child;
     this.child = null;
-    // DETACHED IS ITS OWN STATE, and it is not "live".
-    //
-    // `status` is derived from `exited`/`error`/`bytes`, and the child's own
-    // exit handler is what sets `exited` — which lands milliseconds AFTER this
-    // returns. In that gap a mirror that has just been deliberately torn down
-    // still reported `status: "live"` over its last painted screen. Recorded
-    // here so the answer is right from the instant the decision is made rather
-    // than whenever the kernel gets around to reaping the child.
+    // Detached is set at once (the exit handler lands later), so a torn-down mirror
+    // never reports live.
     this.detached = true;
     if (!c) return;
-    // SIGTERM first so the client can drop its session connection cleanly; the
-    // process is not left to linger if it ignores that.
+    // SIGTERM first so the client drops its session cleanly.
     try { c.kill("SIGTERM"); } catch { /* already gone */ }
     setTimeout(() => { try { c.kill("SIGKILL"); } catch { /* already gone */ } }, 1500);
   }
@@ -459,17 +362,13 @@ class Capture {
       this.frame = this.screen.serialise();
       this.screen.dirty = false;
     }
-    // A blank screen has several distinct causes and they are NOT
-    // interchangeable — "still starting" and "the client died" look identical
-    // on screen and demand opposite reactions from the operator.
+    // A blank screen has distinct causes (starting vs died) with opposite remedies.
     const waited = this.startedAt ? Date.now() - this.startedAt : 0;
     let status = "live";
     let reason = null;
     if (this.detached) {
-      // Checked FIRST: a mirror torn down with the cell is not "exited"
-      // (nothing crashed) and must never read as "live". The last frame is kept
-      // and still served — it is the final state of a real session, which is
-      // worth looking at — but it is labelled as history, not as motion.
+      // Checked first: torn down with the cell, not crashed. The last frame is kept
+      // and labelled as history.
       status = "detached";
       reason = "the cell was stopped and the mirror was closed with it — this is the last frame, not a live view";
     } else if (this.exited) {
@@ -509,17 +408,8 @@ class Capture {
 }
 
 /**
- * POSIX single-quote escaping.
- *
- * The capture now execs through `sh -c` in order to size the pty with `stty`
- * (see Capture.start), which means every interpolated value crosses a SHELL.
- * `sessionId` comes from a log file and `serveUrl` from config — neither is
- * attacker-controlled today, but "today" is not a security property, and a
- * shell metacharacter reaching this command would run as the operator.
- *
- * Single quotes disable ALL shell interpretation; the only character that
- * cannot appear inside them is a single quote itself, which is closed, escaped
- * and reopened in the standard way.
+ * POSIX single-quote escaping: the capture execs through `sh -c` (for stty),
+ * so every interpolated value crosses a shell.
  */
 function shQuote(s) {
   return `'${String(s ?? "").replace(/'/g, `'\\''`)}'`;
@@ -527,11 +417,7 @@ function shQuote(s) {
 
 // ── the manager ──────────────────────────────────────────────────────────────
 
-/**
- * At most ONE capture at a time. A second attach to a second session would
- * double the cost for a surface that shows one session, and the drawer only
- * ever displays the current cell.
- */
+/** At most one capture at a time: the surface shows one session. */
 export class TuiMirror {
   constructor({ serveUrl, bin = DEFAULT_ATTACH_BIN }) {
     this.serveUrl = serveUrl;
@@ -542,10 +428,7 @@ export class TuiMirror {
     if (this.sweeper.unref) this.sweeper.unref();
   }
 
-  /**
-   * Poll for a frame, starting the capture if needed. Polling IS the keepalive:
-   * the surface that reads the frames is what keeps them being produced.
-   */
+  /** Poll for a frame, starting the capture if needed. Polling is the keepalive. */
   poll(sessionId) {
     if (!sessionId) {
       return {
@@ -557,8 +440,7 @@ export class TuiMirror {
     }
 
     if (this.capture && this.capture.sessionId !== sessionId) {
-      // The cell rolled over to a new session. The old view is not the current
-      // one, so it is dropped rather than shown as if it were live.
+      // The cell moved to a new session: drop the old view.
       this.capture.stop();
       this.capture = null;
     }
