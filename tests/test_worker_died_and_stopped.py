@@ -69,7 +69,8 @@ def _stats(**over: Any) -> _OpencodeRunStats:
 def test_a_worker_that_dies_in_a_repair_round_ends_the_cell_keeping_the_last_grade(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from tests.test_challenge_budget_stop import REAL_CHECK, _make_runner as make, _patch_fake_docker
+    from tests.test_challenge_budget_stop import REAL_CHECK, _patch_fake_docker
+    from tests.test_challenge_budget_stop import _make_runner as make
 
     runner = make(tmp_path, max_attempts=5)
     _patch_fake_docker(monkeypatch)
