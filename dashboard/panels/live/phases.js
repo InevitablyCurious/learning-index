@@ -24,7 +24,7 @@ import { odo } from "../tick.js";
 // one block, split down the middle, under the gates those phases produce.
 // Exported for panels/wall.js; see the note on `provisional` below.
 
-// Mirrors dashboard/contract.mjs PHASES_PER_CELL and config.py max_attempts.
+// Mirrors control/board/contract.mjs PHASES_PER_CELL and config.py max_attempts.
 const PHASES_PER_CELL = 5;
 
 const PHASES = [

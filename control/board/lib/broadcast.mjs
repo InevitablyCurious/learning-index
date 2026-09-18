@@ -113,11 +113,11 @@ export function granularSignatures(board) {
 let lastSections = null;
 let lastHeartbeat = 0;
 
-export async function tick(cfg, mods, broken) {
+export async function tick(cfg) {
   if (!streamClients.size) return; // nobody attached: do no work at all
   let board;
   try {
-    board = await getBoard(cfg, mods, broken);
+    board = await getBoard(cfg);
   } catch (err) {
     broadcast("error", { reason: String(err?.message ?? err) });
     return;

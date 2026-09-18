@@ -172,7 +172,7 @@ class ChallengeCellResult:
     #
     # Stated here rather than subtracted by each consumer — there are three of
     # them (run_artifacts.py, control/baselines.mjs,
-    # dashboard/sources/stack-ledger.mjs) and three subtractions are three
+    # control/board/sources/stack-ledger.mjs) and three subtractions are three
     # chances to disagree about whether a cell is a measurement.
     instrument_anomaly_turns: int = 0
     # ── WO-I1 (2026-09-07): THE UNRECOVERED COMPLEMENT, STATED BY THE

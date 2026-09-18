@@ -48,8 +48,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { emptyBoard } from "./contract.mjs";
-import { read as readRunLog } from "./sources/run-log.mjs";
+import { emptyBoard } from "../control/board/contract.mjs";
+import { read as readRunLog } from "../control/board/sources/run-log.mjs";
 
 const noop = () => {};
 const stubEl = () => ({
@@ -182,14 +182,14 @@ test("running and complete are unchanged by the stall branch", () => {
 });
 
 test("the board keeps NO stall threshold of its own to drift from the producer's", async () => {
-  // The 900s threshold used to be DUPLICATED into dashboard/contract.mjs
+  // The 900s threshold used to be DUPLICATED into control/board/contract.mjs
   // because the board judged stalls too, and a drift test pinned the two
   // copies together. Only the producer judges now (control/runstate.mjs
   // against the heartbeat); a threshold reappearing board-side is the defect
   // class returning — a consumer deriving a fact the producer states.
   const fs = await import("node:fs/promises");
-  const contract = await fs.readFile(new URL("./contract.mjs", import.meta.url), "utf8");
-  const runLog = await fs.readFile(new URL("./sources/run-log.mjs", import.meta.url), "utf8");
+  const contract = await fs.readFile(new URL("../control/board/contract.mjs", import.meta.url), "utf8");
+  const runLog = await fs.readFile(new URL("../control/board/sources/run-log.mjs", import.meta.url), "utf8");
   assert.ok(!/STALL_THRESHOLD_S/.test(contract), "contract.mjs must export no stall threshold");
   assert.ok(!/STALL_THRESHOLD_S/.test(runLog), "run-log.mjs must gate on none");
   assert.ok(

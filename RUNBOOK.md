@@ -1049,16 +1049,14 @@ Run-tree layout:
 
 A mode value other than on/off yields `memoryUNKNOWN/` in place of `memoryOFF`/`memoryON`.
 
-### Dashboard deployment — the whole repo is mounted read-only
+### Dashboard deployment
 
-The dashboard (`:8717`) runs in its own container and mounts the ENTIRE `bench/` repo
-read-only at `/bench` (`dashboard/docker-compose.yml:29` → `- ..:/bench:ro`). Consequence: **any new
-file under `bench/` is already served at `/bench/<rel-path>`** — a new data source needs only
-a new reader module (`dashboard/sources/*.mjs`), and ONLY reader source requires an image rebuild
-(`dashboard/Dockerfile` COPYs the sources into the image); mounted data (e.g.
-`data/results-ledger.jsonl`) is picked up live with no rebuild. The `:ro` is deliberate: the
-dashboard never writes, and the run artifacts under `runs/` are the authoritative record (RC-5) — a
-read-only mount makes "the dashboard corrupted a run" structurally impossible.
+The dashboard container (`:8717`) holds no run data: it serves the page and
+relays `/api/*` to the control plane (`:8718`, host, loopback), which reads the
+run files and assembles the board. A new data source is a reader in
+`control/board/sources/` and needs a control-plane restart
+(`cd dev && make control-restart`, never mid-run); a page change needs
+`dashboard/redeploy.sh`.
 
 ### Remote viewing (LAN access)
 
@@ -1703,7 +1701,7 @@ scaffold fallback (`scripts/run_cumulative.py:1732-1744`).
 It sits on a different turn/token scale than a floor (it skipped the build), so
 it folds `scorable:false` with a stated reason (`control/baselines.mjs:467`,
 `:501-519`) and is excluded from the transfer curve's baseline
-(`dashboard/sources/stack-ledger.mjs:198`). It never appears in the ledger's
+(`control/board/sources/stack-ledger.mjs:198`). It never appears in the ledger's
 `baseline_rows`.
 
 ### Honesty fields

@@ -14,7 +14,7 @@ onto the CAMPAIGN directory (the one holding `manifest.json`, one level above
 the arm), opened a path that never exists, and reported *"no live.jsonl yet"* for
 the entire life of every run — a reason indistinguishable from a run that never
 wrote one. **Readers must resolve the path, never construct it**;
-`dashboard/sources/_runtime.mjs::liveStreamPath` is the one resolver, and
+`control/board/sources/_runtime.mjs::liveStreamPath` is the one resolver, and
 `scripts/bench_preflight.py::check_live_stream` blocks a launch when it stops
 finding what the harness writes.
 
@@ -99,10 +99,10 @@ construction.
 
 > **Resolved (WO-HDR-FIX-01) — the dashboard migrated.** The topbar was the one
 > documented exception, and it is gone. The dashboard no longer derives
-> `stalled` from the launch log's mtime: `dashboard/sources/run-log.mjs` now sets
+> `stalled` from the launch log's mtime: `control/board/sources/run-log.mjs` now sets
 > `state: terminal ? "complete" : "running"` and keeps `log_silent_s` as a debug
 > fact with **no rendering verdict**. `reconcileRunLiveness`
-> (`dashboard/run-liveness.mjs`) now consumes the producer's `state` in both
+> (`control/board/run-liveness.mjs`) now consumes the producer's `state` in both
 > directions — a stated stall lands carrying `heartbeat_age_s` as the verdict
 > evidence, a live verdict corrects a board-claimed stall, and a dead process
 > still overrides — and the STALLED chip renders `heartbeat_age_s`, never

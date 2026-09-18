@@ -133,53 +133,32 @@ Most of a real run is null. The empty states are designed, not incidental.
 
 ## Architecture
 
+Two processes. The **control plane** (`control/`, host, loopback :8718) is the
+only thing that reads run files or changes anything: it assembles the board
+from its readers (`control/board/sources/`) and pushes it over server-sent
+events (`GET /api/stream`). The **dashboard** (this folder, a container on
+:8717) serves the page and relays `/api/*` to the control plane — it mounts
+no run data.
+
 ```
-contract.mjs          the versioned JSON contract + null-safe helpers
-server.mjs            zero-dep HTTP server: peer guard → static GET → dashboard
-                      GET APIs → same-origin control relay → 404
+server.mjs            peer check → static files → relay /api/* → 404
 lib/
-  net-policy.mjs      peer classifier (loopback/private/link-local trusted) +
-                      same-origin check
-  control-relay.mjs   exact METHOD/path allowlist relay to the loopback control
-                      plane (origin gate on POSTs, 64KB cap, never logs bodies)
-Dockerfile            single stage — there is nothing to build
-docker-compose.yml    read-only mount, loopback-or-specific publish, opt-in hub-db
-sources/
-  _runtime.mjs        module isolation: timeouts, tail-bounded reads, merge
-  run-manifest.mjs    provenance: policy anchor, levers, org, model
-  status-stream.mjs   AUTHORITATIVE — gates, arm, verdict
-  run-log.mjs         the live pulse between attempt records
-  live-stream.mjs     the cell's live.jsonl — the during-the-run surface
-  learning.mjs        in-session extraction capture: matrix, claims, ledger
-  funnel-cells.mjs    plugin funnel counters      (ON cells only)
-  plugin-log.mjs      recall latency p50/p95      (ON cells only)
-  results-ledger.mjs  completed scored cells across runs (append-only JSONL)
-  stack-ledger.mjs    longitudinal transfer curve; spans run directories
-  opencode-serve.mjs  live token burn             (opt-in, host API)
-  control-plane.mjs   roster, run control, event feed (relayed, same-origin)
-  hub-db.mjs          candidate relevance/standing (opt-in, DISABLED default)
+  net-policy.mjs      peer classifier + same-origin check
+  control-relay.mjs   relay to the control plane (same-origin POSTs, 64KB
+                      body cap, pipes the live stream, never logs bodies)
+check/board-check.mjs uses the real board in a browser (run by redeploy.sh)
 index.html + board.js + panels/   the board
+Dockerfile            single stage — there is nothing to build
+docker-compose.yml    loopback publish; docker-compose.lan.yml adds the LAN
 ```
 
 ### Configuration
 
-Env vars override the config file, so the container is reconfigured with
-`docker run -e …` or a compose `environment:` block — never a rebuild:
-
 | Var | Default | Purpose |
 |---|---|---|
-| `OKP_DASH_HOST` | `127.0.0.1` (image: `0.0.0.0`) | host-process bind address (`--host` overrides) |
+| `OKP_DASH_HOST` | `127.0.0.1` (image: `0.0.0.0`) | bind address |
 | `OKP_DASH_PORT` | `8717` | port |
-| `OKP_DASH_BENCH_ROOT` | `..` (image: `/bench`) | bench repo root |
-| `OKP_DASH_POLL_MS` | `2000` | refresh cadence |
-| `OKP_DASH_OPENCODE_URL` | `http://127.0.0.1:8719` | live agent API |
-| `OKP_DASH_CONTROL_URL` | `http://127.0.0.1:8718` | the relay's upstream control plane (always loopback) |
-| `OKP_DASH_SOURCE_<NAME>` | — | force a source on/off |
-| `OKP_DASH_HUBDB` | off | enable the hub-db source |
-| `OKP_HUB_DB_{HOST,PORT,USER,NAME,PASSWORD}` | — | hub postgres |
-
-The password is read from the environment at query time. It is never written to
-config, never logged, and never returned by `/api/health`.
+| `OKP_DASH_CONTROL_URL` | `http://127.0.0.1:8718` | the control plane the relay forwards to |
 
 ### Remote viewing
 
@@ -209,15 +188,12 @@ the check. Run it alone with `node check/board-check.mjs [url ...]`.
 
 ### Adding a source
 
-Drop a file in `sources/` exporting `id`, `fields`, `describe()` and
-`async read(ctx)` returning `{ ok, patch, provenance, reason? }`, then register
-it in `dashboard.config.json`. The merge is additive: `null` never overwrites a
-value, so enabling a source can only add information.
-
-**A source cannot take the board down.** Each read is isolated behind a 2s
-timeout and a try/catch. A module that throws, hangs, is absent, or fails to
-import is reported `unwired` with a reason, and its fields stay null — which is
-already a designed UI state.
+Readers live in `control/board/sources/`. Each exports `id`, `fields`,
+`describe()` and `async read(ctx)` returning `{ ok, patch, provenance,
+reason? }`; add it to the list and merge order in
+`control/board/lib/board-build.mjs`. `null` never overwrites a value. A reader
+that throws or takes longer than 2s is reported `unwired` with its reason and
+the board renders without it.
 
 ### Preserved subtrees — who owns each panel
 
@@ -247,23 +223,18 @@ path. (Contrast: the non-preserved ledger legitimately uses toggle-state-then-
 
 Written to be run by anyone, out of the box, without wrecking their machine:
 
-- **Read-only.** Nothing opens a file for write. The bench mount is `:ro`, so
-  this is enforced by the kernel, not by good intentions.
+- **Holds nothing.** The container mounts no run data and opens no file for
+  write; every read and write goes through the control plane on loopback.
 - **Runs as a non-root user** (`node`, uid 1000) with no writable state.
-- **The docker socket is never mounted.** `hub-db` connects to postgres over
-  TCP. Handing a read-only dashboard control of the host docker daemon in order
-  to read four tables is an absurd trade, so it isn't made.
+- **The docker socket is never mounted.**
 - **Loopback-only by default; LAN access is opt-in** (see Remote viewing).
   Verified surface
-  when exposed: `POST → 405`, traversal → `404`, non-allowlisted file → `404`,
-  `touch /bench/…` → `Read-only file system`, container `uid=1000(node)`.
+  when exposed: traversal → `404`, non-allowlisted file → `404`, cross-origin
+  POST → `403`, container `uid=1000(node)`.
   Anyone already on the LAN can read gate ids, token counts and run metadata —
   no plaintext, no keys.
-- **Tail-bounded reads** (256KB). A six-hour log costs the same as a fresh one.
 - **Fixed static allowlist** — no dynamic path resolution, so traversal is
   impossible by construction.
-- **`hub-db` ships disabled.** You do not need a database, docker, or any part
-  of the Open Knowledge stack for the board to come up.
 - **No CDN, no webfont fetch.** The board renders offline.
 - **Privacy:** memory plaintext, raw queries and full CIDs never reach the
   board. `query_log.query_text` is never selected. Everything rendered is

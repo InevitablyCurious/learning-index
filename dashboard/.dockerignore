@@ -6,7 +6,6 @@
 **/runs
 **/data
 **/*.log
-dashboard.config.json
 README.md
 Dockerfile
 docker-compose.yml

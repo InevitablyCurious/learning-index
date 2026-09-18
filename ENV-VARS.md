@@ -31,17 +31,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | DEBUG_API | off | debug endpoints on task servers | env =1 |
 | OKP_DASH_HOST | 127.0.0.1 (image 0.0.0.0) | dashboard bind addr | env or --host |
 | OKP_DASH_PORT | 8717 | dashboard port | env or --port |
-| OKP_DASH_BENCH_ROOT | .. (image /bench) | bench root | env |
-| OKP_DASH_POLL_MS | 2000 | refresh cadence | env |
-| OKP_DASH_OPENCODE_URL | http://127.0.0.1:8719 | live agent API | env |
 | OKP_DASH_CONTROL_URL | http://127.0.0.1:8718 | the same-origin relay's upstream control plane (always loopback) | env |
-| OKP_DASH_SOURCE_<NAME> | per config | per-source toggle | env OKP_DASH_SOURCE_<NAME>=1/0 |
-| OKP_DASH_HUBDB | off | enable hub-db source | env =1 |
-| OKP_HUB_DB_HOST | okp-postgres | postgres host | env |
-| OKP_HUB_DB_PORT | 5432 | postgres port | env |
-| OKP_HUB_DB_USER | okp | postgres user | env |
-| OKP_HUB_DB_NAME | okp_hub | postgres db | env |
-| OKP_HUB_DB_PASSWORD | "" | postgres password (query-time) | env |
 | OKP_LOG_DIR | ~/.okp/logs | plugin log dir | env |
 | OKP_PLUGIN_PATH | (none) | plugin path baked into worker opencode.json | build-time env |
 | BENCH_SELF_COMPACT | off | benchmark-native worker-side self-fire compaction (`images/worker/self-compact.ts`, baked into every worker image at /opt/bench/self-compact.ts) | env =1, exported by the harness per cell when launched with --compact |
@@ -90,7 +80,6 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_CONTROL_RUNTIME_URL | http://127.0.0.1:1234 | LM Studio runtime | env |
 | OKP_CONTROL_SERVE_URL | http://127.0.0.1:8719 | serve API | env |
 | OKP_CONTROL_PYTHON | null | python binary | env |
-| OKP_DASH_RUNS_ROOT | <benchRoot>/runs | dashboard runs root | env |
 | OKP_IDENTITY_SEED_HEX | (none) | leader-signer seed | env or --seed-hex |
 | OKP_ENV | local | base-URL switch | env =production |
 | OKP_CHAIN_ID | okp-local-1 | chain id | env |

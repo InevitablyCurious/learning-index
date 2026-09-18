@@ -6,7 +6,7 @@
 // chunk is still running, long before the status stream records anything.
 //
 // OPT-IN because it is the only source that makes a network call. Enable it in
-// dashboard.config.json. If the port is closed, this module reports unwired and
+// the control plane's --serve-url. If the port is closed, this module reports unwired and
 // the board loses nothing but liveness.
 //
 // READ-ONLY: GET /session only. This module never posts, never mutates a

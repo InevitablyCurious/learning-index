@@ -24,7 +24,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { reconcileRunLiveness } = await import("./run-liveness.mjs");
+const { reconcileRunLiveness } = await import("../control/board/run-liveness.mjs");
 
 const boardWith = (run, controlRun) => ({
   run: { state: null, phase: null, ...run },

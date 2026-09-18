@@ -33,7 +33,7 @@ import { activeTreeRoot } from "./tree.mjs";
 // never exists and reported "no live.jsonl yet" for the entire life of every
 // run. Importing the designated resolver is the contract; a second copy here
 // would be that defect waiting to happen again. It imports only node builtins.
-import { liveStreamPath } from "../dashboard/sources/_runtime.mjs";
+import { liveStreamPath } from "./board/sources/_runtime.mjs";
 
 async function statOrNull(path) {
   try {

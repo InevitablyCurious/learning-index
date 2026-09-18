@@ -75,6 +75,7 @@ import { routes as toolRoutes } from "./routes/tools.mjs";
 import { routes as challengeRoutes } from "./routes/challenges.mjs";
 import { routes as eventRoutes } from "./routes/events.mjs";
 import { routes as wallRoutes } from "./routes/wall.mjs";
+import { routes as boardRoutes, startBoardLoops } from "./routes/board.mjs";
 
 // initState() runs the import-time side effects — the event subscription, the
 // persist timer and the shutdown handlers — in the exact order they ran at the
@@ -97,6 +98,7 @@ for (const r of [
 ...challengeRoutes,
   ...eventRoutes,
   ...wallRoutes,
+  ...boardRoutes,
 ]) {
   routes[`${r.method} ${r.path}`] = r.handle;
 }
@@ -133,6 +135,7 @@ const server = createServer(async (req, res) => {
 
 // 127.0.0.1 ONLY. There is deliberately no flag to change this.
 server.listen(args.port, "127.0.0.1", () => {
+  startBoardLoops();
   console.log(`bench control plane → http://127.0.0.1:${args.port}`);
   console.log(`  bench root : ${BENCH_ROOT}`);
   console.log(`  python     : ${PYTHON}${existsSync(PYTHON) ? "" : "  (MISSING)"}`);

@@ -1,11 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // BOARD ASSEMBLY — source registry, ordered merge, poll cache.
 //
-// Extracted from server.mjs (WO LI-13). The safety properties documented in
-// server.mjs's header apply verbatim here: every source module runs isolated
-// with a 2s timeout, a module that throws or hangs is reported `unwired`, and
-// poll results are cached with concurrent requests sharing one in-flight
-// refresh. This module is import-safe (top level is declarations only).
+// Every source runs isolated with a 2s timeout; one that throws or hangs is
+// reported `unwired` and the board renders without it. Results are cached for
+// cfg.pollMs and concurrent requests share one in-flight refresh.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { emptyBoard } from "../contract.mjs";
@@ -14,48 +12,25 @@ import { reconcileRunLiveness } from "../run-liveness.mjs";
 
 // ── source registry ──────────────────────────────────────────────────────────
 
-// Specifiers are relative to THIS file (dashboard/lib/), because `loadModules`
-// hands them to a dynamic import() from here — so the dashboard's sources/
-// directory is one level up.
-const MODULE_FILES = {
-  "run-manifest": "../sources/run-manifest.mjs",
-  "status-stream": "../sources/status-stream.mjs",
-  "run-log": "../sources/run-log.mjs",
-  "stack-ledger": "../sources/stack-ledger.mjs",
-  "funnel-cells": "../sources/funnel-cells.mjs",
-  "plugin-log": "../sources/plugin-log.mjs",
-  "opencode-serve": "../sources/opencode-serve.mjs",
-  "control-plane": "../sources/control-plane.mjs",
-  "gate-suite": "../sources/gate-suite.mjs",
-  learning: "../sources/learning.mjs",
-  "live-stream": "../sources/live-stream.mjs",
-  "results-ledger": "../sources/results-ledger.mjs",
-  "hub-db": "../sources/hub-db.mjs",
-};
+import * as runManifest from "../sources/run-manifest.mjs";
+import * as statusStream from "../sources/status-stream.mjs";
+import * as runLog from "../sources/run-log.mjs";
+import * as stackLedger from "../sources/stack-ledger.mjs";
+import * as funnelCells from "../sources/funnel-cells.mjs";
+import * as pluginLog from "../sources/plugin-log.mjs";
+import * as opencodeServe from "../sources/opencode-serve.mjs";
+import * as controlPlane from "../sources/control-plane.mjs";
+import * as gateSuite from "../sources/gate-suite.mjs";
+import * as learning from "../sources/learning.mjs";
+import * as liveStream from "../sources/live-stream.mjs";
+import * as resultsLedger from "../sources/results-ledger.mjs";
 
-/**
- * Load enabled modules. A module that fails to IMPORT is reported as unwired
- * rather than crashing the server — this is what makes the source directory
- * genuinely pluggable: a broken drop-in degrades to a null panel.
- */
-export async function loadModules(cfg) {
-  const mods = [];
-  const broken = [];
-  for (const [name, enabled] of Object.entries(cfg.sources)) {
-    if (!enabled) continue;
-    const file = MODULE_FILES[name];
-    if (!file) {
-      broken.push({ id: name, reason: "unknown source id" });
-      continue;
-    }
-    try {
-      mods.push(await import(file));
-    } catch (err) {
-      broken.push({ id: name, reason: `import failed: ${String(err?.message ?? err).slice(0, 160)}` });
-    }
-  }
-  return { mods, broken };
-}
+// Every source is always on: each one reports its own absence ("unwired",
+// with a reason) instead of being switched off by configuration.
+const MODS = [
+  runManifest, statusStream, runLog, stackLedger, funnelCells, pluginLog,
+  opencodeServe, controlPlane, gateSuite, learning, liveStream, resultsLedger,
+];
 
 // ── board assembly ───────────────────────────────────────────────────────────
 
@@ -68,11 +43,11 @@ export async function loadModules(cfg) {
  *   opencode-serve freshest token counters, last word on liveness
  */
 const ORDER = [
+  "control-plane",
   "run-manifest",
   "status-stream",
   "funnel-cells",
   "plugin-log",
-  "hub-db",
   "learning",
   "run-log",
   // AFTER the artifact sources and BEFORE opencode-serve: the stream is a
@@ -91,11 +66,11 @@ const ORDER = [
   "gate-suite",
 ];
 
-async function buildBoard(cfg, mods, broken) {
+async function buildBoard(cfg) {
   const board = emptyBoard();
   const ctx = { benchRoot: cfg.benchRoot, runsRoot: cfg.runsRoot, config: cfg };
 
-  const ordered = [...mods].sort(
+  const ordered = [...MODS].sort(
     (a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id),
   );
 
@@ -122,17 +97,14 @@ async function buildBoard(cfg, mods, broken) {
 
   reconcileRunLiveness(board);
 
-  board.sources = [
-    ...results.map((r) => ({
-      id: r.id,
-      ok: r.ok,
-      fields: r.fields,
-      reason: r.reason,
-      provenance: r.provenance,
-      ms: r.ms,
-    })),
-    ...broken.map((b) => ({ id: b.id, ok: false, fields: [], reason: b.reason, provenance: null, ms: 0 })),
-  ];
+  board.sources = results.map((r) => ({
+    id: r.id,
+    ok: r.ok,
+    fields: r.fields,
+    reason: r.reason,
+    provenance: r.provenance,
+    ms: r.ms,
+  }));
 
   board.generated_at = Date.now();
   return board;
@@ -144,11 +116,11 @@ let cached = null;
 let cachedAt = 0;
 let inFlight = null;
 
-export async function getBoard(cfg, mods, broken) {
+export async function getBoard(cfg) {
   const age = Date.now() - cachedAt;
   if (cached && age < cfg.pollMs) return cached;
   if (inFlight) return inFlight; // share one refresh across concurrent clients
-  inFlight = buildBoard(cfg, mods, broken)
+  inFlight = buildBoard(cfg)
     .then((b) => {
       cached = b;
       cachedAt = Date.now();

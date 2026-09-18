@@ -13,7 +13,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  CONTROL_ROUTES,
   createControlRelay,
   defaultReadBody,
 } from "./lib/control-relay.mjs";
@@ -85,27 +84,11 @@ function makeRelay(opts = {}) {
 
 // ── the allowlist itself ────────────────────────────────────────────────────
 
-test("CONTROL_ROUTES mirrors the control plane's table minus GET /api/health", () => {
-  assert.equal(CONTROL_ROUTES.size, 45);
-  assert.ok(CONTROL_ROUTES.has("GET /api/roster"));
-  assert.ok(CONTROL_ROUTES.has("GET /api/wall"));
-  assert.ok(CONTROL_ROUTES.has("POST /api/routers/key"));
-  assert.ok(CONTROL_ROUTES.has("POST /api/tools/run"));
-  // The dashboard serves its OWN /api/health — the control plane's is never
-  // relayed, and neither is any method the control plane does not expose.
-  assert.ok(!CONTROL_ROUTES.has("GET /api/health"));
-  assert.ok(!CONTROL_ROUTES.has("PUT /api/run/start"));
-  assert.ok(!CONTROL_ROUTES.has("DELETE /api/history"));
-});
-
-// ── allowlist enforcement at the relay ──────────────────────────────────────
-
-test("allowlisted GET proxies to the control plane", async () => {
+test("GET proxies to the control plane", async () => {
   const h = makeRelay();
   const res = await h.call({ method: "GET", path: "/api/roster" });
   assert.equal(h.fetched.length, 1);
   assert.equal(h.fetched[0].method, "GET");
-  assert.ok(h.fetched[0].url.endsWith("/api/roster"));
   assert.equal(h.fetched[0].url, `${CONTROL_URL}/api/roster`);
   assert.equal(res.statusCode, 200);
   assert.equal(res.headers["content-type"], "application/json");
@@ -113,30 +96,39 @@ test("allowlisted GET proxies to the control plane", async () => {
   assert.equal(res.body, '{"ok":true}');
 });
 
-test("unknown path 404s upstream_unwired and never fetches", async () => {
-  const h = makeRelay();
+test("an unknown path is the control plane's to refuse", async () => {
+  const h = makeRelay({ status: 404, text: '{"ok":false,"code":"upstream_unwired"}' });
   const res = await h.call({ method: "GET", path: "/api/nope" });
+  assert.equal(h.fetched[0].url, `${CONTROL_URL}/api/nope`);
   assert.equal(res.statusCode, 404);
-  assert.equal(h.fetched.length, 0);
-  const body = JSON.parse(res.body);
-  assert.equal(body.ok, false);
-  assert.equal(body.code, "upstream_unwired");
-  assert.equal(body.reason, "no relay route GET /api/nope");
 });
 
-test("wrong method on a known path 404s and is not proxied", async () => {
+test("methods other than GET and POST are refused and never forwarded", async () => {
   const h = makeRelay();
   const res = await h.call({ method: "PUT", path: "/api/run/start" });
-  assert.equal(res.statusCode, 404);
+  assert.equal(res.statusCode, 405);
   assert.equal(h.fetched.length, 0);
-  assert.equal(JSON.parse(res.body).code, "upstream_unwired");
 });
 
-test("extra segment on a known path 404s (exact match, never prefix)", async () => {
-  const h = makeRelay();
-  const res = await h.call({ method: "GET", path: "/api/run/start/extra" });
-  assert.equal(res.statusCode, 404);
-  assert.equal(h.fetched.length, 0);
+test("a live stream is piped through as it arrives", async () => {
+  const chunks = [];
+  const res = {
+    headersSent: false,
+    writeHead(status, headers) { this.statusCode = status; this.headers = headers; this.headersSent = true; return this; },
+    write(c) { chunks.push(Buffer.from(c).toString()); },
+    end() { this.ended = true; },
+  };
+  const relay = createControlRelay({
+    controlUrl: CONTROL_URL,
+    fetchImpl: async () => new Response(new ReadableStream({
+      start(ctl) { ctl.enqueue(new TextEncoder().encode("event: board\n\n")); ctl.close(); },
+    }), { headers: { "content-type": "text/event-stream" } }),
+  });
+  const req = { method: "GET", headers: { host: HOST }, on() {} };
+  await relay(req, res, new URL("http://x/api/stream?since=0"));
+  assert.equal(res.headers["content-type"], "text/event-stream");
+  assert.deepEqual(chunks, ["event: board\n\n"]);
+  assert.ok(res.ended);
 });
 
 // ── origin / CSRF on writes ─────────────────────────────────────────────────

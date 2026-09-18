@@ -23,7 +23,15 @@ import { fileURLToPath } from "node:url";
 import { ringRestarted, capWindow } from "./sources/control-plane.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const read = (rel) => readFile(join(HERE, rel), "utf8");
+// Browser files live in dashboard/; the SSE connect path in control/routes/.
+const DASH = join(HERE, "..", "..", "dashboard");
+const read = (rel) =>
+  readFile(
+    rel === "server.mjs" ? join(HERE, "..", "routes", "board.mjs")
+      : rel === "board.js" || rel.startsWith("panels/") ? join(DASH, rel)
+      : join(HERE, rel),
+    "utf8",
+  );
 
 /** Strip comments so a rule is never satisfied or broken by prose ABOUT it. */
 function code(src) {
@@ -71,7 +79,7 @@ test("the source layer refetches from scratch when the ring re-bases", async () 
 
 test("the SSE proxy resets a per-client cursor that outruns the ring", async () => {
   // The tick loop lives in lib/broadcast.mjs; the connect path stays in
-  // server.mjs. Each watermark reset is pinned in the file that owns it.
+  // routes/board.mjs. Each watermark reset is pinned in the file that owns it.
   const tickSrc = code(await read("lib/broadcast.mjs"));
   assert.match(tickSrc, /since > cursor/, "the tick loop must reset a stale per-client cursor");
   const connectSrc = code(await read("server.mjs"));

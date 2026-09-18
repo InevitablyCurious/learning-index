@@ -68,7 +68,7 @@ process.stdout.write(JSON.stringify(out));
 
 def check_live_stream(c: Check) -> None:
     """The board's reader must find the stream the harness actually writes."""
-    dash = REPO / "dashboard"
+    dash = REPO / "control" / "board"
     node = shutil.which("node")
     if node is None:
         c.add(
@@ -81,9 +81,8 @@ def check_live_stream(c: Check) -> None:
     if not (dash / "sources" / "_runtime.mjs").is_file():
         c.add(
             "board live stream",
-            True,
-            "dashboard sources absent — nothing to verify",
-            blocking=False,
+            False,
+            f"the board's stream reader is missing at {dash / 'sources' / '_runtime.mjs'}",
         )
         return
 
@@ -151,7 +150,7 @@ def check_live_stream(c: Check) -> None:
             f"BOARD IS BLIND: {len(on_disk)} live.jsonl on disk under the active run but the "
             f"dashboard resolver found NONE (e.g. .../{found}). The gate wall and the learning "
             "matrix will read 'no live.jsonl yet' for the WHOLE run. Fix "
-            "dashboard/sources/_runtime.mjs::liveStreamPath — do NOT launch onto a blind board.",
+            "control/board/sources/_runtime.mjs::liveStreamPath — do NOT launch onto a blind board.",
         )
         return
 

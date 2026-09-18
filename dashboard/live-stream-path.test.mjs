@@ -19,9 +19,9 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { liveStreamPath } from "./sources/_runtime.mjs";
-import * as liveStream from "./sources/live-stream.mjs";
-import * as learning from "./sources/learning.mjs";
+import { liveStreamPath } from "../control/board/sources/_runtime.mjs";
+import * as liveStream from "../control/board/sources/live-stream.mjs";
+import * as learning from "../control/board/sources/learning.mjs";
 
 const ROSTER = {
   total: 3,

@@ -30,7 +30,15 @@ import { fileURLToPath } from "node:url";
 import { capWindow } from "./sources/control-plane.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const read = (rel) => readFile(join(HERE, rel), "utf8");
+// Browser files live in dashboard/; the SSE connect path in control/routes/.
+const DASH = join(HERE, "..", "..", "dashboard");
+const read = (rel) =>
+  readFile(
+    rel === "server.mjs" ? join(HERE, "..", "routes", "board.mjs")
+      : rel === "board.js" || rel.startsWith("panels/") ? join(DASH, rel)
+      : join(HERE, rel),
+    "utf8",
+  );
 
 /** Strip comments so a rule is never satisfied or broken by prose ABOUT it. */
 function code(src) {

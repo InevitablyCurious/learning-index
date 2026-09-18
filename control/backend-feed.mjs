@@ -44,7 +44,7 @@
 import { readFile, open, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import { liveStreamPath } from "../dashboard/sources/_runtime.mjs";
+import { liveStreamPath } from "./board/sources/_runtime.mjs";
 import { noticesPathFor } from "./notices.mjs";
 import { cellDirForRun } from "./runstate.mjs";
 

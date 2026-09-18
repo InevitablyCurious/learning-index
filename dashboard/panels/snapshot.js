@@ -13,7 +13,7 @@
 // measured against it measures the absence of a build rather than the presence
 // of memory. That safety property is enforced in TWO folds that do not know
 // about each other — `control/baselines.mjs` for the ledger and
-// `dashboard/sources/stack-ledger.mjs` for the transfer curve — and never
+// `control/board/sources/stack-ledger.mjs` for the transfer curve — and never
 // depends on the operator having read anything here.
 //
 // ── THE SERVER OWNS THE SELECTION ───────────────────────────────────────────

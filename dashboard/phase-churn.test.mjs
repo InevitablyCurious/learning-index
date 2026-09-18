@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { spine } from "./panels/live.js";
-import { read } from "./sources/live-stream.mjs";
+import { read } from "../control/board/sources/live-stream.mjs";
 
 const STOPPED = { state: "complete", chunk: { current: 6, total: 6 } };
 

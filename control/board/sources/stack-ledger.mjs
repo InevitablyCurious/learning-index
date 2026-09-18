@@ -65,10 +65,8 @@
 //    consecutive audits.
 //
 //    The dimension is STRIPPED rather than faked. Nothing on disk carries the
-//    corpus level at recall time. The hub DB could, but it is opt-in and ships
-//    DISABLED (`sources/hub-db.mjs`), so a fresh clone would read `unknown`
-//    anyway — a corpus level is new instrumentation, not a restoration, and
-//    belongs with the recall work rather than smuggled in behind a reader.
+//    corpus level at recall time; a corpus level is new instrumentation and
+//    belongs with the recall work.
 //
 // Every number below is either read from an artifact or explicitly null.
 // ─────────────────────────────────────────────────────────────────────────────
