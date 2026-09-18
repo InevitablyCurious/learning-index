@@ -1,30 +1,13 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// PANEL: LEARNING — how this model is learning, in real time
-//
-// The in-session extraction capture, rendered live. Three views over
-// `board.learning` (owned by sources/learning.mjs):
-//
-//   MATRIX   the gate × attempt grid — the REAL-TIME learning surface. Attempts
-//            fill left→right as the cell runs, so the operator watches gates
-//            flip red→green across the cell's five phases (1 build + 4 repair).
-//   CLAIMS   the model's OWN account — trajectories, knowledge records,
-//            evidence, and the code-derived edit ranges beside it. Two authors,
-//            typographically separate: that separation IS the measurement.
-//   LIVE     capture bookkeeping + the session history on this host.
-//
-// ── HONESTY RULES CARRIED HERE (from the RFD + sources/learning.mjs) ────────
-//
-//   · Window labels are read from learning-ledger.json, NEVER computed here.
-//   · Polarity is do-this / do-not-do, not a verdict — it never takes pass/fail
-//     colours.
-//   · session_goal.text in the master is a MOCKED placeholder and is never shown
-//     as the goal; the real goal reads from the task manifest.
-//   · The OFF-cell capture is not persisted (arm comparability → unbound
-//     worktree → ephemeral tmpfs). OFF rows read `unwired`, never synthesised.
-//   · The master is append-only in effect. A shrink is an anomaly, said in words.
-//
-// This panel is READ-ONLY. It mirrors state; it never starts anything.
-// ─────────────────────────────────────────────────────────────────────────────
+// PANEL: LEARNING — the second tab of the transfer-curve card: how the model
+// is learning, from board.learning (sources/learning.mjs).
+//   MATRIX  gate × attempt, filling left to right as the cell runs
+//   CLAIMS  the model's own account (trajectories, knowledge, evidence) beside
+//           the code-derived edit ranges — two authors, kept visually apart
+//   LIVE    capture bookkeeping and this host's session history
+// Window labels come from learning-ledger.json; polarity is do / do-not, never
+// pass/fail colours; the master's session goal is a placeholder (the real goal is
+// the manifest's); OFF cells read unwired; a shrinking master is an anomaly.
+// Read-only.
 
 import { esc } from "../board.js";
 
@@ -38,11 +21,10 @@ export function learningView() {
   return view;
 }
 
-/** The five phases: attempt 1 builds, attempts 2–5 repair/troubleshoot. */
+/** Attempt 1 builds, attempts 2–5 repair. */
 export const PHASES_PER_CELL = 5;
 
-// ── colour mapping (GREEN phosphor — semantic, not the design's midnight hex) ─
-// Arm identity is carried by words AND colour, matching the rest of the board.
+// Arm identity is carried by words and colour, like the rest of the board.
 const C = {
   armA: "var(--arm-a)", // MEMORY ON
   armB: "var(--arm-b)", // CONTROL
@@ -52,12 +34,7 @@ const C = {
   flip: "var(--type)",
 };
 
-/**
- * The LEARNING tab of the TRANSFER CURVE card. Rendered by panels/curve.js —
- * the curve is the WHAT (where it stopped) and this is the WHY (how the model
- * learned), so the two share one card and one header, exactly as the design
- * specimen draws it. Three views: MATRIX / CLAIMS / LIVE.
- */
+/** The LEARNING tab body (rendered by panels/curve.js): MATRIX / CLAIMS / LIVE. */
 export function renderLearningBody(board) {
   const L = board.learning ?? null;
   return `
@@ -370,22 +347,10 @@ function windowLabelFor(k, tj, L) {
 
 
 /**
- * BACKEND TELEMETRY — the modularity claim, rendered.
- *
- * This benchmark ships as something ANY memory backend can plug into; Okp is
- * the first implementation, not the definition. So this block renders whatever
- * namespaces appear on the live stream, INCLUDING ones this board has never
- * heard of, by treating `data` as opaque and drawing it generically.
- *
- * That is deliberate and load-bearing. A board that silently drops an
- * unrecognised namespace cannot honestly claim any backend can plug in — the
- * third-party integrator would append records correctly, see nothing, and have
- * no way to tell a broken pipe from an unsupported one. Here an unknown backend
- * is visibly ALIVE with its counts and its newest payload, which is enough to
- * confirm the wiring without the board knowing what the payload means.
- *
- * A panel that DOES recognise a namespace is free to render it richly
- * elsewhere. This is the floor, not the ceiling.
+ * BACKEND TELEMETRY — whatever namespaces appear on the live stream, including
+ * unknown ones, drawn generically with `data` treated as opaque. An unknown
+ * backend is visibly alive with its counts and newest payload, so an integrator
+ * can tell a broken pipe from an unsupported one.
  */
 function backendsBlock(board) {
   const live = board?.live ?? null;
@@ -422,8 +387,7 @@ function backendsBlock(board) {
     })
     .join("");
 
-  // A backend that announced itself but has sent no ext records yet is still
-  // real and is stated as such, rather than being absent from the list.
+  // A backend that announced itself but sent nothing yet is still listed.
   const silent = declared
     .filter((b) => !ext.some((e) => e.ns === b.ns))
     .map(
@@ -445,10 +409,8 @@ function backendsBlock(board) {
 }
 
 /**
- * Render an unknown payload without pretending to understand it. Flat scalars
- * become labelled rows; anything nested is shown as compact JSON. Never
- * truncated silently — a clipped value gets an explicit ellipsis so a reader
- * knows to go to the file.
+ * An unknown payload: flat scalars as labelled rows, nested values as compact
+ * JSON, a clipped value marked with an ellipsis.
  */
 function opaque(data) {
   if (data === null || data === undefined) return `<span class="learn-note">no payload</span>`;
@@ -477,19 +439,9 @@ function clipStr(v) {
 function liveView(L, board) {
   const m = L?.master;
 
-  // ── THE SESSION ID IS RESOLVED, AND THE PANEL SAYS FROM WHERE ────────────
-  //
-  // This used to read ONE source: the newest line of predicate-outcomes.jsonl.
-  // That file is written by run_cumulative.py's `finally` block — after the
-  // whole campaign exits — so this row said `unresolved` for the entire run,
-  // every run, by construction. The id was never missing; nothing was looking
-  // anywhere that had it yet.
-  //
-  // Order is freshest-first and each source is NAMED on screen, because "which
-  // artifact is this from" is exactly the question that went unanswered:
-  //   live.jsonl      cell.start, written before the model takes a turn
-  //   agent session   the running opencode session (opencode-serve)
-  //   predicate-outcomes.jsonl  post-mortem; the only source before this fix
+  // The session id, freshest source first and named on screen: live.jsonl
+  // cell.start, the running opencode session, then predicate-outcomes.jsonl
+  // (written only after the campaign ends).
   const resolved =
     (board?.live?.session_id && { id: board.live.session_id, from: "live.jsonl · cell.start" }) ||
     (board?.run?.session_id && { id: board.run.session_id, from: "agent session · live" }) ||
@@ -658,7 +610,7 @@ function frame(head, body, note) {
     </div>`;
 }
 
-// ── tiny local coercions (avoid pulling contract.mjs into the panel) ─────────
+// ── tiny local coercions (keeps contract.mjs out of the browser) ──
 function int(v) {
   if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
