@@ -1,19 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// THE CHALLENGE STEP — what this baseline is measured on
-//
-// A challenge is what the cell builds and what the gates grade. Backgammon is
-// the one that ships; anything cloned into `challenges/` appears here beside it.
-//
-// PINNED AT THE BASELINE. The choice is made once, on the first cell. Every
-// later cell of that baseline builds the same thing, so the step never returns
-// — a baseline whose cells built different challenges would produce a delta
-// measuring the challenge rather than the model.
-//
-// SERVER STATE, FETCHED. The list comes from the control plane, which reads the
-// manifests on disk. A challenge that cannot run is still listed, with the
-// reason, because a picker that hides what the operator just cloned sends them
-// hunting through directories.
-// ─────────────────────────────────────────────────────────────────────────────
+// THE CHALLENGE STEP — what this baseline is measured on. Chosen once, on the
+// first cell; every later cell builds the same one (otherwise the delta would
+// measure the challenge). The list comes from the control plane; one that can't
+// run is shown with its reason.
 
 import { esc } from "../board.js";
 

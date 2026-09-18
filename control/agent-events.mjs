@@ -2,8 +2,8 @@ import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { cellSessionId } from "./runstate.mjs";
 
-// The per-run agent-event transcript. Append-only, one BoardEvent JSON object
-// per line, discoverable from run_dir alone (deterministic path, no walking).
+// A run's agent-event transcript: append-only, one BoardEvent per line, at a
+// path derived from run_dir alone.
 export const AGENT_EVENTS_FILENAME = "agent-events.jsonl";
 
 export function agentEventsPath(runsRoot, runDir) {
@@ -18,8 +18,8 @@ export async function appendAgentEvents(path, rows) {
   await appendFile(path, lines, "utf8");
 }
 
-// Read a past run's persisted agent events. Tolerant of a torn/half-written last
-// line (a crash mid-append is expected). Returns rows in file (arrival) order.
+// Read a past run's persisted agent events in arrival order; a half-written
+// last line (crash mid-append) is skipped.
 export async function readAgentEvents({ runsRoot, runDir, since = 0, limit = null, sequenceIndex = null }) {
   let sid = null;
   if (sequenceIndex != null) {
@@ -56,17 +56,8 @@ export async function readAgentEvents({ runsRoot, runDir, since = 0, limit = nul
 }
 
 /**
- * HOW MANY OF EACH KIND ARE IN THE ROWS BEING SERVED.
- *
- * The persisted branch used to answer the live shape with every count ZEROED,
- * which is not "no data" — it is a wrong number beside a populated list. The
- * board draws its event-kind filter chips from these counts, so a concluded run
- * rendered `tool 0 · file 0 · error 0` over four thousand rows, and an operator
- * filtering for errors had no way to see there were any.
- *
- * COUNTED OVER WHAT IS RETURNED, not over the whole file: the chips label the
- * list beneath them, and a count of rows the caller did not get is a count of
- * something the reader cannot look at.
+ * Per-kind counts over the rows being returned (the filter chips label the list
+ * beneath them).
  */
 function tallyKinds(rows) {
   const counts = { tool: 0, file: 0, thinking: 0, error: 0, lifecycle: 0, harness: 0, user: 0 };
@@ -76,10 +67,9 @@ function tallyKinds(rows) {
   return counts;
 }
 
-// Buffered sink the server injects into the ring: every pushed agent event is
-// enqueued and flushed (appended to the active run's agent-events.jsonl) on a
-// timer. `getRunDir` is an async () => activeRunDir()-style resolver supplied by
-// the caller; rows are held (not dropped, not mis-filed) until a run is known.
+// The buffered sink: every pushed agent event is queued and appended to the
+// active run's agent-events.jsonl on a timer. Rows wait until a run is known,
+// rather than being dropped or mis-filed.
 const PENDING_MAX = 2000; // mirrors EVENT_RING_MAX; bounds memory if no run is active
 export function createAgentEventSink({ runsRoot, getRunDir }) {
   let pending = [];
@@ -102,7 +92,7 @@ export function createAgentEventSink({ runsRoot, getRunDir }) {
         try {
           await appendAgentEvents(agentEventsPath(runsRoot, runDir), rows);
         } catch {
-          // restore on failure so the rows are not silently lost; retried next flush
+          // Put them back on failure; retried next flush.
           pending = rows.concat(pending);
         }
       } finally {

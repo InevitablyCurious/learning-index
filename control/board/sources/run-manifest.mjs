@@ -1,21 +1,9 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// SOURCE: run-manifest
-//
-// Reads <runs_root>/<run_dir>/manifest.json — written at run start. Carries the
-// provenance a skeptical engineer checks FIRST:
-//
-//   - policy-anchor observation was REMOVED with the hub-shell decoupling:
-//     the benchmark no longer reads the backend hub container, so
-//     policy_version / policy_anchor_status report null
-//   - the recall-mode lever, which is what makes the approval gate auto-approve
-//     (operator-supplied via BENCH_RECALL_MODE in the bench process env)
-//   - org, model, seed, roster
-//
-// GATE MODE IS DERIVED, NEVER HARDCODED. It reads the L4_OKP_RECALL_MODE
-// lever the harness recorded. `test` mode auto-approves recalled memories;
-// prod/unset blocks on a human popup no headless run can answer. If the lever
-// is absent we report null and the UI says so — we never assume auto-approve.
-// ─────────────────────────────────────────────────────────────────────────────
+// SOURCE: run-manifest — the active run's manifest.json (written at start):
+// provenance a skeptic checks first — org, model, seed, roster, and the recall
+// mode that decides whether the approval gate auto-approves. Gate mode is
+// derived from the recorded L4_OKP_RECALL_MODE lever (test = auto-approve,
+// anything else = human), and null when not recorded. policy_version and
+// policy_anchor_status are always null now (the hub is no longer read).
 
 import { str, int } from "../contract.mjs";
 import { readJson, activeRun } from "./_runtime.mjs";
@@ -27,9 +15,7 @@ export function describe() {
 }
 
 export async function read(ctx) {
-  // Scoped to the active run, so provenance describes the run whose gates are
-  // on the wall. Picking the newest manifest INDEPENDENTLY of the stream could
-  // pair one run's policy anchor with another run's measurements.
+  // The active run's manifest, so provenance matches the gates on the wall.
   const run = await activeRun(ctx.runsRoot);
   if (!run?.manifestPath) return { ok: false, reason: "no manifest.json under runs root" };
 
@@ -62,7 +48,7 @@ export async function read(ctx) {
         started_at: Date.parse(str(m.created_at) ?? "") || null,
       },
       provenance: {
-        // test-mode auto-approves the gate; anything else blocks on a human.
+        // test mode auto-approves; anything else waits on a human.
         gate_mode: recallMode === null ? null : recallMode === "test" ? "auto-approve" : "human",
         gate_mode_source: recallMode ? `L4_OKP_RECALL_MODE=${recallMode}` : null,
         policy_version: str(edge.version),

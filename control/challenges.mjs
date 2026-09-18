@@ -1,18 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// CHALLENGES — what this benchmark can be pointed at, and whether each is ready
-//
-// A challenge is what the cell builds and what the gates grade. Backgammon is
-// the one that ships; a challenge of your own is its own git repo, cloned into
-// `challenges/` (or anywhere, if you drive the harness yourself).
-//
-// HONEST ABSENCE, NOT A SHORT LIST. A challenge that cannot run is listed with
-// the reason — no starting files, no frozen fingerprint, no gate suite — rather
-// than hidden. A picker that silently omits the thing the operator just cloned
-// sends them hunting through directories.
-//
-// READ-ONLY. This module reads manifests and stats directories. It never writes,
-// never spawns, and never decides whether a run may start: that is preflight's.
-// ─────────────────────────────────────────────────────────────────────────────
+// CHALLENGES — what this benchmark can be pointed at (what the cell builds and
+// the gates grade), and whether each is ready. Backgammon ships; others are git
+// repos cloned into challenges/. One that can't run is listed with the reason,
+// never hidden. Read-only; whether a run may start is preflight's call.
 
 import { readdir, readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
@@ -40,11 +29,8 @@ async function readManifest(dir) {
 }
 
 /**
- * Why this challenge cannot be run, or null when it can.
- *
- * The same four facts the harness needs: starting files to copy, a frozen
- * fingerprint so two runs are comparable, a gate suite, and the two scripts
- * that list and run the checks.
+ * Why this challenge can't run, or null: it needs starting files, a frozen
+ * fingerprint, a gate suite, and the two scripts that list and run checks.
  */
 async function blockedReason(dir, manifest) {
   if (!manifest) return "no challenge.json";
