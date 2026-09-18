@@ -5,8 +5,9 @@
 // only consumed here. A line is drawn only at n≥2 ON runs (one run cannot
 // support a trend). Every point carries its gate ratio, so faster-and-worse
 // reads as exactly that; a point that costs more than the floor is hollow with a
-// danger stroke. The floor is a dashed reference line labelled n=1, never a
-// series. Corpus size is not shown (not measured).
+// danger stroke. The floor is a dashed reference line labelled with the baseline
+// snapshot's depth (n = stack.baseline_n, 1 when unarmed), never a series.
+// Corpus size is not shown (not measured).
 
 import { esc, nul, tok, dur } from "../board.js";
 import { renderLearningBody } from "./learning.js";
@@ -226,6 +227,7 @@ function segsOf(row) {
  */
 function bars(s, pts, M) {
   const base = s.baseline ?? null;
+  const bn = s.baseline_n ?? 1;
   const rows = [];
   if (base) rows.push({ row: base, isBase: true });
   pts.forEach((p) => rows.push({ row: p, isBase: false }));
@@ -313,7 +315,7 @@ function bars(s, pts, M) {
     const r = b.row;
     const arm = r.arm ? String(r.arm).toUpperCase() : "—";
     bits.push(
-      `<text x="${cx}" y="${428}" text-anchor="middle" class="c-gate">${esc(b.isBase ? "OFF floor · n=1" : `${arm} · cell ${r.sequence_index ?? i}`)}</text>`,
+      `<text x="${cx}" y="${428}" text-anchor="middle" class="c-gate">${esc(b.isBase ? `OFF floor · n=${bn}` : `${arm} · cell ${r.sequence_index ?? i}`)}</text>`,
     );
     if (b.preCache) {
       bits.push(
@@ -335,6 +337,7 @@ function svg(s, pts, M, state) {
   const W = 860;
   const H = 300;
   const base = val(s.baseline ?? {}, metric);
+  const bn = s.baseline_n ?? 1;
   const x0 = PAD_X0;
   const x1 = W - PAD_X1;
   const yBot = H - Y_BOT_INSET;
@@ -358,12 +361,12 @@ function svg(s, pts, M, state) {
   bits.push(`<text x="2" y="14" class="c-axis">${esc(M.label)}</text>`);
   if (base !== null) {
     bits.push(
-      `<text x="2" y="32" class="c-legend">─ ─ OFF baseline · n=1 · ${esc(M.fmt(base))}</text>`,
+      `<text x="2" y="32" class="c-legend">─ ─ OFF baseline · n=${bn} · ${esc(M.fmt(base))}</text>`,
     );
   }
   bits.push(`<line x1="${x0 - 18}" y1="${yBot + 10}" x2="${x1}" y2="${yBot + 10}" class="c-ax"/>`);
 
-  // The floor, labelled n=1 at the line.
+  // The floor, labelled with the baseline snapshot's depth (n) at the line.
   if (base !== null) {
     const by = Y(base);
     bits.push(`<line x1="${x0 - 18}" y1="${by}" x2="${x1}" y2="${by}" class="c-base"/>`);
@@ -428,6 +431,7 @@ function deltaLabel(d, m) {
 
 function footer(s, state, M) {
   const base = val(s.baseline ?? {}, metric);
+  const bn = s.baseline_n ?? 1;
   if (state === "baseline_seeded") {
     // Seeded floor: see above.
     const b = s.baseline ?? {};
@@ -465,7 +469,7 @@ function footer(s, state, M) {
 
   return `
     <div class="curve-foot">
-      <span>─── OFF baseline, n=1${base !== null ? `, ${esc(M.fmt(base))}` : ""}</span>
+      <span>─── OFF baseline, n=${bn}${base !== null ? `, ${esc(M.fmt(base))}` : ""}</span>
       <span class="bright">● ON run · gates above</span>
       <span class="${bad ? "danger" : "bright"}">${esc(verdict)}</span>
       <button class="btn sm" data-curve-tab="learning">WHY IT STOPPED → LEARNING</button>

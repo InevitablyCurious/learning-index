@@ -78,7 +78,7 @@ export function armSnapshot(id, model) {
 /** The picker. Skipping is the default and always one click. */
 export function renderSeedFrame(model) {
   const rows = state.snapshots;
-  const seedable = rows.filter((s) => s.seedable);
+  const seedable = sortSeedsByDepth(rows.filter((s) => s.seedable));
   const refused = rows.filter((s) => !s.seedable);
   const armed = armedSnapshotId();
 
@@ -133,6 +133,15 @@ function skipRow(armed) {
     </button>`;
 }
 
+/**
+ * Deepest first: a snapshot taken further down the tree skips more of the
+ * build. Stable sort; `?? 1` mirrors the backend's default for rows captured
+ * before depth was recorded.
+ */
+export function sortSeedsByDepth(rows) {
+  return rows.slice().sort((a, b) => (b.snapshot_depth ?? 1) - (a.snapshot_depth ?? 1));
+}
+
 function seedRow(s, armed) {
   const on = s.id === armed;
   const g = s.gate_totals ?? {};
@@ -151,7 +160,7 @@ function seedRow(s, armed) {
     <button class="sn-row${on ? " on" : ""}" data-seed-pick="${esc(s.id)}" aria-pressed="${on}">
       <span class="sn-mark">${on ? "✓" : "○"}</span>
       <span class="sn-main">
-        <span class="sn-id">${esc(s.id)}<span class="sn-when">${esc(s.created_at ? String(s.created_at).slice(0, 16).replace("T", " ") : "")}</span></span>
+        <span class="sn-id">${esc(s.id)}<span class="sn-when">${esc(s.created_at ? String(s.created_at).slice(0, 16).replace("T", " ") : "")}</span><span class="sn-depth">${esc(`n=${s.snapshot_depth ?? 1}`)}</span></span>
         <span class="sn-meta">${gates}${skipped.length ? ` · skips ${esc(skipped.join(" · "))}` : ""}</span>
         ${driftLine(s)}
       </span>

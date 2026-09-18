@@ -51,6 +51,7 @@ export async function readSnapshot(runsRoot, id) {
       eligible: false,
       reason: "no readable snapshot.json — capture did not complete, so there is nothing to seed from",
       author_model: null,
+      snapshot_depth: 1,
     };
   }
   if (!(await isDir(join(dir, "tree")))) {
@@ -59,6 +60,7 @@ export async function readSnapshot(runsRoot, id) {
       eligible: false,
       reason: "no tree/ directory — the manifest exists but the worktree it describes does not",
       author_model: manifest.author_model ?? null,
+      snapshot_depth: 1,
     };
   }
 
@@ -84,6 +86,7 @@ export async function readSnapshot(runsRoot, id) {
     source_commit: manifest.source_commit ?? null,
     chunk_plan_hash: manifest.chunk_plan_hash ?? null,
     template_hash: manifest.template_hash ?? null,
+    snapshot_depth: manifest.snapshot_depth ?? 1,
 
     cell_void: manifest.cell_void === true,
     eligible: true,

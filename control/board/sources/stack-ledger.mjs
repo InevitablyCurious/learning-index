@@ -14,6 +14,7 @@
 
 import { int, num, str, parseGate } from "../contract.mjs";
 import { readTail, parseJsonl, readJson, statOrNull, listCampaignDirs } from "./_runtime.mjs";
+import { resolveArmed } from "../../snapshots.mjs";
 import { join } from "node:path";
 
 export const id = "stack-ledger";
@@ -110,6 +111,19 @@ export async function read(ctx) {
     : (offs.length ? offs[offs.length - 1] : null);
   const on = rows.filter((r) => r.arm === "on");
 
+  // The floor's n is the armed snapshot's real depth: a seeded chain stacks
+  // builds, so the baseline cell started n snapshots deep. Default 1 when
+  // nothing is armed, the manifest is unreadable, or it predates depth capture
+  // (same `or 1` default as load_snapshot / readSnapshot).
+  const armed = await resolveArmed({ benchRoot: ctx.benchRoot });
+  let depth = 1;
+  if (armed?.snapshot_id) {
+    const m = await readJson(
+      join(ctx.runsRoot, "snapshots", String(armed.snapshot_id), "snapshot.json"),
+    );
+    if (Number.isInteger(m?.snapshot_depth)) depth = m.snapshot_depth;
+  }
+
   return {
     ok: true,
     provenance: {
@@ -121,9 +135,9 @@ export async function read(ctx) {
     patch: {
       stack: {
         id: key,
-        // n=1 by design, labelled at the line.
+        // One OFF cell, labelled at the line; its n is the armed snapshot's depth.
         baseline,
-        baseline_n: baseline ? 1 : 0,
+        baseline_n: baseline ? depth : 0,
         // False = a baseline exists but is void: no delta is valid.
         baseline_scorable: Boolean(
           baseline
