@@ -1,8 +1,8 @@
 // RESET — move all benchmark data into runs/backups/<unix-seconds>/ and start a
 // new tree. Nothing is deleted, and the confirmation says so. Preview then
 // confirm: the server writes the restatement and mints a token bound to what is
-// on disk, so anything that changes in between invalidates it. A cell in flight
-// is refused, and the refusal is shown rather than hiding the button.
+// on disk, so anything that changes in between invalidates it. A cell in
+// flight is stopped first, and the confirmation says so.
 
 import { esc } from "../board.js";
 
