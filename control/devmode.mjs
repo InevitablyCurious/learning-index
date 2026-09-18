@@ -1,43 +1,11 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// DEV MODE — the control plane's own mode, and who is allowed to set it
+// DEV MODE — the control plane's own mode, which gates capabilities for
+// iterating on the benchmark (first: seeding a cell from a build snapshot, which
+// is never a scorable floor). Server state, never the browser's claim.
 //
-// Dev mode gates capabilities that are useful while ITERATING ON THE BENCHMARK
-// and wrong for measuring with it. The first is build-snapshot seeding: starting
-// a cell from a previously built worktree instead of rebuilding the scaffolding.
-// That saves hours per iteration and produces a cell that is NOT a scorable
-// floor, so it must never be reachable by accident.
-//
-// ── WHY THE STATE LIVES HERE AND NOT IN THE BROWSER ─────────────────────────
-//
-// The board is a read-only container on :8717. The control plane is the host
-// process that spawns the harness. A dev-mode flag held in the browser would
-// mean this service takes the browser's word for what mode it is in — the same
-// thing the confirmation-token design already refuses, for the same reason: the
-// words the operator reads before a cell starts must be the words the server
-// will act on, never a page's summary of them.
-//
-// So the mode is server state. The board renders what this module resolves, and
-// a run that was a dev-mode run is one because THIS PROCESS was in dev mode.
-//
-// ── PRECEDENCE, AND WHY A PINNED ENV REFUSES THE TOGGLE ─────────────────────
-//
-// environment → state file → default OFF. An exported variable wins so CI and
-// scripted runs can pin the mode without writing to disk.
-//
-// But a pinned environment makes the board's toggle a LIE: the POST would
-// succeed, the file would change, and the next read would still answer with the
-// environment. So `settable` is published alongside the value and the write
-// REFUSES rather than performing a no-op an operator would have to discover by
-// watching nothing happen.
-//
-// ── A MALFORMED SETTING IS OFF, AND SAYS SO ─────────────────────────────────
-//
-// `BENCH_DEV_MODE=enabled` is not a spelling this understands. It reads as
-// OFF — the safe direction — but it never reads as "nobody configured anything".
-// Absence and misconfiguration are different facts and the reason string keeps
-// them apart, because a silently-ignored setting is how an operator concludes
-// the feature is broken.
-// ─────────────────────────────────────────────────────────────────────────────
+// Precedence: environment → state file → default OFF. A pinned environment makes
+// the mode unsettable (`settable` is published and the write refuses, rather
+// than changing a file the next read ignores). An unrecognised value reads OFF,
+// with a reason that tells it apart from "not configured".
 
 import { promises as fs } from "node:fs";
 import { dirname, join } from "node:path";
@@ -48,12 +16,7 @@ export const DEV_MODE_ENV_VAR = "BENCH_DEV_MODE";
 const TRUTHY = new Set(["1", "true", "yes", "on"]);
 const FALSY = new Set(["0", "false", "no", "off"]);
 
-/**
- * Where the toggled state is persisted.
- *
- * Beside `config/cloud.env`, which is the same class of thing: operator machine
- * state that must never be committed. Both are gitignored.
- */
+/** Beside config/cloud.env: machine state, gitignored. */
 export function devModeStateFile(benchRoot, env = process.env) {
   return env.BENCH_DEV_MODE_FILE || join(benchRoot, "config", "devmode.json");
 }
@@ -67,10 +30,8 @@ async function readFileOrNull(path) {
 }
 
 /**
- * Resolve dev mode, and say WHICH source answered and whether it can be changed.
- *
- * Never throws. An unreadable or malformed source resolves OFF with a reason —
- * the safe direction, stated rather than assumed.
+ * Resolve dev mode, which source answered, and whether it can change. Never
+ * throws; a bad source resolves OFF with a reason.
  */
 export async function resolveDevMode({ benchRoot, env = process.env } = {}) {
   const raw = env[DEV_MODE_ENV_VAR];
@@ -83,8 +44,7 @@ export async function resolveDevMode({ benchRoot, env = process.env } = {}) {
         enabled,
         source: "environment",
         source_detail: `${DEV_MODE_ENV_VAR}=${value} is exported in the control plane's environment`,
-        // PINNED. The toggle must refuse rather than write a file the next read
-        // will ignore.
+        // Pinned: the toggle refuses.
         settable: false,
         settable_reason:
           `${DEV_MODE_ENV_VAR} is exported, and an exported value wins over the ` +
@@ -127,10 +87,7 @@ export async function resolveDevMode({ benchRoot, env = process.env } = {}) {
         enabled: false,
         source: "state_file_malformed",
         source_detail: path,
-        // STILL SETTABLE: writing repairs it, which is the useful behaviour. A
-        // refusal here would leave the operator with a broken file and no
-        // board-side way to fix it — the shell-shaped hole this whole surface
-        // exists to close.
+        // Still settable: writing repairs the broken file from the board.
         settable: true,
         settable_reason: null,
         reason:
@@ -155,8 +112,7 @@ export async function resolveDevMode({ benchRoot, env = process.env } = {}) {
     source_detail: null,
     settable: true,
     settable_reason: null,
-    // NOT a reason — nothing is wrong. A fresh checkout is OFF and that is the
-    // intended state, so this stays null and the board renders no warning.
+    // Nothing wrong: a fresh checkout is OFF by design.
     reason: null,
   };
 }
@@ -171,13 +127,7 @@ export async function readDevMode({ benchRoot, env = process.env } = {}) {
   };
 }
 
-/**
- * Set dev mode.
- *
- * Returns the RE-RESOLVED state, never what this function hoped it wrote — the
- * same discipline the routers panel follows, and the only version that cannot
- * report a success the next read disagrees with.
- */
+/** Set dev mode; returns the re-read state, not what it hoped it wrote. */
 export async function writeDevMode({ benchRoot, enabled, env = process.env } = {}) {
   if (typeof enabled !== "boolean") {
     return {
