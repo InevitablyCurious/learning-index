@@ -1,21 +1,8 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// THE RECALL MOMENT — the orchestrated beat, and the most-watched rectangle.
-//
-// NON-NEGOTIABLES ENFORCED HERE:
-//  - The gate-mode label is ADJACENT and PERMANENT. In benchmark mode the gate
-//    auto-approves; no viewer may be left believing a human approved anything.
-//    It is derived from the recorded lever, never hardcoded — if the lever was
-//    not observed we say "gate mode unobserved" rather than assuming.
-//  - The chosen memory renders as FOUR LABELLED ATOMIC FIELDS
-//    (implement / context / dnd / stack). Collapsing them into one blob is a
-//    conformance violation, not a style choice. `dnd` may legitimately be null.
-//  - Outcome is TRI-STATE. `unobserved` is styled as a THIRD state, never as a
-//    failure — silence is not a vote.
-//  - A serve is delivery, not a win. Nothing in this panel calls it a success.
-//
-// MOTION: this is where the entire motion budget goes. The takeover announces
-// once (a 200ms settle) and then holds still. No pulsing, no looping.
-// ─────────────────────────────────────────────────────────────────────────────
+// THE RECALL MOMENT. The gate-mode label is permanent and derived from the
+// recorded lever ("unobserved" if it wasn't seen). The chosen memory shows as
+// four labelled fields (implement / context / dnd / stack), never one blob.
+// Outcome is tri-state; unobserved is not a failure; a serve is delivery, not a
+// win. Motion: one 200ms settle, then still.
 
 import { esc, nul, clip, shortCid } from "../board.js";
 
@@ -24,7 +11,7 @@ export function renderRecall(board) {
   const gateMode = board.provenance?.gate_mode;
   const gateSrc = board.provenance?.gate_mode_source;
 
-  // The gate label is permanent — present in BOTH the resting and fired states.
+  // Present in both resting and fired states.
   const gateLabel =
     gateMode === null || gateMode === undefined
       ? `<span class="label">gate: ${nul("mode unobserved")}</span>`
@@ -57,11 +44,7 @@ function resting(board, gateLabel, gateSrc) {
   const armed = (board.episodes ?? []).filter((e) => e.state === "red-again").length;
   const isControl = board.run?.arm === "off";
 
-  // "align-items: safe center" — a plain `center` on a scrollable flex
-  // container pushes overflowing content past the TOP edge, where it cannot be
-  // scrolled back into view. `safe` falls back to start-alignment the moment it
-  // would overflow, so the panel stays centred when it fits and stays reachable
-  // when it does not.
+  // `safe center`: plain `center` pushes overflow past the top, unreachable.
   return `
   <div class="panel">
     <div class="phead">
@@ -99,8 +82,7 @@ function metaRow(rm) {
     ? `<span class="label">gate decided</span> ${rm.gate_decision_ms}ms`
     : `<span class="label">gate decided</span> ${nul("unobserved")}`);
 
-  // A guard that scanned and found nothing is a RESULT. Absence of detections
-  // is only meaningful if we know the scan actually ran.
+  // "Scanned, found nothing" is a result only if the scan ran.
   const g = rm.guard;
   bits.push(
     !g
@@ -140,11 +122,7 @@ function candidates(rm) {
   ${rows}`;
 }
 
-/**
- * The four atomic fields. NEVER collapsed into one blob.
- * `dnd` null is rendered explicitly — an absent do-not-do is a fact about the
- * memory, not a field to hide.
- */
+/** The four fields; a null dnd is shown, not hidden. */
 function atomic(chosen) {
   if (!chosen) {
     return `<div class="label" style="margin-top:10px">chosen memory ${nul("none")}</div>`;
@@ -166,10 +144,7 @@ function atomic(chosen) {
   </div>`;
 }
 
-/**
- * TRI-STATE outcome. `unobserved` gets its own neutral treatment — it is not a
- * failure, and styling it like one would turn silence into a vote.
- */
+/** Tri-state outcome; unobserved gets a neutral treatment. */
 function outcome(rm) {
   const o = rm.outcome;
   const map = {

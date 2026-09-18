@@ -1,44 +1,21 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// PANEL: HOLD / REVIEW
-//
-// Contract: dev/workspace/reports/1786523828-WO-HOLD-UI-2-dashboard-consumer-contract.md
-//
-// The flow: a run ends → the harness BLOCKS → writes <run_dir>/hold-ui.json →
-// the operator opens the artifact, tests it, comes back, releases. Release
-// creates a file at `release.path`; the harness polls for it every 2.0s.
-//
-// SIX STATES, each a designed answer:
-//
-//   no hold file          render NOTHING. Not an error, not an empty box, not
-//                         a spinner. Absence is a specified state.
-//   ui_healthy: true      url + release control + held-for-N from started_at
-//   ui_healthy: false     NO LINK IS SHOWN. Handing over a URL for an artifact
-//                         that never came up wastes the operator's time twice —
-//                         they click it, get nothing, and have to work out
-//                         whether the link or the artifact is broken. Show
-//                         boot_detail + server_log instead. RELEASE STILL WORKS.
-//   lan_reachable: true   the artifact ignored the loopback requirement and is
-//                         reachable from every device on the network. Named,
-//                         with the address, and it must NOT look like a normal
-//                         hold — it is a FINDING, not a success.
-//   vanished mid-render   hold-ui.json is unlinked ON RELEASE. Disappearance
-//                         means RELEASED. It is never an error state.
-//   feature off           BENCH_HOLD_UI unset. Phrased as a choice not
-//                         yet made, so it never reads as broken.
-//
-// CANON (§5.4). Release is NEVER blocked by a dead UI or a bad bind. A board
-// that can withhold the operator's ability to continue their own run would be
-// a party withholding control over knowledge — precisely what the Four Exit
-// Guarantees forbid. The release control is present in every held state.
-// ─────────────────────────────────────────────────────────────────────────────
+// PANEL: HOLD / REVIEW — a run ends, the harness blocks and writes
+// <run_dir>/hold-ui.json; the operator tests the artifact, then releases (which
+// creates the file at `release.path`, polled every 2s).
+//   no hold file         render nothing
+//   ui_healthy true      link + release + how long it has been held
+//   ui_healthy false     no link (it would lead nowhere); boot detail and server
+//                        log instead
+//   lan_reachable true   the artifact bound beyond loopback: shown as a finding
+//   vanished mid-render  released (the file is removed on release)
+//   feature off          BENCH_HOLD_UI unset, phrased as a choice
+// Release is available in every held state, whatever the artifact's health.
 
 import { esc, nul, dur } from "../board.js";
 
 export function renderHold(board) {
   const h = board.hold;
 
-  // NO HOLD → NOTHING. Rendering an empty panel here would train the operator
-  // to ignore a region that matters enormously when it does appear.
+  // No hold: nothing at all.
   if (!h) return "";
 
   if (h.feature_off) {
@@ -49,7 +26,7 @@ export function renderHold(board) {
   }
 
   if (h.released) {
-    // The file vanished between poll and render. That is the success path.
+    // The file vanished between poll and render: released.
     return band("released", "RELEASED — THE RUN CONTINUES", [
       `<div class="hold-line">Released. The run continues.</div>`,
       `<div class="note">hold-ui.json is unlinked on release. Its disappearance means released — never an error.</div>`,
@@ -71,7 +48,7 @@ export function renderHold(board) {
   if (lan) {
     parts.push(`
       <div class="hold-line">The artifact ignored the loopback requirement. It is bound to <span class="danger bright">${esc(h.bind?.lan_address ?? "an unknown LAN address")}</span> and is reachable from every device on your network.</div>`);
-    // The URL is SHOWN but never promoted — this hold is a finding.
+    // Shown, never promoted: this hold is a finding.
     parts.push(urlBox(h, true));
   } else if (healthy) {
     parts.push(urlBox(h, false));
@@ -134,10 +111,7 @@ function diag(h) {
     </div>`;
 }
 
-/**
- * RELEASE IS ALWAYS AVAILABLE. See the Canon note in the header — this control
- * is never disabled, never hidden, and never gated on the artifact's health.
- */
+/** Release is never disabled, hidden, or gated on the artifact's health. */
 function releaseRow(h, kind) {
   const path = h.release?.path ?? null;
   return `

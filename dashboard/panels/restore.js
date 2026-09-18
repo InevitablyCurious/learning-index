@@ -1,23 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// RESTORE — put a previous bench back
-//
-// Every reset parks the live bench into `runs/backups/<unix-seconds>/`. This is
-// the surface that reads them back: one scrollable list, one card per backup,
-// enough on each card to choose WITHOUT opening a folder.
-//
-// ── WHAT A CARD HAS TO ANSWER ───────────────────────────────────────────────
-//
-// "Which one was that?" is a question about CONTENT, not about a timestamp. A
-// list of unix seconds is technically complete and useless — so each card leads
-// with when it was taken in words, then the models it holds, then the counts.
-// The models are the line an operator actually recognises their own work by.
-//
-// ── THE CHECK IS SHOWN BEFORE IT IS NEEDED ──────────────────────────────────
-//
-// A backup that would fail the restore check is marked on its card and its
-// button is dead, rather than letting the operator pick it and be refused. The
-// reason travels with the mark: a refusal an operator cannot act on is noise.
-// ─────────────────────────────────────────────────────────────────────────────
+// RESTORE — put a previous bench back from runs/backups/. One card per backup,
+// leading with when it was taken, then the models it holds (what an operator
+// recognises), then counts. A backup that would fail the restore check is marked
+// with its reason and its button is dead.
 
 import { esc } from "../board.js";
 
@@ -26,8 +10,7 @@ const ui = {
   loading: false,
   backups: null,
   error: null,
-  // The card the operator picked. Confirmation is a SECOND step, on the same
-  // surface, so the list stays visible behind the decision.
+  // The picked card; confirmation is a second step on the same surface.
   selected: null,
   token: null,
   restatement: null,
@@ -126,9 +109,7 @@ export async function commitRestore() {
       ui.pending = false;
       return;
     }
-    // Every panel's local state now refers to data that has been replaced
-    // wholesale. A reload is the only way the board comes back describing the
-    // bench that is actually there — same reasoning as the reset path.
+    // A full reload: every panel's local state refers to replaced data.
     window.location.reload();
   } catch (err) {
     ui.refusal = { code: "unreachable", reason: String(err?.message ?? err) };
@@ -136,7 +117,7 @@ export async function commitRestore() {
   }
 }
 
-// ── formatting ───────────────────────────────────────────────────────────────
+// ── formatting ──
 
 function when(iso) {
   const t = Date.parse(iso);
@@ -185,13 +166,7 @@ function countLine(b) {
   return parts.join(" · ");
 }
 
-/**
- * The models this backup holds, deduped across its result folders.
- *
- * This is the line an operator recognises their own work by, so it is never
- * silently empty: a backup with results but no readable model says so, which is
- * also the shape of a backup worth looking at before trusting.
- */
+/** The models this backup holds; never silently empty. */
 function modelLine(b) {
   const models = [...new Set((b.results ?? []).flatMap((r) => r.models ?? []))];
   if (models.length) return models.map((m) => `<span class="bk-model">${esc(m)}</span>`).join("");
@@ -206,7 +181,7 @@ function cellLine(b) {
   return `<span class="bk-cells">${off} memory-off · ${on} memory-on</span>`;
 }
 
-// ── render ───────────────────────────────────────────────────────────────────
+// ── render ──
 
 export function renderRestoreButton(board) {
   if (!board?.control) return "";
@@ -253,8 +228,7 @@ function card(b) {
   const ok = b.check?.ok !== false;
   const warned = ok && (b.check?.warnings ?? []).length > 0;
 
-  // The verdict rides on the card, with its reason, because a dead button whose
-  // cause is elsewhere teaches an operator nothing.
+  // The verdict and its reason ride on the card.
   const badge = ok
     ? warned
       ? `<span class="bk-badge warn" title="${esc((b.check.warnings ?? []).join("; "))}">CHECK · ${
