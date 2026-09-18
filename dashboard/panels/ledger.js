@@ -1,87 +1,23 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// PANEL: BASELINES — every completed OFF measurement, its ON runs nested inside
+// PANEL: BASELINES — every completed OFF measurement, its ON runs nested inside.
 //
-// ── WHAT REPLACED WHAT, AND WHY ─────────────────────────────────────────────
+// A run is a delta against one specific floor, so it is drawn inside that
+// floor's row: reading it against a different floor is not possible. A model
+// with no floor has no row ([+ BASELINE] is where that absence belongs).
+// Expanding a row opens its frozen event and backend feeds.
 //
-// This was a THREE-level card: baseline → memory PROFILE → runs. The middle
-// level is gone (2026-09-07). A profile froze a producer-model allowlist so a
-// cross-model memory transfer could be declared, and this benchmark does not
-// run that experiment: it measures the INFORMATION DELTA of ONE model against
-// its OWN floor, the same model in both arms, repeated until the results stop
-// improving. Under that measurement the profile's subject axis was degenerate —
-// a profile only ever appeared beneath its own subject's baseline — and its
-// roster axis was inert, because no recall path has ever filtered by producing
-// model. The card is now baseline → runs, which is the shape of the experiment.
-//
-// THE NESTING IS STILL THE ARGUMENT. A run has no meaning apart from the floor
-// it is measured against: its entire content is a Δ, and a Δ is a subtraction
-// from one specific floor. Rendering runs as top-level objects invites the one
-// mistake this board exists to prevent — reading a run's result against a floor
-// that is not the one it was measured against. Under this shape that comparison
-// is not merely discouraged, it is unspellable: the floor is the row the run is
-// physically inside.
-//
-// A MODEL WITH NO FLOOR HAS NO ROW. That is the point, not an omission. Starting
-// a baseline is what [+ BASELINE] is for, which is where an absence belongs — a
-// card of measurements should not be padded with placeholder rows for
-// measurements nobody has taken.
-//
-// ── THE RECORD OPENS WITH THE ROW ───────────────────────────────────────────
-//
-// Expanding a baseline reads its FROZEN FEEDS off disk — the agent EVENT FEED
-// and the BACKEND FEED exactly as the LIVE RUN card drew them while the cell was
-// running. That read used to hang off the profile drawer, so with no profile
-// frozen there was no way to reach it at all: the feeds were persisted, served,
-// and unreachable. They belong to the measurement, so they hang off the
-// measurement.
-//
-// ── THE RULES THIS SURFACE EXPRESSES, none of them decided here ─────────────
-//   1. an ON run cannot start until its model's baseline is complete and non-void
-//   2. an ON run is always the SAME MODEL as the floor it is measured against
-//   3. runs are SERIAL — one cell in flight blocks EVERY launch on EVERY row
-//
-// EVERY GATE IS COMPUTED SERVER-SIDE (`control/models-ledger.mjs`) and arrives
-// as `{allowed, reason}`. This panel renders that verdict and never re-derives
-// it. A button whose enabled state disagreed with the refusal the server would
-// actually apply is worse than no button: it teaches the operator that the UI
-// lies, and the lesson generalises to every other control on the board.
-//
-// A DISABLED CONTROL ALWAYS STATES WHY, beside the row rather than in a tooltip
-// nobody on a stream can hover.
-//
-// ── THE TWO-AXIS FOOTER STAYS ───────────────────────────────────────────────
-//
-// Efficiency and correctness sit in two boxes, SIDE BY SIDE, at the SAME type
-// size. There is no third box combining them, no arrow, no score. A single
-// "improvement" number would be the most natural thing to put here and would
-// silently let a faster-and-worse cell read as a win. The design specimen for
-// this card does not show it — it shows one card out of a board — and it is kept
-// because it is a hard rule of the board, not a feature of the old shape.
-// ─────────────────────────────────────────────────────────────────────────────
+// Every gate ([+ run] allowed or not) comes from control/models-ledger.mjs as
+// {allowed, reason} and is rendered, never re-derived. A disabled control states
+// why beside the row. Efficiency and correctness stay two side-by-side readouts,
+// never combined into one score.
 
 import { esc, nul, tok } from "../board.js";
-// SELECTING A FLOOR POINTS THE DATA FEED CARD AT ITS FROZEN RECORD. This panel
-// owns the choice; that card owns the reading — see panels/live.js. A second
-// feed surface was built here first and removed: it reused the row renderers
-// and none of the tools (tabs, kind chips, source/severity facets, the jump
-// pill), so the place you went to read four thousand rows was the one without
-// the means to read them.
+// Selecting a floor points the DATA FEED card (panels/live.js) at its record.
 import { historicalSelection } from "./live.js";
-// RESET sits beside [+ BASELINE] because that header is where an operator goes
-// to change what the bench holds — one control adds, the other clears.
+// RESET and RESTORE flank [+ BASELINE]: undo · add · clear.
 import { renderResetButton } from "./treereset.js";
-// RESTORE sits on the other side of [+ BASELINE] from RESET: the row reads
-// undo · add · clear, left to right.
 import { renderRestoreButton } from "./restore.js";
 
-/**
- * WHICH BASELINE ROW IS OPEN. Module-local: it is view state, not measurement,
- * so it never belongs on the board payload where a poll would overwrite it.
- *
- * ONE AT A TIME. Opening a second row closes the first — a row holds its runs
- * AND both of its frozen feeds, and two open at once pushes the two-axis footer
- * off the bottom of the screen.
- */
+/** Which baseline row is open (view state, off the payload). One at a time. */
 let expandedBaseline = null;
 
 /** Is the DATA FEED card pointed at this row? Marks the row, never gates it. */
@@ -103,19 +39,13 @@ export function renderLedger(board) {
   const ledger = board.models_ledger ?? null;
   const rows = ledger?.baseline_rows ?? null;
 
-  // A row whose baseline left the index must not stay open invisibly — the
-  // state is reconciled against what is actually being drawn.
+  // A row whose baseline left the index must not stay open invisibly.
   if (expandedBaseline && rows && !rows.some((b) => b.id === expandedBaseline)) {
     expandedBaseline = null;
   }
 
-  // ── THE STAT STRIP LEADS; THE BASELINES FOLLOW ──────────────────────────
-  // The strip used to be the card's footer. It is now the card's HEAD, and the
-  // baselines table sits under it — the two blocks are in the reverse of the
-  // order they were drawn in. The strip is a fixed-geometry readout that never
-  // grows, so it stays on screen; the baselines list grows without bound, and
-  // a readout parked underneath it moves further out of reach with every
-  // baseline added. `stats()` is still the same block with the same rows.
+  // The stat strip leads (fixed height, stays on screen); the growing
+  // baselines table follows.
   return `
     <section class="ledger bl">
       ${stripBlock()}
@@ -126,17 +56,8 @@ export function renderLedger(board) {
 }
 
 /**
- * THE HEAD — what the card is, how much of it there is, and the one control.
- *
- * ONE BUTTON, NOT ONE PER ROW. [+ baseline] used to sit on every model row,
- * which put a control on a card whose job is to be read for every model the
- * bench could theoretically measure. Starting a floor is one act from one place
- * — see panels/create.js. The count beside it ("5 complete · 1 running") is what
- * the per-row view made slow to answer.
- *
- * STARTING A RUN IS NOT HERE, and that is deliberate: an ON run is measured
- * against ONE specific floor, so it starts from that floor's own row where the
- * operator can see what it will be subtracted from.
+ * The head: what the card is, the counts, and the one [+ BASELINE] control.
+ * Starting a run is on each floor's own row, not here.
  */
 function head(ledger, board) {
   const c = ledger?.counts ?? null;
@@ -152,14 +73,7 @@ function head(ledger, board) {
     </div>`;
 }
 
-/**
- * VOID IS COUNTED SEPARATELY OR NOT AT ALL — never folded into "complete".
- *
- * A void-instrument baseline ran to completion and produced numbers that measure
- * the harness. Counting it as complete would inflate the bench's apparent
- * progress with a floor nothing may be measured against; omitting it silently
- * would make a baseline the operator remembers running disappear from the tally.
- */
+/** Void is counted separately, never folded into complete. */
 function countWords(c) {
   const bits = [`${c.complete} complete`];
   if (c.running) bits.push(`${c.running} running`);
@@ -168,12 +82,7 @@ function countWords(c) {
   return bits.join(" · ");
 }
 
-/**
- * THE SERIAL RULE, STATED ONCE AT THE TOP.
- *
- * It is a property of the BENCH, not of any baseline, and a reader scanning rows
- * should not have to infer it from every row carrying the same refusal.
- */
+/** The serial rule, stated once for the whole bench. */
 function serialChip(ledger) {
   if (!ledger) return "";
   if (!ledger.run_in_flight) return `<span class="tag">IDLE — NO CELL IN FLIGHT</span>`;
@@ -197,14 +106,7 @@ function body(board, ledger, rows) {
     ${rows.map((b) => baselineRow(board, ledger, b)).join("")}`;
 }
 
-/**
- * NO BASELINES AT ALL — the cold-install state, and the one that must not read
- * as a failure.
- *
- * It states the next action rather than the absence, because on a fresh bench
- * the absence is correct and the operator's question is "what do I do", not
- * "what went wrong".
- */
+/** No baselines at all: the fresh-install state, stated as the next action. */
 function empty(ledger) {
   const startable = (ledger.startable ?? []).filter((m) => m.can_baseline?.allowed);
   return `
@@ -222,11 +124,7 @@ function empty(ledger) {
     </div>`;
 }
 
-/**
- * EIGHT COLUMNS, shared by the header and every baseline row so they cannot
- * drift. The last is the launch control and carries no label — a header over a
- * button names the button, which the button already does.
- */
+/** Eight columns shared by header and rows; the last (the button) is unlabelled. */
 function cols() {
   return `
     <div class="blcols">
@@ -235,16 +133,9 @@ function cols() {
     </div>`;
 }
 
-// ── ONE BASELINE ────────────────────────────────────────────────────────────
+// ── ONE BASELINE ──
 
-/**
- * The whole row is the expand affordance, so the click target is the size of the
- * row rather than a caret an operator has to aim at.
- *
- * A ROW WITH NO RUNS STILL EXPANDS. It opens onto its own frozen record — the
- * event and backend feeds of the OFF cell that made it — which is the whole
- * reason a floor with nothing measured against it is still worth opening.
- */
+/** The whole row expands. A row with no runs still opens onto its own record. */
 function baselineRow(board, ledger, b) {
   const open = expandedBaseline === b.id;
   const n = b.run_count ?? 0;
@@ -268,48 +159,26 @@ function baselineRow(board, ledger, b) {
     </div>`;
 }
 
-/**
- * The right-hand readout: what this row IS, in the vocabulary of runs.
- *
- * A RUNNING BASELINE SAYS SO AND SAYS NOTHING ELSE. Its run count is not zero —
- * it is not yet a question, because a floor with no total cannot have anything
- * measured against it. Printing "NO RUNS" on it would state a fact about a
- * measurement nobody has been allowed to take yet.
- */
+/** The right-hand readout. A running baseline says RUNNING and nothing else. */
 function stateWord(b, n) {
-  // ELAPSED, NOT "AGO". This column is 128px and "RUNNING · 22m ago" clips to
-  // "RUNNING · 22m ag…", which reads as a truncated word rather than a duration.
-  // The design's own form is "RUNNING · 22m": the cell is running NOW, so the
-  // number is how long it has been going, and "ago" is the wrong preposition for
-  // it anyway — it belongs on the run rows, where the event is in the past.
+  // Elapsed ("RUNNING · 22m"), not "ago": the cell is running now.
   if (b.state === "running") return `RUNNING${b.campaign_started_at ? ` · ${elapsed(b.campaign_started_at)}` : ""}`;
   if (b.state === "void") return "VOID — NOT A FLOOR";
-  // CONTEXT EXHAUSTED takes the state column on a floor too: the run stopped
-  // at the limit, and that is the first thing to know about its numbers. The
-  // run count is still in the drawer.
+  // Context exhausted takes the state column on a floor too.
   if (b.context_exhausted) return "CONTEXT EXHAUSTED";
   if (!n) return "NO RUNS";
   return `${n} RUN${n === 1 ? "" : "S"}`;
 }
 
-/**
- * THE VOID EXPLANATION, printed on the row rather than behind the expansion.
- *
- * Void is the state that matters most and looks like success from every angle
- * except the one that counts: the cell ran, it produced turns and gates, and
- * every one of those numbers measures the harness. An operator who does not
- * read this row's reason will read its numbers.
- */
+/** The void reason, printed on the row: its numbers measure the harness. */
 function voidNote(b) {
   if (b.state !== "void" || !b.reason) return "";
   return `<div class="blwhy"><span class="null">${esc(b.reason)}</span></div>`;
 }
 
 /**
- * CONTEXT EXHAUSTED, said on the row. The session ran out of room and the
- * harness stopped the run there instead of letting opencode summarise it. On a
- * floor the last graded round is the result; on a row that is not a floor,
- * nothing was graded and the reason says so.
+ * Context exhausted, on the row. On a floor the last graded round is the
+ * result; otherwise nothing was graded.
  */
 function exhaustedNote(b) {
   if (!b.context_exhausted) return "";
@@ -328,17 +197,8 @@ function gatesCell(g) {
 }
 
 /**
- * A model id, shortened for the identity column only.
- *
- * The FULL id is one column to the right and the full slug is on the title, so
- * nothing is lost — this is the design's `base-8d1e · qwen3c-30b`, where the
- * second half is a hint for scanning rather than the authoritative name.
- *
- * THIRTEEN CHARACTERS, measured rather than guessed: the column is 210px, the
- * face is 12.5px mono (~7.5px/char ≈ 27 characters), and `base-XXXX · ` spends
- * twelve of them. Truncating HERE rather than leaving it to the CSS ellipsis is
- * what keeps the cut at a whole character on every row instead of mid-glyph at
- * a width that shifts with the id.
+ * A shortened model id for the identity column (13 characters fit the 210px
+ * column after `base-XXXX · `). The full id is the next column and the title.
  */
 function shortModel(id) {
   const s = String(id ?? "");
@@ -346,12 +206,7 @@ function shortModel(id) {
   return bare.length <= 13 ? bare : `${bare.slice(0, 12)}…`;
 }
 
-// ── INSIDE A BASELINE: THE RUNS, THEN THE FROZEN RECORD ─────────────────────
-//
-// TWO BLOCKS, IN THIS ORDER, and the order is the argument. The runs are what
-// the operator came for — the Δ curve against this floor. The frozen record
-// beneath them is what the floor itself did, kept because a Δ is only readable
-// if the thing it was subtracted from can be inspected.
+// ── INSIDE A BASELINE: the runs (the deltas), then the floor's own frozen record.
 
 function drawer(board, ledger, b) {
   return `
@@ -361,20 +216,8 @@ function drawer(board, ledger, b) {
 }
 
 /**
- * THE ROW'S OWN FEED MARK — a readout, NEVER a control.
- *
- * ── WHY THIS IS NOT A BUTTON ANY MORE ───────────────────────────────────────
- *
- * It was `[feed]`, and when the card was already showing that row it became
- * `SHOWING` wired to "return to live". So the control TOGGLED: with the record
- * auto-opened on load, pressing the thing labelled for this row CLOSED it. The
- * operator saw the feed appear, pressed the button that named it, and watched it
- * vanish — "its existence is fleeting and inconsistent", which it was.
- *
- * SELECTING A BASELINE IS CLICKING THE BASELINE. The row is the control (it
- * already was, for its own drawer), so there is one affordance, it is the whole
- * row, and it cannot un-select — clicking a row selects THAT row. Returning to
- * the live cell is one control in one place: BACK TO LIVE, on the card.
+ * The row's feed mark: a readout, never a control. Clicking the row selects it;
+ * BACK TO LIVE on the card is the one way back.
  */
 function feedMark(ledger, b) {
   const sel = historicalSelection();
@@ -382,9 +225,7 @@ function feedMark(ledger, b) {
     sel != null && sel.run_dir === b.run_dir && sel.sequence_index === b.sequence_index;
   if (showing) return `<span class="blfeed on">FEED</span>`;
 
-  // A RUNNING CELL IS ALSO SELECTABLE — the operator asked for the row to work
-  // "whether it's old or running now". Its feed is the LIVE one, so the card is
-  // returned to live rather than reading a record that does not exist yet.
+  // A running cell's feed is the live one.
   if (ledger?.run_in_flight && b.state === "running") return `<span class="blfeed live">LIVE</span>`;
 
   const addressable =
@@ -397,18 +238,8 @@ function feedMark(ledger, b) {
 }
 
 /**
- * [+ run] — and it carries THE MODEL AND THE SUBSTRATE off the row it sits on.
- *
- * The substrate travels because it decides whether the cell is billed and how
- * the server resolves the identity, and there is no second surface to correct it
- * from. The model is the baseline's own: an ON run is always the same model as
- * the floor it is measured against, so reading it off any other row would be
- * the one mistake this card is shaped to prevent.
- *
- * A gated control renders as a live button ONLY when it is allowed. When it is
- * not, it renders disabled carrying `title`, and the reason is ALSO printed in
- * full below the row — a disabled control with no visible explanation is the
- * single most common way a UI wastes an operator\'s time.
+ * [+ run], carrying the model and substrate off its own row. Disabled with its
+ * reason shown in full below the row when not allowed.
  */
 function runBtn(b) {
   const gate = b.can_run;
@@ -422,13 +253,8 @@ function runBtn(b) {
 }
 
 /**
- * THE ON RUNS MEASURED AGAINST THIS FLOOR, newest first.
- *
- * Every column here is the CELL\'s. The runs are read off the campaign this
- * floor belongs to (control/models-ledger.mjs `onRunsFor`), so a run cannot be
- * present without a cell behind it — the "launched but unattributable" state
- * the profile store produced does not exist any more, because nothing has to be
- * recorded at launch for a cell to be found afterwards.
+ * The ON runs against this floor, newest first, read off its campaign
+ * (models-ledger.mjs onRunsFor).
  */
 function runs(b) {
   const list = b.runs ?? [];
@@ -487,15 +313,8 @@ function detail(c) {
   return `${esc(bits.join(" · "))}${buildStrip(c)}`;
 }
 
-// ── WO-CHUNKVIS-1: THE BUILD STRIP ──────────────────────────────────────────
-//
-// Which of the six build chunks actually landed. This is DISPLAY ONLY — the
-// harness gates nothing on it, and neither does this panel.
-//
-// NULL IS NOT ZERO. `build_chunks` is null for every cell measured before this
-// shipped, and for any cell that ran no chunked build. Rendering that as six
-// incomplete chunks would mark the entire historical campaign as broken, so
-// absent data draws NOTHING rather than an alarm.
+// ── THE BUILD STRIP ── which of the build chunks landed. Display only. null
+// (older cells, unchunked builds) draws nothing, never six failures.
 const CHUNK_GLYPH = { complete: "✓", died: "✗", not_reached: "–" };
 
 export function buildStrip(c) {
@@ -505,18 +324,13 @@ export function buildStrip(c) {
   const cells = chunks.map((k) => {
     const state = String(k.state ?? "not_reached");
     const glyph = CHUNK_GLYPH[state] ?? "–";
-    // The reason rides on the chunk that DIED, not on the ones that never got
-    // a turn because of it: "4 ✗ run_timeout · 5 – · 6 –" names the culprit,
-    // where "incomplete: 4, 5, 6" makes an operator hunt three chunks for one
-    // fault.
+    // The reason rides on the chunk that died, not on the ones it prevented.
     const why = state === "died" && k.reason ? ` ${esc(String(k.reason))}` : "";
     return `<span class="bc ${esc(state)}">${esc(String(k.chunk ?? "?"))}&nbsp;${esc(glyph)}${why}</span>`;
   }).join("");
 
-  // THE OUTCOME AND THE FILE, SIDE BY SIDE. A chunk whose drive ran clean to
-  // the end while the file it owns still holds its scaffold stubs did not do
-  // the work. Not an error, not a gate: a discrepancy the operator can see
-  // instead of one buried in a transcript.
+  // A chunk that ran clean while its file still holds scaffold stubs: shown as a
+  // discrepancy, not an error.
   const lying = chunks.filter(
     (k) => k.state === "complete" && Number(k.stubs_remaining) > 0,
   );
@@ -532,12 +346,8 @@ export function buildStrip(c) {
 }
 
 /**
- * Δ AGAINST THE BASELINE THIS ROW IS PHYSICALLY INSIDE.
- *
- * Computed on the server against that same floor and rendered here — the panel
- * does not subtract anything. `better` arrives as a word rather than being read
- * off the sign, because fewer turns is an improvement and a leading minus reads
- * as a loss to everyone who has ever seen a financial figure.
+ * Δ against the floor this row is inside, computed server-side. `better`
+ * arrives as a word, because fewer turns (a minus) is an improvement.
  */
 function deltaCell(r, b) {
   const d = r.delta ?? null;
@@ -552,13 +362,7 @@ function sign(d) {
   return d > 0 ? "+" : d < 0 ? "−" : "±";
 }
 
-/**
- * ELAPSED, IN WORDS, to a resolution that means something.
- *
- * Seconds are noise on a cell that runs for hours, and an exact timestamp is
- * what an operator has to do arithmetic on. "11m ago" is the design's own form
- * and it is the one that answers the question being asked of this column.
- */
+/** Elapsed in words ("11m ago"). */
 function since(when) {
   const s = secondsSince(when);
   if (s === null) return "time unobserved";
@@ -585,15 +389,7 @@ function secondsSince(when) {
   return Math.max(0, Math.round((Date.now() - t) / 1000));
 }
 
-// ── THE NESTING, ARGUED IN WORDS ────────────────────────────────────────────
-
-/**
- * The design's two footer sentences, kept verbatim in substance.
- *
- * They are on the card rather than in a doc because the nesting is a CLAIM about
- * what these objects are, and a reader who does not know the claim reads the
- * indentation as a filing convention they are free to ignore.
- */
+/** The footer's two sentences: the nesting is a claim, stated on the card. */
 function nesting() {
   return `
     <div class="blnest">
@@ -606,32 +402,11 @@ function nesting() {
     </div>`;
 }
 
-// ── THE STATS STRIP — the card's leading block, readouts only ───────────────
-//
-// IT WAS THE FOOTER. It is now the first thing on the card, above the baselines
-// table, and the baselines table is second — the two swapped. Nothing about
-// what it reads changed; only where it is read.
-//
-// WHAT THIS SPACE IS FOR. It carried prose explaining the instrument, plus null
-// states written as sentences. The instrument is explained in the docs. This is
-// a readout strip: a label and a number, nothing else. No units, no captions,
-// no explanations of what an absent number would have meant.
-//
-// TWO ZONES, ONE ROW EACH, NEVER MERGED.
-//
-//   BENCHMARK — native. True for anyone who clones this repo.
-//   CUSTOM    — pluggable. True only where the contributor's own services run.
-//
-// Both come from ONE route, `GET /api/stats`, in ONE entry shape, and the same
-// slot renderer draws either. The board derives nothing: a number computed here
-// as well as server-side is two numbers that can disagree. See
-// control/runstats.mjs for the boundary and the manifest seam.
-//
-// FIXED SLOTS. Each row holds SLOTS positions and pads with empty ones, so the
-// strip has its final geometry before the numbers that will fill it are chosen.
-// A slot nobody has claimed reads PLACEHOLDER; a claimed slot whose source
-// could not be reached reads "—", never zero — a relay that is down must not
-// read as a run with no loop-guard fires.
+// ── THE STATS STRIP ── readouts only (a label and a number). Two rows, never
+// merged: BENCHMARK (true for anyone who clones this repo) and CUSTOM (true only
+// where the contributor's services run). Both from GET /api/stats, derived nothing
+// here (see control/runstats.mjs). Fixed slots: an unclaimed slot reads
+// PLACEHOLDER; an unreachable source reads "—", never zero.
 
 /** Positions per row. Padding is layout, so it is decided here, not in the API. */
 const SLOTS = 6;
@@ -642,12 +417,8 @@ let statsInFlight = false;
 const STATS_MIN_INTERVAL_MS = 5000;
 
 /**
- * Fire-and-forget refresh, throttled, read on the NEXT render.
- *
- * Render stays synchronous on purpose: the strip must draw from whatever is
- * already known rather than block the whole ledger on a service that may be
- * slow or absent. The board re-renders on its own poll, so a reading taken now
- * appears a beat later.
+ * Fire-and-forget, throttled; read on the next render so the ledger never
+ * waits on a slow service.
  */
 function maybeRefreshStats() {
   if (statsInFlight) return;
@@ -660,8 +431,7 @@ function maybeRefreshStats() {
       stats = { ...body, loaded: true };
     })
     .catch(() => {
-      // The control plane, not the stat's own source, is what failed. Every
-      // slot reads unreachable rather than the rows disappearing.
+      // The control plane failed: every slot reads unreachable.
       stats = { bench: [], custom: [], custom_manifest_attached: false, loaded: true, unreachable: true };
     })
     .finally(() => {
@@ -694,15 +464,7 @@ function strip(zone, list) {
     </div>`;
 }
 
-/**
- * The two stat rows, as the card's leading block.
- *
- * `.ledger-lead` replaces `.ledger-foot`: the class carried the position in its
- * name and the position changed, and a rule called "foot" pinned to the top of
- * a card is how the next reader is misled. The rules themselves are the same
- * treatment inverted — the 2px rule and the --bg ground that make this read as
- * a readout rather than a peer row now sit below the block instead of above it.
- */
+/** The two stat rows, as the card's leading block (.ledger-lead). */
 function stripBlock() {
   return `
     <div class="ledger-lead">
