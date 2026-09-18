@@ -65,7 +65,12 @@ async function checkTarget(browser, base) {
   const click = async (selector, what) => {
     const el = page.locator(selector).first();
     if (!(await el.count())) { problems.push(`missing: ${what}`); return false; }
-    await el.click();
+    try {
+      await el.click({ timeout: 3000 });
+    } catch {
+      problems.push(`could not press ${what}`);
+      return false;
+    }
     await settle();
     return true;
   };
@@ -93,8 +98,11 @@ async function checkTarget(browser, base) {
     if (!(await s.innerText()).trim()) problems.push("a board panel rendered empty");
   }
 
-  for (const tab of await page.locator("[data-curve-tab]").all()) await tab.click().then(() => settle());
-  for (const tab of await page.locator("[data-feedtab]").all()) await tab.click().then(() => settle());
+  // Tabs are looked up by name each time: a live board redraws between clicks.
+  for (const attr of ["data-curve-tab", "data-feedtab"]) {
+    const names = await page.locator(`[${attr}]`).evaluateAll((els, a) => els.map((e) => e.getAttribute(a)), attr);
+    for (const n of names) await click(`[${attr}="${n}"]`, `the ${n} tab`);
+  }
   expectFetched("/api/stats", "the results stats strip");
   expectFetched("/api/backend-feed", "the backend feed");
 
@@ -103,12 +111,15 @@ async function checkTarget(browser, base) {
     expectFetched("/api/tools", "the tools menu");
     expectFetched("/api/routers", "the router keys list");
     await page.keyboard.press("Escape");
-    await click("[data-tools-close]", "the tools close button").catch(() => {});
     await settle();
+    if (await page.locator("[data-tools-close]").count()) await click("[data-tools-close]", "the tools close button");
   }
 
-  // New-baseline window: local → first model → as far as it goes without launching.
-  if (await click("[data-create-open]", "the + BASELINE button")) {
+  // New-baseline window: local → first model → as far as it goes without
+  // launching. Skipped while a run is in flight: the window rightly refuses to
+  // go past the model step then.
+  const runInFlight = (await page.locator(".topbar .tag.on").count()) > 0;
+  if (!runInFlight && (await click("[data-create-open]", "the + BASELINE button"))) {
     await click('[data-create-kind="local"]', "the local baseline choice");
     await click("[data-create-next]", "the next button (kind)");
     await click("[data-create-model]", "a model to pick");

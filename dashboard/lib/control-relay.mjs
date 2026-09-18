@@ -47,7 +47,6 @@ export function createControlRelay({
   controlUrl,
   fetchImpl = fetch,
   readBody = defaultReadBody,
-  timeoutMs = 10_000,
 }) {
   return async function relay(req, res, url) {
     if (req.method !== "GET" && req.method !== "POST") {
@@ -86,10 +85,10 @@ export function createControlRelay({
     if (req.headers?.["content-type"] != null) headers["content-type"] = req.headers["content-type"];
     if (req.headers?.accept != null) headers.accept = req.headers.accept;
 
-    // The timeout covers waiting for the reply to START; a live stream then
-    // runs until either side closes.
+    // NO TIMEOUT. The control plane decides how long an act takes (starting a
+    // run runs preflight first); a relay that gives up early reports a failure
+    // for a write that succeeded. The request ends when the browser leaves.
     const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(new Error(`control plane did not answer in ${timeoutMs}ms`)), timeoutMs);
     req.on?.("close", () => abort.abort());
 
     try {
@@ -102,7 +101,6 @@ export function createControlRelay({
       const type = upstream.headers.get("content-type") ?? "application/octet-stream";
 
       if (type.startsWith("text/event-stream") && upstream.body) {
-        clearTimeout(timer);
         res.writeHead(upstream.status, {
           "content-type": type,
           "cache-control": "no-store",
@@ -118,10 +116,8 @@ export function createControlRelay({
       }
 
       const text = await upstream.text();
-      clearTimeout(timer);
       res.writeHead(upstream.status, { "content-type": type, "cache-control": "no-store" }).end(text);
     } catch (err) {
-      clearTimeout(timer);
       if (res.headersSent) { res.end(); return; }
       res.writeHead(502, JSON_OUT).end(JSON.stringify({ ok: false, reason: String(err?.message ?? err) }));
     }
