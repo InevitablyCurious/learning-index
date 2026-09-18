@@ -1,30 +1,8 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// RESET — start a new benchmark tree
-//
-// ── WHAT THE BUTTON DOES, IN ONE LINE ───────────────────────────────────────
-//
-// Mints `runs/<unix-seconds>/` and points the harness at it. The previous tree
-// stays on disk and stops being read. NOTHING IS DELETED, and the confirm card
-// says so in those words — an operator who believes a button deletes their
-// measurements will not press it, and an operator who believes it does not when
-// it does has been misled about the worst possible thing.
-//
-// ── WHY IT IS ARM→CONFIRM AND NOT A window.confirm() ────────────────────────
-//
-// The same protocol the run control uses, for the same reason: the SERVER
-// composes the restatement and mints a token bound to what is actually on disk.
-// A browser-composed "are you sure?" confirms the operator's belief about the
-// state, not the state. Here the token binds to the active tree AND to the
-// campaign list, so a cell that lands between arming and confirming invalidates
-// the token and the operator is re-shown what changed.
-//
-// ── THE ONE REFUSAL ─────────────────────────────────────────────────────────
-//
-// A cell in flight. Rolling forward mid-run would leave the harness writing into
-// a tree nothing reads. The server refuses it; this panel renders that refusal
-// rather than hiding the button, because a control that vanishes teaches an
-// operator nothing about why.
-// ─────────────────────────────────────────────────────────────────────────────
+// RESET — move all benchmark data into runs/backups/<unix-seconds>/ and start a
+// new tree. Nothing is deleted, and the confirmation says so. Preview then
+// confirm: the server writes the restatement and mints a token bound to what is
+// on disk, so anything that changes in between invalidates it. A cell in flight
+// is refused, and the refusal is shown rather than hiding the button.
 
 import { esc } from "../board.js";
 
@@ -47,7 +25,7 @@ export function isResetOpen() {
   return ui.open === true;
 }
 
-/** Open the modal and immediately ask the server what a reset would move. */
+/** Open the modal and ask the server what a reset would move. */
 export function openReset() {
   ui.open = true;
   ui.refusal = null;
@@ -76,7 +54,7 @@ export function clearResetResult() {
   ui.result = null;
 }
 
-/** ARM. The server validates and mints a token bound to the tree on disk. */
+/** Arm: the server validates and mints a token. */
 export async function armReset() {
   ui.pending = true;
   ui.refusal = null;
@@ -105,7 +83,7 @@ export async function armReset() {
   }
 }
 
-/** CONFIRM. Carries the token; any drift is rejected server-side. */
+/** Confirm with the token; any drift is rejected server-side. */
 export async function commitReset() {
   if (!ui.token) {
     disarmReset();
@@ -126,14 +104,8 @@ export async function commitReset() {
       return;
     }
 
-    // ── THE BOARD GOES BACK TO ZERO, AND A RE-POLL IS NOT ENOUGH ────────────
-    //
-    // Panels hold their own client state — an expanded ledger row, a pinned
-    // curve metric, a cached event window, a selected baseline. After a reset
-    // every one of those refers to something that no longer exists, and the
-    // board would show a mix of fresh server data and stale local selections.
-    // A full reload is the only way to guarantee what was asked for: the bench
-    // reads as brand new, with nothing carried over.
+    // A full reload: every panel's local selections refer to data that no longer
+    // exists.
     window.location.reload();
   } catch (err) {
     ui.refusal = { code: "unreachable", reason: String(err?.message ?? err) };
@@ -143,11 +115,8 @@ export async function commitReset() {
 }
 
 /**
- * THE BUTTON — in the BASELINES header, immediately right of [+ BASELINE].
- *
- * It sits there rather than in the top bar because that header is where an
- * operator already goes to change what the bench holds: [+ BASELINE] adds, this
- * clears. RED, because unlike everything else on that row it acts on all of it.
+ * The RESET button, beside [+ BASELINE]: that header is where the bench's
+ * contents change. Red, because it acts on all of it.
  */
 export function renderResetButton(board) {
   if (!board?.control) return "";
@@ -155,13 +124,7 @@ export function renderResetButton(board) {
     title="reset all benchmark data — everything is backed up first">${ui.pending ? "…" : "RESET"}</button>`;
 }
 
-/**
- * THE TREE CHIP — top bar, informational only.
- *
- * Names the tree the harness is writing into. A board that shows measurements
- * without saying which tree they came from cannot be told apart from one still
- * showing a tree that was retired an hour ago.
- */
+/** The tree chip: names the tree the harness is writing into. */
 export function renderTreeChip(board) {
   const tree = board?.tree ?? null;
   if (!tree) return "";
@@ -173,12 +136,8 @@ export function renderTreeChip(board) {
 }
 
 /**
- * THE MODAL — one question, two answers.
- *
- * The question is asked in the operator's terms ("all benchmark data"), and the
- * SERVER's own list of what will move is shown underneath it. A confirmation
- * that describes the act in general terms lets an operator agree to something
- * they would have refused had it been named.
+ * The modal: the question in the operator's terms, and the server's own list
+ * of what will move underneath.
  */
 export function renderResetModal(board) {
   if (!ui.open) return "";

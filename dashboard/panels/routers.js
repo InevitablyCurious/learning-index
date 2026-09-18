@@ -1,40 +1,9 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// ROUTERS — cloud credentials, set from the board
-//
-// ── WHY THIS SURFACE EXISTS ─────────────────────────────────────────────────
-//
-// A cloud cell needs a router API key. Before this panel the only way to supply
-// one was to export a variable into the shell that happened to launch the
-// control plane, or hand-write a dotenv file beside it. The board could see
-// neither, so it rendered the consequence as a greyed-out "Cloud API baseline"
-// with no reason attached, and the operator had to leave for a terminal to find
-// out why.
-//
-// That is the failure this panel closes. An operator driven to a shell for one
-// capability ends up driving everything from there, and the board stops being
-// the interface it was built to be.
-//
-// ── THE KEY IS ONE-WAY ──────────────────────────────────────────────────────
-//
-// A key goes in and never comes back. The server returns only `{present,
-// source, fingerprint}` — enough to say a launch will authenticate and which
-// credential is in play, worth nothing to anyone reading it off the wire. The
-// input is `type=password` with autocomplete off and is never populated from the
-// server, so the browser has nothing to remember or re-offer.
-//
-// ── NO API KEY SET IS A STATE, NOT AN ABSENCE ───────────────────────────────
-//
-// A router with no key renders as loudly as one with a key, and carries the
-// server's own reason — every location that was checked. "Nothing here" with no
-// explanation is what sent the operator to a terminal in the first place.
-//
-// ── THE REGISTRY IS SERVED, NOT HELD HERE ───────────────────────────────────
-//
-// OrcaRouter is the first router supported and more are expected. The list comes
-// from `GET /api/routers` so adding one is a row in the harness, never an edit
-// here. A UI holding its own copy would eventually offer a router the harness
-// cannot route to.
-// ─────────────────────────────────────────────────────────────────────────────
+// ROUTERS — cloud credentials, set from the board (so the operator never has
+// to leave for a terminal to supply one). A key goes in and never comes back:
+// the server returns {present, source, fingerprint}; the input is a password
+// field with autocomplete off, never prefilled. A router with no key says so,
+// with every place the server checked. The router list comes from
+// GET /api/routers, never held here.
 
 import { esc } from "../board.js";
 
@@ -42,7 +11,7 @@ const ui = {
   loading: false,
   data: null,
   error: null,
-  // Typed keys, per router, never read back from the server.
+  // Typed keys, per router; never read back from the server.
   drafts: {},
   busy: {},
   results: {},
@@ -74,11 +43,8 @@ export async function loadRouters() {
 }
 
 /**
- * Save one router's key.
- *
- * The draft is cleared on success so the typed value does not linger in memory
- * or survive a re-render, and the registry is reloaded so what the panel shows
- * is what the server now resolves — not what this function hoped it wrote.
+ * Save one router's key, clear the draft, and reload so the panel shows what
+ * the server now resolves.
  */
 export async function saveRouterKey(id) {
   const key = String(ui.drafts[id] ?? "").trim();
@@ -108,7 +74,7 @@ export async function saveRouterKey(id) {
   }
 }
 
-// ── render ───────────────────────────────────────────────────────────────────
+// ── render ──
 
 /** Where the key came from, in words an operator can act on. */
 function sourceWord(source) {
@@ -132,8 +98,7 @@ function routerCard(r) {
     : `<span class="rt-state rt-unset">NO API KEY SET</span>
        <span class="rt-meta">${esc(r.key?.reason ?? "no key resolved")}</span>`;
 
-  // Replacing an existing key is allowed and says so. A field that silently
-  // overwrites is worse than one that states what it will do.
+  // Replacing a key is allowed and says so.
   const action = set ? "Replace key" : "Set key";
 
   return `
@@ -166,15 +131,9 @@ function routerCard(r) {
 }
 
 /**
- * THE ROUTER CREDENTIAL SECTION, WITHOUT A DRAWER AROUND IT.
- *
- * Split out so the hamburger menu can carry credentials and tools in ONE
- * surface. The operator asked for one place to go; two drawers that each hold
- * half of "things I configure" is the shape that made them hunt.
- *
- * The state, the loader and the save path are untouched and still live in this
- * module — only the frame moved. `data-router-save` continues to work wherever
- * this is mounted, because the handler is delegated on the document.
+ * The credential section on its own, mounted inside the tools drawer (one
+ * place for things the operator configures). The save handler is delegated, so
+ * it works wherever this is mounted.
  */
 export function renderRoutersSection() {
   const body = ui.loading
