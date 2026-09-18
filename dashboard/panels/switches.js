@@ -82,11 +82,6 @@ export function debounced(key, ms = SWITCH_DEBOUNCE_MS) {
   return false;
 }
 
-/** Test seam — the clock is not resettable otherwise. */
-export function resetDebounce() {
-  lastFired.clear();
-}
-
 // ── render ──
 
 /**

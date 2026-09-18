@@ -16,9 +16,7 @@ import {
   classifyServer,
   deregisterServer,
   listServers,
-  portHolders,
   processCommand,
-  reapAndRequirePort,
   reapServers,
   registerServer,
   serversDir,
@@ -113,35 +111,4 @@ test("kind narrows the reap — one arm's orphans are not the other's business",
   assert.equal(report.left.length, 1);
   assert.equal(report.left[0].kind, "gate");
   assert.equal(listServers(root).length, 1, "the gate record survives a play reap");
-});
-
-test("reapAndRequirePort REFUSES a stranger and names it, instead of killing it", async () => {
-  const root = tmpRoot();
-  const http = await import("node:http");
-  const srv = http.createServer((_, res) => res.end("stranger"));
-  await new Promise((r) => srv.listen(0, "127.0.0.1", r));
-  const { port } = srv.address();
-
-  try {
-    await assert.rejects(
-      () => reapAndRequirePort(port, { kind: "gate" }, root),
-      (err) => {
-        assert.match(err.message, new RegExp(`port ${port} is held`));
-        assert.match(err.message, /did not start/);
-        assert.match(err.message, new RegExp(`pid ${process.pid}\\b`), "names the holder");
-        return true;
-      },
-    );
-    // The whole point: it is still there.
-    const holders = await portHolders(port);
-    assert.ok(holders.some((h) => h.pid === process.pid), "the stranger must survive");
-  } finally {
-    srv.close();
-  }
-});
-
-test("reapAndRequirePort returns quietly when the port is free", async () => {
-  const root = tmpRoot();
-  // Port 0 is never listened on, so nothing can hold it.
-  await reapAndRequirePort(1, { kind: "gate" }, root);
 });

@@ -30,10 +30,6 @@ export function toggleBaselineRow(id) {
   expandedBaseline = expandedBaseline === id ? null : id;
 }
 
-export function expandedBaselineId() {
-  return expandedBaseline;
-}
-
 export function renderLedger(board) {
   maybeRefreshStats();
   const ledger = board.models_ledger ?? null;

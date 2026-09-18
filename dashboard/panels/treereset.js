@@ -17,10 +17,6 @@ const ui = {
   result: null,
 };
 
-export function resetState() {
-  return ui;
-}
-
 export function isResetOpen() {
   return ui.open === true;
 }
@@ -44,14 +40,6 @@ export function disarmReset() {
   ui.token = null;
   ui.restatement = null;
   ui.moves = [];
-}
-
-export function clearResetRefusal() {
-  ui.refusal = null;
-}
-
-export function clearResetResult() {
-  ui.result = null;
 }
 
 /** Arm: the server validates and mints a token. */
@@ -122,17 +110,6 @@ export function renderResetButton(board) {
   if (!board?.control) return "";
   return `<button class="btn sm blreset" data-reset-open="1" ${ui.pending ? "disabled" : ""}
     title="reset all benchmark data — everything is backed up first">${ui.pending ? "…" : "RESET"}</button>`;
-}
-
-/** The tree chip: names the tree the harness is writing into. */
-export function renderTreeChip(board) {
-  const tree = board?.tree ?? null;
-  if (!tree) return "";
-  const id = tree.active ?? null;
-  const n = Array.isArray(tree.live_campaigns) ? tree.live_campaigns.length : 0;
-  return `<span class="chip" title="the benchmark tree the harness is writing into">TREE ${
-    id ? esc(id) : "—"
-  }${n ? ` · ${n} result${n === 1 ? "" : "s"}` : " · empty"}</span>`;
 }
 
 /**

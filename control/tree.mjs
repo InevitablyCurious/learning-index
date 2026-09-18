@@ -86,14 +86,6 @@ export function campaignSegments(subject) {
   return [t.substrate, t.router, t.provider, t.model];
 }
 
-/** Mode directory for a cell. The only two values, spelled the operator's way. */
-export function modeDir(memoryMode) {
-  const m = String(memoryMode ?? "").trim().toLowerCase();
-  if (m === "on" || m === "memoryon") return "memoryON";
-  if (m === "off" || m === "memoryoff") return "memoryOFF";
-  return "memoryUNKNOWN";
-}
-
 // ── the pointer ─────────────────────────────────────────────────────────────
 
 async function readJsonOrNull(path) {

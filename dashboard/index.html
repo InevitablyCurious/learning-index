@@ -356,13 +356,13 @@ a:hover{color:var(--type)}
 .btn.picked{background:var(--fg);color:var(--bg);border-color:var(--fg)}
 .btn.picked:hover:not(:disabled){background:var(--type);border-color:var(--type);color:var(--bg)}
 
-.sel,.inp{
+.sel{
   font:400 12px var(--font);
   background:var(--bg);color:var(--type);
   border:1px solid var(--border-strong);border-radius:var(--radius-sm);
   padding:6px 8px;width:100%;
 }
-.sel:disabled,.inp:disabled{color:var(--dim);opacity:.6;cursor:not-allowed}
+.sel:disabled{color:var(--dim);opacity:.6;cursor:not-allowed}
 
 /* ── topbar ─────────────────────────────────────────────────────────────── */
 /* NOWRAP IS LOAD-BEARING: these are single-line identity chips. Wrapping them
@@ -472,7 +472,6 @@ a:hover{color:var(--type)}
 .ck-src{font:400 11px var(--font);color:var(--dim);white-space:nowrap}
 .ck-detail{grid-column:2 / -1;font:400 11.5px/1.5 var(--font);color:var(--dim);word-break:break-word}
 .ck-row.ck-fail .ck-detail{color:var(--danger)}
-.ck-note{margin-top:14px;font:400 11.5px/1.6 var(--font);color:var(--dim)}
 
 /* ── THE WAY OUT OF A PREFLIGHT REFUSAL ──────────────────────────────────────
    Under the checklist, not beside it: the rows say what is wrong and this says
@@ -543,7 +542,7 @@ a:hover{color:var(--type)}
 .res-verdict{white-space:nowrap}
 .res-atg{color:var(--fg)}
 .res-delta{color:var(--fg)}
-.curve-frame,.curve-foot,.hold-line,.hold-diag,.tui-head,.tui-foot,.ledger-head,.ledger-cols,.ledger-row,.axis,.big,.prov,.feed-head{font-family:var(--font)}
+.curve-frame,.curve-foot,.hold-line,.hold-diag,.tui-head,.tui-foot,.ledger-head,.axis,.big,.prov,.feed-head{font-family:var(--font)}
 .curve-frame{padding:22px;border:1px solid var(--border);border-radius:var(--radius-md);background:linear-gradient(180deg,color-mix(in srgb,var(--bg-2) 85%, transparent),var(--bg-2))}
 .curve-svg{overflow:visible}
 .c-axis,.c-legend,.c-note,.c-base-lbl,.c-annot,.c-val,.c-delta,.c-gate{fill:var(--dim);font-size:11px}
@@ -589,12 +588,8 @@ a:hover{color:var(--type)}
 .bkk{font:400 10.5px var(--font);color:var(--dim)}
 .bkv{font:400 11px var(--font);color:var(--fg);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .c-delta.bad,.c-gate.bad{fill:var(--danger)}
-.ledger-head,.ledger-cols,.ledger-row,.axes,.axis,.prov,.feed-head,.tui-head,.tui-foot,.confirm-actions{display:flex;align-items:center;gap:12px;min-width:0}
-.ledger-cols,.ledger-row{display:grid;grid-template-columns:var(--ledger-cols);gap:12px;align-items:center}
-.ledger-cols{font:700 10px var(--font);letter-spacing:.16em;color:var(--dim);padding-bottom:8px;border-bottom:1px solid var(--hairline)}
-.ledger-row{padding:10px 0;border-bottom:1px solid color-mix(in srgb, var(--fg) 8%, transparent)}
-.ledger-row.live{color:var(--type)}
-.ledger-row.void{color:var(--dim)}
+.ledger-head,.axes,.axis,.prov,.feed-head,.tui-head,.tui-foot,.confirm-actions{display:flex;align-items:center;gap:12px;min-width:0}
+
 .ledger-lead{display:flex;flex-direction:column;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--hairline)}
 .big{display:flex;flex-direction:column;gap:4px;font:700 13px var(--font)}
 .hold{gap:10px}
@@ -764,7 +759,6 @@ a:hover{color:var(--type)}
 .ckey-body{font:400 11.5px/1.45 var(--font);color:var(--fg);overflow-wrap:anywhere}
 .ckey-note{font:400 10.5px/1.45 var(--font);color:var(--dim)}
 
-
 /* THE FOOTER. BACK left, CTA right, and the CTA is the only filled control on
    the frame — dismissing or retreating costs nothing, so neither may compete
    visually with the choice that spends hours or freezes a file forever. */
@@ -784,12 +778,11 @@ a:hover{color:var(--type)}
    has its own dialog, raised only while there is something to confirm or a
    refusal to read. Narrow, because it is one decision. */
 .rmodal{width:min(640px,calc(100vw - 48px))}
-.rmodal-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px;padding-top:10px;border-top:1px solid var(--hairline)}
+
 /* A CLOUD CELL IS BILLED, AND THE CONTROL THAT STARTS IT SAYS SO. Ruled top and
    bottom so it survives greyscale — this is the one fact on
    the run control that costs money if it goes unread, and it is not the same
    class of thing as a refusal, so it is not drawn in the failure hue. */
-.rcloud{padding:8px 0;border-top:2px solid var(--link);border-bottom:2px solid var(--link);font:700 11px/1.5 var(--font);letter-spacing:.04em;color:var(--link)}
 
 /* ── EVENT-KIND FILTER CHIPS (panels/live.js) ──────────────────────────────
    These are <button>s, and `.chip` alone sets only font and colour — so they
@@ -873,37 +866,24 @@ a:hover{color:var(--type)}
 /* ── RUN CONTROL ───────────────────────────────────────────────────────────
    Design 5b. Four states: idle · blocked (with the reason ON the control) ·
    live (confirm, naming what is abandoned) · starting (bounded counter). */
-.runctl{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-top:1px solid var(--border-strong)}
-.runctl-head{display:flex;align-items:baseline;gap:12px;min-width:0}
-.runctl-form{display:flex;flex-direction:column;gap:8px}
+
 .rrow{display:grid;grid-template-columns:74px minmax(0,1fr);gap:12px;align-items:center}
 /* A pinned subject is a STATEMENT, not a disabled select. It is drawn as text
    with its reason attached, so it never reads as a control awaiting unlock. */
-.rpin{display:flex;flex-direction:column;gap:2px;font:700 var(--fs-ident)/1.4 var(--font);color:var(--type);min-width:0}
-.rpin-why{font:400 10.5px/1.4 var(--font);letter-spacing:.02em;color:var(--dim)}
+
 .rrow label{font:700 10.5px var(--font);letter-spacing:.16em;color:var(--dim)}
 /* A narrow-context advisory on a cloud model. It is a caveat, not a refusal:
    the model is offered and armable, and this states what the operator is
    accepting. Warm rather than red for that reason. */
-.rrow-advisory{align-items:flex-start}
-.rrow-advisory .rpin-why{color:var(--warn,#c8a24a);line-height:1.5}
-.rsel{font:400 12px var(--font);background:var(--bg);color:var(--type);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:6px 8px;width:100%}
-.rsel:disabled{color:var(--dim);opacity:.6;cursor:not-allowed}
+
 /* The server's own words, verbatim. Pre-wrapped because the restatement is
    composed as lines and its line breaks carry meaning. */
-.restate{white-space:pre-wrap;font:400 12px/1.6 var(--font);color:var(--type);padding:10px 12px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--bg)}
-.abandon{display:flex;flex-direction:column;gap:8px;padding:11px 13px;border:1px solid var(--danger);border-radius:var(--radius-md)}
-.abandon .note{color:var(--fg)}
-.rwhy{font:400 11.5px/1.5 var(--font);color:var(--dim)}
-.rwhy.bad{color:var(--danger)}
-.runbtn{font:700 11.5px var(--font);letter-spacing:.14em;padding:9px 16px;border-radius:var(--radius-sm);cursor:pointer;background:var(--check);color:var(--bg);border:1px solid var(--check);box-shadow:0 0 18px var(--glow);text-align:center}
-.runbtn:hover:not(:disabled){background:var(--type);border-color:var(--type)}
-.runbtn.armed{background:var(--danger);border-color:var(--danger);color:var(--bg);box-shadow:none}
+
 /* BLOCKED IS DASHED AND UNFILLED — it must not read as a button awaiting a
    click. The reason rides the label itself, never a tooltip: nobody watching a
    stream can hover, and a control disabled without saying why is
    indistinguishable from one that is broken. */
-.runbtn.blocked,.runbtn:disabled{background:transparent;color:var(--dim);border:1px dashed var(--border-strong);box-shadow:none;cursor:not-allowed}
+
 /* RESET TREE — the armed confirm sits INLINE in the top bar, not in a modal.
    A destructive-looking control that opens a dialog invites a reflex dismissal;
    this one keeps the server's restatement on screen next to the button that
@@ -1119,14 +1099,9 @@ a:hover{color:var(--type)}
 .dw-empty{font:400 11px/1.6 var(--font);color:var(--dim);padding:18px 0;text-align:center}
 .starting{display:flex;align-items:center;gap:11px;padding:9px 14px;border:1px solid var(--fg);border-radius:var(--radius-sm);flex-wrap:wrap}
 .starting .ttl{color:var(--type)}
-.dots{display:flex;gap:3px}
-.dots i{width:5px;height:5px;border-radius:50%;background:var(--fg);animation:dotsweep 315ms steps(1) infinite}
-.dots i:nth-child(2){animation-delay:105ms}
-.dots i:nth-child(3){animation-delay:210ms}
+
 /* The elapsed counter is the honest signal; the dots are decoration. Under
    reduced motion the dots hold still and the counter still proves liveness. */
-@keyframes dotsweep{0%,32%{opacity:1}33%,100%{opacity:.18}}
-@media (prefers-reduced-motion:reduce){.dots i{animation:none;opacity:1}}
 
 /* ── TUI MIRROR — the third tab of the transfer-curve card ────────────────
    It was `.tui-dock`: position:fixed, bottom-right, floating over whatever was
@@ -1364,16 +1339,14 @@ a:hover{color:var(--type)}
 .curve-foot{display:flex;gap:22px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--hairline);font:400 12px var(--font);color:var(--dim)}
 .curve{flex:1 1 0}
 
-/* ── RUN LEDGER — row cells ───────────────────────────────────────────────
-   The track list is on .ledger-row; these style the cells within it. The
-   long identity columns are the ONLY ones allowed to ellipsize — a truncated
-   number would be a lie, a truncated model name is merely abbreviated. */
-.ledger-row>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* ── RUN LEDGER — row cells. Only the long identity columns may ellipsize:
+   a truncated number would be wrong, a truncated model name is abbreviated. */
+
 .arm{font-weight:700;letter-spacing:.06em}
 .model{color:var(--fg)}
 .delta{color:var(--type);white-space:nowrap}
 .delta.worse{color:var(--danger)}
-.ledger-row.live .delta{color:var(--dim)}
+
 .ledger-empty{padding:18px;border:1px dashed var(--border-strong);border-radius:var(--radius-md);font:400 12.5px/1.6 var(--font);color:var(--dim)}
 /* THE STATS STRIP. It LEADS the card now — the baselines table sits under it,
    the reverse of the order they used to be drawn in. The treatment is the same
@@ -1876,10 +1849,7 @@ a:hover{color:var(--type)}
 /* ── STOP CONTROL (panels/runstart.js) ─────────────────────────────────────
    Only rendered while a cell is live. The confirm is danger-coloured; the
    opener is not, because looking at what stopping would do is free. */
-.rbtn{font:700 10.5px var(--font);letter-spacing:.1em;background:none;color:var(--type);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:7px 12px;cursor:pointer}
-.rbtn:hover{border-color:var(--type)}
-.rbtn:disabled{color:var(--dim);opacity:.6;cursor:not-allowed}
-.rbtn.danger{color:var(--bad,#c46a6a);border-color:var(--bad,#c46a6a)}
+
 .note.bad{color:var(--bad,#c46a6a)}
 
 /* ── ROUTERS DRAWER (panels/routers.js) ────────────────────────────────────
@@ -1966,28 +1936,6 @@ a:hover{color:var(--type)}
 .btn.destroy.solid{background:var(--danger);color:var(--bg);border-color:var(--danger)}
 .confirm-actions{flex-direction:column;align-items:stretch;gap:8px}
 .confirm-actions .btn{text-align:center}
-
-/* ── POPOUT SHELL (panels/popout.js) ──────────────────────────────────────
-   Generalised from the TUI dock. Docks stack UPWARD from bottom-right and
-   their `bottom` is computed per dockIndex in JS, so two popouts can never
-   land on the same slot. The window width is set inline FROM its content —
-   these rules must never impose one, which is the defect the TUI panel
-   exists to fix ("the space was not made for the TUI"). */
-.pop-dock{position:fixed;right:14px;z-index:80;max-width:calc(100vw - 28px)}
-.pop-bar,.pop-win{background:var(--surface-raised);border:1px solid var(--border-strong);border-radius:var(--radius-md);box-shadow:var(--shadow-raise)}
-.pop-bar{height:34px;padding:0 10px;display:flex;align-items:center;gap:12px;min-width:0}
-.pop-win{padding:10px;display:flex;flex-direction:column;gap:9px;max-width:calc(100vw - 28px);max-height:calc(100vh - 40px)}
-.pop-head{display:flex;align-items:center;gap:12px;min-width:0}
-.pop-brand{font:700 12px var(--font);color:var(--type);flex:none}
-.pop-stat{font:400 12px var(--font);color:var(--fg);flex:none}
-.pop-body{overflow:auto;min-height:0;font-family:var(--font)}
-.pop-foot{font:400 11.5px var(--font);color:var(--dim);padding-top:8px;border-top:1px solid var(--hairline)}
-.pop-tabs{display:flex;gap:6px;border-bottom:1px solid var(--hairline);padding-bottom:8px}
-.pop-tab{font:700 10.5px var(--font);letter-spacing:.14em;color:var(--dim);background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 11px;cursor:pointer}
-/* The ACTIVE tab differs by fill AND border, not hue alone — the board has to
-   survive a greyscale screenshot. */
-.pop-tab.on{color:var(--type);border-color:var(--fg);background:color-mix(in srgb, var(--fg) 10%, transparent)}
-.pop-n{color:var(--fg);font-weight:400}
 
 /* ── VIEWPORT STEP-DOWN for the new grids ────────────────────────────────
    Measured breakpoints. Nothing is ever hidden — the rail reflows and the
@@ -2165,40 +2113,10 @@ a:hover{color:var(--type)}
    same amber as `.fx-blocked`. State on the row follows the feed's
    data-attribute convention (`.evrow[data-level]`): a left rule only, and
    OFF is a hairline — absence drawn as absence. */
-.dv-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
-.dv-row[data-state="on"]{box-shadow:inset 2px 0 0 var(--warn,#e0b34d)}
-.dv-row[data-state="off"]{box-shadow:inset 2px 0 0 var(--hairline)}
-.dv-toggle{
-  font:700 11.5px var(--font);letter-spacing:.12em;
-  background:transparent;color:var(--dim);
-  border:1px solid var(--border-strong);border-radius:var(--radius-sm);
-  padding:7px 13px;cursor:pointer;white-space:nowrap;
-}
-.dv-toggle:hover:not(:disabled){color:var(--fg);border-color:var(--fg)}
-.dv-toggle.on{
-  color:var(--bg);background:var(--warn,#e0b34d);border-color:var(--warn,#e0b34d);
-}
-.dv-toggle.on:hover:not(:disabled){color:var(--bg);background:var(--type);border-color:var(--type)}
-.dv-toggle:disabled{color:var(--dim);border-color:var(--hairline);cursor:not-allowed}
-.dv-toggle.on:disabled{background:transparent;color:var(--dim)}
-.dv-src{font:400 10.5px/1.5 var(--font);color:var(--dim);min-width:0;overflow-wrap:anywhere}
-.dv-unknown{
-  display:flex;flex-direction:column;gap:6px;
-  padding:10px 12px;border:1px dashed var(--border-strong);
-  border-radius:var(--radius-md);background:transparent;
-}
-.dv-state{flex:none;font:700 11px var(--font);letter-spacing:.14em;color:var(--warn,#e0b34d)}
-.dv-why{font:400 11px/1.6 var(--font);color:var(--dim);overflow-wrap:anywhere}
-.dv-note{font:400 11px/1.55 var(--font);color:var(--dim);overflow-wrap:anywhere}
+
 /* A refusal from the server wears the off-hue, like every refusal on the
    board (`.rm-refusal`, `.rwhy.bad`). */
-.dv-note.bad{color:var(--danger)}
-.dv-warn{
-  font:400 11px/1.6 var(--font);color:var(--warn,#e0b34d);
-  padding:9px 11px;border:1px solid var(--warn,#e0b34d);border-radius:var(--radius-md);
-  background:color-mix(in srgb, var(--warn,#e0b34d) 6%, var(--bg-2));
-  overflow-wrap:anywhere;
-}
+
 .devmode-on{
   display:inline-flex;align-items:center;gap:6px;
   font:700 10.5px var(--font);letter-spacing:.16em;

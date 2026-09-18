@@ -35,10 +35,6 @@ export function refreshChallenges() {
     });
 }
 
-export function challengeState() {
-  return state;
-}
-
 /** The one to start on: the only ready challenge, when there is exactly one. */
 export function soleReadyChallenge() {
   const ready = state.challenges.filter((c) => c.ready);

@@ -80,11 +80,6 @@ export function classifyAddress(ip) {
   return "unparseable";
 }
 
-/** Loopback, private or link-local. Public, unspecified and unparseable are not. */
-export function isTrustedPeer(ip) {
-  return TRUSTED_CLASSES.has(classifyAddress(ip));
-}
-
 /**
  * Origin check for writes:
  *   no Origin header → true (non-browser clients; browsers always send one on POST)

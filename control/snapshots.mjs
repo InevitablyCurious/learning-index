@@ -146,23 +146,6 @@ export function seedableBy(row, model) {
   return { ok: true, reason: null };
 }
 
-/**
- * Corpus drift as a list of differing fields, in the same shape as the
- * harness's snapshot_validity_relaxed notice. null on one side is drift; on both
- * sides a match.
- */
-export function corpusDrift(row, { chunkPlanHash = null, templateHash = null, sourceCommit = null } = {}) {
-  if (!row) return [];
-  const pairs = [
-    ["chunk_plan_hash", row.chunk_plan_hash, chunkPlanHash],
-    ["template_hash", row.template_hash, templateHash],
-    ["source_commit", row.source_commit, sourceCommit],
-  ];
-  return pairs
-    .filter(([, recorded, running]) => recorded !== running)
-    .map(([field, recorded, running]) => ({ field, snapshot: recorded, running }));
-}
-
 // ── THE ARMED SNAPSHOT ── persisted beside dev mode (survives restarts, never
 // committed). writeArmed returns the re-read state. Whether arming is allowed
 // (dev mode) is the caller's policy.

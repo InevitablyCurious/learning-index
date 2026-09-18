@@ -7,9 +7,9 @@
 // command line still contains it — otherwise the pid was recycled and the record
 // is pruned, the process left alone.
 //
-// One file per process under runs/servers/<pid>.json (two spawners write
-// concurrently; no lock needed). Stale records are normal and pruned by readers.
-// Node builtins only: the gate harness imports this standalone.
+// One file per process under runs/servers/<pid>.json, so writers never race.
+// Stale records are normal and pruned by readers.
+// Used by play (control/play.mjs).
 
 import { execFile } from "node:child_process";
 import fs from "node:fs";
@@ -199,20 +199,3 @@ export async function portHolders(port) {
   return holders;
 }
 
-/**
- * Reap our own servers, then refuse if the port is still held — naming the
- * holder and leaving it running. The operator decides about their own processes.
- */
-export async function reapAndRequirePort(port, opts = {}, benchRoot = BENCH_ROOT) {
-  await reapServers(opts, benchRoot);
-
-  const holders = await portHolders(port);
-  if (holders.length === 0) return;
-
-  const who = holders.map((h) => `pid ${h.pid} (${h.command})`).join(", ");
-  throw new Error(
-    `port ${port} is held by a process the bench did not start: ${who}. ` +
-      "Stop it and re-run. The bench cleans up servers it started (runs/servers/) " +
-      "and will not kill a process it does not own.",
-  );
-}

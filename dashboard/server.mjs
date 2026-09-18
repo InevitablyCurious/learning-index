@@ -57,7 +57,6 @@ const STATIC = {
   "/panels/rail.js": { file: "panels/rail.js", type: "text/javascript; charset=utf-8" },
   "/panels/runstart.js": { file: "panels/runstart.js", type: "text/javascript; charset=utf-8" },
   "/panels/startup.js": { file: "panels/startup.js", type: "text/javascript; charset=utf-8" },
-  "/panels/popout.js": { file: "panels/popout.js", type: "text/javascript; charset=utf-8" },
   "/panels/results.js": { file: "panels/results.js", type: "text/javascript; charset=utf-8" },
   "/panels/learning.js": { file: "panels/learning.js", type: "text/javascript; charset=utf-8" },
   "/panels/treereset.js": { file: "panels/treereset.js", type: "text/javascript; charset=utf-8" },

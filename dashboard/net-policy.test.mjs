@@ -16,7 +16,6 @@ import {
   classifyAddress,
   guardPeer,
   isSameOrigin,
-  isTrustedPeer,
 } from "./lib/net-policy.mjs";
 
 // ── classifyAddress: IPv4 ───────────────────────────────────────────────────
@@ -71,18 +70,18 @@ test("classifyAddress: garbage and non-strings are unparseable, never trusted cl
   assert.equal(classifyAddress(undefined), "unparseable");
 });
 
-// ── isTrustedPeer ───────────────────────────────────────────────────────────
+// ── trusted peers (guardPeer) ───────────────────────────────────────────────────────────
 
-test("isTrustedPeer: local-wire classes are trusted", () => {
-  assert.equal(isTrustedPeer("127.0.0.1"), true);
-  assert.equal(isTrustedPeer("192.168.1.5"), true);
-  assert.equal(isTrustedPeer("fe80::1"), true);
+test("guardPeer: local-wire classes are trusted", () => {
+  assert.equal(guardPeer("127.0.0.1").ok, true);
+  assert.equal(guardPeer("192.168.1.5").ok, true);
+  assert.equal(guardPeer("fe80::1").ok, true);
 });
 
-test("isTrustedPeer: public, unspecified and unparseable are refused", () => {
-  assert.equal(isTrustedPeer("8.8.8.8"), false);
-  assert.equal(isTrustedPeer("0.0.0.0"), false);
-  assert.equal(isTrustedPeer("garbage"), false);
+test("guardPeer: public, unspecified and unparseable are refused", () => {
+  assert.equal(guardPeer("8.8.8.8").ok, false);
+  assert.equal(guardPeer("0.0.0.0").ok, false);
+  assert.equal(guardPeer("garbage").ok, false);
 });
 
 // ── isSameOrigin ────────────────────────────────────────────────────────────

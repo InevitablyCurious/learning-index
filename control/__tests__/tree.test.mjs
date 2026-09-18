@@ -14,7 +14,6 @@ import {
   segment,
   subjectTriple,
   campaignSegments,
-  modeDir,
   isTreeId,
   campaignTreeId,
   mintTree,
@@ -71,15 +70,6 @@ test("TREE: the subject triple is total for every shape the harness produces", (
   assert.equal(empty.substrate, "local");
   assert.ok(empty.model, "an unnameable model still gets a named directory");
   assert.equal(campaignSegments({ kind: "cloud", cloud: { provider: "p", model: "m" } }).length, 4);
-});
-
-test("TREE: mode directories are the two arms, and an unknown arm is never folded into one", () => {
-  assert.equal(modeDir("off"), "memoryOFF");
-  assert.equal(modeDir("on"), "memoryON");
-  // Filing an unresolved arm under a real one would corrupt the contrast this
-  // bench exists to measure, so it gets its own container.
-  assert.equal(modeDir("banana"), "memoryUNKNOWN");
-  assert.equal(modeDir(null), "memoryUNKNOWN");
 });
 
 test("TREE: minting points the pointer forward and DELETES NOTHING", async () => {

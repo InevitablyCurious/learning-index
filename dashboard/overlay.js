@@ -47,6 +47,3 @@ export function renderOverlay(board) {
   patch(root, "");
 }
 
-export function closeOverlays() {
-  closeCreate();
-}

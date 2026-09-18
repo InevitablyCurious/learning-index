@@ -2,24 +2,16 @@
 // cell is panels/create.js). Stop is preview-then-confirm: the server mints the
 // token and writes the restatement, and refusals render verbatim with their code.
 
-import { esc, clip, dur } from "../board.js";
-
 /** Local UI state: what the operator is doing, which no poll can know. */
 const ui = {
-  sel: { model: "", arm: "", org: "", kind: "local" },
-  pending: false,
-  refusal: null,
-  // The stop flow: `armed` holds the confirm token (preview, then confirm).
+  // The stop flow: `stopArmed` holds the confirm token (preview, then confirm).
   stopArmed: null,
   stopRestatement: null,
   stopBusy: false,
   stopError: null,
-
-  startedAt: null,
 };
 
-/** A read-only snapshot of run-start state, for the startup feed. */
-
+/** A read-only snapshot of the stop state, for the top bar. */
 export function stopState() {
   return { armed: ui.stopArmed !== null, restatement: ui.stopRestatement, busy: ui.stopBusy, error: ui.stopError };
 }
@@ -76,14 +68,5 @@ export async function commitStop() {
   } finally {
     ui.stopBusy = false;
   }
-}
-
-function payload() {
-  return {
-    model: ui.sel.model,
-    arm: ui.sel.arm || undefined,
-    kind: ui.sel.kind,
-    org: ui.sel.arm === "on" ? ui.sel.org.trim() || undefined : undefined,
-  };
 }
 

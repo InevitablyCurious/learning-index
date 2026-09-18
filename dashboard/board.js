@@ -288,7 +288,6 @@ import { renderResults } from "./panels/results.js";
 import { paintTicks, snapTicks } from "./panels/tick.js";
 import { armSnapshot } from "./panels/snapshot.js";
 import { setLearningView } from "./panels/learning.js";
-import { togglePopout } from "./panels/popout.js";
 import { renderOverlay } from "./overlay.js";
 import { patch } from "./dom.js";
 // Network acts live in board-actions.js; state and render stay here.
@@ -390,7 +389,7 @@ function bindInteraction() {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-pop-toggle],[data-pop-view],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick]");
+  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick]");
   if (!t) return;
 
   if (t.dataset.gateId) {
@@ -597,14 +596,6 @@ function onClick(e) {
     render();
     return;
   }
-  // Popouts: the view switch is checked before the toggle.
-  if (t.dataset.popView) {
-    const [id, v] = t.dataset.popView.split(":");
-    if (id === "learning") setLearningView(v);
-    render();
-    return;
-  }
-  if (t.dataset.popToggle) { togglePopout(t.dataset.popToggle); render(); return; }
 }
 
 function onRunSel(e) {

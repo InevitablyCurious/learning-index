@@ -13,10 +13,6 @@ let inFlight = false;
 let lastAt = 0;
 const MIN_INTERVAL_MS = 2000;
 
-export function snapshotState() {
-  return state;
-}
-
 /** The armed id or null (the confirm frame draws its caution from it). */
 export function armedSnapshotId() {
   return state.armed?.snapshot_id ?? null;

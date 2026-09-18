@@ -17,10 +17,6 @@ let view = "matrix";
 export function setLearningView(v) {
   if (VIEWS.includes(v)) view = v;
 }
-export function learningView() {
-  return view;
-}
-
 /** Attempt 1 builds, attempts 2–5 repair. */
 export const PHASES_PER_CELL = 5;
 

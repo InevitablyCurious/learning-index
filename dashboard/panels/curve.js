@@ -30,10 +30,6 @@ let metric = "turns";
 export function setCurveMetric(m) {
   if (METRICS[m]) metric = m;
 }
-export function curveMetric() {
-  return metric;
-}
-
 /**
  * The card's tabs: TRANSFER CURVE (across runs), LEARNING (inside one session),
  * TUI MIRROR (the raw terminal). The selection is also a subscription: board.js
