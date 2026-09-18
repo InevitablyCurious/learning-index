@@ -1,30 +1,13 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// LIVE PANEL — PHASE SPINE + PROVISIONAL COUNTERS
-//
-// The phase spine (1 BUILD + 4 GRADEs) and the provisional token counters. Both
-// are rendered BY THE GATE WALL (panels/wall.js imports `spine` and
-// `provisional` through the live.js entry's re-export), not by the DATA FEED
-// card itself — the two halves answer the same question from opposite ends, so
-// they share one block on the wall, under the gates those phases produce and at
-// the cost those counters report.
-//
-// PURE: nothing here reads the panel's mutable state, so this module imports
-// only the board's format helpers and the odometer. Split from panels/live.js
-// (LI-14) with no behaviour change.
-// ─────────────────────────────────────────────────────────────────────────────
+// PHASE SPINE (1 BUILD + 4 GRADEs) and PROVISIONAL COUNTERS, rendered by the
+// gate wall (panels/wall.js, via the live.js re-export): where the cell is, and
+// what it has spent getting there. Pure: reads no panel state.
 
 import { esc, nul, tok, dur } from "../../board.js";
 import { odo } from "../tick.js";
 
-// ── THE PHASE SPINE — 1 BUILD + (max_attempts − 1) GRADEs ─────────────────
-//
-// RENDERED BY THE GATE WALL, alongside the provisional counters. The two halves
-// answer the same question from opposite ends — the spine says which phase the
-// cell is IN, the counters say what it has SPENT getting there — so they share
-// one block, split down the middle, under the gates those phases produce.
-// Exported for panels/wall.js; see the note on `provisional` below.
+// ── THE PHASE SPINE ──
 
-// Mirrors control/board/contract.mjs PHASES_PER_CELL and config.py max_attempts.
+// Same as control/board/contract.mjs PHASES_PER_CELL (config.py max_attempts 5).
 const PHASES_PER_CELL = 5;
 
 const PHASES = [
@@ -37,10 +20,9 @@ const PHASES = [
 ];
 
 /**
- * Map the harness phase string onto 1..PHASES_PER_CELL. The harness emits
- * `initial`, `initial-chunk-N`, `feedback-N`, `verdict-pass-N` (each possibly
- * with a `-zero-tool-resume-M` suffix). Attempt N's verdict/feedback maps to
- * phase N+1: feedback-1 → 2, …, feedback-4 → 5.
+ * Map the harness phase string (initial, initial-chunk-N, feedback-N,
+ * verdict-pass-N, optional -zero-tool-resume-M) onto 1..5: attempt N's
+ * feedback/verdict is phase N+1.
  */
 export function phaseIndex(phase) {
   const p = String(phase ?? "").toLowerCase();
@@ -59,24 +41,10 @@ export function chunkOf(phase) {
 }
 
 /**
- * WHERE THE CELL IS — the harness's own word for it, not a parsed one.
- *
- * TWO SOURCES, AND THEY ARE NOT EQUAL.
- *
- *   `board.live.phase`  the producer's `phase.start` record. Authoritative.
- *   `board.run.phase`   recovered BY REGEX from PROGRESS lines in the launch
- *                       log (sources/run-log.mjs). A fallback, and only that.
- *
- * The parsed one is emitted by the build/serve loop, so it stops moving the
- * moment the build ends: with grading under way and 36 of 53 gates already
- * passing, it still read `initial-chunk-6` and this spine said BUILD · RUNNING.
- * The harness had written `phase.start feedback-1` six milliseconds after
- * `attempt.end` and no consumer read it.
- *
- * The fallback is KEPT rather than deleted, because `live.jsonl` is written from
- * cell start and a run begun before it existed has none — and because the tail
- * window can scroll past every `phase.start` on a long cell. A board that went
- * blank in those cases would have traded a lagging phase for no phase.
+ * Where the cell is: board.live.phase (the harness's phase.start record) is
+ * authoritative; board.run.phase (parsed from the launch log, which stops moving
+ * when the build ends) is the fallback for runs with no stream or a tail that
+ * scrolled past every phase.start.
  */
 function activePhase(r, board) {
   const stated = board?.live?.phase ?? null;
@@ -96,9 +64,7 @@ export function spine(r, board) {
     return `<div class="spine"><div class="null">${esc("no phase observed — nothing has reported yet")}</div></div>`;
   }
 
-  // ATTEMPT VERDICTS COME FROM `attempt.end`, which is the producer saying an
-  // attempt CLOSED and how it went. A phase the harness has finished must never
-  // read as running, whatever the parsed phase says.
+  // Attempt verdicts come from attempt.end: a closed attempt never reads running.
   const verdicts = new Map();
   for (const a of board?.live?.attempts ?? []) {
     if (Number.isFinite(a?.attempt)) verdicts.set(a.attempt, a);
@@ -108,10 +74,7 @@ export function spine(r, board) {
   return `<div class="spine">${PHASES.map((p) => {
     let state =
       active === null ? "pending" : p.n < active ? "done" : p.n === active ? (stopped ? "done" : "running") : "pending";
-    // A PHASE THE CELL NEVER FINISHED IS NOT DONE. When the cell has stopped,
-    // a phase with no closed attempt was cut off (the one it was in) or never
-    // reached (every one after it) — saying DONE there claims a grade that
-    // never ran.
+    // A stopped cell's unfinished phases are stopped or not run, never done.
     if (stopped && !verdicts.has(p.n)) state = p.n <= (active ?? 0) ? "stopped" : "notrun";
     return phaseRow(p, state, r, board, verdicts.get(p.n), stated, ended);
   }).join("")}</div>`;
@@ -132,22 +95,8 @@ function phaseRow(p, state, r, board, verdict, stated, ended) {
   const ticks =
     p.n === 1 && state !== "pending" ? chunkTicks(r, board, state) : "";
 
-  // THE VERDICT OF A CLOSED ATTEMPT, from `attempt.end`.
-  //
-  // ── "failed" AGAIN — the two numbers now count the same thing ────────────
-  //
-  // This briefly read "N findings". It had to: the wall counted failing GATES
-  // while this row counted `attempt.end.failed` = `len(failed_gates)`, and the
-  // gate runner's list mixed suite gates with individual conformance
-  // sub-problems. Measured across all five attempts of run 1788599410 the two
-  // ran a constant +10 apart — the 11 conformance problems collapsing into the
-  // single `CONF` gate — and both were labelled "failed", which read as a
-  // contradiction.
-  //
-  // Conformance is now enumerated as 65 real gates (`pregate.spec.ts`), so one
-  // finding IS one gate and the two counts agree. The word goes back to what it
-  // means. The producer's number is still what is shown — the board does not
-  // publish a second opinion about a closed attempt.
+  // The closed attempt's `failed` count, from attempt.end (one conformance
+  // finding is now one gate, so this matches the wall).
   const outcome =
     verdict && state === "done"
       ? `<span class="ph-verdict ${verdict.verdict === "PASS" ? "good" : "bad"}"${
@@ -174,8 +123,8 @@ function phaseRow(p, state, r, board, verdict, stated, ended) {
 }
 
 /**
- * PLAYER ORDER: the stage this round reached — the model was told only that
- * stage's problems. The count past it were graded and not told.
+ * Player order: the stage this round reached; the model was told only that
+ * stage's problems.
  */
 function stageChip(v) {
   if (!Number.isFinite(v.stage)) return "";
@@ -187,9 +136,8 @@ function stageChip(v) {
 }
 
 /**
- * What a closed attempt changed against the one before it. Without this a
- * round that fixed two gates and broke two reads "27 failed" like the round
- * before it, and looks as if nothing moved.
+ * What a closed attempt changed against the one before (fixed/broke), so a
+ * round that fixed two and broke two doesn't look like nothing moved.
  */
 function churn(v) {
   if (!Number.isFinite(v.fixed) || !Number.isFinite(v.broke)) return "";
@@ -201,18 +149,8 @@ function churn(v) {
 }
 
 /**
- * The work orders inside phase 1.
- *
- * ── A FINISHED BUILD HAS NO CURRENT CHUNK ──────────────────────────────────
- * `phaseState` is load-bearing and was missing. `r.chunk.current` is the last
- * chunk the build reached and it KEEPS that value after the build ends — so the
- * final tick stayed `now` and went on pulsing through the whole of grading,
- * advertising work that had already finished. Motion on this board means one
- * thing, "this is happening right now", and a tick that pulses after its phase
- * closed breaks that for every other animation on the card.
- *
- * When the phase is done every tick is done: there is no current work order,
- * because there is no current work.
+ * The work orders inside phase 1. When the phase is done every tick is done: a
+ * finished build has no current chunk (it must not keep pulsing).
  */
 function chunkTicks(r, board, phaseState) {
   const total = r.chunk?.total ?? 6;
@@ -236,72 +174,20 @@ function chunkTicks(r, board, phaseState) {
 }
 
 /**
- * PROVISIONAL COUNTERS — every token category the agent reports, labelled,
- * all five summed into ONE total.
+ * PROVISIONAL COUNTERS — every token category, labelled, all five summed into
+ * one total (rendered on the gate wall: correctness and cost for one cell).
  *
- * ── IT IS RENDERED BY THE GATE WALL, NOT BY THIS CARD ──────────────────────
- * Exported and called from panels/wall.js. The two cards in the axes row are
- * stretched to a common height, so the shorter one carries dead space — and
- * measured across the three curve tabs the gate wall was carrying 13px, 533px
- * and 137px of it. This block is 262px, which is what closes that gap without
- * simply moving it to the other card (the whole spine is 527px and would have
- * made the wall the tall one instead).
- *
- * It also belongs there on the argument. The gate wall answers "is the running
- * cell correct"; these counters answer "at what cost". Correctness and
- * efficiency for one cell, in one card, is the board's own thesis rather than a
- * space-filling accident — and the phase spine stays here, next to the event
- * feed, which is the same temporal story told twice over.
- *
- * ── WHAT WAS WRONG ─────────────────────────────────────────────────────────
- * This block used to render `tokens.input + tokens.output` and label it with
- * nothing at all — a bare "138K" between the turn count and the clock. It
- * dropped `reasoning` and both cache figures on the floor. On the
- * deepseek-v4-flash cell that exposed this, reasoning alone was 239,381
- * against an input+output of 201,768, and cache read was 41.5M. The board was
- * reporting a fraction of the tokens the run actually put through the
- * provider and presenting it as the total.
- *
- * ── WHY CACHE READ IS IN THE TOTAL ─────────────────────────────────────────
- * An earlier revision showed cache read below the rule and dimmed, excluded
- * from the sum, on the reasoning that re-reading an unchanged prefix is not
- * "new work". That was wrong for the question this instrument exists to
- * answer. Operator's ruling, and it is correct:
- *
- *   Cache reads are BILLED. The benchmark asks whether injected memory saves
- *   tokens. Memory injection makes the prompt bigger, and a bigger prompt is
- *   re-read on EVERY turn — so the cost of memory lands in cache read
- *   multiplied by the turn count, which is precisely where it would hide if
- *   this figure sat outside the total. Excluding it lets the memory arm look
- *   cheap while it is the expensive one.
- *
- * At 41.5M against 441K generated, cache read is ~99% of the tokens processed.
- * It is not a footnote to the measurement; on a long agentic cell it IS the
- * measurement. It renders at full weight alongside the others.
- *
- * ── A PARTIAL TOTAL SAYS SO ────────────────────────────────────────────────
- * Only `opencode-serve` observes reasoning and the cache figures, and it is
- * opt-in and network-bound. When it is unwired, `status-stream` still supplies
- * input and output from the run artifacts. The total then sums 2 of 5, is
- * marked `partial`, and names what is missing. It is never silently presented
- * as whole — that silence was the original defect.
- *
- * ZERO IS AN OBSERVATION. `cache write` is 0 on this provider and renders as
- * 0, not as absent. Only a genuinely unobserved category reads "unobserved".
- *
- * ── NOTHING CLIPS ──────────────────────────────────────────────────────────
- * The spine column is a hard 340px track (300px under 1600px). The grid is
- * `1fr auto`: the value takes the width its digits need and the LABEL
- * ellipsises if anything has to give. Verified against a 12-digit value down
- * to 200px. A shortened word is recoverable from context; a truncated figure
- * on a measuring instrument is a wrong reading.
+ * Cache read is in the total: it is billed, and injected memory grows the prompt
+ * that is re-read every turn, so memory's cost lands there (often ~99% of
+ * tokens). When only 2 of 5 categories are observed (opencode-serve unwired) the
+ * total is marked partial and names what is missing. Zero is an observation. The
+ * label ellipsises before a figure ever clips.
  */
 export function provisional(r, running) {
   const t = r.tokens ?? {};
   const mark = running ? " <span class='muted'>\u203a</span>" : "";
 
-  // Prompt side first, then generation side. All five are billed and all five
-  // are summed.
+  // Prompt side first, then generation. All five are billed and summed.
   const parts = [
     { label: "input", v: numOrNull(t.input) },
     { label: "cache read", v: numOrNull(t.cache_read) },
@@ -339,40 +225,17 @@ function numOrNull(v) {
   return v === null || v === undefined || !Number.isFinite(v) ? null : v;
 }
 
-/** Exact digits with thousands separators. The headline rounds; a breakdown
- *  that also rounded could not be reconciled against anything. */
+/** Exact digits: a breakdown must reconcile against the rounded headline. */
 function exact(n) {
   return Number(n).toLocaleString("en-US");
 }
 
 /**
- * CACHE HIT RATE — the cost signal the token counts alone cannot show.
- *
- *   hit = cache read / (input + cache read + cache write)
- *
- * i.e. of every prompt token the provider processed this cell, what fraction
- * arrived already cached. Output and reasoning are NOT in the denominator:
- * they are generated, never cached, and including them would make the rate
- * drift with verbosity instead of with cache behaviour.
- *
- * ── WHY THIS IS ON THE BOARD ───────────────────────────────────────────────
- * The thing under measurement is a memory system that INJECTS text into the
- * prompt. A cached prompt is matched by PREFIX: change something early in the
- * context and every token after it must be re-sent uncached. So a memory
- * system that writes into the prompt at the wrong moment can invalidate the
- * cache on every operation, and the bill moves from the cached rate to the
- * full input rate across the whole context — a large cost difference that is
- * INVISIBLE in the token total, because the token count barely moves while
- * the price per token multiplies.
- *
- * Read it as: high and steady = the prefix is stable. A drop, or a rate that
- * is structurally lower on the memory arm than the control arm, means memory
- * is busting the cache and the arm is more expensive than its token count
- * suggests.
- *
- * NOT SHOWN rather than shown wrong: the rate needs all three prompt-side
- * categories. If any is unobserved the row says so — a hit rate computed over
- * a partial denominator would read as a real measurement and be a fiction.
+ * CACHE HIT RATE = cache read / (input + cache read + cache write): the share
+ * of prompt tokens that arrived cached. Memory that writes early into the prompt
+ * breaks the cached prefix and multiplies cost without moving the token count; a
+ * lower rate on the memory arm shows that. Not shown unless all three
+ * categories are observed.
  */
 function cacheHitRow(t) {
   const input = numOrNull(t.input);
@@ -394,12 +257,8 @@ function cacheHitRow(t) {
       </div>`;
   }
   const hit = (read / prompt) * 100;
-  // Two decimals: at 99.xx% the interesting movement is in the hundredths, and
-  // rounding to a whole number would paint 99.4% and 99.9% as the same figure
-  // while they differ by ~8x in uncached tokens.
-  // THE RATE CLIMBS BUT DOES NOT FLOAT A DELTA. "+0.03" of a percentage is not
-  // a spend, and floating it beside rows that ARE spends would put two
-  // different kinds of number in one visual language.
+  // Two decimals (99.4% vs 99.9% is ~8× the uncached tokens). The rate animates
+  // but floats no delta: it is not a spend.
   return `
     <div class="tkrow tkrate">
       <span class="tkl">cache hit</span>
@@ -412,25 +271,9 @@ function cacheHitRow(t) {
 }
 
 /**
- * THE BOTTOM ROW — TWO NUMBERS, AND THEY ARE NOT MULTIPLIED.
- *
- * `total` is the sum of the categories listed above it and nothing else.
- * `turns` sits beside it as a second, INDEPENDENT reading — it is not a factor,
- * not a divisor, and no figure on this panel is derived from it.
- *
- * That separation is deliberate and worth stating, because the obvious-looking
- * relationship is false. Context is not constant across a cell: it grows every
- * turn (turn 1 carried ~5K here, turn 298 carried ~292K). So "turns × context"
- * with the FINAL context — the number the TUI shows — overstates a cell by
- * roughly 75%, and with the AVERAGE context it is exactly true only because
- * average context IS total prompt ÷ turns, which computes nothing you did not
- * already have. Either way it silently drops output and reasoning, which are
- * generated tokens billed several times higher than cached ones.
- *
- * So the two numbers are shown, and left alone. The unit word rides on the
- * turn count so a reader can never take it for a token figure — two bare
- * numbers side by side under a heading that says TOKENS is exactly how that
- * misreading happens.
+ * The bottom row: the total and the turn count, side by side and never
+ * multiplied (context grows every turn, so turns × context computes nothing
+ * useful). The unit word rides on the turn count.
  */
 function sumRow(label, total, turns, partial) {
   const turnTxt =
@@ -445,10 +288,7 @@ function sumRow(label, total, turns, partial) {
 }
 
 function tokRow(label, v, cls = "") {
-  // EVERY CATEGORY FLOATS ITS DELTA. Which line moved is the question an
-  // operator is actually asking of this table — a run whose cache read climbs
-  // while input stays flat is a different run from the reverse, and the two
-  // used to look identical because only the digits changed.
+  // Every category floats its delta, so it is visible which line moved.
   return `
     <div class="tkrow ${cls}">
       <span class="tkl">${esc(label)}</span>
