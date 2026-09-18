@@ -1,42 +1,13 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// PANEL: SEED FROM A BUILD SNAPSHOT — the dev-mode step of the baseline branch
-//
-// A snapshot is a captured worktree, taken automatically at the attempt-1 grade
-// boundary of every baseline. Seeding a cell from one skips the build phase —
-// measured at ~5,600 wall-seconds and ~350 turns on this bench — so the run
-// starts at the first troubleshooting round, which is what the benchmark is
-// actually trying to measure.
-//
-// ── IT IS A DEVELOPMENT FEATURE, AND THE BOARD SAYS SO EVERYWHERE ───────────
-// A seeded cell is NEVER a scorable floor (dev-benchmark-snapshot.md §5). Its
-// turns, tokens and wall time sit on a scale no unseeded cell shares, so a delta
-// measured against it measures the absence of a build rather than the presence
-// of memory. That safety property is enforced in TWO folds that do not know
-// about each other — `control/baselines.mjs` for the ledger and
-// `control/board/sources/stack-ledger.mjs` for the transfer curve — and never
-// depends on the operator having read anything here.
-//
-// ── THE SERVER OWNS THE SELECTION ───────────────────────────────────────────
-// Arming POSTs to the control plane and this panel re-reads the answer; the
-// armed id is never held here as truth. Same argument dev mode itself is built
-// on: a seed carried by the browser would mean the control plane trusts the
-// browser's claim about what run it is starting. `/api/run/start` reads the
-// armed snapshot from its own state, so what is confirmed and what is run are
-// the same value from the same read.
-//
-// ── INELIGIBLE SNAPSHOTS ARE LISTED, NOT HIDDEN ─────────────────────────────
-// A snapshot an operator captured and then cannot find in this list teaches
-// them nothing by its absence — "why is it not here" is precisely the question
-// a filtered list cannot answer. So every snapshot for this model is shown, and
-// the ones that cannot seed carry their producer's own refusal sentence.
-// ─────────────────────────────────────────────────────────────────────────────
+// PANEL: SEED FROM A BUILD SNAPSHOT — the dev-mode step of the baseline flow.
+// Seeding skips the build (~5,600s, ~350 turns) and starts at the first
+// troubleshooting round. A seeded cell is never a scorable floor, enforced
+// independently in control/baselines.mjs and sources/stack-ledger.mjs. The
+// control plane owns which snapshot is armed; this panel posts and re-reads.
+// Every snapshot for the model is listed; ineligible ones carry their refusal.
 
 import { esc, nul, tok, dur } from "../board.js";
 
-/**
- * Server state, read on demand. Never the source of truth for what is armed —
- * that is the control plane, and this is the last answer it gave.
- */
+/** The control plane's last answer; never the truth about what is armed. */
 let state = { loaded: false, snapshots: [], armed: null, error: null, model: null };
 let inFlight = false;
 let lastAt = 0;
@@ -46,7 +17,7 @@ export function snapshotState() {
   return state;
 }
 
-/** The armed id, or null. Read by the confirm frame to draw its caution. */
+/** The armed id or null (the confirm frame draws its caution from it). */
 export function armedSnapshotId() {
   return state.armed?.snapshot_id ?? null;
 }
@@ -58,12 +29,8 @@ export function armedSnapshot() {
 }
 
 /**
- * Fire-and-forget refresh, throttled, read on the NEXT render.
- *
- * Render stays synchronous: the frame draws from whatever is known and the
- * board re-renders on its own poll, so a reading taken now appears a beat
- * later. The model is part of the request because the same-model rule is
- * applied per row by the server — this panel never decides seedability itself.
+ * Fire-and-forget, throttled, read on the next render. The model is sent
+ * because the server decides seedability per row.
  */
 export function refreshSnapshots(model) {
   if (inFlight) return;
@@ -83,9 +50,7 @@ export function refreshSnapshots(model) {
       };
     })
     .catch((err) => {
-      // UNREACHABLE IS NOT EMPTY. An empty list means nothing was captured; a
-      // failed read means we do not know. Rendering the first as the second
-      // would tell an operator their snapshots are gone.
+      // Unreachable is not empty: "we don't know" never reads as "none captured".
       state = { loaded: true, snapshots: [], armed: null, error: String(err?.message ?? err), model };
     })
     .finally(() => {
@@ -94,7 +59,7 @@ export function refreshSnapshots(model) {
     });
 }
 
-/** Arm or disarm, then re-read. The POST's own answer is not trusted as state. */
+/** Arm or disarm, then re-read (the POST's answer isn't trusted as state). */
 export function armSnapshot(id, model) {
   fetch(`/api/snapshots/arm`, {
     method: "POST",
@@ -112,16 +77,9 @@ export function armSnapshot(id, model) {
     });
 }
 
-// ── THE FRAME BODY ──────────────────────────────────────────────────────────
+// ── THE FRAME BODY ──
 
-/**
- * The picker, as the baseline branch's dev-mode step.
- *
- * SKIPPING IS THE DEFAULT AND IS ALWAYS ONE CLICK. The step exists to offer a
- * shortcut, so "no snapshot" must never be harder to choose than a snapshot —
- * an operator who opened this step by accident has to be able to leave it in
- * the state they arrived in.
- */
+/** The picker. Skipping is the default and always one click. */
 export function renderSeedFrame(model) {
   const rows = state.snapshots;
   const seedable = rows.filter((s) => s.seedable);
@@ -164,9 +122,8 @@ export function renderSeedFrame(model) {
 }
 
 /**
- * The no-seed option, drawn as a peer of the snapshots rather than as an
- * absence. It is the normal way to run a baseline and the only one that
- * produces a floor, so it reads as a choice, not as a cancel.
+ * The no-seed option, a peer of the snapshots: the normal way to run, and the
+ * only one that produces a floor.
  */
 function skipRow(armed) {
   const on = !armed;
@@ -206,13 +163,8 @@ function seedRow(s, armed) {
 }
 
 /**
- * Corpus drift, shown and never used to disqualify.
- *
- * D-SNAP-DEVMODE-EXCEPTIONS (Jerry, 2026-09-05): dev mode is the operator's own
- * fast-iteration tool and a seeded run is not a publicly defendable data point,
- * so `source_commit` and corpus-identity drift warn and proceed. The harness
- * emits the same fact as a `snapshot_validity_relaxed` notice when the run
- * starts, so what is shown here and what the run reports agree.
+ * Corpus drift, shown and never disqualifying (seeded runs are dev-only); the
+ * harness reports the same as a snapshot_validity_relaxed notice.
  */
 function driftLine(s) {
   if (!s.source_commit) return "";
@@ -220,9 +172,7 @@ function driftLine(s) {
 }
 
 function refusedList(refused) {
-  // Capped: the store accumulates a snapshot per test run, and a wall of
-  // refusals nobody can act on is noise. The count is stated so the list is
-  // visibly partial rather than quietly truncated.
+  // Capped, with the count stated so the list is visibly partial.
   const SHOW = 4;
   const shown = refused.slice(0, SHOW);
   return `
@@ -240,15 +190,8 @@ function refusedList(refused) {
 }
 
 /**
- * THE CAUTION ON THE CONFIRM FRAME.
- *
- * Reuses the `.cwarn.override` treatment the compaction-off warning already
- * uses, because it is the same class of statement: the operator has actively
- * chosen something that changes what the cell measures, and the consequence is
- * invisible until hours later.
- *
- * It must say the load-bearing thing — that this is NOT a scorable floor — and
- * it must say what was bought, so the trade is legible rather than implied.
+ * The caution on the confirm frame (the .cwarn.override treatment): says this
+ * is not a scorable floor, and what the seed saved.
  */
 export function seedWarning() {
   const s = armedSnapshot();
