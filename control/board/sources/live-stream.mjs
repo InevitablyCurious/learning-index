@@ -1,32 +1,11 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// SOURCE: live-stream
+// SOURCE: live-stream — the cell's live.jsonl, the benchmark's one
+// during-the-run surface (LIVE-STREAM.md), located via liveStreamPath. Other
+// sources read files written when something ends; this is what makes the gate
+// wall and the learning panel move during a run.
 //
-// Reads the cell's `live.jsonl` — the benchmark's ONE during-the-run surface.
-// Located via `liveStreamPath`, never constructed here: the harness writes it
-// into the CELL directory, not the campaign root. See LIVE-STREAM.md.
-// See LIVE-STREAM.md for the contract this implements.
-//
-// ── WHY THIS SOURCE EXISTS ──────────────────────────────────────────────────
-// Every other source here reads an artifact written when something ENDS.
-// `manifest.status.jsonl` is appended once per COMPLETED cell — all of a cell's
-// attempt records at once — and `predicate-outcomes.jsonl` is written after the
-// whole campaign exits. Two observed consequences:
-//
-//   · the learning panel resolved its session id from the newest
-//     predicate-outcome line, so it read `unresolved` for entire runs; and
-//   · the gate wall could only move once per cell, never per verdict-pass.
-//
-// Neither was a miswiring. The board was asking post-mortem files to be live.
-//
-// ── THE BENCHMARK OWNS THE KINDS; BACKENDS OWN THE NAMESPACES ───────────────
-// This board must render a run driven by a memory backend it has never heard
-// of. So this module understands the harness's core kinds and treats every
-// `ext` record as opaque: it groups them by `ns`, counts them, keeps the newest
-// few, and NEVER interprets `data`. A panel that recognises a namespace can
-// render it richly; one that does not still shows that the namespace is live
-// and how much it has said. That is the modularity claim, and it holds here by
-// this file containing no backend-specific logic.
-// ─────────────────────────────────────────────────────────────────────────────
+// The benchmark owns the core kinds; backends own their `ext` namespaces, which
+// are grouped, counted and kept newest-few but never interpreted. No
+// backend-specific logic lives here.
 
 import { int, str } from "../contract.mjs";
 import { readTail, parseJsonl, activeRun, liveStreamPath } from "./_runtime.mjs";
@@ -37,25 +16,22 @@ export function describe() {
   return "during-the-run event stream — session id, per-gate verdicts, backend telemetry";
 }
 
-/** Newest-N kept per namespace. A feed, not an archive — the file is the archive. */
+/** Newest few per namespace; the file is the archive. */
 const EXT_KEEP = 12;
-/** Tail bound. The stream is append-only, so the newest records are the live ones. */
+/** Tail bound: the newest records are the live ones. */
 const TAIL_BYTES = 512 * 1024;
 
 export async function read(ctx) {
   const run = await activeRun(ctx.runsRoot);
   if (!run) return { ok: false, reason: "no active run directory — nothing to read yet" };
 
-  // The stream is written into the CELL directory, not the campaign directory
-  // this `run.dir` names — see `liveStreamPath`. Joining the filename onto
-  // `run.dir` here is what kept the wall empty through a live run.
+  // The stream is in the cell folder, not run.dir (see liveStreamPath).
   const path = await liveStreamPath(run.dir);
   const raw = path ? await readTail(path, TAIL_BYTES) : "";
   if (!raw) {
     return {
       ok: false,
-      // NOT an error. A cell that has not opened its session yet has written
-      // nothing, and a run started before the stream existed never will.
+      // Not an error: nothing written yet, or a run from before the stream existed.
       reason: "no live.jsonl yet — written from cell start (older runs have none)",
     };
   }
@@ -63,32 +39,19 @@ export async function read(ctx) {
   const recs = parseJsonl(raw);
   if (!recs.length) return { ok: false, reason: "live.jsonl present but held no parseable records" };
 
-  // ── CORE: the harness's own account ───────────────────────────────────────
+  // ── CORE: the harness's own account ──
   let sessionId = null;
   let cellSeq = null;
   let arm = null;
   let attempt = null;
-  // ── THE PHASE, AS THE PRODUCER STATES IT ──────────────────────────────────
-  //
-  // `phase.start` is a documented core kind and this reader ignored it, while
-  // the board's phase spine read `run.phase` — which sources/run-log.mjs
-  // recovers BY REGEX from PROGRESS lines in the launch log. That is the exact
-  // shape of defect this whole surface exists to remove: a consumer deriving a
-  // fact a producer states.
-  //
-  // It is not academic. PROGRESS lines are emitted by the build/serve loop, so
-  // when the build ended and grading began the parsed phase sat on
-  // `initial-chunk-6` while gate verdicts were already landing — the spine said
-  // BUILD · RUNNING against a wall showing 36/53 passing. The producer had
-  // written `phase.start feedback-1` six milliseconds after `attempt.end`, and
-  // nothing read it.
+  // The phase as the producer states it (phase.start); the regex-parsed
+  // run.phase lags a whole grading pass.
   let phase = null;
   const phaseLog = [];
   const gates = new Map(); // gate id -> newest verdict, per the LAST attempt seen
   const attempts = new Map(); // attempt -> {verdict, failed, ts}
-  // attempt -> (gate id -> status). Kept so each closed attempt can say what it
-  // FIXED and what it BROKE against the one before: a round that fixes two and
-  // breaks two keeps the same failing count and otherwise reads as no change.
+  // attempt → (gate → status), so each closed attempt can say what it fixed
+  // and broke against the previous one.
   const byAttempt = new Map();
   let ended = null; // the producer's cell.end: how the cell stopped
   const byNs = new Map();
@@ -98,8 +61,7 @@ export async function read(ctx) {
     if (!r || typeof r !== "object") continue;
     const kind = str(r.kind);
 
-    // The join key. Carried on every cell-scoped record; the newest wins so a
-    // multi-cell run reports the cell actually running.
+    // The join key; the newest wins, so a multi-cell run names the running cell.
     const sid = str(r.session_id);
     if (sid) sessionId = sid;
     if (int(r.cell_seq) !== null) cellSeq = int(r.cell_seq);
@@ -119,24 +81,10 @@ export async function read(ctx) {
       const status = str(r.status);
       if (a !== null) attempt = Math.max(attempt ?? 0, a);
 
-      // ── TWO DIFFERENT FACTS, AND KEEPING ONLY ONE OF THEM WAS THE BUG ─────
-      //
-      // The gate runner re-grades the WHOLE suite every attempt, so a gate that
-      // passed on attempt 1 emits `pass` again on attempt 2. Collapsing to the
-      // newest record threw away the trajectory, and the wall then had nothing
-      // to compute "first passed on attempt N" from — so it used the newest
-      // attempt instead and drew a `2` on all 65 gates that had passed first
-      // try. Attempts-to-green is a headline measurement of this bench; a wall
-      // that reports 2 for a gate that never failed is not a cosmetic defect.
-      //
-      //   status/phase/attempt/ts  the NEWEST verdict — the current state of
-      //                            the code, which is what the square's colour
-      //                            means.
-      //   first_pass_attempt       the EARLIEST attempt that recorded a pass.
-      //   ever_failed              did ANY attempt record a fail.
-      //
-      // The last two are folds across every record seen, and they are what
-      // separates a green-first-try square from a repaired one.
+      // The runner re-grades the whole suite every attempt, so two facts are kept:
+      // the newest verdict (the square's colour) and the trajectory — the earliest
+      // passing attempt and whether any attempt failed. Keeping only the newest drew a
+      // "2" on every gate that had passed first try.
       const prev = gates.get(gid) ?? {
         id: gid,
         status: null,
@@ -147,8 +95,7 @@ export async function read(ctx) {
         ever_failed: false,
       };
 
-      // Newest wins. Ordered by attempt, then ts — the file is appended in
-      // order, but a reader must not depend on that to stay correct.
+      // Newest by attempt, then ts (never rely on file order).
       const newer =
         prev.attempt === null ||
         (a !== null && a > prev.attempt) ||
@@ -177,9 +124,7 @@ export async function read(ctx) {
       const ph = str(r.phase);
       if (!ph) continue;
       const ts = int(r.ts);
-      // NEWEST WINS BY TIMESTAMP, not by file order. The file is appended in
-      // order and a reader must still not depend on that — the same rule
-      // `gate.result` already follows above.
+      // Newest by timestamp, not file order.
       if (phase === null || (ts ?? 0) >= (phase.ts ?? 0)) phase = { phase: ph, ts };
       phaseLog.push({ phase: ph, ts });
       continue;
@@ -192,7 +137,7 @@ export async function read(ctx) {
           verdict: str(r.verdict),
           failed: int(r.failed),
           ts: int(r.ts),
-          // PLAYER ORDER: the stage the round reached; null on older streams.
+          // Player order: the stage this round reached; null on older streams.
           stage: int(r.stage),
           stage_name: str(r.stage_name),
           withheld: int(r.withheld),
@@ -206,7 +151,7 @@ export async function read(ctx) {
       continue;
     }
     if (kind === "ext") {
-      // OPAQUE BY CONTRACT. Grouped and counted, never interpreted.
+      // Opaque by contract: grouped and counted, never interpreted.
       const ns = str(r.ns) ?? "(unnamed)";
       if (!byNs.has(ns)) byNs.set(ns, { ns, count: 0, last_ts: null, types: new Map(), recent: [] });
       const slot = byNs.get(ns);
@@ -219,7 +164,7 @@ export async function read(ctx) {
     }
   }
 
-  // FIXED / BROKE per closed attempt, against the attempt before it.
+  // Fixed / broke per closed attempt, against the one before.
   for (const entry of attempts.values()) {
     const now = byAttempt.get(entry.attempt);
     const before = byAttempt.get(entry.attempt - 1);
@@ -252,12 +197,8 @@ export async function read(ctx) {
         cell_seq: cellSeq,
         arm,
         attempt,
-        // The producer's own account of where the cell is. `phase` is the
-        // newest transition; `phases` is the ordered history, which is what
-        // lets a consumer show when each one started without re-reading the
-        // file. Null when the stream carries no `phase.start` at all — an
-        // older run, or a tail window that has scrolled past them — and a
-        // consumer must fall back rather than treat null as "no phase".
+        // `phase` is the newest transition, `phases` the ordered history. null when
+        // no phase.start is visible (older run, or scrolled past): consumers fall back.
         phase: phase?.phase ?? null,
         phase_ts: phase?.ts ?? null,
         phases: phaseLog.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0)),
@@ -265,11 +206,10 @@ export async function read(ctx) {
         gates: gateList,
         gate_counts: counts,
         attempts: [...attempts.values()].sort((a, b) => a.attempt - b.attempt),
-        // How the cell stopped, as the producer said it (null while running).
+        // How the cell stopped, as the producer said (null while running).
         ended,
         backends: [...backends.values()],
-        // Namespaces are reported whether or not any panel knows them: an
-        // unrecognised backend must still be visibly ALIVE rather than absent.
+        // Every namespace is reported, known to a panel or not.
         ext: [...byNs.values()]
           .map((s) => ({
             ns: s.ns,

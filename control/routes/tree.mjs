@@ -1,31 +1,18 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// BENCH CONTROL PLANE — TREE / BACKUP / HISTORY / PLAY ROUTES (LI-14 phase 2)
-//
-// Handler bodies moved here BYTE-VERBATIM from server.mjs; the route paths are
-// wire contract — the board calls them byte-identically — and must not change.
-// Shared state comes from ../state.mjs and the non-route helpers from ../lib/:
-// imported, never redefined.
-//
-// Each entry is { method, path, handle(req, res, url) }. server.mjs builds its
-// dispatch table from these at startup and hands each handler the URL it
-// already parsed for the dispatch key, so the bodies stay verbatim.
-// ─────────────────────────────────────────────────────────────────────────────
+// BENCH CONTROL PLANE — TREE / BACKUP / HISTORY / PLAY ROUTES. Each entry is
+// { method, path, handle(req, res, url) }; paths are wire contract with the board.
 
 import { rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { refuse } from "../contract.mjs";
-// THE BENCHMARK TREE. Minting is the control plane's act because the board
-// container mounts the repo read-only — see tree.mjs for the layout and for
-// why a reset rolls forward instead of unlinking.
+// The benchmark tree (see tree.mjs).
 import {
   readTreePointer,
   listCampaignDirs,
   campaignTreeId,
   resetAll,
 } from "../tree.mjs";
-// RESTORE. Listing, checking and putting a backup back — kept out of tree.mjs so
-// the layout rules and the recovery rules can be read (and tested) apart.
+// Restore: listing, checking and putting back a backup (backups.mjs).
 import { listBackups, restoreBackup } from "../backups.mjs";
 import { readDevMode } from "../devmode.mjs";
 import { listRunCells, readCheckpointIndex, readDiffText, readTranscriptText } from "../history.mjs";
@@ -39,11 +26,8 @@ import { stopRun } from "../lib/lifecycle.mjs";
 
 export const routes = [
   {
-    // ── GET /api/tree ────────────────────────────────────────────────────
-    //
-    // Which benchmark tree is live, when it was minted, what is in it, and what
-    // it retired. The board's RESET control reads this to state — before the
-    // operator commits — exactly what is about to become inert.
+    // ── GET /api/tree ── the live tree, when it was minted, what it holds, and
+    // what it retired (read by the RESET dialog).
     method: "GET",
     path: "/api/tree",
     async handle(req, res, url) {
@@ -56,9 +40,7 @@ export const routes = [
       }
       const campaigns = await listCampaignDirs(RUNS_ROOT);
       const active = pointer?.active ?? null;
-      // Reported SEPARATELY rather than summed: "what a reset retires" and
-      // "what is on disk" are different numbers, and a single count would let
-      // an operator read legacy campaigns as part of the live tree.
+      // Campaigns in the live tree vs on disk, reported separately.
       const inTree = active ? campaigns.filter((c) => campaignTreeId(c.relative) === active) : [];
       sendJson(res, 200, {
         ok: true,
@@ -74,15 +56,8 @@ export const routes = [
   },
 
   {
-    // ── POST /api/tree/reset/preview ─────────────────────────────────────
-    //
-    // The restatement the UI must show before RESET fires, composed SERVER-SIDE
-    // for the same reason run preview is: the words the operator reads have to
-    // be the words the server will act on.
-    //
-    // PREVIEW RUNS THE SAME REFUSAL AS THE COMMIT. A preview that green-lights a
-    // reset the commit would refuse moves the refusal to after the operator has
-    // committed — the defect already fixed once on the run path.
+    // ── POST /api/tree/reset/preview ── the restatement shown before RESET,
+    // composed here, with the same refusals as the commit.
     method: "POST",
     path: "/api/tree/reset/preview",
     async handle(req, res, url) {
@@ -103,11 +78,8 @@ export const routes = [
   },
 
   {
-    // ── POST /api/tree/reset ─────────────────────────────────────────────
-    //
-    // Back EVERYTHING up and start a brand new tree. Results, baselines and
-    // run logs all move to runs/backups/<ts>/ — see tree.mjs for
-    // why the sweep is an allow list and what it deliberately leaves running.
+    // ── POST /api/tree/reset ── back up everything and start a new tree (see
+    // tree.mjs for what the sweep moves and leaves).
     method: "POST",
     path: "/api/tree/reset",
     async handle(req, res, url) {
@@ -131,16 +103,12 @@ export const routes = [
         return;
       }
       try {
-        // Stop any in-flight run BEFORE retiring the tree, so the harness's
-        // teardown writes its final artifacts into a tree that still resolves,
-        // and the backup captures them instead of stranding them mid-write.
+        // Stop any run first, so its teardown writes into a tree that still resolves.
         await stopRun();
         const done = await resetAll(RUNS_ROOT);
 
-        // ARCHIVE THE RESULTS LEDGER into the same backup, then start a fresh
-        // one. The ledger is derived data — the tree is authoritative — so a
-        // ledger problem must never block a reset: this whole block fails OPEN,
-        // and a failed archive is reported in the response, not thrown.
+        // Archive the results ledger into the same backup and start a fresh one. The
+        // ledger is derived data, so this fails open and reports rather than blocking.
         let ledger_note;
         try {
           const ledgerSrc = join(BENCH_ROOT, "data", "results-ledger.jsonl");
@@ -172,12 +140,8 @@ export const routes = [
   },
 
   {
-    // ── GET /api/backups ─────────────────────────────────────────────────
-    //
-    // Every reset the bench has ever taken, newest first, each summarised well
-    // enough to choose between them WITHOUT opening a folder: when it was taken,
-    // which models it holds, how many results it carries, and whether it would
-    // pass the restore check.
+    // ── GET /api/backups ── every reset taken, newest first, summarised well
+    // enough to choose between (when, which models, how many results, restorable?).
     method: "GET",
     path: "/api/backups",
     async handle(req, res, url) {
@@ -187,10 +151,7 @@ export const routes = [
   },
 
   {
-    // ── POST /api/backups/restore/preview ────────────────────────────────
-    //
-    // Runs the SAME refusals the restore will run, so a preview can never
-    // green-light a restore the commit would reject.
+    // ── POST /api/backups/restore/preview ── the same refusals as the restore.
     method: "POST",
     path: "/api/backups/restore/preview",
     async handle(req, res, url) {
@@ -202,10 +163,8 @@ export const routes = [
   },
 
   {
-    // ── POST /api/backups/restore ────────────────────────────────────────
-    //
-    // Parks the live bench into its own backup, then moves the chosen one in.
-    // No step overwrites anything — see backups.mjs.
+    // ── POST /api/backups/restore ── park the live bench as its own backup, then
+    // move the chosen one in. Nothing is overwritten (backups.mjs).
     method: "POST",
     path: "/api/backups/restore",
     async handle(req, res, url) {
@@ -248,10 +207,8 @@ export const routes = [
   },
 
   {
-    // ── GET /api/history ─────────────────────────────────────────────────
-    // Every cell of every era, most-recent tree first. Dev mode is measured
-    // once here (the same readDevMode the /api/devmode branch serves) and
-    // broadcast onto every entry by history.mjs — one producer, carried.
+    // ── GET /api/history ── every cell of every era, newest tree first, with dev
+    // mode read once and carried on every entry.
     method: "GET",
     path: "/api/history",
     async handle(req, res, url) {
@@ -268,9 +225,8 @@ export const routes = [
   },
 
   {
-    // ── GET /api/history/checkpoints ─────────────────────────────────────
-    // The cell's checkpoint index + diffs. A run without checkpoint history
-    // degrades to nulls inside ok:true — absence is a state, not a failure.
+    // ── GET /api/history/checkpoints ── a cell's checkpoint index and diffs;
+    // none recorded degrades to nulls inside ok:true.
     method: "GET",
     path: "/api/history/checkpoints",
     async handle(req, res, url) {
@@ -286,9 +242,7 @@ export const routes = [
   },
 
   {
-    // ── GET /api/history/diff ────────────────────────────────────────────
-    // One checkpoint diff as raw text — a diff is read, not parsed, so it is
-    // served verbatim rather than wrapped in JSON.
+    // ── GET /api/history/diff ── one checkpoint diff, raw text.
     method: "GET",
     path: "/api/history/diff",
     async handle(req, res, url) {
@@ -305,8 +259,7 @@ export const routes = [
   },
 
   {
-    // ── GET /api/history/transcript ──────────────────────────────────────
-    // The cell's transcript.md as raw markdown, verbatim.
+    // ── GET /api/history/transcript ── the cell's transcript.md, raw.
     method: "GET",
     path: "/api/history/transcript",
     async handle(req, res, url) {
@@ -322,10 +275,8 @@ export const routes = [
   },
 
   {
-    // ── POST /api/history/delete/preview ─────────────────────────────────
-    //
-    // What deleting this run would remove, in plain words, plus the token that
-    // binds the confirmation to what is actually on disk. Nothing is touched.
+    // ── POST /api/history/delete/preview ── what deleting this run would remove,
+    // plus the token binding the confirmation to what is on disk. Touches nothing.
     method: "POST",
     path: "/api/history/delete/preview",
     async handle(req, res, url) {
@@ -341,13 +292,9 @@ export const routes = [
   },
 
   {
-    // ── POST /api/history/delete ─────────────────────────────────────────
-    //
-    // PERMANENT. Unlike /api/tree/reset — which MOVES everything into
-    // runs/backups/ and can be undone — this removes bytes. It is gated on the
-    // preview's token, refuses the live tree, refuses while a run is in flight,
-    // and refuses any archive whose layout it does not recognise rather than
-    // deleting on a guess.
+    // ── POST /api/history/delete ── permanent (unlike reset, which moves). Needs
+    // the preview's token; refuses the live tree, a run in flight, and any archive
+    // layout it doesn't recognise.
     method: "POST",
     path: "/api/history/delete",
     async handle(req, res, url) {
@@ -363,10 +310,8 @@ export const routes = [
   },
 
   {
-    // ── GET /api/play ────────────────────────────────────────────────────
-    // What is being played right now, or null. Read from the server registry,
-    // never from a variable in this process: the control plane restarts and a
-    // play server outlives it.
+    // ── GET /api/play ── what is playing, from the server registry (a play server
+    // outlives a control-plane restart).
     method: "GET",
     path: "/api/play",
     async handle(req, res, url) {
@@ -376,15 +321,8 @@ export const routes = [
   },
 
   {
-    // ── POST /api/play/start ─────────────────────────────────────────────
-    //
-    // Boot one built result so a person can play it. This is the operator's
-    // own check on what the grading says — see play.mjs for why that matters.
-    //
-    // It does NOT refuse while a cell is in flight. It used to have to: with a
-    // fixed port there was exactly one address and the grader owned it. The
-    // artifact now takes its port from the environment, play assigns a free
-    // one, and the two no longer want the same thing.
+    // ── POST /api/play/start ── boot a built result for a person to play (see
+    // play.mjs). Allowed during a run: play uses a free port, never the grader's.
     method: "POST",
     path: "/api/play/start",
     async handle(req, res, url) {
@@ -402,8 +340,7 @@ export const routes = [
   },
 
   {
-    // ── POST /api/play/stop ──────────────────────────────────────────────
-    // Idempotent: "nothing was running" is a result, not an error.
+    // ── POST /api/play/stop ── idempotent.
     method: "POST",
     path: "/api/play/stop",
     async handle(req, res, url) {

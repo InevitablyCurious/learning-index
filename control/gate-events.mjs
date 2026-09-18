@@ -1,26 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// HARNESS EVENTS — grading progress, tailed from the run log
-//
-// WHY THIS EXISTS (WO-GRADE-VIS-1)
-//
-// The event feed shows what the AGENT does, via the worker's `opencode serve`
-// SSE stream. But grading is HARNESS work, and while it runs the agent is idle
-// by design — so the feed correctly goes quiet and the board becomes
-// indistinguishable from a wedged one.
-//
-// Measured 2026-08-12: an attempt-3 gate ran 1918s (~32 min) against a 45s/113s
-// baseline. For that entire window the gate log did not exist (the harness
-// buffered gate output until exit) and the event feed was silent. The operator
-// had no way to tell "grading" from "stalled" without an agent inspecting
-// process stacks by hand. That is the gap this module closes.
-//
-// It reads the harness's OWN published PROGRESS lines — the same channel the
-// dashboard's run-log source already parses — and republishes the grading ones
-// as feed rows. It does not invent a second telemetry channel, and it never
-// talks to the worker.
-//
-// READ-ONLY: tails a log file. Never writes, never spawns, never signals.
-// ─────────────────────────────────────────────────────────────────────────────
+// HARNESS EVENTS — grading progress from the harness's own PROGRESS lines in
+// the run log. While grading runs the agent is idle and its feed quiet; this
+// tells grading apart from a wedge. Only gate.status (the grading indicator) is
+// used by the event feed now; the rows live in the backend feed. Read-only.
 
 import { GATE_STALL_THRESHOLD_S } from "./contract.mjs";
 import { newestLog, readTail } from "./runstate.mjs";
@@ -35,15 +16,8 @@ function parseKV(line) {
 }
 
 /**
- * Extract grading events from run-log text, in order.
- *
- * DEDUPE: every PROGRESS line is emitted TWICE by the harness (once through the
- * structured logger, once bare) — verified on disk, and the reason the
- * dashboard's run-log source keys its deltas by phase. Here the whole line
- * (minus its timestamp) is the key, so each real event yields exactly one row
- * instead of a visibly doubled feed.
- *
- * Returns rows in the BoardEvent shape used by EventRing, with `kind:"harness"`.
+ * Grading events from run-log text, in order, as BoardEvent rows. Every
+ * PROGRESS line is logged twice, so the line minus its timestamp is the dedupe key.
  */
 export function parseGateEvents(text) {
   const rows = [];
@@ -55,18 +29,14 @@ export function parseGateEvents(text) {
     const step = kv.step;
     if (!step || !step.startsWith("gate-")) continue;
 
-    // Identity excludes the leading timestamp so the duplicate pair collapses.
+    // Excluding the timestamp collapses the duplicate pair.
     const idx = raw.indexOf("PROGRESS");
     const key = idx >= 0 ? raw.slice(idx).trim() : raw.trim();
     if (seen.has(key)) continue;
     seen.add(key);
 
-    // THE DEDUPE KEY IS ALSO THE ROW'S IDENTITY, and it is now carried.
-    //
-    // These rows are rebuilt from the log on EVERY poll, so the consumer needs
-    // a way to tell "the same harness event, seen again" from "a new one".
-    // Without it the feed cannot admit them once — see the EventRing.admit()
-    // contract and the re-append defect it closes.
+    // The dedupe key is also the row's id, so a row rebuilt every poll is admitted
+    // once (EventRing.admit).
     const row = rowFor(step, kv);
     if (row) row.id = `harness:${key}`;
     rows.push(row);
@@ -102,9 +72,7 @@ function rowFor(step, kv) {
       return base;
 
     case "gate-phase-end": {
-      // A failing gate phase is a normal, expected measurement outcome — the
-      // whole point of the benchmark is that gates fail. It must NEVER be
-      // rendered as an error, or a working run looks broken.
+      // A failing gate phase is a normal outcome, never an error.
       base.name = `gate:${kv.phase ?? "?"}`;
       const problems = kv.problems && kv.problems !== "unknown" ? ` · ${kv.problems} problems` : "";
       base.detail = `${kv.phase ?? "?"} ${kv.status ?? "done"}${problems}`;
@@ -112,8 +80,7 @@ function rowFor(step, kv) {
     }
 
     case "gate-timeout":
-      // The one genuine error in this family: the gate was KILLED and the
-      // attempt was never graded.
+      // The one real error here: the gate was killed and the attempt never graded.
       base.kind = "error";
       base.name = "gate timeout";
       base.detail = `gate killed after ${kv.wall_s ?? "?"}s (limit ${kv.limit_s ?? "?"}s) — attempt not graded`;
@@ -126,17 +93,8 @@ function rowFor(step, kv) {
 }
 
 /**
- * Current grading status derived from the ordered event rows.
- *
- * `active` is true when a phase has STARTED and not yet ENDED. That pairing is
- * what makes an in-phase hang visible: phase markers alone would show the last
- * phase that began and look identical whether it finished or not.
- *
- * Elapsed is measured from the gate log's MTIME, never from a parsed timestamp
- * — the harness writes naive local timestamps and `Date.parse` resolves them
- * against the READER's timezone, which produced a constant phantom 7.1h silence
- * in a UTC container (see contract.mjs STALL_THRESHOLD_S). mtime is an absolute
- * epoch and needs no agreement between writer and reader.
+ * Grading status from the ordered rows: `active` while a phase has started and
+ * not ended. Elapsed comes from the gate log's mtime, never a parsed timestamp.
  */
 export function gradingStatus(rows, { logMtimeMs = null, now = Date.now() } = {}) {
   let phase = null;
@@ -144,25 +102,9 @@ export function gradingStatus(rows, { logMtimeMs = null, now = Date.now() } = {}
   let attempt = null;
   let timedOut = false;
 
-  // ── PER-PHASE RESULTS (added 2026-08-13) ────────────────────────────────
-  //
-  // THE GAP THIS FILLS: the harness publishes a real, quantified result for
-  // every grading phase as it completes —
-  //   step=gate-phase-end phase=conformance status=fail problems=3
-  //   step=gate-phase-end phase=backend     status=fail problems=2
-  // — but the only consumer of gate data on the board was `wall.gates`, which
-  // is built from manifest.status.jsonl and is written ONLY AT ATTEMPT END.
-  //
-  // The consequence the operator hit: grading ran for minutes, three phases
-  // reported real failures, and the GATE WALL sat at zero gates showing "the
-  // grader has not run yet" — which was false, and unresponsive-looking,
-  // precisely when there was something to watch.
-  //
-  // These are NOT gate identities and must never be rendered as squares: a
-  // phase problem count is a different measurement from a named failing gate,
-  // and conflating them would invent gates that do not exist. They are carried
-  // as their own list so the panel can state what the grader has found SO FAR,
-  // clearly labelled as in-flight and provisional.
+  // Per-phase results (conformance/backend/frontend status and problem count)
+  // as each phase ends, so the board shows what grading has found so far. Phase
+  // problem counts are not gates and are never drawn as squares; provisional.
   const phases = [];
 
   for (const r of rows) {
@@ -170,8 +112,7 @@ export function gradingStatus(rows, { logMtimeMs = null, now = Date.now() } = {}
       attempt = r.detail?.match(/attempt (\S+)/)?.[1] ?? attempt;
       phase = null;
       active = true;
-      // A new attempt re-grades from scratch; last attempt's phase results are
-      // not this attempt's.
+      // A new attempt re-grades from scratch.
       phases.length = 0;
     } else if (r.type === "harness:gate-phase-start") {
       phase = r.phase;
@@ -182,7 +123,7 @@ export function gradingStatus(rows, { logMtimeMs = null, now = Date.now() } = {}
     } else if (r.type === "harness:gate-phase-end") {
       phase = r.phase;
       active = false;
-      // `detail` is composed as "<phase> <status> · <n> problems" by rowFor().
+      // `detail` is "<phase> <status> · <n> problems" (rowFor).
       const st = r.detail?.match(/^\S+\s+(\S+)/)?.[1] ?? null;
       const probs = r.detail?.match(/·\s*(\d+)\s+problems/)?.[1] ?? null;
       const existing = phases.find((p) => p.phase === r.phase);
@@ -213,24 +154,17 @@ export function gradingStatus(rows, { logMtimeMs = null, now = Date.now() } = {}
     phase,
     attempt,
     timed_out: timedOut,
-    // Seconds since the gate log was last written while a phase is open.
+    // Seconds since the gate log was written while a phase is open.
     silent_s: elapsed,
     stall_threshold_s: GATE_STALL_THRESHOLD_S,
-    // The operator-facing verdict. Deliberately a derived boolean rather than a
-    // colour: the panel decides presentation, this decides truth.
+    // A boolean verdict; the panel decides presentation.
     stalled: elapsed !== null && elapsed >= GATE_STALL_THRESHOLD_S,
-    // Per-phase progress. PROVISIONAL BY CONSTRUCTION — the authoritative gate
-    // list still lands in manifest.status.jsonl at attempt end.
+    // Provisional: the authoritative gate list lands at attempt end.
     phases,
   };
 }
 
-/**
- * Read grading events + status for the active run.
- *
- * Tail-bounded like every other reader here: a multi-hour log costs the same as
- * a fresh one.
- */
+/** Grading events and status for the active run; tail-bounded. */
 export async function readGateActivity(runsRoot) {
   const log = await newestLog(runsRoot);
   if (!log) return { rows: [], status: null, log: null };
