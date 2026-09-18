@@ -1,113 +1,44 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// CLOUD BASELINES — the models this bench can measure that are not resident
+// CLOUD BASELINES — models the bench can measure that are not resident. The
+// harness runs a cloud cell with --cloud (slug {router}/{provider}/{model},
+// checked against the OrcaRouter block in harness/config.py); this lets the board
+// launch one.
 //
-// ── WHY THIS FILE EXISTS ────────────────────────────────────────────────────
-//
-// The harness has been able to run a cloud cell for as long as `--cloud` has
-// existed (`scripts/run_cumulative.py`, `_compose_cloud_slug`): it composes the
-// slug `{router}/{provider}/{model}`, checks it against the OrcaRouter provider
-// block in `harness/config.py`, and routes the cell straight at the vendor
-// instead of the local relay. THE CONTROL PLANE COULD NOT REACH ANY OF IT. The
-// board's only launch path built a local invocation, so the bench could measure
-// exactly one class of model and the operator's answer to "benchmark a frontier
-// model against this corpus" was to leave the board and use the CLI.
-//
-// ── A MIRROR, AND THE MIRROR IS DELIBERATE ──────────────────────────────────
-//
-// The catalogue below is a copy of `CLOUD_ORCAROUTER_PROVIDER["models"]`. The
-// control plane is JS and the registry is Python, so there is no shared import —
-// the same standing condition that makes `roster.mjs` mirror the worker context
-// registry rather than reading it. The copy is PINNED BY A DRIFT TEST
-// (control.test.mjs) against config.py, so a model added on one side and not the
-// other fails a test rather than presenting as "that model does not exist".
-//
-// ── THE KEY IS RESOLVED HERE AND NEVER LEAVES ───────────────────────────────
-//
-// A cloud cell needs ORCAROUTER_API_KEY. It is resolved SERVER-SIDE, from the
-// same two places `harness/spend_key.py` reads — the environment, then the
-// dotenv-format key file (`config/cloud.env`, mode 0600) — and it is NEVER sent
-// to the browser and never accepted FROM the browser. What crosses the wire is
-// `{present, source, fingerprint}`: enough for the board to state whether a
-// cloud launch can succeed and where the key came from, and useless to anyone
-// who intercepts it.
-//
-// A KEY FIELD IN THE MODAL WOULD BE THE OBVIOUS DESIGN AND IT IS THE WRONG ONE.
-// It would put a live credential in page memory, in the POST body, and in
-// whatever the browser decides to autofill — to configure something that is
-// already configured on disk, on a service that runs on the same machine.
-//
-// ── MONEY IS NOT A DETAIL ───────────────────────────────────────────────────
-//
-// A local cell costs hours. A cloud cell costs hours AND money, and the ceiling
-// is real: the proxy refuses a reservation above ABSOLUTE_MAX_USD per cell. That
-// number is mirrored here so the confirmation card can state the ceiling the
-// operator is committing to, in the same breath as the model name.
-// ─────────────────────────────────────────────────────────────────────────────
+// The catalogue mirrors config.py (JS cannot import Python) and a drift test in
+// control.test.mjs pins the two. The API key is resolved here from the
+// environment or config/cloud.env and never sent to or accepted from the
+// browser: only {present, source, fingerprint} crosses the wire. The per-cell
+// spend ceiling is mirrored so the confirmation can state it.
 
 import { promises as fs } from "node:fs";
 import { ROUTERS, resolveRouterKey } from "./routers.mjs";
 import { join } from "node:path";
 
-/**
- * The router the composed slug names. `run_cumulative.py` defaults to this when
- * `--router` is absent, and the slug it builds is `{router}/{provider}/{model}`.
- * Mirrors config.DEFAULT_CLOUD_ROUTER.
- */
+/** The router the slug names (mirrors config.DEFAULT_CLOUD_ROUTER). */
 const DEFAULT_CLOUD_ROUTER = "orcarouter";
 
 /** Mirrors spend_key.CLOUD_API_KEY_ENV. */
 export const CLOUD_API_KEY_ENV = "ORCAROUTER_API_KEY";
 
 /**
- * The per-cell spend ceiling, mirrored from
- * `harness/adapters/openrouter_proxy.py` ABSOLUTE_MAX_USD.
- *
- * STATED ON THE CONFIRMATION CARD rather than left in the proxy. An operator
- * committing to a cloud cell is committing to a bill, and the one number that
- * bounds it should not require reading the adapter to find.
+ * The per-cell spend ceiling (mirrors openrouter_proxy.py), stated on the
+ * confirmation card.
  */
 export const ABSOLUTE_MAX_USD = 12.0;
 
 /**
- * THE CATALOGUE — mirror of config.CLOUD_ORCAROUTER_PROVIDER["models"].
- *
- * Keyed by the `{provider}/{model}` key the harness validates against, which is
- * exactly what `--provider` and `--model` are split from. Storing the key in the
- * shape the harness checks means the control plane cannot compose a slug the
- * harness will reject: the two agree by construction rather than by care.
+ * The catalogue (mirror of config.CLOUD_ORCAROUTER_PROVIDER["models"]), keyed
+ * by the {provider}/{model} key the harness validates.
  */
 /**
- * ADVISORY, NOT A GATE. Below this window the board badges the model with its
- * actual context and a caveat; it never hides it.
- *
- * The benchmark measures an INFORMATION DELTA WITHIN one model — the same model
- * runs OFF then ON repeatedly, so it is its own control and its window cancels
- * out of its own delta. A narrow window does not bias the measurement. What it
- * risks is the cell hitting the provider's context ceiling mid-run, which is a
- * runnability caveat the operator weighs, not a decision the picker makes for them.
+ * Advisory, not a gate: a narrower window is badged, never hidden. It cannot
+ * bias a within-model delta; it risks hitting the provider's ceiling mid-run.
  */
 export const CONTEXT_ADVISORY_FLOOR = 262144;
 
 /**
- * THE CEILING BELOW WHICH CHUNK-BOUNDARY COMPACTION DEFAULTS ON.
- *
- * A model with less than this much room runs out of it during the six-chunk
- * build, and arrives at the repair phase unable to see which steps it has
- * already solved and why — the exact capability the troubleshooting phase
- * needs. Compaction spends the build narration (already committed to files) to
- * buy that room back.
- *
- * DELIBERATELY A SEPARATE NUMBER FROM `CONTEXT_ADVISORY_FLOOR`, which is a
- * different question wearing a similar shape: that one asks "will this cell hit
- * the provider ceiling and die", this one asks "will the build crowd out the
- * repair". Collapsing them into one constant would silently couple the
- * compaction default to the narrow-context badge, so that moving either number
- * for its own reasons would move the other for none.
- *
- * A DEFAULT, NOT A GATE. The operator sets the toggle; this only decides where
- * it starts. Applies to BOTH substrates — a 200k cloud model has the same
- * problem a 262k local one does, and the model does not care which side of the
- * relay it sits on.
+ * Below this context window, chunk-boundary compaction defaults on (the build
+ * would crowd out the repair phase). Separate from CONTEXT_ADVISORY_FLOOR, which
+ * asks a different question. A default, not a gate; both substrates.
  */
 export const COMPACT_DEFAULT_CEILING = 524288;
 
@@ -231,13 +162,7 @@ export const CLOUD_MODELS = {
   "z-ai/glm-5.3-flash": { name: "GLM 5.3 Flash", context: 1000000, output: 128000 },
 };
 
-/**
- * The catalogue as rows, provider first.
- *
- * The board's model picker filters by provider and by text, so it needs the
- * provider as its own field rather than a prefix to be re-split in the browser.
- * One split, here, and every consumer reads the same answer.
- */
+/** The catalogue as rows, with the provider as its own field. */
 export function cloudCatalog() {
   return Object.entries(CLOUD_MODELS).map(([key, m]) => {
     const [provider, model] = splitCloudKey(key);
@@ -248,8 +173,7 @@ export function cloudCatalog() {
       name: m.name,
       context: m.context,
       output: m.output,
-      // Surfaced so the picker can badge it. `null` when the window is ample —
-      // an absent note renders nothing, which is the common case.
+      // For the picker's badge.
       below_advisory_floor: m.context < CONTEXT_ADVISORY_FLOOR,
       context_note:
         m.context < CONTEXT_ADVISORY_FLOOR
@@ -258,9 +182,7 @@ export function cloudCatalog() {
             "OpenCode fires emergency compaction at 95% so the provider does not error out, " +
             "but compaction is not enabled by default here and a compacted run measures a different thing."
           : null,
-      // The slug the manifest will record, composed the same way
-      // `_compose_cloud_slug` composes it. Shown on the confirmation card so
-      // the operator sees the identity that will be frozen, not a paraphrase.
+      // The slug the manifest will record, shown on the confirmation card.
       slug: `${DEFAULT_CLOUD_ROUTER}/${key}`,
     };
   });
@@ -272,10 +194,8 @@ function cloudProviders() {
 }
 
 /**
- * Split a `{provider}/{model}` key. Returns `[null, null]` for anything that is
- * not exactly two segments — a key with three segments is a composed slug that
- * still carries its router, and treating it as a provider key would compose
- * `orcarouter/orcarouter/...` and fail at the harness with a confusing message.
+ * Split a {provider}/{model} key; anything but two segments is [null, null]
+ * (a three-segment slug still carries its router).
  */
 function splitCloudKey(key) {
   const parts = String(key ?? "").split("/").filter(Boolean);
@@ -284,11 +204,8 @@ function splitCloudKey(key) {
 }
 
 /**
- * Is this a model the bench can route to the cloud, and if not, WHY not.
- *
- * Returns the same `{ok, code, reason}` shape every other gate in this service
- * returns, so a refusal here renders through the board's existing refusal path
- * rather than needing one of its own.
+ * Can the bench route this model to the cloud, and if not, why — in the
+ * standard {ok, code, reason} refusal shape.
  */
 export function resolveCloudModel(key) {
   const k = String(key ?? "").trim();
@@ -327,35 +244,17 @@ export function resolveCloudModel(key) {
 }
 
 /**
- * WHERE THE KEY COMES FROM, AND WHETHER IT IS THERE.
- *
- * The environment wins over the file, mirroring spend_key: a key exported into
- * the control plane's own environment is the one the spawned harness inherits,
- * so reporting the file's key while the harness would use the environment's
- * would be a report about a run that is not the one about to happen.
- *
- * NEVER RETURNS THE KEY. The fingerprint is returned instead — it identifies
- * WHICH key is in play (the useful question when two are configured) and
- * discloses nothing. This object is published to the browser.
+ * Where the key comes from, and whether it is there: environment first (what
+ * the spawned harness inherits), then the file. Never returns the key, only its
+ * fingerprint.
  */
 export async function readCloudKey({ benchRoot, env = process.env } = {}) {
-  // ONE RESOLVER. This used to look only at the env var and config/cloud.env,
-  // while the Routers panel looked in three places — so the board could report a
-  // key present and this could still report a cloud cell unable to authenticate.
-  // Two resolvers for one credential is how a greyed-out button outlives the
-  // problem that caused it. The router registry is the single answer now.
+  // One resolver: the router registry (shared with the Routers panel).
   const router = ROUTERS.find((r) => r.id === DEFAULT_CLOUD_ROUTER) ?? ROUTERS[0];
   return resolveRouterKey(router, { benchRoot, env });
 }
 
-/**
- * The whole cloud capability, in one object.
- *
- * Assembled here rather than in the route so the launch gate and the board read
- * the SAME answer — a picker that offers a model the launch would refuse for
- * want of a key is the class of lie this codebase spends most of its comments
- * refusing to tell.
- */
+/** The whole cloud capability, shared by the launch gate and the board. */
 export async function readCloud({ benchRoot, env = process.env } = {}) {
   const key = await readCloudKey({ benchRoot, env });
   return {
@@ -365,13 +264,12 @@ export async function readCloud({ benchRoot, env = process.env } = {}) {
     providers: cloudProviders(),
     models: cloudCatalog(),
     key,
-    // The ceiling belongs beside the models, not in a footnote: it is the
-    // number that bounds what a confirmation on this surface costs.
+    // The ceiling travels with the models.
     spend_ceiling_usd: ABSOLUTE_MAX_USD,
     spend_note:
       `the proxy refuses any reservation above $${ABSOLUTE_MAX_USD.toFixed(2)} for a single cell. ` +
       "That is a hard ceiling on one cell, not a budget for the campaign.",
-    // ONE PLACE SAYS WHETHER A CLOUD CELL CAN START AT ALL.
+    // The one answer to whether a cloud cell can start.
     can_start: key.present,
     can_start_reason: key.present ? null : key.reason,
   };

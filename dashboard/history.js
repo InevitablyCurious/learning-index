@@ -1,17 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// HISTORY PAGE — standalone /history for the bench board.
-//
-// The board (:8717) shows the live run; this page shows the RECORD: every
-// benchmark run the control plane (:8718) knows about, its check-points, the
-// files each check-point changed, and the stored unified diffs rendered
-// side-by-side. All data arrives over plain fetch() from the control plane —
-// there is no shared sources/ module (those are server-side only).
-//
-// HOUSE RULE: nothing in this module touches `document` or `fetch` at the top
-// level, so `import "./history.js"` under Node is side-effect-free and tests
-// can exercise the pure renderers and the loaders (with a stubbed fetch).
-// The ONLY caller of boot() is the inline module script in history.html.
-// ─────────────────────────────────────────────────────────────────────────────
+// HISTORY PAGE — /history: every run the control plane knows, its
+// checkpoints, the files each changed and the stored diffs side by side.
+// Nothing touches `document` or `fetch` at module load, so tests can import it
+// under Node; boot() is called only by history.html.
 
 /** Escape everything that reaches the DOM. Paths and reasons are data, not HTML. */
 function esc(s) {
@@ -20,33 +10,20 @@ function esc(s) {
   })[c]);
 }
 
-// ── module state ────────────────────────────────────────────────────────────
-// Mutated ONLY by the loaders and the click handlers below; read by paint().
+// ── module state ── mutated only by loaders and click handlers.
 
 const runsUi = { runs: [], loading: false, error: null };
-// "view result": which row is booting, what is playing, and the last refusal.
+// Which row is booting, what is playing, the last refusal.
 const playUi = { busy: null, playing: null, error: null };
-// Delete is PERMANENT and is two steps: a preview that restates exactly what
-// goes, and a confirm carrying the token that binds to what is on disk. `plan`
-// holds the pending preview; nothing is removed until it is confirmed.
+// Delete is permanent and two-step: a preview restating what goes, then a
+// confirm carrying the token bound to what is on disk.
 const delUi = { plan: null, busy: null };
 const cpsUi = { checkpoints: null, diffs: null, loading: false, error: null };
 const diffUi = { diffText: null, diffPath: null, loading: false, error: null };
 const selection = { run: null, cell: null, cp: null };
 
-// ── toasts ──────────────────────────────────────────────────────────────────
-//
-// THE RULE THESE EXIST TO SERVE: standardise the VIEW, never the data.
-//
-// This bench's history is heterogeneous by nature — runs stopped early, trees
-// written before conventions this code knows about, cells that never got as far
-// as a build. None of that gets normalised or repaired on the way to the screen.
-// Each row is shown as what it is, and anything that cannot be shown or done
-// says WHY, in a sentence that can be copied and handed to someone else without
-// re-deriving the context.
-//
-// So every toast carries: a code, a reason, and where it happened — and a copy
-// button that yields all three as one pasteable block.
+// ── toasts ── the view is standardised, never the data: every problem shows as
+// a toast with a code, a reason and where it happened, plus a copy button.
 
 const toasts = { items: [], seq: 0 };
 
@@ -87,11 +64,7 @@ function paintToasts() {
   if (el) el.innerHTML = renderToasts(toasts);
 }
 
-/**
- * Raise a toast. Never throws, never dedupes away a repeat: the same failure
- * happening twice is two facts, and collapsing them has hidden a real one
- * before (a surface that showed one message for eleven findings).
- */
+/** Raise a toast. Never dedupes: the same failure twice is two facts. */
 export function toast({ code, reason, where = null, detail = null, bad = true }) {
   const item = {
     id: `t${++toasts.seq}`,
@@ -123,7 +96,7 @@ export async function copyToast(id) {
       return true;
     }
   } catch {
-    // Clipboard denied (insecure origin, permissions). Fall through.
+    // Clipboard denied: fall through.
   }
   return false;
 }
@@ -133,8 +106,7 @@ export function currentToasts() {
   return toasts.items;
 }
 
-// ── pure renderers ──────────────────────────────────────────────────────────
-// Each returns an HTML string. No DOM access, no fetch — tests import these.
+// ── pure renderers ── HTML strings, no DOM, no fetch.
 
 /** One run row. Carries data-run + data-cell for the delegated click. */
 export function renderRunRow(run) {
@@ -143,19 +115,14 @@ export function renderRunRow(run) {
     ? `<span class="dev-on">enabled</span> <span class="dev-src">${esc(r.dev_mode_source ?? "")}</span>` +
       (r.dev_mode_file ? `<span class="hist-sub dev-file">${esc(r.dev_mode_file)}</span>` : "")
     : `<span class="dev-off">off</span>`;
-  // The play control is a SIBLING of the row button, not a child: a button
-  // inside a button is invalid markup and the inner click never arrives.
+  // The play control is a sibling of the row button (no button inside a button).
   const id = `${r.benchmark_id}::${r.cell}`;
-  // `tree_id` is the run's own identity; `benchmark_id` is the resolvable
-  // half and reads "backups" for every archived row. Showing the latter would
-  // label a dozen different runs identically.
+  // Show tree_id: benchmark_id reads "backups" for every archived row.
   const treeId = r.tree_id ?? r.benchmark_id;
   const era = r.archived
     ? `<span class="hist-era">archived</span>`
     : `<span class="hist-era live">live tree</span>`;
-  // An unrecognised layout is shown as unrecognised. The row still resolves —
-  // its (benchmark_id, cell) pair is untouched — but nothing here invents an
-  // identity the path did not carry.
+  // An unrecognised layout is shown as such; no identity is invented.
   const idLabel = r.unreadable
     ? `<span class="hist-none">unrecognised</span>`
     : esc(treeId);
@@ -218,10 +185,8 @@ export function renderCheckpoints(state) {
 }
 
 /**
- * The files changed AT one check-point: the diffs[] entry whose `to` === cpId.
- * The first check-point has no such entry — that is the baseline, and we say so.
- * data-file carries the diff PATH (the files[].diff value); data-change carries
- * the change kind as an ATTRIBUTE — never an interpolated class name.
+ * The files changed at one checkpoint (the diff whose `to` is cpId); the first
+ * checkpoint is the baseline. The change kind is an attribute, not a class.
  */
 export function renderFiles(checkpoints, diffs, cpId) {
   const list = Array.isArray(diffs) ? diffs : [];
@@ -244,10 +209,7 @@ export function renderFiles(checkpoints, diffs, cpId) {
   }).join("");
 }
 
-/**
- * The diff pane. Renders via the vendored diff2html UMD global; if the vendor
- * file failed to load we say so honestly — never a spinner, never a blank.
- */
+/** The diff pane, via the vendored diff2html; if it failed to load, say so. */
 export function renderDiff(state) {
   if (state?.loading) return `<div class="hist-note">reading diff…</div>`;
   if (state?.error) return `<div class="hist-error" role="alert">${esc(state.error)}</div>`;
@@ -264,7 +226,7 @@ export function renderDiff(state) {
   return caption + `<div class="hist-d2h">${d2h.html(state.diffText, { outputFormat: "side-by-side" })}</div>`;
 }
 
-// ── paint ───────────────────────────────────────────────────────────────────
+// ── paint ──
 
 /** The last "view result" refusal, verbatim. Never a spinner, never silence. */
 export function renderPlayNote(state) {
@@ -272,10 +234,7 @@ export function renderPlayNote(state) {
   if (s.error) return `<div class="hist-error" role="alert">${esc(s.error)}</div>`;
   if (s.playing) {
     const p = s.playing;
-    // A build that answers /health but not / is the seeded-not-yet-built case:
-    // the scaffold ships a working health route and a serveStatic that throws.
-    // Saying which it is here is the difference between a useful check and a
-    // tab full of {"error":"Error: not implemented"}.
+    // Answers /health but not /: seeded and not yet built. Say which.
     const bad = p.page_status != null && p.page_status !== 200;
     const unread = p.page_status == null && p.page_excerpt;
     const warn =
@@ -297,14 +256,7 @@ export function renderPlayNote(state) {
   return "";
 }
 
-/**
- * The delete confirmation: the server's own restatement, verbatim.
- *
- * The sentence is NOT composed here. The control plane computed it from what is
- * actually on disk and issued a token bound to that; re-wording it in the
- * browser would let the two drift and would show an operator a promise the
- * server never made.
- */
+/** The delete confirmation: the server's own restatement, verbatim. */
 export function renderDeleteConfirm(state) {
   const p = state?.plan;
   if (!p) return "";
@@ -349,9 +301,8 @@ function paint() {
   root.innerHTML = renderPage();
 }
 
-// ── loaders ─────────────────────────────────────────────────────────────────
-// Every request is same-origin; the dashboard relays it to the control plane.
-// Loaders mutate module state and re-paint. Errors surface the server's `reason` — never a spinner.
+// ── loaders ── same-origin requests (the dashboard relays them); errors show
+// the server's reason.
 
 /** GET /api/history → the run list, most-recent-first. */
 export async function loadRuns() {
@@ -397,7 +348,7 @@ export async function loadCheckpoints(run, cell) {
         where: `GET /api/history/checkpoints · ${run} · ${cell}`,
       });
     } else {
-      // The contract: checkpoints/diffs are null when nothing was captured.
+      // null when nothing was captured.
       cpsUi.checkpoints = Array.isArray(data?.checkpoints) ? data.checkpoints : null;
       cpsUi.diffs = Array.isArray(data?.diffs) ? data.diffs : null;
     }
@@ -439,22 +390,15 @@ export async function loadDiff(run, cell, diffPath) {
 }
 
 /**
- * The address the OPERATOR's device can actually open.
- *
- * The control plane spawns the artifact on the bench host and reports
- * `http://localhost:<port>/` — true on that host, false from every other
- * device on the LAN (an iPad's localhost is the iPad). The artifact binds
- * every interface, so the port is reachable at the hostname this page itself
- * was served from; only the host needs swapping, and only the browser knows
- * it. Falls back to the spawner's url verbatim when there is no usable port
- * or no hostname to swap in (a refusal carries no port; Node has no location).
+ * The address this device can open: the spawner reports localhost, so keep its
+ * port and swap in the host this page was served from. Falls back to the
+ * spawner's url when there is no port or no hostname.
  */
 export function playUrl(port, serverUrl) {
   const hostname = globalThis.location?.hostname;
   const p = Number(port);
   if (!hostname || !Number.isInteger(p) || p < 1 || p > 65535) return serverUrl;
-  // A browser hands back an IPv6 hostname already bracketed; anything else
-  // carrying a colon needs brackets before a port can follow it.
+  // IPv6 hosts need brackets before a port.
   const host = hostname.includes(":") && !hostname.startsWith("[") ? `[${hostname}]` : hostname;
   return `http://${host}:${p}/`;
 }
@@ -465,8 +409,7 @@ export async function loadPlaying() {
     const res = await fetch(`/api/play`);
     const data = await res.json().catch(() => null);
     const playing = data?.playing ?? null;
-    // The spawner's url names the bench host; the operator may be elsewhere
-    // on the LAN. Same port, this browser's host — see playUrl.
+    // Same port, this browser's host (see playUrl).
     playUi.playing = playing ? { ...playing, url: playUrl(playing.port, playing.url) } : null;
   } catch {
     playUi.playing = null;
@@ -476,14 +419,8 @@ export async function loadPlaying() {
 }
 
 /**
- * Boot one built result and open it.
- *
- * The POST rides the same-origin relay: the dashboard proxies BOTH GETs and
- * POSTs to the loopback control plane — writes are proxied, not performed by
- * the dashboard — exactly as it does for starting a run. The PORT comes from
- * the spawner (only it knows what it assigned); the HOST comes from this
- * page's own address, so an operator on an iPad opens the bench's LAN name
- * and not the iPad itself — see playUrl.
+ * Boot one built result and open it (through the relay). The port comes from
+ * the spawner, the host from this page.
  */
 export async function startPlay(run, cell, openTab) {
   playUi.error = null;
@@ -499,9 +436,8 @@ export async function startPlay(run, cell, openTab) {
     if (!res.ok || data?.ok === false) {
       playUi.error = data?.reason ?? `HTTP ${res.status}`;
       playUi.playing = null;
-      // The named refusals — no_build, no_entrypoint, port_ignored,
-      // boot_failed, invalid_run — reach the operator verbatim, with the row
-      // they came from, ready to paste.
+      // Named refusals (no_build, no_entrypoint, port_ignored, boot_failed,
+      // invalid_run) reach the operator verbatim, with their row.
       toast({
         code: data?.code ?? `http_${res.status}`,
         reason: playUi.error,
@@ -509,8 +445,7 @@ export async function startPlay(run, cell, openTab) {
       });
       return null;
     }
-    // One rewritten url feeds the stored state, the toast, and the tab, so
-    // every surface the operator sees names a host their device can reach.
+    // One rewritten url for the state, the toast and the tab.
     const url = playUrl(data.port, data.url);
     playUi.playing = {
       run,
@@ -522,12 +457,8 @@ export async function startPlay(run, cell, openTab) {
       page_excerpt: data.page_excerpt ?? null,
       debug_seam_open: data.debug_seam_open ?? null,
     };
-    // It booted — but a build that answers /health and not / is the
-    // seeded-not-yet-built case, and that deserves the same pasteable sentence
-    // as an outright refusal rather than a surprise 500 in a new tab.
-    // REQ-DEBUG says the debug routes must 404 without DEBUG_API. No gate can
-    // check it — every gate boots the candidate WITH the seam on — so playing
-    // the shipped configuration is the only place it is observable.
+    // The shipped configuration must 404 the debug routes (REQ-DEBUG); gates always
+    // boot with the seam on, so playing it is the only place to see that.
     if (data.debug_seam_open === true) {
       toast({
         code: "debug_seam_open",
@@ -578,12 +509,8 @@ export async function stopPlay() {
 }
 
 /**
- * Step one: ask what would go. Nothing is removed.
- *
- * A refusal here — the live tree, a run in flight, an archive whose layout the
- * server does not recognise — is toasted with its code and reason and no
- * confirmation is offered. There is deliberately no "force": a shape this code
- * does not understand is not a shape it should delete.
+ * Step one: ask what would go; nothing is removed. A refusal is toasted and
+ * no confirmation offered; there is no force.
  */
 export async function previewDelete(run, cell) {
   delUi.plan = null;
@@ -668,7 +595,7 @@ export function cancelDelete() {
   paint();
 }
 
-// ── click handling ──────────────────────────────────────────────────────────
+// ── click handling ──
 
 /** Open the played game. Separate so tests can drive startPlay without a window. */
 function openInTab(url) {
@@ -706,8 +633,8 @@ function onFileClick(diffPath) {
 }
 
 /**
- * Attach ONE delegated click listener on the page root and kick off the first
- * load. Dispatch is innermost-first: [data-file] → [data-cp] → [data-run].
+ * One delegated click listener on the page root, innermost first:
+ * [data-file] → [data-cp] → [data-run].
  */
 export function boot() {
   if (typeof document === "undefined") return;
@@ -716,16 +643,14 @@ export function boot() {
   root.addEventListener("click", (event) => {
     const el = event.target && typeof event.target.closest === "function" ? event.target : null;
     if (!el) return;
-    // Play controls are dispatched FIRST and are siblings of the row button, so
-    // clicking "view result" never also selects the row.
+    // Play controls first, so they never also select the row.
     const copyEl = el.closest("[data-toast-copy]");
     if (copyEl) { copyToast(copyEl.getAttribute("data-toast-copy")); return; }
     const closeEl = el.closest("[data-toast-close]");
     if (closeEl) { dismissToast(closeEl.getAttribute("data-toast-close")); return; }
     const stopEl = el.closest("[data-play-stop]");
     if (stopEl) { stopPlay(); return; }
-    // Delete: preview, then confirm. Both before the row branch, so neither
-    // also selects the row underneath.
+    // Delete controls also before the row branch.
     if (el.closest("[data-del-go]")) { confirmDelete(); return; }
     if (el.closest("[data-del-cancel]")) { cancelDelete(); return; }
     const delEl = el.closest("[data-del-run]");
@@ -738,8 +663,7 @@ export function boot() {
       const run = playEl.getAttribute("data-play-run");
       const cell = playEl.getAttribute("data-play-cell");
       const live = playUi.playing && `${playUi.playing.run}::${playUi.playing.cell}` === `${run}::${cell}`;
-      // Already up: just open it again. Re-spawning would kill the game the
-      // operator is in the middle of and hand them a fresh board.
+      // Already up: reopen it (re-spawning would kill the game in progress).
       if (live && playUi.playing.url) { openInTab(playUi.playing.url); return; }
       startPlay(run, cell, openInTab);
       return;
@@ -751,9 +675,7 @@ export function boot() {
     const runEl = el.closest("[data-run]");
     if (runEl) { onRunClick(runEl.getAttribute("data-run"), runEl.getAttribute("data-cell")); }
   });
-  // Toasts live outside #history-root (fixed to the viewport), so their copy
-  // and dismiss clicks need their own delegated listener — the root's never
-  // sees them.
+  // Toasts sit outside #history-root, so they get their own listener.
   const toastRoot = document.getElementById("toasts");
   if (toastRoot) {
     toastRoot.addEventListener("click", (event) => {

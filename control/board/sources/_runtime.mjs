@@ -1,17 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// SOURCE MODULE RUNTIME
-//
-// Every source module exports:  { id, describe(), fields, async read(ctx) }
-//   read(ctx) -> { ok, patch, provenance, reason? }
-//
-// GUARANTEE: a source module cannot take the board down. Each read is wrapped
-// in a timeout + try/catch. A module that throws, hangs, or finds no file is
-// reported as `unwired` with a reason, and its fields simply stay null. That
-// null is a designed UI state, not an error path.
-//
-// Reads are READ-ONLY and tail-bounded. Nothing here opens a file for write,
-// and no module may read an unbounded log into memory.
-// ─────────────────────────────────────────────────────────────────────────────
+// SOURCE RUNTIME. Every source exports { id, describe(), fields, async
+// read(ctx) } and read returns { ok, patch, provenance, reason? }. A source
+// cannot take the board down: each read has a timeout and a catch, and a failure
+// is reported `unwired` with a reason. Reads are read-only and tail-bounded.
 
 import { promises as fs } from "node:fs";
 import { createReadStream } from "node:fs";
@@ -24,19 +14,9 @@ export { statOrNull, listDir };
 export const TAIL_BYTES = 256 * 1024;
 
 /**
- * A single module read may not exceed this.
- *
- * MUST BE LARGER THAN ANY TIMEOUT A MODULE APPLIES INTERNALLY. It was 2000ms
- * while control-plane.mjs gave four of its own fetches 2500ms — so those inner
- * timeouts could never fire, and the module was killed by this budget instead
- * of failing the one call that was actually slow. The result was
- * indistinguishable from "the control plane is down": `board.control` came back
- * null and every control on the board went dead, including the one that starts
- * a run, while the service itself answered in ~2ms.
- *
- * 4000ms sits above the 2500ms inner timeouts with headroom, so a slow
- * SUB-CALL now surfaces as that call's own failure with its own reason, and
- * this budget only fires for a module that has genuinely hung.
+ * Per-source read budget. Must exceed any timeout a source applies inside
+ * (control-plane.mjs uses 2500ms), so a slow sub-call fails with its own reason
+ * instead of the whole source vanishing.
  */
 export const READ_TIMEOUT_MS = 4000;
 
@@ -99,81 +79,22 @@ export function parseJsonl(text) {
       const v = JSON.parse(t);
       if (v && typeof v === "object") out.push(v);
     } catch {
-      // a truncated head (tail read) or a half-flushed tail line. expected.
+      // A truncated head (tail read) or half-flushed last line: expected.
     }
   }
   return out;
 }
 
-// ── THE ACTIVE RUN ───────────────────────────────────────────────────────────
+// ── THE ACTIVE RUN ── one run is on screen, and every source agrees which:
+// the run whose manifest declares the newest created_at (written once at run
+// start). Not mtime (renames and reads move it), not the launch log (archived
+// runs keep their old path), not the folder name. A manifest with no parseable
+// created_at ranks below any that has one; when neither declares, a run with
+// attempt records beats a bare folder, then mtime. Pinned by
+// arm-delta-validity.test.mjs.
 //
-// ONE run is on screen at a time, and every source must agree on WHICH.
-//
-// This exists because the board previously had no such concept: each source
-// globbed `<runs_root>/*/` independently and folded EVERY run directory it
-// found into one picture. On a machine with abandoned runs on disk that
-// produced a wall showing the UNION of gates across runs — measured live:
-// 40 gates from the active run rendered red, plus 8 gates that existed only in
-// two abandoned runs rendered "unobserved", on the SAME strip, as if they
-// belonged to one cell. A viewer diffing that strip against the active run's
-// log finds gates that are not in it.
-//
-// That is a correctness defect, not a cosmetic one. The wall's stated contract
-// (wall.js) is that it is checkable line-by-line against the raw failed_gates
-// list of the run being watched, and the arm delta counted abandoned runs'
-// cells toward exclusions on an arm the operator is currently measuring.
-//
-// SELECTION RULE: the run whose MANIFEST DECLARES THE NEWEST created_at.
-//
-// ── THE DEFECT THIS REPLACES (measured, 2026-08-13) ─────────────────────────
-//
-// The rule used to be "the run with a status stream wins; break ties on
-// mtime". It is exactly backwards for the real topology, and it made the board
-// show TWO DIFFERENT CELLS AT ONCE for the first half-hour of every run:
-//
-//   · `manifest.status.jsonl` is appended AT ATTEMPT END — ~30 minutes in
-//     (status-stream.mjs:18-20 states this cadence).
-//   · So a freshly launched run has a manifest and NO status file → rank 0.
-//   · Any abandoned run on disk has a status file → rank 1, and rank was
-//     checked BEFORE mtime.
-//   · Therefore the corpse outranked the live cell, unconditionally, until
-//     the live cell's first attempt closed.
-//
-// Observed on the running board: `run-log` resolved the live cell
-// (`off-cell-20260813T051334.log`, written seconds earlier) while
-// `status-stream` — which feeds the GATE WALL and the arm delta — resolved
-// `cumulative.void-truncation-orphan-contention-20260812T0253`, stale by 21
-// hours. The wall's 23 gates belonged to a run the operator had abandoned.
-//
-// ── WHY created_at AND NOT mtime, AND NOT THE LAUNCH LOG ────────────────────
-//
-// mtime is wrong because it measures when a file was last TOUCHED, which an
-// archive/rename or a stray read-modify can move. `created_at` is written once
-// by the harness at run start and is the run's own statement of when it began.
-//
-// The launch log was the obvious alternative and is REJECTED on evidence: the
-// log records an absolute path (`dst=…/runs/<dir>/sessions/…`), but runs are
-// RENAMED WHEN ARCHIVED and the log keeps the original name. Measured: all
-// three `off-cell-*.log` files on disk point at `runs/cumulative`, because each
-// was the live `cumulative` when it ran. Joining through the log would resolve
-// three different runs to one directory.
-//
-// Directory NAME remains deliberately unused: `cumulative.aborted-*` is a
-// convention, not a guarantee, and a rule that depends on someone remembering
-// to rename a directory fails silently the one time they don't.
-//
-// FALLBACK, IN ORDER. A manifest with no parseable `created_at` sorts below
-// every run that declares one — it is never treated as epoch 0 in a way that
-// could let an unparseable manifest win. When NEITHER run declares a start,
-// the older rule is still the right one and is kept: a run carrying real
-// attempt records outranks a bare directory, so a just-created empty manifest
-// cannot steal the screen from a run that is mid-flight. mtime breaks the
-// final tie. Both orderings are pinned by tests in arm-delta-validity.test.mjs.
-//
-// ─────────────────────────────────────────────────────────────────────────────
-// BENCHMARK TREE — the rules live in control/tree.mjs; these are the readers'
-// views of them.
-// ─────────────────────────────────────────────────────────────────────────────
+// ── BENCHMARK TREE ── the rules live in control/tree.mjs; these are the
+// readers' views of them.
 
 export { isTreeId };
 
@@ -203,22 +124,15 @@ export async function listCampaignDirs(runsRoot) {
 }
 
 
-// A source that legitimately spans runs must say so explicitly; only
-// stack-ledger.mjs does, and it says so in its header. Cross-run aggregation is
-// what this function exists to prevent.
+// Only stack-ledger.mjs spans runs, and says so; this prevents cross-run folds.
 export async function activeRun(runsRoot) {
   let best = null;
-  // Depth-aware: campaigns are nested under the live tree. A one-level readdir
-  // here returned tree ids, none of which hold a manifest, so the board would
-  // report "no manifest.json under runs root" on a bench mid-run.
   for (const ent of await listCampaignDirs(runsRoot)) {
     const dir = ent.dir;
     const status = ent.status;
     const manifest = ent.manifest;
 
-    // The run's own declared start. null when absent or unparseable — such a
-    // run is outranked by any run that declares one, rather than defaulting to
-    // a number that could win.
+    // The run's declared start, or null (ranked below any run that declares one).
     const declared = manifest?.isFile()
       ? (Date.parse(String((await readJson(join(dir, "manifest.json")))?.created_at ?? "")) || null)
       : null;
@@ -228,8 +142,7 @@ export async function activeRun(runsRoot) {
       name: ent.name,
       dir,
       declared,
-      // Carries real attempt records. Only consulted when NEITHER run declares
-      // a start — never as the primary key, which is the defect above.
+      // Only consulted when neither run declares a start.
       rank: status?.isFile() ? 1 : 0,
       mtime,
       statusPath: status?.isFile() ? join(dir, "manifest.status.jsonl") : null,
@@ -243,24 +156,11 @@ export async function activeRun(runsRoot) {
   return best;
 }
 
-// ── WHERE THE LIVE STREAM ACTUALLY IS ────────────────────────────────────────
-//
-// The harness opens the stream in `run_cell` with `LiveStream.for_run(run_dir)`
-// where `run_dir` is the CELL's directory, so the file lands at
-// `<campaign>/memory<ARM>/cell-<seq>/live.jsonl`. `activeRun()` resolves the
-// CAMPAIGN directory — the one holding manifest.json — one level above the arm.
-//
-// Sources that joined `run.dir` with the bare filename therefore opened a path
-// that never exists and reported "no live.jsonl yet" for the whole run. That
-// reason is indistinguishable from a run that legitimately never wrote a
-// stream, which is why the gate wall sat empty while the file was being
-// appended to a few directories down.
-//
-// Resolution order: a campaign-level stream wins when present (the location
-// LIVE-STREAM.md documents, and where a future harness may consolidate it),
-// otherwise the most recently written per-cell stream — the cell now running.
-// Returns null when neither exists. An absent stream stays an absent stream;
-// nothing here invents a path.
+// ── WHERE THE LIVE STREAM IS ── the harness writes it per cell
+// (<campaign>/memory<ARM>/cell-<seq>/live.jsonl), one level below the campaign
+// folder activeRun() resolves. A campaign-level stream wins if present (where
+// LIVE-STREAM.md documents it); otherwise the newest per-cell stream. null when
+// neither exists.
 export const LIVE_STREAM_FILENAME = "live.jsonl";
 
 export async function liveStreamPath(runDir) {
@@ -284,12 +184,7 @@ export async function liveStreamPath(runDir) {
   return best?.path ?? null;
 }
 
-/**
- * Is `a` the more current run than `b`?
- *
- * Declared start first (the run's own statement of when it began), then — only
- * when neither declares — presence of attempt data, then mtime.
- */
+/** Is `a` more current than `b`? Declared start, then attempt data, then mtime. */
 function newerRun(a, b) {
   if (a.declared !== null && b.declared !== null) {
     return a.declared !== b.declared ? a.declared > b.declared : a.mtime > b.mtime;
@@ -300,9 +195,7 @@ function newerRun(a, b) {
   return a.mtime > b.mtime;
 }
 
-/**
- * Run one module with full isolation. Never throws.
- */
+/** Run one source with full isolation. Never throws. */
 export async function runSource(mod, ctx) {
   const started = Date.now();
   try {
@@ -335,12 +228,8 @@ export async function runSource(mod, ctx) {
 }
 
 /**
- * Deep-merge a module patch into the board.
- *
- * MERGE RULE: null never overwrites a non-null value. Modules are additive —
- * a module that has no opinion about a field leaves it exactly as it was, so
- * enabling a new source can only ever ADD information to the board.
- * Arrays replace wholesale (they are owned by exactly one module).
+ * Deep-merge a source patch into the board: null never overwrites a value (a
+ * source can only add information); arrays replace wholesale (one owner each).
  */
 export function mergePatch(target, patch) {
   if (!patch || typeof patch !== "object") return target;
