@@ -1,21 +1,10 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// BROADCAST + THE PUSH LOOP — per-section digests, patch assembly, tick.
-//
-// Extracted from server.mjs (WO LI-13). The wire protocol (SSE) and the
-// rationale for it live in server.mjs, which owns the /api/stream route; this
-// module owns what is pushed AFTER connect. Import-safe: top level is
-// declarations only.
-// ─────────────────────────────────────────────────────────────────────────────
+// BROADCAST + THE PUSH LOOP — what is pushed to /api/stream clients after
+// connect (the route is routes/board.mjs). Import-safe.
 
 import { getBoard } from "./board-build.mjs";
 import { streamClients } from "./state.mjs";
 
-/**
- * Broadcast a named SSE frame to every attached client.
- *
- * A client whose socket has gone away is dropped rather than written to — a
- * dead client must never be able to wedge the broadcast loop.
- */
+/** Send a named SSE frame to every client; a dead socket is dropped. */
 function broadcast(event, data) {
   const frame = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of [...streamClients]) {
@@ -29,12 +18,8 @@ function broadcast(event, data) {
 }
 
 /**
- * The board minus the event ring.
- *
- * Events are streamed separately and incrementally, so shipping them inside the
- * board payload too would reintroduce exactly the redundancy this exists to
- * remove. The ring's METADATA (counts, connected, cursor, grading) is kept —
- * it is small, it changes meaningfully, and the feed header renders from it.
+ * The board minus the event rows (streamed separately as deltas); the ring's
+ * metadata is kept.
  */
 export function boardWithoutEvents(board) {
   const { events, ...rest } = board;
@@ -43,28 +28,10 @@ export function boardWithoutEvents(board) {
   return { ...rest, events: { ...meta, events: [] } };
 }
 
-// Pushes are decided by per-section digests — see `granularSignatures` below.
-
 /**
- * Split a section into its own sub-sections when it is large and only a small
- * part of it moves.
- *
- * ── MEASURED, NOT ASSUMED (2026-08-13) ─────────────────────────────────────
- *
- * After sectioning, patches were still 7.4KB every 2s. Of that, `control` was
- * 6,535 bytes — and the only thing that changed between consecutive patches
- * was a clock nested inside `control.run`. The static 6KB of capabilities and
- * roster rode along on every tick.
- *
- * `control` is the one section big enough and heterogeneous enough to be worth
- * splitting: `capabilities` and `roster` are effectively static for the life of
- * a run, while `run` ticks constantly. Splitting it means a ticking clock costs
- * its own ~300 bytes instead of dragging 6KB of unchanged roster with it.
- *
- * Nothing else is split. A section that is small (`run` at 485b) or that
- * changes as a whole gains nothing from finer granularity, and every split adds
- * a merge rule the client has to honour — complexity that must be paid for by a
- * measurement, not by a guess.
+ * Sections split into sub-sections: `control` is ~6.5KB of static capabilities
+ * and roster around a clock in `run`, so its children are digested separately.
+ * Nothing else is split (each split is a merge rule the client must honour).
  */
 const SPLIT_SECTIONS = { control: ["capabilities", "roster", "run", "notes"] };
 
@@ -80,8 +47,7 @@ export function granularSignatures(board) {
     }
     const split = SPLIT_SECTIONS[k];
     if (split && v && typeof v === "object" && !Array.isArray(v)) {
-      // The named children each get their own digest; whatever remains is
-      // digested together so no field can be silently dropped from the wire.
+      // Whatever isn't split out is digested together, so no field is dropped.
       const rest = { ...v };
       for (const child of split) {
         if (child in v) {
@@ -97,19 +63,8 @@ export function granularSignatures(board) {
   return out;
 }
 
-// ── THE PUSH LOOP ────────────────────────────────────────────────────────────
-//
-// The server polls the SOURCES on the same cadence the browser used to, but
-// it does so ONCE for every attached client and pushes only what changed.
-// That is the whole win: the sources are files and a local HTTP service, so
-// something must read them on an interval — the defect was never the polling,
-// it was that every browser refetched 240KB of mostly-identical payload and
-// rebuilt the board from it.
-//
-// ONLY CHANGED SECTIONS ARE SENT. Per-section digests (see
-// granularSignatures) mean a ticking `run.elapsed_s` costs 486 bytes rather
-// than re-sending the 12.4KB TUI screen beside it. A quiet run costs one
-// heartbeat comment every 15s and nothing else.
+// ── THE PUSH LOOP ── the sources are read once for all clients and only
+// changed sections are pushed (a ticking clock costs a few hundred bytes).
 let lastSections = null;
 let lastHeartbeat = 0;
 
@@ -125,8 +80,7 @@ export async function tick(cfg) {
 
   const sections = granularSignatures(board);
   if (lastSections === null) {
-    // First tick with a client attached: they were already sent a full board
-    // on connect, so this only primes the comparison.
+    // First tick with a client: it already got the full board on connect.
     lastSections = sections;
   } else {
     const patch = {};
@@ -137,8 +91,7 @@ export async function tick(cfg) {
         changed += 1;
       }
     }
-    // A section that DISAPPEARED is a real change and must reach the client,
-    // otherwise a panel keeps rendering state the server no longer has.
+    // A section that disappeared is sent (as null).
     for (const k of Object.keys(lastSections)) {
       if (!(k in sections)) {
         patch[k] = null;
@@ -148,26 +101,20 @@ export async function tick(cfg) {
     lastSections = sections;
 
     if (changed) {
-      // THE TUI IS OWNED BY THE FAST PATH. It is dropped from the slow
-      // patch entirely: the board loop reads a value that is already up to
-      // 2s stale by the time it assembles, so letting it through would
-      // overwrite a fresh 250ms frame with an older one and make the mirror
-      // stutter backwards. One writer per section.
+      // The TUI section belongs to the fast path; this slower copy would overwrite a
+      // newer frame.
       delete patch.tui;
       if (!Object.keys(patch).length) return;
       broadcast("patch", patch);
     }
   }
 
-  // Per-client event deltas. Each client is at its own cursor, so this is a
-  // per-socket write rather than a broadcast.
+  // Event deltas per client, each at its own cursor.
   const rows = board.events?.events ?? [];
   const cursor = board.events?.cursor ?? null;
   for (const res of [...streamClients]) {
     let since = res.okpCursor ?? 0;
-    // Same restart signature as the connect path: a per-client cursor AHEAD
-    // of the ring's own high-water mark is stale from before a re-base, so
-    // replay the full window from scratch.
+    // A cursor ahead of the ring is stale from a restart: replay from scratch.
     if (typeof cursor === "number" && since > cursor) since = 0;
     const fresh = rows.filter((e) => (e.seq ?? -1) > since);
     if (!fresh.length) continue;
@@ -179,9 +126,7 @@ export async function tick(cfg) {
     }
   }
 
-  // A comment frame keeps intermediaries from reaping an idle connection.
-  // It is not data and the client ignores it — but its ABSENCE is how a
-  // silent board becomes a dead board behind a proxy.
+  // A heartbeat comment keeps proxies from reaping an idle connection.
   const now = Date.now();
   if (now - lastHeartbeat >= 15000) {
     lastHeartbeat = now;

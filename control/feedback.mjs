@@ -1,23 +1,7 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// GRADED TEXT — what the model was ACTUALLY told, verbatim.
-//
-// WHY THIS EXISTS (WO-FEEDBACK-1)
-//
-// The grader produces per-gate results; the harness renders those into prose
-// and hands it to the model as if a user had typed it. Until now that prose
-// existed in exactly one place — a sidecar file inside the cell's session dir —
-// and no surface read it. The operator could see that a message was sent
-// (`step=user-event-sidecar chars=1287 text_fp=c02b9470`) but never WHAT was
-// sent, so the one thing that actually steers the benchmarked model was the one
-// thing nobody could read.
-//
-// VERBATIM OR NOTHING. This module does not summarise, re-wrap, re-render or
-// "clean up" the text. It carries the exact bytes the model received, because
-// the entire point is to judge whether those bytes read like a person wrote
-// them. A surface that prettified them would be answering a different question.
-//
-// READ-ONLY: reads append-only JSONL. Never writes, never spawns, never signals.
-// ─────────────────────────────────────────────────────────────────────────────
+// GRADED TEXT — what the model was actually told, verbatim. The harness turns
+// gate results into prose and hands it to the model as if a user typed it; this
+// reads that text from the cell's sidecar file, byte for byte (the point is to
+// judge whether it reads like a person wrote it). Read-only.
 
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
@@ -28,15 +12,12 @@ import { statOrNull, listDir } from "./lib/fs.mjs";
 /** The contract version the board can assert against. */
 export const FEEDBACK_CONTRACT_VERSION = 1;
 
-/** Messages are large (a chunk prompt ran 33KB); bound the read like every other. */
+/** Bounded read (a chunk prompt ran 33KB). */
 const DEFAULT_BYTES = 2 * 1024 * 1024;
 
 /**
- * Read one sidecar file into message records.
- *
- * A truncated leading line is dropped (it is a fragment of a record whose whole
- * content is unknown) and an unparseable line is skipped rather than aborting —
- * a run that died mid-write must still yield every intact message before it.
+ * One sidecar file → records. A truncated first line or unparseable line is
+ * skipped, never fatal.
  */
 export async function readSidecar(path, { bytes = DEFAULT_BYTES } = {}) {
   const st = await statOrNull(path);
@@ -75,12 +56,8 @@ export async function readSidecar(path, { bytes = DEFAULT_BYTES } = {}) {
 }
 
 /**
- * Normalise a sidecar record into the served shape.
- *
- * `kind` defaults to "feedback" ONLY when absent, and the default is reported
- * via `kind_inferred` rather than silently asserted — records written before
- * the field existed are real data and must not be relabelled as if the writer
- * had stated a kind it never stated.
+ * A record → the served shape. A missing `kind` defaults to feedback and says
+ * so (kind_inferred).
  */
 export function normalizeMessage(record, index) {
   const kind = typeof record.kind === "string" && record.kind ? record.kind : null;
@@ -93,25 +70,20 @@ export function normalizeMessage(record, index) {
     at: Number.isFinite(Number(record.timestamp)) ? Number(record.timestamp) : null,
     chars: Number.isFinite(Number(record.chars)) ? Number(record.chars) : text.length,
     text_fp: typeof record.text_fp === "string" ? record.text_fp : null,
-    // VERBATIM. Never trimmed, re-wrapped, or escaped beyond JSON transport.
+    // Verbatim: never trimmed or re-wrapped.
     text,
   };
 }
 
 /**
- * Every cell session dir under a run, newest first.
- *
- * A campaign has one sidecar per cell; the newest is the one an operator
- * watching a live run means by "the feedback".
+ * Every cell session folder under a run, newest first (the newest is "the
+ * feedback" of a live run).
  */
 const CELL_CONTAINERS = ["memoryOFF", "memoryON", "memoryUNKNOWN", "sessions"];
 
 async function sessionDirs(runPath) {
   const rows = [];
-  // BOTH LAYOUTS, DELIBERATELY. Cells live under `memory{OFF,ON}/` in the
-  // benchmark tree and under `sessions/` in every campaign that predates it.
-  // Reading only the new one would blank this panel for all existing history;
-  // reading only the old one would blank it for every run from here on.
+  // Both layouts: memory{OFF,ON}/ in the tree, sessions/ in older campaigns.
   for (const container of CELL_CONTAINERS) {
     const base = join(runPath, container);
     for (const ent of await listDir(base)) {
@@ -119,10 +91,8 @@ async function sessionDirs(runPath) {
       const sidecar = join(base, ent.name, "worktree.user-events.jsonl");
       const st = await statOrNull(sidecar);
       if (!st?.isFile()) continue;
-      // The cell name stays BARE (`cell-0007`) rather than carrying its
-      // container, because `sequence_index` is unique across the whole schedule
-      // — the ON phase is indexed continuing from the OFF baseline — so a cell
-      // name cannot collide across the two arms, and `?cell=` keeps working.
+      // The bare cell name is unique across arms (sequence_index spans the
+      // schedule), so ?cell= keeps working.
       rows.push({ cell: ent.name, path: sidecar, mtime: st.mtimeMs });
     }
   }
@@ -131,12 +101,8 @@ async function sessionDirs(runPath) {
 }
 
 /**
- * Assemble GET /api/feedback.
- *
- * NEVER 500, NEVER FABRICATE. A run with no sidecar yet is the normal state
- * before the first prompt is sent; it returns ok:true with an empty list and
- * `unwired:["user-events"]` plus a reason, so "nothing sent yet" stays
- * distinguishable from "this surface is not wired up".
+ * Assemble GET /api/feedback. Never 500, never fabricate: no sidecar yet is
+ * ok:true, empty, with unwired:["user-events"] and a reason.
  */
 export async function readFeedback({ runsRoot, runDir, cell = null, limit = 50, includeText = true }) {
   const target = resolveRunDir(runsRoot, runDir);
@@ -185,8 +151,7 @@ export async function readFeedback({ runsRoot, runDir, cell = null, limit = 50, 
     counts[m.kind] += 1;
   }
 
-  // Newest last — this is a transcript, not a ticker, matching the event feed's
-  // oldest-first ordering so the two can be read together.
+  // Newest last, like the event feed.
   const bounded = Number.isFinite(limit) && limit > 0 ? all.slice(-limit) : all;
   const messages = includeText ? bounded : bounded.map(({ text, ...rest }) => rest);
 
@@ -198,8 +163,7 @@ export async function readFeedback({ runsRoot, runDir, cell = null, limit = 50, 
     cells: dirs.map((d) => d.cell),
     total: all.length,
     returned: messages.length,
-    // Present only when the caller asked to omit bodies, so a client can tell
-    // "no text in this response" from "no text was sent".
+    // Tells "text omitted from this response" from "no text was sent".
     text_included: includeText,
     messages,
     counts,
@@ -209,12 +173,8 @@ export async function readFeedback({ runsRoot, runDir, cell = null, limit = 50, 
 }
 
 /**
- * The same messages as feed rows, for interleaving into /api/events.
- *
- * Shaped like EventRing's BoardEvent so the feed does not need a second
- * renderer. `kind:"user"` is deliberate: on the board these ARE user turns —
- * that is exactly the fiction under test, and labelling them "harness" in the
- * feed would quietly answer the question the operator is trying to judge.
+ * The same messages as feed rows (BoardEvent shape), kind "user" — on the
+ * board these are user turns, the fiction under test.
  */
 export function feedbackRows(messages, { textCap = 64 * 1024, runDir = "", cell = "" } = {}) {
   return messages.map((m) => {
@@ -234,10 +194,7 @@ export function feedbackRows(messages, { textCap = 64 * 1024, runDir = "", cell 
             ? `verdict: passing (attempt ${m.attempt ?? "?"})`
             : `verdict: still failing (attempt ${m.attempt ?? "?"})`,
       detail: `${m.chars} chars · fp ${m.text_fp ?? "none"}`,
-      // VERBATIM: the full text flows to the feed — the operator reads the whole
-      // prompt on expand. The cap is a safety bound against pathological payloads
-      // (largest known real prompt: 33KB), not a display truncation; `truncated`
-      // stays honest in the rare case it ever trips.
+      // Full text; the cap only guards pathological payloads and is flagged if hit.
       text: truncated ? m.text.slice(0, textCap) : m.text,
       truncated,
       phase: null,
