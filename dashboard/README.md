@@ -199,6 +199,14 @@ the router), the redeploy fails loudly rather than publishing somewhere else.
 Every board request is same-origin: the dashboard relays `/api/*` to the
 control plane, which never leaves this machine's loopback (:8718).
 
+### Checking the board
+
+`./redeploy.sh` ends by running `check/board-check.mjs`: a real browser opens
+the board on every address it is published on, clicks through every panel, tab
+and dialog that changes nothing, and fails the deploy if a page errors, a
+request fails, or a panel never asks for its data. Writes are blocked during
+the check. Run it alone with `node check/board-check.mjs [url ...]`.
+
 ### Adding a source
 
 Drop a file in `sources/` exporting `id`, `fields`, `describe()` and

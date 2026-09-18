@@ -188,32 +188,6 @@
   --panel: var(--bg-2);
 }
 
-/* ── WEBFONT ────────────────────────────────────────────────────────────────
-   JetBrains Mono is the brand's ONE typeface and it is NOT installed on the
-   operator's host (verified: 0 matches in ~/Library/Fonts and the system font
-   list), so every `font-family:'JetBrains Mono'` rule was silently falling
-   back to SF Mono. The artifact bundles the woff2 binaries; the board is
-   containerised and must not reach the network to render, so the faces are
-   declared against Google's CDN with a local() first — if the operator ever
-   installs it, no fetch happens at all.
-
-   font-display:swap is deliberate: the board is a long-lived operations
-   surface, and blocking first paint on a font is worse than one reflow. */
-@font-face{
-  font-family:'JetBrains Mono'; font-style:normal; font-weight:400 800;
-  font-display:swap;
-  src:local('JetBrains Mono'), local('JetBrainsMono-Regular'),
-      url('https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxTOlOVigKp2Q.woff2') format('woff2');
-  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
-}
-@font-face{
-  font-family:'JetBrains Mono'; font-style:italic; font-weight:400 800;
-  font-display:swap;
-  src:local('JetBrains Mono Italic'), local('JetBrainsMono-Italic'),
-      url('https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbX2o-flEEny0FZhsfKu5WU4xD-IQ-PuZJJXxfpAO-Lf1OQk6OThxPA.woff2') format('woff2');
-  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
-}
-
 /* ── VIEWPORT STEP-DOWN ──────────────────────────────────────────────────
    1920+ is the primary target. The board must ALSO survive 1440×900,
    1366×768 and 1280×800 — measured breakpoints, not guesses. The ledger's

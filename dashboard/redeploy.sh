@@ -126,4 +126,8 @@ if [ "${1:-}" = "--control" ]; then
 fi
 
 echo
+echo
+echo "── using the board in a browser (check/board-check.mjs) ───────────"
+node "$HERE/check/board-check.mjs"
+
 echo "→ http://localhost:${PORT}"
