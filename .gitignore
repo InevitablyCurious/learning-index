@@ -58,6 +58,7 @@ data/results-ledger.jsonl
 # --- backgammon task (Phase 2a): never commit installed deps or test artifacts ---
 node_modules/
 task/**/test-results/
+grader/test-results/
 task/**/playwright-report/
 task/**/.last-run.json
 .okp/
