@@ -413,8 +413,8 @@
       "repeat": "The borne-off counts still don't survive being set and read back."
     },
     "REQ-DEBUG/debug.setState": {
-      "first": "They need to put your game into a specific position to test their own side against, and the position they send isn't what comes back.",
-      "repeat": "Setting your game to a specific position still doesn't hold."
+      "first": "They need to put your game into a specific position to test their own side against, but the app won't take the position — when they send it, they get an error back.",
+      "repeat": "Setting your game to a specific position still comes back with an error."
     },
     "REQ-DEBUG/debug.roll": {
       "first": "They need to queue specific dice so their tests get the same roll every time, and your app ignores what they queue and rolls its own.",

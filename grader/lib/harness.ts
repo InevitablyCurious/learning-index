@@ -291,7 +291,26 @@ export async function api(pathname: string, body?: any): Promise<any> {
     signal: AbortSignal.timeout(30_000),
   });
 
-  return response.json();
+  // A non-2xx is never a success: surface it (status + the server's error
+  // detail) instead of letting an error body pass as a parsed response.
+  // The body is read exactly once — as text — then parsed from that text,
+  // because a Response body cannot be consumed twice.
+  const text = await response.text();
+  if (!response.ok) {
+    let detail = text.trim();
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed.error === "string" && parsed.error.trim()) {
+        detail = parsed.error.trim();
+      }
+    } catch {
+      // Non-JSON error body — keep the raw text as the detail.
+    }
+    throw new Error(
+      `HTTP ${response.status} from POST ${normalizePath(pathname)}: ${detail || "<empty body>"}`,
+    );
+  }
+  return JSON.parse(text);
 }
 
 export async function getState(): Promise<any> {
