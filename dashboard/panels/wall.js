@@ -362,9 +362,12 @@ function grid(gates) {
         st === "recovered" && Number.isFinite(g.first_pass_attempt)
           ? esc(String(g.first_pass_attempt))
           : st === "red"
-            ? esc(g.detail?.description?.name ?? g.title ?? g.id)
+            ? esc(g.gate_token ?? g.id)
             : // AN INSTRUMENT FAULT IS MARKED, NOT JUST TINTED. Colour alone
-              // "!" on instrument: something went wrong here, and it is not a failure.
+              // fails an operator who cannot separate amber from red at a
+              // glance, and this is the one square whose whole point is that it
+              // is NOT a failure. "!" reads as "something went wrong HERE" —
+              // deliberately unlike the identifier that says WHICH gate failed.
               st === "instrument"
               ? "!"
               : "";

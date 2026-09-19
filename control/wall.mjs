@@ -205,6 +205,7 @@ export function foldGateStates({ roster, attempts }) {
 
     return {
       id: gate.id,
+      gate_token: gate.gate_token ?? null,
       req: gate.req ?? null,
       title: gate.title ?? null,
       state,
