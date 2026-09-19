@@ -151,9 +151,10 @@ test("WALL: a gate that REGRESSED reads red, not green", () => {
 });
 
 test("WALL: a gate row carries NO phase and no live signal", () => {
-  // The wall is a dumb surface: the server hands it the verdict, the identity
-  // needed to check a square against the log, and — since the trajectory split
-  // — two facts about RECORDED HISTORY. Nothing else.
+  // The wall is a dumb surface: the server hands it the verdict, the two
+  // identities needed to check a square against the log (`id`, unique per
+  // test; `gate_token`, the grouping token), and — since the trajectory
+  // split — two facts about RECORDED HISTORY. Nothing else.
   //
   // The invariant this test exists for is unchanged and is asserted explicitly
   // below: no phase, and nothing live. `first_pass_attempt` / `ever_failed` are
@@ -171,7 +172,7 @@ test("WALL: a gate row carries NO phase and no live signal", () => {
   // count on the row that no surface read; that one was rightly rejected.
   assert.deepEqual(
     Object.keys(row).sort(),
-    ["ever_failed", "first_pass_attempt", "id", "req", "state", "title", "unmeasured_cause"],
+    ["ever_failed", "first_pass_attempt", "gate_token", "id", "req", "state", "title", "unmeasured_cause"],
   );
 
   // THE ACTUAL PROHIBITION, stated as itself rather than as a key count.
