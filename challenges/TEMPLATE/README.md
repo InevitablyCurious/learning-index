@@ -67,8 +67,11 @@ The benchmark needs three things from your suite:
   This is what the repair rounds are made of, and it is where a weak challenge
   shows.
 
-The example's suite lives in the benchmark repo (`grader/`) and its sentences in
-`grader/feedback.json`.
+The example's suite lives in the benchmark repo (`grader/`). Its complaint
+sentences are one `.md` file per gate under `task/backgammon/prompts/failures/`
+(`{base}.md` first-time, `{base}-repeat.md` repeat) — the harness reads those at
+runtime; `grader/feedback.json` is kept as a mirror read by preflight and the
+test suite, not the runtime source.
 
 ## Freeze your starting files
 
