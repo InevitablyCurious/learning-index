@@ -1,16 +1,14 @@
 # Reference, not given to the model
 
-`CONTRACT.md` is the master specification for the backgammon task: the full
-interface and every behavioural requirement, kept for us and for the grading
-suite. It used to sit in `scaffold/`, which meant it was copied into the
-model's work folder and read as part of the task.
+`CONTRACT.md` was the master specification for the backgammon task: the full
+interface and every behavioural requirement. It moved out of `scaffold/` on
+2026-09-15 and was retired entirely on 2026-09-19, when its rules were
+relocated into the six build prompts in `../prompts/`.
 
-It moved out on 2026-09-15 (Jerry). What the model is given is the six build
-prompts in `../prompts/`, and those carry the fixed contact points the grading
-tests depend on — file and function names, board and state shapes, routes, page
-tags, and the exact wording tests search for. Everything a competent developer
-should work out (the rules of backgammon, how to structure the engine, how to
-make the AI strong or fast) is deliberately NOT there.
+The six build prompts in `../prompts/` are now the complete specification —
+file and function names, board and state shapes, routes, page tags, the exact
+wording tests search for, and the full rules of backgammon (movement, hitting,
+bar entry, bear-off, dice usage, the higher-die rule, the doubling cube, win
+classification). There is no separate spec file any more.
 
-If you change what the tests require, change the prompts too; this file is the
-record of intent, not a delivery surface.
+If you change what the tests require, change the prompts too.

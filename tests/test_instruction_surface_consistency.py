@@ -31,7 +31,6 @@ WRONG = "BENCH_DEBUG"
 
 # Files the model reads, and files the grader runs. Both must agree.
 SOURCES = [
-    TASK / "reference" / "CONTRACT.md",
     TASK / "prompts" / "chunk-04.md",
     TASK / "prompts" / "chunk-06.md",
     TASK / "scaffold" / "src" / "server.ts",

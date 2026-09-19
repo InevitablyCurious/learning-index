@@ -3,7 +3,19 @@ REQUIREMENT — the game state MUST survive page reloads. A reload must carry ov
 
 TASK: Implement the complete backgammon engine in `src/game.ts` — pure logic, no I/O. The shared types and constants are already in place from chunk 1 (do not change them). Replace the stubs with real implementations.
 
-Standard backgammon rules apply throughout; the engine is the authority on what is legal.
+Movement and legality — the engine is the authority on what is legal:
+
+- Direction: white moves 24 → 1 (high to low), black moves 1 → 24 (low to high); a checker moves forward by exactly its die's pip count.
+- Opening position (`startingPoints()`): the standard opening — 15 checkers per side, indices 0 and 25 unused (0). White: 2 on point 24, 5 on point 13, 3 on point 8, 5 on point 6. Black: 2 on point 1, 5 on point 12, 3 on point 17, 5 on point 19. `points[p] > 0` = white checkers, `points[p] < 0` = black checkers (absolute value).
+- Landing and blocking: a checker may land on an empty point, a point it owns, or a point holding exactly one opponent checker. A point holding two or more opponent checkers is blocked.
+- Hitting: landing on a lone opponent checker (a blot) hits it — that checker goes to the bar (`applyMove` returns true).
+- Bar entry: a player with any checker on the bar must enter them before making any other move. A white bar checker enters on point `25 − die`; a black bar checker enters on point `die`. Entry is blocked if the destination point holds two or more opponent checkers; if every rolled die's entry point is blocked, the player has no legal move (the turn passes).
+- Using dice: a player must use as many dice as legally possible; a die cannot be reused once consumed.
+- Higher die: when both dice cannot be played but either one alone can, the player must play the higher die.
+- Bearing off (`to === OFF`): legal only when all of the player's checkers are in the home board. A die equal to a checker's exact distance bears it off. A die larger than a checker's distance may bear it off (overshoot) only when there is no checker on a higher point (farther from bear-off) in the home board; otherwise the larger die must be played as an in-board move. White's highest point is 6; black's highest point is 19. `singleMoves` yields no bear-off move while any checker is outside the home board or on the bar.
+- Move sequences (`allSequences`): return each reachable resulting position once (deduplicated by the resulting board), each entry consuming the maximum number of dice.
+- Pip count (`pipCount(b, player)`): the sum over that player's checkers of each checker's distance to bearing off — a white checker on point `p` has distance `p`, a black checker has distance `25 − p`, and a checker on the bar counts as 25.
+- Winning (`checkWin`): when a player has borne off all 15 checkers, report `won: true` and classify `"single"`, `"gammon"`, or `"backgammon"` by the standard definitions — single if the opponent has borne off at least one checker; backgammon if the opponent has borne off none AND still has a checker on the bar or in the winner's home board; otherwise gammon.
 
 The exact function surface (EXACT signatures — other modules import these names as written):
 

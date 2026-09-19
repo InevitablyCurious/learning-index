@@ -2,6 +2,7 @@ GOAL: We are building a fully functional backgammon game in Node + TypeScript th
 REQUIREMENT — the game state MUST survive page reloads. A reload must carry over every piece of information from before the reload: the board, the dice, the score, and whose turn it is. Load the current state from the server when the page opens — do not start a new game on load.
 
 TASK: Wire everything together and verify the product end to end. The acceptance bar is a complete product with **0 errors**.
+- A full human-vs-AI game is playable to completion, reaching a `winner` with a valid `winType`, with no server exceptions.
 
 Play it for real, with tools — drive the API, load the page in a browser, and put the game through the situations a player will hit. `DEBUG_API=1` with `/api/debug/roll` and `/api/debug/state` lets you script dice and positions where that is faster than playing to them.
 

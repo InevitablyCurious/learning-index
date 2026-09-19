@@ -37,6 +37,8 @@ pip, legalMoves, canDouble
 
 Turn flow the server drives: dice are consumed as they are played; when the human has no legal move the turn passes, with `turnOver === true`, `legalMoves === []` and a `message` that says there is no legal move (wording containing "no legal move" or "pass"); after the human turn ends, `/api/ai` advances the AI with `chooseMoves`; a win ends the game with `winner`, `winType` and `pointsWon` (cube value × win multiplier) and a clear `message`; `/api/new` starts a fresh game without any reload and keeps `score` and `gamesPlayed`.
 
+- Doubling cube state: a new game's cube is `{value:1, owner:null}` (centered). `canDouble` is true only when it is the player's turn in the `"roll"` phase (before rolling) and the player may double (cube centered or owned by that player); during the `"move"` phase `canDouble` is false. When a double is offered and accepted, the cube's value doubles and its owner becomes the player who accepted (the taker).
+
 Debug seam — gated by env `DEBUG_API=1`; when `DEBUG_API` is not `1` these routes behave as unknown endpoints (404). It exists so a game can be driven into a known position with known dice:
 
 | Method | Path | Body | Effect |
