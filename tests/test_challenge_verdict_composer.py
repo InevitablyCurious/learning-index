@@ -8,18 +8,19 @@ from harness.adapters.challenge import (
     _EXCUSE_ELIMINATOR,
     ChallengeRunner,
     MissingFeedbackOverrideError,
-    load_feedback_overrides,
+    load_feedback_overrides_from_failures,
 )
 
-FEEDBACK = (
+PROMPTS = (
     Path(__file__).resolve().parents[1]
-    / "grader"
-    / "feedback.json"
+    / "task"
+    / "backgammon"
+    / "prompts"
 )
 
 
 def _override(token: str, kind: str = "first") -> str:
-    return load_feedback_overrides(FEEDBACK)[token][kind]
+    return load_feedback_overrides_from_failures(PROMPTS)[token][kind]
 
 
 def test_build_pass_verdict_lists_what_is_no_longer_happening() -> None:

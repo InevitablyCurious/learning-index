@@ -1,4 +1,10 @@
-"""`grader/feedback.json` — the human-written symptom lines the model is told.
+"""The human-written symptom lines the model is told.
+
+The runtime source is `task/backgammon/prompts/failures/*.md` — one file per
+line — and the wording guards below read it directly, so they validate the
+bytes the repair loop actually delivers. `grader/feedback.json` remains as a
+mirror for the preflight/completeness tooling; this file also tests it for
+structural completeness and for byte-equality with the `.md` source.
 
 WHY THESE TESTS. The repair-loop message used to be derived from the test
 title, and a test title states the RULE. Gate E08 was reported to the model as
@@ -21,7 +27,11 @@ from pathlib import Path
 
 import pytest
 
-from harness.adapters.challenge import ChallengeRunner, load_feedback_overrides
+from harness.adapters.challenge import (
+    ChallengeRunner,
+    load_feedback_overrides,
+    load_feedback_overrides_from_failures,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 TASK = REPO / "task" / "backgammon"
@@ -140,6 +150,12 @@ def _overrides() -> dict[str, dict[str, str]]:
 def _lines() -> list[tuple[str, str, str]]:
     """Every written line, as ``(gate, pass_kind, text)``.
 
+    Read from the `.md` RUNTIME SOURCE (`task/backgammon/prompts/failures/`),
+    not the JSON mirror: a guard that reads the mirror can be escaped by an
+    `.md`-only edit, and the guard's whole job is to vet what the model hears.
+    `test_the_json_mirror_matches_the_md_runtime_source` pins the mirror to
+    this source byte-for-byte.
+
     EVERY GUARD BELOW RUNS ON BOTH LINES. The `repeat` line is the one most at
     risk: it is written second, it is meant to say something the first line did
     not, and the natural way to do that is to get more specific — which is the
@@ -148,7 +164,9 @@ def _lines() -> list[tuple[str, str, str]]:
     """
     return [
         (gate, kind, entry[kind])
-        for gate, entry in sorted(_overrides().items())
+        for gate, entry in sorted(
+            load_feedback_overrides_from_failures(TASK / "prompts").items()
+        )
         for kind in ("first", "repeat")
     ]
 
@@ -161,6 +179,32 @@ def test_the_file_parses_and_the_loader_reads_it() -> None:
     assert FEEDBACK.is_file(), "grader/feedback.json is missing"
     json.loads(FEEDBACK.read_text(encoding="utf-8"))
     assert _overrides(), "the loader read no entries from a file that exists"
+
+
+def test_the_json_mirror_matches_the_md_runtime_source() -> None:
+    """The JSON mirror must agree with the `.md` runtime source, exhaustively.
+
+    The wording guards read the `.md` files; the structural-completeness checks
+    read the JSON mirror. If the two drift, one of them is validating text that
+    is not delivered. This is the explicit cross-pin that keeps the mirror
+    honest against the source: identical key sets AND identical `first`/`repeat`
+    strings for every key.
+    """
+    mirror = _overrides()
+    runtime = load_feedback_overrides_from_failures(TASK / "prompts")
+    assert mirror and runtime, "a source loaded empty — nothing would be compared"
+    assert mirror.keys() == runtime.keys(), (
+        "key sets drifted — JSON-only: "
+        f"{sorted(mirror.keys() - runtime.keys())}, .md-only: "
+        f"{sorted(runtime.keys() - mirror.keys())}"
+    )
+    for key in sorted(mirror):
+        for kind in ("first", "repeat"):
+            assert mirror[key][kind] == runtime[key][kind], (
+                f"{key}/{kind}: grader/feedback.json and the .md runtime source "
+                "disagree — the guards and the mirror are no longer reading the "
+                "same text"
+            )
 
 
 def test_a_missing_or_broken_file_is_never_an_error(tmp_path: Path) -> None:

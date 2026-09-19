@@ -26,13 +26,11 @@ from harness.adapters.challenge import ChallengeRunner
 def test_grader_identity_is_stripped_from_delivered_text() -> None:
     """SINGLE-SYSTEM (WO-FEEDBACK-VOICE-3): the model hears the human-written
     symptom line, never the test title. A user does not say "[G05] REQ-HIGHER-DIE"."""
-    from harness.adapters.challenge import load_feedback_overrides
+    from harness.adapters.challenge import load_feedback_overrides_from_failures
     from pathlib import Path
 
-    overrides = load_feedback_overrides(
-        Path(__file__).resolve().parents[1]
-        / "grader"
-        / "feedback.json"
+    overrides = load_feedback_overrides_from_failures(
+        Path(__file__).resolve().parents[1] / "task" / "backgammon" / "prompts"
     )
     # A covered gate resolves to its human-written override, and no grader
     # identity leaks into the delivered text.

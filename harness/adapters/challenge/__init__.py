@@ -98,6 +98,7 @@ from .feedback import (
     count_stub_sentinels,
     gate_tokens_in_suite,
     load_feedback_overrides,
+    load_feedback_overrides_from_failures,
     missing_feedback_overrides,
     _default_progress,
     _died_reason,

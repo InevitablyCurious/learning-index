@@ -25,7 +25,10 @@ from pathlib import Path
 
 import pytest
 
-from harness.adapters.challenge import ChallengeRunner as R
+from harness.adapters.challenge import (
+    ChallengeRunner as R,
+    load_feedback_overrides_from_failures,
+)
 
 GATES = Path(__file__).resolve().parents[1] / "grader"
 
@@ -163,7 +166,9 @@ def test_no_line_is_truncated_in_delivery() -> None:
     # only from a conformance-shaped check string, and synthesising one per key
     # would test the synthesiser rather than the lines.
     cap = 320
-    overrides = json.loads((GATES / "feedback.json").read_text(encoding="utf-8"))["gates"]
+    overrides = load_feedback_overrides_from_failures(
+        Path(__file__).resolve().parents[1] / "task" / "backgammon" / "prompts"
+    )
     too_long = [
         f"{key}/{kind} ({len(entry[kind])} chars)"
         for key, entry in overrides.items()
