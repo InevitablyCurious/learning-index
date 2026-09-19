@@ -1,0 +1,1 @@
+They're reading the state your app reports and it doesn't include "points" — the 24 board points as a list of numbers, positive for white checkers and negative for black. Without it they can't wire that part of their side up.

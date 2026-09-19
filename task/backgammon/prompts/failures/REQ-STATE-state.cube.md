@@ -1,0 +1,1 @@
+They're reading the state your app reports and it doesn't include "cube" — the doubling cube as its value plus who owns it, with no owner meaning centered. Without it they can't wire that part of their side up.

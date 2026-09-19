@@ -355,13 +355,14 @@ function grid(gates) {
         st === "recovered" && Number.isFinite(g.first_pass_attempt)
           ? ` (first passed on attempt ${g.first_pass_attempt})`
           : "";
-      // Marks in the square: a digit on recovered (how many attempts), an X on red
-      // (a character in the digit's font), nothing on first-try green.
+      // Marks in the square: a digit on recovered (how many attempts), the gate's
+      // own label on red (the same string the card heading uses, always visible),
+      // nothing on first-try green.
       const mark =
         st === "recovered" && Number.isFinite(g.first_pass_attempt)
           ? esc(String(g.first_pass_attempt))
           : st === "red"
-            ? "X"
+            ? esc(g.detail?.description?.name ?? g.title ?? g.id)
             : // AN INSTRUMENT FAULT IS MARKED, NOT JUST TINTED. Colour alone
               // "!" on instrument: something went wrong here, and it is not a failure.
               st === "instrument"

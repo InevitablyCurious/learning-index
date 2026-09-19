@@ -555,9 +555,11 @@ test("green, red and unobserved squares carry NO number", () => {
   // A "1" on every green square is noise: no rim already says attempt 1.
   assert.doesNotMatch(html, /class="gcell green"[^>]*>[^<]/);
   assert.doesNotMatch(html, /class="gcell unobserved"[^>]*>[^<]/);
-  // A failing square carries the X GLYPH and never a digit — the mark says
-  // "failed", and a number on it would read as an attempt count it does not have.
-  assert.match(html, /class="gcell red"[^>]*>X<\/span>/);
+  // A failing square carries the GATE'S LABEL and never a digit — the mark says
+  // WHICH gate failed, and a number on it would read as an attempt count it does
+  // not have. (This gate publishes no description and no title, so the label
+  // falls through to its id, exactly as the card heading does.)
+  assert.match(html, /class="gcell red"[^>]*>B<\/span>/);
   assert.doesNotMatch(html, /class="gcell red"[^>]*>\d/);
 });
 

@@ -41,6 +41,7 @@ from .constants import (
     _FIXED_OPENER_MANY,
     _FIXED_OPENER_ONE,
     _GRADER_DIR,
+    _PACK,
     _SPEC,
     _PASS_VERDICT_MAX_LISTED,
     _STUB_SENTINEL,
@@ -107,6 +108,59 @@ def load_feedback_overrides(path: Path) -> dict[str, dict[str, str]]:
             continue
         loaded[str(key)] = {"first": first, "repeat": repeat}
     return loaded
+
+
+def _key_from_base(base: str) -> str:
+    """Reconstruct a gate KEY from a `failures/*.md` filename base.
+
+    Inverse of the emit scheme that wrote `grader/feedback.json` out as one
+    `.md` per line: `/` in a key became `-` in the filename, so `REQ-STATE/
+    state.pip` emitted as `REQ-STATE-state.pip.md`. The `REQ-<PHASE>` prefix
+    is the only place a real `-` precedes the key's own `/`, so the first
+    `-` after it is the one to undo. `CONF` has no sub-check, and bracket
+    tokens (`G-01` → `G01`) simply drop their separator.
+    """
+    m = re.match(r"^(REQ-[A-Z]+)-(.*)$", base)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}"
+    if base == "CONF":
+        return "CONF"
+    return base.replace("-", "", 1)
+
+
+def load_feedback_overrides_from_failures(
+    prompts_dir: Path,
+) -> dict[str, dict[str, str]]:
+    """Load the per-gate symptom lines from `<prompts_dir>/failures/*.md`.
+
+    THE RUNTIME SOURCE (WO-LI-EXTRACT-FAILURE-PROMPTS). The text that used to
+    live in `grader/feedback.json` now lives as one `.md` file per line —
+    `<base>.md` is a gate's `first` line, `<base>-repeat.md` its `repeat` —
+    with `<base>` mapped back to the gate key by `_key_from_base`. The JSON
+    file remains on disk for the preflight/completeness tooling; this loader
+    is what the repair loop hears.
+
+    BYTE-IDENTICAL BY CONSTRUCTION. Only trailing newlines are stripped
+    (`.rstrip("\\n")`, matching `PromptPack.text`); no whitespace
+    normalization — the files hold the exact sentence the model reads.
+
+    Same tolerance contract as `load_feedback_overrides`: a missing directory
+    returns `{}`, and a gate missing either line is DROPPED rather than
+    half-loaded, so it surfaces as a completeness failure at the
+    preflight/test boundary instead of a partial record mid-run.
+    """
+    failures_dir = Path(prompts_dir) / "failures"
+    if not failures_dir.is_dir():
+        return {}
+    loaded: dict[str, dict[str, str]] = {}
+    for path in sorted(failures_dir.glob("*.md")):
+        stem = path.stem
+        is_repeat = stem.endswith("-repeat")
+        base = stem[: -len("-repeat")] if is_repeat else stem
+        key = _key_from_base(base)
+        text = path.read_text(encoding="utf-8").rstrip("\n")
+        loaded.setdefault(key, {})["repeat" if is_repeat else "first"] = text
+    return {k: v for k, v in loaded.items() if v.get("first") and v.get("repeat")}
 
 
 def gate_tokens_in_suite(gates_dir: Path) -> set[str]:
@@ -258,11 +312,12 @@ class FeedbackMixin:
     def _feedback_overrides(cls) -> dict[str, dict[str, str]]:
         """Human-written symptom lines, keyed by gate token or exact check text.
 
-        Cached on the class; see `_load_feedback_overrides` for the contract.
+        Cached on the class; read from the challenge's `prompts/failures/*.md`
+        files — see `load_feedback_overrides_from_failures` for the contract.
         """
         cached = getattr(cls, "_FEEDBACK_OVERRIDES_CACHE", None)
         if cached is None:
-            cached = load_feedback_overrides(_GRADER_DIR / "feedback.json")
+            cached = load_feedback_overrides_from_failures(_PACK.dir)
             cls._FEEDBACK_OVERRIDES_CACHE = cached
         return cached
 

@@ -1,0 +1,1 @@
+They're reading the state your app reports and it doesn't include "phase" — what the game is waiting for — rolling, moving, game over, or a double being offered. Without it they can't wire that part of their side up.
