@@ -201,6 +201,8 @@ class RunManifest:
             challenge=str(d.get("challenge") or ""),
             roster_fingerprint=d.get("roster_fingerprint"),
             compact=bool(d.get("compact", False)),
+            require_todos=bool(d.get("require_todos", False)),
+            grader_worker_target=d.get("grader_worker_target", None),
         )
 
 

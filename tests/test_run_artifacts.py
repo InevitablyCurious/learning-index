@@ -129,6 +129,35 @@ def test_load_run_manifest_round_trips_all_fields(tmp_path) -> None:
     assert loaded.roster_fingerprint == "rost-1"
 
 
+def test_from_dict_round_trips_require_todos_and_grader_worker_target() -> None:
+    original = replace(
+        _manifest(),
+        require_todos=True,
+        grader_worker_target=0.5,
+    )
+
+    d = original.to_dict()
+    decoded = RunManifest.from_dict(d)
+
+    # Both fields survive the round-trip with the values that were set.
+    assert decoded.require_todos is True
+    assert decoded.grader_worker_target == 0.5
+
+    # The re-serialized dict matches exactly on those keys.
+    assert decoded.to_dict()["require_todos"] == d["require_todos"]
+    assert decoded.to_dict()["grader_worker_target"] == d["grader_worker_target"]
+
+    # A manifest predating both fields decodes to the constructor defaults.
+    legacy = {
+        k: v
+        for k, v in d.items()
+        if k not in ("require_todos", "grader_worker_target")
+    }
+    decoded_legacy = RunManifest.from_dict(legacy)
+    assert decoded_legacy.require_todos is False
+    assert decoded_legacy.grader_worker_target is None
+
+
 def test_status_stream_append_read_and_reopen_keeps_prior_lines(tmp_path) -> None:
     path = tmp_path / "manifest.status.jsonl"
     stream = StatusStream(path)
