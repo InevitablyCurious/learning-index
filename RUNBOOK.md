@@ -576,7 +576,11 @@ its reason.
 `d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee`: CONTRACT.md left the scaffold
 for `task/backgammon/reference/`, so the model is given the six build prompts and nothing else, and
 the prompts were rewritten to carry the graded contact points without the rules and design hints
-a candidate should supply itself. The published-surface guard
+a candidate should supply itself. **Retired 2026-09-19:** `reference/CONTRACT.md` was DELETED and its
+29 `REQ-*` rules relocated into the six chunk prompts (engine rules + G05 higher-die → chunk-02; cube
+state → chunk-04; difficulty wiring → chunk-05; REQ-COMPLETE → chunk-06), reversing the 2026-09-15
+rule-thinning — the six prompts are now the complete specification and `reference/` holds only a
+README. This changes `chunk_plan_hash` (over `prompts/`), NOT the scaffold hash below. The published-surface guard
 (`tests/test_instruction_surface_consistency.py`) now reads the prompts. Prior freeze history:
 the hash was `d2d2f0b798f586101bb34a698235eb1dea691b1ed760f66a316a53fd6ae42928` (re-baselined
 2026-08-30 by `2314693`: gate E08's `allSequences` + `REQ-SEQ-DEDUP` requirement published into
@@ -922,7 +926,7 @@ drive-dependent and losing `:4096` is a loud transport error, never a silent dri
   zero-tool resume exists anywhere in the harness.
 
 **The terminal that ends a successful run is `gates_green`, and it is reachable.** The grader is the
-53-gate `report.mjs` runner; its verdict is `"PASS"` when all three phases
+124-gate `report.mjs` runner — enumerated by `grader/roster.mjs` `enumerateGates()` (conformance 66 · backend 37 · frontend 21; never count the gate total from `grader/checks.json` keys, which miss the `{x}`-template-expanded and multi-test gates); its verdict is `"PASS"` when all three phases
 (conformance/backend/frontend) pass (`report.mjs:831`; per-phase `ok = status===0 && !error` at
 `report.mjs:364`). The run's ONLY success terminal is `termination_reason = "gates_green"`
 (`backgammon.py:2640`, set when the attempt verdict is `"PASS"`); all other `termination_reason`
