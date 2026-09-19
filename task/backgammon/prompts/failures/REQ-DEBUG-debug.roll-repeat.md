@@ -1,1 +1,1 @@
-Your app still ignores the dice they queue and rolls its own.
+Rolling the dice they queued still comes back with an error.

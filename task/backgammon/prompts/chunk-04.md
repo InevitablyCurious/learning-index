@@ -1,5 +1,5 @@
 GOAL: We are building a fully functional backgammon game in Node + TypeScript that runs on localhost. This is chunk 4 of 6. The engine (`src/game.ts`) and AI (`src/ai.ts`) are complete.
-REQUIREMENT — the game state MUST survive page reloads. A reload must carry over every piece of information from before the reload: the board, the dice, the score, and whose turn it is. Load the current state from the server when the page opens — do not start a new game on load.
+REQUIREMENT — the game state MUST survive page reloads. A reload must carry over every piece of information from before the reload: the board, the dice, the score, whose turn it is, the difficulty, the doubling cube, and the remaining dice. Load the current state from the server when the page opens — do not start a new game on load.
 
 TASK: Implement the HTTP server and the full game API in `src/server.ts`, wiring the engine and AI into a playable backend.
 
@@ -34,6 +34,7 @@ pip, legalMoves, canDouble
 - `legalMoves`: `Move[]` — the human's legal moves right now (`[]` unless it is the human's move phase).
 - `canDouble`: boolean — whether the human may offer a double at this moment.
 - `history` is NOT serialized.
+- The server MUST hold a complete, initialized game state from startup, so `/api/state` and `/api/debug/state` return a valid serialized game even before any `/api/new` is called.
 
 Turn flow the server drives: dice are consumed as they are played; when the human has no legal move the turn passes, with `turnOver === true`, `legalMoves === []` and a `message` that says there is no legal move (wording containing "no legal move" or "pass"); after the human turn ends, `/api/ai` advances the AI with `chooseMoves`; a win ends the game with `winner`, `winType` and `pointsWon` (cube value × win multiplier) and a clear `message`; `/api/new` starts a fresh game without any reload and keeps `score` and `gamesPlayed`.
 

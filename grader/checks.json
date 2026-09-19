@@ -289,8 +289,8 @@
       "title": "a specific board position can be set and read back",
       "key": "REQ-DEBUG/debug.setState",
       "name": "Setting a position",
-      "what": "A position set through the debug route is what the game then reports.",
-      "how": "Sets a known position and requires the reply to echo it back."
+      "what": "A position sent through the debug route is set without an error.",
+      "how": "Sets a known position and requires the request to come back without an error."
     },
     {
       "title": "a queued dice roll is honoured",

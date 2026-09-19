@@ -417,8 +417,8 @@
       "repeat": "Setting your game to a specific position still comes back with an error."
     },
     "REQ-DEBUG/debug.roll": {
-      "first": "They need to queue specific dice so their tests get the same roll every time, and your app ignores what they queue and rolls its own.",
-      "repeat": "Your app still ignores the dice they queue and rolls its own."
+      "first": "They need to queue specific dice so their tests get the same roll every time, but when they roll, they get an error back.",
+      "repeat": "Rolling the dice they queued still comes back with an error."
     },
     "REQ-TESTID/dom": {
       "first": "Their automation fell over while reading your page.",
