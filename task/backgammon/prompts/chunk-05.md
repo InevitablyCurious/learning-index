@@ -1,4 +1,5 @@
 GOAL: We are building a fully functional backgammon game in Node + TypeScript that runs on localhost. This is chunk 5 of 6. The backend (engine, AI, API) is complete from chunks 2-4.
+REQUIREMENT — the game state MUST survive page reloads. A reload must carry over every piece of information from before the reload: the board, the dice, the score, and whose turn it is. Load the current state from the server when the page opens — do not start a new game on load.
 
 TASK: Build the frontend in `public/index.html`, `public/style.css`, and `public/app.js` — a compact, animated, fully playable board UI driven by the API.
 

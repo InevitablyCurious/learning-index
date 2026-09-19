@@ -1,4 +1,5 @@
 GOAL: We are building a fully functional backgammon game in Node + TypeScript that runs on localhost. This is chunk 3 of 6. The engine (`src/game.ts`) is complete from chunk 2.
+REQUIREMENT — the game state MUST survive page reloads. A reload must carry over every piece of information from before the reload: the board, the dice, the score, and whose turn it is. Load the current state from the server when the page opens — do not start a new game on load.
 
 TASK: Implement the AI in `src/ai.ts` — evaluation, move choice, win probability, and the doubling-cube policy with accept/decline reasoning. Replace the stubs with real implementations.
 
