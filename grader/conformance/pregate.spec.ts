@@ -134,6 +134,7 @@ for (const [label, thing, verb] of [
   checkGate(`REQ-RENDER/${label}`, `${thing} ${verb} drawn`);
   checkGate(`REQ-TESTID/${label}`, `${thing} ${verb} tagged for automation`);
 }
+checkGate("REQ-RENDER/die-reload", "the dice survive a reload");
 
 // ── behaviour ───────────────────────────────────────────────────────────────
 checkGate("REQ-HINT/hint", "selecting a movable checker shows move hints");

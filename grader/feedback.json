@@ -472,6 +472,10 @@
       "first": "I don't see the dice after I roll.",
       "repeat": "I still can't see the dice after rolling."
     },
+    "REQ-RENDER/die-reload": {
+      "first": "I rolled the dice, refreshed the page, and the board reset itself — my roll was gone and it was my turn to roll again.",
+      "repeat": "Same thing after your fix — I rolled, reloaded, and the board wiped the dice away and started me over as if I hadn't rolled."
+    },
     "REQ-HINT/hint": {
       "first": "When i pick up one of my pieces the game doesn't show me where it can go.",
       "repeat": "I picked a piece up again after your fix and still nothing shows me where it can go."
@@ -479,6 +483,30 @@
     "F15": {
       "first": "I opened the game from a different address than usual and got a dead board — it loads but nothing ever appears on it.",
       "repeat": "Same thing again: reaching the game by its other address still gives me an empty board that never fills in."
+    },
+    "F16": {
+      "first": "I refreshed the page in the middle of a game and it came back telling me it was my turn, even though I'd just finished my move and was waiting on the computer.",
+      "repeat": "It happened again — I reloaded while the computer was taking its turn and the board came back showing my dice ready to roll."
+    },
+    "F17": {
+      "first": "I refreshed the page between games and the score at the top went back to zero-zero even though we'd already played a couple of games.",
+      "repeat": "Played another game, reloaded, and the score got wiped to nothing again — the games we'd won were just gone."
+    },
+    "F18": {
+      "first": "I rolled a five and a two, refreshed the page, and the dice sitting on the board weren't the ones I'd just rolled.",
+      "repeat": "Rolled a different pair this time, reloaded, and the dice that came back still weren't the ones showing before the refresh."
+    },
+    "F19": {
+      "first": "I picked the hard computer, refreshed the page, and it wasn't set to hard any more.",
+      "repeat": "Set it to hard again, reloaded, and it dropped off hard again without me touching the selector."
+    },
+    "F20": {
+      "first": "I refreshed the page and the doubling cube went back to the middle on its own, so the game offered me a double all over again.",
+      "repeat": "Same thing after another refresh — the cube reset to the middle and I could double as if the game had just started."
+    },
+    "F21": {
+      "first": "I'd already used one of my dice and was about to move with the other, refreshed the page, and my turn went back to before I'd rolled.",
+      "repeat": "It happened again — partway through a turn after playing one die, I refreshed and the game put me back to the start of the turn."
     },
     "REQ-RESPONSIVE/startup": {
       "first": "The game never finished loading — it just sat there and nothing ever came up. I ended up force-quitting it.",

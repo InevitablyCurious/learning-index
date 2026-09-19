@@ -289,6 +289,10 @@ export async function runPreGate(): Promise<Problem[]> {
       browser = await chromium.launch();
       const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 
+      // Fresh game BEFORE the frontend's first load, so the server is in the
+      // "roll" phase when the page arrives and the roll button is enabled.
+      await api("/api/new", {});
+
       await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
       await page.waitForSelector('[data-testid="board"]', { timeout: 5_000 });
 
@@ -301,9 +305,29 @@ export async function runPreGate(): Promise<Problem[]> {
         }
       }
 
-      await api("/api/new", {});
+      // ── ROLL VIA THE FRONTEND, THEN CHECK RENDER *BEFORE* ANY RELOAD ──────
+      // The click drives the app's own roll button (it POSTs /api/roll and
+      // renders the dice). The `.catch` keeps a missing button from throwing
+      // the whole pre-gate — its absence is already reported by the testid
+      // loop above.
       await debugRoll([3, 1]);
-      await api("/api/roll");
+      await page.locator('[data-testid="rollBtn"]').click().catch(() => undefined);
+      await page
+        .waitForFunction(
+          () => document.querySelectorAll('[data-testid="die"]').length >= 2,
+          undefined,
+          { timeout: 2_000 },
+        )
+        .catch(() => undefined);
+
+      // NON-RELOAD render check: did the roll draw the dice at all? Distinct
+      // from the reload-survival check below — "the dice didn't draw" vs "the
+      // board reset wiped the roll away" are different failures.
+      const drawnBefore = await page.locator('[data-testid="dice"] *, .die').count();
+      if (drawnBefore < 2) {
+        add("REQ-RENDER/die — the dice are drawn after a roll", ">=2", String(drawnBefore));
+      }
+
       await page.reload({ waitUntil: "domcontentloaded" });
       await page.waitForSelector('[data-testid="board"]', { timeout: 5_000 });
 
@@ -387,19 +411,23 @@ export async function runPreGate(): Promise<Problem[]> {
         testIdText: 'a data-testid "off-tray" element is present',
       });
 
-      await countedElement({
-        add,
-        page,
-        label: "die",
-        testIdSelector: '[data-testid="die"]',
-        // No second spec'd attribute exists for a die, so the render side counts
-        // whatever the dice container actually drew.
-        renderSelector: '[data-testid="dice"] *, .die',
-        expected: 2,
-        exact: false,
-        renderText: "the dice are shown after a roll",
-        testIdText: 'at least two data-testid "die" elements are present',
-      });
+      // ── RELOAD SURVIVAL, MANUALLY SPLIT ────────────────────────────────────
+      // Same either/or semantics as `countedElement`, but the render complaint
+      // is its own gate (`die-reload`): after a reload, "not drawn" means the
+      // frontend reset the board and wiped the roll away — not that the dice
+      // never rendered. No second spec'd attribute exists for a die, so the
+      // render side counts whatever the dice container actually drew.
+      {
+        const drawnAfter = await page.locator('[data-testid="dice"] *, .die').count();
+        const taggedAfter = await page.locator('[data-testid="die"]').count();
+        if (taggedAfter < 2) {
+          if (drawnAfter >= 2) {
+            add("REQ-TESTID/die — at least two data-testid \"die\" elements are present", ">=2", `${taggedAfter} (${drawnAfter} drawn without the attribute)`);
+          } else {
+            add("REQ-RENDER/die-reload — the dice survive a page reload", ">=2", String(drawnAfter));
+          }
+        }
+      }
 
       let hintCount = await page.locator('[data-testid="hint"]').count();
       if (hintCount < 1) {

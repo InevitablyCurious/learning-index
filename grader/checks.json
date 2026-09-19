@@ -203,6 +203,36 @@
       "name": "Works on either host name",
       "what": "The game works whether it's opened at localhost or 127.0.0.1.",
       "how": "Loads the page at both addresses: each must show the board with 24 points and 30 checkers and no errors."
+    },
+    "F16": {
+      "name": "Whose turn survives a reload",
+      "what": "Whose turn it is stays the same after the page is reloaded.",
+      "how": "Sets the server's turn to black, reloads the page, and requires the reported turn to still be black."
+    },
+    "F17": {
+      "name": "Match score survives a reload",
+      "what": "The match score keeps its value across a page reload.",
+      "how": "Sets the score to 3-5, reloads, and requires the reported score to still be 3 and 5."
+    },
+    "F18": {
+      "name": "Dice values survive a reload",
+      "what": "The rolled dice keep their exact values across a page reload.",
+      "how": "Sets the dice to 5 and 2, reloads, and requires the reported dice to still be 2 and 5."
+    },
+    "F19": {
+      "name": "Difficulty survives a reload",
+      "what": "The chosen difficulty stays set across a page reload.",
+      "how": "Sets the difficulty to hard, reloads, and requires it to still be hard."
+    },
+    "F20": {
+      "name": "The doubling cube survives a reload",
+      "what": "Who owns the cube, and therefore whether a double is allowed, stays the same across a reload.",
+      "how": "Sets the cube to be owned by black, reloads, and requires doubling to still be disallowed for white."
+    },
+    "F21": {
+      "name": "Remaining dice survive a reload",
+      "what": "The dice left to play mid-turn stay the same across a page reload.",
+      "how": "Sets one die already played (dice 5 and 2, remaining 2), reloads, and requires the remaining die to still be 2."
     }
   },
   "setup": [
@@ -347,6 +377,13 @@
       "how": "Rolls and counts elements tagged as dice."
     },
     {
+      "title": "the dice survive a reload",
+      "key": "REQ-RENDER/die-reload",
+      "name": "Dice survive a reload",
+      "what": "The dice drawn after a roll are still there after the page is reloaded.",
+      "how": "Rolls, reloads, and counts the drawn dice."
+    },
+    {
       "title": "selecting a movable checker shows move hints",
       "key": "REQ-HINT/hint",
       "name": "Selecting shows hints",
@@ -379,6 +416,7 @@
         "F08",
         "F13",
         "F15",
+        "F19",
         "REQ-BIND/",
         "REQ-API/",
         "REQ-STATE/",
@@ -397,7 +435,8 @@
       "checks": [
         "G01",
         "G02",
-        "F06"
+        "F06",
+        "F17"
       ]
     },
     {
@@ -412,7 +451,10 @@
         "G05",
         "E09",
         "F14",
+        "F18",
+        "F21",
         "REQ-RENDER/die",
+        "REQ-RENDER/die-reload",
         "REQ-TESTID/die",
         "REQ-HINT/",
         "REQ-RESPONSIVE/moving",
@@ -433,6 +475,7 @@
         "F05",
         "E06",
         "E07",
+        "F16",
         "REQ-RESPONSIVE/awkwardroll"
       ]
     },
@@ -462,7 +505,8 @@
       "checks": [
         "G11",
         "F07",
-        "G12"
+        "G12",
+        "F20"
       ]
     },
     {

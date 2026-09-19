@@ -13,6 +13,10 @@ interface ApiState {
   message: string;
   pip: { white: number; black: number };
   cube: { value: number; owner: Player | null };
+  turn: Player;
+  score: { white: number; black: number };
+  dice: number[];
+  canDouble: boolean;
 }
 
 const BAR = 0;
@@ -361,4 +365,81 @@ test("[F08] REQ-TESTID — difficulty selector", async ({ page }) => {
       return state.difficulty;
     })
     .toBe("easy");
+});
+
+test("[F16] REQ-RELOAD — whose turn survives a reload", async ({ page }) => {
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/state", { turn: "black" });
+  await page.reload();
+  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("checker")).toHaveCount(30);
+  const state = await readState(page);
+  expect(state.turn).toBe("black");
+});
+
+test("[F17] REQ-RELOAD — match score survives a reload", async ({ page }) => {
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/state", { score: { white: 3, black: 5 } });
+  await page.reload();
+  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("checker")).toHaveCount(30);
+  const state = await readState(page);
+  expect(state.score.white).toBe(3);
+  expect(state.score.black).toBe(5);
+});
+
+test("[F18] REQ-RELOAD — dice values survive a reload", async ({ page }) => {
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/state", {
+    phase: "move",
+    turn: "white",
+    dice: [5, 2],
+    remainingDice: [5, 2],
+  });
+  await page.reload();
+  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("checker")).toHaveCount(30);
+  const state = await readState(page);
+  expect([...state.dice].sort((a, b) => a - b)).toEqual([2, 5]);
+});
+
+test("[F19] REQ-RELOAD — difficulty survives a reload", async ({ page }) => {
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/state", { difficulty: "hard" });
+  await page.reload();
+  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("checker")).toHaveCount(30);
+  const state = await readState(page);
+  expect(state.difficulty).toBe("hard");
+});
+
+test("[F20] REQ-RELOAD — the doubling cube survives a reload", async ({ page }) => {
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/state", { cube: { value: 2, owner: "black" } });
+  await page.reload();
+  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("checker")).toHaveCount(30);
+  const state = await readState(page);
+  expect(state.canDouble).toBe(false);
+});
+
+test("[F21] REQ-RELOAD — remaining dice survive a reload", async ({ page }) => {
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/state", {
+    phase: "move",
+    turn: "white",
+    dice: [5, 2],
+    remainingDice: [2],
+  });
+  await page.reload();
+  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("checker")).toHaveCount(30);
+  const state = await readState(page);
+  expect([...state.remainingDice].sort((a, b) => a - b)).toEqual([2]);
 });
