@@ -109,7 +109,7 @@ export function currentToasts() {
 // ── pure renderers ── HTML strings, no DOM, no fetch.
 
 /** One run row. Carries data-run + data-cell for the delegated click. */
-export function renderRunRow(run) {
+export function renderRunRow(run, expanded = false) {
   const r = run ?? {};
   const dev = r.dev_mode_enabled
     ? `<span class="dev-on">enabled</span> <span class="dev-src">${esc(r.dev_mode_source ?? "")}</span>` +
@@ -131,7 +131,7 @@ export function renderRunRow(run) {
   const label = busy ? "starting…" : live ? "open ↗" : "view result";
   return (
     `<div class="hist-rowwrap">` +
-      `<button type="button" class="hist-row run-row" data-run="${esc(r.benchmark_id)}" data-cell="${esc(r.cell)}">` +
+      `<button type="button" class="hist-row run-row${expanded ? " on" : ""}" data-run="${esc(r.benchmark_id)}" data-cell="${esc(r.cell)}" aria-expanded="${expanded}"${expanded ? ' aria-controls="history-details"' : ""}>` +
         `<span class="c-id">${idLabel} ${era}</span>` +
         `<span class="c-dev">${dev}</span>` +
         `<span class="c-path">${r.checkpoints_dir ? esc(r.checkpoints_dir) : `<span class="hist-none">none</span>`}</span>` +
@@ -148,7 +148,7 @@ export function renderRunRow(run) {
 }
 
 /** The runs table: loading / error / empty / rows — never a blank pane. */
-export function renderRuns(state) {
+export function renderRuns(state, selected = {}) {
   if (state?.loading) return `<div class="hist-note">reading history…</div>`;
   if (state?.error) return `<div class="hist-error" role="alert">${esc(state.error)}</div>`;
   const runs = Array.isArray(state?.runs) ? state.runs : [];
@@ -157,7 +157,10 @@ export function renderRuns(state) {
     `<div class="hist-head run-row" aria-hidden="true">` +
       `<span>benchmark_id</span><span>dev_mode</span><span>checkpoints_dir</span><span>transcript_file</span>` +
     `</div>` +
-    `<div class="hist-rows">${runs.map((r) => renderRunRow(r)).join("")}</div>`
+    `<div class="hist-rows">${runs.map((r) => {
+      const expanded = r.benchmark_id === selected.run && r.cell === selected.cell;
+      return renderRunRow(r, expanded) + (expanded ? selected.details ?? "" : "");
+    }).join("")}</div>`
   );
 }
 
@@ -273,24 +276,22 @@ export function renderDeleteConfirm(state) {
 }
 
 function renderPage() {
-  const runs =
-    `<section class="hist-pane"><h2 class="hist-h">runs</h2>` +
-    `<div class="hist-playnote">${renderPlayNote(playUi)}</div>` +
-    `<div class="hist-confirm-slot">${renderDeleteConfirm(delUi)}</div>` +
-    `<div class="hist-runs">${renderRuns(runsUi)}</div></section>`;
-  if (!selection.run) return runs;
   const files = selection.cp
     ? renderFiles(cpsUi.checkpoints, cpsUi.diffs, selection.cp)
     : `<div class="hist-note">select a check-point</div>`;
-  return runs +
-    `<section class="hist-pane">` +
+  const details = selection.run ?
+    `<section class="hist-pane hist-details" id="history-details">` +
       `<h2 class="hist-h">checkpoints <span class="hist-sub">${esc(selection.run)}</span></h2>` +
       `<div class="hist-cps">${renderCheckpoints({ ...cpsUi, selected: selection.cp })}</div>` +
       `<h2 class="hist-h">files</h2>` +
       `<div class="hist-files">${files}</div>` +
       `<h2 class="hist-h">diff</h2>` +
       `<div class="hist-diff">${renderDiff(diffUi)}</div>` +
-    `</section>`;
+    `</section>` : "";
+  return `<section class="hist-pane"><h2 class="hist-h">runs</h2>` +
+    `<div class="hist-playnote">${renderPlayNote(playUi)}</div>` +
+    `<div class="hist-confirm-slot">${renderDeleteConfirm(delUi)}</div>` +
+    `<div class="hist-runs">${renderRuns(runsUi, { ...selection, details })}</div></section>`;
 }
 
 /** Apply state to the page. A no-op under Node (no document) so loaders stay testable. */
@@ -612,6 +613,14 @@ function clearDiff() {
 
 function onRunClick(run, cell) {
   if (!run) return;
+  if (selection.run === run && selection.cell === (cell ?? "")) {
+    selection.run = null;
+    selection.cell = "";
+    selection.cp = null;
+    clearDiff();
+    paint();
+    return;
+  }
   selection.run = run;
   selection.cell = cell ?? "";
   selection.cp = null;

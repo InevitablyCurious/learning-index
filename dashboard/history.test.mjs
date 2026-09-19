@@ -76,6 +76,20 @@ test("renderRuns: error state renders the error string", () => {
   assert.ok(html.includes("HTTP 502"), html);
 });
 
+test("renderRuns: archived selection expands beneath its own row, before the next run", () => {
+  const first = { ...RUN, benchmark_id: "backups", cell: "first/cell-0000" };
+  const second = { ...first, cell: "second/cell-0000" };
+  const html = renderRuns({ runs: [first, second] }, {
+    run: first.benchmark_id,
+    cell: first.cell,
+    details: '<section id="history-details">checkpoints</section>',
+  });
+  assert.ok(html.indexOf('data-cell="first/cell-0000"') < html.indexOf('<section id="history-details">'));
+  assert.ok(html.indexOf('<section id="history-details">') < html.indexOf('data-cell="second/cell-0000"'));
+  assert.equal((html.match(/aria-expanded="true"/g) ?? []).length, 1);
+  assert.equal((html.match(/aria-expanded="false"/g) ?? []).length, 1);
+});
+
 // ── renderRunRow ─────────────────────────────────────────────────────────────
 
 test("renderRunRow: full columns + data-run/data-cell hooks", () => {
