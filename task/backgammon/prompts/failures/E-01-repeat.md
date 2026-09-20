@@ -1,1 +1,1 @@
-Rolled doubles again and I'm still only getting the two moves out of the roll.
+Rolled doubles again and I still only get two moves.

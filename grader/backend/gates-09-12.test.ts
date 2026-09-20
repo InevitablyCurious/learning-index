@@ -45,7 +45,7 @@ describe("[G09] REQ-BEAROFF-GATE — bear-off blocked while a checker is outside
     expect(moves.every((m: { to: number }) => m.to !== 25)).toBe(true);
   });
 
-  it("[G09] REQ-BEAROFF-GATE — blocks bear-off when white has any checker on the bar", () => {
+  it("[G19] REQ-BEAROFF-GATE — blocks bear-off when white has any checker on the bar", () => {
     const points = emptyPoints();
     points[2] = 1;
     const board = bd(points, { white: 1, black: 0 });
@@ -120,7 +120,7 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     expect(state.cube).toEqual({ value: 1, owner: null });
   });
 
-  it("[G11] REQ-CUBE-STATE — accepted human double doubles cube and transfers ownership to the taker", async () => {
+  it("[G20] REQ-CUBE-STATE — accepted human double doubles cube and transfers ownership to the taker", async () => {
     // Standard backgammon: when the doubled player TAKES, the taker (here the AI,
     // black) owns the cube — not the doubler. From the opening position the AI's
     // win prob is 0.5 >= its take point, so it accepts.
@@ -132,7 +132,7 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     expect(state.cube).toEqual({ value: 2, owner: "black" });
   });
 
-  it("[G11] REQ-CUBE-STATE — illegal double in move phase must not mutate cube", async () => {
+  it("[G21] REQ-CUBE-STATE — illegal double in move phase must not mutate cube", async () => {
     await api("/api/new", {});
     await debugRoll([3, 1]);
     await api("/api/roll");
@@ -238,7 +238,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     ).toBe("no-double");
   });
 
-  it("[G12] REQ-WINPROB — winProbability is monotonically non-decreasing in the player's pip lead", () => {
+  it("[G22] REQ-WINPROB — winProbability is monotonically non-decreasing in the player's pip lead", () => {
     const fbPoints = emptyPoints();
     fbPoints[2] = 1;
     const farBehind = bd(fbPoints, { white: 0, black: 14 }); // black 350 vs white 2 (lead -348)

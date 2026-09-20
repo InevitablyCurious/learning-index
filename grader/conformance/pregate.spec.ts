@@ -115,6 +115,7 @@ checkGate("REQ-STATE/state.points.length", "state carries points as a 26-length 
 // ── debug hooks the suite drives the app with ───────────────────────────────
 checkGate("REQ-DEBUG/debug.setState", "a specific board position can be set and read back");
 checkGate("REQ-DEBUG/debug.roll", "a queued dice roll is honoured");
+checkGate("REQ-DEBUG/debug.roll.error", "the debug roll endpoint answers without error");
 
 // ── automation handles, one gate per declared name ──────────────────────────
 for (const testId of REQUIRED_STATIC_TESTIDS) {

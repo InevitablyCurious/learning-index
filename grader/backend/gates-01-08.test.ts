@@ -84,19 +84,27 @@ describe("Backgammon backend gates 01-08", () => {
     expect(game.maxPlies(start, "black", [6, 6, 6, 6])).toBe(4);
   });
 
-  it("[G04] REQ-MOVES — legal-move generation (blocked points + hits)", () => {
+  it("[G04] REQ-MOVES — legal-move generation (blocked points)", () => {
     const pts = emptyPoints();
     pts[8] = 1;
     pts[5] = -2;
-    pts[6] = -1;
     const board = bd(pts);
 
     const blocked = game.singleMoves(board, "white", 3) as Move[];
     expect(norm(blocked)).toEqual(norm([]));
+  });
+
+  it("[G17] REQ-MOVES — legal-move generation (hits)", () => {
+    const pts = emptyPoints();
+    pts[8] = 1;
+    pts[6] = -1;
+    const board = bd(pts);
 
     const hit = game.singleMoves(board, "white", 2) as Move[];
     expect(norm(hit)).toEqual(norm([{ from: 8, to: 6, die: 2 }]));
+  });
 
+  it("[G18] REQ-MOVES — legal-move generation (opening die 6)", () => {
     const start = bd([...game.startingPoints()], { white: 0, black: 0 }, { white: 0, black: 0 });
     const dieSixMoves = game.singleMoves(start, "white", 6) as Move[];
     const fromValues = [...new Set(dieSixMoves.map((m) => m.from))].sort((a, b) => a - b);

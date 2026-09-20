@@ -1,1 +1,1 @@
-Started over and checked the cube before either of us touched it, then doubled — it's still wrong somewhere along the way.
+Started over again and the cube still doesn't sit centered, or it still won't let me double.

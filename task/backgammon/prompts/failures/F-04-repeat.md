@@ -1,1 +1,1 @@
-The suggestions still don't tell me which of my two numbers each one would use up.
+The suggestions still don't say which of my numbers each one uses, or they still don't appear.

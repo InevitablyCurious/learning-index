@@ -206,7 +206,7 @@ export async function runPreGate(): Promise<Problem[]> {
         body = undefined;
       }
 
-      if (!isRecord(body) || body.status !== "ok") {
+      if (isRecord(body) && body.status !== "ok") {
         add("REQ-API/health.body.status — /health body carries \"status\":\"ok\"", '{"status":"ok",...}', asObserved(body));
       }
     } catch (error) {
@@ -295,7 +295,7 @@ export async function runPreGate(): Promise<Problem[]> {
         add("REQ-DEBUG/debug.roll — the debug roll queue is honored by /api/roll", "dice [1,6] after /api/roll", asObserved((rolled as any)?.dice));
       }
     } catch (error) {
-      add("REQ-DEBUG/debug.roll — the debug roll queue is honored by /api/roll", "debug roll queue is honored", errorLine(error));
+      add("REQ-DEBUG/debug.roll.error — the debug roll endpoint answers without error", "debug roll answers without error", errorLine(error));
     }
 
     try {

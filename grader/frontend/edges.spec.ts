@@ -170,7 +170,7 @@ test("[F11] REQ-BEAROFF — bear-off visual", async ({ page }) => {
   ).toHaveCount(3);
 });
 
-test("[F12] REQ-NEWGAME — win state + new game without reload", async ({ page }) => {
+test("[F12] REQ-NEWGAME — the win is announced", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator('[data-testid="board"]')).toBeVisible();
 
@@ -199,11 +199,27 @@ test("[F12] REQ-NEWGAME — win state + new game without reload", async ({ page 
     // Capitals are not the player's concern: "You win!" says it as well as "Win".
     await expect(page.locator('[data-testid="modalTitle"]')).toContainText(/win/i);
   }
+});
 
-  await page.evaluate(() => {
-    (window as any).__navmark = 1;
+test("[F22] REQ-NEWGAME — board resets for the next game", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+
+  const points = emptyPts();
+  points[13] = -13;
+
+  await postDebugState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 15, black: 2 },
+    turn: "white",
+    phase: "gameover",
+    winner: "white",
+    winType: "single",
+    message: "You win!",
   });
 
+  await page.reload();
   await page.locator('[data-testid="newGameBtn"]').click({ force: true });
 
   await expect(page.locator('[data-testid="checker"]')).toHaveCount(30);
@@ -232,7 +248,42 @@ test("[F12] REQ-NEWGAME — win state + new game without reload", async ({ page 
     page.locator('[data-testid="checker"][data-color="black"][data-loc="19"]'),
   ).toHaveCount(5);
 
-  await expect(modalOverlay).toHaveClass(/hidden/);
+  await expect(page.locator('[data-testid="modalOverlay"]')).toHaveClass(/hidden/);
+});
+
+test("[F23] REQ-NEWGAME — new game without reload", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+
+  const points = emptyPts();
+  points[13] = -13;
+
+  await postDebugState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 15, black: 2 },
+    turn: "white",
+    phase: "gameover",
+    winner: "white",
+    winType: "single",
+    message: "You win!",
+  });
+
+  await page.reload();
+
+  await page.evaluate(() => {
+    (window as any).__navmark = 1;
+  });
+
+  await page.locator('[data-testid="newGameBtn"]').click({ force: true });
+
+  // Read the mark late. A reload wipes window properties, but the old document
+  // lives until the new one commits, so an immediate read can still see the
+  // mark on a page that is mid-reload — the combined gate this was split from
+  // got that spacing from its ten board assertions. A click-triggered reload
+  // of a local page commits well inside 500ms.
+  await page.waitForTimeout(500);
+
   await expect
     .poll(() => page.evaluate(() => (window as any).__navmark))
     .toBe(1);
@@ -268,7 +319,7 @@ test("[F13] REQ-COMPACT — compact / no horizontal overflow", async ({ page }) 
   }
 });
 
-test("[F14] REQ-ANIM — animation present", async ({ page }) => {
+test("[F14] REQ-ANIM — checker motion is animated", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator('[data-testid="board"]')).toBeVisible();
 
@@ -288,6 +339,11 @@ test("[F14] REQ-ANIM — animation present", async ({ page }) => {
   // duration, OR a CSS keyframe animation with non-zero duration. (transition-property defaults
   // to "all" with 0s duration when unset, so the duration check is what makes this meaningful.)
   expect(checkerAnimates(checkerMotion)).toBe(true);
+});
+
+test("[F26] REQ-ANIM — hint animation", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator('[data-testid="board"]')).toBeVisible();
 
   const points = emptyPts();
   points[6] = 14;

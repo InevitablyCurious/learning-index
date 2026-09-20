@@ -114,7 +114,7 @@ function emptyPoints(): number[] {
   return new Array(26).fill(0);
 }
 
-test("[F01] REQ-RENDER — page loads, no console errors", async ({ page }) => {
+test("[F01] REQ-RENDER — page loads and the board appears", async ({ page }) => {
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 
@@ -130,6 +130,23 @@ test("[F01] REQ-RENDER — page loads, no console errors", async ({ page }) => {
 
   await page.goto("/");
   await expect(page.getByTestId("board")).toBeVisible();
+});
+
+test("[F27] REQ-RENDER — no console or page errors on load", async ({ page }) => {
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
+      consoleErrors.push(msg.text());
+    }
+  });
+
+  page.on("pageerror", (err) => {
+    pageErrors.push(err.stack ?? err.message);
+  });
+
+  await page.goto("/");
 
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
@@ -148,7 +165,28 @@ test("[F02] REQ-RENDER — start game renders full board", async ({ page }) => {
   await expect(page.locator('[data-testid="checker"][data-color="black"]')).toHaveCount(15);
 });
 
-test("[F03] REQ-HINT — play vs AI (a real move advances state)", async ({ page }) => {
+test("[F03] REQ-HINT — clicking a piece shows its moves", async ({ page }) => {
+  await openApp(page);
+
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
+  await page.reload();
+  await expect(page.getByTestId("board")).toBeVisible();
+
+  await page.getByTestId("rollBtn").click();
+  await expect
+    .poll(async () => page.getByTestId("die").count())
+    .toBeGreaterThanOrEqual(2);
+
+  const state = await readState(page);
+  expect(state.legalMoves.length).toBeGreaterThan(0);
+  await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
+
+  const hints = page.getByTestId("hint");
+  await expect.poll(async () => hints.count()).toBeGreaterThan(0);
+});
+
+test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
   await openApp(page);
 
   await postJson<ApiState>(page, "/api/new", {});
@@ -260,6 +298,32 @@ test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {
   await expect(message).toBeVisible();
   await expect(message).not.toHaveText(/^\s*$/);
   await expect(message).toContainText(/no legal move|pass/i);
+});
+
+test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
+  await openApp(page);
+
+  const points = emptyPoints();
+  points[23] = -2; // black blocks white entry for die 2 (25-2=23)
+  points[21] = -2; // black blocks white entry for die 4 (25-4=21)
+  points[24] = -11; // remaining black checkers — the golden client requires exactly 15 per side
+  points[1] = 14; // 14 white in home; the 15th white checker is on the bar (below)
+
+  await postJson<ApiState>(page, "/api/debug/state", {
+    points,
+    bar: { white: 1, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "roll",
+    dice: [],
+    remainingDice: [],
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board")).toBeVisible();
+
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 4] });
+  await page.getByTestId("rollBtn").click();
 
   const whiteBarChecker = page.locator(
     '[data-testid="checker"][data-color="white"][data-loc="bar"]',

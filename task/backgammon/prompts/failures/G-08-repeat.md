@@ -1,1 +1,1 @@
-Still happening as I finish up — pieces are coming off on rolls that are plainly bigger than the distance they had left.
+It happened again finishing up — I had a checker back, and it still took one off from up front.

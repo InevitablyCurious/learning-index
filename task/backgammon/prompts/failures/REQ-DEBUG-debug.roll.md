@@ -1,1 +1,1 @@
-They need to queue specific dice so their tests get the same roll every time, but when they roll, they get an error back.
+They queue a roll through the debug route so their tests get the same dice every time, but the dice that come back aren't the ones they queued.

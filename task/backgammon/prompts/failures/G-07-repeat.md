@@ -1,1 +1,1 @@
-Landed on one of theirs again and went looking for it on the bar afterwards — it wasn't there.
+Hit one of theirs again and the board still doesn't show the full hit.

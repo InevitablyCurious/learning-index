@@ -25,9 +25,9 @@
       "how": "From the opening position, asks how many dice can be used: 3-3-3-3 must allow four, 3-1 two, and black's 6-6-6-6 four."
     },
     "G04": {
-      "name": "Blocked points and hits",
-      "what": "A checker can't land on a point held by two or more opposing checkers, but can land on a single one.",
-      "how": "White on 8, black holding 5 with two checkers and a single black on 6: a 3 must give no moves and a 2 exactly 8→6. From the opening position a 6 may only move checkers from 24, 13 and 8, all staying on the board."
+      "name": "Blocked points",
+      "what": "A checker can't land on a point held by two or more opposing checkers.",
+      "how": "White on 8 with black holding 5 with two checkers: a 3 must give no moves."
     },
     "G05": {
       "name": "Play the higher die",
@@ -51,8 +51,8 @@
     },
     "G09": {
       "name": "No bearing off until all are home",
-      "what": "No bearing off while any checker is outside home or on the bar.",
-      "how": "White on 3 with another on 8: a 3 must not bear off. White on 2 with a checker on the bar: a 2 must not bear off. Both positions must report that not all checkers are home."
+      "what": "No bearing off while any checker is still outside home.",
+      "how": "White on 3 with another on 8: a 3 must not bear off, and the position must report that not all checkers are home."
     },
     "G10": {
       "name": "Single, gammon or backgammon",
@@ -60,14 +60,14 @@
       "how": "White has all 15 off in each case. Black with 2 already off → single. Black with none off, none on the bar and none in white's home → gammon. A black checker in white's home, or on the bar → backgammon. White with only 14 off → not won."
     },
     "G11": {
-      "name": "The doubling cube's state",
-      "what": "The cube starts in the middle, goes to whoever accepts a double, and can't be offered after rolling.",
-      "how": "Through the running server: a new game must have the cube at 1, unowned, with doubling allowed. The player doubles, the computer accepts, and the cube must become 2 owned by black. After rolling, doubling must be disallowed and trying anyway must leave the cube unchanged."
+      "name": "The cube starts centered",
+      "what": "A new game starts with the cube in the middle, and doubling is allowed.",
+      "how": "Through the running server: a new game must have the cube at 1, unowned, with doubling allowed."
     },
     "G12": {
       "name": "The computer's cube decisions",
-      "what": "The computer accepts, declines and offers the cube at its published win-chance thresholds, and its win chance rises as it gets further ahead.",
-      "how": "Even position (30 pips each): win chance 0.5 and every difficulty accepts. Black hopelessly behind (350 against 2): win chance under 0.24 and hard declines. Hard never offers when white owns the cube, offers or holds on a 30-against-61 position exactly as its thresholds say, easy never offers, and hard holds when far too far ahead. A last case checks win chance never drops as the pip lead grows."
+      "what": "The computer accepts, declines and offers the cube at its published win-chance thresholds.",
+      "how": "Even position (30 pips each): win chance 0.5 and every difficulty accepts. Black hopelessly behind (350 against 2): win chance under 0.24 and hard declines. Hard never offers when white owns the cube, offers or holds on a 30-against-61 position exactly as its thresholds say, easy never offers, and hard holds when far too far ahead."
     },
     "G13": {
       "name": "Turn flow",
@@ -83,6 +83,36 @@
       "name": "Port 8002, and a clear error when taken",
       "what": "The server listens on port 8002, and a second copy fails clearly instead of hanging.",
       "how": "With the server already running, starts a second copy on the same port: within 6 seconds it must exit with an error, and its output must name 8002 and say the port is in use or already taken."
+    },
+    "G17": {
+      "name": "Landing on a single checker",
+      "what": "A checker can land on a point held by a single opposing checker.",
+      "how": "White on 8 with a single black on 6: a 2 must give exactly the move 8→6."
+    },
+    "G18": {
+      "name": "The opening roll with a 6",
+      "what": "From the opening position a 6 only moves the checkers that are free to move, and every move stays on the board.",
+      "how": "From the opening position a 6 may only move checkers from 24, 13 and 8, and every move must stay within the board."
+    },
+    "G19": {
+      "name": "No bearing off from the bar",
+      "what": "No bearing off while a checker is still on the bar.",
+      "how": "White on 2 with a checker on the bar: a 2 must not bear off, and the position must report that not all checkers are home."
+    },
+    "G20": {
+      "name": "An accepted double transfers the cube",
+      "what": "When a double is accepted, the cube becomes 2 and belongs to whoever took it.",
+      "how": "Through the running server: the player doubles, the computer accepts, and the cube must become 2 owned by black."
+    },
+    "G21": {
+      "name": "No doubling after rolling",
+      "what": "A double can't be offered once the dice are rolled, and trying anyway changes nothing.",
+      "how": "Through the running server: after rolling, doubling must be disallowed, and trying anyway must leave the cube unchanged."
+    },
+    "G22": {
+      "name": "Win chance rises with the lead",
+      "what": "The computer's win chance never drops as it gets further ahead.",
+      "how": "Four positions ordered by growing pip lead — far behind, near even, ahead, and far ahead: the win chance at each must be at least the one before."
     },
     "E01": {
       "name": "Doubles are four moves",
@@ -130,9 +160,9 @@
       "how": "Copies a board, changes the copy's points, bar and borne-off counts, and checks the original is untouched."
     },
     "F01": {
-      "name": "Page loads cleanly",
-      "what": "The game page loads without errors.",
-      "how": "Opens the page in a browser and requires no console errors and no page errors."
+      "name": "The board appears",
+      "what": "The game page loads and the board appears.",
+      "how": "Opens the page in a browser and requires the board to be visible."
     },
     "F02": {
       "name": "Full board is drawn",
@@ -140,9 +170,9 @@
       "how": "Starts a new game and reloads: exactly 24 points and 30 checkers, 15 of each colour."
     },
     "F03": {
-      "name": "Making a move by clicking",
-      "what": "A player can make a real move by clicking.",
-      "how": "Fixes the next roll to 6-5, clicks Roll, clicks a movable checker, clicks one of its hints, and requires one fewer die left afterwards."
+      "name": "Clicking shows the moves",
+      "what": "Clicking a checker that can move shows where it can go.",
+      "how": "Fixes the next roll to 6-5, clicks Roll, clicks a movable checker, and requires at least one move hint to appear."
     },
     "F04": {
       "name": "Hints show which die",
@@ -152,7 +182,7 @@
     "F05": {
       "name": "No-move notice",
       "what": "When the player can't move, the page says so.",
-      "how": "Puts white on the bar with both entry points blocked and fixes the roll to 2-4. After Roll the message must say there's no legal move or a pass, clicking the bar checker must show no hints, and the turn must be over."
+      "how": "Puts white on the bar with both entry points blocked and fixes the roll to 2-4. After Roll the message must say there's no legal move or a pass."
     },
     "F06": {
       "name": "Pip counts on screen",
@@ -185,9 +215,9 @@
       "how": "Sets a position with 3 white checkers borne off: the player's tray must be visible with exactly 3 white checkers in it."
     },
     "F12": {
-      "name": "Win banner and new game",
-      "what": "A win ends the game with a banner, and a new game starts without reloading the page.",
-      "how": "Sets a won position with the message \"You win!\": the message must show it, and if a modal is open its title must say win (any capitals). Clicking New game must redraw the standard opening layout, hide the modal, and not reload the page."
+      "name": "Win announced",
+      "what": "A win ends the game with a banner or popup that says the player won.",
+      "how": "Sets a won position with the message \"You win!\": the message must show it, and if a modal is open its title must say win (any capitals)."
     },
     "F13": {
       "name": "Fits the window",
@@ -195,9 +225,9 @@
       "how": "At 1280×800 and at 1440×900, starts a new game and requires that neither the board nor the page scrolls horizontally."
     },
     "F14": {
-      "name": "Animation",
-      "what": "Checkers and move hints are animated.",
-      "how": "Reads the page's styles: a checker must have a transition on its position or an animation, and the hint shown for a bar checker must have an animation."
+      "name": "Checker animation",
+      "what": "Checkers move with animation.",
+      "how": "Reads the page's styles: a checker must have a transition on its position or an animation."
     },
     "F15": {
       "name": "Works on either host name",
@@ -233,6 +263,36 @@
       "name": "Remaining dice survive a reload",
       "what": "The dice left to play mid-turn stay the same across a page reload.",
       "how": "Sets one die already played (dice 5 and 2, remaining 2), reloads, and requires the remaining die to still be 2."
+    },
+    "F22": {
+      "name": "Board resets on new game",
+      "what": "After a win, clicking New game redraws the standard opening layout and closes the win popup.",
+      "how": "Sets a won position and clicks New game: exactly 30 checkers, each side back on its opening points, and the modal hidden."
+    },
+    "F23": {
+      "name": "New game without reload",
+      "what": "A new game starts without reloading the page.",
+      "how": "Sets a won position, marks the window, clicks New game, and then reads the mark: window marks do not survive a page reload, so the mark must still be there."
+    },
+    "F24": {
+      "name": "Stuck turn ends",
+      "what": "When no move can be played, the turn is over and nothing is left to click.",
+      "how": "Puts white on the bar with both entry points blocked and fixes the roll to 2-4. After Roll the turn must be over with no legal moves, and clicking the bar checker must show no hints."
+    },
+    "F25": {
+      "name": "A move uses up a die",
+      "what": "Playing a move by clicking really advances the turn.",
+      "how": "Fixes the next roll to 6-5, clicks Roll, clicks a movable checker, clicks one of its hints, and requires one fewer die left afterwards."
+    },
+    "F26": {
+      "name": "Hint animation",
+      "what": "Move hints are animated.",
+      "how": "Reads the page's styles: the hint shown for a bar checker must have an animation."
+    },
+    "F27": {
+      "name": "Page loads cleanly",
+      "what": "The game page loads without errors.",
+      "how": "Opens the page in a browser and requires no console errors and no page errors."
     }
   },
   "setup": [
@@ -305,6 +365,13 @@
       "name": "Fixing the next roll",
       "what": "A roll queued through the debug route is the next roll.",
       "how": "Queues 6-1, rolls, and requires the dice to come back as 1 and 6."
+    },
+    {
+      "title": "the debug roll endpoint answers without error",
+      "key": "REQ-DEBUG/debug.roll.error",
+      "name": "The roll route answers",
+      "what": "A roll queued through the debug route comes back without an error.",
+      "how": "Queues 6-1, rolls, and requires the request to come back without an error."
     },
     {
       "title": "the page tags \"{x}\"",
@@ -419,6 +486,7 @@
       "checks": [
         "G16",
         "F01",
+        "F27",
         "F02",
         "F08",
         "F13",
@@ -453,11 +521,15 @@
         "G03",
         "E01",
         "F03",
+        "F25",
         "F04",
         "G04",
+        "G17",
+        "G18",
         "G05",
         "E09",
         "F14",
+        "F26",
         "F18",
         "F21",
         "REQ-RENDER/die",
@@ -480,6 +552,7 @@
         "E04",
         "G13",
         "F05",
+        "F24",
         "E06",
         "E07",
         "F16",
@@ -491,6 +564,7 @@
       "name": "Bearing off",
       "checks": [
         "G09",
+        "G19",
         "G08",
         "E02",
         "E03",
@@ -503,7 +577,9 @@
       "name": "Winning",
       "checks": [
         "G10",
-        "F12"
+        "F12",
+        "F22",
+        "F23"
       ]
     },
     {
@@ -511,8 +587,11 @@
       "name": "The doubling cube",
       "checks": [
         "G11",
+        "G20",
+        "G21",
         "F07",
         "G12",
+        "G22",
         "F20"
       ]
     },

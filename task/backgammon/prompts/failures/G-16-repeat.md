@@ -1,1 +1,1 @@
-Tried starting a second copy again while the first was still up, and it still just sits there with nothing on screen.
+Started a second copy again and it still either hangs or closes without saying the port is taken.

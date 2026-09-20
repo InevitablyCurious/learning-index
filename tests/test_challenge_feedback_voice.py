@@ -282,7 +282,7 @@ def test_runner_death_check_does_not_abort_feedback_composition() -> None:
     text = ChallengeRunner._build_feedback_prompt(
         problems=problems, repeat_checks=set()
     )
-    assert "can't start a fresh game" in text, "the real gate keeps its voice"
+    assert "doesn't tell me I won" in text, "the real gate keeps its voice"
     assert "gates-13-16" not in text, "the runner-death line never reaches the model"
 
     # All four born-on-runner-death shapes are recognised, wherever they appear.
@@ -327,7 +327,7 @@ def test_runner_death_check_does_not_abort_feedback_composition() -> None:
     verdict = ChallengeRunner._build_pass_verdict(
         newly_passing=[infra, "[F12] REQ-NEWGAME — win state + new game without reload"]
     )
-    assert "can't start a fresh game" in verdict
+    assert "doesn't tell me I won" in verdict
     assert "gates-13-16" not in verdict
 
 
@@ -355,7 +355,7 @@ def test_repeat_gradient_ignores_harness_infra_checks() -> None:
         had_prior_feedback=True,
         repeat_checks={infra, gate},
     )
-    assert "Game ended again and I still had to reload" in text, (
+    assert "still doesn't show me a win message" in text, (
         "the real gate keeps its gradient and moves to its second sighting"
     )
     assert "gates-13-16" not in text, "the runner-death line never reaches the model"

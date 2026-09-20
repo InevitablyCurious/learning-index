@@ -1,1 +1,1 @@
-Those counters on screen still don't agree with what's actually happening on the board in front of me.
+Those pip counters still don't agree with the board — wrong, or not readable as numbers.

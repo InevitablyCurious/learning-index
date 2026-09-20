@@ -1,1 +1,1 @@
-They're reading the state your app reports and it doesn't include "pip" — the pip counts, as white and black numbers. Without it they can't wire that part of their side up.
+They're reading the state your app reports and "pip" is missing, or it isn't two numbers — a white count and a black count. Without it they can't wire that part of their side up.

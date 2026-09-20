@@ -76,8 +76,8 @@
       "repeat": "On a brand new game, before I've even rolled, those two counters that show how many moves a player has left to finish the game still don't read right to me."
     },
     "G03": {
-      "first": "When i roll doubles the game doesn't let me use all four of the dice moves",
-      "repeat": "Rolled doubles several more times and I still get cut short — I run out of moves earlier than I should."
+      "first": "When I roll, the game doesn't give me the right number of moves — doubles don't give me four, and a plain roll doesn't give me two.",
+      "repeat": "Rolled several times and the number of moves I get still doesn't match the dice."
     },
     "G04": {
       "first": "Sometimes the game offers me moves that land on a spot my opponent has stacked with pieces",
@@ -92,24 +92,24 @@
       "repeat": "I got sent to the bar again and the game still let me carry on elsewhere as if nothing had happened."
     },
     "G07": {
-      "first": "When i hit an opponents piece it doesn't travel to the bar.",
-      "repeat": "Landed on one of theirs again and went looking for it on the bar afterwards — it wasn't there."
+      "first": "When I hit one of their pieces, the hit doesn't fully resolve on the board — my piece doesn't land on the point, or theirs doesn't end up on the bar.",
+      "repeat": "Hit one of theirs again and the board still doesn't show the full hit."
     },
     "G08": {
-      "first": "The game lets me take a checker off with a roll bigger than the gap it has left to the edge",
-      "repeat": "Still happening as I finish up — pieces are coming off on rolls that are plainly bigger than the distance they had left."
+      "first": "When I have a checker further back, the game still lets me bear off from a point closer to the edge.",
+      "repeat": "It happened again finishing up — I had a checker back, and it still took one off from up front."
     },
     "G09": {
       "first": "The game let me take a piece off the board even though one of my pieces was still out on the other side of the board",
       "repeat": "Did it again with a straggler stranded nowhere near my home side, and it still started letting me take pieces off."
     },
     "G10": {
-      "first": "When a game ends it doesn't tell me the right way i won or lost",
-      "repeat": "Played several more all the way to the end and the result it announces still doesn't match how the game actually finished."
+      "first": "When a game ends, the result it announces is wrong — a single win, gammon, or backgammon is called by the wrong name, or it says I won before I actually finished.",
+      "repeat": "Played several more games to the end and the result it announces still doesn't match how the game actually finished."
     },
     "G11": {
-      "first": "On a fresh game the doubling cube already reads like someone doubled, or it doesn't change the way it should when we double",
-      "repeat": "Started over and checked the cube before either of us touched it, then doubled — it's still wrong somewhere along the way."
+      "first": "On a fresh game the doubling cube doesn't start centered, or it tells me I can't double yet.",
+      "repeat": "Started over again and the cube still doesn't sit centered, or it still won't let me double."
     },
     "G12": {
       "first": "The computer accepts or refuses the doubling cube at the wrong times",
@@ -124,16 +124,40 @@
       "repeat": "Switched between the levels again: the top setting still isn't any stronger, or it slips in a move that isn't allowed."
     },
     "G16": {
-      "first": "When i try to open the game a second time while it's already running it just sits there and nothing happens",
-      "repeat": "Tried starting a second copy again while the first was still up, and it still just sits there with nothing on screen."
+      "first": "When I start the game a second time while it's already running, it hangs silently — or dies without telling me the port is in use.",
+      "repeat": "Started a second copy again and it still either hangs or closes without saying the port is taken."
+    },
+    "G17": {
+      "first": "When my opponent has a single checker on a point, the game won't let me land there and hit it.",
+      "repeat": "Tried again to land on a single checker of theirs and the game still won't give me that move."
+    },
+    "G18": {
+      "first": "On the opening roll a 6 offers me moves from checkers that are still blocked in.",
+      "repeat": "Rolled an opening 6 again and it still offers moves from checkers that are blocked in."
+    },
+    "G19": {
+      "first": "The game let me bear a checker off even though I still had one on the bar.",
+      "repeat": "It happened again — a piece came off while one of mine was still sitting on the bar."
+    },
+    "G20": {
+      "first": "When my opponent accepts my double, the cube doesn't switch to them — it doesn't show them as the owner now.",
+      "repeat": "Doubled again and after they took it the cube still doesn't show them as the owner."
+    },
+    "G21": {
+      "first": "The game lets me double in the middle of a turn.",
+      "repeat": "Tried doubling mid-turn again and it still lets me."
+    },
+    "G22": {
+      "first": "The computer's win chance doesn't go up as it gets further ahead.",
+      "repeat": "Checked more positions and its win chance still doesn't rise as it pulls ahead."
     },
     "E01": {
-      "first": "The dice is broken, whenever i roll doubles i can only move the pieces 2 times - this is wrong please fix it so that the dice rolls work like normal backgammon.",
-      "repeat": "Rolled doubles again and I'm still only getting the two moves out of the roll."
+      "first": "When I roll doubles, I only get two moves.",
+      "repeat": "Rolled doubles again and I still only get two moves."
     },
     "E02": {
-      "first": "Whenever i'm trying to exit my pieces of the edge of the board during the end of the game - after i have all pieces within the home side - the game allows me to move pieces off the board that shouldn't be allowed which is unfair to my opponent.",
-      "repeat": "Back at the end of the game with everything home, and it's still letting pieces off in ways that feel like cheating my opponent."
+      "first": "At the end of the game the game bears a checker off from the wrong point — it takes one off while a checker sits further back.",
+      "repeat": "Back at the end of the game again and it still bears off from the wrong point."
     },
     "E03": {
       "first": "There is a problem when i roll and i'm trying to take my piece off and it won't let me, it only lets me move the piece forward but it doesn't let me take it off the board",
@@ -176,16 +200,16 @@
       "repeat": "Clicked around on my pieces again and nothing lights up to show me where I'm able to go."
     },
     "F04": {
-      "first": "When i click a piece the suggested moves don't tell me which die they use",
-      "repeat": "The suggestions still don't tell me which of my two numbers each one would use up."
+      "first": "When I click a piece, the suggested moves don't tell me which die they use — or nothing shows up at all.",
+      "repeat": "The suggestions still don't say which of my numbers each one uses, or they still don't appear."
     },
     "F05": {
       "first": "When i have no moves the game doesn't tell me i have to pass",
       "repeat": "Got stuck with nothing I could play again, and the game still says nothing about it."
     },
     "F06": {
-      "first": "The numbers on screen showing how far each side is from finishing don't match the actual game",
-      "repeat": "Those counters on screen still don't agree with what's actually happening on the board in front of me."
+      "first": "The pip numbers on screen don't match the game — they're wrong at the start, drift after a change, or aren't readable as numbers.",
+      "repeat": "Those pip counters still don't agree with the board — wrong, or not readable as numbers."
     },
     "F07": {
       "first": "The doubling cube on screen doesn't show the right number or whose it is",
@@ -200,16 +224,16 @@
       "repeat": "Hit one of theirs again and never saw the piece travel up to the bar on screen."
     },
     "F10": {
-      "first": "When i have a piece on the bar and re-enter it, i don't see it move back onto the board",
-      "repeat": "Brought a piece back in off the bar again and it simply pops into place with no travel across the board."
+      "first": "When I re-enter a piece from the bar, it doesn't come back onto the board — it stays on the bar or never shows up on a point.",
+      "repeat": "Re-entered from the bar again and the piece still doesn't come back onto the board."
     },
     "F11": {
       "first": "When i take a piece off the board it doesn't show up in the off tray",
       "repeat": "Took several pieces off again and the tray at the side still stays empty."
     },
     "F12": {
-      "first": "When the game ends i can't start a fresh game unless i reload the page",
-      "repeat": "Game ended again and I still had to reload the whole page before I could play another."
+      "first": "When the game ends, it doesn't tell me I won — there's no win message or victory popup.",
+      "repeat": "Finished another game and it still doesn't show me a win message or popup."
     },
     "F13": {
       "first": "The board gets cut off or spills off the side of the screen",
@@ -288,16 +312,16 @@
       "repeat": "They read your state again after your fix and \"gamesPlayed\" — how many games have been played, as a number — still isn't in there."
     },
     "REQ-STATE/state.pip": {
-      "first": "They're reading the state your app reports and it doesn't include \"pip\" — the pip counts, as white and black numbers. Without it they can't wire that part of their side up.",
-      "repeat": "They read your state again after your fix and \"pip\" — the pip counts, as white and black numbers — still isn't in there."
+      "first": "They're reading the state your app reports and \"pip\" is missing, or it isn't two numbers — a white count and a black count. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"pip\" is still missing, or still isn't the white and black counts."
     },
     "REQ-STATE/state.legalMoves": {
-      "first": "They're reading the state your app reports and it doesn't include \"legalMoves\" — the legal moves, as a list. Without it they can't wire that part of their side up.",
-      "repeat": "They read your state again after your fix and \"legalMoves\" — the legal moves, as a list — still isn't in there."
+      "first": "They're reading the state your app reports and \"legalMoves\" is missing, or it isn't the list of moves they read. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"legalMoves\" is still missing, or still isn't the list of moves."
     },
     "REQ-STATE/state.canDouble": {
-      "first": "They're reading the state your app reports and it doesn't include \"canDouble\" — whether doubling is allowed right now, as a yes or no. Without it they can't wire that part of their side up.",
-      "repeat": "They read your state again after your fix and \"canDouble\" — whether doubling is allowed right now, as a yes or no — still isn't in there."
+      "first": "They're reading the state your app reports and \"canDouble\" is missing, or it isn't a yes or no. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"canDouble\" is still missing, or still isn't a yes or no."
     },
     "REQ-TESTID/testid.scoreWhite": {
       "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"scoreWhite\" — the human player's score.",
@@ -416,15 +440,19 @@
       "repeat": "The borne-off counts still don't survive being set and read back."
     },
     "REQ-STATE/state.points.length": {
-      "first": "They're reading the state your app reports and the \"points\" list is the wrong shape — some board positions are missing from what they read, so they can't wire that part of their side up.",
-      "repeat": "They read your state again after your fix and the \"points\" list is still the wrong shape — some board positions are still missing from what they read."
+      "first": "They're reading the state your app reports and \"points\" isn't a list of 26 numbers — the board positions they read are missing or not numbers. Without it they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and \"points\" still isn't a list of 26 numbers."
     },
     "REQ-DEBUG/debug.setState": {
       "first": "They need to put your game into a specific position to test their own side against, but the app won't take the position — when they send it, they get an error back.",
       "repeat": "Setting your game to a specific position still comes back with an error."
     },
     "REQ-DEBUG/debug.roll": {
-      "first": "They need to queue specific dice so their tests get the same roll every time, but when they roll, they get an error back.",
+      "first": "They queue a roll through the debug route so their tests get the same dice every time, but the dice that come back aren't the ones they queued.",
+      "repeat": "They queued the roll again and the dice still come back different from the ones they asked for."
+    },
+    "REQ-DEBUG/debug.roll.error": {
+      "first": "They queue a roll through the debug route so their tests get the same dice every time, but when they roll, they get an error back.",
       "repeat": "Rolling the dice they queued still comes back with an error."
     },
     "REQ-TESTID/dom": {
@@ -488,8 +516,8 @@
       "repeat": "I picked a piece up again after your fix and still nothing shows me where it can go."
     },
     "F15": {
-      "first": "I opened the game from a different address than usual and got a dead board — it loads but nothing ever appears on it.",
-      "repeat": "Same thing again: reaching the game by its other address still gives me an empty board that never fills in."
+      "first": "I opened the game from a different address than usual and got a dead board — it loads but nothing appears on it, or it throws errors behind the scenes.",
+      "repeat": "Same thing again: reaching the game by its other address still gives me an empty board or errors."
     },
     "F16": {
       "first": "I refreshed the page in the middle of a game and it came back telling me it was my turn, even though I'd just finished my move and was waiting on the computer.",
@@ -514,6 +542,30 @@
     "F21": {
       "first": "I'd already used one of my dice and was about to move with the other, refreshed the page, and my turn went back to before I'd rolled.",
       "repeat": "It happened again — partway through a turn after playing one die, I refreshed and the game put me back to the start of the turn."
+    },
+    "F22": {
+      "first": "When I start a new game, the board doesn't reset — the pieces are still where the last game left them, or the victory popup is still open.",
+      "repeat": "Started over again and the board still doesn't reset, or the popup is still up."
+    },
+    "F23": {
+      "first": "When the game ends i can't start a fresh game unless i reload the page",
+      "repeat": "Game ended again and I still had to reload the whole page before I could play another."
+    },
+    "F24": {
+      "first": "When I have no moves, the game doesn't finish my turn — it keeps me stuck or still shows me places to click.",
+      "repeat": "Stuck again and it still won't finish my turn, or it still shows hints when I click a piece."
+    },
+    "F25": {
+      "first": "When I click a move, the game doesn't register it — the dice don't get used up.",
+      "repeat": "Clicked a move again and the dice still aren't used up after."
+    },
+    "F26": {
+      "first": "The move hints don't animate — they just pop in with no motion.",
+      "repeat": "The hints still pop in instantly with no animation."
+    },
+    "F27": {
+      "first": "When I open the game, it throws errors in the background.",
+      "repeat": "Opened it fresh again and it still throws errors behind the scenes."
     },
     "REQ-RESPONSIVE/startup": {
       "first": "The game never finished loading — it just sat there and nothing ever came up. I ended up force-quitting it.",

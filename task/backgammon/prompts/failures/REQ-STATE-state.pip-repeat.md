@@ -1,1 +1,1 @@
-They read your state again after your fix and "pip" — the pip counts, as white and black numbers — still isn't in there.
+They read your state again after your fix and "pip" is still missing, or still isn't the white and black counts.
