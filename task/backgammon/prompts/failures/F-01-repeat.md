@@ -1,1 +1,1 @@
-Opened the page again and it still isn't loading cleanly; there are still errors going off behind it.
+I closed it and opened it fresh, and it's still the same — the screen never fills in.

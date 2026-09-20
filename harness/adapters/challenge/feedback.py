@@ -56,10 +56,12 @@ def load_feedback_overrides(path: Path) -> dict[str, dict[str, str]]:
 
     THE CONTRACT. Keys are a gate's bracket token (`"E08"`, `"F12"`), a
     conformance sub-check key (`"REQ-STATE/state.pip"`), or the exact raw check
-    string. Values are ONE sentence in the voice of a person playing the game
-    who has noticed something wrong — the SYMPTOM, never the cause and never
-    the fix. A token key covers every test sharing that token, which is the
-    normal case and is deliberately coarse: a coarser report reveals less.
+    string. Values are ONE sentence per line, in one of two voices: a person
+    playing the game describing WHAT THEY SAW (the tester), or a software team
+    integrating against the app describing what their tooling and API reads
+    could not find or got wrong (the team) — the SYMPTOM, never the cause and
+    never the fix. A token key covers every test sharing that token, which is
+    the normal case and is deliberately coarse: a coarser report reveals less.
 
     WHY A FILE AND NOT DERIVED TEXT. The derived string is the test title, and a
     test title states the RULE ("a checker on the bar counts a full 25 pips").

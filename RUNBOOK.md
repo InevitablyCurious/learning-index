@@ -926,7 +926,7 @@ drive-dependent and losing `:4096` is a loud transport error, never a silent dri
   zero-tool resume exists anywhere in the harness.
 
 **The terminal that ends a successful run is `gates_green`, and it is reachable.** The grader is the
-124-gate `report.mjs` runner — enumerated by `grader/roster.mjs` `enumerateGates()` (conformance 66 · backend 37 · frontend 21; never count the gate total from `grader/checks.json` keys, which miss the `{x}`-template-expanded and multi-test gates); its verdict is `"PASS"` when all three phases
+125-gate `report.mjs` runner — enumerated by `grader/roster.mjs` `enumerateGates()` (conformance 67 · backend 37 · frontend 21; never count the gate total from `grader/checks.json` keys, which miss the `{x}`-template-expanded and multi-test gates); its verdict is `"PASS"` when all three phases
 (conformance/backend/frontend) pass (`report.mjs:831`; per-phase `ok = status===0 && !error` at
 `report.mjs:364`). The run's ONLY success terminal is `termination_reason = "gates_green"`
 (`backgammon.py:2640`, set when the attempt verdict is `"PASS"`); all other `termination_reason`

@@ -11,10 +11,13 @@
     "gate answered by its own failure message measures attempt count, not",
     "capability.",
     "",
-    "THE VOICE. One sentence, from a person playing the finished game who has",
-    "noticed something wrong. They describe WHAT THEY SAW. They do not know the",
-    "function names, the requirement ids, or the fix — they are a user, not a",
-    "reviewer.",
+    "THE VOICES. Two people report after a failure, and which one owns a line",
+    "depends on what kind of fault it is. The tester is a player of the",
+    "finished game who has noticed something wrong: they describe WHAT THEY",
+    "SAW, and they do not know the function names, the requirement ids, or the",
+    "fix — a user, not a reviewer. The integration team is a customer wiring",
+    "software against the app, reporting in \"they/their\" terms what their API",
+    "reads, health checks, and automation could not find or got wrong.",
     "",
     "THE TEST: could a reader who has never seen the spec derive the fix from",
     "this sentence alone? If yes, it is too specific. Name the surface (the",
@@ -161,8 +164,8 @@
       "repeat": "Kept my eyes on the board while it was thinking this time — my pieces still shuffled around on their own."
     },
     "F01": {
-      "first": "The game page throws errors in the background when it loads",
-      "repeat": "Opened the page again and it still isn't loading cleanly; there are still errors going off behind it."
+      "first": "When I open the game, nothing shows up — the screen just stays empty.",
+      "repeat": "I closed it and opened it fresh, and it's still the same — the screen never fills in."
     },
     "F02": {
       "first": "The board doesn't show all the points and pieces it should when a game starts",
@@ -441,12 +444,12 @@
       "repeat": "The checkers are still on screen without the tagging their automation looks for — exactly 30 of them, 15 a side, each tagged \"checker\"."
     },
     "REQ-TESTID/bar": {
-      "first": "The bar show up on screen, but their automation can't select them — it looks for the bar column tagged \"bar\".",
-      "repeat": "The bar are still on screen without the tagging their automation looks for — the bar column tagged \"bar\"."
+      "first": "The bar shows up on screen, but their automation can't select it — it looks for the bar column tagged \"bar\".",
+      "repeat": "The bar is still on screen without the tagging their automation looks for — the bar column tagged \"bar\"."
     },
     "REQ-TESTID/off-tray": {
-      "first": "The off tray show up on screen, but their automation can't select them — it looks for the off tray tagged \"off-tray\".",
-      "repeat": "The off tray are still on screen without the tagging their automation looks for — the off tray tagged \"off-tray\"."
+      "first": "The off tray shows up on screen, but their automation can't select it — it looks for the off tray tagged \"off-tray\".",
+      "repeat": "The off tray is still on screen without the tagging their automation looks for — the off tray tagged \"off-tray\"."
     },
     "REQ-TESTID/die": {
       "first": "The dice show up on screen, but their automation can't select them — it looks for each die tagged \"die\", at least two showing after a roll.",

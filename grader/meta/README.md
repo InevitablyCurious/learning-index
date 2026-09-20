@@ -42,14 +42,14 @@ measurements of the model.
 They are excluded from `vitest.config.ts` (which the graded backend phase uses)
 and from the roster, so `report.mjs` never sees them.
 
-## The gate census — 124, never counted from `checks.json` (2026-09-19)
+## The gate census — 125, never counted from `checks.json` (2026-09-19)
 
-The graded-check denominator is **124 gates** — conformance **66** · backend
+The graded-check denominator is **125 gates** — conformance **67** · backend
 **37** · frontend **21** — as enumerated by `grader/roster.mjs`
 `enumerateGates()`.
 
 Never count the gate inventory from `grader/checks.json` `checks` keys, nor from
-unique bracket tokens in the gate suite. Both undercount: **66 of the 124 exist
+unique bracket tokens in the gate suite. Both undercount: **66 of the 125 exist
 only as `{x}`-template expansions in `setup` plus multi-test backend tokens**, so
 `checks.json` keys (which enumerate the `REQ-*` wrapper tokens) and bracket-token
 counting each miss the template-expanded and per-test gates. The true denominator
