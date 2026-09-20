@@ -110,6 +110,7 @@ for (const key of REQUIRED_STATE_KEYS) {
   checkGate(`REQ-STATE/state.${key}`, `the reported state carries "${key}"`);
 }
 checkGate("REQ-STATE/state.off.white", "borne-off counts survive a set and read back");
+checkGate("REQ-STATE/state.points.length", "state carries points as a 26-length numeric array");
 
 // ── debug hooks the suite drives the app with ───────────────────────────────
 checkGate("REQ-DEBUG/debug.setState", "a specific board position can be set and read back");

@@ -286,6 +286,13 @@
       "how": "Sets 7 white checkers borne off through the debug route; the reply must say 7."
     },
     {
+      "title": "state carries points as a 26-length numeric array",
+      "key": "REQ-STATE/state.points.length",
+      "name": "Points field reads back with 26 numbers",
+      "what": "The points field the server reports is an array of 26 numbers (indices 0 and 25 unused).",
+      "how": "Sets a position through the debug route and checks the reply's points field is an array of 26 numbers."
+    },
+    {
       "title": "a specific board position can be set and read back",
       "key": "REQ-DEBUG/debug.setState",
       "name": "Setting a position",

@@ -262,6 +262,19 @@ export async function runPreGate(): Promise<Problem[]> {
         }
       }
 
+      if (present("points")) {
+        const points = (echoed as any)?.points;
+        const pointsOk =
+          Array.isArray(points) && points.length === 26 && points.every((p) => typeof p === "number");
+        if (!pointsOk) {
+          add(
+            "REQ-STATE/state.points.length — state carries points as a 26-length numeric array",
+            "array of 26 numbers",
+            asObserved(points),
+          );
+        }
+      }
+
       if (present("legalMoves") && !Array.isArray((echoed as any)?.legalMoves)) {
         add("REQ-STATE/state.legalMoves — state carries legalMoves as an array", "array", asObserved((echoed as any)?.legalMoves));
       }

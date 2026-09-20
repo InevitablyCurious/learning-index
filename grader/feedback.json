@@ -412,6 +412,10 @@
       "first": "They can set up a specific board position through your app, but when they read it back the borne-off counts aren't what they set.",
       "repeat": "The borne-off counts still don't survive being set and read back."
     },
+    "REQ-STATE/state.points.length": {
+      "first": "They're reading the state your app reports and the \"points\" list is the wrong shape — some board positions are missing from what they read, so they can't wire that part of their side up.",
+      "repeat": "They read your state again after your fix and the \"points\" list is still the wrong shape — some board positions are still missing from what they read."
+    },
     "REQ-DEBUG/debug.setState": {
       "first": "They need to put your game into a specific position to test their own side against, but the app won't take the position — when they send it, they get an error back.",
       "repeat": "Setting your game to a specific position still comes back with an error."
