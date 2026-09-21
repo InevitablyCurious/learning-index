@@ -72,4 +72,6 @@ export function pipCount(b: Board, player: Player): number;
 export function checkWin(b: Board, player: Player): { won: boolean; type: "single" | "gammon" | "backgammon" | null };
 ```
 
+**Before you hand it over, run it.** Import the engine and put it through a real sequence — a fresh game, several rolls, moves played out for both white and black, a position carried far enough to bear off. You are not checking that any particular answer is right; you are checking that it runs at all. Code that throws, or that never comes back, only shows itself when something executes it.
+
 **Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.
