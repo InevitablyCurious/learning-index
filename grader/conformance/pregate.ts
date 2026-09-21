@@ -17,6 +17,60 @@ export interface Problem {
   observed: string;
 }
 
+/**
+ * What the pre-gate found, and what it actually looked at.
+ *
+ * `resolved` is the second half of the verdict. A check id absent from it was
+ * never reached — an earlier failure skipped past it — so its silence says
+ * nothing about the candidate and must not be read as a pass.
+ */
+export interface PreGateResult {
+  problems: Problem[];
+  resolved: Set<string>;
+}
+
+/** The counted elements, each asked separately whether it is DRAWN and TAGGED. */
+export const COUNTED_ELEMENT_LABELS = [
+  "point",
+  "checker",
+  "bar",
+  "off-tray",
+  "die",
+] as const;
+
+/**
+ * One check's verdict: the finding against it, or `undefined` when it passed.
+ *
+ * The rule lives here, beside the result it reads, because it is the whole
+ * difference between a score and a guess. Three cases, in order:
+ *
+ *   a matching problem   -> that finding
+ *   not in `resolved`    -> never evaluated, which is a failure, not a pass
+ *   otherwise            -> pass
+ *
+ * Matched on the id PLUS a trailing space, never a bare prefix: `state.off`
+ * and `state.off.white` are different checks, as are `health.body` and
+ * `health.body.status`, and a bare prefix would let one swallow the other's
+ * failure and silently green a gate that failed.
+ */
+export function verdictFor(
+  id: string,
+  result: PreGateResult,
+): Problem | undefined {
+  const found = result.problems.find((p) => p.check.startsWith(`${id} `));
+  if (found) {
+    return found;
+  }
+  if (!result.resolved.has(id)) {
+    return {
+      check: id,
+      expected: "this check is evaluated",
+      observed: "never evaluated — an earlier step failed and skipped it",
+    };
+  }
+  return undefined;
+}
+
 export const REQUIRED_STATIC_TESTIDS: string[] = [
   "scoreWhite",
   "scoreBlack",
@@ -171,10 +225,28 @@ async function countedElement(opts: {
   add(`REQ-RENDER/${label} — ${opts.renderText}`, want, String(drawn));
 }
 
-export async function runPreGate(): Promise<Problem[]> {
+export async function runPreGate(): Promise<PreGateResult> {
   const problems: Problem[] = [];
   const add = (check: string, expected: string, observed: string) => {
     problems.push({ check, expected, observed });
+  };
+
+  // ── WHAT WAS ACTUALLY LOOKED AT ─────────────────────────────────────────
+  //
+  // `problems` alone cannot tell "measured and found fine" apart from "never
+  // measured": both are silence. Every catch below reports its own failure
+  // and then SKIPS the checks after it, so those checks produced no problem
+  // and the spec read them as passes — a scaffold with nothing implemented
+  // scored 65 of 68 conformance gates.
+  //
+  // So each step also records the checks it actually resolved. Silence is a
+  // pass only for an id in this set; silence for an id outside it is the
+  // benchmark admitting it does not know. A check nobody resolves fails
+  // loudly rather than passing quietly, which is the safe direction for a
+  // mistake to fall.
+  const resolved = new Set<string>();
+  const resolve = (...ids: string[]) => {
+    for (const id of ids) resolved.add(id);
   };
 
   let server: ServerHandle | null = null;
@@ -189,8 +261,10 @@ export async function runPreGate(): Promise<Problem[]> {
         "server listening on :8002 with /health ok",
         bootObserved(error),
       );
-      return problems;
+      resolve("REQ-BIND/boot");
+      return { problems, resolved };
     }
+    resolve("REQ-BIND/boot");
 
     try {
       const response = await health();
@@ -209,9 +283,16 @@ export async function runPreGate(): Promise<Problem[]> {
       if (isRecord(body) && body.status !== "ok") {
         add("REQ-API/health.body.status — /health body carries \"status\":\"ok\"", '{"status":"ok",...}', asObserved(body));
       }
+      resolve(
+        "REQ-API/health.status",
+        "REQ-API/health.body",
+        "REQ-API/health.body.status",
+      );
     } catch (error) {
       add("REQ-BIND/health — GET /health succeeds", "GET /health succeeds", errorLine(error));
     }
+    // Reached either way: the catch above is this check's own verdict.
+    resolve("REQ-BIND/health");
 
     try {
       const echoed = await debugSetState(
@@ -282,9 +363,17 @@ export async function runPreGate(): Promise<Problem[]> {
       if (present("canDouble") && typeof (echoed as any)?.canDouble !== "boolean") {
         add("REQ-STATE/state.canDouble — state carries canDouble as a boolean", "boolean", asObserved((echoed as any)?.canDouble));
       }
+      resolve(
+        ...REQUIRED_STATE_KEYS.map((key) => `REQ-STATE/state.${key}`),
+        "REQ-STATE/state.off.white",
+        "REQ-STATE/state.points.length",
+        "REQ-STATE/state.legalMoves",
+        "REQ-STATE/state.canDouble",
+      );
     } catch (error) {
       add("REQ-DEBUG/debug.setState — debug.setState seeds a board and /api/state echoes it", "debug state can be set and echoed", errorLine(error));
     }
+    resolve("REQ-DEBUG/debug.setState");
 
     try {
       await debugRoll([6, 1]);
@@ -294,9 +383,11 @@ export async function runPreGate(): Promise<Problem[]> {
       if (!honored) {
         add("REQ-DEBUG/debug.roll — the debug roll queue is honored by /api/roll", "dice [1,6] after /api/roll", asObserved((rolled as any)?.dice));
       }
+      resolve("REQ-DEBUG/debug.roll");
     } catch (error) {
       add("REQ-DEBUG/debug.roll.error — the debug roll endpoint answers without error", "debug roll answers without error", errorLine(error));
     }
+    resolve("REQ-DEBUG/debug.roll.error");
 
     try {
       browser = await chromium.launch();
@@ -491,9 +582,19 @@ export async function runPreGate(): Promise<Problem[]> {
       }
 
       await page.close();
+      resolve(
+        ...REQUIRED_STATIC_TESTIDS.map((testId) => `REQ-TESTID/testid.${testId}`),
+        ...COUNTED_ELEMENT_LABELS.flatMap((label) => [
+          `REQ-RENDER/${label}`,
+          `REQ-TESTID/${label}`,
+        ]),
+        "REQ-RENDER/die-reload",
+        "REQ-HINT/hint",
+      );
     } catch (error) {
       add("REQ-TESTID/dom — page DOM exposes the required testids and hint flow", "DOM testids and hint flow are present", errorLine(error));
     }
+    resolve("REQ-TESTID/dom");
   } catch (error) {
     add("REQ-TESTID/pregate — conformance pre-gate completes without errors", "pre-gate completes", errorLine(error));
   } finally {
@@ -513,5 +614,6 @@ export async function runPreGate(): Promise<Problem[]> {
     }
   }
 
-  return problems;
+  resolve("REQ-TESTID/pregate");
+  return { problems, resolved };
 }

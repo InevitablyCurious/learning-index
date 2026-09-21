@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test";
 import {
+  COUNTED_ELEMENT_LABELS,
   REQUIRED_STATE_KEYS,
   REQUIRED_STATIC_TESTIDS,
   runPreGate,
+  verdictFor,
   type Problem,
 } from "./pregate.ts";
 
@@ -40,11 +42,14 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 let problems: Problem[] = [];
+let resolved: Set<string> = new Set();
 let preGateError: unknown = null;
 
 test.beforeAll(async () => {
   try {
-    problems = await runPreGate();
+    const result = await runPreGate();
+    problems = result.problems;
+    resolved = result.resolved;
   } catch (error) {
     // A pre-gate that throws must fail every gate loudly rather than reporting
     // an empty problem list, which would read as a clean sweep.
@@ -68,7 +73,15 @@ function findingFor(id: string): Problem | undefined {
       observed: String((preGateError as Error)?.message ?? preGateError),
     };
   }
-  return problems.find((p) => p.check.startsWith(`${id} `));
+  // ── SILENCE IS NOT A PASS UNLESS SOMETHING LOOKED ───────────────────────
+  //
+  // Every step of the pre-gate skips the checks after it when it fails, so a
+  // check it never reached produces no problem — indistinguishable, here,
+  // from one that was measured and found correct. Reading that as a pass is
+  // how a scaffold with no implementation scored 65 of 68 conformance gates:
+  // the server stub threw, the boot catch returned, and every check after it
+  // went green. `verdictFor` is where that is now decided.
+  return verdictFor(id, { problems, resolved });
 }
 
 function checkGate(id: string, title: string): void {
@@ -126,15 +139,18 @@ for (const testId of REQUIRED_STATIC_TESTIDS) {
 // Split because the two failures have different audiences — a board with 20
 // points is visible to anyone playing, 24 points that are untagged are visible
 // only to an automated consumer. See `countedElement` in pregate.ts.
-for (const [label, thing, verb] of [
-  ["point", "24 board points", "are"],
-  ["checker", "30 checkers", "are"],
-  ["bar", "the bar", "is"],
-  ["off-tray", "the off tray", "is"],
-  ["die", "the dice", "are"],
-] as const) {
-  checkGate(`REQ-RENDER/${label}`, `${thing} ${verb} drawn`);
-  checkGate(`REQ-TESTID/${label}`, `${thing} ${verb} tagged for automation`);
+// The labels come from pregate.ts, which is also what marks them resolved —
+// a label only named here would be reported "never evaluated" forever.
+const COUNTED_PROSE: Record<(typeof COUNTED_ELEMENT_LABELS)[number], string> = {
+  point: "24 board points are",
+  checker: "30 checkers are",
+  bar: "the bar is",
+  "off-tray": "the off tray is",
+  die: "the dice are",
+};
+for (const label of COUNTED_ELEMENT_LABELS) {
+  checkGate(`REQ-RENDER/${label}`, `${COUNTED_PROSE[label]} drawn`);
+  checkGate(`REQ-TESTID/${label}`, `${COUNTED_PROSE[label]} tagged for automation`);
 }
 checkGate("REQ-RENDER/die-reload", "the dice survive a reload");
 
