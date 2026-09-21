@@ -93,7 +93,7 @@ def test_empty_reports_are_all_not_reached_never_complete() -> None:
 def test_stub_counts_expose_a_completed_but_unbuilt_chunk(tmp_path: Path) -> None:
     """A clean drive is not proof of work. The file it owns is what says so."""
     (tmp_path / "src").mkdir()
-    # chunk 3 owns src/ai.ts; leave it at its full scaffold stub count.
+    # chunk 2 owns src/ai.ts; leave it at its full scaffold stub count.
     (tmp_path / "src" / "ai.ts").write_text(
         'throw new Error("not implemented")\n' * 5, encoding="utf-8"
     )
@@ -103,15 +103,15 @@ def test_stub_counts_expose_a_completed_but_unbuilt_chunk(tmp_path: Path) -> Non
 
     rows = build_chunk_completion(
         chunk_reports=[
+            {"chunk": 1, "exit_code": 0},
             {"chunk": 2, "exit_code": 0},
-            {"chunk": 3, "exit_code": 0},
         ],
-        expected=3,
+        expected=2,
         worktree=tmp_path,
     )
 
-    game = next(r for r in rows if r["chunk"] == 2)
-    ai = next(r for r in rows if r["chunk"] == 3)
+    game = next(r for r in rows if r["chunk"] == 1)
+    ai = next(r for r in rows if r["chunk"] == 2)
     assert game["stubs_remaining"] == 0  # ran clean and actually built
     assert ai["state"] == "complete" and ai["stubs_remaining"] == 5  # ran, NOT built
 
@@ -125,12 +125,13 @@ def test_rows_carry_no_marker_field(tmp_path: Path) -> None:
 
 
 def test_chunks_without_a_stub_file_report_none(tmp_path: Path) -> None:
-    """Chunks 1, 5, 6 own no stub file — absent must not read as zero."""
+    """Chunks 4 and 5 own no stub file — absent must not read as zero."""
     rows = build_chunk_completion(
-        chunk_reports=[{"chunk": 1, "exit_code": 0}], expected=6, worktree=tmp_path
+        chunk_reports=[{"chunk": 4, "exit_code": 0}], expected=5, worktree=tmp_path
     )
-    assert rows[0]["stub_file"] is None
-    assert rows[0]["stubs_remaining"] is None
+    frontend = next(r for r in rows if r["chunk"] == 4)
+    assert frontend["stub_file"] is None
+    assert frontend["stubs_remaining"] is None
 
 
 def test_count_stub_sentinels_on_missing_file_is_none_not_zero(tmp_path: Path) -> None:

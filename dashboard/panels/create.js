@@ -494,7 +494,7 @@ function baselineConfirm(ledger) {
       glyph: compactOn ? "✓" : "○",
       text: compactOn ? "compaction ON — compact between build chunks" : "compaction OFF — no compaction",
       meta: compactOn
-        ? `${ctxWord} · after each of the 6 chunks, never during troubleshooting`
+        ? `${ctxWord} · after each of the 5 chunks, never during troubleshooting`
         : `${ctxWord} · the build keeps its full transcript`,
       kind: compactOn ? "on" : "off",
     })}

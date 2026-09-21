@@ -26,9 +26,9 @@
   ],
   "stub_sentinel": "throw new Error(\"not implemented\")",
   "chunk_stub_files": {
-    "2": "src/game.ts",
-    "3": "src/ai.ts",
-    "4": "src/server.ts"
+    "1": "src/game.ts",
+    "2": "src/ai.ts",
+    "3": "src/server.ts"
   },
   "scaffold_hash": "d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee"
 }

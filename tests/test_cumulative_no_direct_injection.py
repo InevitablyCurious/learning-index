@@ -44,7 +44,7 @@ def test_load_chunk_prompts_returns_exactly_the_on_disk_chunks(
     chunks = runner._load_chunk_prompts()
 
     on_disk = sorted((TASK_DIR / "prompts").glob("chunk-*.md"))
-    assert len(on_disk) == 6
+    assert len(on_disk) == 5
     # Byte-identical to disk: nothing is prepended, appended, or formatted in.
     assert chunks == [p.read_text(encoding="utf-8") for p in on_disk]
     assert all("# OKP MEMORY CONTEXT" not in c for c in chunks)

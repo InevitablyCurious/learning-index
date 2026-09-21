@@ -40,8 +40,8 @@ _SPEC = default_spec()
 # `stubs_remaining: 5` is a visible discrepancy rather than a silent one.
 _STUB_SENTINEL = _SPEC.stub_sentinel
 # Chunk -> the scaffold file that chunk is responsible for emptying of stubs.
-# Chunks 1, 5 and 6 own no stub file: 1 is structure/types, 5 is the frontend
-# (whose scaffold carries no sentinels), 6 is a verification pass.
+# Chunks 4 and 5 own no stub file: 4 is the frontend (whose scaffold carries no
+# sentinels), 5 is a verification pass.
 _CHUNK_STUB_FILE = _SPEC.chunk_stub_files
 
 

@@ -127,7 +127,7 @@ def test_load_chunk_prompts_in_order_with_protocol_on_first_chunk(
     """
     runner_off = _make_runner(tmp_path)
     chunks = runner_off._load_chunk_prompts()
-    assert len(chunks) == 6
+    assert len(chunks) == 5
     assert not chunks[0].startswith("WORKING STYLE")
     # WO-MARKER-RIP: no chunk asks the model to print a completion string. A
     # chunk ends when the session goes idle, and the harness reads nothing the
