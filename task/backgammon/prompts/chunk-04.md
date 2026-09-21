@@ -5,7 +5,7 @@ TASK: Implement the HTTP server and the full game API in `src/server.ts`, wiring
 
 Binding (as in chunk 1): listen on `PORT`, or **8002** when it is unset; print a startup line with the URL; if the port is taken, exit non-zero after a clear single-line message that names the port and says it is already in use.
 
-All game routes accept `POST` with a JSON body (empty `{}` allowed) and respond `200 application/json` with the full serialized state (below). Unknown `/api/*` → `404 {"error":"unknown endpoint"}`. Static files are served from `public/` for all other paths.
+All game routes accept `POST` with a JSON body (empty `{}` allowed) and respond `200 application/json` with the full serialized state (below). Unknown `/api/*` → `404 {"error":"unknown endpoint"}`. Static files are served from `public/` for all other paths. The root URL `/` and every other non-`/api` path serves the HTML page from `public/` with `Content-Type: text/html`, so a browser renders it as a page — never as a file download.
 
 The API surface (EXACT):
 

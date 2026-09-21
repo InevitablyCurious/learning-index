@@ -31,6 +31,7 @@ export function shouldAiAccept(b: Board, player: Player, difficulty: "easy" | "m
 Requirements:
 
 - **Difficulty is real.** `difficulty` selects genuine strength: over repeated play, hard wins more games than easy. Every move the AI makes is legal.
+- **No mutation.** `chooseMoves` must NOT mutate the input board `b` — the board passed in is unchanged afterward (clone it to explore).
 - **Speed.** The AI answers promptly — choosing a move must never leave a player waiting, however many ways there are to play the dice.
 - **Win probability.** `winProbability(b, player)` returns a number in [0, 1] that is ≈ 0.5 (within ±0.01) when both players have equal pip counts, never decreases as the player's pip lead grows, sits below 0.24 for a hopelessly lost position (say, opponent ~2 pips to the player's ~350), and above 0.90 for a nearly certain win. Any function with those properties is fine.
 - **Doubling-cube policy — these are our house numbers, use them exactly.**
