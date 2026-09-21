@@ -37,7 +37,6 @@ Requirements:
 - **Doubling-cube policy — these are our house numbers, use them exactly.**
   - *Accepting.* `shouldAiAccept` takes the cube (returns `"double"`) when `winProbability` is at or above the take point, and passes (`"no-double"`) below it. Take points: **easy 0.32, medium 0.27, hard 0.24**.
   - *Offering.* `shouldAiDouble` offers (returns `"double"`) when `winProbability` is inside the offer window, else holds. Window: **medium 0.72 to 0.90, hard 0.68 to 0.90**. Above 0.90 it is too good to double — hold and play on. **Easy never offers.**
-  - The AI only offers when it may double: the cube is centered or the AI owns it, never when the opponent owns it.
   - Both cube functions return a human-readable `reasoning` string explaining the decision.
 
 **Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.

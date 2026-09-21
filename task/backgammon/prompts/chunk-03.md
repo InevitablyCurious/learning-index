@@ -36,9 +36,9 @@ pip, legalMoves, canDouble
 - `history` is NOT serialized.
 - The server MUST hold a complete, initialized game state from startup, so `/api/state` and `/api/debug/state` return a valid serialized game even before any `/api/new` is called.
 
-Turn flow the server drives: dice are consumed as they are played; when the human has no legal move the turn passes, with `turnOver === true`, `legalMoves === []` and a `message` that says there is no legal move (wording containing "no legal move" or "pass"); after the human turn ends, `/api/ai` advances the AI with `chooseMoves`; a win ends the game with `winner`, `winType` and `pointsWon` (cube value × win multiplier) and a clear `message`; `/api/new` starts a fresh game without any reload and keeps `score` and `gamesPlayed`.
+Turn flow the server drives: `/api/ai` advances the computer's turn using `chooseMoves`. When the human has no move available, the response carries `turnOver === true`, `legalMoves === []`, and a `message` whose wording contains **"no legal move"** or **"pass"** — automation reads that wording, so those words have to appear. A finished game reports `winner`, `winType`, `pointsWon` and a clear `message`. `/api/new` starts a fresh game without any page reload and carries `score` and `gamesPlayed` forward.
 
-- Doubling cube state: a new game's cube is `{value:1, owner:null}` (centered). `canDouble` is true only when it is the player's turn in the `"roll"` phase (before rolling) and the player may double (cube centered or owned by that player); during the `"move"` phase `canDouble` is false. When a double is offered and accepted, the cube's value doubles and its owner becomes the player who accepted (the taker).
+- Doubling cube state: the cube is `{value, owner}`, and **`owner: null` is how we represent a centered cube** — a new game starts `{value: 1, owner: null}`. `canDouble` reports whether the human may offer a double at this exact moment.
 
 Debug seam — gated by env `DEBUG_API=1`; when `DEBUG_API` is not `1` these routes behave as unknown endpoints (404). It exists so a game can be driven into a known position with known dice:
 
