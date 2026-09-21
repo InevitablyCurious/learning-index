@@ -4,7 +4,7 @@
 import { renderCreate, isCreateOpen, closeCreate } from "./panels/create.js";
 import { renderResetModal, isResetOpen } from "./panels/treereset.js";
 import { renderRestoreModal, isRestoreOpen } from "./panels/restore.js";
-import { renderToolsDrawer, isToolsOpen, settleToolsFocus } from "./panels/tools.js";
+import { renderToolsDrawer, isToolsOpen, settleToolsFocus, settleToolLogs } from "./panels/tools.js";
 import { patch } from "./dom.js";
 
 export function renderOverlay(board) {
@@ -35,8 +35,10 @@ export function renderOverlay(board) {
   // The tools drawer ranks below every dialog: it holds no decision.
   if (isToolsOpen()) {
     patch(root, renderToolsDrawer(board));
-    // After the patch, so a row the drawer was pointed at exists to scroll to.
+    // After the patch, so a row the drawer was pointed at exists to scroll to,
+    // and a running job's log sits on its newest line.
     settleToolsFocus();
+    settleToolLogs(board);
     return;
   }
 

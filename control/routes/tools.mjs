@@ -3,7 +3,8 @@
 
 import { refuse } from "../contract.mjs";
 // The tool registry lives in tools.mjs; the board renders what this serves.
-import { describeTools, invokeTool } from "../tools.mjs";
+import { describeTools } from "../tools.mjs";
+import { startToolJob } from "../tooljobs.mjs";
 import { readRunState } from "../runstate.mjs";
 import { BENCH_ROOT, RUNS_ROOT, getLauncher } from "../state.mjs";
 import { sendJson, readBody } from "../lib/http.mjs";
@@ -21,9 +22,11 @@ export const routes = [
   },
 
   {
-    // ── POST /api/tools/run ── run one tool. Every failure is loud, and the
-    // tool's own words are forwarded. No confirmation token: a single click on a
-    // named tool is the act.
+    // ── POST /api/tools/run ── START one tool as a tracked job and answer
+    // immediately: progress and the verdict ride the board frame (tool_jobs),
+    // not this connection, so a dropped tab loses nothing. Refusals before any
+    // job exists (run in flight, unknown tool, blocked, missing argument) are
+    // unchanged and synchronous.
     method: "POST",
     path: "/api/tools/run",
     async handle(req, res, url) {
@@ -48,7 +51,7 @@ export const routes = [
         }
       }
 
-      const out = await invokeTool(BENCH_ROOT, payload?.id, payload?.args ?? {});
+      const out = await startToolJob(BENCH_ROOT, payload?.id, payload?.args ?? {});
       sendJson(res, out.ok ? 200 : 400, out);
       return;
     },

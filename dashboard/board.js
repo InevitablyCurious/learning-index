@@ -232,6 +232,7 @@ import {
   isToolsOpen,
   toggleToolDetail,
   setToolArg,
+  observeToolJobs,
 } from "./panels/tools.js";
 import {
   openRestore,
@@ -355,6 +356,9 @@ function render() {
   try { paintFeed(board); } catch (err) { console.error("feed paint failed:", err); }
   try { paintBackend(); } catch (err) { console.error("backend feed paint failed:", err); }
   try { renderOverlay(board); } catch (err) { console.error("overlay failed:", err); }
+  // Tool jobs (the drawer's refresh buttons): the elapsed ticker, and the page
+  // reload a successful board refresh asks for. Schedules only, never paints.
+  try { observeToolJobs(board); } catch (err) { console.error("tool-job observe failed:", err); }
   // The TUI mirror is painted by xterm.js into a data-preserve node (like the
   // feed) and sized so 130 columns fill the card.
   try { paintTui(board); } catch (err) { console.error("tui paint failed:", err); }

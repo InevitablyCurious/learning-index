@@ -55,6 +55,10 @@ data/extract/*
 # by the egress sidecar; in-cell code must never see scored results.
 data/results-ledger.jsonl
 
+# TOOL JOBS — the refresh/custom-tool job records (control/tooljobs.mjs):
+# runtime state, per-installation, never committed.
+data/tool-jobs.json
+
 # --- backgammon task (Phase 2a): never commit installed deps or test artifacts ---
 node_modules/
 task/**/test-results/

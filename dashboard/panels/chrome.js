@@ -106,7 +106,7 @@ export function renderTopbar(board, { stale, lastError }) {
     <span class="spacer"></span>
     ${feed}
     <a class="histnav" href="/history" aria-label="Run history">history</a>
-    ${renderToolsButton()}
+    ${renderToolsButton(board)}
   </div>
   ${reach.ok ? "" : reachBanner(reach)}`;
 }

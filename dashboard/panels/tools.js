@@ -3,8 +3,13 @@
 // edit), the modes, the router keys and any custom tools a memory system adds.
 // The registry is served by GET /api/tools, never held here, and results are
 // shown in the tool's own words.
+//
+// A tool run is a tracked job on the control plane (control/tooljobs.mjs):
+// pressing run STARTS it and the answer comes back at once; the job's live
+// output, elapsed time and verdict arrive with the board frame (tool_jobs),
+// so closing the drawer or reloading the page loses nothing.
 
-import { esc } from "../board.js";
+import { esc, dur, render } from "../board.js";
 // Credentials live in this drawer too.
 import { renderRoutersSection } from "./routers.js";
 // So does dev mode (server state, read from the board).
@@ -27,9 +32,10 @@ const ui = {
   error: null,
   // Per-tool argument values, prefilled from the server's declared defaults.
   args: {},
-  // Per-tool in-flight state and outcome.
-  busy: {},
-  results: {},
+  // Per-tool refusal from the START call itself (run in flight, blocked,
+  // missing argument): no job exists for these. Job progress and verdicts are
+  // read off the board frame (tool_jobs), not held here.
+  preStartErrors: {},
   // Arrived from a refusal: preflight named this tool as the fix, so its row is
   // highlighted, explained and scrolled to — once (focusScrolled), or the
   // re-render would pin the drawer there.
@@ -120,10 +126,12 @@ export function setToolArg(id, name, value) {
   ui.args[id][name] = value;
 }
 
-/** Fire one tool. The result — success or failure — is kept on its card. */
+/**
+ * Start one tool. The POST only starts the job; progress and the verdict ride
+ * the board frame. Only a refusal before the job exists lands on the card.
+ */
 export async function runTool(id) {
-  ui.busy[id] = true;
-  ui.results[id] = null;
+  delete ui.preStartErrors[id];
   try {
     const res = await fetch(`/api/tools/run`, {
       method: "POST",
@@ -131,19 +139,21 @@ export async function runTool(id) {
       body: JSON.stringify({ id, args: ui.args[id] ?? {} }),
     });
     const data = await res.json().catch(() => null);
-    ui.results[id] =
-      data ?? { ok: false, code: `HTTP ${res.status}`, reason: "the control plane returned nothing readable" };
-    if (data?.ok && ui.tools?.find((t) => t.id === id)?.reload_page) reloadWhenReplaced();
+    if (!res.ok || !data || data.ok === false) {
+      ui.preStartErrors[id] =
+        data && data.ok === false
+          ? data
+          : { ok: false, code: `HTTP ${res.status}`, reason: "the control plane returned nothing readable" };
+    }
+    // ok: the job is on the board frame within a poll — nothing to store here.
   } catch (err) {
-    ui.results[id] = {
+    ui.preStartErrors[id] = {
       ok: false,
       code: "unreachable",
       reason:
         `${String(err?.message ?? err)} — the control plane did not answer. ` +
         `If a tool just restarted it, give it a few seconds and press run again.`,
     };
-  } finally {
-    ui.busy[id] = false;
   }
 }
 
@@ -170,16 +180,72 @@ async function reloadWhenReplaced() {
   }
 }
 
+// ── JOB OBSERVATION ── driven from render(): the elapsed ticker while a job
+// runs, and the page reload a successful board refresh asks for.
+
+/** This page load: a succeeded job from BEFORE it is history, not a trigger. */
+const bootAt = Date.now();
+const reloadArmed = new Set();
+let ticker = null;
+
+/**
+ * Watch the job section of the board frame. Called from render(); pure
+ * scheduling, no painting of its own.
+ */
+export function observeToolJobs(board) {
+  const jobs = board?.tool_jobs?.jobs ?? [];
+  const anyRunning = jobs.some((j) => j?.status === "running");
+
+  // Between patches the elapsed/quiet lines still move. Only while the drawer
+  // is open — nothing else on the board shows them.
+  if (anyRunning && isToolsOpen() && !ticker) {
+    ticker = setInterval(() => {
+      try {
+        render();
+      } catch (err) {
+        console.error("tool-job tick render failed:", err);
+      }
+    }, 1000);
+  } else if ((!anyRunning || !isToolsOpen()) && ticker) {
+    clearInterval(ticker);
+    ticker = null;
+  }
+
+  // Refresh board's job succeeded → the container swap follows; reload onto it.
+  for (const j of jobs) {
+    if (!j?.reload_page || j.status !== "succeeded") continue;
+    if (reloadArmed.has(j.id)) continue;
+    if (!(Date.parse(j.started_at) > bootAt)) continue;
+    reloadArmed.add(j.id);
+    void reloadWhenReplaced();
+  }
+}
+
+/** Pin a running job's log to its newest line after each patch. */
+export function settleToolLogs(board) {
+  const jobs = board?.tool_jobs?.jobs ?? [];
+  for (const el of document.querySelectorAll("[data-job-log]")) {
+    const job = jobs.find((j) => j.id === el.dataset.jobLog);
+    if (job?.status === "running") el.scrollTop = el.scrollHeight;
+  }
+}
+
 // ── render ──
 
-/** The hamburger. Lives at the far right of the top bar. */
-export function renderToolsButton() {
+/** The hamburger. Lives at the far right of the top bar. A dot while any tool
+ * job is running, so a refresh in flight is visible with the drawer closed. */
+export function renderToolsButton(board) {
+  const running = (board?.tool_jobs?.jobs ?? []).some((j) => j?.status === "running");
   return `<button class="hamburger" data-tools-open="1" aria-label="Settings"
-    aria-expanded="${ui.open ? "true" : "false"}"><span></span><span></span><span></span></button>`;
+    aria-expanded="${ui.open ? "true" : "false"}"><span></span><span></span><span></span>${
+      running ? `<span class="hb-act" title="a refresh is running — open for live output"></span>` : ""
+    }</button>`;
 }
 
 export function renderToolsDrawer(board) {
   if (!ui.open) return "";
+
+  const runningCount = (board?.tool_jobs?.jobs ?? []).filter((j) => j?.status === "running").length;
 
   return `
     <div class="drawer-scrim${ui.closing ? " out" : ""}" data-tools-scrim="1"></div>
@@ -200,7 +266,7 @@ export function renderToolsDrawer(board) {
               the one you need when a run is refused. Everything else — harness, prompts,
               challenges, scripts — picks up changes by itself at the next run.
             </p>
-            ${body((t) => !t.external)}
+            ${body((t) => !t.external, board)}
           </section>
 
           ${renderGradingSection()}
@@ -237,12 +303,18 @@ export function renderToolsDrawer(board) {
               Added by this installation for its memory system, not part of the benchmark.
             </p>
 
-            ${body((t) => t.external)}
+            ${body((t) => t.external, board)}
           </section>
         </div>
 
         <div class="dw-foot">
-          <span class="dw-note">${ui.tools === null ? "reading tools…" : ""}</span>
+          <span class="dw-note">${
+            runningCount > 0
+              ? `${runningCount} refresh${runningCount > 1 ? "es" : ""} running — live above`
+              : ui.tools === null
+                ? "reading tools…"
+                : ""
+          }</span>
         </div>
       </aside>`;
 }
@@ -284,7 +356,7 @@ function renderGradingSection() {
     </section>`;
 }
 
-function body(keep) {
+function body(keep, board) {
   if (ui.loading && ui.tools === null) return `<div class="dw-empty">reading registry…</div>`;
   // Above the list, never instead of it: a stale list says it is stale.
   const banner = ui.error
@@ -298,15 +370,21 @@ function body(keep) {
     : "";
   const tools = (ui.tools ?? []).filter(keep);
   if (!tools.length) return banner || `<div class="dw-empty">none</div>`;
-  return `${banner}<div class="dw-list">${tools.map(toolCard).join("")}</div>`;
+  return `${banner}<div class="dw-list">${tools.map((t) => toolCard(t, board)).join("")}</div>`;
 }
 
-function toolCard(t) {
+/** The newest job for one tool (jobs arrive newest first), or null. */
+function latestJob(board, toolId) {
+  return (board?.tool_jobs?.jobs ?? []).find((j) => j?.tool_id === toolId) ?? null;
+}
+
+function toolCard(t, board) {
   const wired = t.status === "wired";
   const open = ui.expanded === t.id;
-  const busy = ui.busy[t.id] === true;
-  const result = ui.results[t.id] ?? null;
   const focused = ui.focus === t.id;
+  const job = latestJob(board, t.id);
+  const running = job?.status === "running";
+  const preError = ui.preStartErrors[t.id] ?? null;
 
   return `
     <div class="tool${wired ? "" : " unwired"}${focused ? " tool-focused" : ""}"${
@@ -341,8 +419,8 @@ function toolCard(t) {
       <div class="tool-row2">
         <span class="tool-id">${esc(t.id)}</span>
         <button class="btn sm tool-detail" data-tool-detail="${esc(t.id)}">${open ? "hide steps" : "steps"}</button>
-        <button class="btn sm primary" data-tool-run="${esc(t.id)}" ${wired && !busy ? "" : "disabled"}>${
-          busy ? "running…" : "run"
+        <button class="btn sm primary" data-tool-run="${esc(t.id)}" ${wired && !running ? "" : "disabled"}>${
+          running ? "running…" : "run"
         }</button>
       </div>
 
@@ -352,16 +430,11 @@ function toolCard(t) {
           : ""
       }
 
-      ${
-        busy
-          ? `<div class="tool-result">
-               <span class="tr-code">RUNNING</span>
-               <span class="tr-lines">no output until it finishes — a refresh can take several minutes</span>
-             </div>`
-          : ""
-      }
+      ${running ? jobLiveBlock(job) : ""}
 
-      ${result && !busy ? resultBlock(t, result) : ""}
+      ${job && !running ? jobResultBlock(t, job) : ""}
+
+      ${!job && preError ? resultBlock(t, preError) : ""}
     </div>`;
 }
 
@@ -374,6 +447,70 @@ function argField(t, a) {
         value="${esc(String(v))}" spellcheck="false" />
       ${a.help ? `<span class="ta-help">${esc(a.help)}</span>` : ""}
     </label>`;
+}
+
+/**
+ * The running job: elapsed time, output age, and the log as it arrives. No
+ * invented percentage — a docker pull has no knowable duration, so the honest
+ * signals are the clock and the bytes.
+ */
+function jobLiveBlock(job) {
+  const started = Date.parse(job.started_at ?? "");
+  const elapsedS = Number.isFinite(started) ? Math.max(0, Math.round((Date.now() - started) / 1000)) : null;
+  const lastOut = Date.parse(job.last_output_at ?? "");
+  const quietS = Number.isFinite(lastOut) ? Math.max(0, Math.round((Date.now() - lastOut) / 1000)) : null;
+  const quietNote =
+    quietS !== null && quietS >= 90
+      ? `<span class="tr-note">no new output for ${dur(quietS)} — registry fetches and grading can be ` +
+        `quiet for minutes. The clock above is re-rendered every second; if it moves, the job is alive.</span>`
+      : "";
+  return `
+    <div class="tool-result live">
+      <span class="tr-code">RUNNING</span>
+      <span class="tr-lines">${
+        elapsedS === null ? "started — elapsed unobserved" : `elapsed ${dur(elapsedS)}`
+      } · ${
+        quietS === null ? "waiting for the first line of output" : `last output ${dur(quietS)} ago`
+      }</span>
+      ${quietNote}
+      ${job.output_tail ? `<pre class="tool-log" data-job-log="${esc(job.id)}">${esc(job.output_tail)}</pre>` : ""}
+    </div>`;
+}
+
+/**
+ * The finished job: verdict, how long it took, and the same log the live view
+ * showed. A job from before this page load renders identically — that is the
+ * reconnect/history guarantee.
+ */
+function jobResultBlock(t, job) {
+  const ok = job.status === "succeeded";
+  const started = Date.parse(job.started_at ?? "");
+  const ended = Date.parse(job.ended_at ?? "");
+  const tookS =
+    Number.isFinite(started) && Number.isFinite(ended) ? Math.max(0, Math.round((ended - started) / 1000)) : null;
+  const log = String(job.output_tail ?? "").trim();
+  const pre = log ? `<pre class="tool-log" data-job-log="${esc(job.id)}">${esc(log)}</pre>` : "";
+
+  if (ok) {
+    // Structured fields, when a custom tool returned any.
+    const res = job.result && typeof job.result === "object" ? job.result : {};
+    const lines = Object.entries(res)
+      .filter(([, v]) => v !== null && v !== undefined && typeof v !== "object")
+      .map(([k, v]) => `${k} ${v}`);
+    return `
+      <div class="tool-result ok">
+        <span class="tr-code">DONE${tookS !== null ? ` · took ${esc(dur(tookS))}` : ""}</span>
+        ${lines.length ? `<span class="tr-lines">${esc(lines.join(" · "))}</span>` : ""}
+        ${t.success_note ? `<span class="tr-note">${esc(t.success_note)}</span>` : ""}
+        ${pre}
+      </div>`;
+  }
+  return `
+    <div class="tool-result bad">
+      <span class="tr-code">${esc(job.code ?? "failed")}${tookS !== null ? ` · after ${esc(dur(tookS))}` : ""}</span>
+      <span class="tr-lines">${esc(job.reason ?? "no reason given")}</span>
+      ${pre}
+    </div>`;
 }
 
 /**

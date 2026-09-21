@@ -35,6 +35,7 @@ import {
 } from "../state.mjs";
 import { sendJson, readBody } from "../lib/http.mjs";
 import { validateStart } from "../lib/validate.mjs";
+import { substrateRefreshInFlight } from "../tooljobs.mjs";
 import { stopRun } from "../lib/lifecycle.mjs";
 
 // The stop confirmation token, shared by preview and commit. Bound to the run
@@ -67,13 +68,15 @@ export const routes = [
 
       // Preview runs the same validation as start, so it never arms a run the start
       // would refuse. The serial gate is excluded: the operator may review the next
-      // run while a cell is in flight.
+      // run while a cell is in flight. So is the refresh gate: a refresh in flight
+      // blocks the start, never the review (the advisory rides along below).
       const run = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const refresh = substrateRefreshInFlight(BENCH_ROOT);
       const check = await validateStart(
         payload,
         roster,
         { ...run, can_start: true, blocked_reason: null },
-        { requireConfirm: false, runsRoot: RUNS_ROOT },
+        { requireConfirm: false, runsRoot: RUNS_ROOT, allowRefresh: true },
       );
       if (check.ok === false) {
         sendJson(res, 400, check);
@@ -97,6 +100,11 @@ export const routes = [
         cloud: cloud ? { provider: cloud.provider, model: cloud.model, slug: cloud.slug, name: cloud.name } : null,
         // The serial rule will block this run; the parameters are still valid.
         blocked_now: run.can_start === true ? null : (run.blocked_reason ?? "a cell is already in flight"),
+        // A substrate-changing refresh in flight will block the start; the
+        // parameters are still valid. Same advisory shape as blocked_now.
+        refresh_now: refresh
+          ? `'${refresh.tool_name}' is running and changes the substrate — start is refused until it finishes`
+          : null,
       });
       return;
     },

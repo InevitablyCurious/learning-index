@@ -190,6 +190,12 @@ export function emptyBoard() {
       },
     },
 
+    // ── TOOL JOBS ── owned by sources/tool-jobs.mjs (records in
+    // control/tooljobs.mjs, persisted to data/tool-jobs.json). The refresh and
+    // custom tools run as tracked jobs: the drawer renders their live output,
+    // elapsed time and verdicts from here. null = source not wired.
+    tool_jobs: null,
+
     history: [],
 
     sources: [],

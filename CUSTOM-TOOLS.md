@@ -33,7 +33,21 @@ BENCH_TOOLS_URL=http://127.0.0.1:8720 node control/server.mjs
   shown blocked and does nothing.
 - **A tool marked `refuse_while_running` is refused while a cell is live**,
   because changing the substrate mid-cell would change what is being measured.
+  Symmetrically, a cell launch is refused while such a tool is running.
 - **Only declared arguments are sent**, as strings.
+
+## How a run is shown
+
+A tool run is a tracked background job (`control/tooljobs.mjs`), not a held
+request: pressing run starts the job and the board answers at once; the job's
+live output, elapsed time and verdict arrive with the board frame and survive
+closing the drawer or reloading the page. A second press while the job runs
+joins it instead of starting an overlapping one.
+
+For a custom tool this means: the card shows the elapsed clock and a "waiting
+for the service" line while `POST /tools/run` is in flight (the service's
+contract streams nothing), then the service's own output and verdict when it
+answers. Keep `timeout_ms` honest — it is still the hard bound.
 
 ## The contract
 

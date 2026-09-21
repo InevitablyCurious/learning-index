@@ -41,7 +41,10 @@ function pythonScript(benchRoot, script) {
     kind: "script",
     command: controlPython(benchRoot),
     argv: [join(benchRoot, "scripts", script)],
-    timeoutMs: 900000,
+    // Measured, not guessed: a warm rebuild is ~9.5min, of which ~6min is
+    // docker.io resolution — the network-variable part. 30min is that cost
+    // with headroom; the job's live log makes a hang visible long before it.
+    timeoutMs: 1800000,
   };
 }
 
@@ -110,6 +113,9 @@ function builtinTools(benchRoot) {
       args: [],
       // Runs are children of the control plane; restarting it would kill one.
       refuse_while_running: true,
+      // A restart also orphans every tool job this process is running, so the
+      // job runner refuses to start it while one is live (tooljobs.mjs).
+      orphans_jobs: true,
       invoke: {
         kind: "script",
         after: {
@@ -317,15 +323,18 @@ export function attachRemedies(checks, registry) {
 
 /**
  * Run a declared command as an argv array, never a shell string. Command and
- * args come from the registry row, not the request. Output returned verbatim.
+ * args come from the registry row, not the request. Output returned verbatim,
+ * and streamed chunk-by-chunk to `onChunk` when given (tool jobs tail it live).
  * `after`, when present, is started detached once the command succeeds — for
  * work that would cut off this very reply (restarting the control plane or the
  * board's container).
  */
-async function runScript({ command, argv, cwd, after, stdout = "", timeoutMs = 120000, benchRoot }) {
+async function runScript({ command, argv, cwd, after, stdout = "", timeoutMs = 120000, benchRoot, onChunk }) {
   const out = command
-    ? await runCommand({ command, argv, cwd: cwd ?? benchRoot, timeoutMs })
+    ? await runCommand({ command, argv, cwd: cwd ?? benchRoot, timeoutMs, onChunk })
     : { ok: true, code: "ok", reason: null, stdout, stderr: "" };
+  // The no-command case (Refresh control plane) still tells a watching job.
+  if (!command && stdout && typeof onChunk === "function") onChunk("stdout", `${stdout}\n`);
   if (out.ok && after) {
     spawn(after.command, after.argv ?? [], {
       cwd: cwd ?? benchRoot,
@@ -337,14 +346,37 @@ async function runScript({ command, argv, cwd, after, stdout = "", timeoutMs = 1
   return out;
 }
 
-async function runCommand({ command, argv, cwd, timeoutMs }) {
+/**
+ * Run one command and settle on the child's `exit` (code + signal = verdict),
+ * never on stdio EOF alone: a descendant that outlives the child (a rebuild
+ * script's docker) holds the pipe write-ends open, so `close` may never fire.
+ */
+export async function runCommand({ command, argv, cwd, timeoutMs, onChunk }) {
   return await new Promise((resolveP) => {
+    /** `close` follows `exit` within single-digit ms normally — a few hundred ms captures trailing stdio without delaying the verdict, and bounds the wait when a surviving descendant holds the pipes open. */
+    const STDIO_GRACE_MS = 300;
     const child = spawn(command, argv ?? [], { cwd, env: { ...process.env } });
     let out = "";
     let err = "";
-    const timer = setTimeout(() => {
+    let timer = null;
+    let grace = null;
+    let settled = false;
+    let verdict = null;
+
+    // Single settlement funnel: idempotent, and tears down every timer so no
+    // stray arm can fire (or keep the loop alive) after the promise resolves.
+    const settle = (payload) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(grace);
+      resolveP(payload);
+    };
+    const drained = (v) => ({ ...v, stdout: out.slice(-8000), stderr: err.slice(-8000) });
+
+    timer = setTimeout(() => {
       child.kill("SIGTERM");
-      resolveP({
+      settle({
         ok: false,
         code: "timeout",
         reason: `no result after ${Math.round(timeoutMs / 1000)}s — the command was terminated`,
@@ -352,21 +384,30 @@ async function runCommand({ command, argv, cwd, timeoutMs }) {
         stderr: err.slice(-4000),
       });
     }, timeoutMs);
-    child.stdout?.on("data", (d) => { out += String(d); });
-    child.stderr?.on("data", (d) => { err += String(d); });
+
+    child.stdout?.on("data", (d) => { const s = String(d); out += s; onChunk?.("stdout", s); });
+    child.stderr?.on("data", (d) => { const s = String(d); err += s; onChunk?.("stderr", s); });
+
     child.on("error", (e) => {
-      clearTimeout(timer);
-      resolveP({ ok: false, code: "spawn_failed", reason: String(e?.message ?? e) });
+      settle({ ok: false, code: "spawn_failed", reason: String(e?.message ?? e) });
     });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolveP({
-        ok: code === 0,
-        code: code === 0 ? "ok" : `exit_${code}`,
-        reason: code === 0 ? null : `the command exited ${code} — its own output is below`,
-        stdout: out.slice(-8000),
-        stderr: err.slice(-8000),
-      });
+
+    child.on("exit", (code, signal) => {
+      if (settled) return; // timeout already resolved — no stray grace timer.
+      verdict =
+        code === 0 && signal === null
+          ? { ok: true, code: "ok", reason: null }
+          : code !== null
+            ? { ok: false, code: `exit_${code}`, reason: `the command exited ${code} — its own output is below` }
+            : { ok: false, code: String(signal), reason: `the command was killed by ${signal} — its own output is below` };
+      // Bounded grace for trailing stdio; if `close` never comes (wedged pipe),
+      // settle anyway with whatever the data handlers accumulated.
+      grace = setTimeout(() => settle(drained(verdict)), STDIO_GRACE_MS);
+    });
+
+    child.on("close", () => {
+      // Normal path: stdio drained right after exit — settle fully drained.
+      if (verdict) settle(drained(verdict));
     });
   });
 }
@@ -421,10 +462,11 @@ async function runService({ url, id, timeoutMs = RUN_TIMEOUT_DEFAULT_MS, args })
 const HANDLERS = { script: runScript, service: runService };
 
 /**
- * Invoke a tool by id. Unknown id, unknown handler, missing argument and
- * failed precondition all fail loudly.
+ * Resolve a tool run to its validated parts, or the loud failure. Shared by
+ * invokeTool (run to completion) and the job runner (tooljobs.mjs), so a run
+ * is refused the same way however it is executed.
  */
-export async function invokeTool(benchRoot, id, args = {}) {
+export async function resolveTool(benchRoot, id, args = {}) {
   const tool = (await toolRegistry(benchRoot)).find((t) => t.id === String(id));
   if (!tool) return { ok: false, code: "unknown_tool", reason: `no tool ${JSON.stringify(String(id))} is registered` };
 
@@ -455,6 +497,20 @@ export async function invokeTool(benchRoot, id, args = {}) {
     if (v !== undefined && v !== null && String(v) !== "") picked[a.name] = String(v);
   }
 
+  return { ok: true, tool, handler, picked };
+}
+
+/**
+ * Invoke a tool by id, synchronously. Unknown id, unknown handler, missing
+ * argument and failed precondition all fail loudly. The board's run route
+ * starts a tracked job instead (tooljobs.mjs); this remains the job runner's
+ * own executor and the seam tests' entry point.
+ */
+export async function invokeTool(benchRoot, id, args = {}) {
+  const resolved = await resolveTool(benchRoot, id, args);
+  if (!resolved.ok) return resolved;
+
+  const { tool, handler, picked } = resolved;
   // Spread first so a row can't override benchRoot or the validated args.
   return await handler({ ...tool.invoke, benchRoot, args: picked });
 }

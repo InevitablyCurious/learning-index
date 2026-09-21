@@ -967,10 +967,15 @@ a:hover{color:var(--type)}
    Three bars, drawn rather than imported: the board ships with NO network
    dependency (see the Dockerfile note on vendor/), and an icon font or an SVG
    sprite would be the first thing to break that for the sake of one glyph. */
-.hamburger{display:inline-flex;flex-direction:column;justify-content:center;gap:3.5px;width:30px;height:24px;padding:0 5px;margin-left:10px;background:transparent;border:1px solid var(--hairline);border-radius:var(--radius-sm);cursor:pointer;flex:0 0 auto}
+.hamburger{display:inline-flex;flex-direction:column;justify-content:center;gap:3.5px;width:30px;height:24px;padding:0 5px;margin-left:10px;background:transparent;border:1px solid var(--hairline);border-radius:var(--radius-sm);cursor:pointer;flex:0 0 auto;position:relative}
 .hamburger span{display:block;height:1.5px;background:var(--fg);border-radius:1px;transition:background .15s ease}
 .hamburger:hover{border-color:var(--fg)}
 .hamburger:hover span{background:var(--check)}
+/* A refresh job in flight, visible with the drawer closed. The dot is steady
+   (the drawer's clock is the live signal); the breathe is only a beacon. */
+.hamburger .hb-act{position:absolute;top:-4px;right:-4px;width:8px;height:8px;padding:0;border-radius:50%;background:var(--accent);animation:hb-breathe 1.6s ease-in-out infinite}
+@keyframes hb-breathe{0%,100%{opacity:1}50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.hamburger .hb-act{animation:none}}
 
 /* The scrim fades; the panel slides. Both are keyed off the same `.out` class
    so open and close are symmetric — a slide in followed by a pop out reads as a
@@ -1088,9 +1093,13 @@ a:hover{color:var(--type)}
 .tool-result{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:var(--radius-sm);border:1px solid var(--border-strong);background:var(--bg-2,rgba(0,0,0,.28))}
 .tool-result.ok{border-color:var(--check)}
 .tool-result.bad{border-color:var(--danger)}
+/* In flight: the job's own output streams into .tool-log below; the clock in
+   .tr-lines is the honest liveness signal, so the frame stays quiet. */
+.tool-result.live{border-color:var(--accent)}
 .tr-code{font:700 9.5px var(--font);letter-spacing:.12em}
 .tool-result.ok .tr-code{color:var(--check)}
 .tool-result.bad .tr-code{color:var(--danger)}
+.tool-result.live .tr-code{color:var(--accent)}
 .tr-lines{font:400 10.5px/1.55 var(--font-mono,var(--font));color:var(--type);overflow-wrap:anywhere}
 .tr-note{font:400 10px/1.5 var(--font);color:var(--dim)}
 /* THE COMMAND'S OWN OUTPUT. Capped and scrollable: a docker build is hundreds

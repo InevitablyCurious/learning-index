@@ -234,13 +234,14 @@ test("SEAM: preflight's fix buttons never contact the custom-tools service", asy
   });
 });
 
-test("TOOLS: the drawer renders the command's own output", () => {
-  // The control plane returns stdout and stderr on success AND failure. A
-  // drawer that drops them leaves an operator with a verdict and no evidence,
-  // which is the state that made a successful rebuild look like nothing.
+test("TOOLS: the drawer renders the job's own output, live and at the verdict", () => {
+  // A tool run is a tracked job (control/tooljobs.mjs): the drawer renders the
+  // live output tail while it runs and the same tail with the verdict when it
+  // settles. A drawer that drops it leaves an operator with a verdict and no
+  // evidence — the state that made a successful rebuild look like nothing.
   const src = readFileSync(join(BENCH, "dashboard", "panels", "tools.js"), "utf8");
-  assert.match(src, /r\.stdout/, "tools.js must render stdout");
-  assert.match(src, /r\.stderr/, "tools.js must render stderr");
+  assert.match(src, /job\.output_tail/, "tools.js must render the job's output tail");
+  assert.match(src, /jobLiveBlock/, "a running job must render live (elapsed, output age, log)");
   assert.ok(
     !/leader still has to accept/.test(src),
     "one tool's outcome line must not be hardcoded in the drawer",

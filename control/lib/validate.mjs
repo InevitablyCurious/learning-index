@@ -14,6 +14,7 @@ import {
 } from "../cloud.mjs";
 import { resolveDevMode } from "../devmode.mjs";
 import { readSnapshot, seedableBy, resolveArmed } from "../snapshots.mjs";
+import { substrateRefreshInFlight } from "../tooljobs.mjs";
 import { args, BENCH_ROOT, RUNS_ROOT } from "../state.mjs";
 
 /**
@@ -25,7 +26,7 @@ export async function validateStart(
   payload,
   roster,
   run,
-  { requireConfirm = true, runsRoot = null } = {},
+  { requireConfirm = true, runsRoot = null, allowRefresh = false } = {},
 ) {
   const model = typeof payload?.model === "string" ? payload.model.trim() : "";
   const arm = payload?.arm === "on" || payload?.arm === "off" ? payload.arm : null;
@@ -50,6 +51,22 @@ export async function validateStart(
 
   if (!run.can_start) {
     return refuse("run_in_flight", run.blocked_reason ?? "a cell is already in flight");
+  }
+  // The symmetric guard: a substrate-changing refresh (refuse_while_running)
+  // may not overlap a cell, and a cell may not launch onto a moving substrate.
+  // Preview skips it like the serial gate — reviewing stays possible; the
+  // advisory rides the preview answer (routes/run.mjs).
+  if (!allowRefresh) {
+    const refresh = substrateRefreshInFlight(BENCH_ROOT);
+    if (refresh) {
+      return refuse(
+        "refresh_in_flight",
+        `'${refresh.tool_name}' is running and changes what a cell would be measured ` +
+          `against — launching now would contaminate the measurement. Wait for it to ` +
+          `finish; the ☰ menu shows it live.`,
+        { tool_id: refresh.tool_id, job_id: refresh.id },
+      );
+    }
   }
   if (kind !== "local" && kind !== "cloud") {
     return refuse("unknown_kind", `'${kind}' is not a substrate — it is 'local' (the relay proxy) or 'cloud' (a routed vendor API)`);
