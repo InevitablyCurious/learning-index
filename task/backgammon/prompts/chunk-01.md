@@ -13,23 +13,19 @@ The complete product (all inside the current working directory), already present
 
 Runtime: **Node + TypeScript**, zero external runtime dependencies. Node ≥ 22.12 runs the `.ts` files with the `--experimental-strip-types` flag (already wired into `npm start`); engine imports use explicit `./x.ts` specifiers. Start command: `node --experimental-strip-types src/server.ts` (also `npm start`).
 
-Board convention (applies everywhere): points numbered 1..24. **White** is the human and **black** is the AI. White moves HIGH→LOW (24→1), home = 1..6, bears off past point 1. Black moves LOW→HIGH (1→24), home = 19..24, bears off past 24. `points[p] > 0` = that many white checkers; `points[p] < 0` = that many black checkers (abs value). A roll of doubles is carried as four dice.
-
 TASK: Implement the complete backgammon engine in `src/game.ts` — pure logic, no I/O. The shared types and constants (`Player`, `BAR`, `OFF`, `Move`, `AppliedMove`, `Board`, `GameState`) are already written at the top of that file — read them, implement against them, and do not change them; every later chunk imports those names as written. Replace the stubs with real implementations.
 
-Movement and legality — the engine is the authority on what is legal:
+You know how backgammon is played. What you cannot know is how THIS codebase lays the board out in memory, and the rest of the product is written against that layout. So the game is yours; the representation below is ours, and everything else imports it exactly as written.
 
-- Direction: white moves 24 → 1 (high to low), black moves 1 → 24 (low to high); a checker moves forward by exactly its die's pip count.
-- Opening position (`startingPoints()`): the standard opening — 15 checkers per side, indices 0 and 25 unused (0). White: 2 on point 24, 5 on point 13, 3 on point 8, 5 on point 6. Black: 2 on point 1, 5 on point 12, 3 on point 17, 5 on point 19. `points[p] > 0` = white checkers, `points[p] < 0` = black checkers (absolute value).
-- Landing and blocking: a checker may land on an empty point, a point it owns, or a point holding exactly one opponent checker. A point holding two or more opponent checkers is blocked.
-- Hitting: landing on a lone opponent checker (a blot) hits it — that checker goes to the bar (`applyMove` returns true).
-- Bar entry: a player with any checker on the bar must enter them before making any other move. A white bar checker enters on point `25 − die`; a black bar checker enters on point `die`. Entry is blocked if the destination point holds two or more opponent checkers; if every rolled die's entry point is blocked, the player has no legal move (the turn passes).
-- Using dice: a player must use as many dice as legally possible; a die cannot be reused once consumed.
-- Higher die: when both dice cannot be played but either one alone can, the player must play the higher die.
-- Bearing off (`to === OFF`): legal only when all of the player's checkers are in the home board. A die equal to a checker's exact distance bears it off. A die larger than a checker's distance may bear it off (overshoot) only when there is no checker on a higher point (farther from bear-off) in the home board; otherwise the larger die must be played as an in-board move. White's highest point is 6; black's highest point is 19. `singleMoves` yields no bear-off move while any checker is outside the home board or on the bar.
-- Move sequences (`allSequences`): return each reachable resulting position once (deduplicated by the resulting board), each entry consuming the maximum number of dice.
-- Pip count (`pipCount(b, player)`): the sum over that player's checkers of each checker's distance to bearing off — a white checker on point `p` has distance `p`, a black checker has distance `25 − p`, and a checker on the bar counts as 25.
-- Winning (`checkWin`): when a player has borne off all 15 checkers, report `won: true` and classify `"single"`, `"gammon"`, or `"backgammon"` by the standard definitions — single if the opponent has borne off at least one checker; backgammon if the opponent has borne off none AND still has a checker on the bar or in the winner's home board; otherwise gammon.
+**How the board is laid out.** Picture the board from the human player's seat. The human is **white** and the computer is **black**. White's checkers travel anticlockwise — from our point 24 around to our point 1 — and bear off past point 1. Black's travel the opposite way round, from point 1 up to point 24, bearing off past 24. Each player's home board is the last quarter of their own journey.
+
+**How that is stored.** `points` is an array of 26 slots. Only 1..24 are real points; slots 0 and 25 are always 0 and exist so the point numbers line up with the indexes. One slot holds one point's whole stack as a single signed number: **positive means that many white checkers, negative means that many black checkers.** So `points[6] === 5` is five white checkers on point 6, and `points[19] === -5` is five black ones on point 19. Checkers that are off the board live in `bar` and `off`, each with a `white` and a `black` count.
+
+**Two sentinel values, because a move off the bar or off the board has no point number.** A checker entering from the bar has `from: BAR` (0). A checker bearing off has `to: OFF` (25). They are only ever used in those two positions.
+
+**Dice.** A roll is the dice for that turn; doubles are carried as **four** entries, not two.
+
+A few of the functions below are ours rather than the game's, and their descriptions say exactly what they must return.
 
 The exact function surface (EXACT signatures — other modules import these names as written):
 
@@ -75,7 +71,5 @@ export function pipCount(b: Board, player: Player): number;
 /** Whether `player` has borne off all 15 checkers, and if so how the win is classified. */
 export function checkWin(b: Board, player: Player): { won: boolean; type: "single" | "gammon" | "backgammon" | null };
 ```
-
-Also keep in mind (the turn driver itself is wired up in chunk 4): a turn consumes dice as they are played, doubles give four moves, turns alternate white → black → white, and a player with no legal move passes.
 
 **Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.
