@@ -324,7 +324,34 @@ class FeedbackMixin:
         return cached
 
     @classmethod
-    def _humanize_check(cls, check: str, *, pass_kind: str = "first") -> str:
+    def _fill_seconds(cls, line: str, observed: str | None) -> str:
+        """Substitute `{seconds}` in a symptom line from the grader's `observed`.
+
+        ONE NUMBER, ONE PLACE — the same contract the nudge files use for
+        `{write_limit}`. The sentence stays hand-written; only the duration is
+        filled in, because only the grader knows how long it actually waited.
+
+        A stall line without a real duration would be worse than one with no
+        number at all: "it hung for 0 seconds" is a false report. So an
+        unresolvable number degrades to the vaguer human phrasing rather than
+        inventing a figure, and the tests pin that the stall path always
+        supplies one.
+
+        THE PLACEHOLDER CARRIES ITS UNIT. `{seconds}` renders as "63 seconds",
+        not "63" — so the fallback can be a phrase ("a long while") and the
+        sentence still reads as English either way. A bare number would leave
+        the fallback as "a long while seconds".
+        """
+        if "{seconds}" not in line:
+            return line
+        m = re.search(r"(\d+)\s*s\b", str(observed or ""))
+        filled = f"{m.group(1)} seconds" if m else "a long while"
+        return line.replace("{seconds}", filled)
+
+    @classmethod
+    def _humanize_check(
+        cls, check: str, *, pass_kind: str = "first", observed: str | None = None
+    ) -> str:
         """Render a gate id as the phrase a person would actually say.
 
         `pass_kind` selects which of the gate's two lines to use: `"first"` the
@@ -365,7 +392,7 @@ class FeedbackMixin:
                 # "CONF" must only resolve conformance checks, never a stray use
                 # of the literal token in a backend/frontend context.
                 if key != "CONF" or conf_key is not None:
-                    return overrides[key][line]
+                    return cls._fill_seconds(overrides[key][line], observed)
 
         if cls._HARNESS_INFRA_CHECK_RE.match(raw):
             raise MissingFeedbackOverrideError(
@@ -566,7 +593,11 @@ class FeedbackMixin:
             # between the two passes and could not key anything.
             pass_kind = "repeat" if raw_check in repeats else "first"
             label = cls._humanize_check(
-                raw_check.split("\n", 1)[0], pass_kind=pass_kind
+                raw_check.split("\n", 1)[0],
+                pass_kind=pass_kind,
+                # A stall line names how long the tester waited; the duration
+                # only exists on the grader's finding.
+                observed=str(record.get("observed", "") or ""),
             )
             # 320, not 200 (2026-09-05). The comment below has been right twice
             # over: at 200 it was ALREADY truncating two hand-written tester

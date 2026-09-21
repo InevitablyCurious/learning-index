@@ -11,7 +11,7 @@ The complete product (all inside the current working directory), already present
 - `src/server.ts` — HTTP server + API, serves `public/`.
 - `public/index.html`, `public/style.css`, `public/app.js` — the page, its styling, its logic.
 
-Runtime: **Node + TypeScript**, zero external runtime dependencies. Node ≥ 22.12 runs the `.ts` files with the `--experimental-strip-types` flag (already wired into `npm start`); engine imports use explicit `./x.ts` specifiers. The start command is `node --experimental-strip-types src/server.ts`, also `npm start`.
+Runtime: **Node + TypeScript**, zero external runtime dependencies. Node ≥ 22.12 runs the `.ts` files with the `--experimental-strip-types` flag (already wired into `npm start`); engine imports use explicit `./x.ts` specifiers. Start command: `node --experimental-strip-types src/server.ts` (also `npm start`).
 
 Board convention (applies everywhere): points numbered 1..24. **White** is the human and **black** is the AI. White moves HIGH→LOW (24→1), home = 1..6, bears off past point 1. Black moves LOW→HIGH (1→24), home = 19..24, bears off past 24. `points[p] > 0` = that many white checkers; `points[p] < 0` = that many black checkers (abs value). A roll of doubles is carried as four dice.
 

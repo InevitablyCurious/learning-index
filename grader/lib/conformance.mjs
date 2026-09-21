@@ -7,7 +7,7 @@
 // runs. Do not "fix" the cycle by duplicating helpers — that would fork state.
 import { MATCHER, announceGateSet, spawnPhase } from "../report.mjs";
 import { playwrightGateResults } from "../gate-results.mjs";
-import { stallCheckFor } from "./stall.mjs";
+import { stallCheckFor, stallObserved } from "./stall.mjs";
 import {
   collectPlaywrightSpecs,
   dedupeProblems,
@@ -139,7 +139,7 @@ export async function runConformancePhase() {
   // model.
   if (run.timedOut) {
     const stall = stallCheckFor("conformance");
-    problems.push(safeProblem(stall, "the game keeps responding", "conformance did not finish"));
+    problems.push(safeProblem(stall, "the game keeps responding", stallObserved(run.elapsedMs)));
     failedGates.push(stall);
   }
 

@@ -158,7 +158,12 @@ describe("no runner can outlive the suite", () => {
     // The clamp is the arithmetic guarantee that report.mjs always reaches its
     // own write — without it a runner starting late could outlive the budget
     // and hand the ending back to the harness watchdog, which is the failure.
-    expect(src).toMatch(/Math\.min\(RUNNER_TIMEOUT_MS,\s*remaining\)/);
+    //
+    // The first argument is now the file's OWN budget (scaled to its golden
+    // time) rather than the flat timeout; the clamp against `remaining` is what
+    // this test is about and is unchanged. `runnerBudgetMs` itself can never
+    // exceed the flat ceiling — pinned in meta/runner-budget.test.ts.
+    expect(src).toMatch(/Math\.min\(runnerBudgetMs\(label\),\s*remaining\)/);
     expect(src).toMatch(/spawnWithDeadline\(\{[\s\S]{0,200}?deadlineMs/);
   });
 
@@ -181,8 +186,11 @@ describe("no runner can outlive the suite", () => {
 
     // The harness kills the process group at DEFAULT_GATE_TIMEOUT_S. The suite
     // must finish inside that or the report is lost — which is the whole defect.
+    // adapters/challenge/, not adapters/backgammon/ — the module moved in the
+    // restructure and this path went stale, so the test threw ENOENT instead of
+    // checking anything. A red test nobody can read is a test nobody reads.
     const harness = fs.readFileSync(
-      path.join(BENCH, "harness", "adapters", "backgammon", "constants.py"),
+      path.join(BENCH, "harness", "adapters", "challenge", "constants.py"),
       "utf-8",
     );
     const gate = /DEFAULT_GATE_TIMEOUT_S\s*=\s*(\d+)/.exec(harness);

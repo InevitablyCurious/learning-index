@@ -249,6 +249,55 @@ const SUITE_BUDGET_MS = (() => {
 const SUITE_STARTED_AT = Date.now();
 const suiteRemainingMs = () => SUITE_BUDGET_MS - (Date.now() - SUITE_STARTED_AT);
 
+// ── A BUDGET THE SIZE OF THE WORK ───────────────────────────────────────────
+//
+// One flat 900s for every file is the right ceiling and the wrong budget.
+// `backend/gates-01-08.test.ts` takes 3ms against the golden, so 900s is
+// 285,000x the reference — a candidate whose engine does not return sits there
+// for fifteen minutes before anyone says so. Measured: a `for (let from = 1;
+// from <= 24; from--)` typo in one candidate's `singleMoves` loops forever, and
+// the suite waited out the full flat timeout to find out.
+//
+// So each file gets STARTUP_ALLOWANCE + its golden time x MULTIPLIER, clamped
+// to the flat timeout. The allowance covers npx/vitest boot (~0.5s here, more
+// on a loaded host) and is deliberately far larger than that; the multiplier
+// covers a candidate that is correct but slow.
+//
+// CALIBRATION, against real candidates rather than taste. The worst measured
+// legitimate slowdowns are in the tens: gates-13-16 went 1.63s -> 74.9s on the
+// 2026-08-17 minimax-m3 cell (~46x), and G14's two gates took 87s and 151s on
+// another. 1000x clears every one of those by more than an order of magnitude.
+// The floor matters more than the multiplier for the fast files: it is what
+// keeps a 3ms file from being handed a 3-second budget.
+//
+// A FILE WITH NO REFERENCE TIME KEEPS THE FLAT TIMEOUT. Never stricter than
+// the behaviour before these numbers existed, so a new gate file cannot be
+// failed by an omission in golden-timings.json.
+const RUNNER_STARTUP_ALLOWANCE_MS = 60_000;
+const RUNNER_GOLDEN_MULTIPLIER = 1000;
+
+const GOLDEN_TIMINGS = (() => {
+  try {
+    const raw = fs.readFileSync(path.join(GATES_DIR, "golden-timings.json"), "utf8");
+    return JSON.parse(raw)?.files ?? {};
+  } catch {
+    // Absent or unreadable: every file falls back to the flat timeout.
+    return {};
+  }
+})();
+
+/** The deadline for one runner, from the reference time of the file it runs. */
+export function runnerBudgetMs(label) {
+  const s = String(label ?? "");
+  for (const [file, goldenMs] of Object.entries(GOLDEN_TIMINGS)) {
+    if (!s.includes(file)) continue;
+    const scaled = RUNNER_STARTUP_ALLOWANCE_MS + Number(goldenMs) * RUNNER_GOLDEN_MULTIPLIER;
+    if (!Number.isFinite(scaled) || scaled <= 0) break;
+    return Math.min(RUNNER_TIMEOUT_MS, Math.round(scaled));
+  }
+  return RUNNER_TIMEOUT_MS;
+}
+
 export async function spawnRunner(label, cmd, args) {
   process.stderr.write(
     `[report] runner=${label} cmd=${cmd} ${args.join(" ")}\n`,
@@ -275,7 +324,7 @@ export async function spawnRunner(label, cmd, args) {
       stderr: "",
     };
   }
-  const deadlineMs = Math.min(RUNNER_TIMEOUT_MS, remaining);
+  const deadlineMs = Math.min(runnerBudgetMs(label), remaining);
 
   // ASYNC SPAWN + PROCESS-GROUP KILL (lib/runner.mjs). The old `spawnSync`
   // timeout killed only the DIRECT `npx` child; a surviving descendant (the

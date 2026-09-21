@@ -19,7 +19,7 @@ import {
   spawnRunner,
 } from "../report.mjs";
 import { isRunnerCrash, runnerFailureObserved, vitestGateResults } from "../gate-results.mjs";
-import { stallCheckFor } from "./stall.mjs";
+import { stallCheckFor, stallObserved } from "./stall.mjs";
 import {
   dedupeProblems,
   dedupeStrings,
@@ -297,7 +297,7 @@ export async function runBackendPhase() {
         // artifacts and the operator; this is the sentence a person would say.
         const stall = stallCheckFor(`backend ${file}`);
         problems.push(
-          safeProblem(stall, "the game keeps responding", `${file} did not finish`),
+          safeProblem(stall, "the game keeps responding", stallObserved(run.elapsedMs)),
         );
         failedGates.push(stall);
       }

@@ -568,28 +568,28 @@
       "repeat": "Opened it fresh again and it still throws errors behind the scenes."
     },
     "REQ-RESPONSIVE/startup": {
-      "first": "The game never finished loading — it just sat there and nothing ever came up. I ended up force-quitting it.",
-      "repeat": "Tried opening it again and it hung on me the same way. Nothing ever appears, it just sits."
+      "repeat": "Tried opening it again and it hung on me the same way. Nothing ever appears, it just sits — {seconds} of it before I gave up.",
+      "first": "The game never finished loading — it just sat there and nothing ever came up. I gave it {seconds} and then force-quit it."
     },
     "REQ-RESPONSIVE/moving": {
-      "first": "It locked up on me while I was moving my pieces around — everything stopped and it never came back.",
-      "repeat": "Froze on me again partway through moving my pieces. Same thing: it stops dead and I have to force it closed."
+      "repeat": "Froze on me again partway through moving my pieces. Same dead stop, and this time I sat through {seconds} before closing it.",
+      "first": "It locked up on me while I was moving my pieces around — everything stopped and it never came back. I waited {seconds}."
     },
     "REQ-RESPONSIVE/bearingoff": {
-      "first": "It locked up on me near the end of the game, around when I was taking pieces off and the stakes went up. It never came back.",
-      "repeat": "Same freeze again at the end of a game — bearing off, doubling, and then it just stops responding."
+      "repeat": "Same freeze again at the end of a game — bearing off, doubling, and then it just stops responding. I waited {seconds} again.",
+      "first": "It locked up on me near the end of the game, around when I was taking pieces off and the stakes went up. It never came back — {seconds} and nothing."
     },
     "REQ-RESPONSIVE/aiturn": {
-      "first": "It locked up while it was the computer's turn — I handed over and it never came back to me.",
-      "repeat": "Again: the computer took its turn, and that was that. It never handed back and I had to force it closed."
+      "repeat": "Again: the computer took its turn, and that was that. It never handed back and after {seconds} I had to force it closed.",
+      "first": "It locked up while it was the computer's turn — I handed over and it never came back to me. {seconds} and it was still sitting there."
     },
     "REQ-RESPONSIVE/awkwardroll": {
-      "first": "It locked up on an awkward roll — I'd rolled doubles and had a piece on the bar. Everything stopped and never came back.",
-      "repeat": "Froze on me again on one of those messy rolls, doubles with a piece stuck on the bar. Same dead stop."
+      "repeat": "Froze on me again on one of those messy rolls, doubles with a piece stuck on the bar. Same dead stop, another {seconds} of nothing.",
+      "first": "It locked up on an awkward roll — I'd rolled doubles and had a piece on the bar. Everything stopped and never came back; I waited {seconds}."
     },
     "REQ-RESPONSIVE/playing": {
-      "first": "It locked up on me while I was playing — the whole page stopped responding and nothing I clicked did anything after that.",
-      "repeat": "It seized up on me again mid-game. Everything on screen just stops reacting."
+      "repeat": "It seized up on me again mid-game. Everything on screen just stops reacting, and {seconds} later it still hadn't moved.",
+      "first": "It locked up on me while I was playing — the whole page stopped responding and nothing I clicked did anything after that. I gave it {seconds}."
     }
   }
 }

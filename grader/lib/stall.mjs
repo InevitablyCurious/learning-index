@@ -52,3 +52,25 @@ export function stallCheckFor(label) {
   }
   return "REQ-RESPONSIVE/startup";
 }
+
+/**
+ * How long the tester waited, as the `observed` half of a stall finding.
+ *
+ * ── WHY THE NUMBER TRAVELS ──────────────────────────────────────────────────
+ *
+ * "It locked up and never came back" is true but unfalsifiable from inside the
+ * cell: a model that reads it cannot tell a genuine infinite loop from a
+ * function that is merely slower than someone's patience. The duration is the
+ * part that makes the report actionable — a person who waited 63 seconds and
+ * gave up is saying something a developer can act on, and it is what they would
+ * actually say.
+ *
+ * The harness reads the seconds back out of this string and substitutes them
+ * into the `{seconds}` placeholder in the hand-written symptom line, the same
+ * way the nudge files carry `{write_limit}`. The sentence stays human-written;
+ * only the number is filled in.
+ */
+export function stallObserved(elapsedMs) {
+  const seconds = Math.max(1, Math.round(Number(elapsedMs ?? 0) / 1000));
+  return `no response after ${seconds}s`;
+}
