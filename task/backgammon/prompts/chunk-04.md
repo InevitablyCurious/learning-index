@@ -34,4 +34,6 @@ Required `data-testid` hooks (EXACT — the UI automation selects on these; stat
 - The bar column: `data-testid="bar"`.
 - The off tray: `data-testid="off-tray"`, with halves `data-testid="off-ai"` and `data-testid="off-you"`.
 
+**Before you hand it over, look at it.** Load the page in a browser and play it — click a checker, take a move, roll again, watch the computer reply. What the server returns is not what a player sees, so a page that looks right in the API can still be broken on screen. The notes in this folder show how to drive a browser from a script.
+
 **Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.

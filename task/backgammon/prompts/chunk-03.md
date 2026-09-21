@@ -49,4 +49,6 @@ Debug seam — gated by env `DEBUG_API=1`; when `DEBUG_API` is not `1` these rou
 
 A position supplied to `/api/debug/state` is a real backgammon position — exactly 15 checkers per side across points, bar and off.
 
+**Before you hand it over, run it.** Start the server and drive it — every route, with real bodies, including the ones that should fail. Play a turn through: roll, move, end the turn, let the AI answer. Read the responses rather than assuming them. The notes in this folder show how to start a server, test it, and stop it in one command.
+
 **Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.

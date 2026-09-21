@@ -39,4 +39,6 @@ Requirements:
   - *Offering.* `shouldAiDouble` offers (returns `"double"`) when `winProbability` is inside the offer window, else holds. Window: **medium 0.72 to 0.90, hard 0.68 to 0.90**. Above 0.90 it is too good to double — hold and play on. **Easy never offers.**
   - Both cube functions return a human-readable `reasoning` string explaining the decision.
 
+**Before you hand it over, run it.** Import the engine and the AI together and let them play — have the AI choose moves from real positions at each difficulty, and check every move it returns is one the engine considers legal. Ask it for a cube decision in a winning position and a losing one. You are checking that it runs and answers promptly, not that any single choice is the best one.
+
 **Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.
