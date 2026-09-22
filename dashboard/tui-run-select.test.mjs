@@ -67,38 +67,39 @@ function boardWithRuns(tui = {}) {
   };
 }
 
-test("the selector lists addressable runs, skips run_id-less ones, and marks the selection", () => {
-  setTuiRunId("run-b");
-  const html = renderTuiBody(boardWithRuns({ run_id: "run-b", session_id: "bbbb2222-xyz" }));
-  assert.ok(html.includes("data-tui-run"), "the selector is present");
-  assert.ok(html.includes('value=""'), "the default/newest option is first");
-  assert.ok(html.includes('value="run-a"'), "run-a is listed");
-  assert.ok(html.includes('value="run-b" selected'), "the selected run is marked");
-  assert.ok(html.includes("pty aaaa1111 · m1 · on"), "the label carries session short + model + arm");
-  assert.ok(!html.includes("cccc3333"), "a run with no run_id is not addressable and is skipped");
-  setTuiRunId("");
+// ── THE HEAD CARRIES NONE OF IT ANY MORE ────────────────────────────────────
+//
+// The selector, the run/pty identity label and the model/arm line were removed
+// when the CELL STRIP became the selector. They are not "temporarily hidden":
+// with N replicates of one configuration the label was identical across every
+// cell, so it could not tell them apart, and two selectors for one subject let
+// the board and the terminal drift onto different cells.
+//
+// The tests that pinned that markup are gone with it, replaced by these, which
+// pin the absence — so putting any of it back is a deliberate act with a
+// failing test to answer for, not a quiet regression.
+
+test("the head carries no cell selector — the strip is the selector", () => {
+  const html = renderTuiBody(boardWith({ runs: [{ run_id: "r1", model: "m", arm: "off" }] }));
+  assert.ok(!html.includes("data-tui-run"), "no <select> in the mirror head");
+  assert.ok(!html.includes("<option"), "no options either");
 });
 
-test("the identity label shows the frame's run_id when the patch carries one", () => {
-  const html = renderTuiBody(boardWithRuns({ run_id: "run-b", session_id: "bbbb2222-xyz" }));
-  assert.ok(html.includes("run run-b"), "the identity label shows the frame's run_id");
-  assert.ok(html.includes("pty bbbb2222"), "label keeps the pty session short");
+test("the head states no identity — which cell is the strip's job", () => {
+  const html = renderTuiBody(boardWith({
+    tui: { status: "live", run_id: "ee363af4-aaaa", session_id: "ses_f355aaaa", frame: null },
+  }));
+  assert.ok(!html.includes("ee363af4"), "no run_id in the head");
+  assert.ok(!html.includes("ses_f355"), "no pty session in the head");
+  assert.ok(!html.includes("cols ×"), "no terminal dimensions");
 });
 
-test("with no run_id on the frame the label falls back to the session short", () => {
-  const html = renderTuiBody(boardWithRuns({ run_id: null, session_id: "dddd4444-xyz" }));
-  assert.ok(html.includes("pty dddd4444"), "session short is kept");
-  assert.ok(!html.includes("· run "), "no run label is invented");
+test("the head keeps the one thing that is a fact about right now", () => {
+  // Whether frames are arriving is the only non-constant the head carried.
+  const html = renderTuiBody(boardWith({ tui: { status: "live", frame: null } }));
+  assert.ok(html.includes("live"), "the status word survives");
 });
 
-test("a board with no live runs still renders the default option", () => {
-  const html = renderTuiBody({
-    control: { run: { runs: [], live_count: 0 } },
-    run: {},
-    events: null,
-    tui: { status: null, frame: null },
-    hold: null,
-  });
-  assert.ok(html.includes("data-tui-run"), "the selector is present");
-  assert.ok(html.includes('value="" selected'), "default is selected");
-});
+function boardWith({ runs = [], tui = null } = {}) {
+  return { control: { run: { runs } }, tui, preflight: null, control_plane: null };
+}

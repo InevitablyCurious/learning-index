@@ -627,7 +627,14 @@ function onClick(e) {
   // why it died.
   if (t.dataset.cellPick !== undefined) {
     const n = Number(t.dataset.cellPick);
-    setSelectedCell(selectedCell() === n ? null : n);
+    const clearing = selectedCell() === n;
+    setSelectedCell(clearing ? null : n);
+    // AND REPOINT THE MIRROR. These were two selections: the strip chose what
+    // the board was ABOUT, and the TUI kept its own run_id, so clicking a card
+    // changed the panels and left the terminal showing whichever cell the
+    // server defaulted to. One click, one subject. Clearing goes back to the
+    // unkeyed default (newest), which is what the server does with no key.
+    setTuiRunId(clearing ? null : t.dataset.cellRun || null);
     render();
     return;
   }

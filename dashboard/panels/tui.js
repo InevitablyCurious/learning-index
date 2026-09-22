@@ -8,7 +8,7 @@
 // frame held and labelled). DETACH & CLOSE kills the mirror for good (the cell
 // keeps running) and says so.
 
-import { esc, nul, tuiRunId } from "../board.js";
+import { esc, nul } from "../board.js";
 import { renderStartupFeed, startupFeed } from "./startup.js";
 
 /** Must match control/tui.mjs (drift-guarded). */
@@ -54,62 +54,31 @@ function terminalHasPainted(t, status) {
   return Boolean(t?.frame) && (status === "live" || status === "silent");
 }
 
-// ── THE TAB HEAD ── identity, the cell selector, the read-only claim, and
-// DETACH & CLOSE.
-
+// ── THE TAB HEAD ── the brand and whether frames are arriving. Nothing else.
+//
+// WHAT WAS HERE AND WHY IT WENT. The head carried the terminal's dimensions,
+// the run_id, the pty session (twice, through two code paths), the model, the
+// arm, a cell <select>, a standing READ-ONLY claim and a DETACH & CLOSE
+// button. Every one of those is now either shown by the cell strip or is
+// chrome restating a constant:
+//
+//   cols × rows      fixed by the mirror, never varies, never actionable
+//   run / pty id     the strip says which cell; the ids are addressing
+//   model · arm      identical across a batch — it cannot tell cells apart
+//   the <select>     replaced by the strip, which is the selector now
+//   READ-ONLY        always true; a label that never changes carries nothing
+//
+// The status word stays because it is the one thing here that is a FACT about
+// right now: whether frames are arriving, and how stale the last one is.
 function mirrorHead(board, t) {
   return `
     <div class="tui-head">
       <span class="tui-brand">▌TUI MIRROR</span>
-      <span class="note">${esc(`${TUI_COLS} cols × ${TUI_ROWS} rows`)}${identLabel(t)}</span>
-      ${runSelector(board)}
       <span class="tui-stat">${statusWord(t, t?.status ?? null)}</span>
-      <span class="tag">READ-ONLY MIRROR — NO INPUT</span>
       <span class="spacer"></span>
-      <button class="btn sm destroy" data-tui-detach="1">DETACH &amp; CLOSE</button>
     </div>`;
 }
 
-/** WHOSE terminal is on screen: the cell's run_id, and its pty session. */
-function identLabel(t) {
-  const run = t?.run_id ? ` · run ${String(t.run_id).slice(0, 8)}` : "";
-  const pty = t?.session_id ? ` · pty ${String(t.session_id).slice(0, 8)}` : "";
-  return esc(`${run}${pty}`);
-}
-
-/**
- * The operator's cell selector: WHICH live cell's terminal this mirror
- * follows. A minimal <select> keyed on run_id; the server pushes only the
- * selected cell's frames to this client (the subscription in board.js carries
- * the key), so the render stays the single board.tui — no per-run_id map here.
- * Entries with no run_id (an external launch, contract.mjs RunStateEntry) are
- * not addressable by key and are skipped. The `cprov` class is the board's one
- * styled <select>; presentation is a candidate for Walter's UX review.
- */
-function runSelector(board) {
-  const runs = (board?.control?.run?.runs ?? []).filter((r) => r?.run_id);
-  const selected = tuiRunId() ?? "";
-  return `
-    <select class="cprov" data-tui-run="1" aria-label="which cell to mirror">
-      <option value=""${selected === "" ? " selected" : ""}>cell — default (newest)</option>
-      ${runs
-        .map(
-          (r) =>
-            `<option value="${esc(r.run_id)}"${r.run_id === selected ? " selected" : ""}>${esc(runLabel(r))}</option>`,
-        )
-        .join("")}
-    </select>`;
-}
-
-/** session short + model/arm when present; the run_id short as the fallback. */
-function runLabel(r) {
-  const parts = [
-    r.session_id ? `pty ${String(r.session_id).slice(0, 8)}` : null,
-    r.model ?? null,
-    r.arm ?? null,
-  ].filter(Boolean);
-  return parts.length ? parts.join(" · ") : `run ${String(r.run_id).slice(0, 8)}`;
-}
 
 function statusWord(t, status) {
   if (!t) return `<span class="null">not attached</span>`;

@@ -121,6 +121,7 @@ function card(c, median, activeIndex) {
     .join(" · ");
   return `
     <button class="cellcard ${h.cls}${on ? " on" : ""}" data-cell-pick="${esc(String(c.sequence_index))}"
+            data-cell-run="${esc(String(c.run_id ?? ""))}"
             aria-pressed="${on ? "true" : "false"}" title="${esc(seq)} — ${esc(stateLine(c))}">
       <span class="cc-head">
         <span class="cc-dot ${h.dot}"></span>
