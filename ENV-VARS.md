@@ -46,7 +46,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 |---|---|---|---|
 | BENCH_HUB_URL | http://127.0.0.1:4440 | hub endpoint | env |
 | BENCH_MCP_RECALL_URL | http://127.0.0.1:4550 (host) / http://host.docker.internal:4550 (worker) | recall client | env |
-| BENCH_SERVE_HOST_PORT | 8719 | host-published serve port | env |
+| BENCH_SERVE_HOST_PORT | (unset → auto-allocated free port; positive int → pin) | host-published live-view serve port — `harness/free_port.py::resolve_serve_host_port` allocates+exports a free loopback port per run-instance when unset/`""`/`"0"`/`"auto"`; the fixed `8719` is retired (2026-09-22) | env |
 | BENCH_SERVE_CONTAINER_PORT | 4096 | container serve port | env |
 | BENCH_ENV_FILE | config/bench.env | durable env file path | env |
 | BENCH_ROOT | <bench>/.. | workspace-root anchor | env |
@@ -78,7 +78,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_CONTROL_BENCH_ROOT | .. | control bench root | env |
 | OKP_CONTROL_PROXY_URL | http://127.0.0.1:4545 | model proxy: the control roster AND the harness model list (`GET /v1/models`) | env |
 | OKP_CONTROL_RUNTIME_URL | http://127.0.0.1:1234 | LM Studio runtime | env |
-| OKP_CONTROL_SERVE_URL | http://127.0.0.1:8719 | serve API | env |
+| OKP_CONTROL_SERVE_URL | http://127.0.0.1:8719 | serve API — **same-cell legacy fallback only** (control/state.mjs:25); the per-cell live-view URL is resolved from the cell's `cell.start` `serve_url` first (`routes/run.mjs` `cellServeUrl`), never cross-cell | env |
 | OKP_CONTROL_PYTHON | null | python binary | env |
 | OKP_IDENTITY_SEED_HEX | (none) | leader-signer seed | env or --seed-hex |
 | OKP_ENV | local | base-URL switch | env =production |

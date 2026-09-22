@@ -47,7 +47,7 @@ Every line is one JSON object.
 | `v` | yes | Envelope version. `1`. Bumped only for a breaking change. |
 | `ts` | yes | Unix ms when the record was emitted. |
 | `kind` | yes | One of the core kinds, or `ext`. |
-| `run_id` | when known | The run this belongs to. |
+| `run_id` | when known | The run this belongs to — the harness `run_label` (`cumulative-{seq:04d}-{arm}-{model}`), NOT the control-plane ledger `run_id` (a separate in-memory uuid) nor `manifest.run_id` (the manifest parent-dir basename). |
 | `cell_seq` | on cell-scoped records | Which cell in the campaign. |
 | `session_id` | on cell-scoped records | **The join key.** Present from `cell.start`. |
 

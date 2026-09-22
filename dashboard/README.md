@@ -23,8 +23,18 @@ package manager to start, something has been added that should not have been.
 The tests run on the stdlib runner for the same reason:
 
 ```bash
-cd bench/dashboard && node --test
+cd dashboard && node --test
 ```
+
+**Panel tests import modules bare under Node.** `board.js` boots
+(`bindInteraction(); render(); connect();`) only when BOTH `document` AND
+`EventSource` are defined (`board.js:712`), so a panel test that imports
+`board.js`/`create.js` must import them BARE (no stub) — `typeof EventSource` is
+`undefined` under Node, so the boot guard is false and the import is inert. A
+`document`-only stub is also inert (the `EventSource` conjunct is the real
+trigger); stubbing `EventSource` (or `window`) fires the boot and crashes on the
+missing `#root`. If a later `render()` needs a document stub, install it for that
+render only — never stub `EventSource`/`window`.
 
 **One vendored library, and it is stated rather than hidden.** `vendor/` holds
 xterm.js 6.0.0 — MIT, zero runtime dependencies — as the prebuilt UMD bundle the
@@ -215,7 +225,7 @@ event feed's click-to-expand is painted by the subtree's owner (`live.js`):
 `evRow`, so a rebuild reproduces the expansion. If a preserved subtree needs a
 new interaction, give it to its owner — do not add it to the board-wide render
 path. (Contrast: the non-preserved ledger legitimately uses toggle-state-then-
-`render()` at `board.js:687-688`.)
+`render()` via the board-wide `render()` defined at `board.js:355`.)
 
 ---
 

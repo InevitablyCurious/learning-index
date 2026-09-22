@@ -1,5 +1,5 @@
 # RUNBOOK.md — the operative run card
-**Version:** 7 · **Status:** OPERATIVE · **Supersedes:** v6 (2026-08-07) · **Amended:** 2026-09-04 (post-cleanup doc pass: extraction architecture recorded §2/§9, CLOUD-MIRROR-DRIFT closed §11, test baseline refreshed §14)
+**Version:** 8 · **Status:** OPERATIVE · **Supersedes:** v7 (2026-09-04) · **Amended:** 2026-09-22 (concurrency + median baselines landed: N-concurrent cells, per-cell live-view port, batch-median baseline with fingerprint + operator selection — §0/§3/§7/§10; the live N=1-vs-N=8 contention measurement remains PENDING, §11)
 
 > This is the authoritative operations reference for the benchmark; where another document disagrees, this one governs.
 
@@ -63,7 +63,7 @@ requirement.
 
 ---
 
-## 0. OPERATOR QUICKSTART — start one cell
+## 0. OPERATOR QUICKSTART — start one cell (or N concurrent)
 
 Everything an operator needs to launch a run. Rationale and rules live in the sections cited.
 
@@ -99,6 +99,7 @@ curl -s -X POST 127.0.0.1:8718/api/run/preview \
   -d '{"model":"qwen3.6-35b-a3b-bench","arm":"off"}'
 # CLOUD payload: {"model":"deepseek/deepseek-chat","arm":"off","kind":"cloud"}
 # (model = the {provider}/{model} roster key; ON cells add "org":"<org>")
+# N concurrent cells: add "concurrency":<N> (default 1) — the control plane sequences all N
 # → {"token":…, "restatement":…} — read the restatement, then confirm:
 curl -s -X POST 127.0.0.1:8718/api/run/start -d '{"confirm":"<token>"}'
 ```
@@ -165,11 +166,13 @@ sed -n 's/^attach_cmd=//p' runs/*/*/*/*/*/memory*/cell-*/live-view.txt
 #    (equivalently, from the launch log — in-tree for control-plane starts:)
 grep -E 'attach_cmd|session_id' runs/<tree>/<arm>-cell-<ts>.log | tail -5
 #    then attach to the cell's live worker serve — the id is per-run, e.g.:
-opencode attach http://127.0.0.1:8719 --session ses_00b54ddb7ffemO5eRSBu0ni034
-#    `--session` is NOT optional: without it the terminal UI opens its own new-session
-#    view instead of the live worker session. There is only ever ONE session on
-#    :8719, so `-c` (continue last) is the typo-proof route:
-opencode attach http://127.0.0.1:8719 -c
+opencode attach http://127.0.0.1:<port> --session ses_00b54ddb7ffemO5eRSBu0ni034
+#    Each cell's live view is published on its OWN host port — free-port allocated
+#    per run-instance (2026-09-22; supersedes the fixed :8719). Read the port from
+#    the cell's `cell.start` record (surfaced on the board) or the attach_cmd in
+#    live-view.txt; do not assume a fixed port. `--session` is NOT optional:
+#    without it the terminal UI opens its own new-session view instead of the live
+#    worker session.
 ```
 
 **Control plane (recommended) and cloud cells.** A cell may also be started through the control
@@ -184,8 +187,8 @@ run environment. At benchmark end (all attempts + gates done) the cell is NOT to
 artifact's server boots host-side from the bind-mounted worktree on `http://localhost:8002` —
 the exact code the model wrote, via the same boot the gates perform — and the run waits. The log
 carries a loud `HOLD-UI ACTIVE` line with the URL, the held container name, and the release
-command; machine-readable state is `<run_dir>/hold-ui.json`. Browse the UI (the live view on
-:8719 also stays up), then release: `touch <run_dir>/RELEASE_HOLD`. Teardown + reap then run
+command; machine-readable state is `<run_dir>/hold-ui.json`. Browse the UI (the live view
+also stays up), then release: `touch <run_dir>/RELEASE_HOLD`. Teardown + reap then run
 unconditionally as always (RC-6); heartbeat progress lines keep the status stream live during
 the wait (rule 5.15 is not tripped). Never set this on an unattended cell — the run waits until
 released or killed, and a kill still tears the stack down.
@@ -383,7 +386,14 @@ with exit 2 (verified 2026-08-10). `--until-review` is DEAD (removed by `ba2947a
 
 ---
 
-## 3. THE CELL — one per invocation, always
+## 3. THE CELL — N concurrent cells per start, one per invocation
+
+> **Concurrency landed (2026-09-22).** This section once read "one per invocation, always — the
+> harness never runs cells concurrently." That is superseded. The control plane's `/api/run/start`
+> now accepts a `concurrency` count N (default 1) and launches N cells at once; the harness itself
+> still runs **one cell per invocation** and never loops, pairs arms, or decides what runs next. A
+> live cell blocks only **its own model's** next launch (per-model gate), so different models run
+> concurrently.
 
 **The first pass is chunked (2026-08-09).** Attempt 1 is a
 sequence of chunk prompts (`task/backgammon/prompts/chunk-01..06.md`), driven in order through
@@ -524,9 +534,13 @@ with zero new turns AND zero new tokens is a loud `silent_phase` failure, never 
    no poller, no LLM judge.
 3. **The cell ends.** Extraction is the next invocation, not part of this one.
 
-**One cell per invocation. Always.** A campaign is the operator running the command again. The
-harness never loops over cells, never runs cells concurrently, never pairs arms, never pre-runs a
-baseline set, never decides what runs next.
+**One cell per invocation; N concurrent per start (2026-09-22, supersedes "never runs cells
+concurrently").** The control plane sequences and tracks all N cells itself — the dashboard sends ONE
+"run N cells" request, and the control plane allocates N distinct `sequence_index` values, opens N
+per-cell logs, and spawns N detached harnesses. The harness never loops over cells, never pairs arms,
+never pre-runs a baseline set, never decides what runs next. A cell of a given model blocks only that
+model's next launch (per-model gate, `models-ledger.mjs`); the baseline is no longer a single OFF run —
+it is the operator's chosen run out of an N-cell batch, reported as the batch median (see §10).
 
 **What a cell does internally:** build from the fixture → gates run host-side regardless of how the
 worker terminated → problems-only feedback (§8) → repeat, `max_attempts` 5 → resolved problems →
@@ -906,7 +920,12 @@ After a reboot or power failure, bring the stack back up in this order. Do NOT r
 
 - **(a) Bench MCP `:4550`** — `dev/scripts/bench-mcp.sh start` (managed service). Never `make redeploy`.
 - **(b) Control plane `:8718`** — `cd control && env -u BENCH_PLUGIN_DIR nohup node server.mjs --port 8718 > ../../dev/.logs/bench-control.log 2>&1 < /dev/null &`. `env -u BENCH_PLUGIN_DIR` keeps the control plane from inheriting a bench plugin pointer; add `BENCH_TOOLS_URL=http://127.0.0.1:8720` for the custom-tools drawer and `BENCH_STATS_MANIFEST` for the run-stats manifest when those surfaces are used.
-- **(c) Live-view `:8719`** — the host port is published by the egress sidecar (worker image `bench-worker:v1`, ingress forward host `:8719` → cell `:4096`); the worker cell itself stays on the internal-only network and publishes no host ports. If `:8719` is unreachable, the worker image is stale — rebuild with `.venv/bin/python scripts/rebuild_worker_image.py` from the repo root and relaunch the run.
+- **(c) Live view (per-cell host port)** — each cell's live-view serve is published on its OWN host
+  port, free-port allocated per run-instance (2026-09-22; the old fixed `:8719` is retired). The port
+  is recorded on the cell's `cell.start` record and surfaced on the board; the egress sidecar forwards
+  host `<port>` → cell `:4096`. The worker cell itself stays on the internal-only network and publishes
+  no host ports. If a cell's live view is unreachable, the worker image is stale — rebuild with
+  `.venv/bin/python scripts/rebuild_worker_image.py` from the repo root and relaunch the run.
 - **(d) Stale session-db volumes** — `docker volume rm -f` on any leaked `{container}-session-db` volumes (manual only; the harness does not auto-purge them).
 
 ### Completion detection — one transport, bounded recovery
@@ -1079,12 +1098,13 @@ security notes: `dashboard/README.md` → "Remote viewing".
   cell itself has **no general outbound access**: it runs on the `--internal` network (no gateway, no
   route) and reaches the model/MCP/hub only through the per-run egress sidecar. The residual is that
   the sidecar's upstream set is a fixed host:port list, not a domain policy — a known, accepted
-  residual, not an oversight to rediscover. **Maintainer hazard:** egress wiring is four
-  `if config.egress_host:` branches that must move in lockstep — sidecar launch
-  (`docker_worker.py:305`), network selection (`:1104`), MCP/hub URL rewrite (`:1260`), and publish
-  (`:1346`) — gating network without publish silently kills the host `:4096` publish, and gating
-  network without the URL rewrite breaks MCP/hub reachability (the exact `67a7aa6` state, with
-  zero diff evidence at the `-p` line itself).
+residual, not an oversight to rediscover. **Maintainer hazard:** egress wiring is THREE
+`if config.egress_host:` branches that must move in lockstep — sidecar launch
+(`docker_worker.py:380`), network selection (`:1290`), and host `:4096` publish (`:1487`) — gating
+network without publish silently kills the host `:4096` publish (the exact `67a7aa6` state, with
+zero diff evidence at the `-p` line itself). There is no MCP/hub URL-rewrite branch under
+`egress_host` (superseded 2026-09-22: the prior "four branches / MCP/hub URL rewrite" claim was
+stale).
 
 ### Known failure signature — org bootstrap (TWO distinct causes, same symptom)
 
@@ -1392,7 +1412,17 @@ fingerprint against an image built from the commit under test (§0 step 2).
 
 ## 10. VARIANCE POLICY — in full
 
-1. **Baseline: N=1 per scored cell.**
+> **Two different N's (2026-09-22) — do not conflate them.** (a) **Baseline batch N** (§0
+> concurrency): the OFF floor is no longer one run. The control plane runs N concurrent cells, the
+> board reports the **median problem count over scored runs**, bound to a **fingerprint** of the eight
+> inputs that determine what was measured (build prompts, grader, model, challenge, compaction,
+> scaffold, golden, worker image), and the operator **picks** the artifact run — the record stores the
+> pick's **signed deviation** from the median. Any fingerprint input change **voids** the batch. (b)
+> **Scored-cell variance N** (this section): how a single scored cell's verdict is hardened against
+> noise. Separate dials.
+
+1. **Baseline: N=1 per scored cell.** (The scored cell itself starts at one run — the variance dial
+   (b) above, distinct from the baseline batch N (a).)
 2. **Borderline cells repeat to N=3.** If any trigger below fires for a cell, **that cell and only
    that cell** re-runs to a total of three. The reported verdict is the **majority** for discrete
    outcomes and the **median** for continuous metrics. All three runs' raw artifacts are retained.
@@ -1450,6 +1480,8 @@ Fixed defects are not listed. They are in git.
 | **SERVE-MESSAGE-500** | 🟢 ROOT-CAUSED + FIXED 2026-08-11 | **NOT an opencode bug — the worker's SQLite session DB was CORRUPT.** `PRAGMA integrity_check` on the preserved DBs of BOTH 500-failing cells reports `database disk image is malformed`, with damaged pages in **tree 27 = the `part` table** — exactly the table in the failing `select … from "part" where "message_id" in (?×N)`. The 11:14 cell that never 500'd is **clean**. The IN-list size (36→50) was a **red herring**: a larger list touches more pages, so it meets a corrupt page sooner. **Cause:** the DB was bind-mounted from the macOS filesystem (osxfs/gRPC-FUSE), whose locking + fsync semantics SQLite cannot rely on. Pinning opencode never helped because the image was ALREADY pinned (`images/worker/Dockerfile:4`, 1.18.1). **Fix:** the session DB now lives on a **named Docker volume** (ext4 in the Linux VM), exported via `docker cp` at teardown to the same published host path; a per-cell volume is chowned to the worker uid (needs `--user 0:0` — the image bakes `USER worker`) and removed in a `finally` so a failed teardown cannot leak volumes. **Second defect closed:** extraction previously accepted any `is_file()` DB. SQLite corruption is PARTIAL — the corrupt DB answered `count(*)`=492 fine — so a corrupt substrate **silently under-reported memories** instead of failing. `harness/session_db_integrity.py` defines the fail-closed guard `require_sound_session_db` (`session_db_integrity.py:154-167`), which EXISTS but has NO non-test caller today — it is not wired into the run path, so a corrupt substrate is NOT caught. | was: intermittently, cell-voiding — now: cause removed, but a corrupt substrate is NOT caught today (the fail-closed guard `require_sound_session_db` exists but has no non-test caller — it is not on the run path) |
 | **RECALL-SELECTION-BIAS** | 🟡 OPEN — known, stated limitation | Recall fires only after a repeat — the second failure under the same stable `failureKey` while still red — so every serve is conditioned on an already-hard problem. Standing therefore measures **"works on stuck problems," not "works."** Defensible, and arguably the population that matters, but a further departure from the sim's uniform-serving assumption (recorded 2026-08-08; claim and limit travel together — the §1.1/§1.2 dual-carriage principle). | every standing/recall conclusion — disclosed, not blocking |
 | **CLOUD-MIRROR-DRIFT** | 🟢 CLOSED (reconciled, verified 2026-09-04) | The `control/cloud.mjs` `CLOUD_MODELS` mirror (`:114`) and `harness/config.py` `CLOUD_ORCAROUTER_PROVIDER["models"]` are now both **117** entries with identical key sets and matching context/output limits; the drift test `control/__tests__/models-ledger.test.mjs:329` (`DRIFT: the cloud catalogue matches CLOUD_ORCAROUTER_PROVIDER in config.py`) **passes**. The prior "87 mirrored vs 117" drift (30 refused models) is reconciled. Keep the drift test live — it is the guard that caught this class. | — |
+| **CONCURRENCY-MEASUREMENT** | 🟡 OPEN — **PENDING** | The live N=1-vs-N=8 measurement (CONCURRENCY-SPEC §8) has **NOT been run**. The concurrency feature (8 commits, suites green) is built, but "verified concurrency safety" is **not yet a measured claim**: the three load-fragile in-gate timers (`grader/conformance/pregate.ts:563` 250 ms, `grader/frontend/core.spec.ts:54` 1.5 s, `grader/backend/gates-13-16.test.ts:372` 6 s) could fire more often under N=8 contention and convert contention into extra failures — the measured quantity. Run the same fingerprint at N=1 and N=8 and compare before advertising the feature as verified. | §8 measurement integrity |
+| **STACK-LEDGER-FLOOR-DRIFT** | 🟡 OPEN — code-owner | `control/board/sources/stack-ledger.mjs:109-111` still picks `scorable[scorable.length - 1]` for the transfer-curve floor while `control/baselines.mjs` moved to batch-median + operator selection; its `:104` comment "Same rule as control/baselines.mjs" is now false. The card (baselines.mjs) and the curve (stack-ledger.mjs) will disagree until it too reads the batch. | transfer curve vs baseline card |
 
 **Memory is not a constraint — CLOSED, do not re-investigate.** Zero swap, ~211 GB wired headroom.
 The trap that misled two sessions is `top`'s "unused" line, which excludes inactive pages macOS
@@ -1554,11 +1586,11 @@ target does not exercise it.
 **Gates must resolve the entrypoint from the artifact**, never assume a fixed server filename — the
 build pipeline may change it. A hardcoded filename here is what produced a whole dead campaign cell.
 
-**Verified baseline: 938 passed / 1 skipped, in 7.43s** (full default suite, 2026-09-04, post-cleanup;
-the `1 skipped` is `tests/test_predicate_emitter.py:101`, which skips when `okp-mcp/dist` walk-v1 is
-not built — the former skip source `test_openrouter_proxy_docker_e2e.py` was DELETED in the
-OpenRouter-proxy removal). 939 selected of 941 collected — the 2 slow-marked tests are deselected
-by `-m "not slow"`. Any change must return to this or account for the difference.
+**Verified baseline: 2062 passed / 413 skipped** (full default suite, 2026-09-22, post-concurrency +
+median-baselines; collect-only `2475/2477 collected, 2 deselected`). The 413 skips are the
+docker-gated `@REQUIRES_DOCKER`/slow-marked tests (no container launched). Prior: 938 passed / 1
+skipped on 2026-09-04, before the concurrency test additions. Any change must return to this or
+account for the difference.
 
 ---
 
@@ -1749,9 +1781,9 @@ scaffold fallback (`scripts/run_cumulative.py:1732-1744`).
 ### Why a seeded cell is not a floor
 
 It sits on a different turn/token scale than a floor (it skipped the build), so
-it folds `scorable:false` with a stated reason (`control/baselines.mjs:467`,
-`:501-519`) and is excluded from the transfer curve's baseline
-(`control/board/sources/stack-ledger.mjs:198`). It never appears in the ledger's
+it folds `scorable:false` with a stated reason (`control/baselines.mjs:517-535`)
+and is excluded from the transfer curve's baseline
+(`control/board/sources/stack-ledger.mjs:106-108`). It never appears in the ledger's
 `baseline_rows`.
 
 ### Honesty fields
