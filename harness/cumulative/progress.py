@@ -102,16 +102,11 @@ def _contention_fields(result: Any) -> dict[str, Any]:
         return {}
 
     return {
-        "http_429_count": _int_or_default(
-            _field(contention, "http_429_count"), default=0
-        ),
-        "http_402_count": _int_or_default(
-            _field(contention, "http_402_count"), default=0
-        ),
+        "http_429_count": _optional_int(_field(contention, "http_429_count")),
+        "http_402_count": _optional_int(_field(contention, "http_402_count")),
         "retry_count": _int_or_default(_field(contention, "retry_count"), default=0),
-        "upstream_error_count": _int_or_default(
-            _field(contention, "upstream_error_count"),
-            default=0,
+        "upstream_error_count": _optional_int(
+            _field(contention, "upstream_error_count")
         ),
         "max_request_ms": _optional_int(_field(contention, "max_request_ms")),
         "median_request_ms": _optional_int(_field(contention, "median_request_ms")),

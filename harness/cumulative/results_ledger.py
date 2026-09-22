@@ -50,6 +50,21 @@ RECALL_FIELDS = (
     "serve_success_rate",
 )
 
+# The contention-covariate subset of the same ``progress`` dict. Unlike
+# recall, NOT arm-gated: contention is measured on BOTH ON and OFF cells (via
+# the spend DB), so every record carries the conditions it was gathered under.
+# A per-field None means not measured (spend DB unavailable) — never
+# zero-filled. Visibility only: these fields gate nothing.
+CONTENTION_FIELDS = (
+    "http_429_count",
+    "http_402_count",
+    "retry_count",
+    "upstream_error_count",
+    "max_request_ms",
+    "median_request_ms",
+    "wall_near_timeout",
+)
+
 
 def utc_now_iso() -> str:
     """House UTC timestamp: second precision, ``Z`` suffix."""
@@ -169,6 +184,14 @@ def build_run_records(
                     if arm == "on" and progress is not None
                     else None
                 ),
+                # contention: the covariates this cell was gathered under,
+                # carried on BOTH arms (not gated on arm=="on"); None only
+                # when the attempt record published no progress mapping.
+                "contention": (
+                    {field: progress.get(field) for field in CONTENTION_FIELDS}
+                    if progress is not None
+                    else None
+                ),
                 "session_fp": point.get("session_fp"),
                 "session_id": attempt.get("session_id"),
                 "timestamp": timestamp if timestamp is not None else utc_now_iso(),
@@ -207,6 +230,7 @@ def append_run_records(
 
 
 __all__ = [
+    "CONTENTION_FIELDS",
     "LEDGER_RELATIVE_PATH",
     "RECALL_FIELDS",
     "append_run_records",

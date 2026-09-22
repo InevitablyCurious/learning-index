@@ -5,7 +5,9 @@ shape) plus a real StatusStream of per-cell attempt records, then asserts the
 emitted JSONL line's exact fields: the OFF cell carries arm=="off",
 recall is None (not a dict of nulls), org_id is None; the ON cell carries a
 populated recall sub-dict (the recall-yield fields of the published progress)
-and its per-cell org_id. No metrics are invented: every value flows from the
+and its per-cell org_id. WO-CONCUR-07: both arms also carry the ``contention``
+covariates sub-dict (None only when the attempt published no progress). No
+metrics are invented: every value flows from the
 same surfaces a real run publishes.
 """
 
@@ -16,7 +18,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from harness.cumulative.convergence import ConvergencePoint
+from harness.cumulative.convergence import CONTENTION_FIELDS, ConvergencePoint
 from harness.cumulative.progress import progress_from_cell_result
 from harness.cumulative.results_ledger import (
     RECALL_FIELDS,
@@ -29,6 +31,7 @@ from harness.cumulative.run_artifacts import (
     StatusStream,
     default_status_stream_path,
 )
+from harness.cumulative.types import SessionRecord
 
 
 def _manifest_to_dict() -> dict[str, Any]:
@@ -93,6 +96,23 @@ def _on_telemetry() -> dict[str, Any]:
         "served_attempted": 3,
         "served_failed": 1,
         "served_confirmed": 2,
+    }
+
+
+def _contention() -> dict[str, Any]:
+    """The contention covariates a cell publishes under ``contention``.
+
+    Read by progress.py's ``_contention_fields`` (Mapping or attribute access)
+    and published FLAT into the progress dict by ``ProgressVector.to_dict``.
+    """
+    return {
+        "http_429_count": 5,
+        "http_402_count": 1,
+        "retry_count": 2,
+        "upstream_error_count": 3,
+        "max_request_ms": 1200,
+        "median_request_ms": 800,
+        "wall_near_timeout": False,
     }
 
 
@@ -173,6 +193,11 @@ def test_off_cell_record_shape(tmp_path: Path) -> None:
     assert record["wall_seconds"] == 12.5
     assert record["wall_cost_usd"] == 0.25
     assert record["recall"] is None, "OFF recall is None, not a dict of nulls"
+    # This fixture publishes no contention: the covariates stay per-field None
+    # (not measured), never zero-filled — and the key itself is still present.
+    assert record["contention"] == {field: None for field in CONTENTION_FIELDS}, (
+        "unmeasured contention is a dict of Nones, never zero-filled"
+    )
     assert record["session_fp"] == "fp-off-cell"
     assert record["session_id"] == "ses-off-cell"
     assert record["timestamp"] == "2026-08-29T13:00:00Z"
@@ -225,6 +250,98 @@ def test_on_cell_recall_populated(tmp_path: Path) -> None:
     assert recall["inject_yield"] == 0.4
     assert recall["serve_success_rate"] == 2 / 3
     assert record["model"] == "local/test-model", "requested_model wins over served"
+
+
+def test_convergence_point_carries_contention_covariates() -> None:
+    """WO-CONCUR-07: a scored session's point surfaces the contention
+    covariates it was gathered under — the 7 flat progress fields, nested."""
+    telemetry = {**_off_telemetry(), "contention": _contention()}
+    record = SessionRecord(
+        sequence_index=0,
+        model="local/test-model",
+        provider_pin="local",
+        memory_mode="off",
+        phase_group="off",
+        phase="DONE",
+        session_id="ses-off-cell",
+        session_fp="fp-off-cell",
+        progress=progress_from_cell_result(telemetry).to_dict(),
+    )
+
+    point = ConvergencePoint.from_session_record(record)
+    assert point is not None
+    assert point.contention == _contention()
+    emitted = point.to_dict()["contention"]
+    assert emitted == _contention()
+    assert set(emitted) == set(CONTENTION_FIELDS)
+
+
+def test_ledger_records_carry_contention_on_both_arms(tmp_path: Path) -> None:
+    """WO-CONCUR-07: contention is NOT arm-gated (measured on ON and OFF);
+    it is None only when the attempt record published no progress mapping."""
+    manifest_path = tmp_path / "manifest.json"
+    stream_path = _write_attempt_records(
+        manifest_path,
+        [
+            {
+                "type": "attempt",
+                "sequence_index": 0,
+                "memory_mode": "off",
+                "org_id": "okp-org-0",
+                "verdict": "PASS",
+                "session_fp": "fp-off-cell",
+                "session_id": "ses-off-cell",
+                "progress": progress_from_cell_result(
+                    {**_off_telemetry(), "contention": _contention()}
+                ).to_dict(),
+            },
+            {
+                "type": "attempt",
+                "sequence_index": 1,
+                "memory_mode": "on",
+                "org_id": "org-on-target",
+                "verdict": "PASS",
+                "session_fp": "fp-on-cell",
+                "session_id": "ses-on-cell",
+                "progress": progress_from_cell_result(
+                    {**_on_telemetry(), "contention": _contention()}
+                ).to_dict(),
+            },
+            {
+                "type": "attempt",
+                "sequence_index": 2,
+                "memory_mode": "off",
+                "org_id": "okp-org-0",
+                "verdict": "FAIL",
+                "session_fp": "fp-no-progress",
+                "session_id": "ses-no-progress",
+                # No progress mapping: contention must be None, never invented.
+            },
+        ],
+    )
+    scorecard = _scorecard(
+        [
+            _point(0, "fp-off-cell"),
+            _point(1, "fp-on-cell"),
+            _point(2, "fp-no-progress"),
+        ]
+    )
+
+    records = build_run_records(
+        tree_id=None,
+        task="backgammon",
+        scorecard=scorecard,
+        status_stream_path=stream_path,
+        timestamp="2026-08-29T13:00:00Z",
+    )
+    assert len(records) == 3
+    off, on, no_progress = records
+    assert off["arm"] == "off"
+    assert off["contention"] == _contention(), "carried on the OFF arm too"
+    assert set(off["contention"]) == set(CONTENTION_FIELDS)
+    assert on["arm"] == "on"
+    assert on["contention"] == _contention()
+    assert no_progress["contention"] is None, "no progress => None, not invented"
 
 
 def test_append_writes_jsonl_accumulates_and_preserves_torn_line(

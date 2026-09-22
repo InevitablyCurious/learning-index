@@ -25,6 +25,20 @@ from .types import SessionRecord
 
 CONVERGENCE_SCHEMA_VERSION = 1
 
+# The contention-covariate subset of the status-stream ``progress`` dict
+# (ProgressVector.to_dict fields), measured on BOTH memory arms via the spend
+# DB. Fixed tuple: no invented metrics. None means not measured (e.g. spend DB
+# unavailable) — never zero-filled. Visibility only: these fields gate nothing.
+CONTENTION_FIELDS = (
+    "http_429_count",
+    "http_402_count",
+    "retry_count",
+    "upstream_error_count",
+    "max_request_ms",
+    "median_request_ms",
+    "wall_near_timeout",
+)
+
 
 def _coerce_optional_int(value: Any) -> int | None:
     if value is None or isinstance(value, bool) or isinstance(value, str):
@@ -93,6 +107,11 @@ class ConvergencePoint:
     build_phase_ran: bool = False
     skipped_build_cost: dict[str, Any] | None = None
     dev_mode: bool = False
+    # WO-CONCUR-07: the contention covariates this session was gathered under,
+    # mirrored from the progress dict's CONTENTION_FIELDS (visibility, never a
+    # gate). None only on a point constructed without a progress mapping; a
+    # per-field None means that covariate was not measured.
+    contention: dict[str, Any] | None = None
 
     @classmethod
     def from_session_record(cls, record: SessionRecord) -> ConvergencePoint | None:
@@ -139,6 +158,7 @@ class ConvergencePoint:
             if isinstance(skipped_build_cost, Mapping)
             else None,
             dev_mode=bool(getattr(record, "dev_mode", False)),
+            contention={name: progress.get(name) for name in CONTENTION_FIELDS},
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -162,6 +182,7 @@ class ConvergencePoint:
             "build_phase_ran": self.build_phase_ran,
             "skipped_build_cost": self.skipped_build_cost,
             "dev_mode": self.dev_mode,
+            "contention": self.contention,
         }
 
 
@@ -243,6 +264,7 @@ def build_convergence_trend(
 
 
 __all__ = [
+    "CONTENTION_FIELDS",
     "CONVERGENCE_SCHEMA_VERSION",
     "ConvergencePoint",
     "ConvergenceTrend",

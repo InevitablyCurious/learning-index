@@ -138,9 +138,61 @@ export function signedDeviation(problemCount, median) {
 }
 
 /**
+ * Batch-level contention summary over the SCORED runs only — the same
+ * population the median is derived from. VISIBILITY ONLY: it lets an operator
+ * tell a crowded batch from a quiet one; it gates nothing, scores nothing, and
+ * is deliberately NOT a fingerprint input (a slower/crowded run is still the
+ * same run). Aggregation over scored runs carrying a contention object:
+ *   - the four counts (http_429_count, http_402_count, retry_count,
+ *     upstream_error_count) are SUMMED;
+ *   - the two latencies (max_request_ms, median_request_ms) take the MAX;
+ *   - wall_near_timeout is ANY (true when any scored run is true).
+ * A field no scored run measured is null — never a fabricated 0/false.
+ */
+export function contentionSummary(runs) {
+  const measured = runs
+    .filter((run) => run.scored === true && run.contention && typeof run.contention === "object")
+    .map((run) => run.contention);
+  const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const sum = (key) => {
+    let out = null;
+    for (const c of measured) {
+      const v = num(c[key]);
+      if (v !== null) out = (out ?? 0) + v;
+    }
+    return out;
+  };
+  const max = (key) => {
+    let out = null;
+    for (const c of measured) {
+      const v = num(c[key]);
+      if (v !== null) out = out === null ? v : Math.max(out, v);
+    }
+    return out;
+  };
+  const any = (key) => {
+    let out = null;
+    for (const c of measured) {
+      if (typeof c[key] === "boolean") out = out === null ? c[key] : out || c[key];
+    }
+    return out;
+  };
+  return {
+    http_429_count: sum("http_429_count"),
+    http_402_count: sum("http_402_count"),
+    retry_count: sum("retry_count"),
+    upstream_error_count: sum("upstream_error_count"),
+    max_request_ms: max("max_request_ms"),
+    median_request_ms: max("median_request_ms"),
+    wall_near_timeout: any("wall_near_timeout"),
+  };
+}
+
+/**
  * Build the batch record. Runs are normalized (problem_count number|null,
- * scored boolean, void_reason string|null); counts and median are derived
- * from the normalized list so the record never disagrees with itself.
+ * scored boolean, void_reason string|null, contention object|null); counts,
+ * median and the contention summary are derived from the normalized list so
+ * the record never disagrees with itself.
  */
 export function assembleBatch({ runDir, runs, fingerprint, now = new Date().toISOString() }) {
   const normalized = runs.map((run) => ({
@@ -148,6 +200,9 @@ export function assembleBatch({ runDir, runs, fingerprint, now = new Date().toIS
     problem_count: Number.isFinite(run.problem_count) ? run.problem_count : null,
     scored: run.scored === true,
     void_reason: typeof run.void_reason === "string" ? run.void_reason : null,
+    // The run's seven contention covariates, copied so the record never
+    // aliases the caller's object. Visibility only — NOT a fingerprint input.
+    contention: run.contention && typeof run.contention === "object" ? { ...run.contention } : null,
   }));
   const scoredCount = normalized.filter((run) => run.scored).length;
   return {
@@ -160,6 +215,9 @@ export function assembleBatch({ runDir, runs, fingerprint, now = new Date().toIS
     scored_count: scoredCount,
     void_count: normalized.length - scoredCount,
     median: medianOfScored(normalized),
+    // What conditions the batch was gathered under, over the SCORED runs only
+    // (contentionSummary). Visibility only, never a gate, never fingerprinted.
+    contention: contentionSummary(normalized),
     selection: null,
     void: false,
     void_input: null,

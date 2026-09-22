@@ -21,11 +21,6 @@ CONSTRUCTION_DEFERRED_TELEMETRY_SEAMS: frozenset[str] = frozenset(
         "extraction_candidate_count",
         "accepted_count",
         "rejected_count",
-        "http_429_count",
-        "http_402_count",
-        "retry_count",
-        "upstream_error_count",
-        "wall_near_timeout",
     }
 )
 ON_ONLY_TELEMETRY_SEAMS: frozenset[str] = frozenset(

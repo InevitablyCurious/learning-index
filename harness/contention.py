@@ -5,10 +5,10 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ContentionCovariates:
-    http_429_count: int
-    http_402_count: int
+    http_429_count: int | None
+    http_402_count: int | None
     retry_count: int
-    upstream_error_count: int
+    upstream_error_count: int | None
     max_request_ms: int | None
     median_request_ms: int | None
     wall_seconds: float | None
@@ -23,10 +23,10 @@ class ContentionCovariates:
         wall_near_timeout: bool = False,
     ) -> ContentionCovariates:
         return cls(
-            http_429_count=0,
-            http_402_count=0,
+            http_429_count=None,
+            http_402_count=None,
             retry_count=int(retry_count),
-            upstream_error_count=0,
+            upstream_error_count=None,
             max_request_ms=None,
             median_request_ms=None,
             wall_seconds=wall_seconds,

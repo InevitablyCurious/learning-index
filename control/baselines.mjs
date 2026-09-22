@@ -113,6 +113,11 @@ async function readJsonlOrEmpty(path) {
 
 const int = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 const str = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
+// int() maps null→0 (Number(null) === 0); a covariate that was NOT measured
+// must stay null, never a fabricated 0 — so guard the null before coercing.
+const measuredInt = (v) => (v == null ? null : int(v));
+// A boolean that yields null when absent/non-boolean — never null→false.
+const bool = (v) => (typeof v === "boolean" ? v : null);
 
 /**
  * The gate tally an attempt record carries, or null when it has no total —
@@ -131,6 +136,27 @@ function gateTotals(r) {
     error: int(g.error),
     not_run: int(g.not_run),
     total,
+  };
+}
+
+/**
+ * The seven contention covariates, flat in each status record's `progress`
+ * (written by the harness ProgressVector). VISIBILITY ONLY: they say what
+ * conditions the cell was gathered under — they gate nothing, score nothing,
+ * and are deliberately NOT fingerprint inputs (a crowded run is the same run).
+ * Sticky per field across the attempt fold like every other measurement;
+ * null means "not measured" (spend DB unavailable), never a coerced 0/false.
+ */
+function contentionOf(p, prev) {
+  const c = prev ?? {};
+  return {
+    http_429_count: measuredInt(p.http_429_count) ?? c.http_429_count ?? null,
+    http_402_count: measuredInt(p.http_402_count) ?? c.http_402_count ?? null,
+    retry_count: measuredInt(p.retry_count) ?? c.retry_count ?? null,
+    upstream_error_count: measuredInt(p.upstream_error_count) ?? c.upstream_error_count ?? null,
+    max_request_ms: measuredInt(p.max_request_ms) ?? c.max_request_ms ?? null,
+    median_request_ms: measuredInt(p.median_request_ms) ?? c.median_request_ms ?? null,
+    wall_near_timeout: bool(p.wall_near_timeout) ?? c.wall_near_timeout ?? null,
   };
 }
 
@@ -183,6 +209,8 @@ export async function collectCells(runsRoot) {
         tokens: int(p.total_tokens) ?? int(p.tokens) ?? prev.tokens ?? null,
         problems_before: int(p.problems_before) ?? prev.problems_before ?? null,
         wall_seconds: int(p.wall_seconds) ?? prev.wall_seconds ?? null,
+        // Contention covariates: visibility only, never a gate (contentionOf).
+        contention: contentionOf(p, prev.contention),
         // Build chunks exist only on attempt 1: keep the first non-empty list.
         build_chunks: (Array.isArray(p.build_chunks) && p.build_chunks.length)
           ? p.build_chunks
@@ -253,6 +281,8 @@ export async function collectCells(runsRoot) {
         tokens: meas?.tokens ?? null,
         problems_before: meas?.problems_before ?? null,
         wall_seconds: meas?.wall_seconds ?? null,
+        // The cell's seven contention covariates (null when never measured).
+        contention: meas?.contention ?? null,
         gates: meas?.gates ?? null,
         // null means no data, never "every chunk incomplete".
         build_chunks: meas?.build_chunks ?? null,
@@ -316,6 +346,8 @@ export async function assembleBatchForCells({ repoRoot = REPO_ROOT, runDir, cell
     problem_count: scored(c) ? c.problems_before : null,
     scored: scored(c),
     void_reason: scored(c) ? null : voidReason(c),
+    // Rides along for visibility (batch.runs[].contention); never scored on.
+    contention: c.contention ?? null,
   }));
   const values = await collectFingerprintInputs({ repoRoot, runDir });
   const fingerprint = computeFingerprint(values);

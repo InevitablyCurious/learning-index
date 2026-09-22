@@ -362,7 +362,24 @@ def test_progress_vector_construction_does_not_report_late_populated_seams() -> 
     assert "consumer_injected_count" not in progress.missing_telemetry_seams
     assert "extraction_candidate_count" not in progress.missing_telemetry_seams
     assert "accepted_count" not in progress.missing_telemetry_seams
-    assert "http_429_count" not in progress.missing_telemetry_seams
+
+
+def test_progress_vector_reports_absent_contention_seams() -> None:
+    progress = ProgressVector(problems_before=1, memory_mode="off")
+
+    contention_seams = (
+        "http_429_count",
+        "http_402_count",
+        "retry_count",
+        "upstream_error_count",
+        "wall_near_timeout",
+    )
+    for seam in contention_seams:
+        assert seam in progress.missing_telemetry_seams
+
+    persisted_seams = progress.to_dict()["missing_telemetry_seams"]
+    for seam in contention_seams:
+        assert seam in persisted_seams
 
 
 def test_progress_vector_to_dict_reports_unresolved_late_on_seams() -> None:

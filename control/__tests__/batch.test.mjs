@@ -15,6 +15,7 @@ import {
   fingerprintVerdict,
   medianOfScored,
   signedDeviation,
+  contentionSummary,
   assembleBatch,
   markVoid,
   selectRun,
@@ -268,13 +269,110 @@ test("BATCH: assembleBatch computes counts + median and initializes selection/vo
 
   assert.deepEqual(
     batch.runs[1],
-    { sequence_index: 1, problem_count: null, scored: false, void_reason: "context exhausted" },
+    { sequence_index: 1, problem_count: null, scored: false, void_reason: "context exhausted", contention: null },
     "void run normalized: problem_count null",
   );
   assert.deepEqual(
     batch.runs[3],
-    { sequence_index: 3, problem_count: 26, scored: true, void_reason: null },
+    { sequence_index: 3, problem_count: 26, scored: true, void_reason: null, contention: null },
     "missing void_reason normalized to null",
+  );
+});
+
+test("BATCH: contentionSummary sums counts, maxes latencies, ANYs wall_near_timeout — scored runs only", () => {
+  const run = (scored, contention) => ({ scored, contention });
+  const runs = [
+    run(true, {
+      http_429_count: 2, http_402_count: null, retry_count: 1, upstream_error_count: 0,
+      max_request_ms: 500, median_request_ms: 120, wall_near_timeout: false,
+    }),
+    run(true, {
+      http_429_count: 3, http_402_count: 1, retry_count: null, upstream_error_count: 2,
+      max_request_ms: 900, median_request_ms: 80, wall_near_timeout: true,
+    }),
+    // A void run never enters the summary — the same population as the median.
+    run(false, {
+      http_429_count: 100, http_402_count: 100, retry_count: 100, upstream_error_count: 100,
+      max_request_ms: 100000, median_request_ms: 100000, wall_near_timeout: true,
+    }),
+  ];
+  assert.deepEqual(contentionSummary(runs), {
+    http_429_count: 5, // SUM 2 + 3
+    http_402_count: 1, // SUM; null contributes nothing
+    retry_count: 1, // SUM; null contributes nothing
+    upstream_error_count: 2, // SUM 0 + 2
+    max_request_ms: 900, // MAX
+    median_request_ms: 120, // MAX
+    wall_near_timeout: true, // ANY
+  });
+
+  // A field no scored run measured is null — never a fabricated 0/false.
+  const unmeasured = [
+    run(true, {
+      http_429_count: null, http_402_count: null, retry_count: null, upstream_error_count: null,
+      max_request_ms: null, median_request_ms: null, wall_near_timeout: null,
+    }),
+    run(true, null), // no contention object at all
+  ];
+  assert.deepEqual(contentionSummary(unmeasured), {
+    http_429_count: null, http_402_count: null, retry_count: null, upstream_error_count: null,
+    max_request_ms: null, median_request_ms: null, wall_near_timeout: null,
+  });
+  assert.deepEqual(contentionSummary([]), contentionSummary(unmeasured), "empty → all null");
+
+  // A measured false stays false — ANY is not "truthy-or-null".
+  assert.equal(
+    contentionSummary([run(true, { wall_near_timeout: false })]).wall_near_timeout,
+    false,
+  );
+});
+
+test("BATCH: assembleBatch carries per-run contention and surfaces the scored-only summary", () => {
+  const crowded = {
+    http_429_count: 1, http_402_count: 0, retry_count: 2, upstream_error_count: null,
+    max_request_ms: 300, median_request_ms: 100, wall_near_timeout: false,
+  };
+  const batch = assembleBatch({
+    runDir: "/tmp/run-c",
+    runs: [
+      { sequence_index: 0, problem_count: 10, scored: true, void_reason: null, contention: crowded },
+      {
+        sequence_index: 1, problem_count: null, scored: false, void_reason: "void_instrument",
+        contention: {
+          http_429_count: 9, http_402_count: 9, retry_count: 9, upstream_error_count: 9,
+          max_request_ms: 9999, median_request_ms: 9999, wall_near_timeout: true,
+        },
+      },
+      {
+        sequence_index: 2, problem_count: 20, scored: true, void_reason: null,
+        contention: {
+          http_429_count: 4, http_402_count: null, retry_count: 1, upstream_error_count: 3,
+          max_request_ms: 800, median_request_ms: 50, wall_near_timeout: true,
+        },
+      },
+    ],
+    fingerprint: computeFingerprint(makeValues()),
+    now: "2026-09-22T00:00:00.000Z",
+  });
+
+  assert.deepEqual(batch.runs[0].contention, crowded, "per-run covariates ride on the record");
+  assert.notEqual(batch.runs[0].contention, crowded, "normalized by copy — never aliases the caller");
+  assert.equal(batch.runs[1].contention.http_429_count, 9,
+    "a void run still SAYS its conditions — it is only kept out of the summary");
+  assert.deepEqual(batch.contention, {
+    http_429_count: 5, // 1 + 4; the void run's 9 never enters
+    http_402_count: 0, // 0 + null
+    retry_count: 3, // 2 + 1
+    upstream_error_count: 3, // null + 3
+    max_request_ms: 800, // MAX over scored
+    median_request_ms: 100, // MAX over scored
+    wall_near_timeout: true, // ANY over scored
+  });
+  // Contention is deliberately NOT fingerprinted: the canonical values stay
+  // the eight contract inputs (pinned by the FINGERPRINT_INPUTS order test).
+  assert.deepEqual(
+    Object.keys(batch.fingerprint.values),
+    FINGERPRINT_INPUTS.map((input) => input.name),
   );
 });
 
