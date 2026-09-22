@@ -161,8 +161,12 @@ export function restatement({ model, arm, org, context, kind, cloud = null, comp
     `context: ${context ? `${context} tokens` : "registry default (262144)"}`,
     // Stated either way, on or off.
     compact
-      ? "compaction: ON — the session is compacted after each of the six build " +
-        "chunks (never during repair), costing one model turn per chunk"
+      // No count: the number of build chunks is the challenge's, not this
+      // string's. It said "six" while the task had five, which is the shape of
+      // mistake a launch restatement must never make — the operator is
+      // confirming what they are about to spend an hour on.
+      ? "compaction: ON — the session is compacted after each build chunk " +
+        "(never during repair), costing one model turn per chunk"
       : "compaction: OFF — the build runs uncompacted, and the repair phase " +
         "starts with whatever context the build left",
     org ? `org: ${org}` : "org: not applicable to a control cell",

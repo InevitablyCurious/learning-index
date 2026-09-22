@@ -91,6 +91,7 @@ def _build_context(args: argparse.Namespace, *, require_runtime: bool) -> CliCon
         chunk_plan_hash=compute_task_template_hash(PROMPTS_DIR)
         or "",
         sequence_index=args.sequence_index,
+        off_replicates=getattr(args, "off_replicates", 1) or 1,
     )
     recorded_run_context = getattr(getattr(sequencer, "_manifest"), "run_context", None)
     drift = compare_run_context(recorded_run_context, current_run_context)

@@ -27,20 +27,44 @@ def _seeded_rng(*, seed: int, roster_hash: str) -> random.Random:
     return random.Random(seed_int)
 
 
-def build_off_order(roster: list[RosterEntry]) -> list[ScheduledSession]:
-    """Build the declared-roster OFF baseline schedule in roster order."""
+def build_off_order(
+    roster: list[RosterEntry], *, replicates: int = 1
+) -> list[ScheduledSession]:
+    """Build the declared-roster OFF baseline schedule in roster order.
+
+    REPLICATES ARE THE SAME CELL, NOT DIFFERENT SESSIONS. A baseline is the
+    MEDIAN of N runs of one configuration, because a single run was never a
+    baseline — measured on this task, identical prompts and identical model
+    produced 23, 25 and 62 problems. So one roster entry yields N scheduled
+    sessions that differ only by sequence index: same model, same arm, same
+    everything the fingerprint covers.
+
+    Without this the control plane could allocate indices 0..N-1 while the
+    schedule held exactly one session, and every cell after the first died on
+    `sequence_index N out of range` seconds after launch.
+
+    Replicates are contiguous per roster entry, so a roster of two models at
+    N=3 is [m0, m0, m0, m1, m1, m1]. `sequence_index` stays the position in
+    the schedule, which is what `session_records[i].sequence_index == i`
+    (relied on by explicit-index mode) requires.
+    """
     _require_non_empty_roster(roster)
-    return [
-        ScheduledSession(
-            sequence_index=index,
-            model=entry.model,
-            provider_pin=entry.provider_pin,
-            memory_mode="off",
-            phase_group=PhaseGroup.OFF_BASELINE.value,
-            roster_index=index,
-        )
-        for index, entry in enumerate(roster)
-    ]
+    if not isinstance(replicates, int) or isinstance(replicates, bool) or replicates < 1:
+        raise ValueError(f"replicates must be a positive integer, got {replicates!r}")
+    sessions: list[ScheduledSession] = []
+    for roster_index, entry in enumerate(roster):
+        for _ in range(replicates):
+            sessions.append(
+                ScheduledSession(
+                    sequence_index=len(sessions),
+                    model=entry.model,
+                    provider_pin=entry.provider_pin,
+                    memory_mode="off",
+                    phase_group=PhaseGroup.OFF_BASELINE.value,
+                    roster_index=roster_index,
+                )
+            )
+    return sessions
 
 
 def build_on_order(
@@ -108,12 +132,19 @@ def build_schedule(
     seed: int,
     roster_hash: str,
     on_budget: int,
+    off_replicates: int = 1,
 ) -> list[ScheduledSession]:
-    """Build cumulative schedule: full OFF baseline then seeded ON phase."""
+    """Build cumulative schedule: full OFF baseline then seeded ON phase.
+
+    ``off_replicates`` applies to the OFF baseline ONLY. An OFF floor is the
+    median of N runs; an ON cell is a single measurement taken against that
+    floor, every time. Replicating the ON arm would be averaging away the
+    thing the benchmark exists to observe.
+    """
     _require_non_empty_roster(roster)
     _require_non_negative_budget(budget=on_budget, field_name="on_budget")
 
-    off_order = build_off_order(roster)
+    off_order = build_off_order(roster, replicates=off_replicates)
     on_order = build_on_order(
         roster,
         seed=seed,

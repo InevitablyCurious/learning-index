@@ -88,6 +88,7 @@ class CumulativeSequencer:
         run_context: Mapping[str, Any] | None = None,
         chunk_plan_hash: str = "",
         sequence_index: int | None = None,
+        off_replicates: int = 1,
     ) -> None:
         if not isinstance(runner, SessionRunner):
             raise ValueError("runner must implement SessionRunner")
@@ -97,11 +98,16 @@ class CumulativeSequencer:
             raise ValueError("manifest_path must be a non-empty path")
 
         planned_roster_hash = roster_hash(roster)
+        # N cells of one configuration are N sessions in the schedule. Every
+        # process of a batch passes the SAME off_replicates, so whichever one
+        # creates the manifest plans all N slots and the rest resume it and
+        # find their own index valid.
         planned_schedule = build_schedule(
             roster,
             seed=seed,
             roster_hash=planned_roster_hash,
             on_budget=on_budget,
+            off_replicates=off_replicates,
         )
 
         manifest = resume_or_create(
@@ -129,10 +135,43 @@ class CumulativeSequencer:
 
         manifest_schedule = [item.to_dict() for item in manifest.schedule]
         expected_schedule = [item.to_dict() for item in planned_schedule]
-        if manifest_schedule != expected_schedule:
+        # A LATER BATCH MAY ADD REPLICATES, AND MAY ONLY ADD.
+        #
+        # A baseline is the median of N runs of one configuration, and running
+        # more of them later is how an operator sharpens it — so a plan that is
+        # the recorded schedule plus further sessions EXTENDS the campaign
+        # instead of being refused as drift.
+        #
+        # Strictly an append: every recorded entry must survive unchanged, in
+        # place. That is what keeps `session_records[i].sequence_index == i`,
+        # which explicit-index mode selects on, and it is why a reshuffle (an
+        # ON phase growing under a longer OFF prefix, a changed roster order)
+        # still fails loudly rather than silently renumbering cells that have
+        # already run.
+        grew = (
+            len(expected_schedule) > len(manifest_schedule)
+            and expected_schedule[: len(manifest_schedule)] == manifest_schedule
+        )
+        if manifest_schedule != expected_schedule and not grew:
             raise ValueError(
                 "cannot resume: schedule drift detected; start a fresh run"
             )
+        if grew:
+            added = planned_schedule[len(manifest.schedule) :]
+            manifest.schedule = list(planned_schedule)
+            manifest.session_records = list(manifest.session_records) + [
+                SessionRecord(
+                    sequence_index=session.sequence_index,
+                    model=session.model,
+                    provider_pin=session.provider_pin,
+                    memory_mode=session.memory_mode,
+                    phase_group=session.phase_group,
+                    phase=SessionPhase.PREPARE_FIXTURE.value,
+                    org_id=org_id,
+                )
+                for session in added
+            ]
+            atomic_write(normalized_manifest_path, manifest)
 
         self._manifest_path = normalized_manifest_path
         self._runner = runner

@@ -220,6 +220,22 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--off-replicates",
+        type=int,
+        default=1,
+        help=(
+            "How many OFF cells of EACH rostered model the schedule plans — "
+            "the N of a baseline batch. A baseline is the MEDIAN of N runs, "
+            "because one run was never a baseline: identical prompts and "
+            "identical model have produced 23, 25 and 62 problems on this "
+            "task. Every process of a batch passes the SAME value, so "
+            "whichever one creates the manifest plans all N slots and the "
+            "rest resume it. Applies to the OFF arm only: an ON cell is a "
+            "single measurement against that floor, and replicating it would "
+            "average away what the benchmark exists to observe."
+        ),
+    )
+    parser.add_argument(
         "--sequence-index",
         type=int,
         default=None,

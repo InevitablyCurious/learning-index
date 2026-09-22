@@ -298,6 +298,12 @@ export const routes = [
         const cellArgv = [
           ...argv.slice(0, subcommandAt),
           "--sequence-index", String(cell.sequence_index),
+          // EVERY cell of the batch plans the same N slots. Without this the
+          // schedule holds one session per model, the allocator hands out
+          // 0..N-1, and every cell after the first dies seconds in on
+          // "sequence_index 2 out of range". Sent on the OFF arm only: an ON
+          // cell is a single measurement against the floor.
+          ...(arm === "on" ? [] : ["--off-replicates", String(concurrency)]),
           ...argv.slice(subcommandAt),
         ];
         // The harness writes run-scoped notices to the same file; `source` says
