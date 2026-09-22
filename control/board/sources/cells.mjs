@@ -73,10 +73,19 @@ async function readCellLog(path) {
   return { phase, chunk: chunkOf(phase), turns };
 }
 
-/** Seconds since a start stamp, or null when there is nothing to measure. */
+/**
+ * Seconds since a start stamp, or null when there is nothing to measure.
+ *
+ * The ledger records `started_at` as epoch MILLISECONDS (a number), not an
+ * ISO string — `Date.parse` on it returns NaN, which showed every live card
+ * with no elapsed time at all. Both forms are accepted so neither a ledger
+ * record nor a manifest timestamp silently reads as unmeasured.
+ */
 function elapsed(startedAt) {
-  const t = Date.parse(startedAt ?? "");
-  return Number.isFinite(t) ? Math.max(0, Math.round((Date.now() - t) / 1000)) : null;
+  if (startedAt === null || startedAt === undefined) return null;
+  const t = typeof startedAt === "number" ? startedAt : Date.parse(startedAt);
+  if (!Number.isFinite(t) || t <= 0) return null;
+  return Math.max(0, Math.round((Date.now() - t) / 1000));
 }
 
 export async function read(ctx) {
