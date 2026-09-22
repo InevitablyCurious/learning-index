@@ -29,7 +29,7 @@ Required `data-testid` hooks (EXACT — the UI automation selects on these; stat
 - Each board point: `data-testid="point"` and `data-point="<1..24>"` — exactly 24 points.
 - Each checker: `data-testid="checker"`, `data-color="white|black"`, `data-loc="<1..24>|bar|off"` — exactly 30 checkers (15 per colour), positioned at their board/bar/off location.
 - Each move hint: `data-testid="hint"`.
-- Each die: `data-testid="die"` (classes `used` / `rolling` convey state), nested inside the `dice` container.
+- Each die: `data-testid="die"`, nested inside the `dice` container.
 - After a roll, at least two dice are visible on the board.
 - The bar column: `data-testid="bar"`.
 - The off tray: `data-testid="off-tray"`, with halves `data-testid="off-ai"` and `data-testid="off-you"`.
