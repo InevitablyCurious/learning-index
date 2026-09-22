@@ -194,9 +194,11 @@ export async function finishValidate(
 
   // ── THE BASELINE GATE ── an ON cell needs a valid, non-void floor of its own
   // model (baselineFor): without one it burns hours on an uninterpretable number.
-  // This is also the only place the same-model rule lives. OFF cells are exempt
-  // (an OFF cell is the baseline). With no runsRoot the gate cannot be evaluated,
-  // so it fails closed.
+  // scorable:false is "no floor yet" in every form — including a batch awaiting
+  // the operator's selection (reason "awaiting_selection"): a batch nobody has
+  // picked is not a floor to measure against. This is also the only place the
+  // same-model rule lives. OFF cells are exempt (an OFF cell is a baseline run).
+  // With no runsRoot the gate cannot be evaluated, so it fails closed.
   if (arm === "on") {
     if (!runsRoot) {
       return refuse(
@@ -206,7 +208,7 @@ export async function finishValidate(
       );
     }
     const offCells = await collectOffCells(runsRoot);
-    const baseline = baselineFor(model, offCells);
+    const baseline = await baselineFor(model, offCells, { runsRoot });
     if (!baseline.scorable) {
       return refuse("baseline_required", baseline.reason, { model, subject_model: model });
     }

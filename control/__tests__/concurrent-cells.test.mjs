@@ -216,7 +216,14 @@ test("CAMPAIGN: allocateSequenceIndex is atomic across concurrent starts, seeded
     mkdirSync(dirname(manifestArg), { recursive: true });
     writeFileSync(
       manifestArg,
-      JSON.stringify({ created_at: "2026-09-20T00:00:00Z", current_index: 7 }),
+      JSON.stringify({
+        created_at: "2026-09-20T00:00:00Z",
+        current_index: 7,
+        // The bound the cursor must respect: the harness refuses
+        // --sequence-index >= the schedule length (sequencer.py:168-175).
+        // Length 20 covers every index this test allocates (7..19).
+        schedule: Array.from({ length: 20 }, (_, i) => ({ sequence_index: i })),
+      }),
     );
     const before = readFileSync(manifestArg, "utf8");
 
@@ -242,11 +249,59 @@ test("CAMPAIGN: allocateSequenceIndex is atomic across concurrent starts, seeded
     // cell's _checkpoint is a full-manifest atomic_write that would clobber it.
     assert.equal(readFileSync(manifestArg, "utf8"), before, "the manifest is untouched");
 
-    // An absent manifest is a fresh campaign: its first cell is index 0.
+    // An absent manifest is a fresh campaign: no schedule exists to bound
+    // against yet, so the cursor is unbounded and its first cell is index 0.
     const fresh = join(root, "no-such-campaign", "manifest.json");
     assert.deepEqual(
       [await allocateSequenceIndex(fresh), await allocateSequenceIndex(fresh)],
       [0, 1],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("CAMPAIGN: allocateSequenceIndex refuses indices past the schedule length — the harness's range check, enforced upfront", async () => {
+  const root = mkdtempSync(join(tmpdir(), "conc-seq-bound-"));
+  try {
+    const manifestArg = join(root, "cumulative-m-b", "manifest.json");
+    mkdirSync(dirname(manifestArg), { recursive: true });
+    writeFileSync(
+      manifestArg,
+      JSON.stringify({
+        created_at: "2026-09-20T00:00:00Z",
+        current_index: 0,
+        schedule: Array.from({ length: 3 }, (_, i) => ({ sequence_index: i })),
+      }),
+    );
+
+    // Within the bound: seeded-consecutive, exactly as before.
+    assert.deepEqual(
+      [
+        await allocateSequenceIndex(manifestArg),
+        await allocateSequenceIndex(manifestArg),
+        await allocateSequenceIndex(manifestArg),
+      ],
+      [0, 1, 2],
+      "indices inside the schedule length allocate as before",
+    );
+
+    // The 4th allocation is past the schedule: refused upfront, naming the
+    // range — the harness would refuse --sequence-index 3 cell-by-cell
+    // (sequencer.py:168-175), so the pre-flight loop refuses the whole batch
+    // before any spawn. No clamp, no degrade to current_index selection.
+    await assert.rejects(
+      allocateSequenceIndex(manifestArg),
+      /sequence_index 3 out of range: manifest schedule has 3 session_record\(s\); valid indices are 0\.\.2/,
+      "an over-range index throws with the valid range named",
+    );
+
+    // The refusal throws BEFORE the increment: the over-range index is not
+    // consumed, so a retry refuses identically (no silent cursor drift).
+    await assert.rejects(
+      allocateSequenceIndex(manifestArg),
+      /sequence_index 3 out of range/,
+      "the refused index is not burned — the cursor stays at the bound",
     );
   } finally {
     rmSync(root, { recursive: true, force: true });

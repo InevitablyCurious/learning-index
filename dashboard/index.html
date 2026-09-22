@@ -1474,6 +1474,19 @@ a:hover{color:var(--type)}
    explaining them has to be on screen beside them — and a disabled [+ run] that
    does not say what it is waiting for is indistinguishable from a broken one. */
 .blwhy{padding:0 4px 10px 36px;font:400 11.5px/1.5 var(--font)}
+/* ── BATCH PICK ── the operator's floor selection, under an awaiting or void
+   row. The slot is data-preserve (doOpenBatch injects the record into it), so
+   :empty is the unopened state and must cost no space. The void banner is
+   ruled, not merely coloured: it changes what every number below it means. */
+.cbatch{padding:0 4px 10px 36px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.cbatch:empty{display:none;padding:0}
+.cbatch-btn{font:400 11px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:4px 9px;cursor:pointer}
+.cbatch-btn:hover{border-color:var(--fg)}
+.cbatch-btn:disabled{opacity:.55;cursor:not-allowed}
+.cbatch-row{display:flex;align-items:baseline;gap:10px;font:400 12px var(--font);color:var(--fg);min-width:0}
+.cbatch-seq{color:var(--dim);flex:none}
+.cbatch-void{font:700 11.5px var(--font);color:var(--danger);border:1px solid var(--danger);border-radius:var(--radius-sm);padding:6px 9px}
+.cbatch-sel{font:400 11.5px var(--font);color:var(--check)}
 /* THE TWO SENTENCES THAT ARGUE THE NESTING. Side by side at equal weight,
    because they are two halves of one claim. */
 /* Last block on the card now that the stat strip leads it, so the rule that

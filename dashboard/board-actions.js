@@ -6,12 +6,13 @@
 // clicked (the board can lose the control plane between render and click);
 // dom-patch.test.mjs pins that.
 
-import { board, render, controlReachability, setTuiRunId } from "./board.js";
+import { board, render, controlReachability, setTuiRunId, nul } from "./board.js";
 import { armReset, commitReset } from "./panels/treereset.js";
 import { loadRouters, saveRouterKey } from "./panels/routers.js";
 import { setDevMode, isDevModeBusy } from "./panels/devmode.js";
 import { launchCell } from "./panels/create.js";
 import { loadTools, runTool } from "./panels/tools.js";
+import { loadBatch, renderBatch, pickRun } from "./panels/batch.js";
 import {
   selectHistoricalRun,
   selectHistoricalRunUnreachable,
@@ -223,5 +224,45 @@ export async function doCommitReset() {
   // Reloads the page on success, so no panel keeps a selection that outlived
   // its data.
   await commitReset();
+  render();
+}
+
+/**
+ * BATCH: read one campaign's batch record and paint it into the row's
+ * data-preserve slot (panels/ledger.js renders the slot; patch() never wipes
+ * it). A batch the server does not have is painted as absent — never as an
+ * empty, pickable list.
+ */
+export async function doOpenBatch(runDir) {
+  const reach = controlReachability(board);
+  if (!reach.ok) { console.error(`batch unavailable — ${reach.code}`); render(); return; }
+  let batch = null;
+  try {
+    batch = await loadBatch(runDir);
+  } catch (err) {
+    console.error("batch load failed:", err);
+  }
+  const slot = document.querySelector(`[data-batch-slot="${runDir}"]`);
+  if (slot) slot.innerHTML = batch ? renderBatch(batch) : nul("batch unavailable");
+  render();
+}
+
+/**
+ * BATCH PICK: POST the operator's floor selection, then re-open the batch so
+ * the slot shows the server's truth — the recorded selection with its signed
+ * deviation, or the void banner if the batch died between render and click.
+ * A refused pick is printed, never swallowed: the re-opened record is the
+ * only success signal.
+ */
+export async function doPickBatch(runDir, seq) {
+  const reach = controlReachability(board);
+  if (!reach.ok) { console.error(`batch select unavailable — ${reach.code}`); render(); return; }
+  render();
+  try {
+    await pickRun(runDir, seq);
+  } catch (err) {
+    console.error("batch select failed:", err);
+  }
+  await doOpenBatch(runDir);
   render();
 }

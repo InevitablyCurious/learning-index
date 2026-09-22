@@ -7,16 +7,31 @@ import { join } from "node:path";
 
 import { confirmationToken } from "../contract.mjs";
 import { readCloud, resolveCloudModel, cloudCatalog, CLOUD_MODELS, CONTEXT_ADVISORY_FLOOR } from "../cloud.mjs";
-import { readBaselines, BASELINES_FILE, isArchivedRun, baselineId, identifyCell } from "../baselines.mjs";
+import { readBaselines, BASELINES_FILE, isArchivedRun, baselineId, identifyCell, collectOffCells, assembleBatchForCells } from "../baselines.mjs";
+import { selectRun, writeBatch, markVoid } from "../batch.mjs";
 import { manifestArgFor, campaignDirName } from "../campaign.mjs";
 import { mintTree } from "../tree.mjs";
 import { readModelsLedger } from "../models-ledger.mjs";
 
 import { BENCH, writeRun, writeCampaign, OFF_PASS, writeCampaignCell, treeFixture } from "./_shared.mjs";
 
-test("LEDGER: a valid OFF cell is the baseline, and it opens + run but not + baseline", async () => {
+/**
+ * The operator's pick: assemble the batch for one model's OFF cells and select
+ * `seq` as the floor. A single completed OFF cell is no longer a baseline by
+ * itself — a floor exists only once the batch carries a selection.
+ */
+async function selectFloor(root, dir, model, seq = 0) {
+  const cells = (await collectOffCells(root)).filter((c) => c.model === model);
+  const runDir = join(root, dir);
+  const batch = await assembleBatchForCells({ runDir, cells });
+  selectRun(batch, seq);
+  await writeBatch(runDir, batch);
+}
+
+test("LEDGER: a SELECTED OFF cell is the baseline, and it opens + run but not + baseline", async () => {
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", { status: OFF_PASS });
+  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -33,6 +48,64 @@ test("LEDGER: a valid OFF cell is the baseline, and it opens + run but not + bas
   assert.ok(row, "a measured floor has no row in baseline_rows");
   assert.equal(row.can_run.allowed, true);
   assert.equal(row.run_count, 0, "no ON cell has been measured against it yet");
+  rmSync(root, { recursive: true, force: true });
+});
+
+/** OFF_PASS plus the graded problem count the batch median is built from. */
+const OFF_PASS_MEASURED = {
+  ...OFF_PASS,
+  progress: { ...OFF_PASS.progress, problems_before: 7 },
+};
+
+test("LEDGER: an UNSELECTED batch is a VISIBLE 'awaiting' row carrying the median — never silently dropped", async () => {
+  // The failure this prevents: baselineFor answered awaiting_selection (a batch
+  // exists, no floor does) but baselineList derived no flag from it, computed
+  // state "none" and skipped the row — so the card never showed the batch the
+  // operator has to pick from, and the model looked never-run.
+  const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
+  writeRun(root, "cumulative", { status: OFF_PASS_MEASURED });
+  // NO selectFloor: the batch assembles on first read, the selection never does.
+
+  const led = await readModelsLedger({
+    runsRoot: root,
+    benchModels: [{ id: "m-a", bench_eligible: true }],
+  });
+  const row = led.baseline_rows.find((b) => b.model === "m-a");
+  assert.ok(row, "an awaiting-selection batch must appear in baseline_rows");
+  assert.equal(row.state, "awaiting");
+  assert.equal(row.reason, "awaiting_selection");
+  assert.equal(row.scorable, false, "an unselected batch is not a floor");
+  assert.equal(row.median, 7, "the batch median rides the row so the card can render it");
+  assert.equal(row.void_input, null, "nothing is void here");
+  assert.equal(row.candidates, 1, "the batch's scored-run count rides the row");
+  assert.equal(row.can_run.allowed, false, "no floor — nothing may be measured against it");
+  assert.equal(row.can_run.reason, "awaiting_selection");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("LEDGER: a batch_void row names the changed input — void_input rides through to baseline_rows", async () => {
+  const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
+  writeRun(root, "cumulative", { status: OFF_PASS_MEASURED });
+
+  // Assemble the batch, then void it on a named fingerprint input — the same
+  // markVoid a stale-fingerprint read performs (batch.mjs).
+  const runDir = join(root, "cumulative");
+  const cells = (await collectOffCells(root)).filter((c) => c.model === "m-a");
+  const batch = await assembleBatchForCells({ runDir, cells });
+  markVoid(batch, "grader_hash", "grader/gate suite — a changed test changes what a failure count means");
+  await writeBatch(runDir, batch);
+
+  const led = await readModelsLedger({
+    runsRoot: root,
+    benchModels: [{ id: "m-a", bench_eligible: true }],
+  });
+  const row = led.baseline_rows.find((b) => b.model === "m-a");
+  assert.ok(row, "a void batch keeps its row");
+  assert.equal(row.state, "void");
+  assert.equal(row.reason, "batch_void");
+  assert.equal(row.void_input, "grader_hash", "the changed input is named on the row, not just on the baseline");
+  assert.equal(row.median, 7, "the stale median rides along, labelled void");
+  assert.equal(row.scorable, false);
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -65,6 +138,7 @@ test("LEDGER: attempt_ceiling_reached is a real FAIL, not a void instrument", as
   writeRun(root, "cumulative", {
     status: { type: "attempt", sequence_index: 0, verdict: "FAIL", terminal_reason: "attempt_ceiling_reached", progress: { turns: 40 } },
   });
+  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -94,6 +168,7 @@ test("LEDGER: a cell in flight blocks EVERY button on ITS OWN model, never anoth
   // across models while one model stays serial.
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", { status: OFF_PASS });           // m-a has a floor
+  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -141,6 +216,7 @@ test("LEDGER: a floor on one model never blocks another model's + baseline", asy
   // model's floor has any bearing on it.
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", { status: OFF_PASS });           // m-a has a floor
+  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -224,6 +300,7 @@ test("CAMPAIGN: an unreadable legacy manifest never relocates the live campaign"
 test("BASELINES: the index is the single export, and it is written to disk", async () => {
   const root = mkdtempSync(join(tmpdir(), "okp-base-"));
   writeRun(root, "cumulative", { status: OFF_PASS });           // m-a floored
+  await selectFloor(root, "cumulative", "m-a");
   const models = [{ id: "m-a", bench_eligible: true }, { id: "m-b", bench_eligible: true }];
 
   const idx = await readBaselines({ runsRoot: root, models });
@@ -259,6 +336,7 @@ test("LEDGER: a floor with no ON cell reports an empty run list, not an excuse",
   // is no attribution step any more for one to fail at.
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", { status: OFF_PASS });
+  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -284,6 +362,7 @@ test("LEDGER: the ON cells of the floor\'s own campaign ARE its runs, read off d
     { seq: 1, arm: "on", status: { type: "attempt", sequence_index: 1, verdict: "PASS", progress: { turns: 6, total_tokens: 300, wall_seconds: 40 } } },
     { seq: 2, arm: "on", status: { type: "attempt", sequence_index: 2, verdict: "PASS", progress: { turns: 7, total_tokens: 350, wall_seconds: 45 } } },
   ]);
+  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -322,6 +401,7 @@ test("LEDGER: the floor\'s own OFF cell is never listed as a run against itself"
     { seq: 0, arm: "off", status: { ...OFF_PASS, sequence_index: 0 } },
     { seq: 1, arm: "on", status: { type: "attempt", sequence_index: 1, verdict: "PASS", progress: { turns: 6 } } },
   ]);
+  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -549,6 +629,7 @@ test("BASELINE: the list is rooted in cells, so a cloud floor appears without a 
     gate_totals: { pass: 69, fail: 2, error: 0, not_run: 0, total: 71 },
     progress: { turns: 31, total_tokens: 900, wall_seconds: 120 },
   })}\n`);
+  await selectFloor(root, "cumulative-anthropic-claude-opus-5", "anthropic/claude-opus-5");
 
   // NOTE the empty roster: this is the cold case where the local proxy is down.
   const idx = await readBaselines({ runsRoot: root, models: [] });
@@ -588,6 +669,9 @@ test("BASELINES: a tree-layout campaign carries the FULL relative run_dir, not t
     // A legacy flat campaign beside the tree. A DIFFERENT model, because the
     // list is one row per model — two m-a floors would fold into a single row.
     writeRun(runs, "cumulative-legacy-model", { model: "m-b", status: OFF_PASS });
+
+    await selectFloor(runs, rel, "m-a");
+    await selectFloor(runs, "cumulative-legacy-model", "m-b");
 
     const idx = await readBaselines({ runsRoot: runs, models: [] });
     assert.equal(idx.list.length, 2);
@@ -650,6 +734,7 @@ test("LEDGER: startable spans both substrates and gates each one separately", as
   mkdirSync(join(root, "config"), { recursive: true });
   writeFileSync(join(root, "config", "cloud.env"), "ORCAROUTER_API_KEY=k\n");
   writeRun(root, "cumulative", { status: OFF_PASS });
+  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -693,6 +778,7 @@ test("LEDGER: a cell in flight blocks its OWN model's rows on BOTH substrates, n
   mkdirSync(join(root, "config"), { recursive: true });
   writeFileSync(join(root, "config", "cloud.env"), "ORCAROUTER_API_KEY=k\n");
   writeRun(root, "cumulative", { status: OFF_PASS });
+  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,

@@ -45,6 +45,7 @@ const STATIC = {
   "/panels/routers.js": { file: "panels/routers.js", type: "text/javascript; charset=utf-8" },
   "/panels/curve.js": { file: "panels/curve.js", type: "text/javascript; charset=utf-8" },
   "/panels/ledger.js": { file: "panels/ledger.js", type: "text/javascript; charset=utf-8" },
+  "/panels/batch.js": { file: "panels/batch.js", type: "text/javascript; charset=utf-8" },
   "/panels/create.js": { file: "panels/create.js", type: "text/javascript; charset=utf-8" },
   "/panels/facet.js": { file: "panels/facet.js", type: "text/javascript; charset=utf-8" },
   "/panels/live.js": { file: "panels/live.js", type: "text/javascript; charset=utf-8" },

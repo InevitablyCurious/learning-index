@@ -11,7 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { STALL_THRESHOLD_S } from "../contract.mjs";
-import { collectCells, collectOffCells, baselineFor } from "../baselines.mjs";
+import { collectCells, collectOffCells, baselineFor, baselineId } from "../baselines.mjs";
+import { readBatch, selectRun, writeBatch } from "../batch.mjs";
 import { campaignDirName } from "../campaign.mjs";
 import { readRunState } from "../runstate.mjs";
 import { readModelsLedger } from "../models-ledger.mjs";
@@ -293,7 +294,7 @@ function writeSeededRun(root, { dir = "cumulative", snapshotId = "snap-fixture-1
   }));
   const a1 = {
     type: "attempt", sequence_index: 0, attempt: 5, verdict: "PASS",
-    progress: { turns: 12, total_tokens: 900, build_chunks: [] },
+    progress: { turns: 12, total_tokens: 900, problems_before: 7, build_chunks: [] },
   };
   // TOP-LEVEL — sibling of `progress`, never inside it.
   if (snapshotId !== null) a1.seeded_from_snapshot = snapshotId;
@@ -313,7 +314,7 @@ test("SEEDED: a cell carrying seeded_from_snapshot folds with the id and never s
       "the fold must carry the id from the TOP-LEVEL record field — reading r.progress.seeded_from_snapshot would silently null it",
     );
 
-    const b = baselineFor("m-a", await collectOffCells(root));
+    const b = await baselineFor("m-a", await collectOffCells(root), { runsRoot: root });
     assert.equal(b.scorable, false, "a seeded cell must never become a model's floor — even complete, PASS, non-void");
     assert.equal(b.seeded, true);
     assert.equal(b.voided, undefined, "no voided flag — baselineList must compute state 'none' and drop the row");
@@ -337,33 +338,107 @@ test("SEEDED: a cell carrying seeded_from_snapshot folds with the id and never s
   }
 });
 
-test("SEEDED: the same cell WITHOUT the field stays a scorable floor", async () => {
+test("SEEDED: the same cell WITHOUT the field is a floor once SELECTED — a single run alone is not", async () => {
   const root = mkdtempSync(join(tmpdir(), "seeded-clean-"));
   try {
     writeSeededRun(root, { snapshotId: null });
     const cells = await collectCells(root);
     assert.equal(cells[0].seeded_from_snapshot, null, "an absent field folds to null, never undefined");
 
-    const b = baselineFor("m-a", await collectOffCells(root));
-    assert.equal(b.scorable, true, "a complete, non-void, unseeded OFF cell is a valid floor");
+    const offCells = await collectOffCells(root);
+    // A SINGLE RUN IS NO LONGER A BASELINE. One complete, non-void, unseeded
+    // OFF cell assembles a batch, but until the operator picks, there is no
+    // floor — the old implicit `scorable[scorable.length - 1]` pick is gone.
+    const unselected = await baselineFor("m-a", offCells, { runsRoot: root });
+    assert.equal(unselected.scorable, false, "one completed OFF cell by itself is not a floor any more");
+    assert.equal(unselected.exists, true, "the batch exists even though no floor does");
+    assert.equal(unselected.reason, "awaiting_selection");
+    assert.equal(unselected.candidates, 1, "the batch scored the single run");
+    assert.equal(unselected.median, 7, "the median of the scored runs rides the awaiting state");
+
+    // The operator's selection makes it the floor.
+    const runDir = join(root, "cumulative");
+    const batch = await readBatch(runDir);
+    assert.ok(batch, "baselineFor assembled the batch on first read");
+    selectRun(batch, 0);
+    await writeBatch(runDir, batch);
+
+    const b = await baselineFor("m-a", offCells, { runsRoot: root });
+    assert.equal(b.scorable, true, "a complete, non-void, unseeded OFF cell is a valid floor once selected");
     assert.equal(b.exists, true);
+    assert.equal(b.sequence_index, 0);
+    assert.equal(b.measured_before, 7, "the floor's measurement is the selected run's problem count");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("SEEDED: a model with BOTH a seeded and an unseeded OFF cell keeps the unseeded floor", async () => {
+/** ONE campaign, three OFF cells: seq 0 seeded, seq 1 + seq 2 scored. */
+function writeMixedCampaign(root, dir) {
+  const d = join(root, dir);
+  mkdirSync(d, { recursive: true });
+  writeFileSync(join(d, "manifest.json"), JSON.stringify({
+    created_at: "2026-09-04T00:00:00Z",
+    schedule: [
+      { sequence_index: 0, memory_mode: "off", provider_pin: "m-a" },
+      { sequence_index: 1, memory_mode: "off", provider_pin: "m-a" },
+      { sequence_index: 2, memory_mode: "off", provider_pin: "m-a" },
+    ],
+  }));
+  const seeded = {
+    type: "attempt", sequence_index: 0, attempt: 5, verdict: "PASS",
+    seeded_from_snapshot: "snap-fixture-1",
+    progress: { turns: 12, total_tokens: 900, problems_before: 4, build_chunks: [] },
+  };
+  const r1 = {
+    type: "attempt", sequence_index: 1, attempt: 5, verdict: "PASS",
+    progress: { turns: 30, total_tokens: 2100, problems_before: 10, build_chunks: [] },
+  };
+  const r2 = {
+    type: "attempt", sequence_index: 2, attempt: 5, verdict: "FAIL",
+    progress: { turns: 44, total_tokens: 3000, problems_before: 20, build_chunks: [] },
+  };
+  writeFileSync(join(d, "manifest.status.jsonl"),
+    [seeded, r1, r2].map((r) => JSON.stringify(r)).join("\n") + "\n");
+  return d;
+}
+
+test("SEEDED: a seeded cell never joins the batch, and the SELECTED run is the floor — whichever its order", async () => {
   const root = mkdtempSync(join(tmpdir(), "seeded-mixed-"));
   try {
-    writeSeededRun(root, { dir: "cumulative-seeded" });
-    writeSeededRun(root, { dir: "cumulative-real", snapshotId: null });
+    writeMixedCampaign(root, "cumulative");
     const offCells = await collectOffCells(root);
-    assert.equal(offCells.length, 2);
+    assert.equal(offCells.length, 3);
 
-    const b = baselineFor("m-a", offCells);
-    assert.equal(b.scorable, true, "the unseeded cell remains the floor");
-    assert.equal(b.run_dir, "cumulative-real", "the resolved floor is the unseeded cell, whichever order the walk found them");
-    assert.equal(b.candidates, 1, "the seeded cell is not a candidate");
+    // No selection yet: the batch exists — median over the two SCORED runs,
+    // the seeded cell never enters — but no floor does.
+    const unselected = await baselineFor("m-a", offCells, { runsRoot: root });
+    assert.equal(unselected.scorable, false);
+    assert.equal(unselected.exists, true);
+    assert.equal(unselected.reason, "awaiting_selection");
+    assert.equal(unselected.candidates, 2, "the seeded cell is not a candidate");
+    assert.equal(unselected.median, 15, "median of the scored runs {10, 20}");
+
+    // The operator picks seq 1 — NOT the last scorable run. The old implicit
+    // pick took scorable[scorable.length - 1] (seq 2 here) in filesystem-walk
+    // order; the floor is now the selected run, whichever its position.
+    const runDir = join(root, "cumulative");
+    const batch = await readBatch(runDir);
+    selectRun(batch, 1);
+    await writeBatch(runDir, batch);
+
+    const b = await baselineFor("m-a", offCells, { runsRoot: root });
+    assert.equal(b.scorable, true);
+    assert.equal(b.sequence_index, 1, "the floor is the SELECTED run, not an order-dependent pick");
+    assert.equal(b.run_dir, "cumulative");
+    assert.equal(b.id, baselineId("cumulative", 1));
+    assert.equal(b.measured_before, 10, "the selected run's problem count");
+    assert.equal(b.candidates, 2);
+    assert.equal(b.reason, null);
+
+    // A seeded run is never selectable: selectRun fails loud rather than
+    // fabricating a selection over an unscored run.
+    assert.throws(() => selectRun(batch, 0), /no scored run/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -97,14 +97,24 @@ export async function campaignTargetFor(subject, runsRoot) {
 // limitation: a restart re-seeds from the manifest, and --sequence-index runs
 // never advance current_index, so indices handed out before a restart can be
 // re-issued afterward.
+// The cursor IS bounded: the harness hard-refuses --sequence-index >=
+// len(session_records) (sequencer.py:168-175), so allocation refuses an
+// over-range index upfront — a batch past the remaining schedule is refused
+// whole in pre-flight instead of launching cells the harness rejects one by
+// one. The bound is seeded with the cursor: the session_records length when
+// populated, else the schedule length (the harness populates session_records
+// from schedule on first run, sequencer.py:141-155); null — unbounded — when
+// the manifest carries neither, because a fresh campaign's first cells
+// precede the manifest the harness creates.
 const sequenceCursors = new Map(); // manifestArg -> next index to hand out
+const sequenceLimits = new Map(); // manifestArg -> schedule-length bound (null: unbounded)
 // In-flight seed promises. The seed read is async, so without this guard two
 // concurrent first-calls would both see the cursor unset, both await the seed
 // and both hand out the same index — a check-then-act race across the await.
 // Deduplicating the seed keeps the get/increment below synchronous and atomic.
-const seeding = new Map(); // manifestArg -> Promise<number>
+const seeding = new Map(); // manifestArg -> Promise<{seed, limit}>
 
-/** The index to seed `manifestArg`'s cursor from, read from its manifest. */
+/** The cursor seed and schedule-length bound for `manifestArg`, from its manifest. */
 async function seedCursor(manifestArg) {
   const manifest = await readJsonOrNull(manifestArg);
   // Fail loud on a manifest that exists but cannot be read: silently seeding 0
@@ -116,14 +126,32 @@ async function seedCursor(manifestArg) {
       `cannot allocate sequence_index: campaign manifest ${manifestArg} exists but cannot be read`,
     );
   }
-  return Number.isFinite(manifest?.current_index) ? Number(manifest.current_index) : 0;
+  const seed = Number.isFinite(manifest?.current_index) ? Number(manifest.current_index) : 0;
+  // The bound mirrors what the harness will have populated by launch time: it
+  // fills an empty session_records from schedule before the range check
+  // (sequencer.py:141 — Python truthiness, so [] counts as absent, and
+  // resume_or_create writes exactly that pre-population state to disk,
+  // manifest.py:224-231). A zero length therefore falls through exactly like
+  // an absent key; both empty/absent leaves the cursor unbounded.
+  const records = Number(manifest?.session_records?.length);
+  const scheduled = Number(manifest?.schedule?.length);
+  const limit =
+    Number.isFinite(records) && records > 0
+      ? records
+      : Number.isFinite(scheduled) && scheduled > 0
+        ? scheduled
+        : null;
+  return { seed, limit };
 }
 
 /**
  * Allocate the next distinct sequence_index for `manifestArg`. The first call
- * for a manifest lazily seeds the cursor from manifest.current_index; every
- * call then reads and increments the in-memory cursor synchronously, so N
- * concurrent starts in this single Node process each get a distinct index.
+ * for a manifest lazily seeds the cursor from manifest.current_index and its
+ * bound from the schedule length; every call then reads and increments the
+ * in-memory cursor synchronously, so N concurrent starts in this single Node
+ * process each get a distinct index. An index at or past the bound throws —
+ * the harness would refuse it (sequencer.py:168-175), so the batch is refused
+ * upfront in pre-flight, never clamped or degraded to current_index selection.
  * Never writes to the manifest.
  */
 export async function allocateSequenceIndex(manifestArg) {
@@ -134,16 +162,27 @@ export async function allocateSequenceIndex(manifestArg) {
       seeding.set(manifestArg, seedPromise);
     }
     try {
-      const value = await seedPromise;
+      const { seed, limit } = await seedPromise;
       // Only the first caller to land sets the cursor; the rest find it set.
-      if (!sequenceCursors.has(manifestArg)) sequenceCursors.set(manifestArg, value);
+      if (!sequenceCursors.has(manifestArg)) {
+        sequenceCursors.set(manifestArg, seed);
+        sequenceLimits.set(manifestArg, limit);
+      }
     } finally {
       seeding.delete(manifestArg);
     }
   }
   // Synchronous read-then-increment: no await between get and set, so the
-  // single Node process makes this atomic across concurrent starts.
+  // single Node process makes this atomic across concurrent starts. The bound
+  // check sits inside that synchronous region; a refused index is NOT consumed
+  // (the throw precedes the increment), so retries refuse identically.
   const next = sequenceCursors.get(manifestArg);
+  const limit = sequenceLimits.get(manifestArg);
+  if (limit != null && next >= limit) {
+    throw new Error(
+      `sequence_index ${next} out of range: manifest schedule has ${limit} session_record(s); valid indices are 0..${limit - 1}`,
+    );
+  }
   sequenceCursors.set(manifestArg, next + 1);
   return next;
 }

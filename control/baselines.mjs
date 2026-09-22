@@ -1,16 +1,29 @@
 // BASELINES — the one owner of "does model X have a floor, and which cell is it".
 //
-// One floor per model. A model with a valid floor cannot start another baseline
-// (re-baselining means archiving the run); a model without one always can. A void
-// cell (it measured the harness, not the model) is no baseline.
+// One floor per model: the operator's SELECTED run from the model's persisted
+// batch (<run_dir>/batch.json — median over the scored runs, fingerprint-bound).
+// A single run is not a baseline; an unselected batch is "awaiting_selection".
+// A model with a valid floor cannot start another baseline (re-baselining means
+// archiving the run); a model without one always can. A void cell (it measured
+// the harness, not the model) is no baseline.
 //
 // <runsRoot>/baselines.json is an export, never an input: every read re-derives
 // from the run folders, and a failed write is reported in `stored`, not thrown.
 
 import { promises as fs } from "node:fs";
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import path, { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { listLiveCampaignDirs } from "./tree.mjs";
+import {
+  hashDir,
+  computeFingerprint,
+  fingerprintVerdict,
+  markVoid,
+  assembleBatch,
+  readBatch,
+  writeBatch,
+} from "./batch.mjs";
 
 /**
  * A short, stable id (`base-8d1e`) derived from run dir + cell index, never
@@ -67,6 +80,9 @@ const OFF_ARM = "off";
 
 /** A cell is five phases: 1 build + 4 grades (max_attempts 5). */
 const PHASES_PER_CELL = 5;
+
+/** The repo root (Learning-Index), resolved from this module — never hardcoded by callers. */
+const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 async function readJsonOrNull(path) {
   try {
@@ -165,6 +181,7 @@ export async function collectCells(runsRoot) {
         verdict: str(r.verdict) ?? prev.verdict ?? null,
         turns: int(p.turns) ?? prev.turns ?? null,
         tokens: int(p.total_tokens) ?? int(p.tokens) ?? prev.tokens ?? null,
+        problems_before: int(p.problems_before) ?? prev.problems_before ?? null,
         wall_seconds: int(p.wall_seconds) ?? prev.wall_seconds ?? null,
         // Build chunks exist only on attempt 1: keep the first non-empty list.
         build_chunks: (Array.isArray(p.build_chunks) && p.build_chunks.length)
@@ -234,6 +251,7 @@ export async function collectCells(runsRoot) {
         verdict: meas?.verdict ?? null,
         turns: meas?.turns ?? null,
         tokens: meas?.tokens ?? null,
+        problems_before: meas?.problems_before ?? null,
         wall_seconds: meas?.wall_seconds ?? null,
         gates: meas?.gates ?? null,
         // null means no data, never "every chunk incomplete".
@@ -250,10 +268,109 @@ export async function collectCells(runsRoot) {
 }
 
 /**
- * The baseline for one model: the newest OFF cell that is complete, not void
- * and not seeded — with the reason whenever the answer is no.
+ * The eight fingerprint inputs that determine what a batch measured: four
+ * directory hashes over the measured repo, plus identity fields from the
+ * run-manifest. A run without a manifest is genuinely unidentifiable — the
+ * identity fields are null/false, never fabricated.
  */
-export function baselineFor(model, offCells) {
+export async function collectFingerprintInputs({ repoRoot = REPO_ROOT, runDir }) {
+  const [chunk_plan_hash, grader_hash, scaffold_hash, golden_hash] = await Promise.all([
+    hashDir(path.join(repoRoot, "task", "backgammon", "prompts")),
+    hashDir(path.join(repoRoot, "grader"), {
+      exclude: new Set(["node_modules", ".git", "test-results"]),
+    }),
+    hashDir(path.join(repoRoot, "task", "backgammon", "scaffold")),
+    hashDir(path.join(repoRoot, "task", "backgammon", "golden")),
+  ]);
+
+  const manifest = await readJsonOrNull(path.join(runDir, "manifest.run-manifest.json"));
+
+  return {
+    chunk_plan_hash,
+    grader_hash,
+    scaffold_hash,
+    golden_hash,
+    model: str(manifest?.requested_model) ?? str(manifest?.served_model) ?? null,
+    challenge: str(manifest?.challenge) ?? null,
+    compaction: manifest?.compact === true,
+    worker_image: manifest?.worker_image_fingerprint ?? null,
+  };
+}
+
+/**
+ * Build and persist the batch record for one model's OFF cells: the median
+ * problem count over SCORED runs (voids excluded, never counted as failures),
+ * bound to the current fingerprint. Written atomically to <runDir>/batch.json.
+ */
+export async function assembleBatchForCells({ repoRoot = REPO_ROOT, runDir, cells }) {
+  // The same scorability rule baselineFor applies: complete, not void-instrument,
+  // not seeded, and not out of context before anything was graded.
+  const scored = (c) => c.state === "complete" && !c.void_instrument && !c.seeded_from_snapshot && !(c.context_exhausted === true && !c.gates);
+  const voidReason = (c) => c.context_exhausted === true && !c.gates ? "context_exhausted"
+    : c.seeded_from_snapshot ? "seeded_from_snapshot"
+      : c.void_instrument ? "void_instrument"
+        : c.state !== "complete" ? (c.terminal_reason ?? c.state ?? "incomplete")
+          : "no_measurement";
+  const runs = cells.map((c) => ({
+    sequence_index: c.sequence_index,
+    problem_count: scored(c) ? c.problems_before : null,
+    scored: scored(c),
+    void_reason: scored(c) ? null : voidReason(c),
+  }));
+  const values = await collectFingerprintInputs({ repoRoot, runDir });
+  const fingerprint = computeFingerprint(values);
+  const batch = assembleBatch({ runDir, runs, fingerprint });
+  await writeBatch(runDir, batch);
+  return batch;
+}
+
+/**
+ * Verify a persisted batch's fingerprint against the CURRENT inputs: any
+ * changed input voids the batch (markVoid mutates it) and is named — the
+ * first differing one in FINGERPRINT_INPUTS order. This helper never writes;
+ * persisting the void is the CALLER's decision. `currentInputs` (a bare
+ * values map) is injectable for tests; the default re-collects the eight
+ * live inputs from the measured repo plus the batch's own run_dir manifest.
+ */
+export async function verifyBatchFingerprint(batch, { repoRoot = REPO_ROOT, currentInputs = null } = {}) {
+  const current = currentInputs
+    ? computeFingerprint(currentInputs)
+    : computeFingerprint(await collectFingerprintInputs({ repoRoot, runDir: batch.run_dir }));
+  const verdict = fingerprintVerdict(batch.fingerprint, current);
+  if (!verdict.valid) {
+    markVoid(batch, verdict.changedInput, verdict.changedReason);
+    return { batch, void: true, void_input: verdict.changedInput };
+  }
+  return { batch, void: false, void_input: null };
+}
+
+/**
+ * Read the batch for a runs-root-RELATIVE run_dir and verify its fingerprint
+ * against the current inputs. A batch the verification voids is persisted
+ * void right here — the record must not keep claiming a validity it lost.
+ * No batch is {ok:false}: this path never assembles one (assembly needs the
+ * cells, which only baselineFor has).
+ */
+export async function readBatchForRunDir({ runsRoot, runDir, repoRoot = REPO_ROOT }) {
+  const abs = join(runsRoot, runDir);
+  const batch = await readBatch(abs);
+  if (!batch) return { ok: false, error: "no batch for run_dir" };
+  const verified = await verifyBatchFingerprint(batch, { repoRoot });
+  if (verified.void) await writeBatch(abs, verified.batch);
+  return { ok: true, batch: verified.batch };
+}
+
+/**
+ * The baseline for one model: the operator's SELECTED run from the model's
+ * persisted batch — never an arbitrary pick. A single run is not a baseline;
+ * the batch (<runsRoot>/<run_dir>/batch.json: median problem count over the
+ * SCORED runs, fingerprint-bound) plus the operator's selection is. Without a
+ * selection there is no floor yet (reason "awaiting_selection"); the standing
+ * refusals (seeded, void, exhausted, pending, never-run) are unchanged. The
+ * batch is assembled on first read and never rewritten here, so a persisted
+ * selection survives every derivation; a selection is never fabricated.
+ */
+export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsRoot = null } = {}) {
   const mine = offCells.filter((c) => c.model === model);
   // Out of room with nothing graded is not a floor.
   const exhaustedUngraded = (c) => c.context_exhausted === true && !c.gates;
@@ -268,27 +385,99 @@ export function baselineFor(model, offCells) {
   const running = mine.filter((c) => c.state !== "complete");
 
   if (scorable.length) {
-    // Newest valid floor wins.
-    const b = scorable[scorable.length - 1];
+    // The batch is per campaign run dir, and a campaign schedules ONE model —
+    // the primary case is every cell of the model sharing one run_dir, so that
+    // dir's batch is the model's batch. run_dir is runs-root-relative
+    // (tree.mjs), so it resolves against runsRoot — never against the cwd.
+    const relDir = mine[0].run_dir;
+    if (!runsRoot) {
+      throw new Error(
+        `baselineFor(${model}): runsRoot is required to resolve the batch at run_dir '${relDir}'`,
+      );
+    }
+    const runDir = join(runsRoot, relDir);
+    // One batch per run dir: this dir's batch is assembled from this dir's
+    // cells (identical to `mine` in the single-dir case).
+    const batchCells = mine.filter((c) => c.run_dir === relDir);
+    // An existing batch is the operator's record — read it, and assemble ONLY
+    // when absent: re-assembling would wipe a persisted selection.
+    const batch = (await readBatch(runDir))
+      ?? (await assembleBatchForCells({ repoRoot, runDir, cells: batchCells }));
+
+    // A fingerprint-void batch is never a floor: its numbers measured a
+    // different grader/prompts/scaffold/golden/image than the current one, so
+    // every Δ against them would be invalid — even a persisted selection does
+    // not rescue it. Name the changed input; never quietly reuse stale
+    // numbers. (The void is detected + persisted by readBatchForRunDir; a
+    // freshly assembled batch is fingerprinted from the current inputs and so
+    // is never void here.)
+    if (batch.void === true) {
+      const rep = mine[0];
+      return {
+        exists: false,
+        scorable: false,
+        voided: true,
+        id: rep.id,
+        run_dir: rep.run_dir,
+        sequence_index: rep.sequence_index,
+        kind: rep.kind,
+        provider: rep.provider,
+        model_slug: rep.model_slug,
+        candidates: batch.scored_count,
+        median: batch.median,
+        void_input: batch.void_input,
+        reason: "batch_void",
+      };
+    }
+
+    if (batch.selection) {
+      const sel = batchCells.find((c) => c.sequence_index === batch.selection.sequence_index);
+      if (!sel) {
+        throw new Error(
+          `baselineFor(${model}): the batch selection names sequence_index `
+          + `${batch.selection.sequence_index}, which no OFF cell of ${relDir} matches — `
+          + "the persisted batch and the cells on disk disagree",
+        );
+      }
+      return {
+        exists: true,
+        scorable: true,
+        id: sel.id,
+        run_dir: sel.run_dir,
+        sequence_index: sel.sequence_index,
+        // The floor's MEASUREMENT: the selected run's problem count. (Under the
+        // single-run pick this was the campaign's created_at timestamp.)
+        measured_before: sel.problems_before,
+        kind: sel.kind,
+        provider: sel.provider,
+        model_slug: sel.model_slug,
+        turns: sel.turns,
+        tokens: sel.tokens,
+        wall_seconds: sel.wall_seconds,
+        gates: sel.gates,
+        verdict: sel.verdict,
+        context_exhausted: sel.context_exhausted === true,
+        // The batch's scored-run count; only the selected run is the floor.
+        candidates: batch.scored_count,
+        reason: null,
+      };
+    }
+
+    // Batch assembled, operator hasn't picked: a batch exists, a floor does
+    // not. No pick is fabricated — this is the awaiting-selection state.
+    const rep = mine[0];
     return {
       exists: true,
-      scorable: true,
-      id: b.id,
-      run_dir: b.run_dir,
-      sequence_index: b.sequence_index,
-      measured_before: b.created_at,
-      kind: b.kind,
-      provider: b.provider,
-      model_slug: b.model_slug,
-      turns: b.turns,
-      tokens: b.tokens,
-      wall_seconds: b.wall_seconds,
-      gates: b.gates,
-      verdict: b.verdict,
-      context_exhausted: b.context_exhausted === true,
-      // More than one valid cell is shown as a count; only one is the floor.
-      candidates: scorable.length,
-      reason: null,
+      scorable: false,
+      id: rep.id,
+      run_dir: rep.run_dir,
+      sequence_index: rep.sequence_index,
+      kind: rep.kind,
+      provider: rep.provider,
+      model_slug: rep.model_slug,
+      candidates: batch.scored_count,
+      median: batch.median,
+      reason: "awaiting_selection",
     };
   }
 
@@ -383,11 +572,12 @@ export function baselineFor(model, offCells) {
 
 /**
  * Every baseline that exists: one row per model (a model has one floor;
- * `candidates` counts the others). States: complete (a floor), running (in
- * flight, refuses runs), void (ran but measured the harness), none (no row —
- * e.g. only seeded cells).
+ * `candidates` counts the others). States: complete (a floor), awaiting (a
+ * batch assembled but unselected — visible so the operator can pick), running
+ * (in flight, refuses runs), void (ran but measured the harness), exhausted
+ * (out of context before grading), none (no row — e.g. only seeded cells).
  */
-function baselineList(offCells) {
+async function baselineList(offCells, { repoRoot = REPO_ROOT, runsRoot = null } = {}) {
   const byModel = new Map();
   for (const c of offCells) {
     if (!c.model) continue;
@@ -397,7 +587,9 @@ function baselineList(offCells) {
 
   const rows = [];
   for (const [model, cells] of byModel) {
-    const b = baselineFor(model, cells);
+    const b = await baselineFor(model, cells, { repoRoot, runsRoot });
+    // An awaiting-selection batch is a VISIBLE row: the operator must see the
+    // batch (and its median) to pick from it — dropping it hides the pick.
     const state = b.scorable
       ? "complete"
       : b.voided
@@ -406,7 +598,9 @@ function baselineList(offCells) {
           ? "exhausted"
           : b.pending
             ? "running"
-            : "none";
+            : b.reason === "awaiting_selection"
+              ? "awaiting"
+              : "none";
     if (state === "none") continue;
 
     // Identity from the resolved baseline, else the newest cell.
@@ -435,15 +629,19 @@ function baselineList(offCells) {
       // Cells found vs valid: what to check when an expected floor is missing.
       cells_seen: cells.length,
       candidates: b.candidates ?? 0,
+      // The batch's median problem count — the awaiting row's measurement and
+      // the void row's stale one. Null when no batch was ever assembled.
+      median: b.median ?? null,
+      // The fingerprint input that voided the batch (state "void"); else null.
+      void_input: b.void_input ?? null,
       reason: b.reason ?? null,
     });
   }
 
-  // Newest first.
+  // Newest first — by campaign timestamp. measured_before is the floor's
+  // problem count now, not a time, so it must never key this sort.
   rows.sort((a, b) =>
-    String(b.measured_before ?? b.campaign_started_at ?? "").localeCompare(
-      String(a.measured_before ?? a.campaign_started_at ?? ""),
-    ),
+    String(b.campaign_started_at ?? "").localeCompare(String(a.campaign_started_at ?? "")),
   );
   return rows;
 }
@@ -461,9 +659,9 @@ async function buildBaselineIndex({ runsRoot, models }) {
   const ids = (models ?? []).map((m) => (typeof m === "string" ? m : str(m?.id))).filter(Boolean);
 
   const out = {};
-  for (const id of ids) out[id] = baselineFor(id, offCells);
+  for (const id of ids) out[id] = await baselineFor(id, offCells, { runsRoot });
 
-  const list = baselineList(offCells);
+  const list = await baselineList(offCells, { runsRoot });
 
   return {
     contract_version: BASELINES_CONTRACT_VERSION,

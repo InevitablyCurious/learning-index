@@ -151,8 +151,24 @@ function baselineRow(board, ledger, b) {
       ${voidNote(b)}
       ${exhaustedNote(b)}
       ${b.can_run?.allowed === false && b.can_run?.reason ? `<div class="blwhy"><span class="null">${esc(b.can_run.reason)}</span></div>` : ""}
+      ${batchPick(b)}
       ${open ? drawer(board, ledger, b) : ""}
     </div>`;
+}
+
+/**
+ * The operator's batch control. An unselected batch (reason
+ * "awaiting_selection") and a fingerprint-voided one (reason "batch_void") are
+ * the two rows that need a floor decision: [batch] opens the record into the
+ * slot below. The slot is data-preserve — doOpenBatch (board-actions.js)
+ * injects the batch into it, and patch() must not wipe it on the next refresh.
+ */
+function batchPick(b) {
+  if (b.reason !== "awaiting_selection" && b.reason !== "batch_void") return "";
+  const dir = esc(String(b.run_dir ?? ""));
+  return `
+    <div class="blwhy"><button class="cbatch-btn" data-batch-open="${dir}">batch</button></div>
+    <div class="cbatch" data-preserve data-batch-slot="${dir}"></div>`;
 }
 
 /** The right-hand readout. A running baseline says RUNNING and nothing else. */
