@@ -24,6 +24,14 @@ const TUI_IDLE_STOP_MS = 30000;
 /** No first byte after this long is a real fault, and reported as one. */
 const TUI_FIRST_PAINT_TIMEOUT_MS = 25000;
 
+/**
+ * Bound on concurrent captures (one per mirrored cell). Each capture holds a
+ * PTY child process, so the map is capped: past this many, the least-recently
+ * polled capture is stopped and dropped (Map insertion order is the LRU order —
+ * every poll re-inserts its key at the end).
+ */
+export const MAX_CAPTURES = 16;
+
 const DEFAULT_ATTACH_BIN = "opencode";
 
 // ── the screen ───────────────────────────────────────────────────────────────
@@ -417,54 +425,85 @@ function shQuote(s) {
 
 // ── the manager ──────────────────────────────────────────────────────────────
 
-/** At most one capture at a time: the surface shows one session. */
+/** One bounded capture per mirrored cell, keyed on the run identity. */
 export class TuiMirror {
   constructor({ serveUrl, bin = DEFAULT_ATTACH_BIN }) {
     this.serveUrl = serveUrl;
     this.bin = bin;
-    this.capture = null;
+    /** runId → Capture, bounded by MAX_CAPTURES with LRU eviction. */
+    this.captures = new Map();
     this.sweeper = setInterval(() => this.sweep(), 2000);
     // Never hold the process open on this timer alone.
     if (this.sweeper.unref) this.sweeper.unref();
   }
 
-  /** Poll for a frame, starting the capture if needed. Polling is the keepalive. */
-  poll(sessionId) {
+  /**
+   * Poll a frame of the cell identified by `runId`, starting its capture if
+   * needed. Polling is the keepalive. `serveUrl` is that cell's own serve URL
+   * (each concurrent cell has its own port); it falls back to the process
+   * default only when unresolved. The payload carries `run_id` so downstream
+   * can key on it.
+   */
+  pollFor(runId, sessionId, serveUrl) {
     if (!sessionId) {
       return {
         running: false,
+        run_id: runId ?? null,
         session_id: null,
         frame: null,
         reason: "no session observed yet — the TUI mirror attaches to the running cell's session.",
       };
     }
 
-    if (this.capture && this.capture.sessionId !== sessionId) {
+    let capture = this.captures.get(runId);
+    if (capture && capture.sessionId !== sessionId) {
       // The cell moved to a new session: drop the old view.
-      this.capture.stop();
-      this.capture = null;
+      capture.stop();
+      this.captures.delete(runId);
+      capture = null;
     }
 
-    if (!this.capture) {
-      this.capture = new Capture({ sessionId, serveUrl: this.serveUrl, bin: this.bin });
-      this.capture.start();
+    if (!capture) {
+      capture = new Capture({
+        sessionId,
+        serveUrl: serveUrl ?? this.serveUrl,
+        bin: this.bin,
+      });
+      this.captures.set(runId, capture);
+      capture.start();
+      this.evict();
     }
 
-    return this.capture.read();
+    // LRU touch: re-inserting moves this runId to the end of the Map order.
+    this.captures.delete(runId);
+    this.captures.set(runId, capture);
+
+    return { ...capture.read(), run_id: runId };
   }
 
-  /** Stop a capture nobody is reading. */
+  /** Enforce MAX_CAPTURES by stopping the least-recently-polled captures. */
+  evict() {
+    while (this.captures.size > MAX_CAPTURES) {
+      const lru = this.captures.keys().next().value;
+      this.captures.get(lru).stop();
+      this.captures.delete(lru);
+    }
+  }
+
+  /** Stop captures nobody is reading. */
   sweep() {
-    if (!this.capture) return;
-    if (this.capture.idleFor(Date.now()) > TUI_IDLE_STOP_MS) {
-      this.capture.stop();
-      this.capture = null;
+    const now = Date.now();
+    for (const [runId, capture] of this.captures) {
+      if (capture.idleFor(now) > TUI_IDLE_STOP_MS) {
+        capture.stop();
+        this.captures.delete(runId);
+      }
     }
   }
 
   shutdown() {
     clearInterval(this.sweeper);
-    if (this.capture) this.capture.stop();
-    this.capture = null;
+    for (const capture of this.captures.values()) capture.stop();
+    this.captures.clear();
   }
 }

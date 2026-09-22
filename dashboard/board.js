@@ -88,9 +88,44 @@ function capWindow(rows, cap) {
 
 let stream = null;
 
+// ── TUI MIRROR CELL SELECTION ── WHICH live cell's terminal the mirror
+// follows, keyed on the control-plane ledger run_id. null is the unkeyed
+// default — the newest cell — matching the server's own contract
+// (control/board/lib/tui.mjs groups frame subscribers by this key).
+let selectedRunId = null;
+
+/** The run_id this client's TUI subscription is keyed on; null = default/newest. */
+export function tuiRunId() {
+  return selectedRunId;
+}
+
+/**
+ * Point the TUI mirror at one live cell (empty/falsy = the default). Changing
+ * the selection resubscribes, so the server's fast path regroups this client
+ * under the new run_id; the cursor is kept, so no event is replayed or skipped.
+ */
+export function setTuiRunId(id) {
+  const next = id || null;
+  if (next === selectedRunId) return;
+  selectedRunId = next;
+  resubscribe();
+}
+
+/**
+ * The subscription URL, pure and exported for tests. `tui=1` (the TUI MIRROR
+ * tab is selected) opts into full terminal frames; otherwise only the mirror's
+ * status is sent. `run_id` keys the mirror to one live cell; absent = default.
+ */
+export function streamUrl(cursor, wantsTui, runId) {
+  const tui = wantsTui ? "&tui=1" : "";
+  const key = runId ? `&run_id=${encodeURIComponent(runId)}` : "";
+  return `/api/stream?since=${cursor}${tui}${key}`;
+}
+
 /**
  * Reconnect the stream when the subscription changes (the TUI tab opening or
- * closing). The cursor is kept, so no event is replayed or skipped.
+ * closing, or the mirrored cell changing). The cursor is kept, so no event is
+ * replayed or skipped.
  */
 export function resubscribe() {
   if (stream) {
@@ -101,10 +136,11 @@ export function resubscribe() {
 }
 
 function connect() {
-  // Resume from the cursor. tui=1 (the TUI MIRROR tab is selected) opts into full
-  // terminal frames; otherwise only the mirror's status is sent.
-  const wantsTui = curveTab() === "tui" ? "&tui=1" : "";
-  stream = new EventSource(`/api/stream?since=${eventCursor}${wantsTui}`);
+  // Guarded like the boot block below: this module is also a library that panel
+  // tests import under Node, where setTuiRunId still runs.
+  if (typeof EventSource === "undefined") return;
+  // Resume from the cursor; the subscription carries the TUI tab and the cell.
+  stream = new EventSource(streamUrl(eventCursor, curveTab() === "tui", selectedRunId));
 
   stream.addEventListener("board", (msg) => {
     try {
@@ -311,6 +347,7 @@ import {
   doCommitRestore,
   doArmReset,
   doCommitReset,
+  doSelectTuiRun,
 } from "./board-actions.js";
 
 function render() {
@@ -613,6 +650,8 @@ function onRunSel(e) {
   // Same for a half-typed API key.
   const ri = e.target.closest("[data-router-input]");
   if (ri) { setRouterDraft(ri.dataset.routerInput, e.target.value); return; }
+  // The TUI cell selector is a change, never a keystroke: resubscribe at once.
+  if (e.target.closest("[data-tui-run]")) { doSelectTuiRun(e.target.value); return; }
   if (e.target.closest("[data-create-query]")) { setCreateQuery(e.target.value); render(); return; }
   if (e.target.closest("[data-create-provider]")) { setCreateProvider(e.target.value); render(); }
   if (e.target.closest("[data-create-concurrency-n]")) { setCreateConcurrencyN(e.target.value); render(); return; }

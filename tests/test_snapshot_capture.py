@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import subprocess
+import time
 from typing import Any
 
 import pytest
@@ -814,3 +815,47 @@ def test_seeded_cache_miss_grades_for_real_and_stays_silent(
     assert result.verdict == "PASS"
     # A miss is silent: no grade_cache_hit notice on the live stream.
     assert _hit_notices(tmp_path) == []
+
+
+# ── PER-RUN-INSTANCE SNAPSHOT ID: SAME-MILLISECOND COLLISION ────────────────
+#
+# snapshot_id is "<ms stamp>-<run_identity>". N concurrent cells finishing in
+# the same millisecond therefore get N distinct ids in the GLOBAL snapshot
+# root — under the bare ms stamp the second capture would collide with the
+# first's directory, and its failure path (rmtree of the partial dest) would
+# delete the sibling's already-written snapshot.
+
+
+def test_same_millisecond_distinct_run_identities_never_collide(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Frozen clock + two run identities → two distinct snapshots, both intact."""
+    frozen = 1_790_081_930.123  # both cells "finish" inside this one millisecond
+    monkeypatch.setattr(time, "time", lambda: frozen)
+    monkeypatch.setenv("BENCH_RUNS_DIR", str(tmp_path))
+
+    identities = ("1a2b3c4d5e6f", "0f1e2d3c4b5a")
+    for seq, identity in enumerate(identities):
+        runner = _make_runner(tmp_path, mock="scaffold")
+        monkeypatch.setattr(
+            runner, "_run_gate_report", lambda **kwargs: dict(PASS_REPORT)
+        )
+        result = runner._run_cell_impl(
+            run_label="lbl",
+            run_dir=tmp_path / f"rundir-{seq}",
+            task_id="backgammon",
+            run_identity=identity,
+        )
+        assert result.verdict == "PASS"
+
+    # The second capture did NOT collide with (and so did not rmtree) the
+    # first: both siblings exist under the one shared snapshots root with
+    # intact trees, and each manifest carries its own dir name as the id —
+    # the same string is the dir name and the manifest snapshot_id.
+    ms = int(frozen * 1000)
+    dirs = _snapshot_dirs(tmp_path)
+    assert [d.name for d in dirs] == sorted(f"{ms}-{i}" for i in identities)
+    for snap in dirs:
+        assert (snap / "tree" / "package.json").is_file()
+        payload = json.loads((snap / "snapshot.json").read_text(encoding="utf-8"))
+        assert payload["snapshot_id"] == snap.name

@@ -265,10 +265,12 @@ export async function cellDirForRun(runsRoot, runDir, sequenceIndex) {
 }
 
 /**
- * The session id a cell ran under, from its own cell.start record (never from a
- * launch log that may describe another cell). null when unresolvable.
+ * The cell.start record at the head of the cell's own live.jsonl (never from a
+ * launch log that may describe another cell). null when unresolvable. Shared
+ * head-anchored read: the harness publishes session_id, serve_host_port, and
+ * serve_url on this one record, and the tail-readers miss it on real runs.
  */
-export async function cellSessionId(runsRoot, runDir, sequenceIndex) {
+async function cellStartRecord(runsRoot, runDir, sequenceIndex) {
   const cell = await cellDirForRun(runsRoot, runDir, sequenceIndex);
   if (!cell) return null;
   const head = await readHead(join(runsRoot, cell.cellDir, "live.jsonl"));
@@ -281,9 +283,28 @@ export async function cellSessionId(runsRoot, runDir, sequenceIndex) {
       continue;
     }
     if (rec?.kind !== "cell.start") continue;
-    return typeof rec.session_id === "string" ? rec.session_id : null;
+    return rec;
   }
   return null;
+}
+
+/**
+ * The session id a cell ran under, from its own cell.start record (never from a
+ * launch log that may describe another cell). null when unresolvable.
+ */
+export async function cellSessionId(runsRoot, runDir, sequenceIndex) {
+  const rec = await cellStartRecord(runsRoot, runDir, sequenceIndex);
+  return typeof rec?.session_id === "string" ? rec.session_id : null;
+}
+
+/**
+ * The cell's own serve_url — each concurrent cell gets its own free serve
+ * port, published on the cell.start record at the head of its live.jsonl.
+ * null when the record or field is absent.
+ */
+export async function cellServeUrl(runsRoot, runDir, sequenceIndex) {
+  const rec = await cellStartRecord(runsRoot, runDir, sequenceIndex);
+  return typeof rec?.serve_url === "string" ? rec.serve_url : null;
 }
 
 /**

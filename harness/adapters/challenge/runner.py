@@ -440,6 +440,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         build_chunk_expected: int,
         worker_image_identity: Any,
         run_label: str,
+        run_identity: str,
         session_id: str | None,
         report: dict[str, Any] | None = None,
     ) -> None:
@@ -472,7 +473,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 os.environ.get("BENCH_RUNS_DIR") or (self._repo_root / "runs")
             )
             snapshot_root = runs_root / "snapshots"
-            snapshot_id = str(int(time.time() * 1000))
+            snapshot_id = f"{int(time.time() * 1000)}-{run_identity}"
             # A cell the harness limited is not a capability result; the flag
             # travels with the snapshot so the tree is never read as one.
             cell_void = bool(
@@ -569,6 +570,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         worktree: Path,
         state_hash: str | None,
         run_label: str,
+        run_identity: str,
         session_id: str | None,
         attempt: int,
     ) -> str | None:
@@ -590,7 +592,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 os.environ.get("BENCH_RUNS_DIR") or (self._repo_root / "runs")
             )
             snapshot_root = runs_root / "snapshots"
-            snapshot_id = str(int(time.time() * 1000))
+            snapshot_id = f"{int(time.time() * 1000)}-{run_identity}"
             seed_depth = self._seed_snapshot_depth if self._seed_snapshot_depth else 1
             provenance: dict[str, Any] = {
                 "snapshot_depth": seed_depth + 1,
@@ -1631,6 +1633,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                             build_chunk_expected=build_chunk_expected,
                             worker_image_identity=worker_image_identity,
                             run_label=run_label,
+                            run_identity=run_identity,
                             session_id=session_id,
                             report=report,
                         )
@@ -1666,6 +1669,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                                 ),
                                 state_hash=attempt_state_hash,
                                 run_label=run_label,
+                                run_identity=run_identity,
                                 session_id=session_id,
                                 attempt=attempt,
                             )

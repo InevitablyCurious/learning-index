@@ -13,7 +13,6 @@
 import { readFile, open, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import { liveStreamPath } from "./board/sources/_runtime.mjs";
 import { noticesPathFor } from "./notices.mjs";
 import { cellDirForRun } from "./runstate.mjs";
 
@@ -169,19 +168,18 @@ function toRow(rec) {
 
 /**
  * The merged feed for one run (run_dir resolved by the caller, like every other
- * run-scoped route). With `sequenceIndex` the live half is pinned to exactly
- * that cell's stream; without it, the newest cell's.
+ * run-scoped route). The live half is pinned to exactly one cell by
+ * `sequenceIndex`; without it there is NO live half — an unkeyed request never
+ * falls back to "newest cell by mtime", which with N cells in flight silently
+ * shows a stream nobody asked for. The notices half (logPath) is run-scoped
+ * and unaffected by the key.
  */
 export async function readBackendFeed({ runsRoot, runDir, logPath, sequenceIndex = null, complete = false }) {
   let livePath = null;
-  if (runDir) {
-    if (sequenceIndex != null) {
-      // Pinned to exactly this cell's stream, or none.
-      const cell = await cellDirForRun(runsRoot, runDir, sequenceIndex);
-      livePath = cell ? join(runsRoot, cell.cellDir, "live.jsonl") : null;
-    } else {
-      livePath = await liveStreamPath(join(runsRoot, runDir)).catch(() => null);
-    }
+  if (runDir && sequenceIndex != null) {
+    // Pinned to exactly this cell's stream, or none.
+    const cell = await cellDirForRun(runsRoot, runDir, sequenceIndex);
+    livePath = cell ? join(runsRoot, cell.cellDir, "live.jsonl") : null;
   }
   const noticePath = logPath ? noticesPathFor(logPath) : null;
 

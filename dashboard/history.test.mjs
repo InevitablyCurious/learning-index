@@ -21,6 +21,8 @@ import {
   loadRuns,
   loadCheckpoints,
   loadDiff,
+  cellWirePair,
+  currentToasts,
 } from "./history.js";
 
 // ── fixtures — the real endpoint shapes ─────────────────────────────────────
@@ -179,7 +181,7 @@ test("renderDiff: error state renders the reason", () => {
 
 // ── loaders ──────────────────────────────────────────────────────────────────
 
-test("loadCheckpoints: encodeURIComponent applied to run and cell", async () => {
+test("loadCheckpoints: sends the wire pair — full run_dir + sequence_index, encoded", async () => {
   const realFetch = globalThis.fetch;
   let capturedUrl = null;
   globalThis.fetch = async (url) => {
@@ -187,12 +189,29 @@ test("loadCheckpoints: encodeURIComponent applied to run and cell", async () => 
     return { ok: true, json: async () => ({ checkpoints: [], diffs: [] }) };
   };
   try {
-    await loadCheckpoints("1788672514", "local/x/cell-0000");
+    await loadCheckpoints(RUN.benchmark_id, RUN.cell);
   } finally {
     globalThis.fetch = realFetch;
   }
-  assert.ok(capturedUrl.includes("cell=local%2Fx%2Fcell-0000"), capturedUrl);
-  assert.ok(capturedUrl.includes("run=1788672514"), capturedUrl);
+  // RUN is 1788672514 + local/x/cell-0000: run_dir is the full cell path
+  // minus its last two segments (the arm and the cell name).
+  assert.equal(capturedUrl, "/api/history/checkpoints?run=1788672514%2Flocal&sequence_index=0");
+});
+
+test("loadCheckpoints: a cell with no sequence_index refuses without fetching", async () => {
+  const realFetch = globalThis.fetch;
+  let fetched = false;
+  globalThis.fetch = async () => {
+    fetched = true;
+    return { ok: true, json: async () => ({ checkpoints: [], diffs: [] }) };
+  };
+  try {
+    await loadCheckpoints(RUN.benchmark_id, "local/x/cell-abc");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.equal(fetched, false, "an unaddressable row must not reach the wire");
+  assert.equal(currentToasts().at(-1)?.code, "cell_unaddressable");
 });
 
 // ── same-origin — the dashboard relays /api/history* ────────────────────────
@@ -223,9 +242,40 @@ test("loadDiff: fetches the same-origin encoded diff URL — no host", async () 
     return { ok: true, text: async () => "@@ -1 +1 @@" };
   };
   try {
-    await loadDiff("run1", "cell1", "a/b.txt");
+    await loadDiff(RUN.benchmark_id, RUN.cell, "a/b.txt");
   } finally {
     globalThis.fetch = realFetch;
   }
-  assert.equal(capturedUrl, "/api/history/diff?run=run1&cell=cell1&path=a%2Fb.txt");
+  assert.equal(capturedUrl, "/api/history/diff?run=1788672514%2Flocal&sequence_index=0&path=a%2Fb.txt");
+});
+
+// ── cellWirePair — the row identity → the (run_dir, sequence_index) address ──
+
+test("cellWirePair: a tree row maps to its campaign run_dir + index", () => {
+  assert.deepEqual(
+    cellWirePair("1790015745", "local/local-llm-proxy/omlx/qwen3/memoryOFF/cell-0007"),
+    { run_dir: "1790015745/local/local-llm-proxy/omlx/qwen3", sequence_index: 7 },
+  );
+});
+
+test("cellWirePair: a legacy flat row maps to the benchmark_id alone", () => {
+  assert.deepEqual(cellWirePair("cumulative", "memoryOFF/cell-0000"), {
+    run_dir: "cumulative",
+    sequence_index: 0,
+  });
+});
+
+test("cellWirePair: an archived row keeps the backups/ prefix in run_dir", () => {
+  assert.deepEqual(
+    cellWirePair("backups", "1790015745/1790004579/local/omlx/model/memoryOFF/cell-0012"),
+    { run_dir: "backups/1790015745/1790004579/local/omlx/model", sequence_index: 12 },
+  );
+});
+
+test("cellWirePair: a cell name with no index addresses nothing", () => {
+  assert.equal(cellWirePair("1790015745", "local/omlx/model/memoryOFF/cell-abc"), null);
+  // No arm segment between the run_dir and the cell name → no run_dir to send.
+  assert.equal(cellWirePair("1790015745", "cell-0000"), null);
+  assert.equal(cellWirePair("1790015745", ""), null);
+  assert.equal(cellWirePair(null, null), null);
 });

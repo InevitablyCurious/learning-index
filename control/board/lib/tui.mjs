@@ -21,9 +21,22 @@ export function tuiForClient(section, wantsFrame) {
  */
 export const TUI_STREAM_MS = 250;
 
-/** Clients that asked for frames. */
-function tuiSubscribers() {
-  return [...streamClients].filter((res) => res.okpWantsTui === true);
+/**
+ * Clients that asked for frames, grouped by the run_id of the cell each one
+ * mirrors (`res.okpTuiRunId`, from /api/stream's `?run_id=` param). `null` is
+ * the unkeyed default group — the newest cell — matching /api/tui's own
+ * truthiness contract: an empty string counts as default too.
+ */
+export function groupTuiSubscribers(clients) {
+  const groups = new Map();
+  for (const res of clients) {
+    if (res.okpWantsTui !== true) continue;
+    const key = res.okpTuiRunId || null;
+    const subs = groups.get(key);
+    if (subs) subs.push(res);
+    else groups.set(key, [res]);
+  }
+  return groups;
 }
 
 /**
@@ -40,40 +53,52 @@ export function diffTuiRows(prev, next) {
 }
 
 // ── THE FAST PATH LOOP ──
-let lastTuiFrame = null;
-let lastTuiRows = null;
-let tuiInFlight = false;
+/**
+ * run_id (null = the default newest cell) → { sig, rows, inFlight }: one memo
+ * per mirrored cell, so each subscriber receives the frame of the cell IT
+ * selected rather than whichever single cell the unkeyed path last saw.
+ */
+const tuiMemo = new Map();
 
-export async function tuiTick(cfg) {
-  const subs = tuiSubscribers();
-  if (!subs.length) {
-    // Nobody watching: forget the memo so the next subscriber gets a full frame.
-    lastTuiFrame = null;
-    return;
+/**
+ * Fetch, diff, and push for ONE run_id group. `runId === null` fetches
+ * /api/tui unkeyed (the default newest cell); a string run_id fetches exactly
+ * that cell. Every patch carries the run_id it belongs to so the client can
+ * key its render.
+ */
+async function pushTuiGroup(base, runId, subs) {
+  let memo = tuiMemo.get(runId);
+  if (!memo) {
+    memo = { sig: null, rows: null, inFlight: false };
+    tuiMemo.set(runId, memo);
   }
   // Never stack requests on a slow control plane.
-  if (tuiInFlight) return;
-  tuiInFlight = true;
+  if (memo.inFlight) return;
+  memo.inFlight = true;
   try {
-    const base = cfg.controlUrl ?? "http://127.0.0.1:8718";
-    const res = await fetch(`${base}/api/tui`, {
+    const url =
+      runId === null
+        ? `${base}/api/tui`
+        : `${base}/api/tui?run_id=${encodeURIComponent(runId)}`;
+    const res = await fetch(url, {
       signal: AbortSignal.timeout(2000),
       headers: { accept: "application/json" },
     });
     if (!res.ok) return;
     const data = await res.json();
     const sig = JSON.stringify(data);
-    if (sig === lastTuiFrame) return; // an unchanged terminal sends nothing
-    lastTuiFrame = sig;
+    if (sig === memo.sig) return; // an unchanged terminal sends nothing
+    memo.sig = sig;
 
     // Changed rows only, by index; a full frame when there's nothing to splice.
-    const rows = diffTuiRows(lastTuiRows, data.frame);
+    const rows = diffTuiRows(memo.rows, data.frame);
     const { frame: _f, ...meta } = data;
+    const key = data.run_id ?? runId;
     const body =
       rows === null
-        ? JSON.stringify({ tui: data })
-        : JSON.stringify({ tui_rows: { rows, meta } });
-    lastTuiRows = data.frame ?? null;
+        ? JSON.stringify({ tui: { ...data, run_id: key } })
+        : JSON.stringify({ tui_rows: { rows, meta, run_id: key } });
+    memo.rows = data.frame ?? null;
 
     for (const r of subs) {
       try {
@@ -85,6 +110,19 @@ export async function tuiTick(cfg) {
   } catch {
     // A blip never kills the loop; the panel keeps its last good frame.
   } finally {
-    tuiInFlight = false;
+    memo.inFlight = false;
   }
+}
+
+export async function tuiTick(cfg) {
+  const groups = groupTuiSubscribers(streamClients);
+  // Forget the memo of any cell nobody watches, so its next subscriber gets a
+  // full frame. An in-flight entry survives the prune — dropping it would let
+  // the next tick stack a second fetch for the same cell.
+  for (const [runId, memo] of tuiMemo) {
+    if (!groups.has(runId) && !memo.inFlight) tuiMemo.delete(runId);
+  }
+  if (!groups.size) return;
+  const base = cfg.controlUrl ?? "http://127.0.0.1:8718";
+  await Promise.all([...groups].map(([runId, subs]) => pushTuiGroup(base, runId, subs)));
 }

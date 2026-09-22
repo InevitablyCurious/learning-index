@@ -10,6 +10,8 @@
 //
 // `?since=` carries the client's event cursor so a reconnect resumes without a
 // gap. `?tui=1` asks for full terminal frames, which are withheld otherwise.
+// `?run_id=` keys the TUI mirror to one specific cell (the control-plane
+// ledger uuid); absent/empty mirrors the default newest cell.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { args, BENCH_ROOT, RUNS_ROOT } from "../state.mjs";
@@ -60,6 +62,9 @@ export const routes = [
       req.on("error", drop);
       res.on("error", drop);
       res.okpWantsTui = url.searchParams.get("tui") === "1";
+      // Which cell this client mirrors; the TUI fast path (board/lib/tui.mjs)
+      // fetches and pushes that cell's frames to it — and only to it.
+      res.okpTuiRunId = url.searchParams.get("run_id") ?? null;
 
       try {
         const board = await getBoard(cfg);

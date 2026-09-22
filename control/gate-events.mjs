@@ -3,8 +3,12 @@
 // tells grading apart from a wedge. Only gate.status (the grading indicator) is
 // used by the event feed now; the rows live in the backend feed. Read-only.
 
+import { join } from "node:path";
+
 import { GATE_STALL_THRESHOLD_S } from "./contract.mjs";
-import { newestLog, readTail } from "./runstate.mjs";
+import { cellDirForRun, newestLog, readTail } from "./runstate.mjs";
+import { activeTreeRoot } from "./tree.mjs";
+import { listDir, statOrNull } from "./lib/fs.mjs";
 
 /** Parse `k=v` pairs out of a PROGRESS line. */
 function parseKV(line) {
@@ -164,9 +168,50 @@ export function gradingStatus(rows, { logMtimeMs = null, now = Date.now() } = {}
   };
 }
 
-/** Grading events and status for the active run; tail-bounded. */
-export async function readGateActivity(runsRoot) {
-  const log = await newestLog(runsRoot);
+/**
+ * The launch log of exactly one cell, or null. The control plane names each
+ * cell's launch log `<arm>-cell-<stamp>-s<NNNN>.log` (routes/run.mjs), so the
+ * sequence index in the file name IS the cell identity; the scan covers the
+ * same bases as runstate's candidate scan (active tree, then runs root). The
+ * cell must also exist under the requested run_dir (cellDirForRun) — a request
+ * for a cell that is not there yields nothing, never another cell's log.
+ */
+async function cellLaunchLog(runsRoot, runDir, sequenceIndex) {
+  const cell = await cellDirForRun(runsRoot, runDir, sequenceIndex);
+  if (!cell) return null;
+  const suffix = `-s${String(sequenceIndex).padStart(4, "0")}.log`;
+  let treeRoot = null;
+  try {
+    treeRoot = await activeTreeRoot(runsRoot);
+  } catch {
+    treeRoot = null;
+  }
+  for (const base of treeRoot ? [treeRoot, runsRoot] : [runsRoot]) {
+    for (const ent of await listDir(base)) {
+      if (!ent.isFile() || !ent.name.endsWith(suffix)) continue;
+      if (!/^(off|on)-cell-|^cell-/.test(ent.name)) continue;
+      const path = join(base, ent.name);
+      const st = await statOrNull(path);
+      if (st?.isFile()) {
+        return { path, mtime: st.mtimeMs, size: st.size, name: ent.name, run_dir: runDir };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Grading events and status, tail-bounded. With `{ runDir, sequenceIndex }`
+ * the read is pinned to exactly that cell's launch log — empty when the cell
+ * or its log is absent, never another cell's. Without a selector it reads the
+ * newest live cell's log, as before.
+ */
+export async function readGateActivity(runsRoot, opts = {}) {
+  const { runDir = null, sequenceIndex = null } = opts ?? {};
+  const log =
+    runDir && sequenceIndex != null
+      ? await cellLaunchLog(runsRoot, runDir, sequenceIndex)
+      : await newestLog(runsRoot);
   if (!log) return { rows: [], status: null, log: null };
 
   const text = await readTail(log.path);

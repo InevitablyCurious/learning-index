@@ -111,8 +111,9 @@ export async function listSnapshots(runsRoot) {
   }
 
   const rows = await Promise.all(names.map((n) => readSnapshot(runsRoot, n)));
-  // The id is a millisecond capture stamp, so it sorts numerically.
-  rows.sort((a, b) => Number(b.id) - Number(a.id));
+  // The id is "<ms capture stamp>-<run identity>", so order by the numeric
+  // prefix (parseInt stops at the "-"); a full Number() would be NaN.
+  rows.sort((a, b) => Number.parseInt(b.id, 10) - Number.parseInt(a.id, 10));
   return { ok: true, dir, snapshots: rows, reason: null };
 }
 

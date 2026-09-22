@@ -9,7 +9,7 @@
 // a run must likewise be served that cell's own events and stream — resolved
 // from (run_dir, sequence_index), never from the newest cell. These tests pin
 // the module level of that fix (agent-events.mjs, runstate.mjs
-// logPathForRunDir + cellDirForRun/cellSessionId, backend-feed.mjs) and
+// logPathForRunDir + cellDirForRun/cellSessionId/cellServeUrl, backend-feed.mjs) and
 // source-pin the routes that wire it — since LI-14 phase 2 those live in
 // routes/events.mjs, because the control plane's entrypoint calls listen() at
 // import and cannot be imported here (the same tradeoff control.test.mjs
@@ -31,7 +31,7 @@ import {
   createAgentEventSink,
 } from "./agent-events.mjs";
 import { EventRing } from "./events.mjs";
-import { cellDirForRun, cellSessionId, logPathForRunDir } from "./runstate.mjs";
+import { cellDirForRun, cellSessionId, cellServeUrl, logPathForRunDir } from "./runstate.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // LI-14 phase 1 moved the shared singletons to state.mjs and the non-route
@@ -191,9 +191,10 @@ test("BACKEND FEED: logPathForRunDir resolves a past run's log by run_dir", asyn
 });
 
 test("BACKEND FEED: both halves resolve for a past run via readBackendFeed", async () => {
-  // The route-level fix at module level: with run_dir + the resolved logPath,
-  // BOTH streams attach — the run's own live.jsonl (found under its cell) and
-  // the notices sidecar of ITS launch log (logPath + ".notices.jsonl").
+  // The route-level fix at module level: with run_dir + sequence_index + the
+  // resolved logPath, BOTH streams attach — the run's own live.jsonl (found
+  // under its cell) and the notices sidecar of ITS launch log (logPath +
+  // ".notices.jsonl").
   const { readBackendFeed } = await import("./backend-feed.mjs");
   const root = mkdtempSync(join(tmpdir(), "okp-backend-feed-past-"));
   try {
@@ -215,7 +216,7 @@ test("BACKEND FEED: both halves resolve for a past run via readBackendFeed", asy
     );
 
     const logPath = await logPathForRunDir(root, "my-run");
-    const feed = await readBackendFeed({ runsRoot: root, runDir: "my-run", logPath });
+    const feed = await readBackendFeed({ runsRoot: root, runDir: "my-run", logPath, sequenceIndex: 0 });
     assert.equal(feed.sources.live.attached, true);
     assert.equal(feed.sources.notices.attached, true);
     assert.ok(feed.rows.some((r) => r.kind === "cell.start"), "the live half is present");
@@ -232,8 +233,8 @@ const CELL_RUN_DIR = "1788717847/local/local-llm-proxy/omlx/qwen3-6-35b-a3b-benc
 
 // Build a two-cell fixture run under `root`: cell-0000 (memoryOFF, ses_A) and
 // cell-0001 (memoryON, ses_B), each with its own live.jsonl (cell.start first —
-// the record cellSessionId reads — then non-heartbeat records with DISTINCT
-// event values so a leaked cell is provable), plus a run-level
+// the record cellSessionId/cellServeUrl read — then non-heartbeat records with
+// DISTINCT event values so a leaked cell is provable), plus a run-level
 // agent-events.jsonl mixing both sessions' rows.
 function writeCellFixture(root) {
   const J = (o) => `${JSON.stringify(o)}\n`;
@@ -243,7 +244,7 @@ function writeCellFixture(root) {
   mkdirSync(cellA, { recursive: true });
   writeFileSync(
     join(cellA, "live.jsonl"),
-    J({ v: 1, ts: 1, kind: "cell.start", session_id: "ses_A", cell_seq: 0, arm: "off" }) +
+    J({ v: 1, ts: 1, kind: "cell.start", session_id: "ses_A", cell_seq: 0, arm: "off", serve_host_port: 8100, serve_url: "http://127.0.0.1:8100" }) +
       J({ v: 1, ts: 2, kind: "heartbeat" }) +
       J({ v: 1, ts: 3, kind: "notice", source: "a", event: "off-notice", level: "info" }),
   );
@@ -252,7 +253,7 @@ function writeCellFixture(root) {
   mkdirSync(cellB, { recursive: true });
   writeFileSync(
     join(cellB, "live.jsonl"),
-    J({ v: 1, ts: 1, kind: "cell.start", session_id: "ses_B", cell_seq: 1, arm: "on" }) +
+    J({ v: 1, ts: 1, kind: "cell.start", session_id: "ses_B", cell_seq: 1, arm: "on", serve_host_port: 8101, serve_url: "http://127.0.0.1:8101" }) +
       J({ v: 1, ts: 3, kind: "notice", source: "a", event: "on-notice", level: "info" }),
   );
 
@@ -293,6 +294,31 @@ test("CELL SCOPE: cellSessionId reads the session_id from the cell's own cell.st
     writeCellFixture(root);
     assert.equal(await cellSessionId(root, CELL_RUN_DIR, 0), "ses_A");
     assert.equal(await cellSessionId(root, CELL_RUN_DIR, 1), "ses_B");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("CELL SCOPE: cellServeUrl reads the serve_url from the cell's own cell.start", async () => {
+  // Each concurrent cell gets its own free serve port; a mirror attaching to
+  // ONE cell must take the url from that cell's OWN live.jsonl head — the
+  // tail-readers miss cell.start on real runs.
+  const root = mkdtempSync(join(tmpdir(), "okp-cell-url-"));
+  try {
+    writeCellFixture(root);
+    assert.equal(await cellServeUrl(root, CELL_RUN_DIR, 0), "http://127.0.0.1:8100");
+    assert.equal(await cellServeUrl(root, CELL_RUN_DIR, 1), "http://127.0.0.1:8101");
+    assert.equal(await cellServeUrl(root, CELL_RUN_DIR, 9), null, "a cell that never ran resolves to null");
+
+    // A cell.start without serve_url resolves to null, never a guess at a
+    // neighboring cell's port.
+    const bare = join(root, CELL_RUN_DIR, "memoryOFF", "cell-0002");
+    mkdirSync(bare, { recursive: true });
+    writeFileSync(
+      join(bare, "live.jsonl"),
+      `${JSON.stringify({ v: 1, ts: 1, kind: "cell.start", session_id: "ses_C", cell_seq: 2 })}\n`,
+    );
+    assert.equal(await cellServeUrl(root, CELL_RUN_DIR, 2), null);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

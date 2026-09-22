@@ -7,6 +7,7 @@ import { promises as fs } from "node:fs";
 import { join } from "node:path";
 
 import { resolveRunDir } from "./wall.mjs";
+import { cellDirForRun } from "./runstate.mjs";
 import { statOrNull, listDir } from "./lib/fs.mjs";
 
 /** The contract version the board can assert against. */
@@ -76,8 +77,8 @@ export function normalizeMessage(record, index) {
 }
 
 /**
- * Every cell session folder under a run, newest first (the newest is "the
- * feedback" of a live run).
+ * Every cell session folder under a run that has a sidecar, newest first
+ * (listing order only — selection is by sequence_index, never by recency).
  */
 const CELL_CONTAINERS = ["memoryOFF", "memoryON", "memoryUNKNOWN", "sessions"];
 
@@ -92,7 +93,8 @@ async function sessionDirs(runPath) {
       const st = await statOrNull(sidecar);
       if (!st?.isFile()) continue;
       // The bare cell name is unique across arms (sequence_index spans the
-      // schedule), so ?cell= keeps working.
+      // schedule), so the cellName resolved from (run_dir, sequence_index)
+      // picks exactly one row.
       rows.push({ cell: ent.name, path: sidecar, mtime: st.mtimeMs });
     }
   }
@@ -102,9 +104,12 @@ async function sessionDirs(runPath) {
 
 /**
  * Assemble GET /api/feedback. Never 500, never fabricate: no sidecar yet is
- * ok:true, empty, with unwired:["user-events"] and a reason.
+ * ok:true, empty, with unwired:["user-events"] and a reason. The cell is
+ * selected by (run_dir, sequence_index) — the canonical identity — and an
+ * absent or unresolvable index reads EMPTY, never the newest cell: silently
+ * serving another cell's prompts would forge "the live session".
  */
-export async function readFeedback({ runsRoot, runDir, cell = null, limit = 50, includeText = true }) {
+export async function readFeedback({ runsRoot, runDir, sequenceIndex = null, limit = 50, includeText = true }) {
   const target = resolveRunDir(runsRoot, runDir);
   if (!target) {
     return {
@@ -133,12 +138,22 @@ export async function readFeedback({ runsRoot, runDir, cell = null, limit = 50, 
     };
   }
 
-  const chosen = cell ? dirs.find((d) => d.cell === cell) : dirs[0];
+  const resolved =
+    sequenceIndex != null ? await cellDirForRun(runsRoot, target.name, sequenceIndex) : null;
+  const chosen = resolved ? dirs.find((d) => d.cell === resolved.cellName) ?? null : null;
   if (!chosen) {
+    // EMPTY, plus what exists: the caller asked for one cell or none, and
+    // "none" is the answer — never a substitute nobody selected.
     return {
-      ok: false,
-      code: "no_such_cell",
-      reason: `no cell ${JSON.stringify(String(cell))} with a sidecar under runs/${target.name}`,
+      ok: true,
+      contract_version: FEEDBACK_CONTRACT_VERSION,
+      run_dir: target.name,
+      cell: null,
+      cells: dirs.map((d) => d.cell),
+      messages: [],
+      counts: { chunk: 0, pass_verdict: 0, feedback: 0 },
+      unwired: [],
+      unwired_reasons: {},
     };
   }
 

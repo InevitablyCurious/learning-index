@@ -330,15 +330,49 @@ export async function loadRuns() {
   paint();
 }
 
+/**
+ * The row identity → the wire address. /api/history rows carry
+ * (benchmark_id, cell); the checkpoints/diff/transcript routes are addressed
+ * by (run, sequence_index), where run is the FULL runs-root-relative run_dir
+ * — the campaign dir holding the memory* arms, which cellDirForRun scans —
+ * and sequence_index is the cell's own N. `<benchmark_id>/<cell>` is the full
+ * cell path (`<run_dir>/<arm>/cell-NNNN`), so run_dir is that minus its last
+ * two segments. null when the cell name carries no index: such a row
+ * addresses nothing, and no request is invented for it.
+ */
+export function cellWirePair(run, cell) {
+  const segs = String(`${run ?? ""}/${cell ?? ""}`).split("/").filter(Boolean);
+  if (segs.length < 3) return null;
+  const named = /^cell-(\d+)$/i.exec(segs[segs.length - 1]);
+  if (!named) return null;
+  return { run_dir: segs.slice(0, -2).join("/"), sequence_index: Number(named[1]) };
+}
+
+/** The one refusal for a row whose cell name carries no sequence_index. */
+const UNADDRESSABLE = (cell) => `no sequence_index in "${cell}" — this row addresses no cell`;
+
 /** GET /api/history/checkpoints → check-points + stored diffs for one run's cell. */
 export async function loadCheckpoints(run, cell) {
+  const pair = cellWirePair(run, cell);
+  if (!pair) {
+    cpsUi.checkpoints = null;
+    cpsUi.diffs = null;
+    cpsUi.error = UNADDRESSABLE(cell);
+    toast({
+      code: "cell_unaddressable",
+      reason: cpsUi.error,
+      where: `GET /api/history/checkpoints · ${run} · ${cell}`,
+    });
+    paint();
+    return;
+  }
   cpsUi.loading = true;
   cpsUi.error = null;
   cpsUi.checkpoints = null;
   cpsUi.diffs = null;
   paint();
   try {
-    const url = `/api/history/checkpoints?run=${encodeURIComponent(run)}&cell=${encodeURIComponent(cell)}`;
+    const url = `/api/history/checkpoints?run=${encodeURIComponent(pair.run_dir)}&sequence_index=${pair.sequence_index}`;
     const res = await fetch(url);
     const data = await res.json().catch(() => null);
     if (!res.ok || data?.ok === false) {
@@ -346,7 +380,7 @@ export async function loadCheckpoints(run, cell) {
       toast({
         code: data?.code ?? "checkpoints_unreadable",
         reason: cpsUi.error,
-        where: `GET /api/history/checkpoints · ${run} · ${cell}`,
+        where: `GET /api/history/checkpoints · ${pair.run_dir} · cell ${pair.sequence_index}`,
       });
     } else {
       // null when nothing was captured.
@@ -363,13 +397,26 @@ export async function loadCheckpoints(run, cell) {
 
 /** GET /api/history/diff → raw unified-diff text for one stored diff file. */
 export async function loadDiff(run, cell, diffPath) {
+  const pair = cellWirePair(run, cell);
+  if (!pair) {
+    diffUi.diffText = null;
+    diffUi.diffPath = diffPath;
+    diffUi.error = UNADDRESSABLE(cell);
+    toast({
+      code: "cell_unaddressable",
+      reason: diffUi.error,
+      where: `GET /api/history/diff · ${run} · ${cell} · ${diffPath}`,
+    });
+    paint();
+    return;
+  }
   diffUi.loading = true;
   diffUi.error = null;
   diffUi.diffText = null;
   diffUi.diffPath = diffPath;
   paint();
   try {
-    const url = `/api/history/diff?run=${encodeURIComponent(run)}&cell=${encodeURIComponent(cell)}&path=${encodeURIComponent(diffPath)}`;
+    const url = `/api/history/diff?run=${encodeURIComponent(pair.run_dir)}&sequence_index=${pair.sequence_index}&path=${encodeURIComponent(diffPath)}`;
     const res = await fetch(url);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
@@ -377,7 +424,7 @@ export async function loadDiff(run, cell, diffPath) {
       toast({
         code: data?.code ?? "diff_unreadable",
         reason: diffUi.error,
-        where: `GET /api/history/diff · ${run} · ${cell} · ${diffPath}`,
+        where: `GET /api/history/diff · ${pair.run_dir} · cell ${pair.sequence_index} · ${diffPath}`,
       });
     } else {
       diffUi.diffText = await res.text();

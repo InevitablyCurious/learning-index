@@ -2,7 +2,7 @@
 // { method, path, handle(req, res, url) }; paths are wire contract with the board.
 
 import { rename, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 import { refuse } from "../contract.mjs";
 // The benchmark tree (see tree.mjs).
@@ -18,11 +18,35 @@ import { readDevMode } from "../devmode.mjs";
 import { listRunCells, readCheckpointIndex, readDiffText, readTranscriptText } from "../history.mjs";
 import { playStatus, startPlay, stopPlay } from "../play.mjs";
 import { deleteRun, planRunDelete } from "../rundelete.mjs";
-import { readRunState } from "../runstate.mjs";
+import { readRunState, cellDirForRun } from "../runstate.mjs";
 import { BENCH_ROOT, RUNS_ROOT } from "../state.mjs";
 import { sendJson, sendText, readBody } from "../lib/http.mjs";
 import { treeResetGate, restoreGate } from "../lib/gates.mjs";
 import { stopRun } from "../lib/lifecycle.mjs";
+
+/** ?sequence_index= → an int ≥ 0, else null (the same parse the feed routes use). */
+function sequenceIndexParam(url) {
+  const raw = Number(url.searchParams.get("sequence_index"));
+  return Number.isInteger(raw) && raw >= 0 ? raw : null;
+}
+
+/**
+ * The wire pair (run, sequence_index) → the readers' pair (benchmark_id, cell),
+ * or null. `run` is the runs-root-relative run dir; cellDirForRun pins exactly
+ * one cell (never the newest), and the split re-derives what resolveCellDir
+ * re-joins and containment-checks.
+ */
+async function historyCellPair(runsRoot, run, sequenceIndex) {
+  if (!run || sequenceIndex == null) return null;
+  const resolved = await cellDirForRun(runsRoot, run, sequenceIndex);
+  if (!resolved) return null;
+  const segs = resolved.cellDir.split(sep);
+  if (segs.length < 2) return null;
+  return { benchmarkId: segs[0], cell: segs.slice(1).join(sep) };
+}
+
+/** The one refusal for a (run, sequence_index) pair that resolves nowhere. */
+const NO_CELL_REASON = "run + sequence_index resolved to no cell under the runs root";
 
 export const routes = [
   {
@@ -226,15 +250,17 @@ export const routes = [
 
   {
     // ── GET /api/history/checkpoints ── a cell's checkpoint index and diffs;
-    // none recorded degrades to nulls inside ok:true.
+    // none recorded degrades to nulls inside ok:true. The cell is addressed by
+    // (run, sequence_index) — the canonical identity — never by name.
     method: "GET",
     path: "/api/history/checkpoints",
     async handle(req, res, url) {
-      const r = await readCheckpointIndex(
-        RUNS_ROOT,
-        url.searchParams.get("run"),
-        url.searchParams.get("cell"),
-      );
+      const pair = await historyCellPair(RUNS_ROOT, url.searchParams.get("run"), sequenceIndexParam(url));
+      if (!pair) {
+        sendJson(res, 400, refuse("invalid_run", NO_CELL_REASON));
+        return;
+      }
+      const r = await readCheckpointIndex(RUNS_ROOT, pair.benchmarkId, pair.cell);
       if (r.ok) sendJson(res, 200, r);
       else sendJson(res, r.status, { ok: false, code: r.code, reason: r.reason });
       return;
@@ -246,12 +272,12 @@ export const routes = [
     method: "GET",
     path: "/api/history/diff",
     async handle(req, res, url) {
-      const r = await readDiffText(
-        RUNS_ROOT,
-        url.searchParams.get("run"),
-        url.searchParams.get("cell"),
-        url.searchParams.get("path"),
-      );
+      const pair = await historyCellPair(RUNS_ROOT, url.searchParams.get("run"), sequenceIndexParam(url));
+      if (!pair) {
+        sendJson(res, 400, refuse("invalid_run", NO_CELL_REASON));
+        return;
+      }
+      const r = await readDiffText(RUNS_ROOT, pair.benchmarkId, pair.cell, url.searchParams.get("path"));
       if (r.ok) sendText(res, 200, r.text, "text/plain; charset=utf-8");
       else sendJson(res, r.status, { ok: false, code: r.code, reason: r.reason });
       return;
@@ -263,11 +289,12 @@ export const routes = [
     method: "GET",
     path: "/api/history/transcript",
     async handle(req, res, url) {
-      const r = await readTranscriptText(
-        RUNS_ROOT,
-        url.searchParams.get("run"),
-        url.searchParams.get("cell"),
-      );
+      const pair = await historyCellPair(RUNS_ROOT, url.searchParams.get("run"), sequenceIndexParam(url));
+      if (!pair) {
+        sendJson(res, 400, refuse("invalid_run", NO_CELL_REASON));
+        return;
+      }
+      const r = await readTranscriptText(RUNS_ROOT, pair.benchmarkId, pair.cell);
       if (r.ok) sendText(res, 200, r.text, "text/markdown; charset=utf-8");
       else sendJson(res, r.status, { ok: false, code: r.code, reason: r.reason });
       return;

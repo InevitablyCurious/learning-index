@@ -139,21 +139,53 @@ test("FEEDBACK: run_dir traversal is refused, same as the wall", async () => {
 test("FEEDBACK: text can be omitted for an index, and that is stated", async () => {
   const dir = mkdtempSync(join(tmpdir(), "fb-"));
   try {
-    const cell = join(dir, "cumulative", "sessions", "cell-0");
+    const cell = join(dir, "cumulative", "memoryOFF", "cell-0000");
     mkdirSync(cell, { recursive: true });
     writeFileSync(
       join(cell, "worktree.user-events.jsonl"),
       '{"type":"user","kind":"feedback","attempt":2,"text":"body here"}\n',
     );
-    const withText = await readFeedback({ runsRoot: dir, runDir: "cumulative" });
+    const withText = await readFeedback({ runsRoot: dir, runDir: "cumulative", sequenceIndex: 0 });
     assert.equal(withText.messages[0].text, "body here");
     assert.equal(withText.text_included, true);
     assert.equal(withText.counts.feedback, 1);
 
-    const without = await readFeedback({ runsRoot: dir, runDir: "cumulative", includeText: false });
+    const without = await readFeedback({ runsRoot: dir, runDir: "cumulative", sequenceIndex: 0, includeText: false });
     assert.equal(without.text_included, false, "a client must tell 'no text here' from 'no text sent'");
     assert.equal(without.messages[0].text, undefined);
     assert.equal(without.messages[0].chars, "body here".length, "the length still reports");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("FEEDBACK: the cell is keyed by sequence_index — absent or unresolvable reads EMPTY, never the newest", async () => {
+  // The silent newest-cell fallback is dead: an unkeyed read (or a key that
+  // resolves nowhere) returns no messages and reports which cells exist,
+  // instead of selecting one nobody asked for.
+  const dir = mkdtempSync(join(tmpdir(), "fb-"));
+  try {
+    const cell = join(dir, "cumulative", "memoryOFF", "cell-0000");
+    mkdirSync(cell, { recursive: true });
+    writeFileSync(
+      join(cell, "worktree.user-events.jsonl"),
+      '{"type":"user","kind":"feedback","attempt":2,"text":"body here"}\n',
+    );
+
+    const unkeyed = await readFeedback({ runsRoot: dir, runDir: "cumulative" });
+    assert.equal(unkeyed.ok, true);
+    assert.equal(unkeyed.cell, null);
+    assert.deepEqual(unkeyed.messages, []);
+    assert.deepEqual(unkeyed.cells, ["cell-0000"], "what exists is reported, not selected");
+
+    const missing = await readFeedback({ runsRoot: dir, runDir: "cumulative", sequenceIndex: 5 });
+    assert.equal(missing.ok, true);
+    assert.equal(missing.cell, null);
+    assert.deepEqual(missing.messages, [], "an index that resolves nowhere never falls back to cell-0000");
+
+    const keyed = await readFeedback({ runsRoot: dir, runDir: "cumulative", sequenceIndex: 0 });
+    assert.equal(keyed.cell, "cell-0000");
+    assert.equal(keyed.messages[0].text, "body here");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -8,7 +8,7 @@ import { readGateActivity } from "../gate-events.mjs";
 import { readFeedback, feedbackRows } from "../feedback.mjs";
 import { readBackendFeed } from "../backend-feed.mjs";
 import { collectStats, readStatsBaseline } from "../runstats.mjs";
-import { readRunState, logPathForRunDir, cellDirForRun } from "../runstate.mjs";
+import { readRunState, logPathForRunDir } from "../runstate.mjs";
 import {
   ring,
   BENCH_ROOT,
@@ -43,14 +43,12 @@ export const routes = [
         // plus the verbatim prompts (worktree.user-events.jsonl), in one EventRing.
         const persisted = await readAgentEvents({ runsRoot: RUNS_ROOT, runDir: requestedRunDir, since: 0, limit: null, sequenceIndex });
 
-        // The prompts, scoped to the cell when sequence_index is given. A read
-        // failure degrades to the agent rows alone.
+        // The prompts, scoped to the cell by sequence_index (absent or
+        // unresolvable reads empty, never the newest cell). A read failure
+        // degrades to the agent rows alone.
         let promptRows = [];
         try {
-          const cellName = sequenceIndex != null
-            ? (await cellDirForRun(RUNS_ROOT, requestedRunDir, sequenceIndex))?.cellName ?? null
-            : null;
-          const fb = await readFeedback({ runsRoot: RUNS_ROOT, runDir: requestedRunDir, cell: cellName, limit: 0 });
+          const fb = await readFeedback({ runsRoot: RUNS_ROOT, runDir: requestedRunDir, sequenceIndex, limit: 0 });
           if (fb.ok) promptRows = feedbackRows(fb.messages, { runDir: fb.run_dir, cell: fb.cell });
         } catch {
           promptRows = [];
@@ -184,16 +182,20 @@ export const routes = [
 
   {
     // ── GET /api/feedback ── the graded text the model was told, verbatim.
-    //   ?run_dir=  default the active run   ?cell=  default the newest cell
-    //   ?limit=    default 50, newest last  ?text=0  index only
+    //   ?run_dir=         default the active run
+    //   ?sequence_index=  the cell selector; absent (or resolving nowhere)
+    //                     reads empty, never the newest cell
+    //   ?limit=           default 50, newest last   ?text=0  index only
     method: "GET",
     path: "/api/feedback",
     async handle(req, res, url) {
       const limitRaw = Number(url.searchParams.get("limit"));
+      const seqRaw = Number(url.searchParams.get("sequence_index"));
+      const sequenceIndex = Number.isInteger(seqRaw) && seqRaw >= 0 ? seqRaw : null;
       const result = await readFeedback({
         runsRoot: RUNS_ROOT,
         runDir: url.searchParams.get("run_dir") ?? (await activeRunDir()),
-        cell: url.searchParams.get("cell"),
+        sequenceIndex,
         limit: Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 50,
         includeText: url.searchParams.get("text") !== "0",
       });

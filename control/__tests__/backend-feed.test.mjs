@@ -33,7 +33,7 @@ test("BACKEND FEED: two streams merge into one ordered view", async () => {
   );
 
   try {
-    const feed = await readBackendFeed({ runsRoot: join(root, "runs"), runDir: "cumulative", logPath: log });
+    const feed = await readBackendFeed({ runsRoot: join(root, "runs"), runDir: "cumulative", logPath: log, sequenceIndex: 0 });
 
     // ORDERED BY TIME ACROSS BOTH FILES — the control plane's `run_queued` at
     // 900 precedes the cell's own first record.
@@ -75,7 +75,7 @@ test("BACKEND FEED: a gate.result row surfaces the runner's own per-gate facts",
   );
 
   try {
-    const feed = await readBackendFeed({ runsRoot: join(root, "runs"), runDir: "cumulative", logPath: null });
+    const feed = await readBackendFeed({ runsRoot: join(root, "runs"), runDir: "cumulative", logPath: null, sequenceIndex: 0 });
     const [graded, notRun] = feed.rows;
     assert.deepEqual(graded.detail, { id: "G14", status: "pass", phase: "backend", duration_ms: 87123 });
     assert.equal(graded.source, "harness", "a core kind keeps its default chip");
@@ -126,7 +126,7 @@ test("ERROR LOG: an error outside the activity window is still kept", async () =
     }
     writeFileSync(join(cell, "live.jsonl"), text);
 
-    const feed = await readBackendFeed({ runsRoot: join(root, "runs"), runDir: "c", logPath: log });
+    const feed = await readBackendFeed({ runsRoot: join(root, "runs"), runDir: "c", logPath: log, sequenceIndex: 0 });
 
     assert.equal(feed.windowed, true, "the fixture must actually exceed the window");
     assert.ok(!feed.rows.some((r) => r.event === "worker_died_mid_file"), "the tail dropped it, as designed");
@@ -203,6 +203,87 @@ test("BACKEND FEED: a missing stream is stated, never rendered as silence", asyn
     assert.deepEqual(feed.rows, []);
     assert.equal(feed.sources.live.attached, false);
     assert.equal(feed.sources.notices.attached, false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("BACKEND FEED: an unkeyed request gets NO live half, never the newest cell's stream", async () => {
+  // The fallback this replaces resolved "newest cell by mtime" — with N cells
+  // in flight that silently showed one cell's stream to a request that named
+  // no cell. Absence of a key now means absence of live data, not a guess.
+  // The run-scoped notices half is unaffected: it was never cell-keyed.
+  const { readBackendFeed } = await import("../backend-feed.mjs");
+  const root = mkdtempSync(join(tmpdir(), "okp-bfeed-unkeyed-"));
+  const cell = join(root, "runs", "cumulative", "memoryOFF", "cell-0000");
+  mkdirSync(cell, { recursive: true });
+  const log = join(root, "cell.log");
+  const J = (o) => `${JSON.stringify(o)}\n`;
+  try {
+    writeFileSync(join(cell, "live.jsonl"), J({ v: 1, ts: 1000, kind: "cell.start" }));
+    writeFileSync(
+      `${log}.notices.jsonl`,
+      J({ v: 1, ts: 900, kind: "notice", source: "control", event: "run_queued", level: "info" }),
+    );
+
+    const feed = await readBackendFeed({ runsRoot: join(root, "runs"), runDir: "cumulative", logPath: log });
+    assert.equal(feed.sources.live.attached, false, "no cell named, no live stream read");
+    assert.equal(feed.sources.live.path, false);
+    assert.ok(!feed.rows.some((r) => r.kind === "cell.start"), "the newest cell's rows are NOT silently shown");
+    assert.deepEqual(feed.rows.map((r) => r.event), ["run_queued"], "the run-scoped notices half still answers");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("BACKEND FEED: a requested cell that is not there yields empty, never another cell's data", async () => {
+  // The wrong-cell read this surface exists to prevent: asking for a cell that
+  // does not exist must answer "nothing", not "here is cell-0000 instead".
+  const { readBackendFeed } = await import("../backend-feed.mjs");
+  const root = mkdtempSync(join(tmpdir(), "okp-bfeed-missing-"));
+  const cell = join(root, "runs", "cumulative", "memoryOFF", "cell-0000");
+  mkdirSync(cell, { recursive: true });
+  const J = (o) => `${JSON.stringify(o)}\n`;
+  try {
+    writeFileSync(join(cell, "live.jsonl"), J({ v: 1, ts: 1000, kind: "cell.start" }));
+    const feed = await readBackendFeed({
+      runsRoot: join(root, "runs"),
+      runDir: "cumulative",
+      logPath: null,
+      sequenceIndex: 999,
+    });
+    assert.equal(feed.ok, true, "a missing cell is a real state, never a 500");
+    assert.deepEqual(feed.rows, []);
+    assert.equal(feed.sources.live.attached, false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("BACKEND FEED: the requested cell yields exactly its own rows", async () => {
+  // Two cells, two streams, one request: the answer is the named cell's rows
+  // and nothing else — the identity the (run_dir, sequence_index) key exists
+  // to carry.
+  const { readBackendFeed } = await import("../backend-feed.mjs");
+  const root = mkdtempSync(join(tmpdir(), "okp-bfeed-keyed-"));
+  const cellA = join(root, "runs", "cumulative", "memoryOFF", "cell-0000");
+  const cellB = join(root, "runs", "cumulative", "memoryON", "cell-0001");
+  mkdirSync(cellA, { recursive: true });
+  mkdirSync(cellB, { recursive: true });
+  const J = (o) => `${JSON.stringify(o)}\n`;
+  try {
+    writeFileSync(join(cellA, "live.jsonl"), J({ v: 1, ts: 1000, kind: "cell.start", session_id: "ses_a" }));
+    writeFileSync(join(cellB, "live.jsonl"), J({ v: 1, ts: 2000, kind: "cell.start", session_id: "ses_b" }));
+
+    const feed = await readBackendFeed({
+      runsRoot: join(root, "runs"),
+      runDir: "cumulative",
+      logPath: null,
+      sequenceIndex: 1,
+    });
+    assert.equal(feed.sources.live.attached, true);
+    assert.equal(feed.rows.length, 1);
+    assert.equal(feed.rows[0].detail.session_id, "ses_b", "exactly the requested cell's stream");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
