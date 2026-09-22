@@ -96,6 +96,9 @@ def _build_runner(module: Any, tmp_path: Path, *, runs_dir: Path | None = None) 
     runner._run_manifest_written = False
     runner._runner_cls = _FakeRunner
     runner._spend_meter = _FakeSpendMeter()
+    # run_identity contract: _state_for_session reads self._run_identity
+    # (normally initialized in __init__, which __new__ skips).
+    runner._run_identity = "test-run-identity"
     return runner
 
 
@@ -120,7 +123,11 @@ class _FakeRunner:
         self._kwargs = kwargs
 
     def run_cell(
-        self, run_label: str, run_dir: Path, task_id: str = "backgammon"
+        self,
+        run_label: str,
+        run_dir: Path,
+        task_id: str = "backgammon",
+        run_identity: str | None = None,
     ) -> Any:
         return _cell_result()
 
@@ -299,7 +306,11 @@ def test_turn_terminal_records_appended_for_truncated_turns(tmp_path: Path) -> N
             self._kwargs = kwargs
 
         def run_cell(
-            self, run_label: str, run_dir: Path, task_id: str = "backgammon"
+            self,
+            run_label: str,
+            run_dir: Path,
+            task_id: str = "backgammon",
+            run_identity: str | None = None,
         ) -> Any:
             return result
 
@@ -364,7 +375,11 @@ def test_scoring_turn_exclusions_reach_the_status_stream(tmp_path: Path) -> None
             self._kwargs = kwargs
 
         def run_cell(
-            self, run_label: str, run_dir: Path, task_id: str = "backgammon"
+            self,
+            run_label: str,
+            run_dir: Path,
+            task_id: str = "backgammon",
+            run_identity: str | None = None,
         ) -> Any:
             return result
 

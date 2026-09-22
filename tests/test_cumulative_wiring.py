@@ -33,11 +33,18 @@ def test_real_session_runner_forwards_proxy_creds_to_backgammon_runner(
             captured.update(kwargs)
 
         def run_cell(
-            self, run_label: str, run_dir: Path, task_id: str = "backgammon"
+            self,
+            run_label: str,
+            run_dir: Path,
+            task_id: str = "backgammon",
+            run_identity: str | None = None,
         ) -> Any:
             return type("_R", (), {"session_id": "sid-1", "verdict": "PASS"})()
 
     runner._session_states = {}
+    # run_identity contract: _state_for_session reads self._run_identity
+    # (normally set in __init__, which __new__ skips).
+    runner._run_identity = "test-run-identity"
     # WO-ERRDATA-C4: run_session accumulates per-cell error counts into
     # _error_totals (normally initialized in __init__, which __new__ skips).
     runner._error_totals = {
@@ -94,7 +101,11 @@ def test_error_cap_per_type_aborts_the_whole_benchmark(tmp_path: Path) -> None:
             pass
 
         def run_cell(
-            self, run_label: str, run_dir: Path, task_id: str = "backgammon"
+            self,
+            run_label: str,
+            run_dir: Path,
+            task_id: str = "backgammon",
+            run_identity: str | None = None,
         ) -> Any:
             return type(
                 "_R",
@@ -107,6 +118,9 @@ def test_error_cap_per_type_aborts_the_whole_benchmark(tmp_path: Path) -> None:
             )()
 
     runner._session_states = {}
+    # run_identity contract: _state_for_session reads self._run_identity
+    # (normally set in __init__, which __new__ skips).
+    runner._run_identity = "test-run-identity"
     runner._error_totals = {
         "guard_aborted_turns": 18,
         "finalize_timeout_turns": 0,

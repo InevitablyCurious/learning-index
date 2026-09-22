@@ -46,6 +46,7 @@ class GradingMixin:
         report_path: Path,
         log_path: Path,
         attempt: int | None = None,
+        run_identity: str | None = None,
     ) -> dict[str, Any]:
         """Run the gate oracle, STREAMING its output to ``log_path`` as it runs.
 
@@ -89,13 +90,14 @@ class GradingMixin:
         # container is inconvenient, and then a result exists that nobody can
         # reproduce.
         assert_grader_image_available()
-        grade_container = grading_container_name(report_path)
+        grade_container = grading_container_name(report_path, run_identity=run_identity)
         gate_cmd = gate_argv(
             worktree=worktree,
             report_path=report_path,
             roster_path=self.gate_roster_path,
             attempt=attempt,
             worker_target=self.grader_worker_target,
+            run_identity=run_identity,
         )
         # `docker` is invoked from the repo root; the gates travel inside the
         # image, so there is no gates directory for this process to stand in.

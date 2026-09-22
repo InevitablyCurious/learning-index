@@ -56,7 +56,7 @@ def assert_image_available(image: str = IMAGE) -> None:
         )
 
 
-def container_name(report_path: Path) -> str:
+def container_name(report_path: Path, *, run_identity: str | None = None) -> str:
     """A deterministic name for the grading container.
 
     ── WHY IT NEEDS ONE ────────────────────────────────────────────────────────
@@ -68,11 +68,16 @@ def container_name(report_path: Path) -> str:
 
     A name the caller can compute without the client makes it killable. Derived
     from the report path, so it identifies the cell and the attempt rather than
-    being a random id nobody can trace back.
+    being a random id nobody can trace back. When ``run_identity`` is given it
+    rides FIRST in the derived part, so the ``[:120]`` clip takes the tail and
+    never the id — concurrent run-instances cannot collide on this name.
     """
     cell = report_path.parent.name or "cell"
     stem = report_path.stem  # attempt-N-report
-    safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in f"{cell}-{stem}")
+    identity = f"{run_identity}-" if run_identity else ""
+    safe = "".join(
+        ch if ch.isalnum() or ch in "-_" else "-" for ch in f"{identity}{cell}-{stem}"
+    )
     return f"bench-grade-{safe.strip('-').lower()}"[:120]
 
 
@@ -102,6 +107,7 @@ def gate_argv(
     worker_target: float | None = None,
     workers: int | None = None,
     image: str = IMAGE,
+    run_identity: str | None = None,
 ) -> list[str]:
     """`docker run ...` for one grading pass.
 
@@ -117,7 +123,7 @@ def gate_argv(
         # container running, because it belongs to the daemon and not to the
         # process group the harness spawned. See `container_name`.
         "--name",
-        container_name(report_path),
+        container_name(report_path, run_identity=run_identity),
         "--network",
         "none",
         "-v",

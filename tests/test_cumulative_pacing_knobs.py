@@ -59,7 +59,11 @@ def test_pacing_knobs_env_unset_uses_defaults_without_optional_runner_overrides(
             captured.update(kwargs)
 
         def run_cell(
-            self, run_label: str, run_dir: Path, task_id: str = "backgammon"
+            self,
+            run_label: str,
+            run_dir: Path,
+            task_id: str = "backgammon",
+            run_identity: str | None = None,
         ) -> Any:
             return type("_R", (), {"session_id": "sid-default", "verdict": "PASS"})()
 
@@ -88,7 +92,11 @@ def test_pacing_knobs_env_set_forwards_runner_constructor_overrides(
             captured.update(kwargs)
 
         def run_cell(
-            self, run_label: str, run_dir: Path, task_id: str = "backgammon"
+            self,
+            run_label: str,
+            run_dir: Path,
+            task_id: str = "backgammon",
+            run_identity: str | None = None,
         ) -> Any:
             return type("_R", (), {"session_id": "sid-env", "verdict": "PASS"})()
 

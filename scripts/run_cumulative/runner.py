@@ -17,6 +17,7 @@ import logging
 import os
 import shutil
 import subprocess
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -120,10 +121,16 @@ def _read_proxy_served_identity(proxy_runs_dir: Path | None = None) -> str | Non
 
 class _SessionRunState:
     def __init__(
-        self, *, run_label: str, run_dir: Path, last_session_id: str | None = None
+        self,
+        *,
+        run_label: str,
+        run_dir: Path,
+        run_identity: str,
+        last_session_id: str | None = None,
     ) -> None:
         self.run_label = run_label
         self.run_dir = run_dir
+        self.run_identity = run_identity
         self.last_session_id = last_session_id
 
 
@@ -177,6 +184,7 @@ class RealSessionRunner:
         require_todos: bool = False,
         grader_worker_target: float | None = None,
         seed_snapshot: str | None = None,
+        run_identity: str | None = None,
     ) -> None:
         self._task = task
         self._org_id = org_id
@@ -265,6 +273,11 @@ class RealSessionRunner:
         )
         self._run_manifest_written = False
         self._seed = seed
+        # Run-instance identity: normally generated ONCE in main() and shared
+        # with the ProcessReaper so its anchored sweep (name=-{run_identity}$)
+        # matches exactly this run's containers. The uuid fallback covers
+        # direct construction (tests / embedding) where main() never ran.
+        self._run_identity = run_identity or uuid.uuid4().hex[:12]
 
     def _progress(self, message: str) -> None:
         _LOG.info("run_cumulative.progress %s", message)
@@ -868,7 +881,11 @@ class RealSessionRunner:
             / _mode_dir(session.memory_mode)
             / f"cell-{session.sequence_index:04d}"
         )
-        state = _SessionRunState(run_label=run_label, run_dir=run_dir)
+        state = _SessionRunState(
+            run_label=run_label,
+            run_dir=run_dir,
+            run_identity=self._run_identity,
+        )
         self._session_states[session.sequence_index] = state
         return state
 
@@ -1030,12 +1047,14 @@ class RealSessionRunner:
         # convention as the pacing knobs above.
         cloud_slug = getattr(self, "_cloud_slug", None)
         if cloud_slug is not None:
-            worker_proxy_base_url = worker_model_base_url(state.run_label, cloud=True)
+            worker_proxy_base_url = worker_model_base_url(
+                state.run_identity, cloud=True
+            )
         elif self._proxy_base_url is not None:
             worker_proxy_base_url = self._proxy_base_url
         else:
             worker_proxy_base_url = resolve_worker_spend_proxy_base_url(
-                run_label=state.run_label
+                run_label=state.run_identity
             )
 
         # WO-SNAP-04: dev-mode seeding, resolved and validated BEFORE the
@@ -1138,7 +1157,9 @@ class RealSessionRunner:
         # parsing the run label. Set as an attribute rather than a constructor
         # argument so an adapter that predates the live stream still works.
         runner._cell_seq = int(session.sequence_index)
-        result = runner.run_cell(state.run_label, state.run_dir)
+        result = runner.run_cell(
+            state.run_label, state.run_dir, run_identity=state.run_identity
+        )
         session.produced_snapshot_id = getattr(result, "produced_snapshot_id", None)
         state.last_session_id = result.session_id or state.last_session_id
 
@@ -1279,6 +1300,11 @@ def _build_real_runner(
     )
     verify_worker_model_acceptance(models=accepted_models, logger=_LOG)
 
+    # Generated ONCE per run-instance in main() and stashed on args, so the
+    # reaper and this runner share the SAME identity suffix. getattr: absent on
+    # paths where main() never ran (direct construction in tests).
+    run_identity = getattr(args, "run_identity", None)
+
     return RealSessionRunner(
         task=str(args.task),
         org_id=str(args.org),
@@ -1302,4 +1328,5 @@ def _build_real_runner(
         # only `run` builds a real runner). Absent/empty means no seeding —
         # the normal scaffold+build run.
         seed_snapshot=str(getattr(args, "seed_snapshot", "") or "").strip() or None,
+        run_identity=run_identity,
     )

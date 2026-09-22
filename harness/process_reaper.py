@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import shutil
 import signal
 import socket
@@ -199,11 +198,16 @@ class ProcessReaper:
         self,
         *,
         run_label: str = "bench",
+        run_identity: str | None = None,
         bench_ports: list[int] | None = None,
         logger: logging.Logger | None = None,
         process_provider: Callable[[], Sequence[int]] | None = None,
     ) -> None:
         self.run_label = run_label or "bench"
+        # Run-instance identity (12-hex uuid4 token shared by every cell of
+        # THIS run). The ONLY safe key for the cell-container sweep; run_label
+        # is display/reporting only.
+        self.run_identity = run_identity
         self.bench_ports = list(bench_ports or [])
         self.log = logger or _LOG
         self._process_provider = process_provider or _default_process_provider
@@ -290,25 +294,41 @@ class ProcessReaper:
         return killed
 
     def _remove_cell_containers(self) -> list[str]:
-        """Force-remove leaked bench cell containers. Never fails the reaper.
+        """Force-remove THIS run's leaked bench cell containers. Never fails.
 
         Cell workers are plain ``docker run`` containers named
-        ``bench-cell-<run_label>``; the run path removes its own on a
-        clean exit, so anything still present here is a crash leak. Scoped by
-        this reaper's own run label — an unscoped prefix sweep would remove
-        OTHER runs' live cells (and did: reaper unit tests force-removing
-        parallel xdist docker-isolation cells was the suite's flake class).
+        ``bench-cell-<label>-<run_identity>``, where ``run_identity`` is a
+        12-hex token generated once per run-instance and shared by all of that
+        run's cells; the run path removes its own on a clean exit, so anything
+        still present here is a crash leak. The sweep is anchored to THIS
+        run's identity suffix (``name=-<run_identity>$`` — docker's ``name=``
+        filter is a regex match, same anchoring idiom as cell_isolation), so
+        it can only ever match this run-instance's containers and NEVER a
+        sibling run's live cells. The old ``name=bench-cell-<label>``
+        substring filter is gone entirely: unanchored, it could match sibling
+        runs (an unscoped sweep force-removing a parallel run's live cell is
+        this suite's historical flake class), and as constructed it matched
+        nothing at all — the reaper was built with the TASK label, not the
+        cell label (RUNBOOK.md dead-filter incident). With no run_identity
+        there is nothing safe to match: log a warning and remove nothing.
+        Best-effort cleanup in a ``finally`` block must never raise and never
+        guess.
         """
+        if self.run_identity is None:
+            self.log.warning(
+                "process_reaper no run_identity; skipping cell container sweep "
+                "(an unscoped sweep must never guess)"
+            )
+            return []
         docker = shutil.which("docker")
         if docker is None:
             self.log.info(
                 "process_reaper docker unavailable; skipping cell container sweep"
             )
             return []
-        label = re.sub(r"[^a-zA-Z0-9_.-]", "-", self.run_label)
         try:
             out = subprocess.run(
-                [docker, "ps", "-aq", "--filter", f"name=bench-cell-{label}"],
+                [docker, "ps", "-aq", "--filter", f"name=-{self.run_identity}$"],
                 capture_output=True,
                 text=True,
                 timeout=15,

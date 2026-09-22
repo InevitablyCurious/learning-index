@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Callable
 
@@ -449,7 +450,16 @@ def main() -> int:
     try:
         run_label = getattr(args, "task", None) or "bench"
         bench_ports = _discover_bench_ports()
-        reaper = ProcessReaper(run_label=run_label, bench_ports=bench_ports)
+        # ONE identity per run-instance, generated at process entry and shared
+        # with BOTH the reaper and the session runner (via args) so the reaper's
+        # anchored sweep (name=-{run_identity}$) matches exactly the containers
+        # this run creates.
+        args.run_identity = uuid.uuid4().hex[:12]
+        reaper = ProcessReaper(
+            run_label=run_label,
+            bench_ports=bench_ports,
+            run_identity=args.run_identity,
+        )
         return handler(args)
     finally:
         _LOG.info("process_reaper: unconditional reap entering finally")

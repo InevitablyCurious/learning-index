@@ -224,11 +224,39 @@ def test_transient_probe_error_retries_to_clear(monkeypatch):
     assert calls["n"] == pr._PORT_CLEAR_ATTEMPTS
 
 
-def test_cell_container_sweep_is_scoped_to_run_label(monkeypatch):
-    """The container sweep filters by THIS reaper's run label, never the bare
-    ``bench-cell-`` prefix. Regression: an unscoped sweep force-removed
-    other xdist workers' live docker-isolation cells mid-test (the recurring
-    'container is not running' flake class)."""
+def test_cell_container_sweep_is_scoped_to_run_identity(monkeypatch):
+    """The container sweep is anchored to THIS run-instance's identity suffix
+    (``name=-<run_identity>$``), never the bare ``bench-cell-`` prefix and
+    never the run label. Regression: an unscoped sweep force-removed other
+    xdist workers' live docker-isolation cells mid-test (the recurring
+    'container is not running' flake class), and the old label filter — built
+    from the TASK label, unanchored — matched nothing at all."""
+    import harness.process_reaper as pr
+
+    calls: list[list[str]] = []
+
+    def fake_run(argv, **kwargs):
+        calls.append(list(argv))
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(pr.shutil, "which", lambda name: f"/fake/{name}")
+    monkeypatch.setattr(pr.subprocess, "run", fake_run)
+
+    reaper = ProcessReaper(run_label="my-run-42", run_identity="abc123")
+    removed = reaper._remove_cell_containers()
+
+    assert removed == []
+    assert calls == [
+        ["/fake/docker", "ps", "-aq", "--filter", "name=-abc123$"]
+    ]
+
+
+def test_cell_container_sweep_without_run_identity_sweeps_nothing(monkeypatch):
+    """No run_identity => no sweep at all: returns [], invokes no docker.
+
+    Best-effort cleanup in a ``finally`` block must never raise and must never
+    guess a filter — without the run-instance identity there is no anchored
+    key, so the reaper refuses to touch any container."""
     import harness.process_reaper as pr
 
     calls: list[list[str]] = []
@@ -244,9 +272,7 @@ def test_cell_container_sweep_is_scoped_to_run_label(monkeypatch):
     removed = reaper._remove_cell_containers()
 
     assert removed == []
-    assert calls == [
-        ["/fake/docker", "ps", "-aq", "--filter", "name=bench-cell-my-run-42"]
-    ]
+    assert calls == []
 
 
 def test_reap_report_fields_and_unconditional():

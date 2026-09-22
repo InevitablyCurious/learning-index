@@ -59,15 +59,20 @@ def test_run_cell_forwards_cell_identity_and_no_memory(
 
     # The fake's signature no longer ACCEPTS the removed memory kwarg: if
     # `run_cell` tried to pass one, this would raise TypeError and fail here.
+    # `run_identity` IS legitimate cell identity (normalized once per cell by
+    # `run_cell`), so the strict keyword-only signature accepts it — and only
+    # it, run_label, run_dir, task_id.
     def _fake_run_cell_impl(
         *,
         run_label: str,
         run_dir: Path,
         task_id: str,
+        run_identity: str | None = None,
     ) -> ChallengeCellResult:
         captured["run_label"] = run_label
         captured["run_dir"] = run_dir
         captured["task_id"] = task_id
+        captured["run_identity"] = run_identity
         return ChallengeCellResult(
             verdict="PASS",
             attempts_to_green=0,
@@ -95,6 +100,8 @@ def test_run_cell_forwards_cell_identity_and_no_memory(
     assert captured["run_label"] == "run-no-direct-injection"
     assert captured["task_id"] == "backgammon"
     assert captured["run_dir"] == run_dir
+    # run_identity is normalized by run_cell before forwarding: never None.
+    assert isinstance(captured["run_identity"], str) and captured["run_identity"]
     assert result.verdict == "PASS"
 
 

@@ -39,6 +39,7 @@ import re
 import shutil
 import subprocess
 import time
+import uuid
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Callable
@@ -662,8 +663,17 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         return entry
 
     def run_cell(
-        self, run_label: str, run_dir: Path, task_id: str | None = None
+        self,
+        run_label: str,
+        run_dir: Path,
+        task_id: str | None = None,
+        run_identity: str | None = None,
     ) -> ChallengeCellResult:
+        # One run-instance identity, normalized ONCE here so it is stable
+        # across every attempt of this cell: the cell container is created
+        # per CELL, not per attempt, and the grader name derives from the
+        # same token. Concurrent run-instances therefore cannot collide.
+        run_identity = run_identity or uuid.uuid4().hex[:12]
         # The challenge names itself: its directory is its id, so a second
         # challenge does not report under the example's name.
         task_id = task_id or self.task_dir.name
@@ -724,6 +734,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 run_label=run_label,
                 run_dir=run_dir,
                 task_id=task_id,
+                run_identity=run_identity,
             )
             verdict = str(getattr(result, "verdict", "") or "") or None
             # THE FIELD IS `termination_reason`. This read `terminal_reason`,
@@ -793,7 +804,14 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         run_label: str,
         run_dir: Path,
         task_id: str,
+        run_identity: str | None = None,
     ) -> ChallengeCellResult:
+        # Defensive normalization for direct callers of _run_cell_impl (tests
+        # call it without a run_identity): run_cell normalizes before it
+        # forwards, so this only fires on a direct call. Without it, a None
+        # would crash egress_container_name(None) (sha256 of None) or name the
+        # cell container `bench-cell-{label}-None`.
+        run_identity = run_identity or uuid.uuid4().hex[:12]
         # WO-LI15-I3B STAGE 3B: late-bound patch seams. Tests monkeypatch
         # DockerCell/docker_available/ServeClient/worker_image_fingerprint on
         # the PACKAGE (harness.adapters.challenge), so bind them as call-time
@@ -951,7 +969,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
             self._plugin_present = image_plugin_present()
 
             sanitized_label = re.sub(r"[^a-zA-Z0-9_.-]", "-", run_label)
-            container_name = f"bench-cell-{sanitized_label}"
+            container_name = f"bench-cell-{sanitized_label}-{run_identity}"
             stale_rm = subprocess.run(
                 ["docker", "rm", "-f", container_name],
                 capture_output=True,
@@ -998,10 +1016,10 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 worktree=worktree,
                 container_name=container_name,
                 # Egress contract (harness/egress.py): the sidecar name is
-                # derived from the RAW run label (sha256, DNS-safe by
+                # derived from the run_identity token (sha256, DNS-safe by
                 # construction) — NOT the sanitized container label — so it
                 # matches the URL run_cumulative/spend_key point the worker at.
-                egress_host=egress_container_name(run_label),
+                egress_host=egress_container_name(run_identity),
             )
             cell_context = DockerCell(
                 cell_config,
@@ -1358,6 +1376,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                             report_path=report_json,
                             log_path=gate_log,
                             attempt=attempt,
+                            run_identity=run_identity,
                         )
                     except GateTimeoutError as exc:
                         # A STALL IS NOT A VERDICT (WO-FEEDBACK-1).

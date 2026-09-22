@@ -469,6 +469,17 @@ class DockerCell:
                 f"PROGRESS egress-sidecar start name={self.config.egress_host} image={self.config.image}"
             )
             try:
+                # Stale-name guard: the sidecar name is run-unique, so this
+                # clears a leaked sidecar of THIS run's exact name (e.g. from a
+                # crashed prior run kept alive by --restart unless-stopped,
+                # holding the host serve port) and never a sibling's live
+                # sidecar. Mirrors the worker cell's docker rm -f guard.
+                subprocess.run(
+                    ["docker", "rm", "-f", self.config.egress_host],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
                 started_sidecar = subprocess.run(
                     sidecar_cmd,
                     capture_output=True,
