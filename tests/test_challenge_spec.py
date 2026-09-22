@@ -39,7 +39,7 @@ def test_the_adapter_reads_those_facts_rather_than_its_own() -> None:
 
     spec = default_spec()
     assert c._GRADER_DIR == spec.grader_dir
-    assert c._HOLD_UI_PORT == spec.app_port
+    assert c._HOLD_UI_PORT == 0  # auto-allocate sentinel (free per-cell port); no longer spec.app_port
     assert c._STUB_SENTINEL == spec.stub_sentinel
     assert c._CHUNK_STUB_FILE == spec.chunk_stub_files
     assert DECLARED_TEST_COMMANDS == spec.test_commands

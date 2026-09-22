@@ -8,10 +8,10 @@ THE LATE-BOUND _HOLD_UI_PORT SEAM. tests/test_hold_ui_review.py patches
 the port via monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", port)
 on the PACKAGE, and _hold_for_ui_review consumes it in seven places.
 This module therefore must NOT bind _HOLD_UI_PORT at import time: an
-import-time binding would freeze the default 8002 and silently ignore
-the patch, and a module-level __getattr__ cannot help — PEP 562 fires
-only on attribute access, never on the bare LOAD_GLOBAL references
-inside a function. Instead, _hold_for_ui_review reads the package
+import-time binding would freeze the default (0 = auto-allocate) and
+silently ignore the patch, and a module-level __getattr__ cannot help —
+PEP 562 fires only on attribute access, never on the bare LOAD_GLOBAL
+references inside a function. Instead, _hold_for_ui_review reads the package
 attribute ONCE at call time into a local of the same name, so the
 monkeypatched value is what the hold sees. The other _HOLD_UI_*
 constants are not patched anywhere, so importing them directly from
@@ -45,6 +45,7 @@ from .constants import (
     _HOLD_UI_SERVER_LOG,
     _HOLD_UI_STATE_FILE,
 )
+from harness.free_port import allocate_free_host_port
 
 
 def _resolve_hold_ui_entrypoint(worktree: Path) -> Path:
@@ -152,20 +153,26 @@ def _hold_for_ui_review(
     """Hold the cell stack for operator UI review until released.
 
     No-op unless BENCH_HOLD_UI=1. Boots the artifact's server host-side
-    from the worktree on :8002 (the gate boot, minus Playwright), then waits on
-    the RELEASE_HOLD sentinel. Never fails the cell: boot problems are logged
+    from the worktree on a per-cell FREE port passed to it as PORT (the
+    gate's assigned-port boot, minus Playwright), then waits on the
+    RELEASE_HOLD sentinel. Never fails the cell: boot problems are logged
     and the hold still proceeds (container + worktree stay inspectable). The
-    UI server is killed in a finally — the ProcessReaper does not watch 8002.
+    UI server is killed in a finally — the ProcessReaper does not watch it.
     """
     import harness.adapters.challenge as _pkg
     _HOLD_UI_PORT = _pkg._HOLD_UI_PORT  # late-bound: tests monkeypatch the package attr; read it once at call time
     if (os.environ.get(_HOLD_UI_ENV) or "").strip() != "1":
         return
 
+    # Per-cell free port: a fixed 8002 would collide when N held cells boot
+    # host-side at once. A positive value is a pin (tests monkeypatch it);
+    # 0 (the default) allocates a free port and passes it to the artifact.
+    port = int(_HOLD_UI_PORT) if int(_HOLD_UI_PORT) > 0 else allocate_free_host_port()
+
     release_path = run_dir / _HOLD_UI_RELEASE_FILE
     state_path = run_dir / _HOLD_UI_STATE_FILE
     server_log_path = run_dir / _HOLD_UI_SERVER_LOG
-    url = f"http://localhost:{_HOLD_UI_PORT}"
+    url = f"http://localhost:{port}"
 
     proc: subprocess.Popen[str] | None = None
     log_handle: Any = None
@@ -174,7 +181,7 @@ def _hold_for_ui_review(
 
     # A stale listener here is the audit's leaked-gate-server class; the gates
     # themselves SIGKILL it on every boot (harness.ts freePort). Mirrored.
-    for pid in _hold_ui_port_listeners(_HOLD_UI_PORT):
+    for pid in _hold_ui_port_listeners(port):
         try:
             os.kill(pid, signal.SIGKILL)
             progress(
@@ -196,7 +203,7 @@ def _hold_for_ui_review(
             proc = subprocess.Popen(
                 ["node", str(entrypoint)],
                 cwd=str(worktree),
-                env={**os.environ, "DEBUG_API": "1"},
+                env={**os.environ, "DEBUG_API": "1", "PORT": str(port)},
                 stdout=log_handle,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -213,7 +220,7 @@ def _hold_for_ui_review(
             while time.monotonic() < deadline:
                 if proc.poll() is not None:
                     break
-                if _hold_ui_healthy(_HOLD_UI_PORT):
+                if _hold_ui_healthy(port):
                     ui_healthy = True
                     break
                 time.sleep(0.25)
@@ -237,7 +244,7 @@ def _hold_for_ui_review(
         pass
 
     # Did the artifact actually bind loopback-only, as the prompt requires?
-    lan_exposure = _hold_ui_lan_exposed(_HOLD_UI_PORT) if ui_healthy else None
+    lan_exposure = _hold_ui_lan_exposed(port) if ui_healthy else None
     if lan_exposure is not None:
         progress(
             f"PROGRESS run_label={run_label} step=hold-ui bind=LAN_EXPOSED "
@@ -350,7 +357,7 @@ def _hold_for_ui_review(
                 server_alive = proc is not None and proc.poll() is None
                 progress(
                     f"PROGRESS run_label={run_label} step=hold-ui heartbeat "
-                    f"held_s={now - held_at:.0f} url={url} healthy={_hold_ui_healthy(_HOLD_UI_PORT)} "
+                    f"held_s={now - held_at:.0f} url={url} healthy={_hold_ui_healthy(port)} "
                     f"server_alive={server_alive}"
                 )
             time.sleep(_HOLD_UI_POLL_S)
@@ -370,11 +377,11 @@ def _hold_for_ui_review(
                 log_handle.close()
             except OSError:
                 pass
-        remaining = _hold_ui_port_listeners(_HOLD_UI_PORT)
+        remaining = _hold_ui_port_listeners(port)
         if remaining:
             progress(
                 f"PROGRESS run_label={run_label} step=hold-ui "
-                f"port_still_occupied port={_HOLD_UI_PORT} pids={remaining} "
+                f"port_still_occupied port={port} pids={remaining} "
                 "detail=not-our-server; left running"
             )
         try:

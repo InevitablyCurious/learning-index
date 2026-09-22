@@ -137,7 +137,7 @@ async function scanErrors(path) {
 const LIFTED_FIELDS = {
   "gate.result": ["id", "status", "phase", "duration_ms"],
   "run.start": ["task"],
-  "cell.start": ["arm", "model", "session_id"],
+  "cell.start": ["arm", "model", "session_id", "serve_host_port", "serve_url"],
   "phase.start": ["phase"],
   "attempt.end": ["attempt", "verdict", "conformed", "failed"],
   "cell.end": ["verdict", "terminal_reason"],

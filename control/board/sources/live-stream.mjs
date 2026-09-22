@@ -43,6 +43,10 @@ export async function read(ctx) {
   let sessionId = null;
   let cellSeq = null;
   let arm = null;
+  // The cell's own serve endpoint, as the producer stated it on cell.start
+  // (null on older streams).
+  let serveHostPort = null;
+  let serveUrl = null;
   let attempt = null;
   // The phase as the producer states it (phase.start); the regex-parsed
   // run.phase lags a whole grading pass.
@@ -68,6 +72,8 @@ export async function read(ctx) {
 
     if (kind === "cell.start") {
       arm = str(r.arm) ?? arm;
+      serveHostPort = int(r.serve_host_port) ?? serveHostPort;
+      serveUrl = str(r.serve_url) ?? serveUrl;
       continue;
     }
     if (kind === "cell.end") {
@@ -196,6 +202,8 @@ export async function read(ctx) {
         session_id: sessionId,
         cell_seq: cellSeq,
         arm,
+        serve_host_port: serveHostPort,
+        serve_url: serveUrl,
         attempt,
         // `phase` is the newest transition, `phases` the ordered history. null when
         // no phase.start is visible (older run, or scrolled past): consumers fall back.

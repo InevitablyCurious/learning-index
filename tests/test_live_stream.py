@@ -52,6 +52,17 @@ def test_none_fields_are_omitted_never_written_as_null(tmp_path):
     assert "arm" not in rec
 
 
+def test_cell_start_carries_the_serve_port(tmp_path):
+    # The board discovers each cell's live-view host port from this record —
+    # the manifest/status only land at cell END. These field NAMES are the
+    # contract between the harness writer and the board's reader.
+    s = LiveStream.for_run(tmp_path, run_id="r1")
+    s.emit("cell.start", session_id="ses_abc", serve_host_port=18432, serve_url="http://127.0.0.1:18432")
+    (rec,) = _lines(s.path)
+    assert rec["serve_host_port"] == 18432
+    assert rec["serve_url"] == "http://127.0.0.1:18432"
+
+
 def test_ext_payload_is_opaque_and_passes_through_untouched(tmp_path):
     # The modularity claim: the harness does not read, validate or reshape a
     # backend's data. Anything JSON-serialisable survives byte for byte.

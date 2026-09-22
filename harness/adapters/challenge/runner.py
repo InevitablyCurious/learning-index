@@ -1083,6 +1083,8 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         session_id=cell_session_id,
                         arm=str(getattr(self, "memory_mode", "") or "") or None,
                         model=str(getattr(self, "model", "") or "") or None,
+                        serve_host_port=int(self.serve_host_port),
+                        serve_url=serve_base,
                     )
                 self._progress(
                     "PROGRESS step=live-view "

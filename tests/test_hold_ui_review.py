@@ -68,6 +68,35 @@ def _mk_worktree(tmp_path: Path, port: int) -> Path:
     return worktree
 
 
+def _stub_server_port_env() -> str:
+    """Stub that honors the PORT env (unlike _stub_server, which bakes the
+    port in) — the auto-allocation test needs it to prove the hold passes its
+    allocated port through to the artifact."""
+    return (
+        "const http = require('http');\n"
+        "const PORT = Number(process.env.PORT ?? 8002);\n"
+        "const srv = http.createServer((req, res) => {\n"
+        "  if (req.url === '/health') { res.writeHead(200); res.end('ok'); return; }\n"
+        "  res.writeHead(200, { 'content-type': 'text/html' });\n"
+        "  res.end('<html><body>stub-ui</body></html>');\n"
+        "});\n"
+        "srv.listen(PORT, '0.0.0.0');\n"
+    )
+
+
+def _mk_worktree_port_env(tmp_path: Path) -> Path:
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    (worktree / "package.json").write_text(
+        json.dumps(
+            {"name": "stub", "type": "commonjs", "scripts": {"start": "node server.js"}}
+        ),
+        encoding="utf-8",
+    )
+    (worktree / "server.js").write_text(_stub_server_port_env(), encoding="utf-8")
+    return worktree
+
+
 def _hold_kwargs(tmp_path: Path, worktree: Path, lines: list[str]) -> dict:
     return {
         "run_label": "test-hold",
@@ -137,6 +166,51 @@ def test_hold_boots_real_ui_and_release_tears_it_down(
     # boot health probe; re-prove the served page contract from the stub source.
     stub = _stub_server(_BOOT_TEST_PORT)
     assert "/health" in stub and "stub-ui" in stub
+
+
+def test_hold_auto_allocates_a_free_port_and_passes_it_as_port_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """_HOLD_UI_PORT=0 (the shipped default) must allocate a free per-cell
+    port and pass it to the artifact as PORT — a fixed 8002 collides when N
+    held cells boot host-side at once. The stub listens ONLY on the PORT env
+    value, so boot=ok on a non-8002 port proves the env reached the artifact
+    (the grader boots the same way: grader/lib/harness.ts)."""
+    monkeypatch.setenv(_HOLD_UI_ENV, "1")
+    monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", 0)
+    worktree = _mk_worktree_port_env(tmp_path)
+    lines: list[str] = []
+    # The state file is unlinked at release, so capture it DURING the hold.
+    captured: dict = {}
+
+    def _capture_then_release() -> None:
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            state_file = tmp_path / _HOLD_UI_STATE_FILE
+            if state_file.exists():
+                time.sleep(0.5)
+                captured.update(json.loads(state_file.read_text(encoding="utf-8")))
+                (tmp_path / _HOLD_UI_RELEASE_FILE).write_text(
+                    "release\n", encoding="utf-8"
+                )
+                return
+            time.sleep(0.2)
+
+    grabber = threading.Thread(target=_capture_then_release, daemon=True)
+    grabber.start()
+
+    _hold_for_ui_review(**_hold_kwargs(tmp_path, worktree, lines))
+    grabber.join(timeout=25)
+
+    joined = "\n".join(lines)
+    assert "step=hold-ui boot=ok" in joined
+    assert captured, "hold never published its state file"
+    assert captured["ui_healthy"] is True
+    port = int(captured["url"].rsplit(":", 1)[1])
+    assert port != 8002, "hold must auto-allocate, not fall back to the spec port"
+    # The url the operator is handed (the waiting banner) carries the same port.
+    assert f"url=http://localhost:{port}" in joined
+    assert _port_free(port), "hold must leave no listener behind"
 
 
 def test_hold_survives_unresolvable_entrypoint(

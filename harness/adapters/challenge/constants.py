@@ -95,14 +95,15 @@ _REASONING_EFFORT_ENV = "BENCH_REASONING_EFFORT"
 
 # WO-HOLD-UI-1: opt-in post-cell observation window. When BENCH_HOLD_UI=1,
 # the cell's stack (container + worktree) is NOT torn down at benchmark end; the
-# artifact's UI server is booted host-side from the bind-mounted worktree on
-# :8002 — the exact bytes the model wrote, the same boot the gates perform
-# (grader/lib/harness.ts). The port MUST equal PORT there.
+# artifact's UI server is booted host-side from the bind-mounted worktree on a
+# per-cell FREE port passed to it as PORT — the exact bytes the model wrote,
+# the same assigned-port boot the gates perform (grader/lib/harness.ts). A
+# fixed :8002 would collide when N held cells boot host-side at once.
 # Release is operator-explicit: `touch <run_dir>/RELEASE_HOLD`. Teardown then
 # proceeds through the normal unconditional path (RC-6 is preserved — the hold
 # sits INSIDE the cell context, so every abort/interrupt still tears down).
 _HOLD_UI_ENV = "BENCH_HOLD_UI"
-_HOLD_UI_PORT = _SPEC.app_port
+_HOLD_UI_PORT = 0  # auto-allocate a free per-cell port; no longer spec.app_port
 _HOLD_UI_RELEASE_FILE = "RELEASE_HOLD"
 _HOLD_UI_STATE_FILE = "hold-ui.json"
 _HOLD_UI_SERVER_LOG = "hold-ui-server.log"

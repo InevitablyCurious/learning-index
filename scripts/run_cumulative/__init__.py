@@ -18,6 +18,7 @@ from typing import Any, Callable
 
 from harness import config
 from harness.cumulative.progress import progress_from_cell_result
+from harness.free_port import resolve_serve_host_port
 from harness.process_reaper import (
     ProcessReaper,
     run_reaper_unconditional,
@@ -449,6 +450,13 @@ def main() -> int:
         return handler(args)
     try:
         run_label = getattr(args, "task", None) or "bench"
+        # ONE free live-view host port per run-instance, allocated before the
+        # reaper reads it. With N concurrent cells (separate processes) each
+        # allocates its own free port; a pinned BENCH_SERVE_HOST_PORT is honored.
+        # resolve_serve_host_port() exports the chosen port to the env, so the
+        # two independent readers (RunConfig + ChallengeRunner) and this reaper
+        # all resolve the SAME value.
+        resolve_serve_host_port()
         bench_ports = _discover_bench_ports()
         # ONE identity per run-instance, generated at process entry and shared
         # with BOTH the reaper and the session runner (via args) so the reaper's
