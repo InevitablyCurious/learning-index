@@ -36,6 +36,11 @@ const ui = {
   // Tri-state: null = the server's default stands (it knows the context window);
   // true/false = the operator's override.
   compact: null,
+  // Toggle, default OFF = the current single-cell behaviour.
+  concurrency: false,
+  // String; the count N, default the verified ceiling. Stored as a string so a
+  // half-typed value survives; parsed at launch.
+  concurrencyN: "8",
 
   // "Working" and "refused" are different facts; never shown as each other.
   pending: false,
@@ -66,6 +71,8 @@ export function openCreate() {
   ui.arm = "off";
   ui.org = null;
   ui.compact = null;
+  ui.concurrency = false;
+  ui.concurrencyN = "8";
   ui.pending = false;
   ui.refusal = null;
   ui.launch = null;
@@ -166,6 +173,14 @@ export function toggleCreateCompact(shown) {
 
 export function setCreateQuery(q) {
   ui.query = String(q ?? "");
+}
+
+export function toggleCreateConcurrency() {
+  ui.concurrency = !ui.concurrency;
+}
+
+export function setCreateConcurrencyN(v) {
+  ui.concurrencyN = String(v ?? "");
 }
 
 export function setCreateProvider(p) {
@@ -513,6 +528,7 @@ function baselineConfirm(ledger) {
         })
       : line({ glyph: "·", text: "this cell IS the floor", meta: "an OFF baseline is measured against nothing — it is what everything else is subtracted from", kind: "ghost" })}
     ${compactOn ? "" : compactOffWarning(compactDefault)}
+    ${isOn ? "" : concurrencyControl()}
     ${seedWarning()}`;
 
   return shell({
@@ -537,6 +553,41 @@ function compactControl(compactOn, compactDefault) {
     <button class="ccompact-btn${overrideOff ? " override" : ""}" data-create-compact="${compactOn ? "on" : "off"}" aria-pressed="${compactOn}">
       COMPACT: ${compactOn ? "ON" : "OFF"}
     </button>`;
+}
+
+/**
+ * The concurrency control: how many cells this launch starts at once. OFF is
+ * the single-cell behaviour the board has always had. A count that is not a
+ * positive integer is refused here loudly — it never reaches the server as a
+ * guess. Above the verified ceiling of 8 is warned, never blocked.
+ */
+function concurrencyControl() {
+  const n = Number(ui.concurrencyN);
+  const valid = Number.isInteger(n) && n >= 1;
+  let note = "";
+  if (ui.concurrency && !valid) {
+    note = `
+      <div class="cwarn override" role="alert">
+        <span class="cwarn-head">${esc("CONCURRENT COUNT INVALID — LAUNCH WILL BE REFUSED")}</span>
+        <span class="cwarn-body">${esc(
+          `The number of cells at once must be a positive integer — got ${JSON.stringify(ui.concurrencyN)}.`,
+        )}</span>
+      </div>`;
+  } else if (ui.concurrency && n > 8) {
+    note = `
+      <div class="cwarn" role="note">
+        <span class="cwarn-head">${esc("ABOVE THE VERIFIED CEILING")}</span>
+        <span class="cwarn-body">${esc(
+          `${n} cells at once exceeds the verified ceiling of 8 — throughput may degrade, but it is allowed.`,
+        )}</span>
+      </div>`;
+  }
+  return `
+    <button class="cconcurrent-btn" data-create-concurrency="${ui.concurrency ? "on" : "off"}" aria-pressed="${ui.concurrency}">
+      CONCURRENT: ${ui.concurrency ? "ON" : "OFF"}
+    </button>
+    <input class="cconcurrent-n" data-create-concurrency-n="1" value="${esc(ui.concurrencyN)}" inputmode="numeric" aria-label="cells at once"${ui.concurrency ? "" : " disabled"}>
+    ${note}`;
 }
 
 /**
@@ -634,6 +685,7 @@ export function openCellConfirm({ model, kind, arm = "off", org = null } = {}) {
   ui.arm = arm;
   ui.org = org;
   ui.compact = null;
+  ui.concurrency = false;
   ui.refusal = null;
   ui.launch = null;
   ui.step = "b3";
@@ -670,11 +722,26 @@ export async function launchCell({ model, kind, arm = null, org = null } = {}) {
     }
 
     ui.launch.start = { state: ROW.running };
+    // Concurrency: only the OFF/baseline arm. A count that is not a positive
+    // integer is a hard client-side refusal — never posted, never silently
+    // defaulted.
+    let concurrency = null;
+    if (ui.concurrency && (ui.arm ?? "off") !== "on") {
+      const n = Number(ui.concurrencyN);
+      if (!Number.isInteger(n) || n < 1) {
+        ui.launch.start = { state: ROW.fail, detail: `concurrency must be a positive integer — got ${JSON.stringify(ui.concurrencyN)}` };
+        return;
+      }
+      concurrency = n;
+    }
     // Org is never guessed; the server refuses with org_required.
     const payload = { model: ui.model, arm: ui.arm ?? "off", kind: ui.kind };
     if ((ui.arm ?? "off") === "on" && ui.org) payload.org = ui.org;
     // Sent only when touched; an absent key applies the server's default.
     if (ui.compact !== null) payload.compact = ui.compact;
+    // Sent only when the operator turned the toggle on; absent = the server's
+    // default of 1. (The value is already validated above.)
+    if (concurrency !== null) payload.concurrency = concurrency;
     // The challenge: the server refuses an unknown one, or a second challenge on a
     // baseline that already built another.
     if (ui.challenge) payload.challenge = ui.challenge;

@@ -275,6 +275,8 @@ import {
   setCreateKind,
   setCreateModel,
   toggleCreateCompact,
+  toggleCreateConcurrency,
+  setCreateConcurrencyN,
   openCellConfirm,
   setCreateQuery,
   setCreateProvider,
@@ -393,7 +395,7 @@ function bindInteraction() {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick]");
+  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick]");
   if (!t) return;
 
   if (t.dataset.gateId) {
@@ -453,6 +455,7 @@ function onClick(e) {
   if (t.dataset.createModel) { setCreateModel(t.dataset.createModel); render(); return; }
   // Flip away from what is currently shown.
   if (t.dataset.createCompact) { toggleCreateCompact(t.dataset.createCompact === "on"); render(); return; }
+  if (t.dataset.createConcurrency) { toggleCreateConcurrency(); render(); return; }
   if (t.hasAttribute("data-create-baseline-continue")) {
     // Runs preflight, preview and start; results land on BASELINE · 4.
     void doLaunchBaseline();
@@ -612,6 +615,7 @@ function onRunSel(e) {
   if (ri) { setRouterDraft(ri.dataset.routerInput, e.target.value); return; }
   if (e.target.closest("[data-create-query]")) { setCreateQuery(e.target.value); render(); return; }
   if (e.target.closest("[data-create-provider]")) { setCreateProvider(e.target.value); render(); }
+  if (e.target.closest("[data-create-concurrency-n]")) { setCreateConcurrencyN(e.target.value); render(); return; }
 }
 
 function onGateHover(e) {
