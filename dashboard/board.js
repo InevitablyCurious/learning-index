@@ -296,6 +296,7 @@ import {
   historicalSelection,
 } from "./panels/live.js";
 import { renderHold } from "./panels/hold.js";
+import { renderCells, setSelectedCell, selectedCell, observeCellStrip } from "./panels/cells.js";
 import { renderRail } from "./panels/rail.js";
 import { renderRecall } from "./panels/recall.js";
 import {
@@ -377,6 +378,7 @@ function render() {
     <div class="shell">
       ${renderTopbar(board, { stale: consecutiveErrors > 0, lastError })}
       ${renderHold(board)}
+      ${renderCells(board)}
       <div class="axes-row">
         ${renderCurve(board)}
         ${renderWall(board)}
@@ -399,6 +401,7 @@ function render() {
   try { renderOverlay(board); } catch (err) { console.error("overlay failed:", err); }
   // Tool jobs (the drawer's refresh buttons): the elapsed ticker, and the page
   // reload a successful board refresh asks for. Schedules only, never paints.
+  try { observeCellStrip(); } catch (err) { console.error("cell strip observe failed:", err); }
   try { observeToolJobs(board); } catch (err) { console.error("tool-job observe failed:", err); }
   // The TUI mirror is painted by xterm.js into a data-preserve node (like the
   // feed) and sized so 130 columns fill the card.
@@ -434,7 +437,7 @@ function bindInteraction() {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-batch-open],[data-batch-pick],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick]");
+  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-batch-open],[data-batch-pick],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
   if (!t) return;
 
   if (t.dataset.gateId) {
@@ -616,6 +619,18 @@ function onClick(e) {
   // companion attribute, like model/kind ride on [+ run].
   if (t.dataset.batchOpen) { void doOpenBatch(t.dataset.batchOpen); return; }
   if (t.dataset.batchPick) { void doPickBatch(t.dataset.batchDir, Number(t.dataset.batchPick)); return; }
+  // ── CELL STRIP ── which cell of the batch the board is about. Local view
+  // state only: it selects nothing, starts nothing and picks no floor (that is
+  // [data-batch-pick] above). Clicking the selected card again clears back to
+  // "follow the live cell", so the strip is never a state the operator is
+  // stuck in. A void cell selects like any other — it is where they find out
+  // why it died.
+  if (t.dataset.cellPick !== undefined) {
+    const n = Number(t.dataset.cellPick);
+    setSelectedCell(selectedCell() === n ? null : n);
+    render();
+    return;
+  }
   // ── BASELINES CARD ── checked after the buttons inside rows, so [+ run] never
   // also toggles its row. Clicking a row expands it and points the DATA FEED card
   // at it; the way back to the live cell is BACK TO LIVE on the card.

@@ -91,3 +91,27 @@ export async function findChallenge(benchRoot, id) {
   if (!wanted) return null;
   return (await listChallenges(benchRoot)).find((c) => c.id === wanted) ?? null;
 }
+
+/**
+ * How many build chunks a challenge sends, counted from its prompts folder.
+ *
+ * COUNTED, NEVER A CONSTANT. The board carried a literal 6 here, written when
+ * the backgammon task had six chunks. It has five — the no-op first chunk was
+ * dropped — so every live cell rendered "chunk 3 of 6" against a five-chunk
+ * build. A constant cannot notice that; a count can. `null` when the folder
+ * cannot be read, because "unknown" renders honestly and a wrong number does
+ * not.
+ *
+ * The glob matches `PromptPack.chunks()` on the harness side (`chunk-*.md`),
+ * which is what actually decides how many the model is sent.
+ */
+export async function countChunkPrompts(challengeDir) {
+  if (!challengeDir) return null;
+  try {
+    const names = await readdir(join(challengeDir, "prompts"));
+    const n = names.filter((f) => /^chunk-.*\.md$/.test(f)).length;
+    return n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}

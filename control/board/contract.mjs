@@ -195,6 +195,9 @@ export function emptyBoard() {
     // custom tools run as tracked jobs: the drawer renders their live output,
     // elapsed time and verdicts from here. null = source not wired.
     tool_jobs: null,
+    // One record per cell of the current batch — what the cell strip selects
+    // on. Null until a run exists; never a partial object.
+    cells: null,
 
     history: [],
 

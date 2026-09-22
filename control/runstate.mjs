@@ -459,6 +459,12 @@ export async function readRunState({ runsRoot, launchers = liveRuns(), aliveProb
 
     runs.push({
       run_id: rec?.run_id ?? null,
+      // WHICH CELL OF THE BATCH. With N concurrent cells of one model and arm,
+      // every other field on this record is identical across them — same
+      // model, same arm, same run_dir. The sequence index is the only thing
+      // that tells an operator (or a selector) which cell they are looking at,
+      // and it was read here for the session lookup and then dropped.
+      sequence_index: rec?.sequence_index ?? null,
       state,
       running,
       // Per-run, never a global gate: this run is in flight, so it cannot be

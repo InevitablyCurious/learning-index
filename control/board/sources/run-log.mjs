@@ -11,6 +11,22 @@ import { join } from "node:path";
 import { int, str } from "../contract.mjs";
 import { readTail } from "./_runtime.mjs";
 import { newestLog } from "../../runstate.mjs";
+import { countChunkPrompts } from "../../challenges.mjs";
+
+/**
+ * How many chunks this build sends. BENCH_TASK_DIR is the same seam the
+ * harness reads, so a run pointed at a variant challenge counts that one's
+ * chunks rather than the bundled task's.
+ */
+async function chunkTotal(ctx) {
+  // Instrumentation, never a gate: a caller with no benchRoot (the source's
+  // own tests drive `read` with a bare ctx) gets null rather than a throw. A
+  // missing chunk count costs one label; a throw here costs the whole pulse.
+  const dir =
+    process.env.BENCH_TASK_DIR ||
+    (ctx?.benchRoot ? join(ctx.benchRoot, "task", "backgammon") : null);
+  return dir ? await countChunkPrompts(dir) : null;
+}
 
 export const id = "run-log";
 export const fields = ["run.phase", "run.chunk", "run.turns", "run.state", "run.elapsed_s"];
@@ -141,7 +157,10 @@ export async function read(ctx) {
     patch: {
       run: {
         phase,
-        chunk: { current: chunk, total: 6 },
+        // Counted from the challenge's prompts folder, never a literal. A
+        // hardcoded 6 outlived the six-chunk task and drew every cell of the
+        // five-chunk build as "chunk N of 6".
+        chunk: { current: chunk, total: await chunkTotal(ctx) },
         turns: scoringTurns, // SCORING turns. never session_turns.
         session_turns: sessionTurns, // raw, carried for the anomaly rail only
         arm: mode,

@@ -526,6 +526,60 @@ a:hover{color:var(--type)}
 </style>
 <style id="panelcss">
 /* panel CSS is appended below — see the second style block */
+/* THE CELL STRIP. Sits between the topbar and the first row of panels: with N
+   concurrent cells it is how the operator says which one the board is about.
+   Cards are 146px — ~20 characters of JetBrains Mono at 11px, which is what
+   every line inside is written to. A card that wraps loses its second row, so
+   the width is a budget, not a preference. */
+.cells{display:flex;flex-direction:column;gap:8px;min-width:0}
+.cells-head{display:flex;align-items:baseline;gap:10px}
+.cells-void{font:400 11px var(--font);color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 30%,transparent);border-radius:var(--radius-sm);padding:5px 8px}
+/* Horizontal scroll with snap: cards settle on their own edge instead of
+   stopping mid-card. The right-edge fade is the "more this way" cue and is a
+   gradient to the canvas colour, so the strip reads as running under the edge
+   rather than as a border. */
+.cells-scroll{position:relative;display:flex;gap:7px;overflow-x:auto;padding-bottom:7px;scroll-snap-type:x proximity;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--fg) 14%,transparent) transparent;
+  --fade-l:0px;--fade-r:34px;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 var(--fade-l),#000 calc(100% - var(--fade-r)),transparent 100%);
+  mask-image:linear-gradient(90deg,transparent 0,#000 var(--fade-l),#000 calc(100% - var(--fade-r)),transparent 100%)}
+/* Only the edge with cells beyond it fades. A fixed both-edge mask dims the
+   first card when nothing is left of it; a right-only one leaves a hard cut
+   once the operator scrolls. */
+.cells-scroll:not(.at-start){--fade-l:34px}
+.cells-scroll.at-end{--fade-r:0px}
+.cells-scroll::-webkit-scrollbar{height:4px}
+.cells-scroll::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--fg) 14%,transparent);border-radius:var(--radius-pill)}
+.cells-scroll:hover::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--fg) 26%,transparent)}
+.cells-scroll::-webkit-scrollbar-track{background:transparent}
+.cellcard{flex:0 0 146px;scroll-snap-align:start;display:flex;flex-direction:column;gap:5px;
+  background:transparent;border:1px solid var(--border);border-radius:var(--radius-md);
+  padding:8px 9px;font:400 11px var(--font);color:var(--fg);text-align:left;cursor:pointer;
+  transition:border-color .12s ease,background .12s ease}
+.cellcard:hover{border-color:var(--border-strong);background:color-mix(in srgb,var(--fg) 4%,transparent)}
+.cellcard:focus-visible{outline:none;box-shadow:0 0 0 2px var(--focus-ring)}
+.cellcard.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+/* A void cell is dimmed, never hidden: it is where the operator finds out why
+   it died, and a batch that dropped its failures would overstate itself. */
+.cellcard.cc-is-void{border-color:color-mix(in srgb,var(--danger) 28%,transparent);opacity:.8}
+.cellcard.cc-is-void .cc-state{color:var(--danger)}
+.cellcard.cc-is-quiet{border-color:color-mix(in srgb,var(--fg) 30%,transparent)}
+.cc-head{display:flex;align-items:center;gap:5px}
+.cc-seq{color:var(--type);font-size:12px}
+.cc-dot{width:6px;height:6px;border-radius:50%;background:var(--fg);flex:0 0 auto}
+.cc-dot.cc-live{background:var(--check)}
+.cc-dot.cc-quiet{background:var(--comment)}
+.cc-dot.cc-done{background:var(--fg)}
+.cc-dot.cc-void{background:var(--danger)}
+.cc-tag{margin-left:auto;font-size:10px;letter-spacing:.04em}
+.cc-tag.view{color:var(--accent)}
+.cc-tag.med{color:var(--comment)}
+.cc-state{color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-bar{display:block;height:3px;border-radius:2px;background:color-mix(in srgb,var(--fg) 12%,transparent);overflow:hidden}
+.cc-bar>i{display:block;height:100%;background:var(--comment)}
+.cellcard.on .cc-bar>i{background:var(--accent)}
+.cellcard.cc-is-void .cc-bar>i{background:color-mix(in srgb,var(--danger) 50%,transparent)}
+.cc-meta{color:var(--dim);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (prefers-reduced-motion:reduce){.cellcard{transition:none}}
 .axes-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--gap);align-items:stretch}
 /* THE PANEL. 12px radius + --border (not --hairline) is the artifact's own
    §8.1 measurement; the rewrite had flattened every panel to a 4px box with

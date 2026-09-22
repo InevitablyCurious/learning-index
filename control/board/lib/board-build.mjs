@@ -22,6 +22,7 @@ import * as learning from "../sources/learning.mjs";
 import * as liveStream from "../sources/live-stream.mjs";
 import * as resultsLedger from "../sources/results-ledger.mjs";
 import * as toolJobs from "../sources/tool-jobs.mjs";
+import * as cells from "../sources/cells.mjs";
 
 // Every source is always on: each one reports its own absence ("unwired",
 // with a reason) instead of being switched off by configuration.
@@ -29,6 +30,7 @@ const MODS = [
   runManifest, statusStream, runLog, stackLedger, funnelCells, pluginLog,
   opencodeServe, controlPlane, gateSuite, learning, liveStream, resultsLedger,
   toolJobs,
+  cells,
 ];
 
 // ── board assembly ───────────────────────────────────────────────────────────
@@ -56,6 +58,10 @@ const ORDER = [
   "opencode-serve",
   // Owns `tool_jobs` alone; in-memory, so it is never the slow source.
   "tool-jobs",
+  // Owns `cells` alone — the per-cell strip. Listed rather than left out:
+  // indexOf returns -1 for an unlisted source, which sorts it FIRST, so an
+  // omission here is an accidental merge position rather than a no-op.
+  "cells",
   // Owns `suite` alone (split from control-plane so a slow suite can't hold the
   // TUI); position not load-bearing.
   "gate-suite",

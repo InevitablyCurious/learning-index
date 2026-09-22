@@ -153,9 +153,13 @@ test("RUN STATE: multiple live runs are listed NEWEST-LOG-FIRST, each keyed by i
     assert.deepEqual(Object.keys(state.runs[0]).sort(), [
       "arm", "blocked_reason", "can_start", "heartbeat_age_s", "launched_by",
       "liveness", "log_name", "log_path", "log_silent_s", "model", "pid",
-      "run_dir", "run_id", "running", "session_id", "started_at", "state",
-      "terminal_ok", "terminal_status",
+      "run_dir", "run_id", "running", "sequence_index", "session_id",
+      "started_at", "state", "terminal_ok", "terminal_status",
     ]);
+
+    // WHICH CELL, not just which run. Every other field is identical across a
+    // batch of one model and arm; the index is what an operator selects on.
+    assert.deepEqual(state.runs.map((r) => r.sequence_index), [4, 3]);
 
     // The legacy top-level surface mirrors the NEWEST live run.
     assert.equal(state.log_name, "on-cell-b.log");
