@@ -15,7 +15,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -75,6 +75,49 @@ test("liveStreamPath returns null rather than guessing when no stream exists", a
   const { campaign } = await fixture({ stream: null });
   assert.equal(await liveStreamPath(campaign), null);
   assert.equal(await liveStreamPath(null), null);
+});
+
+// ── TWO CELLS, ONE STREAM WINS ───────────────────────────────────────────────
+// A campaign directory can hold more than one cell (memory<ARM>/cell-<seq>).
+// With no campaign-level live.jsonl, the scan across ALL arm/cell dirs must
+// return the stream with the NEWEST mtime — and a cell that never wrote a
+// stream must never beat one that did.
+
+/** A campaign with two cell dirs; `streams` says which cells get a live.jsonl. */
+async function twoCellFixture({ streams = [true, true] } = {}) {
+  const root = await mkdtemp(join(tmpdir(), "livestream2-"));
+  const campaign = join(root, "campaign");
+  const cells = [
+    join(campaign, "memoryOFF", "cell-0000"),
+    join(campaign, "memoryOFF", "cell-0001"),
+  ];
+  for (const cell of cells) await mkdir(cell, { recursive: true });
+  for (let i = 0; i < cells.length; i++) {
+    if (streams[i]) {
+      await writeFile(join(cells[i], "live.jsonl"), JSON.stringify(STREAM[0]) + "\n");
+    }
+  }
+  return { campaign, cells };
+}
+
+test("liveStreamPath picks the NEWEST cell stream when a campaign holds two cells", async () => {
+  const { campaign, cells } = await twoCellFixture();
+  const [a, b] = cells.map((c) => join(c, "live.jsonl"));
+  // Distinct mtimes make the ordering deterministic, independent of write order.
+  await utimes(a, new Date(1000), new Date(1000));
+  await utimes(b, new Date(2000), new Date(2000));
+  assert.equal(await liveStreamPath(campaign), b, "the newer cell's stream wins");
+  // mtime decides, not directory order — flip the mtimes and the winner flips.
+  await utimes(a, new Date(3000), new Date(3000));
+  assert.equal(await liveStreamPath(campaign), a, "newest mtime wins regardless of scan order");
+});
+
+test("liveStreamPath takes the cell that HAS a stream when its sibling has none", async () => {
+  // cell-0000 writes a stream, cell-0001 (scanned later) never does.
+  const { campaign, cells } = await twoCellFixture({ streams: [true, false] });
+  const a = join(cells[0], "live.jsonl");
+  await utimes(a, new Date(1000), new Date(1000));
+  assert.equal(await liveStreamPath(campaign), a, "an absent stream never beats a present one");
 });
 
 test("gate wall reads verdicts from the cell-directory stream; later attempt wins", async () => {
