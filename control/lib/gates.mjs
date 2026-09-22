@@ -5,7 +5,7 @@ import { refuse } from "../contract.mjs";
 import { readRunState } from "../runstate.mjs";
 import { planReset } from "../tree.mjs";
 import { describeBackup, checkBackup, resolveBackupDir } from "../backups.mjs";
-import { RUNS_ROOT, getLauncher } from "../state.mjs";
+import { RUNS_ROOT } from "../state.mjs";
 
 /**
  * May the tree be reset now, and what would it move? A cell in flight is
@@ -13,7 +13,7 @@ import { RUNS_ROOT, getLauncher } from "../state.mjs";
  * says so.
  */
 export async function treeResetGate() {
-  const run = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+  const run = await readRunState({ runsRoot: RUNS_ROOT });
   const willStop = run.can_start !== true;
 
   const { moves, keeps } = await planReset(RUNS_ROOT);
@@ -51,7 +51,7 @@ export async function treeResetGate() {
  * quietly wrong).
  */
 export async function restoreGate(id) {
-  const run = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+  const run = await readRunState({ runsRoot: RUNS_ROOT });
   if (run.can_start !== true) {
     return refuse(
       "run_in_progress",

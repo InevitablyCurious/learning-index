@@ -4,7 +4,8 @@
 //
 //  1. An ON run needs its model's baseline complete and non-void.
 //  2. An ON run is always the same model as its floor (self-paired).
-//  3. Runs are serial across the whole bench.
+//  3. Runs are serial PER MODEL: a cell in flight blocks its own model's
+//     launches, never another model's (the N-slot ledger, run-ledger.mjs).
 //
 // One floor per model; a void baseline counts as no baseline, with the reason.
 
@@ -14,11 +15,15 @@ import { readBaselines, collectCells } from "./baselines.mjs";
 const str = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const int = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
+// The serial rule is per model, stated once for every surface: a cell in flight
+// blocks its OWN model's launches, never another model's.
+const serialReasonFor = (id) => `a cell for ${id} is already in flight — this model is serial`;
+
 /**
- * Assemble GET /api/models-ledger. `runInFlight` is passed in from runstate.mjs
- * (the one owner of run state).
+ * Assemble GET /api/models-ledger. `inFlightModels` is the Set of model ids
+ * with a live run, passed in from run-ledger.mjs (the one owner of run slots).
  */
-export async function readModelsLedger({ runsRoot, benchModels, runInFlight, blockedReason, cloud = null }) {
+export async function readModelsLedger({ runsRoot, benchModels, inFlightModels = new Set(), cloud = null }) {
   const eligible = (benchModels ?? []).filter((m) => m?.bench_eligible);
 
   // One derivation, attached to the payload too, so gates and quoted floors are
@@ -28,12 +33,6 @@ export async function readModelsLedger({ runsRoot, benchModels, runInFlight, blo
   // Every cell on disk, both arms, read once per poll.
   const allCells = await collectCells(runsRoot);
 
-  // The serial rule is a fact about the bench, computed once for every surface:
-  // one cell in flight blocks every launch on every model.
-  const serialNote = runInFlight
-    ? (blockedReason ?? "a cell is already in flight — bench runs are serial, never parallel")
-    : null;
-
   const models = eligible.map((m) => {
     const id = str(m.id);
     const baseline = baselines.models[id] ?? {
@@ -42,14 +41,16 @@ export async function readModelsLedger({ runsRoot, benchModels, runInFlight, blo
       candidates: 0,
       reason: `no floor was resolved for ${id}`,
     };
-    const serialBlock = serialNote;
+    // This model's own in-flight state; no other model's cell matters here.
+    const inFlight = inFlightModels.has(id);
 
-    // A baseline is gated by two things only: nothing in flight, and no valid
-    // floor already for this model. No other model's floor matters.
+    // A baseline is gated by two things only: nothing in flight for THIS model,
+    // and no valid floor already for it. No other model's state matters.
     const canBaseline = {
-      allowed: !runInFlight && !baseline.scorable,
-      reason: serialBlock
-        ?? (baseline.scorable
+      allowed: !inFlight && !baseline.scorable,
+      reason: inFlight
+        ? serialReasonFor(id)
+        : (baseline.scorable
           ? `${id} already has a valid baseline; re-baselining is a declared act, not a button`
           : null),
     };
@@ -57,8 +58,8 @@ export async function readModelsLedger({ runsRoot, benchModels, runInFlight, blo
     // An ON run needs a closed, valid floor of its own model — the same
     // baselineFor rule /api/run/start applies.
     const canRun = {
-      allowed: !runInFlight && baseline.scorable,
-      reason: serialBlock ?? (baseline.scorable ? null : baseline.reason),
+      allowed: !inFlight && baseline.scorable,
+      reason: inFlight ? serialReasonFor(id) : (baseline.scorable ? null : baseline.reason),
     };
 
     return {
@@ -70,6 +71,8 @@ export async function readModelsLedger({ runsRoot, benchModels, runInFlight, blo
       baseline,
       // The ON cells measured against this floor (onRunsFor).
       runs: onRunsFor(baseline, allCells),
+      // This model's own serial state; the top-level run_in_flight is the aggregate.
+      in_flight: inFlight,
       can_baseline: canBaseline,
       can_run: canRun,
     };
@@ -80,12 +83,13 @@ export async function readModelsLedger({ runsRoot, benchModels, runInFlight, blo
     contract_version: MODELS_LEDGER_CONTRACT_VERSION,
     // The floor index, attached whole (also at /api/baselines and baselines.json).
     baselines,
-    // Also stated once at the top: the serial rule belongs to the bench.
-    run_in_flight: Boolean(runInFlight),
-    run_blocked_reason: runInFlight ? (blockedReason ?? "a cell is already in flight") : null,
+    // The aggregate mirror of the per-model gates: is ANY model in flight.
+    run_in_flight: inFlightModels.size > 0,
     serial_note:
-      "one cell runs at a time across the whole bench. The local model is a single resident slot, " +
-      "so a second concurrent cell would contend for it and corrupt the timing evidence of both.",
+      "one cell runs at a time per model: a model with a cell in flight is serial until that cell " +
+      "closes. Different models may run concurrently — but the local model is a single resident " +
+      "slot, so a second concurrent cell on the same model would contend for it and corrupt the " +
+      "timing evidence of both.",
     models,
     // The card's own shape: measured floors at the root with their runs inside.
     // `models` answers the gates (including models that never ran); `baseline_rows`
@@ -93,12 +97,12 @@ export async function readModelsLedger({ runsRoot, benchModels, runInFlight, blo
     baseline_rows: baselineRows({
       baselines,
       allCells,
-      serialBlock: serialNote,
+      inFlightModels,
     }),
     counts: baselines.counts ?? { complete: 0, running: 0, void: 0, exhausted: 0 },
     // Every model a new baseline could start on, both substrates, each with its
     // resolved gate (what the [+ BASELINE] modal renders).
-    startable: startableModels({ eligible, baselines, cloud, serialBlock: serialNote }),
+    startable: startableModels({ eligible, baselines, cloud, inFlightModels }),
     cloud: cloud
       ? {
           // The catalogue and a key report, never the key (cloud.mjs).
@@ -116,18 +120,20 @@ export async function readModelsLedger({ runsRoot, benchModels, runInFlight, blo
 }
 
 /** One row per measured floor, every gate resolved here. */
-function baselineRows({ baselines, allCells, serialBlock }) {
+function baselineRows({ baselines, allCells, inFlightModels }) {
   const rows = Array.isArray(baselines?.list) ? baselines.list : [];
 
   return rows.map((b) => {
     // Runs against this row's own floor.
     const runs = onRunsFor(b, allCells);
+    // This floor's own model in flight; another model's cell does not block it.
+    const inFlight = inFlightModels.has(b.model);
 
     // Needs a closed, valid floor; running and void refuse with different
     // reasons (wait vs archive and re-run).
     const canRun = {
-      allowed: !serialBlock && b.scorable === true,
-      reason: serialBlock ?? (b.scorable ? null : b.reason),
+      allowed: !inFlight && b.scorable === true,
+      reason: inFlight ? serialReasonFor(b.model) : (b.scorable ? null : b.reason),
     };
 
     return {
@@ -145,16 +151,18 @@ function baselineRows({ baselines, allCells, serialBlock }) {
 
 /**
  * Every model a baseline could start on, one list with a `kind` field.
- * Refusals, in order: serial (a cell in flight), floor (already has one), key
- * (cloud without a key — refused here, before a campaign folder is built).
+ * Refusals, in order: serial (a cell in flight for THIS model), floor (already
+ * has one), key (cloud without a key — refused here, before a campaign folder
+ * is built).
  */
-function startableModels({ eligible, baselines, cloud, serialBlock }) {
+function startableModels({ eligible, baselines, cloud, inFlightModels }) {
   const out = [];
 
   for (const m of eligible) {
     const id = str(m.id);
     if (!id) continue;
     const b = baselines.models[id] ?? null;
+    const inFlight = inFlightModels.has(id);
     out.push({
       id,
       kind: "local",
@@ -164,9 +172,10 @@ function startableModels({ eligible, baselines, cloud, serialBlock }) {
       context: int(m.declared_context),
       has_baseline: b?.scorable === true,
       can_baseline: {
-        allowed: !serialBlock && b?.scorable !== true,
-        reason: serialBlock
-          ?? (b?.scorable
+        allowed: !inFlight && b?.scorable !== true,
+        reason: inFlight
+          ? serialReasonFor(id)
+          : (b?.scorable
             ? `${id} already has a valid baseline (${b.id ?? "floor"}); re-baselining is a declared act, not a button`
             : null),
       },
@@ -178,6 +187,7 @@ function startableModels({ eligible, baselines, cloud, serialBlock }) {
     // heard of them).
     const row = (baselines.list ?? []).find((b) => b.model === m.key) ?? null;
     const keyed = cloud?.key?.present === true;
+    const inFlight = inFlightModels.has(m.key);
     out.push({
       id: m.key,
       kind: "cloud",
@@ -191,9 +201,10 @@ function startableModels({ eligible, baselines, cloud, serialBlock }) {
       context_note: m.context_note ?? null,
       has_baseline: row?.scorable === true,
       can_baseline: {
-        allowed: !serialBlock && row?.scorable !== true && keyed,
-        reason: serialBlock
-          ?? (row?.scorable
+        allowed: !inFlight && row?.scorable !== true && keyed,
+        reason: inFlight
+          ? serialReasonFor(m.key)
+          : (row?.scorable
             ? `${m.key} already has a valid baseline (${row.id}); re-baselining is a declared act, not a button`
             : keyed
               ? null

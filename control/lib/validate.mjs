@@ -15,6 +15,8 @@ import {
 import { resolveDevMode } from "../devmode.mjs";
 import { readSnapshot, seedableBy, resolveArmed } from "../snapshots.mjs";
 import { substrateRefreshInFlight } from "../tooljobs.mjs";
+// The serial gate's one source of in-flight truth: the N-slot run ledger.
+import { inFlightModels } from "../run-ledger.mjs";
 import { args, BENCH_ROOT, RUNS_ROOT } from "../state.mjs";
 
 /**
@@ -49,8 +51,19 @@ export async function validateStart(
   // Defaults to local; anything else is refused by name.
   const kind = payload?.kind === "cloud" ? "cloud" : payload?.kind === "local" || payload?.kind === undefined || payload?.kind === null ? "local" : String(payload.kind);
 
-  if (!run.can_start) {
-    return refuse("run_in_flight", run.blocked_reason ?? "a cell is already in flight");
+  // ── THE SERIAL GATE ── PER MODEL, from the run ledger (run-ledger.mjs):
+  // a model with a cell in flight is serial until that cell closes, because a
+  // second concurrent cell on it contends for its single resident slot and
+  // corrupts the timing evidence of both. Different models may run
+  // concurrently — another model's cell never blocks this start.
+  // `run.can_start` is the caller's now-fact channel, not a second in-flight
+  // source: preview passes can_start:true to skip the gate (reviewing stays
+  // possible while a cell is in flight; the advisory rides the preview answer
+  // — routes/run.mjs), and a run state that sees nothing live skips it too,
+  // so a ledger slot whose process AND log are both gone never wedges the
+  // model shut.
+  if (run?.can_start !== true && inFlightModels().has(model)) {
+    return refuse("run_in_flight", `a cell for ${model} is already in flight — this model is serial`);
   }
   // The symmetric guard: a substrate-changing refresh (refuse_while_running)
   // may not overlap a cell, and a cell may not launch onto a moving substrate.

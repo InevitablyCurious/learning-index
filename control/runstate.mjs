@@ -1,8 +1,10 @@
-// RUN STATE — is a cell in flight, and may another be started?
+// RUN STATE — which cells are in flight, and may another be started?
 //
-// The control plane's only mutable fact is the launcher it spawned; everything
-// else is read from the run's own files. A run counts as running only when the
-// process exists (signal 0, not a pid file) AND the harness is heartbeating.
+// The control plane's mutable fact is the run ledger (run-ledger.mjs): every
+// launch it spawned holds a slot there, so N concurrent cells are tracked at
+// once. Everything else is read from each run's own files. A run counts as
+// running only when the process exists (signal 0, not a pid file) AND the
+// harness is heartbeating.
 
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
@@ -13,6 +15,7 @@ import { activeTreeRoot } from "./tree.mjs";
 // The one live-stream path resolver (LIVE-STREAM.md); never build the path by hand.
 import { liveStreamPath } from "./board/sources/_runtime.mjs";
 import { statOrNull, listDir } from "./lib/fs.mjs";
+import { liveRuns, markRunFinished } from "./run-ledger.mjs";
 
 /**
  * Age in ms of the newest heartbeat in this run's live stream, or null when
@@ -106,10 +109,14 @@ async function externalRunAlive({ runDir }) {
   const procs = await findHarnessProcs({ runDir });
   // The scan failed; the caller falls back to the heartbeat.
   if (procs === null) return null;
-  // Conservative: any bench harness still means a cell is in flight (the
-  // campaign is serial). A reset blocked one cycle too long costs a wait; one
+  // Scoped attribution: a harness carrying THIS run's directory on its argv is
+  // bound to it, so with N cells in flight one run's harness never marks every
+  // other run alive. A log that has not named its run dir yet cannot be
+  // attributed — any harness counts, the conservative live-by-default of a
+  // just-started run. A reset blocked one cycle too long costs a wait; one
   // allowed too early costs the measurement.
-  return procs.bound.length > 0 || procs.other.length > 0;
+  if (!runDir) return procs.bound.length > 0 || procs.other.length > 0;
+  return procs.bound.length > 0;
 }
 
 /**
@@ -135,14 +142,15 @@ export function runDirOf(text) {
 }
 
 /**
- * The newest live cell launch log. A log whose run directory no longer exists
- * describes a wiped run and is skipped, so a wiped bench never reads as running.
+ * Every cell launch log candidate, newest first. Launch logs live in the live
+ * tree (so a reset retires them) and, for pre-tree benches, at the runs root;
+ * the tree root is a strict subdirectory of the runs root, so the two bases
+ * never yield the same file. One scan, two readers: newestLog and the
+ * live-run enumeration in readRunState.
  */
-export async function newestLog(runsRoot) {
+async function cellLogCandidates(runsRoot) {
   const candidates = [];
 
-  // Launch logs live in the live tree (so a reset retires them) and, for
-  // pre-tree benches, at the runs root.
   let treeRoot = null;
   try {
     treeRoot = await activeTreeRoot(runsRoot);
@@ -162,9 +170,16 @@ export async function newestLog(runsRoot) {
     }
   }
 
-  // Newest first, then take the first whose run directory still exists.
   candidates.sort((a, b) => b.mtime - a.mtime);
-  for (const cand of candidates) {
+  return candidates;
+}
+
+/**
+ * The newest live cell launch log. A log whose run directory no longer exists
+ * describes a wiped run and is skipped, so a wiped bench never reads as running.
+ */
+export async function newestLog(runsRoot) {
+  for (const cand of await cellLogCandidates(runsRoot)) {
     // 256KB: a long log's first artifact path can sit well back from the end.
     const runDir = runDirOf(await readTail(cand.path, 256 * 1024));
     // Not named yet: a run that just started. Live by default.
@@ -331,99 +346,184 @@ export function terminalFrom(text) {
 }
 
 /**
- * Assemble the run state. `launcher` is the process this control plane spawned,
- * or null for a CLI launch (still a real run, never reported as idle).
+ * Assemble the run state: EVERY live run, newest log first.
+ *
+ * `launchers` is the run ledger's live set (run-ledger.mjs) — the runs this
+ * control plane spawned. A live log with no ledger record is an external (CLI)
+ * launch: still a real run, never reported as idle. A run is live when its log
+ * carries no terminal status AND its process/heartbeat is alive — the same
+ * state machine the single-run reader used, applied per log.
+ *
+ * The return carries `runs[]` + `live_count`, plus the legacy single-run keys
+ * mirrored from the NEWEST live run (the idle shape when none is live) — the
+ * only backward-compat surface.
+ *
+ * Side effect: the REAL run ledger is reconciled against what this pass
+ * observed — a live record whose log ended (terminal status) or whose log /
+ * run_dir disappeared is marked finished, so a naturally completed run stops
+ * counting as in flight. The injected `launchers` param is never reconciled.
  */
-export async function readRunState({ runsRoot, launcher, aliveProbe = externalRunAlive, heartbeatProbe = heartbeatAge }) {
-  const log = await newestLog(runsRoot);
+export async function readRunState({ runsRoot, launchers = liveRuns(), aliveProbe = externalRunAlive, heartbeatProbe = heartbeatAge }) {
+  const runs = [];
+  // Terminal endings seen on candidate logs this pass, keyed by log path —
+  // the reconcile pass's evidence that a ledger run ended naturally. Keyed by
+  // log, never by run_dir: N concurrent cells share one run_dir, and one
+  // cell's ending must not finish its siblings.
+  const terminalByLog = new Map();
 
-  if (!log) {
-    return {
-      state: "idle",
-      // `running` is published on both return paths.
-      running: false,
-      run_dir: null,
-      log_path: null,
-      log_name: null,
-      pid: null,
-      model: null,
-      arm: null,
-      session_id: null,
-      started_at: null,
-      log_silent_s: null,
-      liveness: "unknown",
-      heartbeat_age_s: null,
-      terminal_status: null,
-      can_start: true,
-      blocked_reason: null,
-      launched_by: null,
-    };
+  for (const cand of await cellLogCandidates(runsRoot)) {
+    // 256KB: a long log's first artifact path can sit well back from the end.
+    const runDir = runDirOf(await readTail(cand.path, 256 * 1024));
+    // A log whose run directory no longer exists describes a wiped run and is
+    // skipped, so a wiped bench never reads as running. Not named yet: a run
+    // that just started — live by default.
+    if (runDir !== null) {
+      const st = await statOrNull(join(runsRoot, runDir));
+      if (!st?.isDirectory()) continue;
+    }
+
+    const text = await readTail(cand.path);
+    const terminal = terminalFrom(text);
+    // A log that ended is not a live run — but its ending is the ledger
+    // reconcile pass's evidence, so keep the classified terminal.
+    const ended = classifyTerminal(terminal);
+    if (ended) {
+      terminalByLog.set(cand.path, { terminal_status: terminal.status, terminal_ok: ended.ok });
+      continue;
+    }
+
+    // The ledger record for this log, when the control plane launched it:
+    // exact log_path first, then run_dir. No record: an external launch.
+    const rec =
+      launchers.find((r) => r.log_path && r.log_path === cand.path) ??
+      launchers.find((r) => r.run_dir && runDir && r.run_dir === runDir) ??
+      null;
+
+    // Process check on both launch paths; null only when the scan itself failed.
+    const alive = rec ? pidAlive(rec.pid) : await aliveProbe({ runDir });
+    // No terminal record and no process: abandoned, never measured — not live,
+    // so it drops out of the set at once rather than after the stall threshold.
+    if (alive === false) continue;
+
+    // Liveness comes from one source: the heartbeat the harness writes into the
+    // cell's live.jsonl every 15s. Log mtime and event-feed proxies were tried
+    // and were wrong (a phase can run 86 turns between log lines).
+    const heartbeatAgeMs = await heartbeatProbe({ runsRoot, runDir });
+    const heartbeatAgeS = heartbeatAgeMs === null ? null : Math.round(heartbeatAgeMs / 1000);
+    // live: a beat inside the threshold. stalled: beats stopped (60 missed beats).
+    // unknown: no heartbeat at all — never called stalled.
+    const liveness =
+      heartbeatAgeS === null ? "unknown" : heartbeatAgeS >= STALL_THRESHOLD_S ? "stalled" : "live";
+
+    let state;
+    if (alive === true) {
+      // The process exists: silence is a stall, not a death, and still blocks.
+      state = liveness === "stalled" ? "stalled" : "running";
+    } else {
+      // ps failed: a beating cell is alive; only a stopped heartbeat reads as
+      // failed — and a failed run is not live, so it drops out.
+      state = liveness === "stalled" ? "failed" : "running";
+    }
+    if (state === "failed") continue;
+
+    const running = state === "running" || state === "starting" || state === "stalled";
+    const arm =
+      rec?.arm ?? (/^on-cell-/.test(cand.name) ? "on" : /^off-cell-/.test(cand.name) ? "off" : null);
+    // The cell's own cell.start record is the authoritative session id (with N
+    // cells in flight a launch log can describe another cell); the log text is
+    // the fallback, and the only source for an external run.
+    const sessionId =
+      (rec && runDir ? await cellSessionId(runsRoot, runDir, rec.sequence_index) : null) ??
+      sessionIdFrom(text);
+
+    runs.push({
+      run_id: rec?.run_id ?? null,
+      state,
+      running,
+      // Per-run, never a global gate: this run is in flight, so it cannot be
+      // started again; whether ANOTHER cell may start is the caller's policy.
+      can_start: !running,
+      blocked_reason: running ? `this cell is ${state} (${cand.name}) — already in flight` : null,
+      run_dir: runDir ?? null,
+      log_path: cand.path,
+      log_name: cand.name,
+      pid: rec?.pid ?? null,
+      model: rec?.model ?? null,
+      arm,
+      session_id: sessionId,
+      started_at: rec?.started_at ?? null,
+      log_silent_s: Math.max(0, Math.round((Date.now() - cand.mtime) / 1000)),
+      // Liveness and its age. log_silent_s is informational only, never liveness.
+      liveness,
+      heartbeat_age_s: heartbeatAgeS,
+      // A live run carries no terminal status; an unrecognised one (no string
+      // status) passes through unvouched, exactly as the single-run reader did.
+      terminal_status: terminal?.status ?? null,
+      // Whether the ending was good: true clean, false adverse, null unvouched.
+      terminal_ok: null,
+      // A run this service started (a ledger record) vs one launched at the CLI.
+      launched_by: rec ? "control-plane" : "external",
+    });
   }
 
-  const text = await readTail(log.path);
-  const terminal = terminalFrom(text);
-  const silent = Math.max(0, Math.round((Date.now() - log.mtime) / 1000));
-
-  // Process check on both launch paths; null only when the scan itself failed.
-  const alive = launcher
-    ? pidAlive(launcher.pid)
-    : await aliveProbe({ runDir: log.run_dir });
-  const arm = /^on-cell-/.test(log.name) ? "on" : /^off-cell-/.test(log.name) ? "off" : null;
-
-  // Liveness comes from one source: the heartbeat the harness writes into the
-  // cell's live.jsonl every 15s. Log mtime and event-feed proxies were tried and
-  // were wrong (a phase can run 86 turns between log lines).
-  const heartbeatAgeMs = await heartbeatProbe({ runsRoot, runDir: log.run_dir });
-  const heartbeatAgeS = heartbeatAgeMs === null ? null : Math.round(heartbeatAgeMs / 1000);
-  // live: a beat inside the threshold. stalled: beats stopped (60 missed beats).
-  // unknown: no heartbeat at all — never called stalled.
-  const liveness =
-    heartbeatAgeS === null ? "unknown" : heartbeatAgeS >= STALL_THRESHOLD_S ? "stalled" : "live";
-
-  let state;
-  const terminalClass = classifyTerminal(terminal);
-  if (terminalClass) {
-    state = terminalClass.state;
-  } else if (alive === false) {
-    // No terminal record and no process: abandoned, never measured. Reported at
-    // once rather than after the stall threshold, so reset is not blocked by a corpse.
-    state = "failed";
-  } else if (alive === true) {
-    // The process exists: silence is a stall, not a death, and still blocks.
-    state = liveness === "stalled" ? "stalled" : "running";
-  } else {
-    // ps failed: a beating cell is alive; only a stopped heartbeat reads as failed.
-    state = liveness === "stalled" ? "failed" : "running";
-  }
-
-  const running = state === "running" || state === "starting" || state === "stalled";
-
-  return {
-    state,
+  // The legacy single-run surface mirrors the newest live run (candidates are
+  // newest-first, so runs[0]); when nothing is live it is the idle shape.
+  const newest = runs[0] ?? null;
+  const snapshot = {
+    runs,
+    live_count: runs.length,
+    state: newest?.state ?? "idle",
     // Stop, still_running and the tools' refuse-while-running guard all read this.
-    running,
-    // The run directory, from the log's own text (see newestLog).
-    run_dir: log.run_dir ?? null,
-    log_path: log.path,
-    log_name: log.name,
-    pid: launcher?.pid ?? null,
-    model: launcher?.model ?? null,
-    arm: launcher?.arm ?? arm,
-    session_id: sessionIdFrom(text),
-    started_at: launcher?.started_at ?? null,
-    log_silent_s: silent,
-    // Liveness and its age. log_silent_s is informational only, never liveness.
-    liveness,
-    heartbeat_age_s: heartbeatAgeS,
-    terminal_status: terminal?.status ?? null,
-    // Whether the ending was good: true clean, false adverse, null unvouched.
-    terminal_ok: terminalClass ? terminalClass.ok : null,
-    can_start: !running,
-    blocked_reason: running
-      ? `a cell is ${state} (${log.name}) — the campaign is strictly serial, ` +
-        "one cell at a time (RUNBOOK: OFF-concurrency = 1)"
-      : null,
-    // A run this service started vs one launched at the CLI (which it cannot own).
-    launched_by: launcher ? "control-plane" : "external",
+    running: newest?.running ?? false,
+    run_dir: newest?.run_dir ?? null,
+    log_path: newest?.log_path ?? null,
+    log_name: newest?.log_name ?? null,
+    pid: newest?.pid ?? null,
+    model: newest?.model ?? null,
+    arm: newest?.arm ?? null,
+    session_id: newest?.session_id ?? null,
+    started_at: newest?.started_at ?? null,
+    log_silent_s: newest?.log_silent_s ?? null,
+    liveness: newest?.liveness ?? "unknown",
+    heartbeat_age_s: newest?.heartbeat_age_s ?? null,
+    terminal_status: newest?.terminal_status ?? null,
+    terminal_ok: newest?.terminal_ok ?? null,
+    can_start: newest?.can_start ?? true,
+    blocked_reason: newest?.blocked_reason ?? null,
+    launched_by: newest?.launched_by ?? null,
   };
+
+  // ── Ledger reconciliation ── a run that ended on its own must stop holding
+  // its ledger slot, or its model's launch gate stays wedged forever
+  // (inFlightModels never clears). The enumeration above already read every
+  // candidate log, so the evidence is in hand: a live record whose log
+  // carries a terminal status is finished with that status; a record whose
+  // log file or run_dir cell has disappeared (wiped, rotated away) is
+  // finished unvouched — null/null, nothing left to read. A record naming
+  // neither is live-by-default, exactly as in the enumeration. Only the REAL
+  // ledger is reconciled (`launchers` may be a test fixture), and only as
+  // best effort: bookkeeping never breaks the read for a read-only caller,
+  // and an empty ledger — the common case — makes the pass a no-op.
+  // Idempotent: finished records leave liveRuns(), so a record is marked once.
+  try {
+    for (const rec of liveRuns()) {
+      const ended = rec.log_path ? terminalByLog.get(rec.log_path) : undefined;
+      if (ended) {
+        markRunFinished(rec.run_id, ended);
+        continue;
+      }
+      if (rec.log_path && !(await statOrNull(rec.log_path))?.isFile()) {
+        markRunFinished(rec.run_id, { terminal_status: null, terminal_ok: null });
+        continue;
+      }
+      if (rec.run_dir && !(await statOrNull(join(runsRoot, rec.run_dir)))?.isDirectory()) {
+        markRunFinished(rec.run_id, { terminal_status: null, terminal_ok: null });
+      }
+    }
+  } catch {
+    // The snapshot above is already whole; a failed reconcile only delays a
+    // natural finish to the next poll.
+  }
+
+  return snapshot;
 }

@@ -220,6 +220,22 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--sequence-index",
+        type=int,
+        default=None,
+        help=(
+            "Run exactly the session at this index of the manifest's "
+            "session_records (the record's sequence_index drives the "
+            "cell-000K / cumulative-000K-... labels) instead of selecting "
+            "via manifest.current_index, and never advance current_index: "
+            "the caller (control plane) owns the counter, reserving distinct "
+            "indices so concurrent runs cannot collide on the same cell. An "
+            "index out of range for session_records fails loudly. Omit for "
+            "the default behaviour: read current_index, advance after the "
+            "session."
+        ),
+    )
+    parser.add_argument(
         "--seed-snapshot",
         dest="seed_snapshot",
         default=None,

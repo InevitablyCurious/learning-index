@@ -19,7 +19,7 @@ import { listRunCells, readCheckpointIndex, readDiffText, readTranscriptText } f
 import { playStatus, startPlay, stopPlay } from "../play.mjs";
 import { deleteRun, planRunDelete } from "../rundelete.mjs";
 import { readRunState } from "../runstate.mjs";
-import { BENCH_ROOT, RUNS_ROOT, getLauncher } from "../state.mjs";
+import { BENCH_ROOT, RUNS_ROOT } from "../state.mjs";
 import { sendJson, sendText, readBody } from "../lib/http.mjs";
 import { treeResetGate, restoreGate } from "../lib/gates.mjs";
 import { stopRun } from "../lib/lifecycle.mjs";
@@ -281,7 +281,7 @@ export const routes = [
     path: "/api/history/delete/preview",
     async handle(req, res, url) {
       const body = JSON.parse((await readBody(req)) || "{}");
-      const run = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const run = await readRunState({ runsRoot: RUNS_ROOT });
       const r = await planRunDelete(RUNS_ROOT, body?.run, body?.cell, {
         runInFlight: run.can_start !== true,
       });
@@ -299,7 +299,7 @@ export const routes = [
     path: "/api/history/delete",
     async handle(req, res, url) {
       const body = JSON.parse((await readBody(req)) || "{}");
-      const run = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const run = await readRunState({ runsRoot: RUNS_ROOT });
       const r = await deleteRun(RUNS_ROOT, body?.run, body?.cell, body?.confirm, {
         runInFlight: run.can_start !== true,
       });

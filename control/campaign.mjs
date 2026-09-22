@@ -87,6 +87,67 @@ export async function campaignTargetFor(subject, runsRoot) {
   return { manifest_arg: manifestArg, run_dir: dir, sequence_index: current, tree: null };
 }
 
+// ── Sequence-index allocation ──────────────────────────────────────────────
+// The control plane owns the launch counter: N concurrent starts each get a
+// DISTINCT index, handed to the harness via --sequence-index. The cursor is
+// in-memory only — seeded once per manifest from manifest.current_index and
+// NEVER written back, because a running cell's _checkpoint is a full-manifest
+// atomic_write (harness/cumulative/sequencer.py:323-325) that would silently
+// clobber any control-plane write. Restart durability is an accepted
+// limitation: a restart re-seeds from the manifest, and --sequence-index runs
+// never advance current_index, so indices handed out before a restart can be
+// re-issued afterward.
+const sequenceCursors = new Map(); // manifestArg -> next index to hand out
+// In-flight seed promises. The seed read is async, so without this guard two
+// concurrent first-calls would both see the cursor unset, both await the seed
+// and both hand out the same index — a check-then-act race across the await.
+// Deduplicating the seed keeps the get/increment below synchronous and atomic.
+const seeding = new Map(); // manifestArg -> Promise<number>
+
+/** The index to seed `manifestArg`'s cursor from, read from its manifest. */
+async function seedCursor(manifestArg) {
+  const manifest = await readJsonOrNull(manifestArg);
+  // Fail loud on a manifest that exists but cannot be read: silently seeding 0
+  // would collide with the cells already run. A manifest that does not exist
+  // yet is a fresh campaign whose first cell is index 0 — the harness creates
+  // it at current_index 0 (resume_or_create), matching campaignTargetFor above.
+  if (manifest === null && existsSync(manifestArg)) {
+    throw new Error(
+      `cannot allocate sequence_index: campaign manifest ${manifestArg} exists but cannot be read`,
+    );
+  }
+  return Number.isFinite(manifest?.current_index) ? Number(manifest.current_index) : 0;
+}
+
+/**
+ * Allocate the next distinct sequence_index for `manifestArg`. The first call
+ * for a manifest lazily seeds the cursor from manifest.current_index; every
+ * call then reads and increments the in-memory cursor synchronously, so N
+ * concurrent starts in this single Node process each get a distinct index.
+ * Never writes to the manifest.
+ */
+export async function allocateSequenceIndex(manifestArg) {
+  if (!sequenceCursors.has(manifestArg)) {
+    let seedPromise = seeding.get(manifestArg);
+    if (!seedPromise) {
+      seedPromise = seedCursor(manifestArg);
+      seeding.set(manifestArg, seedPromise);
+    }
+    try {
+      const value = await seedPromise;
+      // Only the first caller to land sets the cursor; the rest find it set.
+      if (!sequenceCursors.has(manifestArg)) sequenceCursors.set(manifestArg, value);
+    } finally {
+      seeding.delete(manifestArg);
+    }
+  }
+  // Synchronous read-then-increment: no await between get and set, so the
+  // single Node process makes this atomic across concurrent starts.
+  const next = sequenceCursors.get(manifestArg);
+  sequenceCursors.set(manifestArg, next + 1);
+  return next;
+}
+
 /**
  * The model a manifest froze, via identifyCell (baselines.mjs) — the same rule
  * the board uses, so the owner named here matches.

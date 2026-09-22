@@ -2,14 +2,15 @@
 // is { method, path, handle(req, res, url) }; paths are wire contract.
 
 import { readRoster } from "../roster.mjs";
-import { readRunState } from "../runstate.mjs";
 import { readModelsLedger } from "../models-ledger.mjs";
 // The floor's one owner (baselines.mjs).
 import { readBaselines } from "../baselines.mjs";
 // Cloud catalogue and key report (see cloud.mjs: no credential crosses the wire).
 import { readCloud } from "../cloud.mjs";
 import { readRouters, writeRouterKey } from "../routers.mjs";
-import { args, BENCH_ROOT, RUNS_ROOT, getLauncher } from "../state.mjs";
+// The N-slot run ledger: the Set of models with a live run (the per-model gate).
+import { inFlightModels } from "../run-ledger.mjs";
+import { args, BENCH_ROOT, RUNS_ROOT } from "../state.mjs";
 import { sendJson, readBody } from "../lib/http.mjs";
 
 export const routes = [
@@ -32,13 +33,12 @@ export const routes = [
     method: "GET",
     path: "/api/models-ledger",
     async handle(req, res, url) {
-      const runState = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
       const roster = await readRoster({ proxyUrl: args.proxyUrl, runtimeUrl: args.runtimeUrl });
       const ledger = await readModelsLedger({
         runsRoot: RUNS_ROOT,
         benchModels: roster.ok ? (roster.bench_models ?? []) : [],
-        runInFlight: runState.can_start !== true,
-        blockedReason: runState.blocked_reason,
+        // The per-model gate: the Set of models with a live run in the N-slot ledger.
+        inFlightModels: inFlightModels(),
         // Passed in, so the ledger stays a pure assembly (testable on fixtures).
         cloud: await readCloud({ benchRoot: BENCH_ROOT }),
       });

@@ -21,7 +21,6 @@ test("LEDGER: a valid OFF cell is the baseline, and it opens + run but not + bas
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }],
-    runInFlight: false,
   });
   const m = led.models[0];
   assert.equal(m.baseline.scorable, true);
@@ -49,7 +48,6 @@ test("LEDGER: a VOID baseline counts as NO baseline and re-opens + baseline", as
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }],
-    runInFlight: false,
   });
   const m = led.models[0];
   assert.equal(m.baseline.scorable, false);
@@ -71,7 +69,6 @@ test("LEDGER: attempt_ceiling_reached is a real FAIL, not a void instrument", as
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }],
-    runInFlight: false,
   });
   assert.equal(led.models[0].baseline.scorable, true, "a capability FAIL is a usable floor");
   rmSync(root, { recursive: true, force: true });
@@ -84,34 +81,51 @@ test("LEDGER: an archived run never supplies a baseline", async () => {
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }],
-    runInFlight: false,
   });
   assert.equal(led.models[0].baseline.exists, false);
   rmSync(root, { recursive: true, force: true });
 });
 
-test("LEDGER: one cell in flight blocks EVERY button on EVERY model", async () => {
-  // The serial rule is a property of the bench, not of a row. A per-row UI is
-  // exactly where this gets broken, because each row looks independent.
+test("LEDGER: a cell in flight blocks EVERY button on ITS OWN model, never another model's", async () => {
+  // The serial rule is PER MODEL (the N-slot ledger, run-ledger.mjs): a cell in
+  // flight blocks every button on its own model's row — a per-row UI is exactly
+  // where this gets broken, because each row looks independent — but it must
+  // never block a DIFFERENT model. That is what lets N cells run concurrently
+  // across models while one model stays serial.
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
-  writeRun(root, "cumulative", { status: OFF_PASS });
+  writeRun(root, "cumulative", { status: OFF_PASS });           // m-a has a floor
 
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }, { id: "m-b", bench_eligible: true }],
-    runInFlight: true,
-    blockedReason: "a cell is running (off-cell-3.log)",
+    inFlightModels: new Set(["m-a"]),
   });
-  assert.equal(led.run_in_flight, true);
-  for (const m of led.models) {
-    assert.equal(m.can_baseline.allowed, false);
-    assert.equal(m.can_run.allowed, false);
-    assert.match(m.can_baseline.reason, /cell is running/);
-  }
-  for (const b of led.baseline_rows) {
-    assert.equal(b.can_run.allowed, false, "a floor row must not offer a launch either");
-    assert.match(b.can_run.reason, /cell is running/);
-  }
+  assert.equal(led.run_in_flight, true, "the top-level aggregate mirrors: SOME model is in flight");
+
+  const byId = Object.fromEntries(led.models.map((m) => [m.id, m]));
+  // m-a: every button blocked, and the reason names the per-model serial rule.
+  assert.equal(byId["m-a"].in_flight, true);
+  assert.equal(byId["m-a"].can_baseline.allowed, false);
+  assert.equal(byId["m-a"].can_run.allowed, false);
+  assert.match(
+    byId["m-a"].can_baseline.reason,
+    /a cell for m-a is already in flight — this model is serial/,
+    "the refusal names the model that is serial, never a global OFF-concurrency rule",
+  );
+  assert.match(byId["m-a"].can_run.reason, /already in flight/);
+  // m-b: untouched by m-a's cell.
+  assert.equal(byId["m-b"].in_flight, false);
+  assert.equal(byId["m-b"].can_baseline.allowed, true, "another model's cell never blocks this floor");
+  assert.equal(byId["m-b"].can_run.allowed, false, "m-b still has no floor to run against");
+  assert.ok(
+    !/in flight/.test(String(byId["m-b"].can_run.reason)),
+    "m-b's refusal is about its missing floor, not about a cell it does not have",
+  );
+
+  // The floor row of the in-flight model must not offer a launch either.
+  const row = led.baseline_rows.find((b) => b.model === "m-a");
+  assert.equal(row.can_run.allowed, false, "a floor row must not offer a launch either");
+  assert.match(row.can_run.reason, /already in flight/);
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -135,7 +149,6 @@ test("LEDGER: a floor on one model never blocks another model's + baseline", asy
       { id: "m-b", bench_eligible: true },
       { id: "m-c", bench_eligible: true },
     ],
-    runInFlight: false,
   });
 
   const byId = Object.fromEntries(led.models.map((m) => [m.id, m]));
@@ -233,7 +246,7 @@ test("BASELINES: the index is the single export, and it is written to disk", asy
   assert.equal(again.stored.written, false);
 
   // THE LEDGER READS THIS SAME INDEX rather than deriving its own.
-  const led = await readModelsLedger({ runsRoot: root, benchModels: models, runInFlight: false });
+  const led = await readModelsLedger({ runsRoot: root, benchModels: models });
   assert.deepEqual(led.baselines.models, idx.models);
   for (const m of led.models) assert.deepEqual(m.baseline.scorable, idx.models[m.id].scorable);
   rmSync(root, { recursive: true, force: true });
@@ -250,7 +263,6 @@ test("LEDGER: a floor with no ON cell reports an empty run list, not an excuse",
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }],
-    runInFlight: false,
   });
   const row = led.baseline_rows.find((b) => b.model === "m-a");
   assert.deepEqual(row.runs, []);
@@ -276,7 +288,6 @@ test("LEDGER: the ON cells of the floor\'s own campaign ARE its runs, read off d
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }],
-    runInFlight: false,
   });
   const row = led.baseline_rows.find((b) => b.model === "m-a");
   assert.equal(row.run_count, 2, "both ON cells are runs; the OFF cell is the floor, not a run");
@@ -315,7 +326,6 @@ test("LEDGER: the floor\'s own OFF cell is never listed as a run against itself"
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }],
-    runInFlight: false,
   });
   const row = led.baseline_rows.find((b) => b.model === "m-a");
   assert.equal(row.sequence_index, 0, "the floor is slot 0");
@@ -644,7 +654,6 @@ test("LEDGER: startable spans both substrates and gates each one separately", as
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }],
-    runInFlight: false,
     cloud: await readCloud({ benchRoot: root, env: {} }),
   });
 
@@ -665,7 +674,6 @@ test("LEDGER: with no key, every cloud model refuses and says which key is missi
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [],
-    runInFlight: false,
     cloud: await readCloud({ benchRoot: root, env: {} }),
   });
   const cloudRows = led.startable.filter((s) => s.kind === "cloud");
@@ -677,9 +685,10 @@ test("LEDGER: with no key, every cloud model refuses and says which key is missi
   rmSync(root, { recursive: true, force: true });
 });
 
-test("LEDGER: a cell in flight blocks every launch on every row, both substrates", async () => {
-  // The serial rule is a property of the BENCH, not of any row. It is the rule
-  // most easily broken by a per-row UI, because each row looks independent.
+test("LEDGER: a cell in flight blocks its OWN model's rows on BOTH substrates, never another model's", async () => {
+  // The serial rule is a per-model property of the BENCH, applied identically
+  // to a local row and a cloud row — and it is the rule most easily broken by a
+  // per-row UI, because each row looks independent.
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   mkdirSync(join(root, "config"), { recursive: true });
   writeFileSync(join(root, "config", "cloud.env"), "ORCAROUTER_API_KEY=k\n");
@@ -688,12 +697,24 @@ test("LEDGER: a cell in flight blocks every launch on every row, both substrates
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }],
-    runInFlight: true,
-    blockedReason: "a cell is already in flight",
+    inFlightModels: new Set(["m-a", "anthropic/claude-opus-5"]),
     cloud: await readCloud({ benchRoot: root, env: {} }),
   });
 
-  for (const s of led.startable) assert.equal(s.can_baseline.allowed, false);
+  const byId = Object.fromEntries(led.startable.map((s) => [s.id, s]));
+  // The two in-flight models are blocked, each on its own substrate.
+  assert.equal(byId["m-a"].can_baseline.allowed, false);
+  assert.match(byId["m-a"].can_baseline.reason, /already in flight/);
+  assert.equal(byId["anthropic/claude-opus-5"].can_baseline.allowed, false);
+  assert.match(byId["anthropic/claude-opus-5"].can_baseline.reason, /already in flight/);
+  // EVERY OTHER cloud model is untouched — the gate is per model, not global.
+  const others = led.startable.filter((s) => s.kind === "cloud" && s.id !== "anthropic/claude-opus-5");
+  assert.ok(others.length > 0, "the catalogue offers more than one cloud model");
+  for (const s of others) {
+    assert.equal(s.can_baseline.allowed, true, `${s.id} has no cell in flight and a key resolves`);
+  }
+
+  // The only measured floor is m-a's, and its model is in flight.
   for (const b of led.baseline_rows) {
     assert.equal(b.can_run.allowed, false);
     assert.match(b.can_run.reason, /already in flight/);

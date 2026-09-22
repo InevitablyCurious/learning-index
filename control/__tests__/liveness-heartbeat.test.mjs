@@ -31,14 +31,14 @@ test("LIVENESS: a fresh heartbeat means running, however old the log is", async 
     const runs = join(root, "runs");
     const dir = campaignDirName("qwen/qwen3.6-flash");
     writeCampaignCell(runs, dir, { gates: [{ id: "CONF" }], results: [] });
-    const first = await readRunState({ runsRoot: runs, launcher: null, aliveProbe: async () => true });
+    const first = await readRunState({ runsRoot: runs, launchers: [], aliveProbe: async () => true });
     // The log has said nothing for 25 minutes — a normal mid-drive phase.
     const old = Date.now() / 1000 - (STALL_THRESHOLD_S + 600);
     utimesSync(first.log_path, old, old);
 
     const state = await readRunState({
       runsRoot: runs,
-      launcher: null,
+      launchers: [],
       aliveProbe: async () => true,
       heartbeatProbe: async () => 3000,
     });
@@ -63,7 +63,7 @@ test("LIVENESS: a stopped heartbeat IS a stall, however fresh the log is", async
 
     const state = await readRunState({
       runsRoot: runs,
-      launcher: null,
+      launchers: [],
       aliveProbe: async () => true,
       heartbeatProbe: async () => (STALL_THRESHOLD_S + 60) * 1000,
     });
@@ -71,7 +71,10 @@ test("LIVENESS: a stopped heartbeat IS a stall, however fresh the log is", async
     assert.equal(state.state, "stalled", "the log being fresh must not rescue a dead heartbeat");
     assert.equal(state.liveness, "stalled");
     assert.equal(state.can_start, false, "a stalled-but-alive cell still holds the tree");
-    assert.match(String(state.blocked_reason), /strictly serial/);
+    // The block is PER RUN: it names this cell's own state, never a global
+    // serial rule — with N concurrent cells, only the cell in flight blocks.
+    assert.match(String(state.blocked_reason), /this cell is stalled/);
+    assert.match(String(state.blocked_reason), /already in flight/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -86,13 +89,13 @@ test("LIVENESS: NO heartbeat is unknown — never stalled", async () => {
     const runs = join(root, "runs");
     const dir = campaignDirName("qwen/qwen3.6-flash");
     writeCampaignCell(runs, dir, { gates: [{ id: "CONF" }], results: [] });
-    const first = await readRunState({ runsRoot: runs, launcher: null, aliveProbe: async () => true });
+    const first = await readRunState({ runsRoot: runs, launchers: [], aliveProbe: async () => true });
     const old = Date.now() / 1000 - (STALL_THRESHOLD_S + 600);
     utimesSync(first.log_path, old, old);
 
     const state = await readRunState({
       runsRoot: runs,
-      launcher: null,
+      launchers: [],
       aliveProbe: async () => true,
       heartbeatProbe: async () => null,
     });

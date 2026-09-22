@@ -26,14 +26,18 @@ test("RUN STATE: a killed CLI-launched run does not block reset behind a fresh l
 
     // Log written moments ago, process gone: the state immediately after a
     // harness is killed mid-cell. Log recency alone called this "running" and
-    // refused reset for the full 15-minute stall threshold.
+    // refused reset for the full 15-minute stall threshold. Under the N-run
+    // semantics an abandoned log is stronger still: it DROPS OUT of runs[] —
+    // a killed CLI run is not a live run, so nothing is left to block on.
     const state = await readRunState({
       runsRoot: runs,
-      launcher: null,
+      launchers: [],
       aliveProbe: async () => false,
     });
 
-    assert.equal(state.state, "failed", "no terminal record and no process is an abandoned run");
+    assert.deepEqual(state.runs, [], "no terminal record and no process is an abandoned run — it leaves the live set");
+    assert.equal(state.live_count, 0);
+    assert.equal(state.state, "idle", "with the abandoned log dropped, nothing is live");
     assert.equal(
       state.can_start,
       true,
@@ -64,7 +68,7 @@ test("RUN STATE: a LIVE run that has gone quiet still blocks reset", async () =>
     const dir = campaignDirName("qwen/qwen3.6-flash");
     writeCampaignCell(runs, dir, { gates: [{ id: "CONF" }], results: [] });
 
-    const first = await readRunState({ runsRoot: runs, launcher: null, aliveProbe: async () => true });
+    const first = await readRunState({ runsRoot: runs, launchers: [], aliveProbe: async () => true });
     // Age the log well past the stall threshold, process still alive.
     const old = Date.now() / 1000 - (STALL_THRESHOLD_S + 120);
     utimesSync(first.log_path, old, old);
@@ -72,7 +76,7 @@ test("RUN STATE: a LIVE run that has gone quiet still blocks reset", async () =>
     // THE HEARTBEAT STOPPED — genuinely wedged.
     const wedged = await readRunState({
       runsRoot: runs,
-      launcher: null,
+      launchers: [],
       aliveProbe: async () => true,
       heartbeatProbe: async () => (STALL_THRESHOLD_S + 120) * 1000,
     });
@@ -81,13 +85,18 @@ test("RUN STATE: a LIVE run that has gone quiet still blocks reset", async () =>
     // prevent. Quiet is not dead.
     assert.equal(wedged.state, "stalled");
     assert.equal(wedged.can_start, false, "a stalled-but-alive cell still holds the tree");
-    assert.match(String(wedged.blocked_reason), /strictly serial/);
+    // The block is PER RUN now — it names this cell's own state, never a
+    // global OFF-concurrency rule (N cells may be live, each blocking itself).
+    assert.match(String(wedged.blocked_reason), /this cell is stalled/);
+    assert.match(String(wedged.blocked_reason), /already in flight/);
+    assert.equal(wedged.runs.length, 1, "a stalled run is still a live run");
+    assert.equal(wedged.runs[0].can_start, false, "per-run: this cell cannot be started again");
 
     // THE HEART IS BEATING — the same stale log, and the cell is fine. It still
     // blocks reset, because it is still running.
     const working = await readRunState({
       runsRoot: runs,
-      launcher: null,
+      launchers: [],
       aliveProbe: async () => true,
       heartbeatProbe: async () => 2000,
     });
@@ -320,7 +329,6 @@ test("SEEDED: a cell carrying seeded_from_snapshot folds with the id and never s
     const led = await readModelsLedger({
       runsRoot: root,
       benchModels: [{ id: "m-a", bench_eligible: true }],
-      runInFlight: false,
     });
     assert.equal(led.models[0].baseline.scorable, false);
     assert.equal(led.baseline_rows.length, 0, "state 'none' drops the row — a seeded cell never appears in baseline_rows");

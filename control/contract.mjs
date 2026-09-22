@@ -59,8 +59,9 @@ export const RESUME_UNSUPPORTED = {
  */
 export const BENCH_PURPOSE = "okp-bench";
 
-// ── RUN STATE ── exactly one run at a time (one resident model). A second
-// start is refused with a reason, never queued.
+// ── RUN STATE ── every live run at once (N concurrent cells). `runs[]` holds
+// one entry per live run, newest log first; the legacy top-level single-run
+// keys mirror the newest live run, or the idle shape when none is live.
 
 /**
  * Stall is judged from filesystem times, never a parsed log timestamp: the
@@ -69,18 +70,46 @@ export const BENCH_PURPOSE = "okp-bench";
 export const STALL_THRESHOLD_S = 900;
 
 /**
+ * One live run in `RunState.runs[]`. A live run is a cell log with no terminal
+ * status whose process/heartbeat is alive, so `state` is "running" or "stalled"
+ * and `running` is true for every entry.
+ *
+ * @typedef {Object} RunStateEntry
+ * @property {string|null}  run_id          — ledger run id; null when a live log has no ledger record (an external launch)
+ * @property {string}       state           — "running" | "stalled" (a live run is never idle, complete or failed)
+ * @property {boolean}      running         — this run is in flight
+ * @property {boolean}      can_start       — !running for THIS run: per-run, never a global gate
+ * @property {string|null}  blocked_reason  — WHY this run cannot be started, verbatim
+ * @property {string|null}  run_dir         — active run directory name
+ * @property {string|null}  log_path        — the launch log being written
+ * @property {string|null}  log_name        — the launch log's file name
+ * @property {number|null}  pid             — launcher pid, null if unobserved
+ * @property {string|null}  model           — the pinned --model alias
+ * @property {string|null}  arm             — "on" | "off"
+ * @property {string|null}  session_id      — live opencode session
+ * @property {number|null}  started_at      — epoch ms
+ * @property {number|null}  log_silent_s    — seconds since last log write
+ * @property {string}       liveness        — "live" | "stalled" | "unknown" (heartbeat age vs STALL_THRESHOLD_S)
+ * @property {number|null}  heartbeat_age_s — seconds since the newest heartbeat, null if never beat
+ * @property {string|null}  terminal_status — the harness's terminal status; null for a live run
+ * @property {boolean|null} terminal_ok     — whether the ending was good; null for a live run
+ * @property {string|null}  launched_by     — "control-plane" (a ledger record) | "external" (CLI)
+ */
+
+/**
+ * The run-state read: the full live set plus the legacy single-run surface.
+ *
  * @typedef {Object} RunState
- * @property {string}      state          — "idle" | "starting" | "running" | "stalled" | "complete" | "failed"
- * @property {string|null} run_dir        — active run directory name
- * @property {string|null} log_path       — the launch log being written
- * @property {number|null} pid            — launcher pid, null if unobserved
- * @property {string|null} model          — the pinned --model alias
- * @property {string|null} arm            — "on" | "off"
- * @property {string|null} session_id     — live opencode session
- * @property {number|null} started_at     — epoch ms
- * @property {number|null} log_silent_s   — seconds since last log write
- * @property {boolean}     can_start      — false while anything is in flight
- * @property {string|null} blocked_reason — WHY start is unavailable, verbatim
+ * @property {RunStateEntry[]} runs       — every live run, newest log first
+ * @property {number}          live_count — runs.length
+ *
+ * Plus every RunStateEntry key except run_id mirrored at the top level from
+ * the NEWEST live run — the only backward-compat surface. When no run is
+ * live: state:"idle", running:false, can_start:true, liveness:"unknown", and
+ * null for the rest. Top-level can_start is therefore false while the newest
+ * live run is in flight and true when idle; the per-run can_start inside
+ * runs[] is the per-run fact, and whether ANOTHER cell may start is the
+ * caller's policy, not this shape's.
  */
 
 // ── START REQUEST ────────────────────────────────────────────────────────────

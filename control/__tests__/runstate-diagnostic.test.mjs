@@ -27,13 +27,32 @@ test("RUN STATE: the resolved run directory is PUBLISHED, not dropped as null", 
       results: [{ id: "CONF", status: "pass" }],
     });
 
-    const state = await readRunState({ runsRoot: runs, launcher: null });
+    // A LIVE run publishes its resolved directory: per-run in runs[] and on the
+    // top-level mirror of the newest live run.
+    const state = await readRunState({
+      runsRoot: runs,
+      launchers: [],
+      aliveProbe: async () => true,
+      heartbeatProbe: async () => 1000,
+    });
+    assert.equal(state.runs.length, 1);
     assert.equal(
-      state.run_dir,
+      state.runs[0].run_dir,
       dir,
       "the log names its run directory and the contract declares the field — publishing null " +
         "forces every run-scoped reader back onto a default that a per-model campaign invalidates",
     );
+    assert.equal(state.run_dir, dir, "the top-level mirror carries the newest live run's directory");
+
+    // AN ABANDONED RUN DROPS OUT. No terminal record and no process is not a
+    // live run: it leaves runs[] at once, and with nothing live the top level
+    // is the idle shape — run_dir null is correct THERE because there is no run.
+    const dead = await readRunState({ runsRoot: runs, launchers: [], aliveProbe: async () => false });
+    assert.deepEqual(dead.runs, [], "a killed run is not a live run and never re-enters the set");
+    assert.equal(dead.live_count, 0);
+    assert.equal(dead.state, "idle");
+    assert.equal(dead.run_dir, null);
+    assert.equal(dead.can_start, true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -53,8 +72,17 @@ test("WALL: a per-model campaign's outcomes are served, never a zeroed suite", a
       ],
     });
 
-    // What the server now passes: the run directory resolved from the log.
-    const runDir = (await readRunState({ runsRoot: runs, launcher: null })).run_dir;
+    // What the server now passes: the run directory resolved from the log. The
+    // run must be LIVE to resolve — an abandoned log drops out of runs[] and the
+    // mirror goes idle, which is the drop-out truth pinned in the test above.
+    const runDir = (
+      await readRunState({
+        runsRoot: runs,
+        launchers: [],
+        aliveProbe: async () => true,
+        heartbeatProbe: async () => 1000,
+      })
+    ).run_dir;
     const wall = await readWall({ runsRoot: runs, runDir });
 
     assert.equal(wall.run_dir, dir);

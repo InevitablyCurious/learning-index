@@ -13,7 +13,6 @@ import {
   ring,
   BENCH_ROOT,
   RUNS_ROOT,
-  getLauncher,
   getRingRunDir,
   setRingRunDir,
 } from "../state.mjs";
@@ -114,7 +113,7 @@ export const routes = [
       // The ring is scoped to one run: if the active run changed, reset it before
       // admitting anything. cell_in_flight comes from the same owner as the launch
       // buttons.
-      const liveRunState = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const liveRunState = await readRunState({ runsRoot: RUNS_ROOT });
       const currentRunDir = await activeRunDir();
       if (currentRunDir !== getRingRunDir()) {
         ring.reset();
@@ -209,7 +208,7 @@ export const routes = [
     method: "GET",
     path: "/api/backend-feed",
     async handle(req, res, url) {
-      const runState = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const runState = await readRunState({ runsRoot: RUNS_ROOT });
       const requestedRunDir = url.searchParams.get("run_dir");
       // A requested past run uses that run's launch log for its notices.
       const logPath = requestedRunDir
@@ -240,7 +239,7 @@ export const routes = [
     method: "GET",
     path: "/api/stats",
     async handle(req, res, url) {
-      const runState = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const runState = await readRunState({ runsRoot: RUNS_ROOT });
       const baselines = await readStatsBaseline({ logPath: runState.log_path });
       // Run-scoped: the run in view comes from activeRunDir, like /api/wall.
       sendJson(

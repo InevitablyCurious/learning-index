@@ -6,7 +6,7 @@ import { refuse } from "../contract.mjs";
 import { describeTools } from "../tools.mjs";
 import { startToolJob } from "../tooljobs.mjs";
 import { readRunState } from "../runstate.mjs";
-import { BENCH_ROOT, RUNS_ROOT, getLauncher } from "../state.mjs";
+import { BENCH_ROOT, RUNS_ROOT } from "../state.mjs";
 import { sendJson, readBody } from "../lib/http.mjs";
 
 export const routes = [
@@ -38,7 +38,7 @@ export const routes = [
         (t) => t.id === payload?.id && t.refuse_while_running,
       );
       if (sensitive) {
-        const state = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+        const state = await readRunState({ runsRoot: RUNS_ROOT });
         if (state?.running) {
           sendJson(res, 409, refuse(
             "run_in_flight",

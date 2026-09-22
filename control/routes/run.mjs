@@ -3,7 +3,7 @@
 
 import { createHash } from "node:crypto";
 import { spawn, execFile } from "node:child_process";
-import { open, readFile } from "node:fs/promises";
+import { open, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -15,14 +15,18 @@ import {
 import { readRoster } from "../roster.mjs";
 import { readRunState, confirmAlive, findHarnessProcs } from "../runstate.mjs";
 import { readHold, releaseHold } from "../hold.mjs";
-// Where a cell's measurement lands (one campaign per model).
-import { campaignTargetFor } from "../campaign.mjs";
-import { captureStatsBaseline } from "../runstats.mjs";
+// Where a cell's measurement lands (one campaign per model), and the atomic
+// cursor that hands N concurrent cells distinct sequence indices.
+import { allocateSequenceIndex, campaignTargetFor } from "../campaign.mjs";
+import { baselinePathFor, captureStatsBaseline } from "../runstats.mjs";
 import { notice, noticesPathFor } from "../notices.mjs";
 // The benchmark tree (see tree.mjs).
 import { ensureTree } from "../tree.mjs";
 // The tool registry: preflight failures resolve to the button that fixes them.
 import { attachRemedies, describeBuiltinTools } from "../tools.mjs";
+// The N-slot run ledger: every cell this service spawns holds a slot, so N
+// concurrent cells are tracked at once (the launcher singleton is gone).
+import { inFlightModels, newRunId, registerRun, unregisterRun } from "../run-ledger.mjs";
 import {
   args,
   BENCH_ROOT,
@@ -30,8 +34,6 @@ import {
   PYTHON,
   RUN_SCRIPT,
   tui,
-  getLauncher,
-  setLauncher,
 } from "../state.mjs";
 import { sendJson, readBody } from "../lib/http.mjs";
 import { validateStart } from "../lib/validate.mjs";
@@ -53,7 +55,7 @@ export const routes = [
     method: "GET",
     path: "/api/run",
     async handle(req, res, url) {
-      sendJson(res, 200, await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() }));
+      sendJson(res, 200, await readRunState({ runsRoot: RUNS_ROOT }));
       return;
     },
   },
@@ -70,7 +72,7 @@ export const routes = [
       // would refuse. The serial gate is excluded: the operator may review the next
       // run while a cell is in flight. So is the refresh gate: a refresh in flight
       // blocks the start, never the review (the advisory rides along below).
-      const run = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const run = await readRunState({ runsRoot: RUNS_ROOT });
       const refresh = substrateRefreshInFlight(BENCH_ROOT);
       const check = await validateStart(
         payload,
@@ -98,8 +100,12 @@ export const routes = [
         // spend ceiling), matching the token.
         kind,
         cloud: cloud ? { provider: cloud.provider, model: cloud.model, slug: cloud.slug, name: cloud.name } : null,
-        // The serial rule will block this run; the parameters are still valid.
-        blocked_now: run.can_start === true ? null : (run.blocked_reason ?? "a cell is already in flight"),
+        // The per-model serial rule will block this run (the same fact the
+        // start gate reads — the run ledger); the parameters are still valid.
+        // Another model's cell no longer blocks this one.
+        blocked_now: inFlightModels().has(model)
+          ? `a cell for ${model} is already in flight — this model is serial`
+          : null,
         // A substrate-changing refresh in flight will block the start; the
         // parameters are still valid. Same advisory shape as blocked_now.
         refresh_now: refresh
@@ -112,10 +118,28 @@ export const routes = [
 
   {
     // ── POST /api/run/start ──────────────────────────────────────────────
+    // ONE request sequences, launches and tracks N cells: N distinct
+    // sequence_index values from the campaign's atomic cursor, N spawned
+    // harnesses, N ledger slots. N=1 goes through the same loop — there is no
+    // single-cell path. The batch is all-or-nothing up to the first spawn
+    // (every index allocated, every log opened, in pre-flight); spawn-phase
+    // failures are reported per cell and never as a bare success.
     method: "POST",
     path: "/api/run/start",
     async handle(req, res, url) {
       const payload = JSON.parse((await readBody(req)) || "{}");
+
+      // How many cells this request launches. Absent = 1; anything but a
+      // positive integer is a bad request, never a silent fallback.
+      const concurrency = payload.concurrency === undefined ? 1 : payload.concurrency;
+      if (!Number.isInteger(concurrency) || concurrency < 1) {
+        sendJson(res, 400, refuse(
+          "bad_concurrency",
+          `concurrency must be a positive integer — got ${JSON.stringify(payload.concurrency)}`,
+        ));
+        return;
+      }
+
       const roster = await readRoster({ proxyUrl: args.proxyUrl, runtimeUrl: args.runtimeUrl });
 
       if (!roster.proxy_ok) {
@@ -123,8 +147,10 @@ export const routes = [
         return;
       }
 
-      const run = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const run = await readRunState({ runsRoot: RUNS_ROOT });
 
+      // The pre-flight gates run ONCE for the request, not per cell: the N
+      // cells share one validated parameter set (and one confirmation token).
       const check = await validateStart(payload, roster, run, { runsRoot: RUNS_ROOT });
       if (!check.ok) {
         sendJson(res, 409, check);
@@ -133,9 +159,11 @@ export const routes = [
 
       const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge } = check;
 
-      // Argv array, no shell. Main-parser flags precede the subcommand (argparse
-      // exits 2 otherwise). Cloud: --cloud --provider <vendor> --model <model half>,
-      // which the harness composes into {router}/{provider}/{model}.
+      // Argv array, no shell — the SHARED argv, identical for every cell of
+      // the batch except the per-cell --sequence-index spliced in below.
+      // Main-parser flags precede the subcommand (argparse exits 2 otherwise).
+      // Cloud: --cloud --provider <vendor> --model <model half>, which the
+      // harness composes into {router}/{provider}/{model}.
       const argv = [RUN_SCRIPT];
       if (kind === "cloud") {
         argv.push("--cloud", "--provider", cloud.provider, "--model", cloud.model);
@@ -177,6 +205,10 @@ export const routes = [
       // between preview and start).
       if (snapshotId) argv.push("--seed-snapshot", snapshotId);
 
+      // The subcommand's position in the shared argv: each cell's
+      // --sequence-index (also a main-parser flag) is spliced in just before
+      // it, so the N per-cell argv arrays differ in exactly one flag.
+      const subcommandAt = argv.length;
       argv.push("run", "--mode", arm, compact ? "--compact" : "--no-compact");
       if (requireTodos) argv.push("--require-todos");
       if (graderWorkerTarget != null) {
@@ -187,96 +219,183 @@ export const routes = [
         .toISOString()
         .replace(/[-:]/g, "")
         .replace(/\.\d+Z$/, "");
-      // The log goes inside the tree, so retiring the tree retires the log.
+      // The logs go inside the tree, so retiring the tree retires the logs.
       const logDir = tree ? join(RUNS_ROOT, tree) : RUNS_ROOT;
-      const logPath = join(logDir, `${arm}-cell-${stamp}.log`);
+      // The cursor to allocate from is the campaign's own manifest. A null
+      // manifest_arg is the legacy flat default: the harness spawned with
+      // cwd=BENCH_ROOT reads runs/cumulative/manifest.json (its
+      // DEFAULT_MANIFEST_PATH, scripts/run_cumulative/paths.py), so the cursor
+      // is seeded from THAT file's current_index — allocating against a null
+      // path would seed a blind 0 and re-run sessions that already have cells.
+      const sequenceManifest =
+        target.manifest_arg ?? join(RUNS_ROOT, "cumulative", "manifest.json");
 
-      // This run's zero for monotonic stat sources, taken before the harness exists
-      // (see captureStatsBaseline). Never blocks a launch.
-      await captureStatsBaseline({ logPath });
-
-      // Written before the spawn, so a launch that dies at startup still leaves a
-      // record that it was attempted.
-      await notice(logPath, "run_queued", {
-        detail: { model: model ?? null, arm: arm ?? null, context: context ?? null },
-      });
-
-      let fh;
+      // ── PRE-FLIGHT THE WHOLE BATCH ── N distinct indices and N open logs,
+      // ALL before the first spawn. Any cell that cannot be prepared refuses
+      // the whole batch and what was prepared is cleaned up: a half-launched
+      // batch is worse than a refused one.
+      const batch = [];
       try {
-        fh = await open(logPath, "a");
+        for (let i = 0; i < concurrency; i += 1) {
+          // The cursor is atomic (campaign.mjs): concurrent starts — this
+          // loop and any sibling request — get distinct indices.
+          const sequenceIndex = await allocateSequenceIndex(sequenceManifest);
+          const logPath = join(
+            logDir,
+            // The name keeps runstate.mjs's scan pattern (/^(off|on)-cell-|^cell-/);
+            // the index suffix keeps N logs of one second distinct.
+            `${arm}-cell-${stamp}-s${String(sequenceIndex).padStart(4, "0")}.log`,
+          );
+          const fh = await open(logPath, "a");
+          const cell = {
+            run_id: newRunId(),
+            sequence_index: sequenceIndex,
+            log_path: logPath,
+            fh,
+            pid: null,
+            launched: false,
+            code: null,
+            error: null,
+          };
+          batch.push(cell);
+
+          // This run's zero for monotonic stat sources, taken before the
+          // harness exists (see captureStatsBaseline). Never blocks a launch.
+          await captureStatsBaseline({ logPath });
+          // Written before the spawn, so a launch that dies at startup still
+          // leaves a record that it was attempted.
+          await notice(logPath, "run_queued", {
+            detail: { model: model ?? null, arm: arm ?? null, context: context ?? null },
+          });
+        }
       } catch (err) {
-        sendJson(res, 500, refuse("launcher_failed", `cannot open log ${logPath}: ${err?.message ?? err}`));
+        // Nothing was spawned: prepared-but-unused logs are ghosts the run
+        // state would read as live-by-default, so the batch leaves no trace.
+        await Promise.all(batch.map(async (cell) => {
+          await cell.fh.close().catch(() => {});
+          for (const f of [cell.log_path, noticesPathFor(cell.log_path), baselinePathFor(cell.log_path)]) {
+            await unlink(f).catch(() => {});
+          }
+        }));
+        sendJson(res, 500, refuse(
+          "launcher_failed",
+          `batch of ${concurrency} refused: cell ${batch.length + 1} could not be prepared — ${err?.message ?? err}`,
+          { requested: concurrency, prepared: batch.length },
+        ));
         return;
       }
 
+      // ── LAUNCH THE BATCH ── per cell: splice its index into the shared
+      // argv, spawn detached, and take the ledger slot at spawn. The env base
+      // is shared; only BENCH_NOTICES is per cell.
       const env = { ...process.env };
-      // The harness writes run-scoped notices to the same file; `source` says who
-      // spoke. A CLI launch runs identically without it.
-      env.BENCH_NOTICES = noticesPathFor(logPath);
       // Context goes through the environment; null = registry default.
       if (context !== null) env.BENCH_WORKER_NUM_CTX = String(context);
       // Read by the harness at import; unset = its own default.
       if (challenge?.dir) env.BENCH_TASK_DIR = challenge.dir;
 
-      let child;
-      try {
-        child = spawn(PYTHON, argv, {
-          cwd: BENCH_ROOT,
-          env,
-          // stdin from /dev/null is mandatory: touching stdin would suspend the process.
-          stdio: ["ignore", fh.fd, fh.fd],
-          detached: true,
-          shell: false,
+      for (const cell of batch) {
+        const cellArgv = [
+          ...argv.slice(0, subcommandAt),
+          "--sequence-index", String(cell.sequence_index),
+          ...argv.slice(subcommandAt),
+        ];
+        // The harness writes run-scoped notices to the same file; `source` says
+        // who spoke. A CLI launch runs identically without it.
+        const cellEnv = { ...env, BENCH_NOTICES: noticesPathFor(cell.log_path) };
+        let child;
+        try {
+          child = spawn(PYTHON, cellArgv, {
+            cwd: BENCH_ROOT,
+            env: cellEnv,
+            // stdin from /dev/null is mandatory: touching stdin would suspend the process.
+            stdio: ["ignore", cell.fh.fd, cell.fh.fd],
+            detached: true,
+            shell: false,
+          });
+        } catch (err) {
+          await cell.fh.close().catch(() => {});
+          cell.code = "launcher_failed";
+          cell.error = `spawn failed: ${err?.message ?? err}`;
+          continue;
+        }
+        child.unref();
+        await cell.fh.close().catch(() => {});
+        cell.pid = child.pid ?? null;
+
+        // The ledger slot at spawn: the batch is tracked from the moment each
+        // harness exists — through the parallel startup window below. A cell
+        // that does not survive the window releases its slot there; the ledger
+        // never vouches for a dead cell.
+        registerRun({
+          run_id: cell.run_id,
+          sequence_index: cell.sequence_index,
+          model,
+          arm,
+          kind,
+          org,
+          context,
+          manifest_arg: target.manifest_arg ?? null,
+          pid: cell.pid,
+          started_at: Date.now(),
+          log_path: cell.log_path,
+          run_dir: target.run_dir,
+          finished: false,
+          terminal_status: null,
+          terminal_ok: null,
         });
-      } catch (err) {
-        await fh.close().catch(() => {});
-        sendJson(res, 500, refuse("launcher_failed", String(err?.message ?? err)));
-        return;
+        cell.launched = true;
       }
 
-      child.unref();
-      await fh.close().catch(() => {});
+      // Startup liveness, all N in parallel: the harness can die seconds after
+      // spawn (usage error, import error, drift guard). Confirm each survived
+      // before claiming the cell started; a cell that did not releases its
+      // ledger slot and is reported per cell (the log tail rides its own log).
+      const spawned = batch.filter((cell) => cell.launched);
+      const liveness = await Promise.all(
+        spawned.map((cell) => confirmAlive(cell.pid, { logPath: cell.log_path })),
+      );
+      for (let i = 0; i < spawned.length; i += 1) {
+        const cell = spawned[i];
+        if (liveness[i].ok) continue;
+        unregisterRun(cell.run_id);
+        cell.launched = false;
+        cell.code = "launch_crashed";
+        cell.error = `harness exited ${liveness[i].elapsed_ms}ms after launch (see log tail)`;
+      }
 
-      // Startup liveness: the harness can die seconds after spawn (usage error,
-      // import error, drift guard). Confirm it survived before claiming the run
-      // started; if not, the refusal carries the log tail.
-      const liveness = await confirmAlive(child.pid, { logPath });
-      if (!liveness.ok) {
+      // ── THE RESPONSE ── one record per cell. A partial batch is never a
+      // bare success: the top-level refusal names the shortfall and runs[]
+      // carries the per-cell truth.
+      const runs = batch.map((cell) => ({
+        run_id: cell.run_id,
+        sequence_index: cell.sequence_index,
+        model,
+        arm,
+        pid: cell.pid,
+        log_path: cell.log_path,
+        launched: cell.launched,
+        ...(cell.error ? { error: cell.error } : {}),
+      }));
+      const failed = batch.filter((cell) => !cell.launched);
+      if (failed.length) {
         sendJson(res, 500, refuse(
-          "launch_crashed",
-          `harness exited ${liveness.elapsed_ms}ms after launch (see log tail)`,
-          { log_path: logPath, pid: child.pid, log_tail: liveness.log_tail },
+          failed[0].code,
+          `${runs.length - failed.length} of ${runs.length} cells launched — ` +
+            failed.map((cell) => `sequence_index ${cell.sequence_index}: ${cell.error}`).join("; "),
+          { runs, tree_error },
         ));
         return;
       }
 
-      setLauncher({
-        pid: child.pid,
-        model,
-        arm,
-        org,
-        context,
-        kind,
-        started_at: Date.now(),
-        log_path: logPath,
-      });
-
       sendJson(res, 200, {
         ok: true,
-        pid: child.pid,
-        log_path: logPath,
-        model,
-        arm,
-        org,
-        context,
-        kind,
-        cloud: cloud ? { provider: cloud.provider, model: cloud.model, slug: cloud.slug } : null,
-        // Where this cell will land, echoed back so a mismatch is visible.
-        run_dir: target.run_dir,
-        sequence_index: target.sequence_index,
-        // null is healthy; non-null means this run is filed outside the tree.
+        runs,
+        // null is healthy; non-null means these runs are filed outside the tree.
         tree_error,
-        restatement: restatement({ model, arm, org, context, kind, cloud }),
+        // The N=1 mirror: the dashboard's single-start consumer
+        // (panels/create.js) reads pid/log_path off this response.
+        ...(runs.length === 1 ? { pid: runs[0].pid, log_path: runs[0].log_path } : {}),
       });
       return;
     },
@@ -303,7 +422,7 @@ export const routes = [
     method: "POST",
     path: "/api/run/stop/preview",
     async handle(req, res, url) {
-      const state = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const state = await readRunState({ runsRoot: RUNS_ROOT });
       if (!state?.running) {
         sendJson(res, 409, refuse("no_run_in_flight", "there is no cell in flight to stop"));
         return;
@@ -349,7 +468,7 @@ export const routes = [
     path: "/api/run/stop",
     async handle(req, res, url) {
       const payload = JSON.parse((await readBody(req)) || "{}");
-      const state = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const state = await readRunState({ runsRoot: RUNS_ROOT });
       if (!state?.running) {
         sendJson(res, 409, refuse("no_run_in_flight", "there is no cell in flight to stop"));
         return;
@@ -369,7 +488,7 @@ export const routes = [
         return;
       }
       await stopRun();
-      const after = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const after = await readRunState({ runsRoot: RUNS_ROOT });
       sendJson(res, 200, {
         ok: true,
         stopped: true,
@@ -436,7 +555,7 @@ export const routes = [
     method: "GET",
     path: "/api/tui",
     async handle(req, res, url) {
-      const run = await readRunState({ runsRoot: RUNS_ROOT, launcher: getLauncher() });
+      const run = await readRunState({ runsRoot: RUNS_ROOT });
       sendJson(res, 200, {
         ...tui.poll(run.session_id),
         // Stated on the surface: this is a second client, not a screen-share.

@@ -8,6 +8,12 @@ extract, coordinator-review, or leader-commit stages.
 
 This module owns *only* deterministic sequencing + checkpointing.
 All side effects are injected through ``SessionRunner``.
+
+Constructed with an explicit ``sequence_index`` (control-plane allocated),
+the sequencer runs exactly that one session from ``session_records`` and
+never advances ``manifest.current_index`` — the control plane owns the
+counter, reserving distinct indices so concurrent runs cannot collide on
+the same cell.
 """
 
 from __future__ import annotations
@@ -81,6 +87,7 @@ class CumulativeSequencer:
         on_budget: int,
         run_context: Mapping[str, Any] | None = None,
         chunk_plan_hash: str = "",
+        sequence_index: int | None = None,
     ) -> None:
         if not isinstance(runner, SessionRunner):
             raise ValueError("runner must implement SessionRunner")
@@ -155,7 +162,32 @@ class CumulativeSequencer:
                 f"({self._manifest.current_index} > {len(self._manifest.session_records)})"
             )
 
+        # Explicit-index mode (control-plane allocated): validate against the
+        # populated session_records BEFORE any side effect and fail loudly —
+        # never clamp, never degrade to current_index selection.
+        if sequence_index is not None and not (
+            0 <= sequence_index < len(self._manifest.session_records)
+        ):
+            raise ValueError(
+                f"sequence_index {sequence_index} out of range: manifest has "
+                f"{len(self._manifest.session_records)} session_record(s); "
+                f"valid indices are 0..{len(self._manifest.session_records) - 1}"
+            )
+        self._explicit_sequence_index = sequence_index
+
     def current_session(self) -> SessionRecord | None:
+        if self._explicit_sequence_index is not None:
+            # Explicit-index mode: this process runs exactly the assigned
+            # session, selected by position (session_records[i].sequence_index
+            # == i by schedule construction). DONE maps to None so
+            # step_until_done terminates with the done state instead of
+            # re-entering the finished session; HALTED_ON_GATE deliberately
+            # does not, so the halted descriptor is still emitted.
+            session = self._manifest.session_records[self._explicit_sequence_index]
+            if self._phase_of(session) == SessionPhase.DONE:
+                return None
+            return session
+
         index = self._manifest.current_index
         if index < 0:
             raise ValueError("manifest.current_index must be non-negative")
@@ -193,6 +225,10 @@ class CumulativeSequencer:
         advances to the next session. A failing walk gate that stops the
         walk checkpoints the session in the HALTED_ON_GATE side-state and
         returns its halted descriptor instead of continuing.
+
+        In explicit-index mode (``sequence_index`` given at construction),
+        runs exactly the assigned session and never advances
+        ``manifest.current_index``.
         """
         while True:
             session = self.current_session()
@@ -261,6 +297,13 @@ class CumulativeSequencer:
 
     def _advance_to_next_session(self, session: SessionRecord) -> None:
         """Advance the manifest past a completed session and prime the next one."""
+        if self._explicit_sequence_index is not None:
+            # Explicit-index mode: manifest.current_index belongs to the
+            # control plane, which reads, bumps, and writes back the counter
+            # and hands each run its reserved index. This process ran exactly
+            # its assigned session; advancing — or drift-checking — the shared
+            # counter here would race the control plane and sibling runs.
+            return
         if self._manifest.current_index == session.sequence_index:
             self._manifest.current_index += 1
             if self._manifest.current_index < len(self._manifest.session_records):

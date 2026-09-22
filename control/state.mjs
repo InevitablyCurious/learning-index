@@ -1,7 +1,8 @@
 // BENCH CONTROL PLANE — SHARED STATE: parsed argv, bench paths, the event ring
 // and its persistence, the TUI mirror, and the mutable cells. Reassigned cells
-// (launcher, ringRunDir, counterWatch) are behind get/set accessors (ESM import
-// bindings are read-only). initState() runs the startup side effects once.
+// (ringRunDir, counterWatch) are behind get/set accessors (ESM import bindings
+// are read-only). initState() runs the startup side effects once. The launched
+// runs are NOT here: the N-slot run ledger (run-ledger.mjs) owns them.
 
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,11 +62,6 @@ export const PYTHON = args.python ?? join(BENCH_ROOT, ".venv", "bin", "python");
 export const RUN_SCRIPT = join(BENCH_ROOT, "scripts", "run_cumulative.py");
 
 // ── mutable state ──
-
-/** The launcher process this service spawned, if any. */
-let launcher = null;
-export function getLauncher() { return launcher; }
-export function setLauncher(next) { launcher = next; }
 
 export const ring = new EventRing();
 
