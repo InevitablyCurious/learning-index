@@ -436,3 +436,41 @@ def test_read_tree_id_absent_none_malformed_raises(tmp_path: Path) -> None:
         assert "not a unix-seconds tree id" in str(exc)
     else:
         raise AssertionError("malformed pointer must raise, never guess")
+
+
+def test_a_concurrent_cell_appends_only_its_own_record(tmp_path: Path) -> None:
+    """Each of N concurrent cells finishes against the SAME campaign scorecard,
+    which holds every cell scored so far. Appending all of it from every
+    process recorded a cell once per sibling that finished after it
+    (2026-09-22: s0001 three times). A process that ran one cell appends one."""
+    manifest_path = tmp_path / "manifest.json"
+    stream_path = _write_attempt_records(
+        manifest_path,
+        [
+            {
+                "type": "attempt",
+                "sequence_index": seq,
+                "memory_mode": "off",
+                "org_id": "okp-org-0",
+                "verdict": "FAIL",
+                "session_fp": f"fp-{seq}",
+                "session_id": f"ses-{seq}",
+                "progress": progress_from_cell_result(_off_telemetry()).to_dict(),
+            }
+            for seq in (0, 1, 2)
+        ],
+    )
+    scorecard = _scorecard([_point(0, "fp-0"), _point(1, "fp-1"), _point(2, "fp-2")])
+    ledger_path = tmp_path / "data" / "results-ledger.jsonl"
+    for seq in (0, 1, 2):
+        written = append_run_records(
+            bench_root=tmp_path,
+            tree_id="1790144847",
+            task="backgammon",
+            scorecard=scorecard,
+            status_stream_path=stream_path,
+            sequence_index=seq,
+        )
+        assert [r["sequence_index"] for r in written] == [seq]
+    lines = ledger_path.read_text(encoding="utf-8").splitlines()
+    assert sorted(json.loads(line)["sequence_index"] for line in lines) == [0, 1, 2]

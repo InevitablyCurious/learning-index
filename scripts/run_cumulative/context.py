@@ -127,6 +127,8 @@ def _append_results_ledger(args: argparse.Namespace, layout: PathLayout) -> None
                 status_stream_path=default_status_stream_path(
                     str(layout.manifest_path)
                 ),
+                # One cell per process under --sequence-index: its record only.
+                sequence_index=getattr(args, "sequence_index", None),
             )
         )
     except Exception as exc:  # noqa: BLE001 -- fail-open, never break a finished run

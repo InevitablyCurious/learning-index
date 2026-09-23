@@ -206,8 +206,15 @@ def append_run_records(
     task: str,
     scorecard: Mapping[str, Any],
     status_stream_path: str | os.PathLike[str],
+    sequence_index: int | None = None,
 ) -> list[dict[str, Any]]:
     """Build the run's records and append them to the host-side ledger.
+
+    ``sequence_index``: the ONE cell this process ran. With N concurrent cells
+    each process finishes against the same campaign scorecard, which holds
+    every cell scored so far; appending all of them from every process
+    recorded a cell once per sibling that finished after it (2026-09-22: s0001
+    three times). ``None`` is a process that ran the whole campaign.
 
     House torn-line-safe append (``StatusStream.append`` pattern): one compact
     sorted-key JSON line per record, append-mode open, flush + fsync each.
@@ -218,6 +225,8 @@ def append_run_records(
         scorecard=scorecard,
         status_stream_path=status_stream_path,
     )
+    if sequence_index is not None:
+        records = [r for r in records if r.get("sequence_index") == sequence_index]
     ledger_path = Path(bench_root).joinpath(*LEDGER_RELATIVE_PATH)
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     for record in records:
