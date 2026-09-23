@@ -86,5 +86,5 @@ server.listen(args.port, "127.0.0.1", () => {
   console.log(`  python     : ${PYTHON}${existsSync(PYTHON) ? "" : "  (MISSING)"}`);
   console.log(`  proxy      : ${args.proxyUrl}`);
   console.log(`  runtime    : ${args.runtimeUrl}`);
-  console.log(`  serve      : ${args.serveUrl}  (event stream)`);
+  console.log(`  events     : per running cell, on each cell's own serve port`);
 });

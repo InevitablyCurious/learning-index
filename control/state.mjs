@@ -7,7 +7,8 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { EventRing, subscribe } from "./events.mjs";
+import { EventRing } from "./events.mjs";
+import { startCellFeeds } from "./cell-feeds.mjs";
 import { createAgentEventSink } from "./agent-events.mjs";
 import { TuiMirror } from "./tui.mjs";
 // Circular by design, and safe: both sides are hoisted functions and neither
@@ -49,7 +50,7 @@ bench control plane
   --bench-root <dir>  default: the parent of this file
   --proxy-url <url>   default http://127.0.0.1:4545   (model roster)
   --runtime-url <url> default http://127.0.0.1:1234   (residency + context)
-  --serve-url <url>   default http://127.0.0.1:8719   (worker event stream)
+  --serve-url <url>   default http://127.0.0.1:8719   (TUI fallback; events follow each cell's own port)
 
   Binds 127.0.0.1 only. There is deliberately no --host flag.
 `);
@@ -92,9 +93,9 @@ export function initState() {
   ring.sink = agentSink;
   persistTimer = setInterval(() => { void agentSink.flush(); }, 1000);
   persistTimer.unref?.();
-  // Subscribes for the life of the process, reconnecting forever (a cell's
-  // serve restarts across teardown).
-  subscribe(`${args.serveUrl}/event`, ring);
+  // One subscription per running cell, on that cell's own serve port
+  // (cell-feeds.mjs); follows cells as they start and end.
+  startCellFeeds({ ring, runsRoot: RUNS_ROOT });
   process.on("exit", () => tui.shutdown());
   process.on("SIGINT", () => { tui.shutdown(); void agentSink.flush().finally(() => process.exit(0)); });
   process.on("SIGTERM", () => { tui.shutdown(); void agentSink.flush().finally(() => process.exit(0)); });
