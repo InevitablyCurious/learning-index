@@ -75,3 +75,30 @@ def test_a_clean_stage_unlocks_the_next_failing_one_skipping_clean_stages() -> N
 def test_runner_deaths_are_never_staged_or_told() -> None:
     view = player_view([{"check": "backend:runner backend/gates-13-16.test.ts"}], STAGES, is_infra=_infra)
     assert view.stage is None and view.visible == [] and view.withheld == []
+
+
+def test_a_check_the_grader_never_reached_is_told_to_no_one() -> None:
+    # Run 1790183923, attempt 4: POST /api/new returned 500, the pre-gate
+    # skipped everything after it, and 30 skipped checks each became a specific
+    # complaint ("their automation can't find the board"). Nobody observed any
+    # of them; only the check that actually failed may be told.
+    skipped = "never evaluated — an earlier step failed and skipped it"
+    problems = [
+        {"check": "conformance:REQ-TESTID/testid.board", "expected": "this check is evaluated", "observed": skipped},
+        {"check": "conformance:REQ-RENDER/checker", "expected": "this check is evaluated", "observed": skipped},
+        {"check": "conformance:REQ-TESTID/dom — page DOM exposes the required testids", "observed": "HTTP 500 from POST /api/new"},
+    ]
+    view = player_view(problems, STAGES, is_infra=_infra)
+    assert [p["check"].split(" ")[0] for p in view.visible] == ["conformance:REQ-TESTID/dom"]
+    assert sorted(view.unevaluated) == ["conformance:REQ-RENDER/checker", "conformance:REQ-TESTID/testid.board"]
+    assert view.withheld == []
+    only_skipped = player_view(problems[:2], STAGES, is_infra=_infra)
+    assert only_skipped.stage is None and only_skipped.visible == [] and len(only_skipped.unevaluated) == 2
+
+
+def test_the_report_runners_own_death_is_never_staged_or_told() -> None:
+    # grader/report.mjs publishes `runner:exception` when it throws (gradable
+    # false). Unrecognised, it reached stage_of, which raises for an unstaged
+    # check and aborts the campaign.
+    view = player_view([{"check": "runner:exception", "observed": "TypeError"}], STAGES, is_infra=_infra)
+    assert view.stage is None and view.visible == [] and view.withheld == []

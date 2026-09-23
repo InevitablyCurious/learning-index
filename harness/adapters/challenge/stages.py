@@ -46,6 +46,22 @@ class PlayerView:
     stage: Stage | None
     visible: list[dict[str, Any]] = field(default_factory=list)
     withheld: list[str] = field(default_factory=list)
+    # Checks the grader never reached this round. Scored as not passing; never
+    # told to the model, because nobody observed them fail.
+    unevaluated: list[str] = field(default_factory=list)
+
+
+# The pre-gate's wording for a check an earlier failure skipped
+# (grader/conformance/pregate.ts verdictFor; pinned by
+# grader/meta/unevaluated-is-not-pass.test.ts). Such a check was never looked
+# at, so there is nothing true to say about it: telling the model "their
+# automation can't find the board" when the page was never opened is how one
+# HTTP 500 became 30 false complaints (run 1790183923, attempts 4 and 5).
+_UNEVALUATED = "never evaluated"
+
+
+def is_unevaluated(problem: dict[str, Any]) -> bool:
+    return str(problem.get("observed", "")).strip().startswith(_UNEVALUATED)
 
 
 def load_stages(checks_json: Path) -> list[Stage]:
@@ -92,19 +108,24 @@ def player_view(
     *,
     is_infra: Callable[[str], bool],
 ) -> PlayerView:
-    """The problems of the earliest failing stage; the rest are withheld."""
+    """The problems of the earliest failing stage; the rest are withheld, and
+    checks the grader never reached are told to no one."""
     staged: list[tuple[Stage, dict[str, Any]]] = []
+    unevaluated: list[str] = []
     for problem in problems:
         if not isinstance(problem, dict):
             continue
         check = str(problem.get("check", "")).strip()
         if not check or is_infra(check):
             continue
+        if is_unevaluated(problem):
+            unevaluated.append(check)
+            continue
         staged.append((stage_of(check, stages), problem))
     if not staged:
-        return PlayerView(stage=None)
+        return PlayerView(stage=None, unevaluated=unevaluated)
     first = min(s.number for s, _ in staged)
     stage = next(s for s, _ in staged if s.number == first)
     visible = [p for s, p in staged if s.number == first]
     withheld = [str(p.get("check", "")).strip() for s, p in staged if s.number != first]
-    return PlayerView(stage=stage, visible=visible, withheld=withheld)
+    return PlayerView(stage=stage, visible=visible, withheld=withheld, unevaluated=unevaluated)

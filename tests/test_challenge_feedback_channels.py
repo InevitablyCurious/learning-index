@@ -263,7 +263,7 @@ def test_one_conformance_finding_is_one_gate() -> None:
     shape check: two findings, one gate).
     """
     src = (GATES / "conformance" / "pregate.ts").read_text(encoding="utf-8")
-    for guarded in ('if (present("pip"))', 'if (present("off"))', 'present("legalMoves")', 'present("canDouble")'):
+    for guarded in ('if (present("pip"))', 'hasOwnProperty.call(echoed, "off")', 'present("legalMoves")', 'present("canDouble")'):
         assert guarded in src, f"{guarded} missing — a missing field would report twice"
 
 
@@ -393,3 +393,52 @@ def test_one_hang_is_reported_once_not_once_per_unmeasured_gate() -> None:
     # And the unmeasured gates say nothing at all — they were not measured, so
     # there is no finding to report, and inventing one would be fabrication.
     assert "edge-gates" not in msg
+
+
+def test_a_refused_setup_is_told_as_the_team_saw_it_never_as_the_gates_player_story() -> None:
+    # Run 1790183923: the endpoint refused every partial body, F19's setup
+    # never took, and the model was told "I picked the hard computer,
+    # refreshed the page…" — which never happened. The grader now marks it.
+    from harness.adapters.challenge import ChallengeRunner
+
+    problems = [
+        {
+            "check": "[F19] REQ-RELOAD — difficulty survives a reload",
+            "observed": "Error: SETUP REFUSED: /api/debug/state did not take difficulty",
+        },
+        {
+            "check": "[F17] REQ-RELOAD — match score survives a reload",
+            "observed": "Error: SETUP REFUSED: /api/debug/state did not take difficulty",
+        },
+    ]
+    msg = ChallengeRunner._build_feedback_prompt(problems=problems)
+    assert "hard computer" not in msg, "the gate's player story must not be told"
+    assert msg.count("debug endpoint") == 1, "same finding twice is one line"
+    assert '"difficulty"' in msg
+    team = msg.split("software team", 1)[1]
+    assert "debug endpoint" in team, "a refused setup is the team's finding"
+    again = ChallengeRunner._build_feedback_prompt(
+        problems=problems[:1], had_prior_feedback=True, repeat_checks={problems[0]["check"]}
+    )
+    assert "still didn't take" in again
+
+
+def test_a_failed_api_call_is_told_as_the_status_and_error_the_app_returned() -> None:
+    # Run 1790183923: "HTTP 500 from POST /api/new: EROFS …" was told as
+    # "their automation fell over while reading your page".
+    from harness.adapters.challenge import ChallengeRunner
+
+    problems = [
+        {
+            "check": "conformance:REQ-TESTID/dom — page DOM exposes the required testids",
+            "observed": "HTTP 500 from POST /api/new: Error: boom",
+        },
+        {
+            "check": "[F02] REQ-RENDER — start game renders full board",
+            "observed": "Error: POST /api/new failed (500)\n\nexpect(received).toBeTruthy()",
+        },
+    ]
+    msg = ChallengeRunner._build_feedback_prompt(problems=problems)
+    assert "fell over" not in msg
+    team = msg.split("software team", 1)[1]
+    assert "POST /api/new" in team and "HTTP 500" in team and '"Error: boom"' in team

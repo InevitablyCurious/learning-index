@@ -296,6 +296,71 @@ def _default_progress(message: str) -> None:
     print(f"[bg] {stamp} {message}", flush=True)
 
 
+# ── A SETUP THAT DID NOT TAKE ───────────────────────────────────────────────
+#
+# The grader marks a gate whose debug-endpoint setup was refused or dropped
+# (grader/lib/harness.ts SETUP_REFUSED) before it judges any behaviour. The
+# gate's own line would then be false — it describes a player experience that
+# never happened ("I picked the hard computer, refreshed the page…", run
+# 1790183923). What IS true is what an integrating team saw: they set a
+# position through the app's debug endpoint and it did not read back. Said in
+# the team's voice, naming the fields the grader found missing.
+SETUP_REFUSED = "SETUP REFUSED"
+_SETUP_FIELDS_RE = re.compile(r"did not take (.+)$")
+_SETUP_LINE_FIRST = (
+    "They set up a specific game position through your app's debug endpoint to check "
+    "something, and it didn't take: {what} didn't read back as what they sent."
+)
+_SETUP_LINE_REPEAT = (
+    "They set a position through your debug endpoint again and it still didn't take: "
+    "{what} still didn't read back as what they sent."
+)
+
+
+# ── THE APP ANSWERED AN API CALL WITH AN ERROR ─────────────────────────────
+#
+# When a check failed because the app answered one of its own API calls with an
+# error status, that status and the app's own error text ARE the finding — what
+# an integrating team pastes into a bug report. The gate's line described
+# something downstream instead: run 1790183923 turned one "HTTP 500 from POST
+# /api/new: EROFS …" into "their automation fell over while reading your page"
+# and thirty tag complaints, and the model never learned the call was failing.
+_HTTP_ERROR_RES = (
+    re.compile(r"HTTP (?P<code>\d{3}) from (?P<method>GET|POST) (?P<path>/\S*?):?\s(?P<detail>.*)"),
+    re.compile(r"(?P<method>GET|POST) (?P<path>/\S+) failed \((?P<code>\d{3})\)"),
+)
+_HTTP_LINE_FIRST = (
+    'When they called {method} {path} on your app it answered HTTP {code} instead of the game state{detail}.'
+)
+_HTTP_LINE_REPEAT = 'They called {method} {path} again and it still answers HTTP {code}{detail}.'
+
+
+def http_error_line(observed: str, *, pass_kind: str) -> str | None:
+    """The true line for a failed API call, or None when none is recorded."""
+    first = str(observed or "").strip().split("\n", 1)[0]
+    for rx in _HTTP_ERROR_RES:
+        if m := rx.search(first):
+            if not m.group("code").startswith(("4", "5")):
+                return None
+            raw = (m.groupdict().get("detail") or "").strip()
+            detail = f' — the response said: "{raw[:140]}"' if raw else ""
+            template = _HTTP_LINE_REPEAT if pass_kind == "repeat" else _HTTP_LINE_FIRST
+            return template.format(method=m.group("method"), path=m.group("path"), code=m.group("code"), detail=detail)
+    return None
+
+
+def setup_refusal_line(observed: str, *, pass_kind: str) -> str | None:
+    """The true line for a refused setup, or None when the gate's setup took."""
+    text = str(observed or "")
+    if SETUP_REFUSED not in text:
+        return None
+    first = text[text.index(SETUP_REFUSED):].split("\n", 1)[0]
+    m = _SETUP_FIELDS_RE.search(first)
+    what = f'"{m.group(1).strip()}"' if m else "the position"
+    template = _SETUP_LINE_REPEAT if pass_kind == "repeat" else _SETUP_LINE_FIRST
+    return template.format(what=what)
+
+
 class FeedbackMixin:
     @classmethod
     def feedback_channel(cls, check: str) -> str:
@@ -592,12 +657,16 @@ class FeedbackMixin:
             # line. Keyed on the raw id because the rendered sentence differs
             # between the two passes and could not key anything.
             pass_kind = "repeat" if raw_check in repeats else "first"
-            label = cls._humanize_check(
+            observed = str(record.get("observed", "") or "")
+            setup_line = setup_refusal_line(observed, pass_kind=pass_kind) or http_error_line(
+                observed, pass_kind=pass_kind
+            )
+            label = setup_line or cls._humanize_check(
                 raw_check.split("\n", 1)[0],
                 pass_kind=pass_kind,
                 # A stall line names how long the tester waited; the duration
                 # only exists on the grader's finding.
-                observed=str(record.get("observed", "") or ""),
+                observed=observed,
             )
             # 320, not 200 (2026-09-05). The comment below has been right twice
             # over: at 200 it was ALREADY truncating two hand-written tester
@@ -619,7 +688,9 @@ class FeedbackMixin:
             if not label or label in seen:
                 continue
             seen.add(label)
-            by_channel[cls.feedback_channel(raw_check)].append(label)
+            # A refused setup or a failed API call is the team's finding,
+            # whatever the gate's channel.
+            by_channel["team" if setup_line else cls.feedback_channel(raw_check)].append(label)
 
         lines: list[str] = [_EXCUSE_ELIMINATOR, "", header, ""]
         for n, label in enumerate(by_channel["tester"], start=1):

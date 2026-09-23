@@ -1590,6 +1590,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         stage=stage_view.stage.number if stage_view.stage else None,
                         stage_name=stage_view.stage.name if stage_view.stage else None,
                         withheld=len(stage_view.withheld),
+                        unevaluated=len(stage_view.unevaluated),
                     )
 
                 if _worker_exit_annot != "harness_error":
@@ -1615,6 +1616,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                             "player_stage": stage_view.stage.number if stage_view.stage else None,
                             "player_stage_name": stage_view.stage.name if stage_view.stage else None,
                             "withheld_checks": len(stage_view.withheld),
+                            "unevaluated_checks": len(stage_view.unevaluated),
                             # Scored cell whose metering awaits parity confirmation against the
                             # first scored cell / the proxy log before it is treated as data.
                             "parity_pending": True,
@@ -1820,6 +1822,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     f"PROGRESS run_label={run_label} step=player-stage attempt={attempt} "
                     f"stage={stage_view.stage.number if stage_view.stage else 'none'} "
                     f"told={len(visible_checks)} withheld={len(stage_view.withheld)} "
+                    f"unevaluated={len(stage_view.unevaluated)} "
                     f"failing_total={len(feedback_checks)}"
                 )
                 told_last_round = visible_checks
@@ -2334,5 +2337,8 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         # unreadable and the attempt is marked ungradable, exactly as an aborted
         # backend runner already was. The name says the RUNNER could not be
         # read, never that the code failed to boot.
-        r"^(?:backend:runner|backend:report-parse|frontend:boot|conformance:runner)\b"
+        # `runner:exception` is report.mjs's own death (it threw; gradable
+        # false). Absent here it reached stage_of, which raises for any
+        # unstaged name — aborting the campaign over an instrument fault.
+        r"^(?:backend:runner|backend:report-parse|frontend:boot|conformance:runner|runner:exception)\b"
     )
