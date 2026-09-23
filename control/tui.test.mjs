@@ -88,3 +88,46 @@ test("shutdown stops every capture", (t) => {
   assert.equal(m.captures.size, 0);
   for (const c of captures) assert.equal(c.detached, true);
 });
+
+// ── A capture that exits on its own is retried (2026-09-23, s0001) ────────
+// s0001's mirror attached before its serve port answered, exited 1, and the
+// dead capture was reused for the rest of the run. These drive the backoff with
+// an explicit clock; /usr/bin/true exits at once, standing in for that client.
+
+import { TUI_RETRY_DELAYS_MS } from "./tui.mjs";
+
+function exitedCapture(t) {
+  const m = makeMirror();
+  t.after(() => m.shutdown());
+  m.pollFor("run-x", "ses-x", "http://127.0.0.1:1");
+  const c = m.captures.get("run-x");
+  c.child = null;
+  c.exited = { code: 1, signal: null, at: 1_000 };
+  return c;
+}
+
+test("an exited capture reads 'reconnecting' and is restarted once its backoff passes", (t) => {
+  const c = exitedCapture(t);
+  assert.equal(c.read().status, "reconnecting");
+  assert.equal(c.retryIfDue(1_000 + TUI_RETRY_DELAYS_MS[0] - 1), false, "not before the backoff");
+  assert.equal(c.retryIfDue(1_000 + TUI_RETRY_DELAYS_MS[0]), true);
+  assert.equal(c.retries, 1);
+  assert.equal(c.exited, null, "a fresh attach is under way");
+  assert.equal(c.lastExit.code, 1, "the exit that caused it is kept");
+});
+
+test("after the last retry it stays exited and says it gave up", (t) => {
+  const c = exitedCapture(t);
+  c.retries = TUI_RETRY_DELAYS_MS.length;
+  assert.equal(c.retryIfDue(10_000_000), false);
+  const r = c.read();
+  assert.equal(r.status, "exited");
+  assert.match(r.reason, /gave up after 5 retries/);
+});
+
+test("a capture torn down with its cell is never restarted", (t) => {
+  const c = exitedCapture(t);
+  c.detached = true;
+  assert.equal(c.retryIfDue(10_000_000), false);
+  assert.equal(c.read().status, "detached");
+});

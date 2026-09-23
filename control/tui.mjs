@@ -24,6 +24,18 @@ const TUI_IDLE_STOP_MS = 30000;
 /** No first byte after this long is a real fault, and reported as one. */
 const TUI_FIRST_PAINT_TIMEOUT_MS = 25000;
 
+// ── A CAPTURE THAT EXITS IS RETRIED, A FEW TIMES ────────────────────────────
+//
+// Measured 2026-09-23, N=8 batch: s0001's mirror attached 3.5s after its
+// cell.start, before its serve port answered; the attach client printed
+// "Unable to connect" and exited 1. The dead capture then stayed in the map —
+// pollFor reuses a capture while its session id is unchanged, and the idle
+// sweep never fires on a card being watched — so that one cell showed
+// "capture client exited" for the rest of the run while the other seven were
+// live. A capture that exits on its own (not torn down with its cell) is
+// restarted after a backoff; after the last attempt it stays exited and says so.
+export const TUI_RETRY_DELAYS_MS = [2000, 4000, 8000, 16000, 30000];
+
 /**
  * Bound on concurrent captures (one per mirrored cell). Each capture holds a
  * PTY child process, so the map is capped: past this many, the least-recently
@@ -300,6 +312,29 @@ class Capture {
     this.error = null;
     this.exited = null;
     this.frame = null;
+    // Restarts after an exit (TUI_RETRY_DELAYS_MS), and the exit that caused the last one.
+    this.retries = 0;
+    this.lastExit = null;
+  }
+
+  /**
+   * Restart a capture that exited on its own, once its backoff has passed.
+   * A torn-down capture (detached) is never restarted. Returns true on restart.
+   */
+  retryIfDue(now = Date.now()) {
+    if (!this.exited || this.detached || this.child) return false;
+    if (this.retries >= TUI_RETRY_DELAYS_MS.length) return false;
+    if (now - this.exited.at < TUI_RETRY_DELAYS_MS[this.retries]) return false;
+    this.retries += 1;
+    this.lastExit = { ...this.exited, error: this.error };
+    this.exited = null;
+    this.error = null;
+    this.bytes = 0;
+    this.screen = new Screen();
+    this.parser = new AnsiParser(this.screen);
+    this.frame = null;
+    this.start();
+    return true;
   }
 
   start() {
@@ -380,8 +415,15 @@ class Capture {
       status = "detached";
       reason = "the cell was stopped and the mirror was closed with it — this is the last frame, not a live view";
     } else if (this.exited) {
-      status = "exited";
-      reason = `capture client exited (code ${this.exited.code ?? "?"}${this.exited.signal ? `, ${this.exited.signal}` : ""})`;
+      const how = `capture client exited (code ${this.exited.code ?? "?"}${this.exited.signal ? `, ${this.exited.signal}` : ""})`;
+      if (this.retries < TUI_RETRY_DELAYS_MS.length) {
+        status = "reconnecting";
+        const wait = Math.max(0, TUI_RETRY_DELAYS_MS[this.retries] - (Date.now() - this.exited.at));
+        reason = `${how} — retrying in ${Math.ceil(wait / 1000)}s (attempt ${this.retries + 1} of ${TUI_RETRY_DELAYS_MS.length})`;
+      } else {
+        status = "exited";
+        reason = `${how} — gave up after ${TUI_RETRY_DELAYS_MS.length} retries`;
+      }
     } else if (this.error && this.bytes === 0) {
       status = "failed";
       reason = this.error;
@@ -407,6 +449,8 @@ class Capture {
       painted: this.bytes > 0,
       error: this.error,
       exited: this.exited,
+      retries: this.retries,
+      last_exit: this.lastExit,
     };
   }
 
@@ -473,6 +517,9 @@ export class TuiMirror {
       capture.start();
       this.evict();
     }
+
+    // A capture that exited on its own is restarted once its backoff passes.
+    capture.retryIfDue();
 
     // LRU touch: re-inserting moves this runId to the end of the Map order.
     this.captures.delete(runId);

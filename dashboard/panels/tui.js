@@ -89,6 +89,7 @@ function statusWord(t, status) {
   if (status === "starting") return `<span class="muted">attaching…</span>`;
   if (status === "failed") return `<span class="danger">failed</span>`;
   if (status === "silent") return `<span class="muted">silent</span>`;
+  if (status === "reconnecting") return `<span class="muted">reconnecting…</span>`;
   if (status === "exited") return `<span class="muted">exited</span>`;
   return nul("status unobserved");
 }
