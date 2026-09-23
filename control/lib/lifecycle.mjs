@@ -107,81 +107,62 @@ async function dockerNamesForRun(logPath) {
 }
 
 /**
- * Stop ONE run. SIGINT, not SIGTERM: the harness then runs its own teardown
- * (cell, egress sidecar, session-db volume); SIGTERM skips it and leaks
- * containers. A docker sweep afterwards removes anything the teardown missed —
- * scoped to THIS run's own log-derived names, never to a bare prefix: an
- * unanchored `name=bench-cell-` sweep force-removes sibling runs' live cells
- * (the historical flake class harness/process_reaper.py documents).
+ * Which harness processes a stop signals — each EXACTLY ONCE.
  *
- * The run is identified, never guessed:
- *   stopRun({ runId }) — that ledger run; an unknown id throws.
- *   stopRun()          — the single live run (ledger or external CLI launch);
- *                        THROWS when more than one is live rather than
- *                        silently picking one. No live run is a quiet no-op
- *                        (the reset path calls this unconditionally).
+ * With N concurrent cells of one campaign every harness carries the same
+ * manifest path, so a run_dir-scoped scan finds all N. Stopping cell by cell
+ * signalled each harness N times, and a second SIGINT can interrupt the
+ * teardown the first one started. So the plan is made once, over every live
+ * run: a ledger pid that is alive is used as is; otherwise one scan per run
+ * dir. A harness that names no run dir is signalled only when it is the sole
+ * live run (the conservative rule readRunState counts it alive by).
+ * Dependencies are injectable for tests.
  */
-export async function stopRun({ runId = null } = {}) {
-  // ── Resolve the one run to stop ─────────────────────────────────────────
-  let target;
-  if (runId !== null && runId !== undefined) {
-    const rec = getRun(runId);
-    if (!rec) {
-      throw new Error(
-        `stopRun: run id '${runId}' is not in the ledger — unknown, or already stopped and unregistered`,
-      );
+export async function planStop(runs, {
+  ledger = getRun,
+  alive = pidAlive,
+  scan = findHarnessProcs,
+} = {}) {
+  const targets = new Map();
+  const scanned = new Set();
+  let scanFailed = false;
+  for (const r of runs) {
+    const pid = (r.run_id ? ledger(r.run_id)?.pid : null) ?? r.pid ?? null;
+    if (pid !== null && alive(pid)) {
+      // A control-plane spawn is detached: the harness leads its own group.
+      targets.set(pid, { pid, pgid: pid, own: true });
+      continue;
     }
-    // A named id never implies singularity: siblings may be live.
-    target = { run_id: rec.run_id, pid: rec.pid, run_dir: rec.run_dir, log_path: rec.log_path, sole: false };
-  } else {
-    // No id: the run state sees EVERY live run — ledger launches and external
-    // CLI launches alike (the ledger alone is blind to CLI runs and empty
-    // after a control-plane restart). More than one live is a refusal, not a
-    // choice: picking one could kill the wrong measurement.
-    const state = await readRunState({ runsRoot: RUNS_ROOT });
-    if (state.live_count > 1) {
-      const live = state.runs.map((r) => r.run_id ?? r.log_name).join(", ");
-      throw new Error(
-        `stopRun: ${state.live_count} runs are live and no run id was given — refusing to pick one (${live}); pass { runId }`,
-      );
+    const key = r.run_dir ?? "";
+    if (scanned.has(key)) continue;
+    scanned.add(key);
+    const procs = await scan({ runDir: r.run_dir });
+    if (procs === null) { scanFailed = true; continue; }
+    for (const p of procs.bound) if (!targets.has(p.pid)) targets.set(p.pid, { pid: p.pid, pgid: p.pgid, own: false });
+    if (!r.run_dir && runs.length === 1) {
+      for (const p of procs.other) if (!targets.has(p.pid)) targets.set(p.pid, { pid: p.pid, pgid: p.pgid, own: false });
     }
-    const only = state.runs[0] ?? null;
-    // Nothing live, nothing to stop — and with no target run there is nothing
-    // a sweep could be scoped to. Not an error: reset calls stop before
-    // wiping whether or not a run is in flight.
-    if (!only) return;
-    target = { run_id: only.run_id, pid: only.pid, run_dir: only.run_dir, log_path: only.log_path, sole: true };
   }
-  const { run_id, pid, run_dir, log_path, sole } = target;
+  return { targets: [...targets.values()], scanFailed };
+}
 
-  // ── Find THIS run's harness: the ledger pid when alive, else a scan scoped
-  // to its run dir. Asking the kernel, not remembering, covers CLI launches
-  // and control-plane restarts; the run_dir scope keeps one run's stop from
-  // signalling another's harness with N cells in flight.
-  const targets = [];
-  if (pid !== null && pidAlive(pid)) {
-    // A control-plane spawn is detached: the harness leads its own group.
-    targets.push({ pid, pgid: pid, own: true });
-  } else {
-    const procs = await findHarnessProcs({ runDir: run_dir });
-    // A failed scan is not an empty machine: nothing to signal, and it says so.
-    if (procs === null) {
-      console.error("[stop] ps scan failed; no harness could be interrupted");
-      await notice(log_path, "stop_scan_failed", {
-        level: "error",
-        detail: { run_id: run_id ?? null, run_dir: run_dir ?? null, signalled: 0 },
-      });
-    } else if (procs.bound.length) {
-      for (const p of procs.bound) targets.push({ pid: p.pid, pgid: p.pgid, own: false });
-    } else if (!run_dir && sole && procs.other.length) {
-      // The run has not named its directory yet AND singularity was verified
-      // at resolution: any harness is the one live run's — the same
-      // conservative rule by which readRunState counted it alive. With a
-      // run_dir known, or a named run id (siblings possible), `other` is
-      // NEVER signalled: an unattributable process is left alone, not guessed.
-      for (const p of procs.other) targets.push({ pid: p.pid, pgid: p.pgid, own: false });
-    }
-  }
+/**
+ * Stop EVERY live run — a single cell or a whole concurrent batch. SIGINT,
+ * not SIGTERM: each harness then runs its own teardown (cell, egress sidecar,
+ * session-db volume); SIGTERM skips it and leaks containers. A docker sweep
+ * afterwards removes anything a teardown missed — scoped to each run's own
+ * log-derived names, never to a bare prefix: an unanchored `name=bench-cell-`
+ * sweep force-removes other runs' live cells (the historical flake class
+ * harness/process_reaper.py documents). No live run is a quiet no-op (the
+ * reset path calls this unconditionally). Returns what it did.
+ */
+export async function stopAll() {
+  const state = await readRunState({ runsRoot: RUNS_ROOT });
+  const runs = state.runs ?? [];
+  if (!runs.length) return { runs: 0, signalled: 0, still_alive: 0 };
+
+  const { targets, scanFailed } = await planStop(runs);
+  if (scanFailed) console.error("[stop] ps scan failed for at least one run; those harnesses were not interrupted");
 
   for (const t of targets) {
     // Signal the group only when the harness leads it (a detached spawn). A
@@ -200,38 +181,36 @@ export async function stopRun({ runId = null } = {}) {
   }
 
   // Wait for every target to exit before the docker sweep.
-  for (let i = 0; i < 40 && targets.some((t) => pidAlive(t.pid)); i++) {
+  for (let i = 0; i < 60 && targets.some((t) => pidAlive(t.pid)); i++) {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-
-  // Record what the stop did: how many were signalled, and whether any survived.
   const survivors = targets.filter((t) => pidAlive(t.pid)).length;
-  await notice(log_path, "stop_signalled", {
-    level: survivors > 0 ? "error" : "info",
-    detail: {
-      run_id: run_id ?? null,
-      signalled: targets.length,
-      own_pid: targets.some((t) => t.own),
-      still_alive: survivors,
-    },
-  });
 
-  // Drop the ledger slot (the launcher singleton this replaces is gone): a
-  // survivor is still visible afterwards — readRunState falls back to the
-  // run_dir-scoped process scan, so "still alive" never hides behind the drop.
-  if (run_id) unregisterRun(run_id);
-
-  // The TUI mirror is the control plane's own `opencode attach` child, so the
-  // harness teardown doesn't own it; left alive it keeps animating a stopped
-  // cell's terminal as live. Killed here; the board's next poll restarts it
-  // against whatever run is live then.
+  // The TUI mirror is the control plane's own `opencode attach` child, so no
+  // harness teardown owns it; left alive it keeps animating a stopped cell's
+  // terminal as live.
   try {
     tui.shutdown();
   } catch (err) {
-    // Never blocks the cell teardown, but a mirror that won't die is reported.
     console.error(`[stop] tui mirror teardown failed (stop proceeds): ${err?.message ?? err}`);
   }
 
+  for (const r of runs) {
+    // Record what the stop did, on each run's own log.
+    await notice(r.log_path, scanFailed && !targets.length ? "stop_scan_failed" : "stop_signalled", {
+      level: survivors > 0 || scanFailed ? "error" : "info",
+      detail: { run_id: r.run_id ?? null, runs: runs.length, signalled: targets.length, still_alive: survivors },
+    });
+    // Drop the ledger slot; a survivor stays visible through readRunState's
+    // run_dir-scoped process scan.
+    if (r.run_id) unregisterRun(r.run_id);
+    await sweepDocker(r.log_path);
+  }
+  return { runs: runs.length, signalled: targets.length, still_alive: survivors };
+}
+
+/** Remove what a teardown missed, scoped to ONE run's own log-derived names. */
+async function sweepDocker(log_path) {
   // ── Docker sweep, scoped to THIS run's own names ────────────────────────
   const { identity, sidecars } = await dockerNamesForRun(log_path);
   const docker = (argv) =>

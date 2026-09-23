@@ -22,7 +22,7 @@ import { readRunState, cellDirForRun } from "../runstate.mjs";
 import { BENCH_ROOT, RUNS_ROOT } from "../state.mjs";
 import { sendJson, sendText, readBody } from "../lib/http.mjs";
 import { treeResetGate, restoreGate } from "../lib/gates.mjs";
-import { stopRun } from "../lib/lifecycle.mjs";
+import { stopAll } from "../lib/lifecycle.mjs";
 
 /** ?sequence_index= → an int ≥ 0, else null (the same parse the feed routes use). */
 function sequenceIndexParam(url) {
@@ -128,7 +128,7 @@ export const routes = [
       }
       try {
         // Stop any run first, so its teardown writes into a tree that still resolves.
-        await stopRun();
+        await stopAll();
         const done = await resetAll(RUNS_ROOT);
 
         // Archive the results ledger into the same backup and start a fresh one. The

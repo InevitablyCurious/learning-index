@@ -13,7 +13,7 @@ import {
   refuse,
 } from "../contract.mjs";
 import { readRoster } from "../roster.mjs";
-import { readRunState, confirmAlive, findHarnessProcs, cellSessionId, cellServeUrl } from "../runstate.mjs";
+import { readRunState, confirmAlive, cellSessionId, cellServeUrl } from "../runstate.mjs";
 import { readHold, releaseHold } from "../hold.mjs";
 // Where a cell's measurement lands (one campaign per model), and the atomic
 // cursor that hands N concurrent cells distinct sequence indices.
@@ -38,15 +38,16 @@ import {
 import { sendJson, readBody } from "../lib/http.mjs";
 import { validateStart } from "../lib/validate.mjs";
 import { substrateRefreshInFlight } from "../tooljobs.mjs";
-import { stopRun } from "../lib/lifecycle.mjs";
+import { stopAll } from "../lib/lifecycle.mjs";
 
-// The stop confirmation token, shared by preview and commit. Bound to the run
-// in flight: a new pid, log or start re-mints it and a stale confirmation fails.
+// The stop confirmation token, shared by preview and commit. Bound to EVERY
+// run in flight: a cell starting or ending, or a new pid/log, re-mints it, so a
+// confirmation never stops a set of cells the operator did not see.
 function stopToken(state) {
-  return createHash("sha256")
-    .update(`stop:${state.pid ?? "external"}:${state.log_name ?? ""}:${state.started_at ?? ""}`)
-    .digest("hex")
-    .slice(0, 12);
+  const runs = (state.runs ?? [])
+    .map((r) => `${r.pid ?? "external"}:${r.log_name ?? ""}:${r.started_at ?? ""}`)
+    .sort();
+  return createHash("sha256").update(`stop:${runs.join("|")}`).digest("hex").slice(0, 12);
 }
 
 export const routes = [
@@ -421,9 +422,9 @@ export const routes = [
   },
 
   {
-    // ── POST /api/run/stop/preview ── abort a live cell: preview, then confirm.
-    // stopRun sends SIGINT so the harness runs its own teardown (cell, sidecar,
-    // volume). An aborted cell has no `progress` and is excluded from the
+    // ── POST /api/run/stop/preview ── abort every live cell: preview, then
+    // confirm. stopAll sends each harness one SIGINT so it runs its own
+    // teardown (cell, sidecar, volume). An aborted cell has no `progress` and is excluded from the
     // convergence trend, so it can never read as a measurement.
     method: "POST",
     path: "/api/run/stop/preview",
@@ -434,35 +435,26 @@ export const routes = [
         return;
       }
       const token = stopToken(state);
-      // Name the pid that will actually be signalled; stopRun finds a CLI-launched
-      // harness too.
-      let pidLine = state.pid ? String(state.pid) : null;
-      if (pidLine === null) {
-        const found = await findHarnessProcs({ runDir: state.run_dir });
-        const adopt = found && (found.bound.length ? found.bound : found.other);
-        if (adopt && adopt.length) {
-          pidLine = `${adopt.map((p) => p.pid).join(", ")} (found by scan — not spawned by this service)`;
-        } else if (found === null) {
-          pidLine = "unknown — the process scan failed; the stop may find nothing to interrupt";
-        } else {
-          pidLine = "no harness process found — the stop will only sweep leftover containers";
-        }
-      }
+      const runs = state.runs ?? [];
+      const n = runs.length;
+      const lines = runs
+        .map((r) => {
+          const seq = Number.isInteger(r.sequence_index) ? `s${String(r.sequence_index).padStart(4, "0")}` : "cell";
+          return `  ${seq}  ${r.model ?? "model unobserved"}  ${r.log_name ?? "log unknown"}`;
+        })
+        .join("\n");
       sendJson(res, 200, {
         ok: true,
         token,
         restatement:
-          `STOP the cell in flight.\n\n` +
-          `  model    ${state.model ?? "unobserved"}\n` +
-          `  log      ${state.log_name ?? "unknown"}\n` +
-          `  pid      ${pidLine}\n` +
-          `  started  ${state.started_at ?? "unknown"}\n\n` +
-          `The harness is interrupted so it tears its own cell down: the worker\n` +
+          `STOP ${n === 1 ? "the cell" : `all ${n} cells`} in flight.\n\n` +
+          `${lines}\n\n` +
+          `Each harness is interrupted once so it tears its own cell down: the worker\n` +
           `container, the egress sidecar and the session-db volume are removed.\n` +
-          `Anything this cell had measured is DISCARDED — a stopped cell writes no\n` +
+          `Anything these cells had measured is DISCARDED — a stopped cell writes no\n` +
           `progress, so it is excluded from the convergence trend and can never be\n` +
           `read as a result. Time and spend already incurred are not recoverable.`,
-        run: { model: state.model ?? null, pid: state.pid ?? null, log_name: state.log_name ?? null },
+        runs: runs.map((r) => ({ sequence_index: r.sequence_index ?? null, model: r.model ?? null, log_name: r.log_name ?? null })),
       });
       return;
     },
@@ -493,11 +485,13 @@ export const routes = [
         );
         return;
       }
-      await stopRun();
+      const done = await stopAll();
       const after = await readRunState({ runsRoot: RUNS_ROOT });
       sendJson(res, 200, {
         ok: true,
         stopped: true,
+        runs: done.runs,
+        signalled: done.signalled,
         // From a re-read: "signal sent" is not "nothing is running".
         still_running: after?.running === true,
         note: after?.running
