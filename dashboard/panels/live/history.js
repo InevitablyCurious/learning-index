@@ -1,99 +1,89 @@
-// DATA FEED — historical selection and backend refresh: opening a concluded
-// baseline's record, returning to live, auto-opening the last run when nothing
-// is live, and the throttled backend-feed refresh. Writes go through state.js
-// setters.
+// DATA FEED — which cell's record the card shows, and keeping it fresh.
+//
+// ONE SUBJECT. The card shows the cell the cell strip is pointing at
+// (panels/cells.js activeCell: the operator's pick, else the newest running
+// cell, else the batch's first). It used to have its own selection — a live
+// ring for "the" running cell, BASELINES rows for a concluded one, BACK TO LIVE
+// between them — and with N concurrent cells that ring held every cell's rows
+// at once. Now there is one read for every cell, running or ended: the cell's
+// own record by (run_dir, sequence_index). While the cell runs it is re-read
+// every REFRESH_MS; the painter appends past its seq watermark, so a re-read
+// adds rows and never rebuilds. One more read after the cell ends catches the
+// rows written between the last poll and the end.
+//
+// Writes go through state.js setters.
 
-import {
-  hist,
-  setHist,
-  autoTried,
-  setAutoTried,
-  autoSuppressed,
-  setAutoSuppressed,
-  setWasLive,
-  backend,
-  setBackend,
-  backendAt,
-  setBackendAt,
-  backendInFlight,
-  setBackendInFlight,
-  emptyBackendFeed,
-} from "./state.js";
+import { hist, setHist } from "./state.js";
+import { activeCell } from "../cells.js";
+import { controlReachability } from "../../board.js";
 
-/** Test seam: forget both what was tried and any operator stand-down. */
-export function resetAutoSelect() {
-  setAutoTried(null);
-  setAutoSuppressed(false);
-  setWasLive(null);
-}
-
-/**
- * Open the newest concluded baseline when nothing is live and nothing is
- * chosen. Fire-and-forget. Tried once per bench state (autoTried), so a failed
- * read isn't retried every push and BACK TO LIVE isn't overridden.
- */
-export function maybeAutoSelect(board) {
-  if (hist) return;
-
-  const live = board?.models_ledger?.run_in_flight === true
-    // cell_in_flight comes off the feed and moves before the ledger does.
-    || board?.events?.cell_in_flight === true;
-  if (live) {
-    // A run clears the stand-down: after a cell runs, the next concluded one opens
-    // by itself again.
-    setAutoSuppressed(false);
-    setAutoTried(null);
-    return;
-  }
-  if (autoSuppressed) return;
-
-  if (!board?.control) return;
-
-  const rows = board?.models_ledger?.baseline_rows ?? [];
-  const b = rows.find(
-    (row) => row?.state === "complete"
-      && typeof row.run_dir === "string" && row.run_dir.length > 0
-      && Number.isInteger(row.sequence_index) && row.sequence_index >= 0,
-  );
-  if (!b) return;
-
-  const key = `${b.run_dir}::${b.sequence_index}`;
-  if (autoTried === key) return;
-  setAutoTried(key);
-  void selectHistoricalRun({
-    run_dir: b.run_dir,
-    sequence_index: b.sequence_index,
-    label: `${b.id} · ${b.model ?? "unknown model"}`,
-  });
-}
+const REFRESH_MS = 2000;
 
 /** `${run_dir}::${sequence_index}` — the cell coordinates, composed once. */
 export function histKey(sel) {
   return `${sel?.run_dir}::${sel?.sequence_index}`;
 }
 
-/** What the card is showing: the selection, or null for the live cell. */
-export function historicalSelection() {
+/** The cell the card is showing, or null when there is none. */
+export function feedSelection() {
   return hist ? { ...hist.sel } : null;
 }
 
-/** Return the card to the live cell; the cached feeds go with it. */
-export function clearHistoricalRun() {
-  setHist(null);
-  // Auto-select stands down, or BACK TO LIVE would undo itself next render.
-  setAutoSuppressed(true);
+/** The strip's active cell as a feed selection; null when it addresses nothing. */
+function selectionFor(board) {
+  const c = activeCell(board);
+  if (!c) return null;
+  if (typeof c.run_dir !== "string" || !c.run_dir) return null;
+  if (!Number.isInteger(c.sequence_index) || c.sequence_index < 0) return null;
+  return {
+    run_dir: c.run_dir,
+    sequence_index: c.sequence_index,
+    running: c.running === true,
+    label: `s${String(c.sequence_index).padStart(4, "0")}`,
+  };
 }
 
 /**
- * Select a concluded cell and read its record once. Never throws; a failure
- * is shown as a note. Returns true when it actually read.
+ * Point the card at the strip's cell and keep its record fresh. Called every
+ * render; fire-and-forget, never throws. A read that fails is shown on the card
+ * as its reason, never as an empty feed.
  */
-export async function selectHistoricalRun(sel) {
-  if (!sel || typeof sel.run_dir !== "string" || !sel.run_dir) return false;
-  if (!Number.isInteger(sel.sequence_index) || sel.sequence_index < 0) return false;
-  if (hist && histKey(hist.sel) === histKey(sel)) return false;
+export function syncFeedToCell(board) {
+  const sel = selectionFor(board);
+  if (!sel) {
+    if (hist) setHist(null);
+    return;
+  }
+  const reach = controlReachability(board);
 
-  setHist({ sel: { ...sel }, loading: true, events: null, backend: null });
+  if (!hist || histKey(hist.sel) !== histKey(sel)) {
+    if (!reach.ok) {
+      setHist({ sel, loading: false, at: Date.now(), readWhileRunning: false,
+        events: { ok: false, reason: `${reach.code}: ${reach.reason}` },
+        backend: { ok: false, reason: `${reach.code}: ${reach.reason}` } });
+      return;
+    }
+    setHist({ sel, loading: true, at: 0, readWhileRunning: false, events: null, backend: null });
+    void readCell(sel);
+    return;
+  }
+
+  // Same cell: carry its running state, and re-read while it runs plus once
+  // after it stops.
+  hist.sel.running = sel.running;
+  if (hist.inFlight || !reach.ok) return;
+  const due = Date.now() - (hist.at ?? 0) >= REFRESH_MS;
+  if (due && (sel.running || hist.readWhileRunning)) void readCell(sel);
+}
+
+/**
+ * Read one cell's record (events + backend feed). The previous read stays on
+ * screen until this one lands; a read for a cell the card has left is dropped.
+ * Returns true when it landed.
+ */
+export async function readCell(sel) {
+  if (!hist || histKey(hist.sel) !== histKey(sel)) return false;
+  hist.inFlight = true;
   const key = histKey(sel);
   const run = encodeURIComponent(sel.run_dir);
   const seq = sel.sequence_index;
@@ -103,21 +93,17 @@ export async function selectHistoricalRun(sel) {
   ]);
   // The operator moved on while this was in flight: drop the stale read.
   if (!hist || histKey(hist.sel) !== key) return false;
-  setHist({ ...hist, loading: false, events, backend: backendRes });
-  return true;
-}
-
-/**
- * Select a cell whose record can't be read (the control plane is
- * unreachable), and show why, rather than doing nothing.
- */
-export function selectHistoricalRunUnreachable(sel, reason) {
   setHist({
-    sel: { ...sel },
+    ...hist,
     loading: false,
-    events: { ok: false, reason },
-    backend: { ok: false, reason },
+    inFlight: false,
+    at: Date.now(),
+    // A read taken while running earns exactly one more after the cell ends.
+    readWhileRunning: hist.sel.running === true,
+    events,
+    backend: backendRes,
   });
+  return true;
 }
 
 // A raw fetch; every failure becomes data.
@@ -129,27 +115,4 @@ async function histFetch(url) {
   } catch (err) {
     return { ok: false, reason: String(err?.message ?? err) };
   }
-}
-
-const BACKEND_MIN_INTERVAL_MS = 2000;
-
-/** Fire-and-forget, throttled, read on the next render. */
-export function maybeRefreshBackend() {
-  if (backendInFlight) return;
-  const now = Date.now();
-  if (backend.loaded && now - backendAt < BACKEND_MIN_INTERVAL_MS) return;
-  setBackendInFlight(true);
-  fetch(`/api/backend-feed`)
-    .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
-    .then((body) => {
-      setBackend({ ...body, loaded: true, unreachable: false });
-    })
-    .catch(() => {
-      // The control plane failed, not a producer: say so.
-      setBackend(emptyBackendFeed({ loaded: true, unreachable: true }));
-    })
-    .finally(() => {
-      setBackendInFlight(false);
-      setBackendAt(Date.now());
-    });
 }

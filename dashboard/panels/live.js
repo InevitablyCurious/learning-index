@@ -40,9 +40,6 @@ import {
   setExpandBound,
   tab,
   hist,
-  setHist,
-  wasLive,
-  setWasLive,
   expandedBackend,
   setExpandedBackend,
   backendExpandBound,
@@ -50,7 +47,7 @@ import {
   eventFeed,
   backendFeed,
 } from "./live/state.js";
-import { maybeAutoSelect, maybeRefreshBackend, histKey } from "./live/history.js";
+import { syncFeedToCell, histKey } from "./live/history.js";
 import {
   backendHead,
   feedTabs,
@@ -65,13 +62,7 @@ import {
 // panels/live.js stays the one import path.
 export { EVENT_KINDS };
 export { phaseIndex, chunkOf, spine, provisional } from "./live/phases.js";
-export {
-  resetAutoSelect,
-  historicalSelection,
-  clearHistoricalRun,
-  selectHistoricalRun,
-  selectHistoricalRunUnreachable,
-} from "./live/history.js";
+export { feedSelection, readCell } from "./live/history.js";
 export {
   setFeedTab,
   toggleBackendSource,
@@ -104,23 +95,15 @@ export function clearKinds() {
  * gate wall).
  */
 export function renderLive(board) {
-  const r = board.run ?? {};
-  // A run starting takes the card back — on the transition only, so an old
-  // record can still be held during a live run (BACK TO LIVE returns).
-  const nowLive = board?.models_ledger?.run_in_flight === true;
-  if (hist && nowLive && wasLive === false) setHist(null);
-  setWasLive(nowLive);
-  // Nothing live: open the last concluded record by itself (marked CONCLUDED).
-  maybeAutoSelect(board);
-  maybeRefreshBackend();
+  // The card follows the cell strip (panels/cells.js); history.js keeps the
+  // cell's record fresh while it runs.
+  syncFeedToCell(board);
 
   return `
     <section class="panel live">
       <div class="phead">
         <span class="ttl">DATA FEED</span>
-        <span class="sub">${hist ? histLabel() : cellLabel(r)}</span>
-        <span class="spacer"></span>
-        ${hist ? `<button class="btn sm" data-feed-live="1">← BACK TO LIVE</button>` : ""}
+        <span class="sub">${cellLabel()}</span>
       </div>
       <div class="live-feed">
         ${tab === "backend" ? backendHead() : feedHead(board)}
@@ -131,20 +114,14 @@ export function renderLive(board) {
     </section>`;
 }
 
-/** Which cell is on screen, and only when one actually is running. */
-function cellLabel(r) {
-  if (r?.state && r.state !== "running") return nul("no cell running");
-  if (!r?.arm && !r?.cell_label) return nul("no run observed");
-  const seq = r.cell_label ? esc(r.cell_label) : "cell";
-  const arm = r.arm ? esc(r.arm.toUpperCase()) : nul("arm unobserved");
-  return `${seq} · ${arm}`;
-}
-
-/** Which record is on screen, and that it is a concluded record. */
-function histLabel() {
+/** Which cell is on screen, and whether it is still running. */
+function cellLabel() {
+  if (!hist) return nul("no cell to show");
   const sel = hist.sel;
-  const who = sel.label ? esc(sel.label) : esc(`${sel.run_dir} · cell ${sel.sequence_index}`);
-  return `${who} · <span class="feed-frozen">CONCLUDED — READ ONCE</span>`;
+  const who = `<span class="feed-subject">${esc(sel.label)}</span>`;
+  return sel.running
+    ? `${who} · <span class="feed-live">LIVE</span>`
+    : `${who} · <span class="feed-frozen">ENDED — COMPLETE RECORD</span>`;
 }
 
 // ── EVENT FEED ──────────────────────────────────────────────────────────────
@@ -176,22 +153,12 @@ function feedHead(board) {
 
 /** `windowed` = more exist, ask for them; `capped` = events were dropped. */
 function feedNote(ev) {
-  if (!ev) return hist ? "reading the record…" : "oldest first · cap 400 · sticky bottom";
-  const bits = [];
-  // A historical read is the cell's whole transcript: no cap, no ring.
-  if (hist) {
-    bits.push(`${ev.returned ?? (ev.events ?? []).length} events · complete record`);
-    if (ev.unmapped) bits.push(`${ev.unmapped} unmapped`);
-    bits.push("oldest first · read once");
-    return bits.join(" · ");
-  }
-  // An idle feed has no window to describe.
-  if (ev.cell_in_flight === false && !(ev.events ?? []).length) return "nothing running";
-  if (ev.capped) bits.push(`ring full — oldest dropped (${ev.total} seen)`);
-  else if (ev.returned < ev.retained) bits.push(`showing ${ev.returned} of ${ev.retained}`);
-  // A high unmapped count is normal: per-token deltas are dropped on purpose.
+  if (!ev) return "reading the record…";
+  if (!hist) return "nothing to show";
+  // The cell's whole record: no cap, no ring.
+  const bits = [`${ev.returned ?? (ev.events ?? []).length} events`];
   if (ev.unmapped) bits.push(`${ev.unmapped} unmapped`);
-  bits.push("oldest first · cap 400");
+  bits.push(hist.sel.running ? "oldest first · re-read every 2s" : "oldest first · complete record");
   return bits.join(" · ");
 }
 
@@ -206,7 +173,7 @@ function sigOf(ev) {
     facetSignature(kindFacet),
     ev?.connected ?? null,
     ev?.reason ?? null,
-    hist ? histKey(hist.sel) : "live",
+    hist ? histKey(hist.sel) : "none",
   ]);
 }
 
@@ -219,7 +186,7 @@ export function paintFeed(board) {
   const sig = sigOf(ev);
 
   if (!ev) {
-    box.innerHTML = padNote("control plane not enabled — the event feed is opt-in and currently off.");
+    box.innerHTML = padNote("reading the cell's record…");
     setRenderedSeq(-1); setRenderedSig(sig);
     return;
   }
@@ -240,9 +207,12 @@ export function paintFeed(board) {
         ? `no ${facetPicked(kindFacet).join(" or ")} events among the ${ev.retained} retained — press CLEAR to see the rest.`
         : ev.retained
           ? "every retained event is hidden by the active filters."
-          : idle
+          : !hist
             // The state the operator is in, and what to do about it.
-            ? "no cell is running, and this bench holds no concluded record to open. Start a baseline from BASELINES."
+            ? "no cell to show — this bench has no batch yet. Start a baseline from BASELINES."
+            : idle
+              // An ended cell whose record holds nothing: said, never blank.
+              ? "this cell's record holds no events — no transcript was captured for it."
             : disconnected
               // Not "connected": the banner above just said it isn't.
               ? "no events were retained before the stream dropped."
@@ -406,7 +376,7 @@ export function feedExportLabel(board) {
   const n = tab === "backend"
     ? mergeBackendRows(backendFeed()).length
     : ((eventFeed(board)?.events) ?? []).length;
-  const src = hist ? `${hist.sel.label ?? hist.sel.run_dir} · cell ${hist.sel.sequence_index}` : "live cell";
+  const src = hist ? `${hist.sel.run_dir} · ${hist.sel.label}` : "no cell";
   return `${n} ${what} · ${src}`;
 }
 
@@ -429,15 +399,15 @@ export function paintBackend() {
     box.innerHTML = padNote(
       dead
         ? (feed.hist_reason
-            ? `the frozen record could not be read — ${feed.hist_reason}`
+            ? `the cell's record could not be read — ${feed.hist_reason}`
             : "control plane unreachable — nothing can be read.")
         : !feed.loaded
           ? "reading…"
           : feed.total > 0
             ? "no records match the picked filters — press CLEAR to see the rest."
             : hist
-              ? "this cell wrote no backend records."
-              : "no backend records yet. Processes write these as they work; an idle bench has none.",
+              ? (hist.sel.running ? "no backend records yet — processes write these as they work." : "this cell wrote no backend records.")
+              : "no cell to show.",
       dead,
     );
     return;

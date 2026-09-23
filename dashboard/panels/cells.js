@@ -116,7 +116,9 @@ function card(c, median, activeIndex) {
   const h = health(c);
   const on = c.sequence_index === activeIndex;
   const seq = `s${String(c.sequence_index ?? 0).padStart(4, "0")}`;
-  const bits = [shortDur(c.elapsed_s), Number.isFinite(c.turns) ? `${c.turns}t` : null]
+  // Scoring turns of the build phases that have FINISHED (control/board/sources/
+  // cells.mjs): the phase in progress is added when it ends.
+  const bits = [shortDur(c.elapsed_s), Number.isFinite(c.turns) ? `${c.turns} turns` : null]
     .filter(Boolean)
     .join(" · ");
   return `
@@ -126,6 +128,7 @@ function card(c, median, activeIndex) {
       <span class="cc-head">
         <span class="cc-dot ${h.dot}"></span>
         <span class="cc-seq">${esc(seq)}</span>
+        ${c.running ? `<span class="cc-tag live">LIVE</span>` : ""}
         ${on ? `<span class="cc-tag view">VIEW</span>` : nearMedian(c, median) ? `<span class="cc-tag med">~med</span>` : ""}
       </span>
       <span class="cc-state">${stateLine(c)}</span>
@@ -204,4 +207,17 @@ export function observeCellStrip() {
     el.dataset.edgeBound = "1";
   }
   mark();
+}
+
+/**
+ * The mark for a panel that cannot follow the strip yet. Its source reads one
+ * cell the control plane chooses, and records not which — so with two or more
+ * cells it may be showing a different cell than the strip's. Said on the panel,
+ * never left for the operator to assume. Nothing with a single cell.
+ */
+export function notPerCellMark(board) {
+  if ((board?.cells?.list ?? []).length < 2) return "";
+  return `<span class="tag cc-notcell" title="${esc(
+    "this panel reads one cell chosen by the control plane, not the cell selected in the strip — per-cell reads for it are not built yet",
+  )}">NOT PER-CELL</span>`;
 }

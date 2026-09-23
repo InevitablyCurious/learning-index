@@ -292,8 +292,6 @@ import {
   jumpToLive,
   feedExportText,
   feedExportLabel,
-  clearHistoricalRun,
-  historicalSelection,
 } from "./panels/live.js";
 import { renderHold } from "./panels/hold.js";
 import { renderCells, setSelectedCell, selectedCell, observeCellStrip } from "./panels/cells.js";
@@ -340,7 +338,6 @@ import {
   doLaunchBaseline,
   doLoadTools,
   doRunTool,
-  pointFeedAt,
   releaseHold,
   detachTui,
   doLoadBackups,
@@ -437,7 +434,7 @@ function bindInteraction() {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-batch-open],[data-batch-pick],[data-feed-run],[data-feed-clear],[data-feed-live],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
+  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-batch-open],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
   if (!t) return;
 
   if (t.dataset.gateId) {
@@ -639,13 +636,10 @@ function onClick(e) {
     return;
   }
   // ── BASELINES CARD ── checked after the buttons inside rows, so [+ run] never
-  // also toggles its row. Clicking a row expands it and points the DATA FEED card
-  // at it; the way back to the live cell is BACK TO LIVE on the card.
+  // also toggles its row. A row expands; which cell the page shows is the cell
+  // strip's job alone.
   if (t.dataset.baselineExpand) {
     toggleBaselineRow(t.dataset.baselineExpand);
-    const b = (board.models_ledger?.baseline_rows ?? []).find((row) => row?.id === t.dataset.baselineExpand);
-    // Paint the "reading…" state now, not after the fetch returns.
-    void pointFeedAt(board, b);
     render();
     return;
   }
@@ -663,11 +657,6 @@ function onClick(e) {
     } catch (err) {
       say(`copy failed — ${String(err?.message ?? err)}`);
     }
-    return;
-  }
-  if (t.hasAttribute("data-feed-clear") || t.hasAttribute("data-feed-live")) {
-    clearHistoricalRun();
-    render();
     return;
   }
 }

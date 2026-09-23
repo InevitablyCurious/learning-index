@@ -1,43 +1,37 @@
-// THE DATA FEED CARD'S TWO SOURCES — the live cell, and a concluded record.
+// THE DATA FEED CARD — one subject: the cell the strip points at.
 //
-// ONE SURFACE, TWO SOURCES. The card reads either the running cell or a frozen
-// baseline record, and it is the same card either way: same tabs, same kind
-// chips, same source/severity facets, same row renderers. These tests pin the
-// SOURCE SWITCH (`selectHistoricalRun` / `clearHistoricalRun`) and the two
-// invariants that make one card safe to point at two things —
+// ONE READ FOR EVERY CELL. The card shows the cell panels/cells.js activeCell
+// names (the operator's pick, else the newest running cell, else the batch's
+// first), read by (run_dir, sequence_index) — running or ended, the same read.
+// A running cell is re-read on a timer; an ended one once more after it ends.
 //
-//   1. a run starting takes the card back, and
-//   2. a stale read never lands on top of a newer choice.
+// THE DEFECT THIS FILE REPLACED. The card had its own selection: a live ring for
+// "the" running cell, BASELINES rows for a concluded one, BACK TO LIVE between
+// them. With N concurrent cells the ring held every cell's rows at once, and the
+// strip's click moved the TUI but not this card — two subjects on one page.
 //
-// THE DEFECT THIS FILE REPLACED. The concluded feeds first rendered as their own
-// stacked sections inside the BASELINES drawer, gated behind a memory PROFILE —
-// so with no profile frozen (which is every bench now) the record was persisted,
-// served, and unreachable. It then rendered in the drawer WITHOUT the drawer
-// having any of the reading tools. Both are gone; the record opens in the card
-// built for reading.
-//
-// Module state in panels/live.js persists across tests in this file, so each
-// subtest establishes the state it asserts on and the ordering is declared.
+// Module state (panels/live/state.js, panels/cells.js) persists across tests in
+// this file, so each subtest establishes the state it asserts on.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
-  selectHistoricalRun,
-  selectHistoricalRunUnreachable,
-  clearHistoricalRun,
-  historicalSelection,
+  feedSelection,
+  readCell,
   renderLive,
   mergeBackendRows,
   condenseBackend,
   bRow,
   EVENT_KINDS,
-  resetAutoSelect,
 } from "./panels/live.js";
+import { hist, setHist } from "./panels/live/state.js";
+import { setSelectedCell } from "./panels/cells.js";
 import { renderLedger } from "./panels/ledger.js";
 
 const RUN_DIR = "1788717847/local/omlx/model-a";
-const SEL = { run_dir: RUN_DIR, sequence_index: 0, label: "base-a · model-a" };
+const ENDED = { sequence_index: 0, run_dir: RUN_DIR, running: false };
+const LIVE = { sequence_index: 1, run_dir: RUN_DIR, running: true };
 
 /** The persisted /api/events envelope, in the shape control/server.mjs serves. */
 const EVENTS = {
@@ -78,254 +72,155 @@ function withFetch(fn, { events = EVENTS, backend = BACKEND } = {}) {
   return Promise.resolve(fn(seen)).finally(() => { globalThis.fetch = real; });
 }
 
-test("selectHistoricalRun — the source switch", async (t) => {
-  await t.test("reads BOTH feeds once, keyed on run_dir + sequence_index", async () => {
-    await withFetch(async (seen) => {
-      clearHistoricalRun();
-      const read = await selectHistoricalRun(SEL);
-      assert.equal(read, true, "an actual read reports true");
-      assert.equal(seen.length, 2, "exactly two reads, in parallel, once");
-      const run = encodeURIComponent(RUN_DIR);
-      assert.ok(seen.includes(`/api/events?run_dir=${run}&sequence_index=0`), "events URL carries the cell address");
-      assert.ok(seen.includes(`/api/backend-feed?run_dir=${run}&sequence_index=0`), "backend URL carries the cell address");
-      assert.deepEqual(historicalSelection(), SEL, "the selection is readable by the card that renders it");
-    });
-  });
-
-  await t.test("re-selecting what is already shown re-reads nothing", async () => {
-    await withFetch(async (seen) => {
-      const read = await selectHistoricalRun({ ...SEL });
-      assert.equal(read, false);
-      assert.equal(seen.length, 0, "a frozen record already on screen is not re-fetched");
-    });
-  });
-
-  await t.test("clearing returns the card to the live cell", () => {
-    clearHistoricalRun();
-    assert.equal(historicalSelection(), null);
-  });
-
-  await t.test("an unaddressable cell is refused before any read", async () => {
-    await withFetch(async (seen) => {
-      for (const bad of [
-        null,
-        { run_dir: "", sequence_index: 0 },
-        { run_dir: RUN_DIR, sequence_index: null },
-        { run_dir: RUN_DIR, sequence_index: -1 },
-      ]) {
-        assert.equal(await selectHistoricalRun(bad), false, JSON.stringify(bad));
-      }
-      assert.equal(seen.length, 0, "not one read was attempted");
-      assert.equal(historicalSelection(), null, "and nothing was selected");
-    });
-  });
-
-  await t.test("a stale read never lands on top of a newer choice", async () => {
-    // The operator switched away — or went back to live — while the first read
-    // was in flight. Landing it now shows a run nobody asked for.
-    const real = globalThis.fetch;
-    globalThis.fetch = async (url) => ({
-      ok: true,
-      json: async () => {
-        clearHistoricalRun();               // the switch, mid-flight
-        return String(url).includes("/api/events") ? EVENTS : BACKEND;
-      },
-    });
-    try {
-      const read = await selectHistoricalRun(SEL);
-      assert.equal(read, false, "a read whose selection moved reports false");
-      assert.equal(historicalSelection(), null, "and does not resurrect the abandoned selection");
-    } finally {
-      globalThis.fetch = real;
-    }
-  });
-});
-
-test("the card renders whichever source it is pointed at", async (t) => {
-  const liveBoard = {
-    run: { arm: "off", cell_label: "cell 0" },
-    events: { connected: true, counts: {}, events: [], retained: 0, returned: 0, total: 0 },
+/** A board whose strip holds `list`; the control plane reachable unless said. */
+function boardWith(list, over = {}) {
+  return {
     control: {},
-    models_ledger: { run_in_flight: false },
+    events: { connected: true, reason: null },
+    cells: { list },
+    models_ledger: { run_in_flight: list.some((c) => c.running) },
+    ...over,
   };
+}
 
-  await t.test("the card is named DATA FEED and names the live cell by default", () => {
-    clearHistoricalRun();
-    const html = renderLive(liveBoard);
-    assert.ok(html.includes("DATA FEED"), "the card is DATA FEED, not LIVE RUN");
-    assert.ok(html.includes("CELL 0") || html.includes("cell 0"), "the live cell is named");
-    assert.ok(!html.includes("CONCLUDED"), "nothing claims a record is on screen");
-    assert.ok(!html.includes("data-feed-live"), "no back-to-live control when already live");
-  });
+/** Forget every selection this file makes. */
+function reset() {
+  setHist(null);
+  setSelectedCell(null);
+}
 
-  await t.test("a selected record is NAMED and marked CONCLUDED, with a way back", async () => {
-    await withFetch(async () => {
-      await selectHistoricalRun(SEL);
+const tick = () => new Promise((r) => setTimeout(r, 0));
+const url = (kind, c) => `/api/${kind}?run_dir=${encodeURIComponent(c.run_dir)}&sequence_index=${c.sequence_index}`;
+
+test("the card follows the cell strip", async (t) => {
+  await t.test("with no cell there is nothing to read, and the card says so", async () => {
+    reset();
+    await withFetch(async (seen) => {
+      const html = renderLive(boardWith([]));
+      await tick();
+      assert.equal(seen.length, 0, "nothing is read");
+      assert.ok(html.includes("no cell to show"), "the card names the absence");
+      assert.equal(feedSelection(), null);
     });
-    const html = renderLive(liveBoard);
-    assert.ok(html.includes("base-a · model-a"), "the record is named on the card");
-    assert.ok(html.includes("CONCLUDED — READ ONCE"), "and marked as a record, not a live feed");
-    assert.ok(html.includes("data-feed-live"), "the way back to the live cell is offered");
-    // The chips are drawn from the persisted counts, which the control plane now
-    // TALLIES rather than zeroing — a concluded run's filters must populate.
-    assert.ok(/tool\s*1/.test(html), "the tool chip carries its real count");
-    assert.ok(/file\s*1/.test(html), "the file chip carries its real count");
   });
 
-  await t.test("a run STARTING takes the card back — but only on the edge", async () => {
-    // THE EDGE, NOT THE STATE. This cleared on every render while a cell ran, so
-    // a record selected mid-run was wiped by the next 2s tick — the same
-    // "fleeting and inconsistent" failure the toggling [feed] button caused. The
-    // operator asked for the row to work "whether it's old or running now".
-    await withFetch(async () => {
-      clearHistoricalRun();
-      resetAutoSelect();
-      await selectHistoricalRun(SEL);
+  await t.test("by default it reads the newest RUNNING cell, keyed on its address", async () => {
+    reset();
+    await withFetch(async (seen) => {
+      renderLive(boardWith([ENDED, LIVE]));
+      await tick();
+      assert.deepEqual(seen.sort(), [url("backend-feed", LIVE), url("events", LIVE)]);
     });
-    assert.notEqual(historicalSelection(), null, "precondition: a record is selected");
-
-    // Establish "not running", then transition into a run: that RECLAIMS.
-    renderLive(liveBoard);
-    renderLive({ ...liveBoard, models_ledger: { run_in_flight: true } });
-    assert.equal(historicalSelection(), null, "the rising edge of a run takes the card");
-
-    // Now select a record DURING the run and hold it across many renders.
-    await withFetch(async () => { await selectHistoricalRun(SEL); });
-    const running = { ...liveBoard, models_ledger: { run_in_flight: true } };
-    for (let k = 0; k < 5; k += 1) renderLive(running);
-    assert.notEqual(historicalSelection(), null,
-      "a record selected mid-run survives — the run is continuing, not starting");
-    clearHistoricalRun();
-    resetAutoSelect();
+    const html = renderLive(boardWith([ENDED, LIVE]));
+    assert.ok(html.includes("s0001"), "the card names the cell");
+    assert.ok(html.includes("feed-live"), "and marks it LIVE");
   });
 
-  await t.test("an unreachable control plane states its reason on the card", () => {
-    clearHistoricalRun();
-    selectHistoricalRunUnreachable(SEL, "control_plane_unreachable: timed out");
-    const html = renderLive(liveBoard);
-    assert.ok(html.includes("base-a · model-a"), "the attempted selection is still named");
-    assert.ok(html.includes("CONCLUDED"), "the card admits which mode it is in");
-    clearHistoricalRun();
+  await t.test("picking a card re-points the card — no second selector, no BACK TO LIVE", async () => {
+    setSelectedCell(0);
+    await withFetch(async (seen) => {
+      renderLive(boardWith([ENDED, LIVE]));
+      await tick();
+      assert.deepEqual(seen.sort(), [url("backend-feed", ENDED), url("events", ENDED)]);
+    });
+    const html = renderLive(boardWith([ENDED, LIVE]));
+    assert.ok(html.includes("s0000"), "the picked cell is named");
+    assert.ok(html.includes("ENDED — COMPLETE RECORD"), "and marked as a complete record");
+    assert.ok(!html.includes("data-feed-live") && !html.includes("BACK TO LIVE"), "there is no way 'back' — the strip is the one control");
+    assert.ok(/tool\s*1/.test(html), "the chips carry the record's real counts");
+  });
+
+  await t.test("a running cell is re-read when due; an ended one is not", async () => {
+    reset();
+    await withFetch(async () => { renderLive(boardWith([LIVE])); await tick(); });
+    hist.at = 0; // due
+    await withFetch(async (seen) => {
+      renderLive(boardWith([LIVE]));
+      await tick();
+      assert.equal(seen.length, 2, "a running cell is re-read");
+    });
+    // It ends: exactly one more read (rows written after the last poll), then none.
+    const ended = { ...LIVE, running: false };
+    hist.at = 0;
+    await withFetch(async (seen) => {
+      renderLive(boardWith([ended]));
+      await tick();
+      assert.equal(seen.length, 2, "one read after the cell ends");
+    });
+    hist.at = 0;
+    await withFetch(async (seen) => {
+      renderLive(boardWith([ended]));
+      await tick();
+      assert.equal(seen.length, 0, "and then the record is complete");
+    });
+  });
+
+  await t.test("a read for a cell the card has left never lands", async () => {
+    reset();
+    setHist({ sel: { ...ENDED, label: "s0000" }, loading: true, at: 0 });
+    const stale = { ...LIVE, label: "s0001" };
+    await withFetch(async () => {
+      assert.equal(await readCell(stale), false, "a read for another cell reports false");
+    });
+    assert.equal(feedSelection().sequence_index, 0, "and the card keeps its cell");
+  });
+
+  await t.test("an unreachable control plane states its reason and reads nothing", async () => {
+    reset();
+    await withFetch(async (seen) => {
+      renderLive(boardWith([LIVE], { control: null, sources: [{ id: "control-plane", reason: "timed out" }] }));
+      await tick();
+      assert.equal(seen.length, 0);
+    });
+    assert.equal(hist.events.ok, false);
+    assert.match(hist.events.reason, /control_plane_unreachable: timed out/);
+    reset();
+  });
+
+  await t.test("a complete record is never described as capped", async () => {
+    reset();
+    await withFetch(async () => { renderLive(boardWith([ENDED])); await tick(); });
+    const html = renderLive(boardWith([ENDED]));
+    assert.ok(!html.includes("cap 400"), "no window is claimed over a whole record");
+    assert.ok(html.includes("complete record"));
+    reset();
   });
 });
 
-test("the BASELINE ROW is the feed selector, and it cannot un-select", async (t) => {
-  // THE DEFECT THIS PINS. Selecting was a separate `[feed]` button that became
-  // `SHOWING` wired to "return to live". So the control TOGGLED: with a record
-  // auto-opened on load, pressing the button that NAMED this row closed it. The
-  // operator saw the feed appear, pressed the thing labelled for it, and watched
-  // it vanish — "its existence is fleeting and inconsistent", which it was.
-  //
-  // Selecting a baseline is now clicking the baseline. One affordance, one
-  // readout, and exactly one way back (BACK TO LIVE, on the card).
+test("a BASELINES row expands and marks — it never selects the feed", async (t) => {
   const row = {
     id: "base-a", model: "model-a", kind: "local", kind_label: "LOCAL",
     state: "complete", scorable: true, run_dir: RUN_DIR, sequence_index: 0,
     turns: 9, gates: { passed: 9, total: 9 }, runs: [], run_count: 0, best: null,
     can_run: { allowed: true, reason: null },
   };
-  const board = (over = {}) => ({
+  const ledgerBoard = (over = {}) => ({
     control: { roster: null },
     models_ledger: { baseline_rows: [row], counts: { complete: 1, running: 0, void: 0 }, startable: [], run_in_flight: false, ...over },
   });
 
-  await t.test("the row carries the selection, and no toggling button exists", () => {
-    clearHistoricalRun();
-    resetAutoSelect();
-    const html = renderLedger(board());
-    assert.ok(html.includes(`data-baseline-expand="base-a"`), "the ROW is the affordance");
-    assert.ok(!html.includes("data-feed-run"), "no separate select button");
-    assert.ok(!html.includes("data-feed-clear"), "and nothing on the row can un-select");
-    assert.ok(!html.includes("SHOWING"), "the toggling label is gone");
+  await t.test("the row is an expander with no feed control on it", () => {
+    reset();
+    const html = renderLedger(ledgerBoard());
+    assert.ok(html.includes(`data-baseline-expand="base-a"`));
+    assert.ok(!/data-feed-(run|clear|live)/.test(html), "no feed selector or way back on the row");
   });
 
-  await t.test("the selected row marks itself — a readout, not a control", async () => {
-    await withFetch(async () => { await selectHistoricalRun(SEL); });
-    const html = renderLedger(board());
-    assert.ok(html.includes("blfeed on"), "the row says the card is pointed at it");
-    assert.ok(html.includes("feeding"), "and the row itself is marked");
-    // Still not a control: the mark is a span, and the row keeps its own handler.
+  await t.test("the row whose cell the card shows says FEED — a readout, not a control", async () => {
+    reset();
+    await withFetch(async () => { renderLive(boardWith([ENDED])); await tick(); });
+    const html = renderLedger(ledgerBoard());
+    assert.ok(html.includes("blfeed on"));
     assert.ok(!/<button[^>]*blfeed/.test(html), "the mark is never a button");
-    clearHistoricalRun();
-    resetAutoSelect();
+    reset();
   });
 
-  await t.test("a running cell's row reads LIVE — its feed is the live one", () => {
-    const html = renderLedger({
-      control: { roster: null },
-      models_ledger: {
-        baseline_rows: [{ ...row, state: "running", can_run: { allowed: false, reason: "still running" } }],
-        counts: { complete: 0, running: 1, void: 0 }, startable: [], run_in_flight: true,
-      },
-    });
-    assert.ok(html.includes("blfeed live"), "a running row points at the live feed, not a record");
-    assert.ok(html.includes(`data-baseline-expand`), "and is still selectable — old OR running now");
-  });
-
-  await t.test("an unaddressable row says so and offers nothing", () => {
-    const html = renderLedger({
-      control: { roster: null },
-      models_ledger: {
-        baseline_rows: [{ ...row, run_dir: null, sequence_index: null }],
-        counts: { complete: 1, running: 0, void: 0 }, startable: [], run_in_flight: false,
-      },
-    });
-    assert.ok(html.includes("blfeed none"), "a row that can address nothing marks itself");
-  });
-});
-
-test("the paint signature changes with the SOURCE, not just the filters", async (t) => {
-  // WHY THIS IS PINNED. `paintFeed` appends past a seq watermark rather than
-  // rebuilding — a rebuild every poll resets scrollTop and makes "new"
-  // undetectable. It rebuilds only when the signature changes, a FORWARD seq gap
-  // appears, or seqs run BACKWARD. Two frozen records are each numbered from
-  // their own session, so if the incoming one's seqs happen to sit above what is
-  // already painted, none of those three fire — and the card splices two
-  // different runs into one list with nothing on screen saying so.
-  //
-  // `sigOf` is module-private, so this asserts on the observable consequence:
-  // the note and the subtitle both re-derive per source, and the card can name
-  // which record it is on. The signature carrying the source key is what makes
-  // the paint agree with them.
-  const liveBoard = {
-    run: { arm: "off", cell_label: "cell 0" },
-    events: { connected: true, counts: {}, events: [], retained: 0, returned: 0, total: 0 },
-    control: {},
-    models_ledger: { run_in_flight: false },
-  };
-
-  await t.test("switching records re-points the card, and says so", async () => {
-    await withFetch(async () => {
-      clearHistoricalRun();
-      await selectHistoricalRun(SEL);
-    });
-    assert.ok(renderLive(liveBoard).includes("base-a · model-a"));
-
-    const other = { run_dir: "1788717847/local/omlx/model-b", sequence_index: 3, label: "base-b · model-b" };
-    await withFetch(async (seen) => {
-      const read = await selectHistoricalRun(other);
-      assert.equal(read, true, "a DIFFERENT record is a real read, never a cache hit");
-      assert.equal(seen.length, 2, "and it re-reads both feeds");
-    });
-    const html = renderLive(liveBoard);
-    assert.ok(html.includes("base-b · model-b"), "the card names the record it switched to");
-    assert.ok(!html.includes("base-a · model-a"), "and stops naming the one it left");
-    assert.deepEqual(historicalSelection(), other);
-    clearHistoricalRun();
-  });
-
-  await t.test("a complete record is never described as capped", async () => {
-    await withFetch(async () => {
-      clearHistoricalRun();
-      await selectHistoricalRun(SEL);
-    });
-    const html = renderLive(liveBoard);
-    // "cap 400" is the LIVE path's server-side window. The persisted read does
-    // not apply it — it answers with the whole transcript — so claiming a cap
-    // over a complete record is a false statement about the rows on screen.
-    assert.ok(!html.includes("cap 400"), "the live cap sentence must not ride a frozen record");
-    assert.ok(html.includes("complete record"), "the record says what it is");
-    clearHistoricalRun();
+  await t.test("a running row reads LIVE", () => {
+    const html = renderLedger(ledgerBoard({
+      baseline_rows: [{ ...row, state: "running", can_run: { allowed: false, reason: "still running" } }],
+      counts: { complete: 0, running: 1, void: 0 }, run_in_flight: true,
+    }));
+    assert.ok(html.includes("blfeed live"));
   });
 });
 
@@ -507,73 +402,20 @@ test("a dead stream must not swallow the rows the feed already holds", async (t)
   });
 });
 
-test("an idle bench must not impersonate the run that just finished", async (t) => {
-  // THE DEFECT THIS PINS, and it cost three rounds of the operator saying "the
-  // historical feed is empty" while the historical endpoint was serving 4,322
-  // rows correctly the whole time.
-  //
+test("the server only merges live prompts while a cell is IN FLIGHT", async () => {
   // `activeRunDir()` resolves the NEWEST run directory whether or not anything
-  // is running. So on an idle bench the LIVE feed reached into the last
-  // CONCLUDED run, served its 10 prompts as live rows, and printed that finished
-  // cell's name in the card's subtitle. The result read exactly like a broken
-  // historical feed: `tool 0 · file 0 · thinking 0 · error 0 · lifecycle 0 ·
-  // user 10` under a heading naming the run whose record was supposedly on
-  // screen. Nothing was broken; the card was showing the wrong source.
-
-  await t.test("the server only merges prompts while a cell is IN FLIGHT", async () => {
-    // The /api/events handler moved from control/server.mjs to
-    // control/routes/events.mjs in LI-14 phase 2; the gate lives with it.
-    const src = await readFile(new URL("../control/routes/events.mjs", import.meta.url), "utf8");
-    assert.match(src, /const cellInFlight = liveRunState\.can_start !== true;/,
-      "the live branch resolves whether a cell is actually running");
-    assert.match(src, /if \(cellInFlight\) \{\s*\n\s*try \{\s*\n\s*const fb = await readFeedback/,
-      "and the feedback read is gated on it");
-    assert.match(src, /cell_in_flight: cellInFlight,/,
-      "and the fact is reported so the card can render the right idle state");
-  });
-
-  await t.test("an idle feed is not drawn as a fault", () => {
-    // `connected:false` is equally true for a crashed run and an idle bench, and
-    // those want opposite words on screen.
-    const board = {
-      run: { state: "complete", arm: "off" },
-      control: {},
-      models_ledger: { run_in_flight: false },
-      events: { connected: false, reason: "event feed disconnected: fetch failed", cell_in_flight: false, events: [], counts: {}, retained: 0, returned: 0, total: 0 },
-    };
-    clearHistoricalRun();
-    const html = renderLive(board);
-    // The subtitle must not name the concluded cell as though it were live.
-    assert.ok(html.includes("no cell running"), "the card says no cell is running");
-    assert.ok(!/qwen|-0000/.test(html), "and does not name a finished cell as the live one");
-  });
-
-  await t.test("a genuinely dropped stream still reads as a fault", () => {
-    // The banner must NOT be suppressed for a run that was live and died —
-    // `cell_in_flight: true` with `connected: false` is a real failure.
-    const board = {
-      run: { state: "running", arm: "off", cell_label: "cell 0" },
-      control: {},
-      models_ledger: { run_in_flight: true },
-      events: { connected: false, reason: "socket hang up", cell_in_flight: true, events: [], counts: {}, retained: 0, returned: 0, total: 0 },
-    };
-    clearHistoricalRun();
-    const html = renderLive(board);
-    assert.ok(html.includes("cell 0"), "a running cell IS named");
-    assert.ok(!html.includes("no cell running"), "and is not reported as idle");
-  });
+  // is running; on an idle bench the live path once served a finished cell's
+  // prompts as live rows. The gate stays with the handler.
+  const src = await readFile(new URL("../control/routes/events.mjs", import.meta.url), "utf8");
+  assert.match(src, /const cellInFlight = liveRunState\.can_start !== true;/);
+  assert.match(src, /if \(cellInFlight\) \{\s*\n\s*try \{\s*\n\s*const fb = await readFeedback/);
+  assert.match(src, /cell_in_flight: cellInFlight,/);
 });
 
 test("the PAINT path runs — the class of bug the suite could not see", async (t) => {
-  // WHY THIS EXISTS. `paintFeed` and `paintBackend` touch the DOM, so nothing in
-  // this suite ever executed them: every other test drives the pure render
-  // functions. A `const idle = …` that went missing while the code USING it
-  // landed therefore passed `node --check`, passed 311 tests, and threw
-  // `idle is not defined` the moment a real browser painted the feed — leaving
-  // the operator looking at a card that silently stopped updating.
-  //
-  // A minimal fake element is enough: the point is that the functions EXECUTE,
-  // not that the markup is inspected (the pure renderers above cover that).
+  // `paintFeed` and `paintBackend` touch the DOM, so the pure-render tests never
+  // execute them; a missing binding once passed every test and threw in the
+  // browser. A minimal fake element is enough to make them run.
   const { paintFeed, paintBackend } = await import("./panels/live.js");
 
   function fakeBox() {
@@ -590,132 +432,47 @@ test("the PAINT path runs — the class of bug the suite could not see", async (
   globalThis.document = { getElementById: (id) => boxes[id] ?? null };
 
   try {
-    const board = {
-      run: { state: "complete", arm: "off" },
-      control: {},
-      models_ledger: { run_in_flight: false },
-      events: { connected: false, reason: "fetch failed", cell_in_flight: false, events: [], counts: {}, retained: 0, returned: 0, total: 0 },
-    };
-
-    await t.test("an idle live feed paints without throwing", () => {
-      clearHistoricalRun();
-      paintFeed(board);
-      assert.ok(boxes["sc-events"].innerHTML.includes("no cell is running"),
-        "and reaches the idle branch that the missing binding guarded");
-      assert.ok(!boxes["sc-events"].innerHTML.includes("disconnected"),
-        "an idle bench is not reported as a dropped stream");
+    await t.test("no cell paints the absence, not a fault", () => {
+      reset();
+      paintFeed(boardWith([]));
+      assert.ok(boxes["sc-events"].innerHTML.includes("no cell to show"));
+      assert.ok(!boxes["sc-events"].innerHTML.includes("feed-banner"), "an empty bench is not a dropped stream");
     });
 
-    await t.test("a dropped stream during a live cell paints its banner", () => {
-      paintFeed({ ...board, events: { ...board.events, cell_in_flight: true } });
+    await t.test("a running cell whose stream dropped paints its banner", async () => {
+      reset();
+      const board = boardWith([LIVE], { events: { connected: false, reason: "socket hang up" } });
+      await withFetch(async () => { renderLive(board); await tick(); }, { events: { ...EVENTS, events: [], retained: 0, returned: 0 } });
+      paintFeed(board);
       assert.ok(boxes["sc-events"].innerHTML.includes("feed-banner"), "the fault banner is drawn");
     });
 
-    await t.test("a loaded historical record paints its rows", async () => {
-      await withFetch(async () => {
-        clearHistoricalRun();
-        await selectHistoricalRun(SEL);
-      });
+    await t.test("an ended cell paints its rows with no banner", async () => {
+      reset();
+      const board = boardWith([ENDED], { events: { connected: false, reason: "no cell is running" } });
+      await withFetch(async () => { renderLive(board); await tick(); });
       paintFeed(board);
       const html = boxes["sc-events"].innerHTML;
       assert.ok(html.includes("run grades"), "the record's rows reach the box");
       assert.ok(!html.includes("feed-banner"), "a complete record carries no disconnection banner");
     });
 
-    await t.test("the backend feed paints its condensed rows", () => {
+    await t.test("an ended cell with an empty record says no transcript was captured", async () => {
+      reset();
+      const board = boardWith([ENDED]);
+      await withFetch(async () => { renderLive(board); await tick(); }, { events: { ...EVENTS, events: [], retained: 0, returned: 0 } });
+      paintFeed(board);
+      assert.ok(boxes["sc-events"].innerHTML.includes("no transcript was captured"));
+    });
+
+    await t.test("the backend feed paints its condensed rows", async () => {
+      reset();
+      await withFetch(async () => { renderLive(boardWith([ENDED])); await tick(); });
       paintBackend();
       assert.ok(boxes["sc-backend"].innerHTML.includes("bkrow"), "backend rows are drawn");
-      clearHistoricalRun();
+      reset();
     });
   } finally {
     globalThis.document = realDoc;
   }
-});
-
-test("with nothing live, the last concluded run opens by itself", async (t) => {
-  // THE DEAD END THIS REMOVES. Gating the record behind [feed] was correct and
-  // useless: the bench's resting state is "one concluded run, nothing running",
-  // so the default view was an empty box explaining where the data it could have
-  // shown lives. The record opens instead — still marked CONCLUDED, still
-  // switchable, still dropped the moment a cell starts.
-  const row = {
-    id: "base-a", model: "model-a", state: "complete",
-    run_dir: RUN_DIR, sequence_index: 0,
-  };
-  const board = (over = {}) => ({
-    run: { state: "complete" },
-    control: {},
-    events: { connected: false, cell_in_flight: false, events: [], counts: {}, retained: 0, returned: 0, total: 0 },
-    models_ledger: { run_in_flight: false, baseline_rows: [row] },
-    ...over,
-  });
-
-  await t.test("an idle board selects the newest complete baseline", async () => {
-    clearHistoricalRun();
-    resetAutoSelect();
-    await withFetch(async (seen) => {
-      renderLive(board());                 // fire-and-forget
-      await new Promise((r) => setTimeout(r, 0));
-      assert.equal(seen.length, 2, "both feeds are read, once");
-    });
-    assert.deepEqual(historicalSelection(), { run_dir: RUN_DIR, sequence_index: 0, label: "base-a · model-a" });
-  });
-
-  await t.test("it does not re-fire on every render", async () => {
-    await withFetch(async (seen) => {
-      renderLive(board());
-      renderLive(board());
-      await new Promise((r) => setTimeout(r, 0));
-      assert.equal(seen.length, 0, "a selection already made is not re-read");
-    });
-  });
-
-  await t.test("BACK TO LIVE is not undone a moment later", async () => {
-    clearHistoricalRun();                  // the operator's own act
-    await withFetch(async (seen) => {
-      renderLive(board());
-      await new Promise((r) => setTimeout(r, 0));
-      assert.equal(seen.length, 0, "the auto-select stands down");
-    });
-    assert.equal(historicalSelection(), null, "and the card stays on live");
-  });
-
-  await t.test("but a run lifts the stand-down, so the NEXT one opens again", async () => {
-    // "I pressed BACK TO LIVE" describes the record on screen then, not a
-    // permanent preference.
-    renderLive(board({ models_ledger: { run_in_flight: true, baseline_rows: [row] } }));
-    await withFetch(async (seen) => {
-      renderLive(board());
-      await new Promise((r) => setTimeout(r, 0));
-      assert.equal(seen.length, 2, "after a cell has run, the record opens by itself again");
-    });
-    clearHistoricalRun();
-    resetAutoSelect();
-  });
-
-  await t.test("a live cell is never displaced by a record", async () => {
-    clearHistoricalRun();
-    resetAutoSelect();
-    await withFetch(async (seen) => {
-      renderLive(board({ events: { connected: true, cell_in_flight: true, events: [], counts: {}, retained: 0, returned: 0, total: 0 } }));
-      await new Promise((r) => setTimeout(r, 0));
-      assert.equal(seen.length, 0, "nothing is auto-selected over a running cell");
-    });
-    assert.equal(historicalSelection(), null);
-  });
-
-  await t.test("a bench with no concluded record says so, and does not claim a cap", async () => {
-    clearHistoricalRun();
-    resetAutoSelect();
-    await withFetch(async (seen) => {
-      renderLive(board({ models_ledger: { run_in_flight: false, baseline_rows: [] } }));
-      await new Promise((r) => setTimeout(r, 0));
-      assert.equal(seen.length, 0, "nothing to open, nothing read");
-    });
-    const html = renderLive(board({ models_ledger: { run_in_flight: false, baseline_rows: [] } }));
-    assert.ok(!html.includes("cap 400"), "an idle feed does not state a window it is not applying");
-    assert.ok(html.includes("nothing running"));
-    clearHistoricalRun();
-    resetAutoSelect();
-  });
 });

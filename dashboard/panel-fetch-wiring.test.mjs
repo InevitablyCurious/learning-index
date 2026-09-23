@@ -14,7 +14,7 @@ function stubDom() {
   globalThis.document = { getElementById: () => ({ innerHTML: "", hidden: false }) };
 }
 
-test("the live panel fetches the backend feed same-origin", async () => {
+test("the live panel reads the strip's cell same-origin, keyed on run_dir + sequence_index", async () => {
   stubDom();
   const seen = [];
   globalThis.fetch = async (url) => {
@@ -25,9 +25,13 @@ test("the live panel fetches the backend feed same-origin", async () => {
     };
   };
   const { renderLive } = await import("./panels/live.js");
-  renderLive({ control: {}, run: {}, events: null });
+  const cell = { sequence_index: 2, run_dir: "r/x", running: true };
+  renderLive({ control: {}, run: {}, events: null, cells: { list: [cell] } });
   await new Promise((r) => setTimeout(r, 10));
-  assert.deepEqual(seen, ["/api/backend-feed"]);
+  assert.deepEqual(seen.sort(), [
+    "/api/backend-feed?run_dir=r%2Fx&sequence_index=2",
+    "/api/events?run_dir=r%2Fx&sequence_index=2",
+  ]);
 });
 
 test("no board code builds a URL from a stored control address", async () => {

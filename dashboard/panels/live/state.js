@@ -39,22 +39,9 @@ export let expandBound = false;
 // ── WHICH FEED ── two tabs, both boxes kept in the DOM (toggled with hidden).
 export let tab = "events";
 
-// ── THE HISTORICAL SOURCE ── a concluded baseline's record, read once when
-// selected; null = the live cell. Same envelopes as the live path.
+// ── THE CELL ON SHOW ── the record of the cell the strip points at (see
+// history.js), re-read while it runs; null = no cell to show.
 export let hist = null;
-
-// The key last auto-opened, so a failed read isn't retried every push and BACK
-// TO LIVE isn't overridden.
-export let autoTried = null;
-export let autoSuppressed = false;
-// Whether a cell was in flight last render (null before the first), to catch
-// the start of a run.
-export let wasLive = null;
-
-// ── BACKEND-FEED POLL STATE ───────────────────────────────────────────────────
-export let backend = emptyBackendFeed();
-export let backendAt = 0;
-export let backendInFlight = false;
 
 // ── BACKEND CLICK-TO-EXPAND STATE ─────────────────────────────────────────────
 export let expandedBackend = null;
@@ -69,12 +56,6 @@ export function setFeedEvents(v) { feedEvents = v; }
 export function setExpandBound(v) { expandBound = v; }
 export function setTab(v) { tab = v; }
 export function setHist(v) { hist = v; }
-export function setAutoTried(v) { autoTried = v; }
-export function setAutoSuppressed(v) { autoSuppressed = v; }
-export function setWasLive(v) { wasLive = v; }
-export function setBackend(v) { backend = v; }
-export function setBackendAt(v) { backendAt = v; }
-export function setBackendInFlight(v) { backendInFlight = v; }
 export function setExpandedBackend(v) { expandedBackend = v; }
 export function setBackendExpandBound(v) { backendExpandBound = v; }
 
@@ -89,16 +70,16 @@ export function emptyBackendFeed(over = {}) {
   };
 }
 
-/** The event feed's empty envelope, for a frozen record that could not be read. */
+/** The event feed's empty envelope, for a record that could not be read. */
 export function emptyEventFeed(reason) {
   return { connected: false, reason, events: [], counts: {}, retained: 0, returned: 0, total: 0 };
 }
 
 // ── ENVELOPE RESOLVERS ────────────────────────────────────────────────────────
 
-/** The backend envelope on show (live or frozen), resolved in one place. */
+/** The backend envelope of the cell on show, resolved in one place. */
 export function backendFeed() {
-  if (!hist) return backend;
+  if (!hist) return emptyBackendFeed({ loaded: true });
   if (hist.loading) return emptyBackendFeed();
   if (hist.backend?.ok !== true) {
     return emptyBackendFeed({ loaded: true, unreachable: true, hist_reason: hist.backend?.reason ?? null });
@@ -107,13 +88,20 @@ export function backendFeed() {
 }
 
 /**
- * The event envelope on show. A loaded historical read is reported as
- * connected: to every reader here, disconnected means "live counts may be
- * stale", which is wrong for a complete record.
+ * The event envelope of the cell on show. A running cell carries the control
+ * plane's event-subscription state (disconnected = its rows may be stale); an
+ * ended cell's record is complete, so it is never called disconnected.
+ * `cell_in_flight` is this cell's, not the bench's.
  */
 export function eventFeed(board) {
-  if (!hist) return board?.events ?? null;
+  if (!hist) return { ...emptyEventFeed(null), cell_in_flight: false };
   if (hist.loading) return null;
-  if (hist.events?.ok !== true) return emptyEventFeed(hist.events?.reason ?? "the frozen record could not be read");
-  return { ...hist.events.data, connected: true, reason: null };
+  if (hist.events?.ok !== true) return emptyEventFeed(hist.events?.reason ?? "the cell's record could not be read");
+  const running = hist.sel.running === true;
+  return {
+    ...hist.events.data,
+    connected: running ? board?.events?.connected === true : true,
+    reason: running ? (board?.events?.reason ?? null) : null,
+    cell_in_flight: running,
+  };
 }

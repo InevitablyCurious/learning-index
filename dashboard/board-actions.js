@@ -1,6 +1,6 @@
 // BENCH BOARD — ACTIONS: every operator act that reaches the control plane
 // (stop, launch, tool run, router key, dev mode, restore, reset, hold release,
-// TUI detach, pointing the DATA FEED card at a baseline). State and render live
+// TUI detach). State and render live
 // in board.js; the import cycle is safe because everything here is deferred
 // inside handlers. Each write path re-checks controlReachability(board) when
 // clicked (the board can lose the control plane between render and click);
@@ -13,11 +13,6 @@ import { setDevMode, isDevModeBusy } from "./panels/devmode.js";
 import { launchCell } from "./panels/create.js";
 import { loadTools, runTool } from "./panels/tools.js";
 import { loadBatch, renderBatch, pickRun } from "./panels/batch.js";
-import {
-  selectHistoricalRun,
-  selectHistoricalRunUnreachable,
-  clearHistoricalRun,
-} from "./panels/live.js";
 import { loadBackups, armRestore, commitRestore } from "./panels/restore.js";
 import { previewStop, commitStop } from "./panels/runstart.js";
 import { cancelDetach } from "./panels/tui.js";
@@ -94,38 +89,6 @@ export async function doRunTool(id) {
   // failed re-read keeps the rows and says they may be stale.
   await loadTools();
   render();
-}
-
-/**
- * Point the DATA FEED card at one baseline. Never throws. A row whose cell is
- * running returns the card to live; a row that addresses nothing leaves it as is.
- */
-export async function pointFeedAt(board, b) {
-  if (!b) return;
-  if (board?.models_ledger?.run_in_flight === true && b.state === "running") {
-    clearHistoricalRun();
-    render();
-    return;
-  }
-  if (b.state !== "complete") return;
-  if (typeof b.run_dir !== "string" || !b.run_dir) return;
-  if (!Number.isInteger(b.sequence_index) || b.sequence_index < 0) return;
-
-  const sel = {
-    run_dir: b.run_dir,
-    sequence_index: b.sequence_index,
-    label: `${b.id} · ${b.model ?? "unknown model"}`,
-  };
-  // With the control plane down both feed reads would come back empty: refuse
-  // with the reason instead.
-  const reach = controlReachability(board);
-  if (!reach.ok) {
-    selectHistoricalRunUnreachable(sel, `${reach.code}: ${reach.reason}`);
-    render();
-    return;
-  }
-  const read = await selectHistoricalRun(sel);
-  if (read) render();
 }
 
 /** Release a hold (same-origin, relayed). */

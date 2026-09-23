@@ -573,6 +573,9 @@ a:hover{color:var(--type)}
 .cc-tag{margin-left:auto;font-size:10px;letter-spacing:.04em}
 .cc-tag.view{color:var(--accent)}
 .cc-tag.med{color:var(--comment)}
+.cc-tag.live{color:var(--check)}
+.cc-tag.live+.cc-tag{margin-left:6px}
+.cc-notcell{color:var(--comment)}
 .cc-state{color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cc-bar{display:block;height:3px;border-radius:2px;background:color-mix(in srgb,var(--fg) 12%,transparent);overflow:hidden}
 .cc-bar>i{display:block;height:100%;background:var(--comment)}
@@ -1504,16 +1507,11 @@ a:hover{color:var(--type)}
    multi-hour cell is neither, so it sits furthest from the row being scanned. */
 .blact{display:flex;justify-content:flex-end;gap:8px;align-items:baseline}
 /* THE FEED MARK — a READOUT, never a control. It says whether the DATA FEED
-   card is pointed at this row; selecting is done by clicking the row itself.
-
-   It was a button, and when the card already showed this row it became SHOWING
-   wired to "return to live" — so the control toggled, and pressing the thing
-   that named this row closed it. One affordance (the row), one readout (this),
-   one way back (BACK TO LIVE on the card). */
+   card is showing this row's cell. Which cell that is, is the cell strip's
+   choice alone; the row only expands. */
 .blfeed{font:700 9.5px var(--font);letter-spacing:.14em;color:var(--dim);white-space:nowrap}
 .blfeed.on{color:var(--bg);background:var(--fg);border-radius:var(--radius-pill);padding:2px 8px}
 .blfeed.live{color:var(--type)}
-.blfeed.none{color:var(--hairline)}
 /* THE SELECTED ROW, marked on the row itself so "which record am I reading" is
    answerable from the list without reading each right-hand cell. */
 .blrow.feeding{background:color-mix(in srgb, var(--fg) 7%, transparent)}
@@ -1577,6 +1575,8 @@ a:hover{color:var(--type)}
    mark, not a warning — a concluded run is the normal thing to be reading — so
    it takes the identity hue and the kicker treatment, never --danger. */
 .feed-frozen{font:700 10px var(--font);letter-spacing:.14em;color:var(--type)}
+.feed-live{font:700 10px var(--font);letter-spacing:.14em;color:var(--check)}
+.feed-subject{color:var(--type)}
 /* THE EXPORT ROW. Under the filters, above the rows — it acts on the whole
    record set, not on what the chips left, so it does not sit among them. The
    note beside it is the only feedback a clipboard write can give. */

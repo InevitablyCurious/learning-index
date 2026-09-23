@@ -11,8 +11,9 @@
 // never combined into one score.
 
 import { esc, nul, tok } from "../board.js";
-// Selecting a floor points the DATA FEED card (panels/live.js) at its record.
-import { historicalSelection } from "./live.js";
+// The DATA FEED card (panels/live.js) shows the cell the strip points at; a row
+// whose cell is on show is marked.
+import { feedSelection } from "./live.js";
 // RESET and RESTORE flank [+ BASELINE]: undo · add · clear.
 import { renderResetButton } from "./treereset.js";
 import { renderRestoreButton } from "./restore.js";
@@ -22,7 +23,7 @@ let expandedBaseline = null;
 
 /** Is the DATA FEED card pointed at this row? Marks the row, never gates it. */
 function feedSelected(b) {
-  const sel = historicalSelection();
+  const sel = feedSelection();
   return sel != null && sel.run_dir === b.run_dir && sel.sequence_index === b.sequence_index;
 }
 
@@ -228,25 +229,16 @@ function drawer(board, ledger, b) {
 }
 
 /**
- * The row's feed mark: a readout, never a control. Clicking the row selects it;
- * BACK TO LIVE on the card is the one way back.
+ * The row's feed mark: a readout, never a control. FEED when the DATA FEED card
+ * is showing this row's cell (the cell strip chose it), LIVE while it runs.
  */
 function feedMark(ledger, b) {
-  const sel = historicalSelection();
+  const sel = feedSelection();
   const showing =
     sel != null && sel.run_dir === b.run_dir && sel.sequence_index === b.sequence_index;
   if (showing) return `<span class="blfeed on">FEED</span>`;
-
-  // A running cell's feed is the live one.
   if (ledger?.run_in_flight && b.state === "running") return `<span class="blfeed live">LIVE</span>`;
-
-  const addressable =
-    typeof b.run_dir === "string" && b.run_dir.length > 0
-    && Number.isInteger(b.sequence_index) && b.sequence_index >= 0;
-  if (!addressable) {
-    return `<span class="blfeed none" title="${esc("this row carries no cell address, so no record can be resolved for it")}">—</span>`;
-  }
-  return `<span class="blfeed">feed</span>`;
+  return "";
 }
 
 /**
