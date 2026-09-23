@@ -60,3 +60,23 @@ def test_an_unmeasured_pass_is_regraded_once_and_its_evidence_kept(tmp_path: Pat
 def test_twice_unmeasured_is_an_instrument_fault(tmp_path: Path) -> None:
     with pytest.raises(InstrumentFaultError, match="twice"):
         _grade(tmp_path, [GraderReportUnreadableError("missing"), {"gradable": False}])
+
+
+def test_a_deadline_kill_is_the_candidates_hang_not_the_instrument(tmp_path: Path) -> None:
+    # report.mjs: a runner killed on a deadline means the code under test did
+    # not return. Regrading would hang again and void the model's failure.
+    hang = {
+        "gradable": False,
+        "ungradable_reason": "backend gates-13-16.test.ts was KILLED ON A DEADLINE",
+        "aborted_runners": ["backend gates-13-16.test.ts"],
+        "timed_out_runners": ["backend gates-13-16.test.ts"],
+        "skipped_runners": [],
+    }
+    g, report = _grade(tmp_path, [hang])
+    assert report is hang and not g.progress, "used as measured, no regrade"
+
+
+def test_an_abort_that_was_not_a_deadline_is_still_regraded(tmp_path: Path) -> None:
+    crashed = {"gradable": False, "aborted_runners": ["conformance"], "timed_out_runners": []}
+    g, report = _grade(tmp_path, [crashed, {"gradable": True}])
+    assert report == {"gradable": True} and any("step=regrade" in p for p in g.progress)

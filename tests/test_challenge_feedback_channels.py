@@ -466,3 +466,17 @@ def test_that_fixed_it_quotes_what_was_actually_said() -> None:
     assert "hard computer" not in verdict
     # A check never told is never reported fixed.
     assert R._build_pass_verdict(newly_passing=["[G05] REQ-HIGHER-DIE — x"], told={}) == ""
+
+
+def test_a_labelled_assertion_is_told_as_that_aspect() -> None:
+    # G01 checks pieces, setup and opponent in one test; its single line listed
+    # them all and the model chased the decoys (run 1790196821).
+    from harness.adapters.challenge import ChallengeRunner as R
+
+    pieces = R._humanize_check(
+        "[G01] REQ-INIT — initial position",
+        observed="AssertionError: [aspect: pieces]: expected [ Array(26) ] to deeply equal [ Array(26) ]",
+    )
+    assert "pieces" in pieces and "cube" not in pieces
+    plain = R._humanize_check("[G01] REQ-INIT — initial position", observed="AssertionError: x")
+    assert plain != pieces

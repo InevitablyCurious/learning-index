@@ -45,23 +45,28 @@ describe("Backgammon backend gates 01-08", () => {
   });
 
   it("[G01] REQ-INIT — initial position", () => {
+    // Each assertion names its aspect, so the model hears which part of a new
+    // game is wrong (harness/adapters/challenge/feedback.py _ASPECT_RE), not a
+    // list of everything this gate happens to check.
+    const PIECES = "[aspect: pieces]";
+    const SETUP = "[aspect: setup]";
     const points = game.startingPoints();
 
-    expect(points).toEqual(STARTING_POINTS_EXPECTED);
+    expect(points, PIECES).toEqual(STARTING_POINTS_EXPECTED);
 
     const state = game.createGame("medium");
-    expect(state.turn).toBe("white");
-    expect(state.phase).toBe("roll");
-    expect(state.cube).toEqual({ value: 1, owner: null });
-    expect(state.bar).toEqual({ white: 0, black: 0 });
-    expect(state.off).toEqual({ white: 0, black: 0 });
-    expect(state.difficulty).toBe("medium");
-    expect(state.winner).toBeNull();
-    expect(state.points).toEqual(game.startingPoints());
-    expect(state.points).toEqual(STARTING_POINTS_EXPECTED);
+    expect(state.turn, SETUP).toBe("white");
+    expect(state.phase, SETUP).toBe("roll");
+    expect(state.cube, SETUP).toEqual({ value: 1, owner: null });
+    expect(state.bar, PIECES).toEqual({ white: 0, black: 0 });
+    expect(state.off, PIECES).toEqual({ white: 0, black: 0 });
+    expect(state.difficulty, SETUP).toBe("medium");
+    expect(state.winner, SETUP).toBeNull();
+    expect(state.points, PIECES).toEqual(game.startingPoints());
+    expect(state.points, PIECES).toEqual(STARTING_POINTS_EXPECTED);
 
-    expect(game.opponent("white")).toBe("black");
-    expect(game.opponent("black")).toBe("white");
+    expect(game.opponent("white"), "[aspect: opponent]").toBe("black");
+    expect(game.opponent("black"), "[aspect: opponent]").toBe("white");
   });
 
   it("[G02] REQ-PIP — pip count", () => {

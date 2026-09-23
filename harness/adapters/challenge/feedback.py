@@ -306,6 +306,7 @@ def _default_progress(message: str) -> None:
 # position through the app's debug endpoint and it did not read back. Said in
 # the team's voice, naming the fields the grader found missing.
 SETUP_REFUSED = "SETUP REFUSED"
+_ASPECT_RE = re.compile(r"\[aspect: ([a-z]+)\]")
 _SETUP_FIELDS_RE = re.compile(
     r"did not take (?P<missed>.+?)(?: \(sent (?P<sent>.+?)\))?(?: \[error: (?P<error>.*)\])?$"
 )
@@ -482,7 +483,15 @@ class FeedbackMixin:
         # CONF line), then the broad CONF token for any conformance check.
         token_key = m.group(1) if (m := cls._GATE_TOKEN_KEY_RE.match(raw)) else None
         conf_key = m.group(1) if (m := cls._CONF_KEY_RE.match(raw)) else None
-        for key in (raw, token_key, conf_key, "CONF"):
+        # ONE TEST, SEVERAL SITUATIONS: a gate whose assertions carry an
+        # `[aspect: X]` message names the one that failed, and its `<gate>.X`
+        # line says just that. G01's single line listed "the pieces, the cube,
+        # or whose turn" — the model re-checked the cube and turn six times and
+        # never looked at the black layout, the only thing wrong (run
+        # 1790196821). Absent the marker, the gate's own line.
+        aspect = m.group(1) if (m := _ASPECT_RE.search(str(observed or ""))) else None
+        aspect_key = f"{token_key}.{aspect}" if token_key and aspect else None
+        for key in (aspect_key, raw, token_key, conf_key, "CONF"):
             if key and key in overrides:
                 # "CONF" must only resolve conformance checks, never a stray use
                 # of the literal token in a backend/frontend context.

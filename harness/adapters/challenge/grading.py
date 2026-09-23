@@ -246,6 +246,17 @@ class GradingMixin:
                 )
                 if report.get("gradable") is not False:
                     return report
+                # A runner KILLED ON A DEADLINE is the candidate's code not
+                # returning — the grader's own reading (report.mjs
+                # gradability: "the candidate's engine, not the instrument").
+                # That is a measurement of the model, told through the hang
+                # checks; regrading it would hang the same way and void a
+                # genuine model failure as the instrument's. Only a pass that
+                # broke for other reasons is regraded.
+                aborted = set(report.get("aborted_runners") or [])
+                timed_out = set(report.get("timed_out_runners") or [])
+                if aborted and aborted <= timed_out and not report.get("skipped_runners"):
+                    return report
                 failure = f"not gradable: {report.get('ungradable_reason') or 'no reason given'}"
             except GraderReportUnreadableError as exc:
                 failure = f"report unreadable: {exc}"

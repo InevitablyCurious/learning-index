@@ -72,8 +72,8 @@
       "repeat": "Fresh game again and I went over the whole table before the first roll — the starting setup still isn't right."
     },
     "G02": {
-      "first": "The numbers showing how many moves are left for a player to finish the game look wrong on a fresh board",
-      "repeat": "On a brand new game, before I've even rolled, those two counters that show how many moves a player has left to finish the game still don't read right to me."
+      "first": "On a brand-new game the pip counts look wrong to me — how far each side still has to move all its pieces to finish doesn't add up.",
+      "repeat": "Fresh game again, before I'd even rolled, and the pip counts still don't add up."
     },
     "G03": {
       "first": "When I roll, the game doesn't give me the right number of moves — doubles don't give me four, and a plain roll doesn't give me two.",
@@ -590,6 +590,18 @@
     "REQ-RESPONSIVE/playing": {
       "repeat": "It seized up on me again mid-game. Everything on screen just stops reacting, and {seconds} later it still hadn't moved.",
       "first": "It locked up on me while I was playing — the whole page stopped responding and nothing I clicked did anything after that. I gave it {seconds}."
+    },
+    "G01.pieces": {
+      "first": "When I start a new game the pieces aren't where a real game starts them.",
+      "repeat": "Fresh game again, and the pieces still aren't set up where a real game starts them."
+    },
+    "G01.setup": {
+      "first": "When I start a new game the rest of the setup is off — the cube, whose turn it is, or what the game is waiting for isn't how a real game begins.",
+      "repeat": "Started over again and the opening setup — the cube, the turn, or what it's waiting on — still isn't right."
+    },
+    "G01.opponent": {
+      "first": "The game gets mixed up about who is playing against whom.",
+      "repeat": "It's still mixed up about who is playing against whom."
     }
   }
 }

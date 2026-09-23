@@ -1590,6 +1590,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         failed=len(failed_gates),
                         stage=stage_view.stage.number if stage_view.stage else None,
                         stage_name=stage_view.stage.name if stage_view.stage else None,
+                        # What the model is told this round, stated — not
+                        # left for readers to derive as failed - withheld.
+                        told=len(stage_view.visible),
                         withheld=len(stage_view.withheld),
                         unevaluated=len(stage_view.unevaluated),
                     )
@@ -1616,6 +1619,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                             # many failing checks lay beyond it (graded, not told).
                             "player_stage": stage_view.stage.number if stage_view.stage else None,
                             "player_stage_name": stage_view.stage.name if stage_view.stage else None,
+                            "told_checks": len(stage_view.visible),
                             "withheld_checks": len(stage_view.withheld),
                             "unevaluated_checks": len(stage_view.unevaluated),
                             # Scored cell whose metering awaits parity confirmation against the

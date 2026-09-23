@@ -40,7 +40,8 @@ def test_every_complaint_key_and_every_drawn_or_tagged_element_has_a_stage() -> 
         keys += [f"REQ-RENDER/{label}", f"REQ-TESTID/{label}"]
     keys += ["REQ-TESTID/testid.anything", "REQ-STATE/state.anything"]
     for key in keys:
-        check = key if key.startswith("REQ-") else f"[{key}] x"
+        # An aspect line (`G01.pieces`) belongs to its gate: same stage.
+        check = key if key.startswith("REQ-") else f"[{key.split('.', 1)[0]}] x"
         stage_of(check, STAGES)
 
 
