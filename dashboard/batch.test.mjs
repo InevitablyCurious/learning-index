@@ -31,7 +31,7 @@ globalThis.fetch = async (url, opts = {}) => {
 };
 
 const { pickRun } = await import("./panels/batch.js");
-const { renderLedger, toggleBaselineRow } = await import("./panels/ledger.js");
+const { renderLedger, toggleBaselineRow, toggleSuperseded } = await import("./panels/ledger.js");
 
 const cell = (i, over = {}) => ({
   sequence_index: i, state: "complete", scored: true, void_reason: null, problems: 20,
@@ -100,11 +100,34 @@ test("while awaiting, every SCORED cell gets a pick button; the void cell gets n
   assert.deepEqual(picks(open(row())), ["0", "1", "3"]);
 });
 
-test("a fingerprint-void batch offers no pick, and names the changed input", () => {
-  const html = open(row({ state: "void", reason: "batch_void", void_input: "grader_hash" }));
+test("a superseded batch folds into its own group, offers no pick, and says why", () => {
+  const r = row({
+    state: "void", reason: "batch_void", void_kind: "superseded", void_input: "grader_hash",
+    void_reason: "grader_hash changed since this batch ran — grader/gate suite",
+  });
+  const folded = open(r);
+  assert.ok(folded.includes("SUPERSEDED — 1 batch"), "the group is named with its count");
+  assert.ok(!folded.includes("s0000"), "folded by default: its cells are not drawn");
+
+  toggleSuperseded();
+  const html = open(r);
+  toggleSuperseded();
   assert.deepEqual(picks(html), []);
-  assert.ok(html.includes("VOID — grader_hash changed"));
+  assert.ok(html.includes("SUPERSEDED — grader_hash changed"));
+  assert.ok(html.includes("grader_hash changed since this batch ran"), "the reason sentence is on screen");
   assert.ok(!html.includes(">batch_void<"), "the raw reason code is not printed");
+});
+
+test("an unfingerprinted batch says so, and the live list says no batch can be a floor", () => {
+  const html = open(row({
+    state: "void", reason: "batch_void", void_kind: "unfingerprinted", void_input: null,
+    void_reason: "s0000 recorded nothing about what it ran on — there is nothing to bind this batch to",
+  }));
+  assert.ok(html.includes("No batch can be a floor right now"));
+  toggleSuperseded();
+  const open2 = open(row({ state: "void", reason: "batch_void", void_kind: "unfingerprinted", void_reason: "s0000 recorded nothing" }));
+  toggleSuperseded();
+  assert.ok(open2.includes("UNFINGERPRINTED"));
 });
 
 test("a picked batch shows the floor with its distance from the median", () => {

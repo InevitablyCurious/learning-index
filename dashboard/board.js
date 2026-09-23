@@ -278,7 +278,7 @@ import {
 } from "./panels/restore.js";
 import { renderCurve, setCurveMetric, setCurveTab, curveTab } from "./panels/curve.js";
 import { clearGatePin, fitGateCard, refitGateCard, renderWall, setGateHover, toggleGatePin } from "./panels/wall.js";
-import { renderLedger, toggleBaselineRow } from "./panels/ledger.js";
+import { renderLedger, toggleBaselineRow, toggleSuperseded } from "./panels/ledger.js";
 import {
   renderLive,
   paintFeed,
@@ -431,7 +431,7 @@ function bindInteraction() {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
+  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
   if (!t) return;
 
   if (t.dataset.gateId) {
@@ -634,6 +634,7 @@ function onClick(e) {
   // ── BASELINES CARD ── checked after the buttons inside rows, so [+ run] never
   // also toggles its row. A row expands; which cell the page shows is the cell
   // strip's job alone.
+  if (t.dataset.supersededToggle) { toggleSuperseded(); render(); return; }
   if (t.dataset.baselineExpand) {
     toggleBaselineRow(t.dataset.baselineExpand);
     render();

@@ -25,6 +25,20 @@ import { renderRestoreButton } from "./restore.js";
 /** Which baseline row is open (view state, off the payload). One at a time. */
 let expandedBaseline = null;
 
+/** Whether the superseded group is open (view state). Folded by default. */
+let supersededOpen = false;
+export function toggleSuperseded() {
+  supersededOpen = !supersededOpen;
+}
+
+/**
+ * A batch voided by its fingerprint: the code moved past it (superseded), its
+ * cells ran on different inputs (mixed), or they recorded nothing to bind it
+ * to (unfingerprinted). Kept and readable, never a floor — so it sits in its
+ * own folded group below the batches that can be.
+ */
+const isSuperseded = (b) => b.state === "void" && typeof b.void_kind === "string";
+
 /** Is the DATA FEED card pointed at this row? Marks the row, never gates it. */
 function feedSelected(b) {
   const sel = feedSelection();
@@ -102,9 +116,27 @@ function unwired() {
 
 function body(board, ledger, rows) {
   if (!rows || !rows.length) return empty(ledger);
+  const live = rows.filter((b) => !isSuperseded(b));
+  const folded = rows.filter(isSuperseded);
   return `
     ${cols()}
-    ${rows.map((b) => baselineRow(board, ledger, b)).join("")}`;
+    ${live.map((b) => baselineRow(board, ledger, b)).join("")}
+    ${live.length ? "" : `<div class="ledger-empty"><div class="note">${esc("No batch can be a floor right now — every batch below was measured on something other than the current code. Start a new baseline.")}</div></div>`}
+    ${folded.length ? supersededGroup(board, ledger, folded) : ""}`;
+}
+
+/** The folded group of batches that can never be a floor, each saying why. */
+function supersededGroup(board, ledger, rows) {
+  const n = rows.length;
+  return `
+    <div class="blsup${supersededOpen ? " open" : ""}">
+      <div class="blsup-head" data-superseded-toggle="1" role="button" tabindex="0" aria-expanded="${supersededOpen ? "true" : "false"}">
+        <span class="blcaret">${supersededOpen ? "▾" : "▸"}</span>
+        <span>${esc(`SUPERSEDED — ${n} batch${n === 1 ? "" : "es"}`)}</span>
+        <span class="note">${esc("measured on something other than the current code · kept for reading, never a floor")}</span>
+      </div>
+      ${supersededOpen ? rows.map((b) => baselineRow(board, ledger, b)).join("") : ""}
+    </div>`;
 }
 
 /** No baselines at all: the fresh-install state, stated as the next action. */
@@ -156,7 +188,7 @@ function baselineRow(board, ledger, b) {
       </div>
       ${voidNote(b)}
       ${exhaustedNote(b)}
-      ${b.can_run?.allowed === false && b.can_run?.reason ? `<div class="blwhy"><span class="null">${esc(b.can_run.reason)}</span></div>` : ""}
+      ${b.can_run?.allowed === false && b.can_run?.reason && b.reason !== "batch_void" ? `<div class="blwhy"><span class="null">${esc(b.can_run.reason)}</span></div>` : ""}
       ${open ? drawer(board, ledger, b) : ""}
     </div>`;
 }
@@ -190,7 +222,12 @@ function pct(p) {
 function stateWord(b) {
   // Elapsed ("RUNNING · 22m"), not "ago": the batch is running now.
   if (b.state === "running") return `RUNNING${b.campaign_started_at ? ` · ${esc(elapsed(b.campaign_started_at))}` : ""}`;
-  if (b.state === "void") return b.void_input ? `VOID — ${esc(b.void_input)} changed` : "VOID — NOT A FLOOR";
+  if (b.state === "void") {
+    if (b.void_kind === "superseded") return `SUPERSEDED — ${esc(b.void_input ?? "an input")} changed`;
+    if (b.void_kind === "mixed") return `MIXED — ${esc(b.void_input ?? "inputs")} differ`;
+    if (b.void_kind === "unfingerprinted") return "UNFINGERPRINTED";
+    return "VOID — NOT A FLOOR";
+  }
   // Out of context room takes the column on a floor too (exhaustedNote says
   // what its numbers mean).
   if (b.state === "exhausted" || b.context_exhausted) return "CONTEXT EXHAUSTED";
@@ -204,9 +241,10 @@ function stateWord(b) {
 /** The void reason, printed on the row: its numbers measure the harness. */
 function voidNote(b) {
   if (b.state !== "void" || !b.reason) return "";
-  // A fingerprint-void batch is named in the FLOOR column by its changed input.
-  if (b.reason === "batch_void") return "";
-  return `<div class="blwhy"><span class="null">${esc(b.reason)}</span></div>`;
+  // A fingerprint-void batch says why in its own sentence (baselines.mjs).
+  const text = b.reason === "batch_void" ? b.void_reason : b.reason;
+  if (!text) return "";
+  return `<div class="blwhy"><span class="null">${esc(text)}</span></div>`;
 }
 
 /**

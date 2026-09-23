@@ -1503,6 +1503,13 @@ a:hover{color:var(--type)}
 .blfeed.live{color:var(--type)}
 /* THE SELECTED ROW, marked on the row itself so "which record am I reading" is
    answerable from the list without reading each right-hand cell. */
+/* THE SUPERSEDED GROUP — batches measured on something other than the current
+   code. Folded, dimmed, readable; never a floor. */
+.blsup{border-top:1px solid var(--hairline);margin-top:4px}
+.blsup-head{display:flex;align-items:baseline;gap:10px;padding:10px 4px;cursor:pointer;font:700 10.5px var(--font);letter-spacing:.12em;color:var(--dim)}
+.blsup-head:hover{background:color-mix(in srgb, var(--fg) 5%, transparent)}
+.blsup-head .note{font-weight:400;letter-spacing:0}
+.blsup .blwrap{opacity:.7}
 .blrow.feeding{background:color-mix(in srgb, var(--fg) 7%, transparent)}
 .blstate.running{color:var(--type)}
 .blstate.void{color:var(--danger)}
