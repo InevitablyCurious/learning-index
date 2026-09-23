@@ -11,7 +11,7 @@ import { promises as fs } from "node:fs";
 
 import { readRunState, readTail, pidAlive, findHarnessProcs } from "../runstate.mjs";
 import { notice } from "../notices.mjs";
-import { getRun, unregisterRun } from "../run-ledger.mjs";
+import { getRun, recordCellEnded } from "../run-ledger.mjs";
 import {
   RUNS_ROOT,
   tui,
@@ -201,9 +201,10 @@ export async function stopAll() {
       level: survivors > 0 || scanFailed ? "error" : "info",
       detail: { run_id: r.run_id ?? null, runs: runs.length, signalled: targets.length, still_alive: survivors },
     });
-    // Drop the ledger slot; a survivor stays visible through readRunState's
-    // run_dir-scoped process scan.
-    if (r.run_id) unregisterRun(r.run_id);
+    // Record the stop on the run's durable launch record — a stopped cell is
+    // ended with a reason, never erased. A survivor stays visible through
+    // readRunState's run_dir-scoped process scan.
+    if (r.run_id) recordCellEnded(r.run_id, r.run_dir, { reason: "stopped by operator", code: null, signal: "SIGINT", log_tail: null });
     await sweepDocker(r.log_path);
   }
   return { runs: runs.length, signalled: targets.length, still_alive: survivors };

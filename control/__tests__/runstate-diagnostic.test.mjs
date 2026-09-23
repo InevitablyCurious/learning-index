@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { campaignDirName } from "../campaign.mjs";
+import { initLedger, registerRun, evictRun } from "../run-ledger.mjs";
 import { readRunState } from "../runstate.mjs";
 import { DEFAULT_RUN_DIR, foldGateStates, readWall } from "../wall.mjs";
 import { firstMeaningfulLine, runnerFailureObserved } from "../../grader/gate-results.mjs";
@@ -28,32 +29,105 @@ test("RUN STATE: the resolved run directory is PUBLISHED, not dropped as null", 
     });
 
     // A LIVE run publishes its resolved directory: per-run in runs[] and on the
-    // top-level mirror of the newest live run.
+    // top-level mirror of the newest live run. Enumeration is the durable
+    // record + the process scan — never log files — so the live run is an
+    // injected record, and scan: async () => null (a failed scan is
+    // indeterminate) makes every injected record live-by-default.
     const state = await readRunState({
       runsRoot: runs,
-      launchers: [],
-      aliveProbe: async () => true,
+      launchers: [
+        {
+          run_id: "run-a",
+          sequence_index: 0,
+          model: "m-a",
+          arm: "off",
+          kind: "local",
+          org: null,
+          context: null,
+          manifest_arg: null,
+          pid: process.pid,
+          started_at: Date.now(),
+          log_path: null,
+          run_dir: dir,
+          finished: false,
+          terminal_status: null,
+          terminal_ok: null,
+        },
+      ],
+      scan: async () => null,
       heartbeatProbe: async () => 1000,
     });
     assert.equal(state.runs.length, 1);
     assert.equal(
       state.runs[0].run_dir,
       dir,
-      "the log names its run directory and the contract declares the field — publishing null " +
+      "the durable record carries its run directory and the contract declares the field — publishing null " +
         "forces every run-scoped reader back onto a default that a per-model campaign invalidates",
     );
     assert.equal(state.run_dir, dir, "the top-level mirror carries the newest live run's directory");
 
-    // AN ABANDONED RUN DROPS OUT. No terminal record and no process is not a
-    // live run: it leaves runs[] at once, and with nothing live the top level
-    // is the idle shape — run_dir null is correct THERE because there is no run.
-    const dead = await readRunState({ runsRoot: runs, launchers: [], aliveProbe: async () => false });
+    // AN ABANDONED RUN DROPS OUT. No durable record and an empty (successful)
+    // scan is not a live run: runs[] is empty at once, and with nothing live
+    // the top level is the idle shape — run_dir null is correct THERE because
+    // there is no run.
+    const dead = await readRunState({
+      runsRoot: runs,
+      launchers: [],
+      scan: async () => ({ bound: [], other: [] }),
+    });
     assert.deepEqual(dead.runs, [], "a killed run is not a live run and never re-enters the set");
     assert.equal(dead.live_count, 0);
     assert.equal(dead.state, "idle");
     assert.equal(dead.run_dir, null);
     assert.equal(dead.can_start, true);
   } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("RUN STATE: a recorded cell whose process is gone is listed ENDED, not silently dropped", async () => {
+  const root = mkdtempSync(join(tmpdir(), "runstate-ended-"));
+  const runs = join(root, "runs");
+  try {
+    // initLedger binds module state (RUNS_ROOT) for the process lifetime —
+    // there is no unbind. The record is evicted in finally, so no live slot
+    // leaks into the tests below (none of them touch the real ledger).
+    initLedger(runs);
+    registerRun({
+      run_id: "r-ended",
+      run_dir: "cumulative",
+      sequence_index: 0,
+      model: "m-a",
+      arm: "off",
+      kind: "local",
+      org: null,
+      context: null,
+      manifest_arg: null,
+      pid: 999999,
+      started_at: Date.now(),
+      log_path: null,
+      finished: false,
+      terminal_status: null,
+      terminal_ok: null,
+    });
+
+    // A SUCCESSFUL scan that does not contain the recorded pid: the cell ended
+    // without an observed exit. The reconcile ends it durably ("exit not
+    // observed"), evicts the cache slot, and the ended record is LISTED —
+    // every ended cell appears in ended[], never silently dropped.
+    const state = await readRunState({
+      runsRoot: runs,
+      scan: async () => ({ bound: [], other: [] }),
+    });
+
+    assert.equal(state.runs.length, 0, "a dead process is not a live run");
+    assert.ok(
+      state.ended.some((e) => e.run_id === "r-ended" && e.ended?.reason === "exit not observed"),
+      "the ended cell is listed with its reason — never silently dropped",
+    );
+    assert.equal(state.can_start, true, "nothing live: the launch gate clears");
+  } finally {
+    evictRun("r-ended");
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -72,14 +146,32 @@ test("WALL: a per-model campaign's outcomes are served, never a zeroed suite", a
       ],
     });
 
-    // What the server now passes: the run directory resolved from the log. The
-    // run must be LIVE to resolve — an abandoned log drops out of runs[] and the
-    // mirror goes idle, which is the drop-out truth pinned in the test above.
+    // What the server now passes: the run directory of the newest live run. The
+    // run must be LIVE to resolve — an abandoned record drops out of runs[] and
+    // the mirror goes idle, which is the drop-out truth pinned in the test above.
     const runDir = (
       await readRunState({
         runsRoot: runs,
-        launchers: [],
-        aliveProbe: async () => true,
+        launchers: [
+          {
+            run_id: "run-w",
+            sequence_index: 0,
+            model: "m-a",
+            arm: "off",
+            kind: "local",
+            org: null,
+            context: null,
+            manifest_arg: null,
+            pid: process.pid,
+            started_at: Date.now(),
+            log_path: null,
+            run_dir: dir,
+            finished: false,
+            terminal_status: null,
+            terminal_ok: null,
+          },
+        ],
+        scan: async () => null,
         heartbeatProbe: async () => 1000,
       })
     ).run_dir;

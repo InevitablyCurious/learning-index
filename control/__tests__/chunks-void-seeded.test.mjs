@@ -2,11 +2,14 @@
 // BUILD-CHUNKS VOID + SEEDED-CELL TESTS — split VERBATIM from
 // control/control.test.mjs (lines 3952–4306). Local helpers kept here:
 // CHUNKS_ATTEMPT_1, writeTwoAttemptRun, writeTruncatedRun, writeSeededRun.
+// MIGRATED (run-state contract): the two RUN STATE tests now enumerate from
+// durable launch RECORDS + a process scan (`aliveProbe` and log-file
+// enumeration are gone); everything after them is byte-identical.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, utimesSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,27 +21,27 @@ import { readRunState } from "../runstate.mjs";
 import { readModelsLedger } from "../models-ledger.mjs";
 import { writeCampaignCell, writeCellFingerprint } from "./_shared.mjs";
 
-test("RUN STATE: a killed CLI-launched run does not block reset behind a fresh log", async () => {
+test("RUN STATE: a killed CLI-launched run does not block reset", async () => {
   const root = mkdtempSync(join(tmpdir(), "runstate-dead-"));
   try {
     const runs = join(root, "runs");
-    const dir = campaignDirName("qwen/qwen3.6-flash");
-    writeCampaignCell(runs, dir, { gates: [{ id: "CONF" }], results: [] });
 
-    // Log written moments ago, process gone: the state immediately after a
-    // harness is killed mid-cell. Log recency alone called this "running" and
-    // refused reset for the full 15-minute stall threshold. Under the N-run
-    // semantics an abandoned log is stronger still: it DROPS OUT of runs[] —
-    // a killed CLI run is not a live run, so nothing is left to block on.
+    // Enumeration has exactly two sources: durable launch RECORDS and one
+    // process SCAN — never launch-log files. A CLI-launched harness killed
+    // mid-cell leaves no record and no live process, so an empty record set
+    // over an empty SUCCESSFUL scan is nothing live. (Log recency alone once
+    // called this "running" and refused reset for the full 15-minute stall
+    // threshold; under the N-run semantics a killed run also DROPS OUT of
+    // runs[] — logs are not read at all any more.)
     const state = await readRunState({
       runsRoot: runs,
       launchers: [],
-      aliveProbe: async () => false,
+      scan: async () => ({ bound: [], other: [] }),
     });
 
-    assert.deepEqual(state.runs, [], "no terminal record and no process is an abandoned run — it leaves the live set");
+    assert.deepEqual(state.runs, [], "no record and no process is an abandoned run — nothing is live");
     assert.equal(state.live_count, 0);
-    assert.equal(state.state, "idle", "with the abandoned log dropped, nothing is live");
+    assert.equal(state.state, "idle", "with no record and no harness process, nothing is live");
     assert.equal(
       state.can_start,
       true,
@@ -57,11 +60,13 @@ test("RUN STATE: a LIVE run that has gone quiet still blocks reset", async () =>
   // OFFER a reset over a cell that is still running. That is unchanged and is
   // what the `can_start` assertions below hold.
   //
-  // What changed is what "gone quiet" MEANS. This test used to age the LOG and
-  // expect `stalled`, which encoded log-mtime as a liveness signal — and that
-  // is precisely the inference that put `CELL STALLED — SILENT 21:49` in the
-  // header of a working cell, because the harness logs at phase boundaries and
-  // one phase ran 86 model turns. Quiet is now a stopped HEARTBEAT, and a
+  // What changed is the enumeration and what "gone quiet" MEANS. Enumeration
+  // now comes from the durable launch RECORDS plus one process SCAN — never
+  // from launch-log files — and "quiet" is a stopped HEARTBEAT over a LIVE
+  // process. This test used to age the LOG and expect `stalled`, which encoded
+  // log-mtime as a liveness signal — and that is precisely the inference that
+  // put `CELL STALLED — SILENT 21:49` in the header of a working cell, because
+  // the harness logs at phase boundaries and one phase ran 86 model turns. A
   // quiet log with a beating heart is just a long phase.
   const root = mkdtempSync(join(tmpdir(), "runstate-quiet-"));
   try {
@@ -69,17 +74,33 @@ test("RUN STATE: a LIVE run that has gone quiet still blocks reset", async () =>
     const dir = campaignDirName("qwen/qwen3.6-flash");
     writeCampaignCell(runs, dir, { gates: [{ id: "CONF" }], results: [] });
 
-    const first = await readRunState({ runsRoot: runs, launchers: [], aliveProbe: async () => true });
-    // Age the log well past the stall threshold, process still alive.
-    const old = Date.now() / 1000 - (STALL_THRESHOLD_S + 120);
-    utimesSync(first.log_path, old, old);
+    // One durable launch record: the control plane spawned this cell and its
+    // process still exists. `scan: async () => null` is a FAILED scan —
+    // indeterminate never ends a run, so the record stays live by default.
+    const record = {
+      run_id: "run-quiet",
+      sequence_index: 0,
+      model: "m-a",
+      arm: "off",
+      kind: "local",
+      org: null,
+      context: null,
+      manifest_arg: null,
+      pid: process.pid,
+      started_at: Date.now(),
+      log_path: null,
+      run_dir: dir,
+      finished: false,
+      terminal_status: null,
+      terminal_ok: null,
+    };
 
     // THE HEARTBEAT STOPPED — genuinely wedged.
     const wedged = await readRunState({
       runsRoot: runs,
-      launchers: [],
-      aliveProbe: async () => true,
-      heartbeatProbe: async () => (STALL_THRESHOLD_S + 120) * 1000,
+      launchers: [record],
+      scan: async () => null,
+      heartbeatProbe: () => (STALL_THRESHOLD_S + 120) * 1000,
     });
     // Log recency alone once called this "failed" and OFFERED a reset while the
     // cell was still running — precisely the loss treeResetGate exists to
@@ -93,15 +114,15 @@ test("RUN STATE: a LIVE run that has gone quiet still blocks reset", async () =>
     assert.equal(wedged.runs.length, 1, "a stalled run is still a live run");
     assert.equal(wedged.runs[0].can_start, false, "per-run: this cell cannot be started again");
 
-    // THE HEART IS BEATING — the same stale log, and the cell is fine. It still
-    // blocks reset, because it is still running.
+    // THE HEART IS BEATING — the cell is fine. It still blocks reset, because
+    // it is still running.
     const working = await readRunState({
       runsRoot: runs,
-      launchers: [],
-      aliveProbe: async () => true,
-      heartbeatProbe: async () => 2000,
+      launchers: [record],
+      scan: async () => null,
+      heartbeatProbe: () => 2000,
     });
-    assert.equal(working.state, "running", "a stale log over a beating cell is a long phase");
+    assert.equal(working.state, "running", "a beating cell is not wedged, whatever the log says");
     assert.equal(working.can_start, false, "still running, so reset stays refused");
   } finally {
     rmSync(root, { recursive: true, force: true });

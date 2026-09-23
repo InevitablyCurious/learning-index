@@ -3,6 +3,10 @@
 // (lines 3779–3951 + local helper writeLiveStream, 3769–3777).
 // NOTE: dynamic import("./runstate.mjs") specifiers shifted to "../runstate.mjs"
 // — they resolve relative to THIS module; everything else is byte-identical.
+// MIGRATED (run-state contract): the first three tests now enumerate from
+// injected launch RECORDS + a process scan — never log files, and `aliveProbe`
+// is gone. `scan: async () => null` is a FAILED scan, which keeps every
+// injected record live-by-default. The last two tests are unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from "node:test";
@@ -25,21 +29,47 @@ function writeLiveStream(runs, campaignDir, records) {
   );
   return join(cellDir, "live.jsonl");
 }
+
+/**
+ * One durable launch record, the shape run-ledger.mjs stores — enumeration's
+ * record source. pid: process.pid is a process that really exists; with a
+ * failed scan (null) the record is live-by-default regardless.
+ */
+function liveRecord(dir, logPath) {
+  return {
+    run_id: "run-x",
+    sequence_index: 0,
+    model: "m-a",
+    arm: "off",
+    kind: "local",
+    org: null,
+    context: null,
+    manifest_arg: null,
+    pid: process.pid,
+    started_at: Date.now(),
+    log_path: logPath,
+    run_dir: dir,
+    finished: false,
+    terminal_status: null,
+    terminal_ok: null,
+  };
+}
+
 test("LIVENESS: a fresh heartbeat means running, however old the log is", async () => {
   const root = mkdtempSync(join(tmpdir(), "liveness-beat-"));
   try {
     const runs = join(root, "runs");
     const dir = campaignDirName("qwen/qwen3.6-flash");
     writeCampaignCell(runs, dir, { gates: [{ id: "CONF" }], results: [] });
-    const first = await readRunState({ runsRoot: runs, launchers: [], aliveProbe: async () => true });
+    const logPath = join(runs, "off-cell-live.log");
     // The log has said nothing for 25 minutes — a normal mid-drive phase.
     const old = Date.now() / 1000 - (STALL_THRESHOLD_S + 600);
-    utimesSync(first.log_path, old, old);
+    utimesSync(logPath, old, old);
 
     const state = await readRunState({
       runsRoot: runs,
-      launchers: [],
-      aliveProbe: async () => true,
+      launchers: [liveRecord(dir, logPath)],
+      scan: async () => null,
       heartbeatProbe: async () => 3000,
     });
 
@@ -63,8 +93,8 @@ test("LIVENESS: a stopped heartbeat IS a stall, however fresh the log is", async
 
     const state = await readRunState({
       runsRoot: runs,
-      launchers: [],
-      aliveProbe: async () => true,
+      launchers: [liveRecord(dir, join(runs, "off-cell-live.log"))],
+      scan: async () => null,
       heartbeatProbe: async () => (STALL_THRESHOLD_S + 60) * 1000,
     });
 
@@ -89,14 +119,14 @@ test("LIVENESS: NO heartbeat is unknown — never stalled", async () => {
     const runs = join(root, "runs");
     const dir = campaignDirName("qwen/qwen3.6-flash");
     writeCampaignCell(runs, dir, { gates: [{ id: "CONF" }], results: [] });
-    const first = await readRunState({ runsRoot: runs, launchers: [], aliveProbe: async () => true });
+    const logPath = join(runs, "off-cell-live.log");
     const old = Date.now() / 1000 - (STALL_THRESHOLD_S + 600);
-    utimesSync(first.log_path, old, old);
+    utimesSync(logPath, old, old);
 
     const state = await readRunState({
       runsRoot: runs,
-      launchers: [],
-      aliveProbe: async () => true,
+      launchers: [liveRecord(dir, logPath)],
+      scan: async () => null,
       heartbeatProbe: async () => null,
     });
 

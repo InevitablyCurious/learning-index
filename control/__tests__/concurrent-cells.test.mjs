@@ -18,13 +18,13 @@ import { dirname, join } from "node:path";
 
 import { allocateSequenceIndex, campaignDirName } from "../campaign.mjs";
 import {
+  evictRun,
   inFlightModels,
   liveRuns,
-  markRunFinished,
   newRunId,
+  recordCellEnded,
   registerRun,
   runCount,
-  unregisterRun,
 } from "../run-ledger.mjs";
 import { readRunState } from "../runstate.mjs";
 
@@ -41,8 +41,9 @@ function makeLauncher(overrides = {}) {
     org: null,
     context: null,
     manifest_arg: null,
-    // The test process itself: pidAlive(process.pid) is true, so a record
-    // matched by log_path classifies live without a ps-scan seam.
+    // The test process itself: pidAlive(process.pid) is true, and the tests
+    // inject scan: async () => null (a failed scan is indeterminate), so every
+    // injected record is live-by-default without a ps-scan seam.
     pid: process.pid,
     started_at: Date.now(),
     log_path: null,
@@ -56,8 +57,10 @@ function makeLauncher(overrides = {}) {
 
 /**
  * A run dir on disk plus a launch log naming it (the PROGRESS-path shape
- * runDirOf resolves), with a controlled mtime for the newest-first ordering.
- * The log name matches runstate.mjs's scan pattern /^(off|on)-cell-|^cell-/.
+ * runDirOf resolves), with a controlled mtime. Enumeration never reads logs —
+ * the mtime is a decoy the ordering test sets AGAINST started_at, so a
+ * regression to mtime ordering fails. The log name matches runstate.mjs's
+ * newestLog scan pattern /^(off|on)-cell-|^cell-/.
  */
 function writeLiveCell(runs, dir, logName, { ageMs = 0 } = {}) {
   mkdirSync(join(runs, dir, "sessions"), { recursive: true });
@@ -88,7 +91,7 @@ test("RUN STATE: two live runs each block THEMSELVES — can_start is per run, t
         makeLauncher({ run_id: "run-alpha", model: "m-a", arm: "off", sequence_index: 7, log_path: logA, run_dir: dirA }),
         makeLauncher({ run_id: "run-beta", model: "m-b", arm: "on", sequence_index: 8, log_path: logB, run_dir: dirB }),
       ],
-      aliveProbe: async () => true,
+      scan: async () => null,
       heartbeatProbe: async () => 1000,
     });
 
@@ -104,8 +107,8 @@ test("RUN STATE: two live runs each block THEMSELVES — can_start is per run, t
       assert.equal(r.can_start, false, "per-run: a cell in flight cannot be started again");
       assert.match(String(r.blocked_reason), /already in flight/);
       assert.ok(
-        String(r.blocked_reason).includes(r.log_name),
-        "the per-run reason names THIS cell's own log, never a global serial rule",
+        String(r.blocked_reason).includes(r.run_dir),
+        "the per-run reason names THIS cell's own run_dir, never a global serial rule",
       );
       assert.equal(r.launched_by, "control-plane");
       assert.equal(r.liveness, "live");
@@ -120,23 +123,25 @@ test("RUN STATE: two live runs each block THEMSELVES — can_start is per run, t
   }
 });
 
-test("RUN STATE: multiple live runs are listed NEWEST-LOG-FIRST, each keyed by its run_id", async () => {
+test("RUN STATE: multiple live runs are listed NEWEST-STARTED-AT-FIRST, each keyed by its run_id", async () => {
   const root = mkdtempSync(join(tmpdir(), "conc-multi-"));
   try {
     const runs = join(root, "runs");
     const dirA = campaignDirName("m-a");
     const dirB = campaignDirName("m-b");
-    // A is a minute old, B is fresh: the ordering is by log mtime, newest first.
-    const logA = writeLiveCell(runs, dirA, "off-cell-a.log", { ageMs: 60_000 });
-    const logB = writeLiveCell(runs, dirB, "on-cell-b.log", { ageMs: 0 });
+    // A started a minute ago, B just started: the ordering is by started_at,
+    // newest first. The log mtimes are set the OTHER way (A's log fresh, B's
+    // old) so a regression to mtime ordering would fail.
+    const logA = writeLiveCell(runs, dirA, "off-cell-a.log", { ageMs: 0 });
+    const logB = writeLiveCell(runs, dirB, "on-cell-b.log", { ageMs: 60_000 });
 
     const state = await readRunState({
       runsRoot: runs,
       launchers: [
-        makeLauncher({ run_id: "run-alpha", model: "m-a", arm: "off", sequence_index: 3, log_path: logA, run_dir: dirA }),
-        makeLauncher({ run_id: "run-beta", model: "m-b", arm: "on", sequence_index: 4, log_path: logB, run_dir: dirB }),
+        makeLauncher({ run_id: "run-alpha", model: "m-a", arm: "off", sequence_index: 3, log_path: logA, run_dir: dirA, started_at: Date.now() - 60_000 }),
+        makeLauncher({ run_id: "run-beta", model: "m-b", arm: "on", sequence_index: 4, log_path: logB, run_dir: dirB, started_at: Date.now() }),
       ],
-      aliveProbe: async () => true,
+      scan: async () => null,
       heartbeatProbe: async () => 1000,
     });
 
@@ -144,7 +149,7 @@ test("RUN STATE: multiple live runs are listed NEWEST-LOG-FIRST, each keyed by i
     assert.deepEqual(
       state.runs.map((r) => r.log_name),
       ["on-cell-b.log", "off-cell-a.log"],
-      "newest log first — the top-level mirror is runs[0]",
+      "newest started_at first — the top-level mirror is runs[0]",
     );
     assert.deepEqual(state.runs.map((r) => r.run_id), ["run-beta", "run-alpha"]);
     assert.deepEqual(state.runs.map((r) => r.run_dir), [dirB, dirA], "distinct run dirs, each on its own entry");
@@ -193,12 +198,15 @@ test("RUN-LEDGER: N slots are tracked at once; finishing one frees its model onl
     );
 
     // Finish one of the two m-x runs: m-x is STILL in flight — its sibling lives.
-    assert.equal(markRunFinished(recs[0].run_id, { terminal_status: "done", terminal_ok: true }), true);
+    // The ledger is UNBOUND here (no initLedger in this file): recordCellEnded
+    // has nothing durable to merge → false, but the cache slot is evicted all
+    // the same, which is what these pure-cache assertions read.
+    assert.equal(recordCellEnded(recs[0].run_id, null, { reason: "ended" }), false);
     assert.equal(runCount(), N - 1);
     assert.deepEqual([...inFlightModels()].sort(), ["m-x", "m-y", "m-z"]);
 
     // Finish the UNIQUE m-y run: its model drops out at once, and only it.
-    assert.equal(markRunFinished(recs[2].run_id, { terminal_status: "done", terminal_ok: true }), true);
+    assert.equal(recordCellEnded(recs[2].run_id, null, { reason: "ended" }), false);
     assert.equal(runCount(), N - 2);
     assert.deepEqual(
       [...inFlightModels()].sort(),
@@ -206,7 +214,7 @@ test("RUN-LEDGER: N slots are tracked at once; finishing one frees its model onl
       "a finished model with no live sibling is no longer in flight; the others are untouched",
     );
   } finally {
-    for (const r of recs) unregisterRun(r.run_id);
+    for (const r of recs) evictRun(r.run_id);
   }
   assert.equal(runCount(), 0, "module state leaves no residue for the next test");
 });

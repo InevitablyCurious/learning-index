@@ -288,6 +288,7 @@ export function isBenchmarkData(name) {
   if (n === "results-ledger.jsonl") return true;      // the run-results ledger (archived here on reset, from data/)
   if (n === "baselines.json") return true;            // the floor
   if (n.startsWith("cumulative")) return true;        // pre-tree result folders
+  if (n === "launches") return true;                  // durable cell launch-record dir (flat layout): a RESET must archive it, never leave it behind or delete it
   if (/^(off|on)-cell-.*\.log$/.test(n) || /^cell-.*\.log$/.test(n)) return true;
   if (n === "master" || n === "failed" || n === "failed-starts" || n === "backgammon") return true;
 

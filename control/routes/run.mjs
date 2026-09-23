@@ -13,7 +13,7 @@ import {
   refuse,
 } from "../contract.mjs";
 import { readRoster } from "../roster.mjs";
-import { readRunState, confirmAlive, cellSessionId, cellServeUrl } from "../runstate.mjs";
+import { readRunState, confirmAlive, cellSessionId, cellServeUrl, readTail } from "../runstate.mjs";
 import { readHold, releaseHold } from "../hold.mjs";
 // Where a cell's measurement lands (one campaign per model), and the atomic
 // cursor that hands N concurrent cells distinct sequence indices.
@@ -24,9 +24,10 @@ import { notice, noticesPathFor } from "../notices.mjs";
 import { ensureTree } from "../tree.mjs";
 // The tool registry: preflight failures resolve to the button that fixes them.
 import { attachRemedies, describeBuiltinTools } from "../tools.mjs";
-// The N-slot run ledger: every cell this service spawns holds a slot, so N
-// concurrent cells are tracked at once (the launcher singleton is gone).
-import { inFlightModels, newRunId, registerRun, unregisterRun } from "../run-ledger.mjs";
+// The N-slot run ledger: every cell this service spawns holds a slot, written
+// through to the durable cell registry, so N concurrent cells are tracked at
+// once and survive a control-plane restart (the launcher singleton is gone).
+import { inFlightModels, newRunId, recordCellEnded, registerRun } from "../run-ledger.mjs";
 import {
   args,
   BENCH_ROOT,
@@ -337,14 +338,40 @@ export const routes = [
           cell.error = `spawn failed: ${err?.message ?? err}`;
           continue;
         }
+        // The durable end-record: the cell is detached and can outlive this
+        // request, so its exit is captured HERE — code/signal plus a log tail
+        // — and merged into its launch record. A cell that ends is recorded as
+        // ended with a reason, never erased. The handler must never throw.
+        child.on("exit", (code, signal) => {
+          try {
+            const reason = signal ? `signal ${signal}` : `exit ${code ?? "?"}`;
+            void readTail(cell.log_path, 8192)
+              .catch(() => "")
+              .then((tail) => {
+                try {
+                  recordCellEnded(cell.run_id, target.run_dir, {
+                    reason,
+                    code,
+                    signal,
+                    log_tail: tail || null,
+                  });
+                } catch (err2) {
+                  console.error(`[run] exit record failed for ${cell.run_id}: ${err2?.message ?? err2}`);
+                }
+              });
+          } catch (err2) {
+            console.error(`[run] exit handler failed for ${cell.run_id}: ${err2?.message ?? err2}`);
+          }
+        });
         child.unref();
         await cell.fh.close().catch(() => {});
         cell.pid = child.pid ?? null;
 
         // The ledger slot at spawn: the batch is tracked from the moment each
-        // harness exists — through the parallel startup window below. A cell
-        // that does not survive the window releases its slot there; the ledger
-        // never vouches for a dead cell.
+        // harness exists — through the parallel startup window below — and the
+        // slot is written through to the durable cell registry, so a control-
+        // plane restart loses no pid. A cell that does not survive the window
+        // is recorded ended there; the ledger never vouches for a dead cell.
         registerRun({
           run_id: cell.run_id,
           sequence_index: cell.sequence_index,
@@ -361,14 +388,16 @@ export const routes = [
           finished: false,
           terminal_status: null,
           terminal_ok: null,
+          ended: null,
         });
         cell.launched = true;
       }
 
       // Startup liveness, all N in parallel: the harness can die seconds after
       // spawn (usage error, import error, drift guard). Confirm each survived
-      // before claiming the cell started; a cell that did not releases its
-      // ledger slot and is reported per cell (the log tail rides its own log).
+      // before claiming the cell started; a cell that did not is recorded
+      // ended — durably, with the reason — and reported per cell (the log tail
+      // rides its own record).
       const spawned = batch.filter((cell) => cell.launched);
       const liveness = await Promise.all(
         spawned.map((cell) => confirmAlive(cell.pid, { logPath: cell.log_path })),
@@ -376,7 +405,12 @@ export const routes = [
       for (let i = 0; i < spawned.length; i += 1) {
         const cell = spawned[i];
         if (liveness[i].ok) continue;
-        unregisterRun(cell.run_id);
+        recordCellEnded(cell.run_id, target.run_dir, {
+          reason: "startup failed",
+          code: null,
+          signal: null,
+          log_tail: liveness[i].log_tail ?? null,
+        });
         cell.launched = false;
         cell.code = "launch_crashed";
         cell.error = `harness exited ${liveness[i].elapsed_ms}ms after launch (see log tail)`;

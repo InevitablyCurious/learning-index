@@ -1,10 +1,14 @@
-// THE RUN LEDGER — the N-slot registry of control-plane runs, keyed on a
-// control-plane-generated run_id. This replaces the single `launcher`
-// singleton: every launched cell gets a slot here, so N concurrent cells can
-// be tracked at once. The Map below is the only state; every read computes
-// from it, never from a second copy.
+// THE RUN LEDGER — the live-cell cache over the durable cell registry
+// (cell-registry.mjs). Every launched cell is written through to disk at
+// spawn, so a control-plane restart loses no pid: initLedger re-adopts the
+// unfinished cells from their durable records. The Map below holds ONLY live
+// records (finished === false) — a finished or ended cell lives on disk, not
+// in memory; that is the bound on this module's state. Every read computes
+// from the Map, never from a second copy.
 
 import { randomUUID } from "node:crypto";
+
+import { endRecord, listRecords, writeRecord } from "./cell-registry.mjs";
 
 /**
  * One run slot in the ledger. This is the contract other modules read.
@@ -25,10 +29,28 @@ import { randomUUID } from "node:crypto";
  * @property {boolean} finished
  * @property {string|null} terminal_status
  * @property {boolean|null} terminal_ok
+ * @property {null|{at:number,code:number|null,signal:string|null,reason:string,log_tail:string|null}} ended
  */
 
-/** @type {Map<string, RunRecord>} run_id → record. The only state. */
+/** The runs root the durable registry writes under; null until initLedger. */
+let RUNS_ROOT = null;
+
+/** @type {Map<string, RunRecord>} run_id → LIVE record. The only in-memory state. */
 const runs = new Map();
+
+/**
+ * Bind the ledger to its durable store and hydrate from it: every record on
+ * disk with `finished === false` becomes a live slot again. Cells are spawned
+ * detached, so they outlive the control plane — this is how a restart
+ * re-adopts them instead of losing their pids. Called once, from initState
+ * (state.mjs), before anything reads the ledger.
+ */
+export function initLedger(runsRoot) {
+  RUNS_ROOT = runsRoot;
+  for (const rec of listRecords(runsRoot)) {
+    if (rec?.finished === false) runs.set(rec.run_id, rec);
+  }
+}
 
 /** A fresh unique control-plane run id. */
 export function newRunId() {
@@ -36,7 +58,9 @@ export function newRunId() {
 }
 
 /**
- * Insert (or overwrite, by `record.run_id`) one run slot.
+ * Insert (or overwrite, by `record.run_id`) one live slot — write-through:
+ * the durable record lands on disk BEFORE the cache slot, so a crash after
+ * spawn can never leave a cell with no record.
  * @param {RunRecord} record
  * @returns {RunRecord} the stored record
  */
@@ -46,36 +70,43 @@ export function registerRun(record) {
   if (typeof record?.run_id !== "string" || record.run_id === "") {
     throw new TypeError("registerRun: record.run_id must be a non-empty string");
   }
-  runs.set(record.run_id, record);
+  if (RUNS_ROOT) writeRecord(RUNS_ROOT, record.run_dir, record);
+  runs.set(record.run_id, { ...record, finished: false });
   return record;
 }
 
 /**
- * Drop one run slot.
- * @returns {boolean} true if it existed, false if absent
+ * Evict one run slot from the cache — a PURE cache eviction, no disk write.
+ * The caller that ends a run writes the durable end itself (cell-registry
+ * endRecord) before evicting, so the durable fact and the cache removal are
+ * one explicit sequence at the call site, never a hidden side effect here.
+ *
+ * @param {string} runId
+ * @returns {boolean} true if the slot existed, false if runId was absent
  */
-export function unregisterRun(runId) {
+export function evictRun(runId) {
   return runs.delete(runId);
 }
 
 /**
- * Mark one run slot as naturally finished: `finished:true` plus the terminal
- * facts of its ending — `null`/`null` when it ended unvouched (a wiped cell,
- * a vanished log). The record is overwritten in the same Map registerRun
- * writes, so every reader (liveRuns, runCount, inFlightModels) sees the
- * finish at once; the slot itself stays as history — only unregisterRun
- * removes it. Idempotent from the reconcile side: a finished record leaves
- * liveRuns(), so it is never visited twice.
+ * Record a cell's process end — durably. endRecord merges
+ * `{ finished:true, ended }` into the on-disk record, so this works even when
+ * the cache slot is already gone (a restart, a prior finish); the slot is
+ * evicted either way. A cell that ends is recorded as ended with a reason —
+ * never erased.
  *
  * @param {string} runId
- * @param {{ terminal_status?: string|null, terminal_ok?: boolean|null }} [ending]
- * @returns {boolean} true if the record exists, false if runId is absent
+ * @param {string|null} runDir  the cell's run_dir — resolves the durable record
+ * @param {{ reason: string, code?: number|null, signal?: string|null, at?: number, log_tail?: string|null }} ending
+ * @returns {boolean} true if a durable record was merged, false if there was
+ *   none (or the ledger is unbound — nothing durable was written).
  */
-export function markRunFinished(runId, { terminal_status = null, terminal_ok = null } = {}) {
-  const rec = runs.get(runId);
-  if (!rec) return false;
-  runs.set(runId, { ...rec, finished: true, terminal_status, terminal_ok });
-  return true;
+export function recordCellEnded(runId, runDir, { reason, code = null, signal = null, at = Date.now(), log_tail = null }) {
+  const merged = RUNS_ROOT
+    ? endRecord(RUNS_ROOT, runDir, runId, { at, code, signal, reason, log_tail })
+    : null;
+  runs.delete(runId);
+  return merged !== null;
 }
 
 /** @returns {RunRecord|undefined} */
@@ -83,14 +114,14 @@ export function getRun(runId) {
   return runs.get(runId);
 }
 
-/** Every record with `finished === false`, in insertion order. */
+/** Every live record, in insertion order. The Map holds only live slots. */
 export function liveRuns() {
-  return [...runs.values()].filter((r) => r.finished === false);
+  return [...runs.values()];
 }
 
 /** How many runs are live. */
 export function runCount() {
-  return liveRuns().length;
+  return runs.size;
 }
 
 /** The distinct models with a live run — the per-model in-flight gate. */

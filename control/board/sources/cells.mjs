@@ -89,9 +89,22 @@ function elapsed(startedAt) {
   return Math.max(0, Math.round((Date.now() - t) / 1000));
 }
 
+/** The strip's one-line death reason: "ended — <reason>", or bare "ended". */
+function endedText(rec) {
+  const r = rec?.ended?.reason;
+  return r ? `ended — ${r}` : "ended";
+}
+
 export async function read(ctx) {
   const state = await readRunState({ runsRoot: ctx.runsRoot });
   const live = Array.isArray(state?.runs) ? state.runs : [];
+  // Durable ended records (readRunState): every cell that LAUNCHED and DIED,
+  // with the reason. The strip's death reasons come from here, never guessed.
+  const ended = Array.isArray(state?.ended) ? state.ended : [];
+  const endedByIndex = new Map();
+  for (const e of ended) {
+    if (Number.isFinite(e?.sequence_index)) endedByIndex.set(e.sequence_index, e);
+  }
 
   // One batch per run_dir. A live cell names it directly; with nothing live
   // the ACTIVE CAMPAIGN does.
@@ -167,31 +180,64 @@ export async function read(ctx) {
 
   // Cells that have ENDED are still part of the batch and still worth opening —
   // a void cell is where an operator finds out why it died. They carry no live
-  // record, so they come from the batch alone, which holds only the verdict:
-  // the count, whether it scored, and why not. Everything else is null rather
-  // than guessed.
+  // record, so the verdict comes from the batch (the count, whether it scored,
+  // and why not) and the death itself from the durable ended record when one
+  // exists. A cell that ended WITHOUT scoring is void with its ended reason —
+  // the reason wins over a batch void reason. Anything neither source holds is
+  // null rather than guessed.
   for (const [idx, rec] of scoredByIndex) {
     if (seen.has(idx)) continue;
+    const endedRec = endedByIndex.get(idx);
     list.push({
       sequence_index: idx,
-      run_id: null,
-      run_dir: runDir,
+      run_id: endedRec?.run_id ?? null,
+      run_dir: endedRec?.run_dir ?? runDir,
       session_id: null,
-      model: null,
-      arm: "off",
+      model: endedRec?.model ?? null,
+      arm: endedRec?.arm ?? "off",
       liveness: "ended",
       running: false,
       state: "complete",
-      terminal_status: null,
+      terminal_status: endedRec?.terminal_status ?? null,
       heartbeat_age_s: null,
-      elapsed_s: null,
+      elapsed_s: endedRec ? elapsed(endedRec.started_at) : null,
       phase: null,
       chunk: { current: null, total },
       turns: null,
-      scored: rec?.scored ?? null,
+      scored: rec?.scored === true ? true : (rec?.scored === false || endedRec ? false : null),
       problems: rec?.problem_count ?? null,
-      void_reason: rec?.void_reason ?? null,
+      void_reason: endedRec ? endedText(endedRec) : (rec?.void_reason ?? null),
     });
+  }
+
+  // Ended cells with NO batch record at all — a cell that died before the batch
+  // ever scored it. The durable ended record is the only source, so it is the
+  // whole card: void, with the reason it ended.
+  for (const e of ended) {
+    const idx = e?.sequence_index;
+    if (!Number.isFinite(idx)) continue;
+    if (seen.has(idx) || scoredByIndex.has(idx)) continue;
+    list.push({
+      sequence_index: idx,
+      run_id: e.run_id ?? null,
+      run_dir: e.run_dir ?? runDir,
+      session_id: null,
+      model: e.model ?? null,
+      arm: e.arm ?? "off",
+      liveness: "ended",
+      running: false,
+      state: "complete",
+      terminal_status: e.terminal_status ?? null,
+      heartbeat_age_s: null,
+      elapsed_s: elapsed(e.started_at),
+      phase: null,
+      chunk: { current: null, total },
+      turns: null,
+      scored: false,
+      problems: null,
+      void_reason: endedText(e),
+    });
+    seen.add(idx);
   }
 
   list.sort((a, b) => (a.sequence_index ?? 0) - (b.sequence_index ?? 0));

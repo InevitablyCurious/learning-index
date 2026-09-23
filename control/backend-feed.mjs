@@ -86,6 +86,16 @@ export function rowLevel(rec) {
 // over), and a substring test skips parsing non-notice lines.
 const errorScans = new Map();
 
+/**
+ * Cap on the NUMBER of paths cached, not on any path's error list (which stays
+ * append-only per the windowing above). One entry accrues per distinct path
+ * ever scanned and nothing else removes it, so without a cap this Map grows
+ * for the life of the process. Over the cap, the oldest entry (first in
+ * insertion order) is evicted; a later re-scan of that path simply starts over
+ * from byte 0 and rebuilds the same list.
+ */
+const MAX_ERROR_SCANS = 256;
+
 async function scanErrors(path) {
   if (!path) return [];
   let size;
@@ -127,6 +137,13 @@ async function scanErrors(path) {
   }
 
   errorScans.set(path, { size, errors });
+  // Bound the cache: evict the oldest path (first key in insertion order).
+  // Only the path count is capped — an evicted path's errors are rebuilt from
+  // byte 0 on its next scan, never lost from the file itself.
+  if (errorScans.size > MAX_ERROR_SCANS) {
+    const oldest = errorScans.keys().next().value;
+    if (oldest !== undefined) errorScans.delete(oldest);
+  }
   return errors;
 }
 

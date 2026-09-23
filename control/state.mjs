@@ -11,6 +11,9 @@ import { EventRing } from "./events.mjs";
 import { startCellFeeds } from "./cell-feeds.mjs";
 import { createAgentEventSink } from "./agent-events.mjs";
 import { TuiMirror } from "./tui.mjs";
+// The run ledger's startup hydrate: re-adopts the cells launched before a
+// restart from their durable records (cell-registry.mjs).
+import { initLedger } from "./run-ledger.mjs";
 // Circular by design, and safe: both sides are hoisted functions and neither
 // reads the other at load.
 import { activeRunDir } from "./lib/lifecycle.mjs";
@@ -89,6 +92,9 @@ let persistTimer = null;
 
 /** The startup side effects, in their original order; called once. */
 export function initState() {
+  // FIRST: bind the run ledger to its durable store and hydrate the live
+  // slots from disk, before anything reads the ledger.
+  initLedger(RUNS_ROOT);
   ring.sink = agentSink;
   persistTimer = setInterval(() => { void agentSink.flush(); }, 1000);
   persistTimer.unref?.();
