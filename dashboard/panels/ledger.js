@@ -331,8 +331,10 @@ function cellRow(b, c, canPick) {
 
 /** How a cell ended, in words. A void cell says why it was not counted. */
 function endedWord(c) {
+  // Unfinished first: a batch record assembled mid-run lists every cell still
+  // going as unscored, and that is not a verdict.
+  if (c.state === "started" || c.state === "not_started") return c.state === "started" ? "running" : "not started";
   if (c.scored === false) return `void · ${c.void_reason ?? "unscored"}`;
-  if (c.state !== "complete") return "running";
   if (c.context_exhausted) return "context exhausted";
   if (String(c.verdict ?? "").toUpperCase() === "PASS") return "green";
   if (c.terminal_reason === "attempt_ceiling_reached") return "attempt cap, not green";

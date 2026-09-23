@@ -69,12 +69,16 @@ function shortDur(s) {
  * class this panel emits carries the cc- prefix for that reason.
  */
 function health(c) {
-  if (c.scored === false) return { cls: "cc-is-void", dot: "cc-void" };
-  if (!c.running) return { cls: "cc-is-done", dot: "cc-done" };
-  if (Number.isFinite(c.heartbeat_age_s) && c.heartbeat_age_s > 90) {
-    return { cls: "cc-is-quiet", dot: "cc-quiet" };
+  // Running first: a batch record assembled while cells still run lists them
+  // unscored, and a live cell must never be drawn as void.
+  if (c.running) {
+    if (Number.isFinite(c.heartbeat_age_s) && c.heartbeat_age_s > 90) {
+      return { cls: "cc-is-quiet", dot: "cc-quiet" };
+    }
+    return { cls: "cc-is-live", dot: "cc-live" };
   }
-  return { cls: "cc-is-live", dot: "cc-live" };
+  if (c.scored === false) return { cls: "cc-is-void", dot: "cc-void" };
+  return { cls: "cc-is-done", dot: "cc-done" };
 }
 
 /**
@@ -84,7 +88,7 @@ function health(c) {
  * wraps costs the card its second row.
  */
 function stateLine(c) {
-  if (c.scored === false) return esc(c.void_reason ?? "void");
+  if (!c.running && c.scored === false) return esc(c.void_reason ?? "void");
   if (Number.isFinite(c.problems)) return `done · ${c.problems}`;
   const cur = c.chunk?.current;
   const tot = c.chunk?.total;

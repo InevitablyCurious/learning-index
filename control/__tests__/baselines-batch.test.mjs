@@ -322,3 +322,34 @@ test("BASELINES-BATCH: a stored batch whose fingerprint its cells never recorded
   assert.equal(again.void_kind, "unfingerprinted");
   assert.equal(batchIsStale(again, bare), false, "and, once void for that reason, stays settled");
 });
+
+test("BASELINES-BATCH: a cell that died before its first graded attempt is 'ended', void with its exception — not 'not_started'", async (t) => {
+  // 2026-09-22, s0002: four hours of build, then IncompleteBuildError in
+  // chunk 5. No attempt record was ever written, so it read as not_started.
+  const { writeCampaign, writeCellFingerprint } = await import("./_shared.mjs");
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "baselines-ended-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const status = (seq, n) => ({ type: "attempt", sequence_index: seq, attempt: 1, verdict: "FAIL", progress: { problems_before: n } });
+  const d = writeCampaign(root, "camp", [
+    { seq: 0, arm: "off", status: status(0, 27) },
+    { seq: 1, arm: "off" },
+    { seq: 2, arm: "off" },
+    { seq: 3, arm: "off" },
+  ]);
+  // s0001 ran and died; s0002 is still going; s0003 never began.
+  for (const seq of [1, 2]) writeCellFingerprint(d, seq);
+  await fs.writeFile(
+    path.join(d, "memoryOFF", "cell-0001", "live.jsonl"),
+    `${JSON.stringify({ kind: "cell.start", cell_seq: 1 })}\n${JSON.stringify({ kind: "cell.end", cell_seq: 1, terminal_reason: "harness_error", terminal_exception: "IncompleteBuildError" })}\n`,
+  );
+
+  const cells = await collectCells(root);
+  const bySeq = new Map(cells.map((c) => [c.sequence_index, c]));
+  assert.equal(bySeq.get(1).state, "ended");
+  assert.equal(bySeq.get(1).terminal_exception, "IncompleteBuildError");
+  assert.equal(bySeq.get(2).state, "started", "began, no end recorded");
+  assert.equal(bySeq.get(3).state, "not_started", "never began");
+
+  const batch = await assembleBatchForCells({ runDir: d, cells });
+  assert.equal(batch.runs.find((r) => r.sequence_index === 1).void_reason, "IncompleteBuildError");
+});

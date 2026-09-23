@@ -50,7 +50,7 @@ function batch(over = {}) {
     cells: [
       cell(0, { problems: 27, vs_median: 4, attempt_failures: [27, 28, 27, 26, 24] }),
       cell(1, { problems: 23, vs_median: 0, attempt_failures: [23, 22, 22, 22, 22] }),
-      cell(2, { state: "not_started", scored: false, void_reason: "not_started", problems: null, vs_median: null, turns: null, tokens: null, wall_seconds: null, verdict: null, terminal_reason: null, attempt_failures: [] }),
+      cell(2, { state: "ended", scored: false, void_reason: "IncompleteBuildError", problems: null, vs_median: null, turns: null, tokens: null, wall_seconds: null, verdict: null, terminal_reason: "harness_error", attempt_failures: [] }),
       cell(3, { problems: 17, vs_median: -6, attempt_failures: [17, 17, 17, 17, 18] }),
     ],
     pick: null,
@@ -92,7 +92,7 @@ test("every cell is listed with its trajectory — the void one too, with its re
   for (const s of ["s0000", "s0001", "s0002", "s0003"]) assert.ok(html.includes(s), s);
   assert.ok(html.includes("27 → 28 → 27 → 26 → 24"));
   assert.ok(html.includes("17 → 17 → 17 → 17 → 18"));
-  assert.ok(html.includes("void · not_started"));
+  assert.ok(html.includes("void · IncompleteBuildError"), "a cell that died in the build says what it died of");
   assert.ok(html.includes("+4") && html.includes("−6") && html.includes("±0"), "distance from the median, signed");
 });
 

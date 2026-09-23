@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { listLiveCampaignDirs } from "./tree.mjs";
+import { readTail } from "./runstate.mjs";
 import {
   CODE_INPUTS,
   hashDir,
@@ -271,9 +272,13 @@ export async function collectCells(runsRoot) {
 
       // What the cell recorded it ran on, at its start (harness/fingerprint.py);
       // null for a cell that recorded nothing.
-      const fingerprint = await readCellFingerprint(
-        join(dir, `memory${String(arm ?? "unknown").toUpperCase()}`, `cell-${String(seq).padStart(4, "0")}`),
-      );
+      const cellDir = join(dir, `memory${String(arm ?? "unknown").toUpperCase()}`, `cell-${String(seq).padStart(4, "0")}`);
+      const fingerprint = await readCellFingerprint(cellDir);
+      // A cell with no attempt record may still have RUN: it died before its
+      // first graded attempt (e.g. IncompleteBuildError in the build). The
+      // harness records how it ended on its own stream (cell.end); read that
+      // rather than calling a four-hour cell "not_started".
+      const ended = meas ? null : await readCellEnd(cellDir);
 
       cells.push({
         id: baselineId(ent.relative, seq),
@@ -286,7 +291,9 @@ export async function collectCells(runsRoot) {
         router: who.router,
         model_slug: who.slug,
         arm,
-        state: meas ? "complete" : "not_started",
+        // complete: graded · ended: ran and stopped before a graded attempt ·
+        // started: began, no end recorded yet · not_started: never began.
+        state: meas ? "complete" : ended ? "ended" : fingerprint ? "started" : "not_started",
         void_instrument: voidInstrument,
         // Seeded cells skip the build, so they are never a scorable floor.
         seeded_from_snapshot: meas?.seeded_from_snapshot ?? null,
@@ -306,7 +313,9 @@ export async function collectCells(runsRoot) {
         attempt_failures: meas
           ? [...meas.attemptFailed.entries()].sort((a, b) => a[0] - b[0]).map(([, n]) => n)
           : [],
-        terminal_reason: meas?.terminal_reason ?? null,
+        terminal_reason: meas?.terminal_reason ?? ended?.terminal_reason ?? null,
+        // The exception a harness_error ended on (cell.end), when there was one.
+        terminal_exception: ended?.terminal_exception ?? null,
         // Out of context room: a result, not an instrument fault.
         context_exhausted: meas?.terminal_reason === "context_exhausted",
         created_at: str(manifest.created_at),
@@ -316,6 +325,27 @@ export async function collectCells(runsRoot) {
   }
 
   return cells;
+}
+
+/**
+ * How a cell ended, from the last cell.end on its own live.jsonl
+ * (harness/live_stream.py), or null when it recorded no end. The tail is
+ * enough: cell.end is the stream's last word.
+ */
+async function readCellEnd(cellDir) {
+  const tail = await readTail(join(cellDir, "live.jsonl"));
+  const lines = tail.split("\n");
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (!lines[i].includes('"cell.end"')) continue;
+    try {
+      const rec = JSON.parse(lines[i]);
+      if (rec?.kind !== "cell.end") continue;
+      return { terminal_reason: str(rec.terminal_reason), terminal_exception: str(rec.terminal_exception) };
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 /** A cell's recorded fingerprint values (harness/fingerprint.py), or null. */
@@ -478,7 +508,7 @@ export async function assembleBatchForCells({ repoRoot = REPO_ROOT, runDir, cell
   const voidReason = (c) => c.context_exhausted === true && !c.gates ? "context_exhausted"
     : c.seeded_from_snapshot ? "seeded_from_snapshot"
       : c.void_instrument ? "void_instrument"
-        : c.state !== "complete" ? (c.terminal_reason ?? c.state ?? "incomplete")
+        : c.state !== "complete" ? (c.terminal_exception ?? c.terminal_reason ?? c.state ?? "incomplete")
           : "no_measurement";
   const runs = cells.map((c) => ({
     sequence_index: c.sequence_index,
@@ -623,8 +653,11 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
     (c) => c.state === "complete" && !c.void_instrument && !c.seeded_from_snapshot && exhaustedUngraded(c),
   );
   const seeded = mine.filter((c) => c.state === "complete" && Boolean(c.seeded_from_snapshot));
-  const voids = mine.filter((c) => c.state === "complete" && c.void_instrument);
-  const running = mine.filter((c) => c.state !== "complete");
+  // Void: graded but measuring the harness, or ended before any graded attempt.
+  const voids = mine.filter((c) => (c.state === "complete" && c.void_instrument) || c.state === "ended");
+  // Still to finish: not begun, or begun with no end recorded. A cell that
+  // ENDED without a graded attempt is not running — it is a void result.
+  const running = mine.filter((c) => c.state === "not_started" || c.state === "started");
 
   if (scorable.length) {
     // The batch is per campaign run dir, and a campaign schedules ONE model —
@@ -783,10 +816,12 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
       provider: v.provider,
       model_slug: v.model_slug,
       candidates: 0,
-      reason:
-        `the last OFF cell for ${model} is void-instrument (${voids[voids.length - 1].terminal_reason ?? "instrument fault"}) — ` +
-        "it produced numbers, but they measure the harness rather than the model, so every Δ " +
-        "computed against them would be invalid. Run a new baseline.",
+      reason: v.state === "ended"
+        ? `the last OFF cell for ${model} ended before any graded attempt (${v.terminal_exception ?? v.terminal_reason ?? "no reason recorded"}) — ` +
+          "there is no measurement to compare a run against. Run a new baseline."
+        : `the last OFF cell for ${model} is void-instrument (${v.terminal_exception ?? v.terminal_reason ?? "instrument fault"}) — ` +
+          "it produced numbers, but they measure the harness rather than the model, so every Δ " +
+          "computed against them would be invalid. Run a new baseline.",
     };
   }
 
