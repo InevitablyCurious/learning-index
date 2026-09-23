@@ -587,18 +587,7 @@ a:hover{color:var(--type)}
 /* THE PANEL. 12px radius + --border (not --hairline) is the artifact's own
    §8.1 measurement; the rewrite had flattened every panel to a 4px box with
    box-shadow:none, which read as a wireframe rather than a raised surface. */
-.curve,.wall,.ledger,.live,.hold,.rail,.results{background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);padding:var(--pad);display:flex;flex-direction:column;gap:12px;min-width:0}
-/* RESULTS HISTORY (WO-43): one row per completed scored cell; the help→harm
-   delta gets the last, widest column. */
-.res-list{display:flex;flex-direction:column;gap:5px;overflow-y:auto}
-.res-row{display:grid;grid-template-columns:9em minmax(0,1.4fr) minmax(0,1fr) 3.5em 5em 2.5em minmax(0,1fr);gap:10px;align-items:baseline;font:400 11.5px var(--font);color:var(--dim)}
-.res-when{color:var(--dim)}
-.res-task{color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.res-model{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.res-arm{color:var(--dim);text-transform:uppercase;letter-spacing:.4px}
-.res-verdict{white-space:nowrap}
-.res-atg{color:var(--fg)}
-.res-delta{color:var(--fg)}
+.curve,.wall,.ledger,.live,.hold,.rail{background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);padding:var(--pad);display:flex;flex-direction:column;gap:12px;min-width:0}
 .curve-frame,.curve-foot,.hold-line,.hold-diag,.tui-head,.tui-foot,.ledger-head,.axis,.big,.prov,.feed-head{font-family:var(--font)}
 .curve-frame{padding:22px;border:1px solid var(--border);border-radius:var(--radius-md);background:linear-gradient(180deg,color-mix(in srgb,var(--bg-2) 85%, transparent),var(--bg-2))}
 .curve-svg{overflow:visible}
@@ -1466,7 +1455,7 @@ a:hover{color:var(--type)}
    drift. The design specimen's 26 / 210 / 74 / 1fr / 84 / 84 / 128, plus a
    trailing auto track for [+ run] — the sheet shows no control because it is a
    specimen of the layout, and the runs it describes have to start somewhere. */
-.blcols,.blrow{display:grid;grid-template-columns:26px minmax(0,210px) 74px minmax(0,1fr) 84px 84px 128px auto;gap:10px;align-items:baseline;min-width:0}
+.blcols,.blrow{display:grid;grid-template-columns:26px minmax(0,1.3fr) 74px minmax(0,150px) minmax(0,130px) minmax(0,1.1fr) 70px auto;gap:10px;align-items:baseline;min-width:0}
 .blcols{font:700 10px/1 var(--font);letter-spacing:.14em;color:var(--dim);padding:9px 4px;border-bottom:1px solid var(--hairline)}
 .blcols>span,.blrow>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bl .ledger-head{align-items:center}
@@ -1526,19 +1515,16 @@ a:hover{color:var(--type)}
    explaining them has to be on screen beside them — and a disabled [+ run] that
    does not say what it is waiting for is indistinguishable from a broken one. */
 .blwhy{padding:0 4px 10px 36px;font:400 11.5px/1.5 var(--font)}
-/* ── BATCH PICK ── the operator's floor selection, under an awaiting or void
-   row. The slot is data-preserve (doOpenBatch injects the record into it), so
-   :empty is the unopened state and must cost no space. The void banner is
-   ruled, not merely coloured: it changes what every number below it means. */
-.cbatch{padding:0 4px 10px 36px;display:flex;flex-direction:column;gap:4px;min-width:0}
-.cbatch:empty{display:none;padding:0}
-.cbatch-btn{font:400 11px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:4px 9px;cursor:pointer}
-.cbatch-btn:hover{border-color:var(--fg)}
-.cbatch-btn:disabled{opacity:.55;cursor:not-allowed}
-.cbatch-row{display:flex;align-items:baseline;gap:10px;font:400 12px var(--font);color:var(--fg);min-width:0}
-.cbatch-seq{color:var(--dim);flex:none}
-.cbatch-void{font:700 11.5px var(--font);color:var(--danger);border:1px solid var(--danger);border-radius:var(--radius-sm);padding:6px 9px}
-.cbatch-sel{font:400 11.5px var(--font);color:var(--check)}
+/* ── THE BATCH'S CELLS ── inside an open row: one line per cell of the batch,
+   void ones included (marked, never dropped), the picked floor marked. */
+.bccols,.bcrow{display:grid;grid-template-columns:62px 74px 80px minmax(170px,1.4fr) 64px 76px 76px minmax(120px,1fr) 64px;gap:10px;align-items:baseline;min-width:0}
+.bccols{font:700 10px/1 var(--font);letter-spacing:.14em;color:var(--dim);padding-bottom:5px;border-bottom:1px solid var(--hairline)}
+.bcrow{padding:6px 0;font:400 12px var(--font);color:var(--fg);border-bottom:1px solid var(--hairline)}
+.bccols>span,.bcrow>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bcseq{color:var(--type)}
+.bcact{text-align:right}
+.bcrow.bc-void{opacity:.8}
+.bcrow.bc-picked{background:color-mix(in srgb, var(--fg) 7%, transparent)}
 /* THE TWO SENTENCES THAT ARGUE THE NESTING. Side by side at equal weight,
    because they are two halves of one claim. */
 /* Last block on the card now that the stat strip leads it, so the rule that

@@ -1,16 +1,20 @@
-// PANEL: BASELINES — every completed OFF measurement, its ON runs nested inside.
+// PANEL: BASELINES — one row per OFF batch, its cells and its ON runs inside.
 //
+// A floor is a BATCH of OFF cells (control/batch.mjs): the median problem
+// count over the scored cells, their spread, and the one cell the operator
+// picks — shown with its distance from the median. The row says that much;
+// expanding it lists every cell of the batch (void ones included) with its own
+// numbers and repair trajectory, and the ON runs measured against the floor.
 // A run is a delta against one specific floor, so it is drawn inside that
-// floor's row: reading it against a different floor is not possible. A model
-// with no floor has no row ([+ BASELINE] is where that absence belongs).
-// Expanding a row opens its frozen event and backend feeds.
+// floor's row. A model with no batch has no row ([+ BASELINE] is where that
+// absence belongs).
 //
 // Every gate ([+ run] allowed or not) comes from control/models-ledger.mjs as
 // {allowed, reason} and is rendered, never re-derived. A disabled control states
 // why beside the row. Efficiency and correctness stay two side-by-side readouts,
 // never combined into one score.
 
-import { esc, nul, tok } from "../board.js";
+import { esc, nul, tok, dur } from "../board.js";
 // The DATA FEED card (panels/live.js) shows the cell the strip points at; a row
 // whose cell is on show is marked.
 import { feedSelection } from "./live.js";
@@ -121,71 +125,87 @@ function empty(ledger) {
     </div>`;
 }
 
-/** Eight columns shared by header and rows; the last (the button) is unlabelled. */
+/** Eight columns shared by header and rows; the last (the buttons) is unlabelled. */
 function cols() {
   return `
     <div class="blcols">
-      <span></span><span>BASELINE</span><span>KIND</span><span>MODEL · PROVIDER</span>
-      <span>TURNS</span><span>GATES</span><span>RUNS</span><span></span>
+      <span></span><span>MODEL · PROVIDER</span><span>KIND</span><span>CELLS</span>
+      <span>MEDIAN (SPREAD)</span><span>FLOOR</span><span>ON RUNS</span><span></span>
     </div>`;
 }
 
 // ── ONE BASELINE ──
 
-/** The whole row expands. A row with no runs still opens onto its own record. */
+/** The whole row expands. A row with no runs still opens onto its batch. */
 function baselineRow(board, ledger, b) {
   const open = expandedBaseline === b.id;
   const n = b.run_count ?? 0;
 
   return `
     <div class="blwrap${open ? " open" : ""}${b.state === "running" ? " running" : ""}">
-      <div class="blrow${open ? " open" : ""}${feedSelected(b) ? " feeding" : ""}" data-baseline-expand="${esc(b.id)}" role="button" tabindex="0" aria-expanded="${open ? "true" : "false"}">
+      <div class="blrow${open ? " open" : ""}${feedSelected(b) ? " feeding" : ""}" data-baseline-expand="${esc(b.id)}" role="button" tabindex="0" aria-expanded="${open ? "true" : "false"}"
+           title="${esc(`${b.id} · ${b.run_dir ?? "?"}`)}">
         <span class="blcaret">${open ? "▾" : "▸"}</span>
-        <span class="blid" title="${esc(`${b.run_dir ?? "?"} seq ${b.sequence_index ?? "?"}`)}">${esc(b.id)} · ${esc(shortModel(b.model))}</span>
+        <span class="blmodel" title="${esc(b.model_slug ?? b.model ?? "")}"><span class="blid">${esc(b.model ?? "unknown model")}</span>${b.provider ? `<span class="note">${esc(` · ${b.provider}`)}</span>` : ""}</span>
         <span class="blkind ${esc(b.kind ?? "local")}">${esc(b.kind_label ?? "LOCAL")}</span>
-        <span class="blmodel" title="${esc(b.model_slug ?? b.model ?? "")}">${esc(b.model ?? "unknown model")}${b.provider ? esc(` · ${b.provider}`) : ""}</span>
-        <span>${b.turns === null || b.turns === undefined ? nul("— pending") : esc(String(b.turns))}</span>
-        <span>${gatesCell(b.gates)}</span>
-        <span class="blstate ${esc(b.state)}${b.context_exhausted ? " ctx" : ""}">${esc(stateWord(b, n))}</span>
+        <span>${cellsWord(b.batch)}</span>
+        <span>${medianWord(b.batch)}</span>
+        <span class="blstate ${esc(b.state)}${b.context_exhausted ? " ctx" : ""}">${stateWord(b)}</span>
+        <span>${n ? esc(String(n)) : nul("none")}</span>
         <span class="blact">${feedMark(ledger, b)}${runBtn(b)}</span>
       </div>
       ${voidNote(b)}
       ${exhaustedNote(b)}
       ${b.can_run?.allowed === false && b.can_run?.reason ? `<div class="blwhy"><span class="null">${esc(b.can_run.reason)}</span></div>` : ""}
-      ${batchPick(b)}
       ${open ? drawer(board, ledger, b) : ""}
     </div>`;
 }
 
-/**
- * The operator's batch control. An unselected batch (reason
- * "awaiting_selection") and a fingerprint-voided one (reason "batch_void") are
- * the two rows that need a floor decision: [batch] opens the record into the
- * slot below. The slot is data-preserve — doOpenBatch (board-actions.js)
- * injects the batch into it, and patch() must not wipe it on the next refresh.
- */
-function batchPick(b) {
-  if (b.reason !== "awaiting_selection" && b.reason !== "batch_void") return "";
-  const dir = esc(String(b.run_dir ?? ""));
-  return `
-    <div class="blwhy"><button class="cbatch-btn" data-batch-open="${dir}">batch</button></div>
-    <div class="cbatch" data-preserve data-batch-slot="${dir}"></div>`;
+/** CELLS: how many, and how many scored and void — voids counted, never hidden. */
+function cellsWord(batch) {
+  const list = batch?.cells ?? [];
+  if (!list.length) return nul("—");
+  const live = list.filter((c) => c.state !== "complete" && c.scored === null).length;
+  const bits = [`${list.length}`];
+  if (batch.scored_count) bits.push(`${batch.scored_count} scored`);
+  if (batch.void_count) bits.push(`<span class="danger">${esc(String(batch.void_count))} void</span>`);
+  if (live && !batch.scored_count && !batch.void_count) bits.push(`${live} running`);
+  return bits.join(" · ");
 }
 
-/** The right-hand readout. A running baseline says RUNNING and nothing else. */
-function stateWord(b, n) {
-  // Elapsed ("RUNNING · 22m"), not "ago": the cell is running now.
-  if (b.state === "running") return `RUNNING${b.campaign_started_at ? ` · ${elapsed(b.campaign_started_at)}` : ""}`;
-  if (b.state === "void") return "VOID — NOT A FLOOR";
-  // Context exhausted takes the state column on a floor too.
-  if (b.context_exhausted) return "CONTEXT EXHAUSTED";
-  if (!n) return "NO RUNS";
-  return `${n} RUN${n === 1 ? "" : "S"}`;
+/** MEDIAN (SPREAD): problems at attempt 1, over the scored cells. */
+function medianWord(batch) {
+  if (!batch || batch.median === null) return nul("no median yet");
+  const spread = batch.spread ? ` <span class="note">(${esc(`${batch.spread.min}–${batch.spread.max}`)})</span>` : "";
+  return `${esc(String(batch.median))}${spread}`;
+}
+
+/** A signed percentage, "+4.3%" / "−8.7%" / "±0%". */
+function pct(p) {
+  if (p === null || p === undefined) return "";
+  return `${p > 0 ? "+" : p < 0 ? "−" : "±"}${Math.abs(p)}%`;
+}
+
+/** FLOOR: the picked cell and its distance from the median, or why there is none. */
+function stateWord(b) {
+  // Elapsed ("RUNNING · 22m"), not "ago": the batch is running now.
+  if (b.state === "running") return `RUNNING${b.campaign_started_at ? ` · ${esc(elapsed(b.campaign_started_at))}` : ""}`;
+  if (b.state === "void") return b.void_input ? `VOID — ${esc(b.void_input)} changed` : "VOID — NOT A FLOOR";
+  // Out of context room takes the column on a floor too (exhaustedNote says
+  // what its numbers mean).
+  if (b.state === "exhausted" || b.context_exhausted) return "CONTEXT EXHAUSTED";
+  if (b.state === "awaiting") return "AWAITING PICK";
+  const pick = b.batch?.pick ?? null;
+  if (!pick) return "FLOOR";
+  const seq = `s${String(pick.sequence_index).padStart(4, "0")}`;
+  return `${esc(seq)} · ${esc(String(pick.problems))} <span class="note">${esc(`${pct(pick.pct_from_median)} vs median`)}</span>`;
 }
 
 /** The void reason, printed on the row: its numbers measure the harness. */
 function voidNote(b) {
   if (b.state !== "void" || !b.reason) return "";
+  // A fingerprint-void batch is named in the FLOOR column by its changed input.
+  if (b.reason === "batch_void") return "";
   return `<div class="blwhy"><span class="null">${esc(b.reason)}</span></div>`;
 }
 
@@ -201,31 +221,84 @@ function exhaustedNote(b) {
   return `<div class="blwhy"><span class="null">${esc(text)}</span></div>`;
 }
 
-/** GATES: a real ratio when the suite total was recorded, and never a fake one. */
-function gatesCell(g) {
-  if (!g) return nul("not graded");
-  if (!g.total) return nul("no suite total");
-  const passed = g.passed ?? (g.total - (g.failed ?? 0));
-  return `<span class="${g.failed ? "danger" : ""}">${esc(`${passed}/${g.total}`)}</span>`;
-}
-
-/**
- * A shortened model id for the identity column (13 characters fit the 210px
- * column after `base-XXXX · `). The full id is the next column and the title.
- */
-function shortModel(id) {
-  const s = String(id ?? "");
-  const bare = s.includes("/") ? s.split("/").pop() : s;
-  return bare.length <= 13 ? bare : `${bare.slice(0, 12)}…`;
-}
-
-// ── INSIDE A BASELINE: the runs (the deltas), then the floor's own frozen record.
+// ── INSIDE A BASELINE: the batch's cells, then the ON runs against its floor.
 
 function drawer(board, ledger, b) {
   return `
     <div class="blacc">
+      ${cellsSection(b)}
       ${runs(b)}
     </div>`;
+}
+
+/** The operator's last refused pick, per run_dir, printed where it was made. */
+const pickRefusals = new Map();
+export function notePickRefusal(runDir, message) {
+  if (message) pickRefusals.set(runDir, message);
+  else pickRefusals.delete(runDir);
+}
+
+/**
+ * Every cell of the batch: its attempt-1 problem count (what the median is
+ * over), its distance from the median, its failures per attempt (the repair
+ * trajectory), and what it cost. A pick button on each scored cell while the
+ * batch awaits one; none on a void batch — a floor never rides stale numbers.
+ */
+function cellsSection(b) {
+  const batch = b.batch;
+  const list = batch?.cells ?? [];
+  if (!list.length) {
+    return `<div class="rsec"><span class="kick">CELLS IN THIS BATCH — 0</span><div class="rempty">${esc("no cell of this batch has been found on disk.")}</div></div>`;
+  }
+  const canPick = b.state === "awaiting";
+  const refusal = pickRefusals.get(b.run_dir);
+  return `
+    <div class="rsec">
+      <div class="rsecline">
+        <span class="kick">CELLS IN THIS BATCH — ${list.length}</span>
+        <span class="spacer"></span>
+        <span class="note">${esc("problems = failed gates at attempt 1 · the median is over scored cells · void cells are listed, never counted")}</span>
+      </div>
+      ${refusal ? `<div class="blwhy"><span class="danger">${esc(refusal)}</span></div>` : ""}
+      <div class="bccols">
+        <span>CELL</span><span>PROBLEMS</span><span>VS MEDIAN</span><span>FAILURES BY ATTEMPT</span>
+        <span>TURNS</span><span>WALL</span><span>TOKENS</span><span>ENDED</span><span></span>
+      </div>
+      ${list.map((c) => cellRow(b, c, canPick)).join("")}
+    </div>`;
+}
+
+function cellRow(b, c, canPick) {
+  const seq = `s${String(c.sequence_index).padStart(4, "0")}`;
+  const isVoid = c.scored === false;
+  const vs = c.vs_median === null ? nul("—") : esc(`${c.vs_median > 0 ? "+" : c.vs_median < 0 ? "−" : "±"}${Math.abs(c.vs_median)}`);
+  const act = c.picked
+    ? `<span class="tag">FLOOR</span>`
+    : canPick && c.scored === true
+      ? `<button class="btn sm" data-batch-pick="${esc(String(c.sequence_index))}" data-batch-dir="${esc(String(b.run_dir ?? ""))}">pick</button>`
+      : "";
+  return `
+    <div class="bcrow${isVoid ? " bc-void" : ""}${c.picked ? " bc-picked" : ""}">
+      <span class="bcseq">${esc(seq)}</span>
+      <span>${c.problems === null ? nul("—") : esc(String(c.problems))}</span>
+      <span>${vs}</span>
+      <span>${c.attempt_failures?.length ? esc(c.attempt_failures.join(" → ")) : nul("not graded")}</span>
+      <span>${c.turns === null ? nul("—") : esc(String(c.turns))}</span>
+      <span>${c.wall_seconds === null ? nul("—") : esc(dur(c.wall_seconds))}</span>
+      <span>${c.tokens === null ? nul("—") : esc(tok(c.tokens))}</span>
+      <span class="${isVoid ? "danger" : ""}">${esc(endedWord(c))}</span>
+      <span class="bcact">${act}</span>
+    </div>`;
+}
+
+/** How a cell ended, in words. A void cell says why it was not counted. */
+function endedWord(c) {
+  if (c.scored === false) return `void · ${c.void_reason ?? "unscored"}`;
+  if (c.state !== "complete") return "running";
+  if (c.context_exhausted) return "context exhausted";
+  if (String(c.verdict ?? "").toUpperCase() === "PASS") return "green";
+  if (c.terminal_reason === "attempt_ceiling_reached") return "attempt cap, not green";
+  return c.terminal_reason ?? c.verdict ?? "ended";
 }
 
 /**

@@ -20,7 +20,6 @@ test("a floor that ran out of room says CONTEXT EXHAUSTED and what its numbers a
   const html = renderLedger(board([row({ context_exhausted: true })], { complete: 1, running: 0, void: 0, exhausted: 0 }));
   assert.match(html, /class="blstate complete ctx">CONTEXT EXHAUSTED</);
   assert.ok(html.includes("the last graded round is its result"));
-  assert.ok(html.includes("99/117"));
 });
 
 test("a row stopped during the build is labelled and says it is not a floor", () => {

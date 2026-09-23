@@ -322,7 +322,6 @@ import { disarmStop } from "./panels/runstart.js";
 import {
   askDetach, cancelDetach, isDetachConfirming, paintTui, fitTui,
 } from "./panels/tui.js";
-import { renderResults } from "./panels/results.js";
 import { paintTicks, snapTicks } from "./panels/tick.js";
 import { armSnapshot } from "./panels/snapshot.js";
 import { setLearningView } from "./panels/learning.js";
@@ -346,7 +345,6 @@ import {
   doArmReset,
   doCommitReset,
   doSelectTuiRun,
-  doOpenBatch,
   doPickBatch,
 } from "./board-actions.js";
 
@@ -368,8 +366,8 @@ function render() {
   }
 
   // Panel order is the board's argument: hold (a blocked run) first; the curve
-  // and the gate wall side by side; the ledger of floors with their ON runs; the
-  // live cell; recall; the honesty rail; provenance; then past results.
+  // and the gate wall side by side; the batches (their cells, their floor and
+  // its ON runs); the live cell; recall; the honesty rail; provenance.
   // patch() morphs the tree in place, so scroll, focus and selection survive.
   patch(root, `
     <div class="shell">
@@ -385,7 +383,6 @@ function render() {
       ${renderRecall(board)}
       ${renderRail(board)}
       ${renderProvenance(board)}
-      ${renderResults(board)}
     </div>
   `);
   // The gate card is drawn invisible, measured, then placed where it fits whole.
@@ -434,7 +431,7 @@ function bindInteraction() {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-batch-open],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
+  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-run-baseline],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
   if (!t) return;
 
   if (t.dataset.gateId) {
@@ -610,11 +607,10 @@ function onClick(e) {
     render();
     return;
   }
-  // ── BATCH ── the operator's floor pick: [batch] opens the record into the
-  // row's data-preserve slot; [pick] stores one scored run with its signed
-  // deviation from the median. The run_dir rides on the pick button as a
-  // companion attribute, like model/kind ride on [+ run].
-  if (t.dataset.batchOpen) { void doOpenBatch(t.dataset.batchOpen); return; }
+  // ── BATCH ── the operator's floor pick, on a cell row inside the BASELINES
+  // drawer: [pick] stores one scored cell with its signed deviation from the
+  // median. The run_dir rides on the button as a companion attribute, like
+  // model/kind ride on [+ run].
   if (t.dataset.batchPick) { void doPickBatch(t.dataset.batchDir, Number(t.dataset.batchPick)); return; }
   // ── CELL STRIP ── which cell of the batch the board is about. Local view
   // state only: it selects nothing, starts nothing and picks no floor (that is
