@@ -23,6 +23,7 @@ import {
   assembleBatch,
   readBatch,
   writeBatch,
+  selectRun,
 } from "./batch.mjs";
 
 /**
@@ -332,6 +333,57 @@ export async function collectFingerprintInputs({ repoRoot = REPO_ROOT, runDir })
  * problem count over SCORED runs (voids excluded, never counted as failures),
  * bound to the current fingerprint. Written atomically to <runDir>/batch.json.
  */
+/**
+ * Does this persisted batch disagree with the cells now on disk?
+ *
+ * Stale means the record marks a run unscored while that cell has since
+ * produced a measurement. That is the mid-flight case: a batch assembled when
+ * the first of N cells finished, with the rest frozen as `not_started`.
+ *
+ * NOT stale merely because the numbers differ — a run's problem count does not
+ * change after it ends, and re-assembling on every read would fight the
+ * operator's selection for no reason. Only the appearance of a measurement
+ * where the record claims none counts.
+ */
+export function batchIsStale(batch, cells) {
+  const byIndex = new Map(cells.map((c) => [c.sequence_index, c]));
+  for (const run of batch?.runs ?? []) {
+    if (run?.scored === true) continue;
+    const cell = byIndex.get(run?.sequence_index);
+    if (!cell) continue;
+    const measured =
+      cell.state === "complete"
+      && !cell.void_instrument
+      && !cell.seeded_from_snapshot
+      && !(cell.context_exhausted === true && !cell.gates);
+    if (measured) return true;
+  }
+  // A cell that exists and is not in the record at all is also missing data.
+  const known = new Set((batch?.runs ?? []).map((r) => r?.sequence_index));
+  return cells.some((c) => !known.has(c.sequence_index));
+}
+
+/**
+ * Re-assemble a batch from the cells as they now stand, keeping the operator's
+ * pick if that run is still scored.
+ *
+ * The selection is the operator's; the numbers around it are the disk's. A
+ * pick that is no longer scored is dropped rather than carried — a floor must
+ * never point at a run the batch does not consider measured.
+ */
+export async function reassemblePreservingSelection({ repoRoot = REPO_ROOT, runDir, cells, persisted = null }) {
+  const fresh = await assembleBatchForCells({ repoRoot, runDir, cells });
+  const pick = persisted?.selection?.sequence_index;
+  if (pick === undefined || pick === null) return fresh;
+  const stillScored = (fresh.runs ?? []).some(
+    (r) => r.sequence_index === pick && r.scored === true,
+  );
+  if (!stillScored) return fresh;
+  selectRun(fresh, pick);
+  await writeBatch(runDir, fresh);
+  return fresh;
+}
+
 export async function assembleBatchForCells({ repoRoot = REPO_ROOT, runDir, cells }) {
   // The same scorability rule baselineFor applies: complete, not void-instrument,
   // not seeded, and not out of context before anything was graded.
@@ -433,8 +485,24 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
     const batchCells = mine.filter((c) => c.run_dir === relDir);
     // An existing batch is the operator's record — read it, and assemble ONLY
     // when absent: re-assembling would wipe a persisted selection.
-    const batch = (await readBatch(runDir))
-      ?? (await assembleBatchForCells({ repoRoot, runDir, cells: batchCells }));
+    //
+    // ── BUT A BATCH ASSEMBLED MID-FLIGHT IS NOT A RECORD, IT IS A SNAPSHOT ──
+    //
+    // Measured on the first concurrent batch: four cells launched, the first
+    // finished at 23:05:38, and batch.json was written two seconds later with
+    // the other three frozen as `not_started`. They finished at 23:45 and
+    // 00:04. Nothing ever refreshed it, so the median read 23 — one sample —
+    // when the set was 24, 22 and 18. Every concurrent batch would have
+    // reported the first cell to finish as though it were the whole batch.
+    //
+    // So a batch is STALE when the cells on disk now carry measurements it
+    // does not. Re-assemble from the current cells and carry the operator's
+    // selection across if that run is still scored — the selection is theirs
+    // to keep; the numbers around it are not theirs to freeze.
+    const persisted = await readBatch(runDir);
+    const batch = persisted && !batchIsStale(persisted, batchCells)
+      ? persisted
+      : await reassemblePreservingSelection({ repoRoot, runDir, cells: batchCells, persisted });
 
     // A fingerprint-void batch is never a floor: its numbers measured a
     // different grader/prompts/scaffold/golden/image than the current one, so

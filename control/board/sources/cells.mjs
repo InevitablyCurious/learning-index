@@ -28,6 +28,7 @@ import { readTail } from "./_runtime.mjs";
 import { readRunState } from "../../runstate.mjs";
 import { readBatch } from "../../batch.mjs";
 import { countChunkPrompts } from "../../challenges.mjs";
+import { listLiveCampaignDirs } from "../../tree.mjs";
 
 export const id = "cells";
 export const fields = ["cells"];
@@ -92,9 +93,24 @@ export async function read(ctx) {
   const state = await readRunState({ runsRoot: ctx.runsRoot });
   const live = Array.isArray(state?.runs) ? state.runs : [];
 
-  // One batch per run_dir. Concurrent cells share it, so the newest live cell
-  // names the batch; with nothing live there is no strip to draw.
-  const runDir = live[0]?.run_dir ?? state?.run_dir ?? null;
+  // One batch per run_dir. A live cell names it directly; with nothing live
+  // the ACTIVE CAMPAIGN does.
+  //
+  // The strip is not a liveness indicator — it is how an operator moves
+  // between the runs of a batch, and that is most useful once the batch has
+  // FINISHED and there is something to compare. Deriving the dir from live
+  // cells alone made the whole strip disappear the moment the last cell
+  // ended, taking the finished batch's navigation with it.
+  let runDir = live[0]?.run_dir ?? state?.run_dir ?? null;
+  if (!runDir) {
+    try {
+      const dirs = await listLiveCampaignDirs(ctx.runsRoot);
+      // Newest campaign in the live tree; archived ones are already excluded.
+      runDir = dirs.length ? dirs[dirs.length - 1].relative : null;
+    } catch {
+      runDir = null;
+    }
+  }
 
   let batch = null;
   if (runDir) {
