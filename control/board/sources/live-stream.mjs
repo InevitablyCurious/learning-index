@@ -12,7 +12,7 @@ import { int, str } from "../contract.mjs";
 import { readTail, parseJsonl, cellLiveStreamPath } from "./_runtime.mjs";
 
 export const id = "live-stream";
-export const fields = ["live"];
+export const fields = ["live", "run.phase", "run.chunk"];
 export function describe() {
   return "during-the-run event stream — session id, per-gate verdicts, backend telemetry";
 }
@@ -21,6 +21,12 @@ export function describe() {
 const EXT_KEEP = 12;
 /** Tail bound: the newest records are the live ones. */
 const TAIL_BYTES = 512 * 1024;
+
+/** "initial-chunk-3" -> 3; any other phase (a repair round) has no chunk -> null. */
+function chunkOf(phase) {
+  const m = /^initial-chunk-(\d+)$/.exec(phase ?? "");
+  return m ? Number(m[1]) : null;
+}
 
 export async function readCell(ctx) {
   const path = await cellLiveStreamPath(ctx.runsRoot, ctx.cell);
@@ -195,6 +201,13 @@ export async function readCell(ctx) {
     ok: true,
     provenance: { path, mtime: null, bytes: raw.length },
     patch: {
+      // The phase as the producer states it (phase.start). Merged after
+      // run-log, which scrapes it from launch-log lines written only when a
+      // chunk ENDS, so the phase spine lagged the cell card by one chunk.
+      // null (no phase.start seen) never overwrites run-log's answer.
+      run: phase
+        ? { phase: phase.phase, chunk: { current: chunkOf(phase.phase) } }
+        : null,
       live: {
         session_id: sessionId,
         cell_seq: cellSeq,

@@ -18,7 +18,9 @@ test("RUNSTATE: `running` is published and agrees with `state`", async () => {
   const { readRunState } = await import("../runstate.mjs");
   const root = mkdtempSync(join(tmpdir(), "okp-runstate-"));
   try {
-    const idle = await readRunState({ runsRoot: root, launcher: null });
+    // The process scan is injected empty: the real one sees this machine's own
+    // harnesses, so the test failed whenever a benchmark was running here.
+    const idle = await readRunState({ runsRoot: root, launchers: [], scan: async () => ({ bound: [], other: [] }) });
     assert.equal(
       Object.hasOwn(idle, "running"),
       true,

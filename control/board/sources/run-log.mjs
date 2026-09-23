@@ -100,12 +100,11 @@ export async function readCell(ctx) {
         sessionTurns = int(kv.session_turns) ?? sessionTurns;
         break;
       }
-      case "serve-drive-start":
       case "transport-recovery": {
         const c = chunkOf(kv.phase);
         if (kv.phase) phase = str(kv.phase);
         if (c !== null) chunk = c;
-        if (step === "transport-recovery") recoveries += 1;
+        recoveries += 1;
         break;
       }
       case "chunk-compaction":

@@ -24,7 +24,7 @@
 // here so the two surfaces cannot disagree about which run is representative.
 
 import { join } from "node:path";
-import { readTail } from "./_runtime.mjs";
+import { readTail, parseJsonl, cellLiveStreamPath } from "./_runtime.mjs";
 import { readRunState } from "../../runstate.mjs";
 import { readBatch } from "../../batch.mjs";
 import { countChunkPrompts } from "../../challenges.mjs";
@@ -51,25 +51,35 @@ function chunkOf(phase) {
  * because two sources disagreeing about a cell's turn count would be worse
  * than neither showing it.
  */
-async function readCellLog(path) {
-  let text;
+async function readCellLog(path, runsRoot, cell) {
+  let text = "";
   try {
-    text = await readTail(path);
+    text = path ? await readTail(path) : "";
   } catch {
-    return { phase: null, chunk: null, turns: null };
+    text = "";
   }
+  // Turns from the drive lines, one count per phase (each line is logged twice).
   const byPhase = new Map();
-  let phase = null;
   for (const line of text.split("\n")) {
-    if (!line.includes("PROGRESS")) continue;
+    if (!line.includes("PROGRESS") || !line.includes("step=serve-drive-end")) continue;
     const kv = {};
     for (const m of line.matchAll(/(\w+)=([^\s]+)/g)) kv[m[1]] = m[2];
-    if (kv.phase) phase = kv.phase;
     if (kv.turns && kv.phase) byPhase.set(kv.phase, Number(kv.turns));
   }
   let turns = null;
   for (const n of byPhase.values()) {
     if (Number.isFinite(n)) turns = (turns ?? 0) + n;
+  }
+  // The phase as the producer states it (phase.start in the cell's own
+  // live.jsonl) — the same answer the phase spine reads. A launch log's
+  // `phase=` means a GATE phase on grading lines ("frontend"), which the
+  // card showed as where the build had got to.
+  let phase = null;
+  const stream = await cellLiveStreamPath(runsRoot, cell);
+  if (stream) {
+    for (const r of parseJsonl(await readTail(stream))) {
+      if (r?.kind === "phase.start" && typeof r.phase === "string") phase = r.phase;
+    }
   }
   return { phase, chunk: chunkOf(phase), turns };
 }
@@ -153,7 +163,7 @@ export async function read(ctx) {
   for (const r of live) {
     const idx = r.sequence_index;
     if (idx !== null && idx !== undefined) seen.add(idx);
-    const log = await readCellLog(r.log_path);
+    const log = await readCellLog(r.log_path, ctx.runsRoot, { run_dir: r.run_dir, sequence_index: idx });
     const rec = scoredByIndex.get(idx) ?? null;
     list.push({
       sequence_index: idx ?? null,
@@ -190,7 +200,7 @@ export async function read(ctx) {
   for (const [idx, rec] of scoredByIndex) {
     if (seen.has(idx)) continue;
     const endedRec = endedByIndex.get(idx);
-    const log = endedRec?.log_path ? await readCellLog(endedRec.log_path) : { phase: null, chunk: null, turns: null };
+    const log = await readCellLog(endedRec?.log_path ?? null, ctx.runsRoot, { run_dir: endedRec?.run_dir ?? runDir, sequence_index: idx });
     list.push({
       sequence_index: idx,
       run_id: endedRec?.run_id ?? null,
@@ -210,7 +220,8 @@ export async function read(ctx) {
       turns: log.turns,
       scored: rec?.scored === true ? true : (rec?.scored === false || endedRec ? false : null),
       problems: rec?.problem_count ?? null,
-      void_reason: endedRec ? endedText(endedRec) : (rec?.void_reason ?? null),
+      // A scored cell is not void, however it exited.
+      void_reason: rec?.scored === true ? null : endedRec ? endedText(endedRec) : (rec?.void_reason ?? null),
     });
   }
 
@@ -221,7 +232,7 @@ export async function read(ctx) {
     const idx = e?.sequence_index;
     if (!Number.isFinite(idx)) continue;
     if (seen.has(idx) || scoredByIndex.has(idx)) continue;
-    const log = e.log_path ? await readCellLog(e.log_path) : { phase: null, chunk: null, turns: null };
+    const log = await readCellLog(e.log_path ?? null, ctx.runsRoot, { run_dir: e.run_dir ?? runDir, sequence_index: idx });
     list.push({
       sequence_index: idx,
       run_id: e.run_id ?? null,

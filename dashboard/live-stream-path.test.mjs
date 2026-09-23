@@ -207,3 +207,19 @@ test("the wall draws a digit only on the gate that actually needed repair", asyn
     "green-first-try must stay unnumbered; only the repaired gate carries its attempt",
   );
 });
+
+test("the cell's phase and chunk are the producer's phase.start, not the log's last finished chunk", async () => {
+  const { ctx } = await fixture({
+    stream: [
+      { v: 1, ts: 1, kind: "cell.start", session_id: "ses_P", cell_seq: 0, arm: "off" },
+      { v: 1, ts: 2, kind: "phase.start", phase: "initial-chunk-2" },
+      { v: 1, ts: 3, kind: "phase.start", phase: "initial-chunk-3" },
+    ],
+  });
+  const { run } = (await liveStream.readCell(ctx)).patch;
+  assert.equal(run.phase, "initial-chunk-3");
+  assert.equal(run.chunk.current, 3);
+  // No phase.start: nothing stated, so nothing overwrites run-log's answer.
+  const bare = await fixture({ stream: [{ v: 1, ts: 1, kind: "cell.start", session_id: "s", cell_seq: 0 }] });
+  assert.equal((await liveStream.readCell(bare.ctx)).patch.run, null);
+});
