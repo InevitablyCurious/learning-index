@@ -86,8 +86,21 @@ def _runs_root_from_args(args: argparse.Namespace) -> Path:
     return resolved.parent.parent
 
 
+# A launch log: "<arm>-cell-<YYYYmmddTHHMMSS>[-sNNNN].log". Every cell of one
+# concurrent batch carries the batch's launch stamp.
+_LAUNCH_LOG = re.compile(r"^(?P<arm>[a-z]+)-cell-(?P<stamp>\d{8}T\d{6})")
+
+
 def _prune_runs_retention(runs_root: Path, *, keep: int = 2) -> dict[str, Any]:
-    """Prune accumulated launch logs under ``runs/``.
+    """Prune accumulated launch logs under ``runs/``, keeping the newest ``keep``
+    LAUNCHES — every log of a kept launch, never a subset of one.
+
+    It kept the newest ``keep`` FILES. That was one launch per file while one
+    cell ran at a time; a concurrent batch writes one log per cell under one
+    launch stamp, so the first cell to exit deleted its running siblings' logs
+    (2026-09-23: 6 of 8). The control plane finds running cells through those
+    logs, so the board went blind — no cells, no feed, no TUI — while the cells
+    ran on. A log that does not parse as a launch log is its own launch.
 
     Retention controls LOG FILES ONLY. Session DBs and archived run directories
     are extraction substrate and are never deleted by this policy, including for
@@ -100,17 +113,24 @@ def _prune_runs_retention(runs_root: Path, *, keep: int = 2) -> dict[str, Any]:
         if not runs_root.is_dir():
             summary["skipped_root"] = str(runs_root)
             return summary
-        entries = sorted(
-            [p for p in runs_root.glob("*-cell-*.log") if p.is_file()],
-            key=lambda p: p.stat().st_mtime,
+        launches: dict[str, list[Path]] = {}
+        for p in runs_root.glob("*-cell-*.log"):
+            if not p.is_file():
+                continue
+            m = _LAUNCH_LOG.match(p.name)
+            launches.setdefault(m.group("stamp") if m else p.name, []).append(p)
+        newest_first = sorted(
+            launches.values(),
+            key=lambda logs: max(p.stat().st_mtime for p in logs),
             reverse=True,
         )
-        for idx, path in enumerate(entries):
-            if idx < keep:
-                summary["kept"].append(path.name)
-                continue
-            path.unlink()
-            summary["deleted"].append(path.name)
+        for idx, logs in enumerate(newest_first):
+            for path in sorted(logs):
+                if idx < keep:
+                    summary["kept"].append(path.name)
+                    continue
+                path.unlink()
+                summary["deleted"].append(path.name)
     except Exception as exc:
         summary["error"] = f"{type(exc).__name__}: {exc}"
     return summary

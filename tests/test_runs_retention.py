@@ -97,3 +97,23 @@ def test_prune_under_keep_threshold_deletes_nothing(tmp_path: Path) -> None:
 
     assert kept_log.exists() and kept_archive.exists()
     assert summary["deleted"] == []
+
+
+def test_prune_keeps_every_log_of_a_concurrent_batch(tmp_path: Path) -> None:
+    """2026-09-23: the first of 8 concurrent cells to exit kept 2 FILES and
+    deleted its six running siblings' launch logs; the control plane finds
+    running cells through them, so the board went blind. A batch shares one
+    launch stamp, and retention keeps whole launches."""
+    module = _load_run_cumulative_module()
+    old = [_make_entry(tmp_path, f"off-cell-2026092{i}T000000-s0000.log", is_dir=False, mtime=10 + i) for i in range(3)]
+    batch = [
+        _make_entry(tmp_path, f"off-cell-20260923T065214-s{seq:04d}.log", is_dir=False, mtime=100 + seq)
+        for seq in range(8)
+    ]
+
+    summary = module._prune_runs_retention(tmp_path)
+
+    assert all(p.exists() for p in batch), "no cell of the newest launch loses its log"
+    assert old[2].exists(), "the second-newest launch is kept too"
+    assert not old[1].exists() and not old[0].exists()
+    assert sorted(summary["deleted"]) == sorted(p.name for p in old[:2])

@@ -283,11 +283,19 @@ def _first_probe_evidence_line(output: str) -> str:
     return lines[0][:240]
 
 
+# The model-acceptance probe's deadline. It proves the worker's opencode ACCEPTS
+# the slug; it is not a speed test. At 60s it failed 5 of 8 cells of a
+# concurrent batch (2026-09-23): eight probes reach one local model at once and
+# the three that passed took 17, 63 and 64s. A slug the worker rejects still
+# fails loud — later, not never.
+WORKER_MODEL_PROBE_TIMEOUT_S = 300.0
+
+
 def verify_worker_model_acceptance(
     *,
     models: Sequence[str],
     image: str = WORKER_IMAGE,
-    timeout_s: float = 60.0,
+    timeout_s: float = WORKER_MODEL_PROBE_TIMEOUT_S,
     logger: logging.Logger | None = None,
     docker_probe: "DockerProbe | None" = None,
 ) -> None:
