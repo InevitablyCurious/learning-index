@@ -1,1 +1,1 @@
-Still sitting there waiting on the computer, and the busier the position, the longer I wait.
+They asked your engine for the ways to play a roll again, and the same end position still comes back more than once.

@@ -266,6 +266,8 @@ export async function collectCells(runsRoot) {
         && !meas.full_green
         && (meas.terminal_reason === "transport_incomplete"
           || meas.terminal_reason === "harness_error"
+          // Grading measured nothing twice on the same code: the instrument's.
+          || meas.terminal_reason === "instrument_fault"
           || (meas.length_truncations ?? 0) > 0
           || (meas.unrecovered_anomaly_turns ?? 0) > 0),
       );
@@ -507,7 +509,7 @@ export async function assembleBatchForCells({ repoRoot = REPO_ROOT, runDir, cell
   const scored = (c) => c.state === "complete" && !c.void_instrument && !c.seeded_from_snapshot && !(c.context_exhausted === true && !c.gates);
   const voidReason = (c) => c.context_exhausted === true && !c.gates ? "context_exhausted"
     : c.seeded_from_snapshot ? "seeded_from_snapshot"
-      : c.void_instrument ? "void_instrument"
+      : c.void_instrument ? (c.terminal_reason === "instrument_fault" ? "instrument_fault" : "void_instrument")
         : c.state !== "complete" ? (c.terminal_exception ?? c.terminal_reason ?? c.state ?? "incomplete")
           : "no_measurement";
   const runs = cells.map((c) => ({

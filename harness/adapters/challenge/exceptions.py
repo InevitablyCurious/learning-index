@@ -29,6 +29,20 @@ class GraderReportUnreadableError(RuntimeError):
     """
 
 
+class InstrumentFaultError(RuntimeError):
+    """A grading pass failed to measure, twice, on the same code.
+
+    Jerry's ruling (2026-09-23): a pass the grader itself reports as not a
+    measurement — its report unreadable, or ``gradable: false`` because a
+    runner aborted, timed out or threw — is graded once more on the same code.
+    A second pass that measures is used as normal. A second failure ends the
+    cell VOID, blamed on the instrument and never on the model: it counts
+    toward no median, and the board says why. Before this the repair loop never
+    read ``gradable`` and told the model a player's story about a pass that had
+    measured nothing.
+    """
+
+
 class MissingFeedbackOverrideError(RuntimeError):
     """A gate reached the repair loop with no human-written symptom line.
 

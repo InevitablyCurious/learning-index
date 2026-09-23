@@ -112,8 +112,8 @@
       "repeat": "Started over again and the cube still doesn't sit centered, or it still won't let me double."
     },
     "G12": {
-      "first": "The computer accepts or refuses the doubling cube at the wrong times",
-      "repeat": "Offered it the cube in a few more spots and its answers still don't line up with how the game was actually going."
+      "first": "The computer handles the doubling cube at the wrong times — it takes or turns down my doubles when it shouldn't, or it offers me the cube when it has no business doubling.",
+      "repeat": "Played more games with the cube in play and the computer still takes, refuses, or offers doubles at the wrong moments."
     },
     "G13": {
       "first": "Turns don't flow right — sometimes a die gets used twice, the turn doesn't come back to me, or i'm stuck with nothing to play and the game won't move on",
@@ -180,8 +180,8 @@
       "repeat": "Still able to take pieces off the board even with one of mine sitting on the bar."
     },
     "E08": {
-      "first": "The computer takes a noticeably long time before it plays some rolls, and the more ways there are to play the dice the longer it stalls",
-      "repeat": "Still sitting there waiting on the computer, and the busier the position, the longer I wait."
+      "first": "Their tools ask your engine for every way to play a roll, and the same finished position keeps coming back more than once — two orders of the same moves show up as two different plays.",
+      "repeat": "They asked your engine for the ways to play a roll again, and the same end position still comes back more than once."
     },
     "E09": {
       "first": "While the computer is thinking some of my pieces suddenly change position on their own, and the board doesn't stay how i left it",

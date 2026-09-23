@@ -35,7 +35,7 @@ from harness.grader_run import (
 )
 
 from .constants import _REPO_ROOT
-from .exceptions import GateTimeoutError, GraderReportUnreadableError
+from .exceptions import GateTimeoutError, GraderReportUnreadableError, InstrumentFaultError
 
 
 class GradingMixin:
@@ -221,6 +221,48 @@ class GradingMixin:
                 f"gate report must be an object: {report_path}"
             )
         return payload
+
+    def _grade_measured(
+        self,
+        *,
+        worktree: Path,
+        report_path: Path,
+        log_path: Path,
+        attempt: int | None = None,
+        run_identity: str | None = None,
+    ) -> dict[str, Any]:
+        """Grade, and regrade ONCE a pass that measured nothing (see
+        InstrumentFaultError). The failed pass's report and log are kept beside
+        the attempt as ``.first-pass`` evidence; a second failure raises."""
+        first_failure: str | None = None
+        for pass_no in (1, 2):
+            try:
+                report = self._run_gate_report(
+                    worktree=worktree,
+                    report_path=report_path,
+                    log_path=log_path,
+                    attempt=attempt,
+                    run_identity=run_identity,
+                )
+                if report.get("gradable") is not False:
+                    return report
+                failure = f"not gradable: {report.get('ungradable_reason') or 'no reason given'}"
+            except GraderReportUnreadableError as exc:
+                failure = f"report unreadable: {exc}"
+            if pass_no == 2:
+                raise InstrumentFaultError(
+                    f"grading measured nothing twice on the same code — first: {first_failure}; "
+                    f"second: {failure}"
+                )
+            first_failure = failure
+            for path in (report_path, log_path):
+                if path.is_file():
+                    path.replace(path.with_name(f"{path.stem}.first-pass{path.suffix}"))
+            self._progress(
+                f"PROGRESS step=regrade attempt={attempt} reason={failure.split(':', 1)[0].replace(' ', '_')} "
+                f"detail={failure}"
+            )
+        raise AssertionError("unreachable")
 
     def _emit_gate_phase_progress(self, line: str, *, log_path: Path) -> None:
         """Republish a gate phase marker as a harness PROGRESS line.

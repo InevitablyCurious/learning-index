@@ -394,6 +394,9 @@ class FeedbackMixin:
         """`"tester"` or `"team"` for one check id. Single source of truth."""
         m = cls._CONF_KEY_RE.match(str(check or "").strip())
         if not m:
+            token = cls._GATE_TOKEN_KEY_RE.match(str(check or "").strip())
+            if token and token.group(1) in cls._TEAM_GATE_TOKENS:
+                return "team"
             return "tester"
         key = m.group(1)
         if key.startswith(cls._TESTER_CONF_PREFIXES):
@@ -516,13 +519,45 @@ class FeedbackMixin:
         return bool(cls._HARNESS_INFRA_CHECK_RE.match(str(check or "").strip()))
 
     @classmethod
-    def _build_pass_verdict(cls, *, newly_passing: list[str]) -> str:
+    def _told_label(cls, record: dict[str, Any], *, pass_kind: str) -> tuple[str, str]:
+        """The line the model is told for one problem, and whose voice says it.
+
+        One place, so the complaint list and the "that fixed it" list can never
+        disagree about what was said. A refused setup or a failed API call is
+        the team's finding whatever the gate's channel; otherwise the gate's
+        own line in its own channel.
+        """
+        raw_check = str(record.get("check", "")).strip()
+        observed = str(record.get("observed", "") or "")
+        setup_line = setup_refusal_line(observed, pass_kind=pass_kind) or http_error_line(
+            observed, pass_kind=pass_kind
+        )
+        if setup_line:
+            return setup_line, "team"
+        label = cls._humanize_check(
+            raw_check.split("\n", 1)[0],
+            pass_kind=pass_kind,
+            # A stall line names how long the tester waited; the duration
+            # only exists on the grader's finding.
+            observed=observed,
+        )
+        return label, cls.feedback_channel(raw_check)
+
+    @classmethod
+    def _build_pass_verdict(
+        cls, *, newly_passing: list[str], told: dict[str, str]
+    ) -> str:
         """What the player says about the complaints that are now gone.
 
         SAME VOICE, SAME SHAPE as the failure message: a short opener, then a
         numbered list of the things they are no longer running into. Each item
-        is that gate's FIRST-pass line — the person is referring back to what
-        they originally reported, so that is the wording they would use.
+        is the line the model was FIRST told for that check (`told`, recorded
+        by the runner) — the person is referring back to what they reported,
+        so it must be what they actually said. It used to be the gate's own
+        first line whatever had been said: run 1790194347 told the model a
+        debug-endpoint finding for F19, then thanked it for fixing "I picked
+        the hard computer, refreshed the page…" — a complaint it never got —
+        and the model built difficulty persistence the next round.
 
         WHAT THIS REPLACED. The old form spliced the symptom into a clause it
         did not fit: "That fixed it — {symptom} works now", which rendered as
@@ -541,7 +576,10 @@ class FeedbackMixin:
             first_line = str(item).split("\n", 1)[0]
             if cls._is_harness_infra_check(first_line):
                 continue
-            sanitized = cls._humanize_check(first_line)
+            # Only what was said can be reported fixed; never a line composed now.
+            sanitized = told.get(str(item).strip())
+            if not sanitized:
+                continue
             # Same cap and reasoning as the failure list: a human symptom
             # sentence legitimately runs long, and a cut mid-clause is the tell
             # that no person wrote it.
@@ -684,17 +722,7 @@ class FeedbackMixin:
             # line. Keyed on the raw id because the rendered sentence differs
             # between the two passes and could not key anything.
             pass_kind = "repeat" if raw_check in repeats else "first"
-            observed = str(record.get("observed", "") or "")
-            setup_line = setup_refusal_line(observed, pass_kind=pass_kind) or http_error_line(
-                observed, pass_kind=pass_kind
-            )
-            label = setup_line or cls._humanize_check(
-                raw_check.split("\n", 1)[0],
-                pass_kind=pass_kind,
-                # A stall line names how long the tester waited; the duration
-                # only exists on the grader's finding.
-                observed=observed,
-            )
+            label, channel = cls._told_label(record, pass_kind=pass_kind)
             # 320, not 200 (2026-09-05). The comment below has been right twice
             # over: at 200 it was ALREADY truncating two hand-written tester
             # lines (E04 at 267 characters, E02 at 244), and the software team's
@@ -715,9 +743,7 @@ class FeedbackMixin:
             if not label or label in seen:
                 continue
             seen.add(label)
-            # A refused setup or a failed API call is the team's finding,
-            # whatever the gate's channel.
-            by_channel["team" if setup_line else cls.feedback_channel(raw_check)].append(label)
+            by_channel[channel].append(label)
 
         lines: list[str] = [_EXCUSE_ELIMINATOR, "", header, ""]
         for n, label in enumerate(by_channel["tester"], start=1):

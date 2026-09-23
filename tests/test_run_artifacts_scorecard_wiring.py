@@ -896,3 +896,24 @@ def test_a_recovered_anomaly_is_scored_not_voided(tmp_path: Path) -> None:
         "a recovered anomaly must not void the cell"
     )
     assert payload["scored_sessions"] == 1, "the measurement must survive"
+
+
+def test_an_instrument_fault_cell_is_void_and_says_so(tmp_path: Path) -> None:
+    # Jerry, 2026-09-23: a grading pass that measured nothing twice on the same
+    # code ends the cell as the instrument's failure — void, never scored.
+    manifest_path = _write_scorecard_manifest(tmp_path)
+    stream = StatusStream(default_status_stream_path(manifest_path))
+    _write_truncated_attempt(
+        stream,
+        sequence_index=0,
+        session_fp="fp-0",
+        session_id="s-0",
+        full_green=False,
+        terminal_reason="instrument_fault",
+        unrecovered_anomaly_turns=0,
+        terminal_outcome=False,
+    )
+    scorecard = build_scorecard(manifest_path)
+    assert scorecard["void_instrument"] == [
+        {"sequence_index": 0, "memory_mode": "on", "void_reason": "instrument_fault"}
+    ]

@@ -20,6 +20,18 @@ from harness.adapters.challenge import (
 from harness.adapters.docker_worker import ImageFingerprint
 
 
+def _told(checks):
+    """What the runner records as told for each check (runner.py told_first_label)."""
+    from harness.adapters.challenge import ChallengeRunner as _R
+
+    return {
+        c: _R._told_label({"check": c}, pass_kind="first")[0]
+        for c in checks
+        if not _R._is_harness_infra_check(c)
+    }
+
+
+
 TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
 # A real graded gate check (a bracket token that HAS a feedback override). The
@@ -337,7 +349,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     # PLAYER ORDER: only a check the model was TOLD about can be reported fixed.
     # REAL_PASS2 (G03, stage 3) was withheld in round 1, so its passing is not
     # news to the model and is not named.
-    pass_verdict = runner._build_pass_verdict(newly_passing=[REAL_PASS1])
+    pass_verdict = runner._build_pass_verdict(newly_passing=[REAL_PASS1], told=_told([REAL_PASS1]))
     # REAL_CHECK failed in BOTH of the last two attempts, so it is a repeat and
     # renders as that gate's second-sighting line — the gradient, per gate.
     failure_feedback = runner._build_feedback_prompt(

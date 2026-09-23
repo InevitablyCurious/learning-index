@@ -20,6 +20,18 @@ import pytest
 from harness.adapters.challenge import ChallengeRunner
 
 
+def _told(checks):
+    """What the runner records as told for each check (runner.py told_first_label)."""
+    from harness.adapters.challenge import ChallengeRunner as _R
+
+    return {
+        c: _R._told_label({"check": c}, pass_kind="first")[0]
+        for c in checks
+        if not _R._is_harness_infra_check(c)
+    }
+
+
+
 # ── voice ────────────────────────────────────────────────────────────────────
 
 
@@ -95,7 +107,7 @@ def test_pass_verdict_no_longer_truncates_mid_word() -> None:
         "[G10] REQ-WINCLASS — classifies backgammon when the loser still has a checker "
         "sitting on the bar at the moment the winner bears off the final checker"
     )
-    out = ChallengeRunner._build_pass_verdict(newly_passing=[long_gate])
+    out = ChallengeRunner._build_pass_verdict(newly_passing=[long_gate], told=_told([long_gate]))
     assert "[G10]" not in out
     assert "REQ-WINCLASS" not in out
     assert not out.rstrip("…").endswith(" "), (
@@ -324,9 +336,7 @@ def test_runner_death_check_does_not_abort_feedback_composition() -> None:
 
     # The pass-verdict path (same _humanize_check exposure) skips infra names
     # instead of crashing, and still voices real gates.
-    verdict = ChallengeRunner._build_pass_verdict(
-        newly_passing=[infra, "[F12] REQ-NEWGAME — win state + new game without reload"]
-    )
+    verdict = ChallengeRunner._build_pass_verdict(newly_passing=[infra, "[F12] REQ-NEWGAME — win state + new game without reload"], told=_told([infra, "[F12] REQ-NEWGAME — win state + new game without reload"]))
     assert "doesn't tell me I won" in verdict
     assert "gates-13-16" not in verdict
 
@@ -390,9 +400,7 @@ def test_every_failure_verdict_opens_with_how_the_player_checked() -> None:
         for planted in ("refresh", "cache", "stale", "leftover", "restart"):
             assert planted not in verdict.lower(), f"the opener names an excuse: {planted}"
 
-    verdict = ChallengeRunner._build_pass_verdict(
-        newly_passing=["[G05] REQ-HIGHER-DIE — use higher die"]
-    )
+    verdict = ChallengeRunner._build_pass_verdict(newly_passing=["[G05] REQ-HIGHER-DIE — use higher die"], told=_told(["[G05] REQ-HIGHER-DIE — use higher die"]))
     assert _EXCUSE_ELIMINATOR not in verdict
 
 

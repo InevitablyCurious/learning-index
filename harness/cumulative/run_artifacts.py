@@ -514,6 +514,11 @@ def build_scorecard(
     def _truncation_signal(record: dict[str, Any]) -> bool:
         if str(record.get("terminal_reason") or "") == "transport_incomplete":
             return True
+        # The grader measured nothing twice on the same code (Jerry,
+        # 2026-09-23; harness/adapters/challenge/exceptions.py
+        # InstrumentFaultError): the instrument's failure, never the model's.
+        if str(record.get("terminal_reason") or "") == "instrument_fault":
+            return True
         if int(record.get("length_truncations") or 0) > 0:
             return True
         # ── NOT `truncated_turns` (fixed 2026-09-05), and NOT
@@ -603,7 +608,11 @@ def build_scorecard(
         {
             "sequence_index": int(record["sequence_index"]),
             "memory_mode": str(record.get("memory_mode") or ""),
-            "void_reason": "provider_truncation",
+            "void_reason": (
+                "instrument_fault"
+                if str(record.get("terminal_reason") or "") == "instrument_fault"
+                else "provider_truncation"
+            ),
         }
         for record in void_instrument_by_index.values()
     ]

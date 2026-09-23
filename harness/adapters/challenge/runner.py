@@ -92,8 +92,8 @@ from .constants import (
 )
 from .exceptions import (
     GateTimeoutError,
-    GraderReportUnreadableError,
     IncompleteBuildError,
+    InstrumentFaultError,
     ServeTransportError,
 )
 from .feedback import (
@@ -925,6 +925,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         # round, and ever. "That fixed it" names only checks it was told about;
         # the second-sighting line goes only to checks it has heard before.
         told_last_round: set[str] = set()
+        # check -> the line the model was first told for it, so "that fixed
+        # it" quotes what was actually said (feedback.py _build_pass_verdict).
+        told_first_label: dict[str, str] = {}
         told_ever: set[str] = set()
         _worker_exit_annot: str | None = None
         first_run: _OpencodeRunStats | None = None
@@ -1390,7 +1393,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     )
                 if report is None:
                     try:
-                        report = self._run_gate_report(
+                        report = self._grade_measured(
                             worktree=worktree,
                             report_path=report_json,
                             log_path=gate_log,
@@ -1460,22 +1463,20 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                                 run_label=run_label,
                             )
                         break
-                    except GraderReportUnreadableError as exc:
-                        # NO REPORT MEANS NOTHING WAS MEASURED (WO-34-A).
-                        #
-                        # The gate oracle produced no readable report: missing,
-                        # truncated, or not valid JSON. No verdict ever existed,
-                        # so this is an instrument failure — it must never be
-                        # scored as a model failure, and must never abort the
-                        # campaign. Hence its own termination_reason, and an
-                        # `attempts_to_green` that says so in words rather than
-                        # borrowing FAIL.
+                    except InstrumentFaultError as exc:
+                        # A GRADING PASS THAT MEASURED NOTHING, TWICE (Jerry,
+                        # 2026-09-23). _grade_measured already regraded once:
+                        # an unreadable report or a pass the grader itself
+                        # marked not gradable. Twice on the same code is the
+                        # instrument's failure, never the model's — the cell
+                        # ends VOID (run_artifacts), counts toward no median,
+                        # and says why. It must never abort the campaign.
                         verdict = "FAIL"
-                        attempts_to_green = "GRADER_REPORT_UNREADABLE"
-                        termination_reason = "grader_report_unreadable"
+                        attempts_to_green = "INSTRUMENT_FAULT"
+                        termination_reason = "instrument_fault"
                         self._progress(
-                            f"PROGRESS run_label={run_label} step=grader-report-unreadable-recorded "
-                            f"attempt={attempt} termination_reason=grader_report_unreadable detail={exc}"
+                            f"PROGRESS run_label={run_label} step=instrument-fault-recorded "
+                            f"attempt={attempt} termination_reason=instrument_fault detail={exc}"
                         )
                         if _worker_exit_annot != "harness_error":
                             # Computed once inside the guard for both consumers:
@@ -1500,7 +1501,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                                     "gate_totals": None,
                                     "state_hash": attempt_state_hash,
                                     "state_alg": STATE_ALG,
-                                    "grader_report_unreadable": True,
+                                    "instrument_fault": True,
                                     "attempt_cost_usd": float(
                                         attempt_costs_usd.get(attempt, 0.0)
                                     ),
@@ -1795,7 +1796,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 # The pass verdict is no longer a separate `_run_cell_attempt`
                 # (`verdict-pass-N`); it is folded into the single feedback
                 # message below. Empty string when nothing newly passed.
-                pass_verdict = self._build_pass_verdict(newly_passing=newly_passing)
+                pass_verdict = self._build_pass_verdict(
+                    newly_passing=newly_passing, told=told_first_label
+                )
 
                 feedback_checks = [
                     str(p.get("check", "")).strip()
@@ -1827,6 +1830,10 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 )
                 told_last_round = visible_checks
                 told_ever |= visible_checks
+                for p in stage_view.visible:
+                    check = str(p.get("check", "")).strip()
+                    if check and check not in told_first_label:
+                        told_first_label[check] = self._told_label(p, pass_kind="first")[0]
                 feedback = self._build_feedback_prompt(
                     problems=stage_view.visible,
                     # WHICH OPENER. "I've checked your resolution for the
@@ -2312,6 +2319,13 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
             cls._PLAYER_STAGES_CACHE = cached
         return cached
     _TESTER_CONF_EXACT = ("REQ-BIND/boot",)
+
+    # Numbered gates a player cannot observe: they call the engine's named
+    # functions (contract, like the API), so only an integrating team sees the
+    # failure. E08 asks for each resulting position once; its old player line
+    # ("the computer takes a noticeably long time") described latency the test
+    # never measures.
+    _TEAM_GATE_TOKENS = ("E08",)
 
     # HARNESS-INFRA CHECK NAMES (WO-FEEDBACK-VOICE-3 follow-up, 2026-08-30).
     # These are born only when a RUNNER DIES mid-run —

@@ -31,6 +31,7 @@ import subprocess  # noqa: F401
 from .exceptions import (
     GateTimeoutError,
     GraderReportUnreadableError,
+    InstrumentFaultError,
     MissingFeedbackOverrideError,
     IncompleteBuildError,
     ServeTransportError,

@@ -448,3 +448,21 @@ def test_a_failed_api_call_is_told_as_the_status_and_error_the_app_returned() ->
     assert "fell over" not in msg
     team = msg.split("software team", 1)[1]
     assert "POST /api/new" in team and "HTTP 500" in team and '"Error: boom"' in team
+
+
+def test_that_fixed_it_quotes_what_was_actually_said() -> None:
+    # Run 1790194347: F19 was told as a debug-endpoint finding, then reported
+    # fixed as "I picked the hard computer, refreshed the page…" — a complaint
+    # the model never got — and it built difficulty persistence next round.
+    from harness.adapters.challenge import ChallengeRunner as R
+
+    record = {
+        "check": "[F19] REQ-RELOAD — difficulty survives a reload",
+        "observed": "Error: SETUP REFUSED: /api/debug/state did not take difficulty (sent difficulty)",
+    }
+    told = {record["check"]: R._told_label(record, pass_kind="first")[0]}
+    verdict = R._build_pass_verdict(newly_passing=[record["check"]], told=told)
+    assert "debug endpoint" in verdict
+    assert "hard computer" not in verdict
+    # A check never told is never reported fixed.
+    assert R._build_pass_verdict(newly_passing=["[G05] REQ-HIGHER-DIE — x"], told={}) == ""
