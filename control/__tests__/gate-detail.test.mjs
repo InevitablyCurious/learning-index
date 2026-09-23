@@ -35,7 +35,7 @@ function fixture() {
   });
   writeFileSync(join(cell, "attempt-1-report.json"), JSON.stringify({ problems: [problem(3)] }));
   writeFileSync(join(cell, "attempt-2-report.json"), JSON.stringify({ problems: [problem(2)] }));
-  return { root, grader, run: join(root, "run") };
+  return { root, grader, cell };
 }
 
 test("GATE DETAIL: ids resolve in both bare and bracketed forms", () => {
@@ -63,7 +63,7 @@ test("GATE DETAIL: the failure line is the assertion's own words, newest round f
         { attempt: 1, gate_results: [{ id: "E04", status: "fail" }] },
         { attempt: 2, gate_results: [{ id: "E04", status: "fail" }] },
       ],
-      runPath: f.run,
+      cellPath: f.cell,
       graderDir: f.grader,
     });
     assert.equal(g.detail.description.name, "Shut out on the bar");
@@ -80,7 +80,7 @@ test("GATE DETAIL: the failure line is the assertion's own words, newest round f
 });
 
 test("GATE DETAIL: a run with no grader folder still returns every gate, with nothing invented", async () => {
-  const [g] = await attachGateDetail({ gates: [{ id: "G01", state: "untested" }], attempts: [], runPath: null, graderDir: null });
+  const [g] = await attachGateDetail({ gates: [{ id: "G01", state: "untested" }], attempts: [], cellPath: null, graderDir: null });
   assert.deepEqual(g.detail, { description: null, rounds: [], last_failure: null, told: null });
 });
 

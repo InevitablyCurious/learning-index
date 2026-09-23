@@ -19,7 +19,7 @@ import { mkdtemp, mkdir, writeFile, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { liveStreamPath } from "../control/board/sources/_runtime.mjs";
+import { cellLiveStreamPath } from "../control/board/sources/_runtime.mjs";
 import * as liveStream from "../control/board/sources/live-stream.mjs";
 import * as learning from "../control/board/sources/learning.mjs";
 
@@ -57,72 +57,46 @@ async function fixture({ stream = STREAM, outcomes = null } = {}) {
   if (outcomes) {
     await writeFile(join(campaign, "predicate-outcomes.jsonl"), outcomes.map((r) => JSON.stringify(r)).join("\n") + "\n");
   }
-  return { ctx: { runsRoot: runs, benchRoot: root }, campaign, cell };
+  const address = { run_dir: "9999000000/cloud/p/m/mm", sequence_index: 0 };
+  return { ctx: { runsRoot: runs, benchRoot: root, cell: address }, runs, campaign, cell, address };
 }
 
-test("liveStreamPath finds the stream in the cell directory, not the campaign root", async () => {
-  const { campaign, cell } = await fixture();
-  assert.equal(await liveStreamPath(campaign), join(cell, "live.jsonl"));
+test("cellLiveStreamPath finds the cell's stream in its own directory, not the campaign root", async () => {
+  const { runs, cell, address } = await fixture();
+  assert.equal(await cellLiveStreamPath(runs, address), join(cell, "live.jsonl"));
 });
 
-test("liveStreamPath prefers a campaign-level stream when one exists", async () => {
-  const { campaign } = await fixture();
-  await writeFile(join(campaign, "live.jsonl"), JSON.stringify(STREAM[0]) + "\n");
-  assert.equal(await liveStreamPath(campaign), join(campaign, "live.jsonl"));
+test("cellLiveStreamPath returns null rather than guessing when the cell does not exist", async () => {
+  const { runs, address } = await fixture({ stream: null });
+  assert.equal(await cellLiveStreamPath(runs, { ...address, sequence_index: 7 }), null);
+  assert.equal(await cellLiveStreamPath(runs, null), null);
+  assert.equal(await cellLiveStreamPath(runs, { run_dir: address.run_dir }), null);
 });
 
-test("liveStreamPath returns null rather than guessing when no stream exists", async () => {
-  const { campaign } = await fixture({ stream: null });
-  assert.equal(await liveStreamPath(campaign), null);
-  assert.equal(await liveStreamPath(null), null);
-});
+// ── TWO CELLS, EACH ITS OWN ──────────────────────────────────────────────────
+// A campaign holds one cell dir per concurrent cell. The resolver used to
+// return whichever stream had the NEWEST mtime, so with N cells writing the
+// board flipped between them with every write. Each address now resolves its
+// own stream, whatever the other cells' mtimes.
 
-// ── TWO CELLS, ONE STREAM WINS ───────────────────────────────────────────────
-// A campaign directory can hold more than one cell (memory<ARM>/cell-<seq>).
-// With no campaign-level live.jsonl, the scan across ALL arm/cell dirs must
-// return the stream with the NEWEST mtime — and a cell that never wrote a
-// stream must never beat one that did.
-
-/** A campaign with two cell dirs; `streams` says which cells get a live.jsonl. */
-async function twoCellFixture({ streams = [true, true] } = {}) {
+test("cellLiveStreamPath resolves each cell's own stream, whatever the mtimes", async () => {
   const root = await mkdtemp(join(tmpdir(), "livestream2-"));
-  const campaign = join(root, "campaign");
-  const cells = [
-    join(campaign, "memoryOFF", "cell-0000"),
-    join(campaign, "memoryOFF", "cell-0001"),
-  ];
-  for (const cell of cells) await mkdir(cell, { recursive: true });
-  for (let i = 0; i < cells.length; i++) {
-    if (streams[i]) {
-      await writeFile(join(cells[i], "live.jsonl"), JSON.stringify(STREAM[0]) + "\n");
-    }
+  const runs = join(root, "runs");
+  const cells = [0, 1].map((n) => join(runs, "camp", "memoryOFF", `cell-000${n}`));
+  for (const c of cells) {
+    await mkdir(c, { recursive: true });
+    await writeFile(join(c, "live.jsonl"), JSON.stringify(STREAM[0]) + "\n");
   }
-  return { campaign, cells };
-}
-
-test("liveStreamPath picks the NEWEST cell stream when a campaign holds two cells", async () => {
-  const { campaign, cells } = await twoCellFixture();
   const [a, b] = cells.map((c) => join(c, "live.jsonl"));
-  // Distinct mtimes make the ordering deterministic, independent of write order.
   await utimes(a, new Date(1000), new Date(1000));
   await utimes(b, new Date(2000), new Date(2000));
-  assert.equal(await liveStreamPath(campaign), b, "the newer cell's stream wins");
-  // mtime decides, not directory order — flip the mtimes and the winner flips.
-  await utimes(a, new Date(3000), new Date(3000));
-  assert.equal(await liveStreamPath(campaign), a, "newest mtime wins regardless of scan order");
-});
-
-test("liveStreamPath takes the cell that HAS a stream when its sibling has none", async () => {
-  // cell-0000 writes a stream, cell-0001 (scanned later) never does.
-  const { campaign, cells } = await twoCellFixture({ streams: [true, false] });
-  const a = join(cells[0], "live.jsonl");
-  await utimes(a, new Date(1000), new Date(1000));
-  assert.equal(await liveStreamPath(campaign), a, "an absent stream never beats a present one");
+  assert.equal(await cellLiveStreamPath(runs, { run_dir: "camp", sequence_index: 0 }), a, "cell 0 is cell 0 even when cell 1 wrote last");
+  assert.equal(await cellLiveStreamPath(runs, { run_dir: "camp", sequence_index: 1 }), b);
 });
 
 test("gate wall reads verdicts from the cell-directory stream; later attempt wins", async () => {
   const { ctx } = await fixture();
-  const res = await liveStream.read(ctx);
+  const res = await liveStream.readCell(ctx);
   assert.equal(res.ok, true, res.reason);
   const { live } = res.patch;
   assert.equal(live.session_id, "ses_LIVE");
@@ -137,7 +111,7 @@ test("gate wall reads verdicts from the cell-directory stream; later attempt win
 
 test("learning matrix fills from the live stream before any post-mortem file exists", async () => {
   const { ctx } = await fixture();
-  const { learning: L } = (await learning.read(ctx)).patch;
+  const { learning: L } = (await learning.readCell(ctx)).patch;
   // Session resolution no longer waits for predicate-outcomes.jsonl.
   assert.equal(L.session_id, "ses_LIVE");
   assert.equal(L.attempt.current, 2);
@@ -157,10 +131,12 @@ test("predicate-outcomes.jsonl stays authoritative once the campaign writes it",
     outcomes: [
       // Disagrees with the live stream on CONF, and names the final session.
       { gate_id: "CONF", attempt: 1, predicate_outcome: "fail", session_id: "ses_FINAL", memory_mode: "off", sequence_index: 0 },
-      { gate_id: "frontend/b.test.ts::beta", attempt: 2, predicate_outcome: "pass", session_id: "ses_FINAL" },
+      { gate_id: "frontend/b.test.ts::beta", attempt: 2, predicate_outcome: "pass", session_id: "ses_FINAL", sequence_index: 0 },
+      // Another cell's row in the same campaign file: never this cell's matrix.
+      { gate_id: "frontend/b.test.ts::beta", attempt: 3, predicate_outcome: "fail", session_id: "ses_OTHER", sequence_index: 1 },
     ],
   });
-  const { learning: L } = (await learning.read(ctx)).patch;
+  const { learning: L } = (await learning.readCell(ctx)).patch;
   assert.equal(L.session_id, "ses_FINAL");
   const byId = new Map(L.matrix.gates.map((g) => [g.id, g.outcomes]));
   // Post-mortem overwrites the live verdict for the same (gate, attempt)...
@@ -194,7 +170,7 @@ const REGRADED = [
 
 test("a re-graded pass does not overwrite the attempt a gate FIRST passed on", async () => {
   const { ctx } = await fixture({ stream: REGRADED });
-  const { live } = (await liveStream.read(ctx)).patch;
+  const { live } = (await liveStream.readCell(ctx)).patch;
   const byId = new Map(live.gates.map((g) => [g.id, g]));
 
   // Passed first try, re-graded pass on attempt 2. It never failed, so it is
@@ -213,7 +189,7 @@ test("a re-graded pass does not overwrite the attempt a gate FIRST passed on", a
 
 test("the wall draws a digit only on the gate that actually needed repair", async () => {
   const { ctx } = await fixture({ stream: REGRADED });
-  const { live } = (await liveStream.read(ctx)).patch;
+  const { live } = (await liveStream.readCell(ctx)).patch;
 
   const { renderWall } = await import("./panels/wall.js");
   const gates = [

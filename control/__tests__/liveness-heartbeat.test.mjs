@@ -139,11 +139,11 @@ test("LIVENESS: NO heartbeat is unknown — never stalled", async () => {
   }
 });
 
-test("LIVENESS: heartbeatAge reads the real stream through the designated resolver", async () => {
+test("LIVENESS: cellHeartbeatAge reads the cell's real stream through the per-cell resolver", async () => {
   // End-to-end over an actual live.jsonl, including the two things a hand-built
   // reader gets wrong: the path is under memory<ARM>/cell-<seq>/ and NOT at the
   // campaign root, and the stream is full of non-heartbeat records.
-  const { heartbeatAge } = await import("../runstate.mjs");
+  const { cellHeartbeatAge } = await import("../runstate.mjs");
   const root = mkdtempSync(join(tmpdir(), "liveness-real-"));
   try {
     const runs = join(root, "runs");
@@ -158,14 +158,15 @@ test("LIVENESS: heartbeatAge reads the real stream through the designated resolv
       { v: 1, ts: now - 1000, kind: "ext", ns: "okp.plugin", type: "capture" },
     ]);
 
-    const age = await heartbeatAge({ runsRoot: runs, runDir: dir, now });
+    const age = await cellHeartbeatAge({ runsRoot: runs, runDir: dir, sequenceIndex: 0, now });
     assert.equal(age, 5000, "the NEWEST heartbeat, ignoring later records of other kinds");
 
     // A stream with no heartbeat at all, and a run directory with no stream.
     writeLiveStream(runs, dir, [{ v: 1, ts: now, kind: "cell.start", session_id: "ses_x" }]);
-    assert.equal(await heartbeatAge({ runsRoot: runs, runDir: dir, now }), null);
-    assert.equal(await heartbeatAge({ runsRoot: runs, runDir: "nope", now }), null);
-    assert.equal(await heartbeatAge({ runsRoot: runs, runDir: null, now }), null);
+    assert.equal(await cellHeartbeatAge({ runsRoot: runs, runDir: dir, sequenceIndex: 0, now }), null);
+    assert.equal(await cellHeartbeatAge({ runsRoot: runs, runDir: dir, sequenceIndex: 1, now }), null, "another cell's stream is never read");
+    assert.equal(await cellHeartbeatAge({ runsRoot: runs, runDir: "nope", sequenceIndex: 0, now }), null);
+    assert.equal(await cellHeartbeatAge({ runsRoot: runs, runDir: null, sequenceIndex: 0, now }), null);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -209,8 +210,8 @@ test("DRIFT: the harness's heartbeat is the one this control plane reads", async
       return; // no python3 here, or the harness package is not importable
     }
 
-    const { heartbeatAge } = await import("../runstate.mjs");
-    const age = await heartbeatAge({ runsRoot: runs, runDir });
+    const { cellHeartbeatAge } = await import("../runstate.mjs");
+    const age = await cellHeartbeatAge({ runsRoot: runs, runDir, sequenceIndex: 0 });
     assert.notEqual(age, null, "the consumer must find the record the producer just wrote");
     assert.ok(age >= 0 && age < 60_000, `implausible age ${age}`);
 

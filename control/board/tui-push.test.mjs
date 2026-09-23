@@ -23,11 +23,13 @@ test("groupTuiSubscribers groups frame subscribers by cell; no cell, no group", 
   const blank = { okpWantsTui: true, okpTuiCell: "" };
   const off = { okpWantsTui: false, okpTuiCell: A };
 
-  const groups = groupTuiSubscribers([a1, a2, b1, none, unset, blank, off]);
+  const early = { okpWantsTui: true, okpTuiCell: A, okpBoardSent: false };
+  const groups = groupTuiSubscribers([a1, a2, b1, none, unset, blank, off, early]);
   assert.equal(groups.size, 2);
   assert.deepEqual(groups.get(A), [a1, a2]);
   assert.deepEqual(groups.get(B), [b1]);
   assert.equal(groups.has(null), false, "no default group");
+  assert.ok(!groups.get(A).includes(early), "no frame before the client's board frame — it would be erased");
 });
 
 test("tuiTick pushes each cell's group its own frame, keyed", async (t) => {
@@ -94,4 +96,22 @@ test("tuiTick pushes each cell's group its own frame, keyed", async (t) => {
   assert.equal(splice.meta.session_id, "ses_a");
   assert.equal(splice.meta.frame, undefined, "the frame rides rows, not meta");
   assert.equal(clientB.patches.length, 1, "the other cell did not change");
+
+  // A second client joins A (a tile switch back, or another tab), terminal
+  // unchanged: it has no frame to splice into, so it gets a FULL frame, and
+  // the client already watching gets nothing new.
+  const lateA = fakeClient(A);
+  streamClients.add(lateA);
+  t.after(() => streamClients.delete(lateA));
+  await tuiTick(cfg);
+  assert.equal(lateA.patches.length, 1);
+  assert.equal(lateA.patches[0].tui.cell, A);
+  assert.deepEqual(lateA.patches[0].tui.frame, [["a1"], ["CHANGED"]]);
+  assert.equal(clientA.patches.length, 2, "the existing watcher is not re-sent the frame");
+
+  // Next change: both A watchers now hold a frame and get the same splice.
+  payloads[A].frame = [["NEW"], ["CHANGED"]];
+  await tuiTick(cfg);
+  assert.deepEqual(lateA.patches[1].tui_rows.rows, [[0, ["NEW"]]]);
+  assert.deepEqual(clientA.patches[2].tui_rows.rows, [[0, ["NEW"]]]);
 });

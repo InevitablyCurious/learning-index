@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { attachGateDetail } from "./gate-detail.mjs";
 import { listChallenges } from "./challenges.mjs";
+import { cellDirForRun } from "./runstate.mjs";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -239,8 +240,13 @@ export function foldGateStates({ roster, attempts }) {
 /**
  * Assemble GET /api/wall. Never 500, never fabricate: a run with no roster
  * returns ok:true, suite.total:null and unwired:["gate-roster"] with a reason.
+ *
+ * ONE CELL. The status stream holds every cell of the campaign; the wall folds
+ * only the records of `sequenceIndex`. Folding them all let the latest cell to
+ * grade a gate paint it, so the wall showed no cell at all. No cell given =
+ * the roster with no outcomes (every gate untested), never a mix.
  */
-export async function readWall({ runsRoot, runDir, benchRoot = null }) {
+export async function readWall({ runsRoot, runDir, sequenceIndex = null, benchRoot = null }) {
   const target = resolveRunDir(runsRoot, runDir);
   if (!target) {
     return {
@@ -257,8 +263,10 @@ export async function readWall({ runsRoot, runDir, benchRoot = null }) {
     roster = await enumerateSuite(benchRoot);
     if (roster) rosterSource = "enumerated";
   }
-  const records = await readStatusRecords(join(target.path, "manifest.status.jsonl"));
-  const attempts = attemptRecords(records);
+  const cell = Number.isInteger(sequenceIndex) && sequenceIndex >= 0 ? sequenceIndex : null;
+  // A missing status file reads null: no attempt yet, never an error.
+  const records = cell === null ? [] : ((await readStatusRecords(join(target.path, "manifest.status.jsonl"))) ?? []);
+  const attempts = attemptRecords(records.filter((r) => Number(r?.sequence_index) === cell));
 
   const unwired = [];
   const reasons = {};
@@ -291,10 +299,11 @@ export async function readWall({ runsRoot, runDir, benchRoot = null }) {
 
   // Each square's hover-card detail (see gate-detail.mjs).
   const graderDir = benchRoot ? await graderDirFor(benchRoot, target.path) : null;
+  const cellDir = cell === null ? null : await cellDirForRun(runsRoot, target.name, cell);
   const detailedGates = await attachGateDetail({
     gates: folded.gates,
     attempts,
-    runPath: target.path,
+    cellPath: cellDir ? join(runsRoot, cellDir.cellDir) : null,
     graderDir,
   });
 
@@ -302,6 +311,7 @@ export async function readWall({ runsRoot, runDir, benchRoot = null }) {
     ok: true,
     contract_version: WALL_CONTRACT_VERSION,
     run_dir: target.name,
+    sequence_index: cell,
     // "run" (pinned to this run) or "enumerated" (live, no run yet).
     suite_source: rosterSource,
     suite: {

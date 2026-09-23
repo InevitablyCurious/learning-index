@@ -47,7 +47,7 @@ export function renderTuiBody(board) {
 
 /**
  * The startup feed yields once a real frame has painted (never on a timer),
- * and comes back on failed/exited. frame_withheld does not count as painted;
+ * and comes back on failed/exited;
  * silent counts as live.
  */
 function terminalHasPainted(t, status) {

@@ -102,7 +102,7 @@ export function writeCampaignCell(runs, dir, { gates, results }) {
   );
   writeFileSync(
     join(runs, dir, "manifest.status.jsonl"),
-    JSON.stringify({ type: "attempt", attempt: 1, gate_results: results }) + "\n",
+    JSON.stringify({ type: "attempt", attempt: 1, sequence_index: 0, gate_results: results }) + "\n",
   );
   writeFileSync(
     join(runs, "off-cell-live.log"),

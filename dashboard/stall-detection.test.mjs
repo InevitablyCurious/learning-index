@@ -49,7 +49,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { emptyBoard } from "../control/board/contract.mjs";
-import { read as readRunLog } from "../control/board/sources/run-log.mjs";
+import { readCell } from "../control/board/sources/run-log.mjs";
+
+/** run-log reads the cell's own launch log, named by its strip entry. */
+const readRunLog = ({ runsRoot }) =>
+  readCell({ runsRoot, cell: { run_dir: "cumulative", sequence_index: 0, log_path: join(runsRoot, "off-cell-20260813T172000.log") } });
 
 const noop = () => {};
 const stubEl = () => ({

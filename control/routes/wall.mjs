@@ -16,10 +16,13 @@ export const routes = [
     path: "/api/wall",
     async handle(req, res, url) {
       // ?run_dir= wins (inspecting an archived run); otherwise the active run from
-      // the cell log (activeRunDir).
+      // the cell log (activeRunDir). ?sequence_index= names the one cell folded;
+      // absent, the roster is returned with no outcomes.
+      const seqRaw = url.searchParams.get("sequence_index");
       const wall = await readWall({
         runsRoot: RUNS_ROOT,
         runDir: url.searchParams.get("run_dir") ?? (await activeRunDir()),
+        sequenceIndex: seqRaw !== null && /^\d+$/.test(seqRaw) ? Number(seqRaw) : null,
         benchRoot: BENCH_ROOT,
       });
       sendJson(res, wall.ok ? 200 : 400, wall);

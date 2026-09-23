@@ -177,10 +177,15 @@ function connect() {
         // Dotted keys are split sections (see granularSignatures); `parent.__rest`
         // carries whatever was not split out.
         if (k.includes(".")) {
-          const [parent, child] = k.split(".");
+          // Split at the FIRST dot only: a by_cell child is a cell address.
+          const dot = k.indexOf(".");
+          const parent = k.slice(0, dot);
+          const child = k.slice(dot + 1);
           if (!board[parent] || typeof board[parent] !== "object") board[parent] = {};
           if (child === "__rest") {
             board[parent] = { ...board[parent], ...(v ?? {}) };
+          } else if (v === null && parent === "by_cell") {
+            delete board[parent][child]; // the cell left the strip
           } else {
             board[parent][child] = v;
           }
@@ -204,8 +209,7 @@ function connect() {
         }
         if (k === "tui") {
           if (v && v.cell !== undefined && v.cell !== selectedTuiCell) continue;
-          // A withheld frame must not erase the one on screen.
-          board.tui = v?.frame_withheld && board.tui?.frame ? { ...v, frame: board.tui.frame } : v;
+          board.tui = v;
           continue;
         }
         board[k] = v;
@@ -380,6 +384,9 @@ function render() {
 
   // The mirror follows the cell the strip points at, selected or default.
   setTuiCell(cellKey(activeCell(board)));
+  // Every panel below draws the strip's cell: the board with that cell's view
+  // laid over it. The board itself carries no cell's state.
+  const view = cellView(board);
 
   // Panel order is the board's argument: hold (a blocked run) first; the curve
   // and the gate wall side by side; the batches (their cells, their floor and
@@ -387,18 +394,18 @@ function render() {
   // patch() morphs the tree in place, so scroll, focus and selection survive.
   patch(root, `
     <div class="shell">
-      ${renderTopbar(board, { stale: consecutiveErrors > 0, lastError })}
-      ${renderHold(board)}
-      ${renderCells(board)}
+      ${renderTopbar(view, { stale: consecutiveErrors > 0, lastError })}
+      ${renderHold(view)}
+      ${renderCells(view)}
       <div class="axes-row">
-        ${renderCurve(board)}
-        ${renderWall(board)}
+        ${renderCurve(view)}
+        ${renderWall(view)}
       </div>
-      ${renderLedger(board)}
-      ${renderLive(board)}
-      ${renderRecall(board)}
-      ${renderRail(board)}
-      ${renderProvenance(board)}
+      ${renderLedger(view)}
+      ${renderLive(view)}
+      ${renderRecall(view)}
+      ${renderRail(view)}
+      ${renderProvenance(view)}
     </div>
   `);
   // The gate card is drawn invisible, measured, then placed where it fits whole.
@@ -406,18 +413,39 @@ function render() {
 
   // After the swap: the feed and overlay paint separately. Each is wrapped so a
   // throw costs that surface, never the board, and is printed.
-  try { paintFeed(board); } catch (err) { console.error("feed paint failed:", err); }
+  try { paintFeed(view); } catch (err) { console.error("feed paint failed:", err); }
   try { paintBackend(); } catch (err) { console.error("backend feed paint failed:", err); }
-  try { renderOverlay(board); } catch (err) { console.error("overlay failed:", err); }
+  try { renderOverlay(view); } catch (err) { console.error("overlay failed:", err); }
   // Tool jobs (the drawer's refresh buttons): the elapsed ticker, and the page
   // reload a successful board refresh asks for. Schedules only, never paints.
   try { observeCellStrip(); } catch (err) { console.error("cell strip observe failed:", err); }
-  try { observeToolJobs(board); } catch (err) { console.error("tool-job observe failed:", err); }
+  try { observeToolJobs(view); } catch (err) { console.error("tool-job observe failed:", err); }
   // The TUI mirror is painted by xterm.js into a data-preserve node (like the
   // feed) and sized so 130 columns fill the card.
-  try { paintTui(board); } catch (err) { console.error("tui paint failed:", err); }
+  try { paintTui(view); } catch (err) { console.error("tui paint failed:", err); }
   // Counters animate to the value already in the markup; a throw costs motion only.
   try { paintTicks(root); } catch (err) { console.error("tick paint failed:", err); }
+}
+
+/**
+ * The board as ONE CELL sees it: board-wide sections as they are, and the
+ * strip's active cell's own view (board.by_cell[address] — run, live, suite,
+ * learning, honesty) laid over them; `run` merges, so the board-wide model
+ * and org stay. No active cell, or a cell with no view yet: those sections are
+ * absent and every panel says so — never another cell's. Pure; exported for
+ * tests.
+ */
+export function cellView(b) {
+  const key = cellKey(activeCell(b));
+  const own = key ? b?.by_cell?.[key] ?? null : null;
+  const view = { ...b };
+  for (const k of ["live", "suite", "learning"]) view[k] = own?.[k] ?? null;
+  view.run = { ...(b?.run ?? {}), ...(own?.run ?? {}) };
+  // The cell's transport honesty over the board-wide memory telemetry (the
+  // ON-only funnel and plugin-log sources, which are not per-cell yet).
+  view.honesty = { ...(b?.honesty ?? {}), ...(own?.honesty ?? {}) };
+  view.cell_sources = own?.sources ?? null;
+  return view;
 }
 
 /** Exported for board-actions.js — every handler repaints through this. */

@@ -7,7 +7,6 @@
 
 import { esc, clip } from "../board.js";
 import { provisional, spine } from "./live.js";
-import { notPerCellMark } from "./cells.js";
 
 /**
  * Columns ~ sqrt(2.5 × gates), clamped to 8–28, so the wall keeps a roughly
@@ -198,7 +197,6 @@ export function renderWall(board) {
     <section class="panel wall">
       <div class="phead">
         <span class="ttl">GATE WALL</span>
-        ${notPerCellMark(board)}
         ${headline(suite, gates)}
         ${attemptTag(suite, board.live ?? null)}
         ${runTag(suite)}

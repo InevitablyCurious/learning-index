@@ -5,7 +5,7 @@
 // renders.
 
 export const id = "control-plane";
-export const fields = ["control", "events", "hold", "tui", "models_ledger", "tree"];
+export const fields = ["control", "events", "hold", "models_ledger", "tree"];
 export function describe() {
   return "host-side control plane — roster, run control, event feed";
 }
@@ -72,13 +72,12 @@ export async function read(ctx) {
   }
 
   // The rest are independent; each failure is recorded, none aborts.
-  const [roster, run, events, hold, tui, mledger, tree] = await Promise.all([
+  const [roster, run, events, hold, mledger, tree] = await Promise.all([
     get(`${base}/api/roster`, 2500),
     get(`${base}/api/run`),
     // A delta, not a full refetch.
     get(`${base}/api/events?limit=${EVENT_WINDOW_CAP}&since=${eventCursor}`, 2500),
     get(`${base}/api/hold`),
-    get(`${base}/api/tui`, 2500),
     // Every launch gate already resolved server-side; passed through untouched.
     get(`${base}/api/models-ledger`, 2500),
     // Which tree is live, so the board can name it.
@@ -90,7 +89,6 @@ export async function read(ctx) {
   if (!run.ok) notes.push(`run state unwired — ${run.reason}`);
   if (!events.ok) notes.push(`event feed unwired — ${events.reason}`);
   if (!hold.ok) notes.push(`hold unwired — ${hold.reason}`);
-  if (!tui.ok) notes.push(`tui unwired — ${tui.reason}`);
   if (!mledger.ok) notes.push(`model ledger unwired — ${mledger.reason}`);
 
   // Merge the delta into the bounded window (trimmed from the front, like the
@@ -133,7 +131,6 @@ export async function read(ctx) {
       },
       events: eventsPayload,
       hold: hold.ok ? hold.data : null,
-      tui: tui.ok ? tui.data : null,
       // null when unavailable: the panel then draws no controls (fail closed).
       models_ledger: mledger.ok && mledger.data?.ok === true ? mledger.data : null,
       // null on a control plane without trees: show nothing rather than guess.

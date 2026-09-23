@@ -159,6 +159,8 @@ export async function read(ctx) {
       sequence_index: idx ?? null,
       run_id: r.run_id ?? null,
       run_dir: r.run_dir ?? null,
+      // The cell's own launch log: the per-cell sources read it by this path.
+      log_path: r.log_path ?? null,
       session_id: r.session_id ?? null,
       model: r.model ?? null,
       arm: r.arm ?? null,
@@ -188,10 +190,12 @@ export async function read(ctx) {
   for (const [idx, rec] of scoredByIndex) {
     if (seen.has(idx)) continue;
     const endedRec = endedByIndex.get(idx);
+    const log = endedRec?.log_path ? await readCellLog(endedRec.log_path) : { phase: null, chunk: null, turns: null };
     list.push({
       sequence_index: idx,
       run_id: endedRec?.run_id ?? null,
       run_dir: endedRec?.run_dir ?? runDir,
+      log_path: endedRec?.log_path ?? null,
       session_id: null,
       model: endedRec?.model ?? null,
       arm: endedRec?.arm ?? "off",
@@ -201,9 +205,9 @@ export async function read(ctx) {
       terminal_status: endedRec?.terminal_status ?? null,
       heartbeat_age_s: null,
       elapsed_s: endedRec ? elapsed(endedRec.started_at) : null,
-      phase: null,
-      chunk: { current: null, total },
-      turns: null,
+      phase: log.phase,
+      chunk: { current: log.chunk, total },
+      turns: log.turns,
       scored: rec?.scored === true ? true : (rec?.scored === false || endedRec ? false : null),
       problems: rec?.problem_count ?? null,
       void_reason: endedRec ? endedText(endedRec) : (rec?.void_reason ?? null),
@@ -217,10 +221,12 @@ export async function read(ctx) {
     const idx = e?.sequence_index;
     if (!Number.isFinite(idx)) continue;
     if (seen.has(idx) || scoredByIndex.has(idx)) continue;
+    const log = e.log_path ? await readCellLog(e.log_path) : { phase: null, chunk: null, turns: null };
     list.push({
       sequence_index: idx,
       run_id: e.run_id ?? null,
       run_dir: e.run_dir ?? runDir,
+      log_path: e.log_path ?? null,
       session_id: null,
       model: e.model ?? null,
       arm: e.arm ?? "off",
@@ -230,9 +236,9 @@ export async function read(ctx) {
       terminal_status: e.terminal_status ?? null,
       heartbeat_age_s: null,
       elapsed_s: elapsed(e.started_at),
-      phase: null,
-      chunk: { current: null, total },
-      turns: null,
+      phase: log.phase,
+      chunk: { current: log.chunk, total },
+      turns: log.turns,
       scored: false,
       problems: null,
       void_reason: endedText(e),

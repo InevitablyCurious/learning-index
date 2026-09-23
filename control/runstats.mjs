@@ -88,19 +88,26 @@ function benchProviders() {
       id: "unmeasured",
       label: "UNMEASURED",
       /**
-       * Gates the runner reached and produced no verdict for — read from
-       * control/wall.mjs so the strip and the wall agree.
+       * Gates the runner reached and produced no verdict for, summed over the
+       * batch's cells — each read from control/wall.mjs for its own cell, so
+       * the strip and every cell's wall agree.
        */
       async read(ctx) {
         if (!ctx?.runDir) return { state: "absent", value: null };
-        const wall = await readWall({
-          runsRoot: ctx.runsRoot,
-          runDir: ctx.runDir,
-          benchRoot: ctx.benchRoot ?? null,
-        });
-        if (!wall?.ok) return { state: "unavailable", value: null };
-        const n = wall.unmeasured;
-        return Number.isFinite(n) ? { state: "ok", value: n } : { state: "unavailable", value: null };
+        const seqs = await cellIndexes(runPath(ctx));
+        if (!seqs.length) return { state: "unavailable", value: null };
+        let total = 0;
+        for (const sequenceIndex of seqs) {
+          const wall = await readWall({
+            runsRoot: ctx.runsRoot,
+            runDir: ctx.runDir,
+            sequenceIndex,
+            benchRoot: ctx.benchRoot ?? null,
+          });
+          if (!wall?.ok || !Number.isFinite(wall.unmeasured)) return { state: "unavailable", value: null };
+          total += wall.unmeasured;
+        }
+        return { state: "ok", value: total };
       },
     },
     {
@@ -184,6 +191,31 @@ export async function turnErrors(runDir) {
     }
   }
   return streams ? counts : null;
+}
+
+/** The sequence indexes of the run's cell directories (memory<ARM>/cell-NNNN). */
+async function cellIndexes(runDir) {
+  const out = [];
+  let arms = [];
+  try {
+    arms = await readdir(runDir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const arm of arms) {
+    if (!arm.isDirectory() || !/^memory/i.test(arm.name)) continue;
+    let cells = [];
+    try {
+      cells = await readdir(join(runDir, arm.name), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const cell of cells) {
+      const m = /^cell-(\d+)$/i.exec(cell.name);
+      if (cell.isDirectory() && m) out.push(Number(m[1]));
+    }
+  }
+  return out.sort((a, b) => a - b);
 }
 
 const SCORECARD_ERROR_FIELD = {

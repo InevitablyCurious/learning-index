@@ -19,7 +19,7 @@ import { sendJson } from "../lib/http.mjs";
 import { streamClients } from "../board/lib/state.mjs";
 import { getBoard } from "../board/lib/board-build.mjs";
 import { boardWithoutEvents, tick } from "../board/lib/broadcast.mjs";
-import { TUI_STREAM_MS, tuiForClient, tuiTick } from "../board/lib/tui.mjs";
+import { TUI_STREAM_MS, tuiTick } from "../board/lib/tui.mjs";
 
 const cfg = {
   benchRoot: BENCH_ROOT,
@@ -60,6 +60,10 @@ export const routes = [
       req.on("close", drop);
       req.on("error", drop);
       res.on("error", drop);
+      // Not ready for TUI frames until the board frame below is written: the
+      // client replaces its whole board on that frame, so a full terminal frame
+      // pushed first would be erased and the row splices after it dropped.
+      res.okpBoardSent = false;
       res.okpWantsTui = url.searchParams.get("tui") === "1";
       // Which cell this client mirrors; the TUI fast path (board/lib/tui.mjs)
       // fetches and pushes that cell's frames to it — and only to it.
@@ -75,8 +79,8 @@ export const routes = [
         const rows = (board.events?.events ?? []).filter((e) => (e.seq ?? -1) > since);
         res.okpCursor = rows.length ? (rows[rows.length - 1].seq ?? since) : since;
         const full = boardWithoutEvents(board);
-        full.tui = tuiForClient(full.tui, res.okpWantsTui);
         res.write(`event: board\ndata: ${JSON.stringify(full)}\n\n`);
+        res.okpBoardSent = true;
         res.write(`event: events\ndata: ${JSON.stringify({ events: rows, cursor: board.events?.cursor ?? null })}\n\n`);
       } catch (err) {
         res.write(`event: error\ndata: ${JSON.stringify({ reason: String(err?.message ?? err) })}\n\n`);

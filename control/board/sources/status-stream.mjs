@@ -6,10 +6,13 @@
 // used here for resolved gates and the arm delta.
 
 import { parseGate, int, str, median, finalizeDelta, cellValidity } from "../contract.mjs";
-import { readTail, parseJsonl, activeRun } from "./_runtime.mjs";
+import { join } from "node:path";
+import { readTail, parseJsonl, activeRun, statOrNull } from "./_runtime.mjs";
 
 export const id = "status-stream";
-export const fields = ["arm_delta", "run.arm", "history", "honesty.transport"];
+export const fields = ["arm_delta", "history"];
+/** What readCell adds to one cell's view. */
+export const cellFields = ["run.arm", "run.attempt", "run.turns", "run.tokens", "honesty"];
 export function describe() {
   return "append-only per-attempt status stream (RC-5) — authoritative for gates, arm, verdict";
 }
@@ -46,8 +49,6 @@ export async function read(ctx) {
       verdict: c.verdict,
     }));
 
-  const newest = cells[0];
-
   return {
     ok: true,
     provenance: {
@@ -56,35 +57,56 @@ export async function read(ctx) {
       bytes: run.statusStat?.size ?? null,
       run: run.name,
     },
+    // Across the campaign's cells on purpose: the OFF/ON delta and the history
+    // are about the batch, not one cell.
+    patch: { arm_delta, history },
+  };
+}
+
+/**
+ * ONE CELL's own attempt records: its arm, attempt, turns, tokens and
+ * transport honesty. Never the newest cell's, never a sum over cells.
+ */
+export async function readCell(ctx) {
+  const path = join(ctx.runsRoot, ctx.cell.run_dir, "manifest.status.jsonl");
+  const st = await statOrNull(path);
+  if (!st?.isFile()) {
+    return { ok: false, reason: "no manifest.status.jsonl yet — appended at attempt end (~30 min)" };
+  }
+  const records = parseJsonl(await readTail(path));
+  const c = cellsFromRecords(records, ctx.cell.run_dir).find((x) => x.seq === ctx.cell.sequence_index);
+  if (!c) return { ok: false, reason: "this cell has no attempt record yet — written at attempt end" };
+  const one = [c];
+
+  return {
+    ok: true,
+    provenance: { path, mtime: st.mtimeMs, bytes: st.size, run: ctx.cell.run_dir },
     patch: {
       run: {
-        arm: newest.arm,
-        cell_label: newest.cell_label,
-        org_id: newest.org_id,
-        attempt: { current: newest.attempt, max: 5 },
-        turns: newest.turns,
+        arm: c.arm,
+        cell_label: c.cell_label,
+        org_id: c.org_id,
+        attempt: { current: c.attempt, max: 5 },
+        turns: c.turns,
         tokens: {
-          input: newest.input_tokens,
-          output: newest.output_tokens,
-          injected_block: newest.injected_block_est_tokens,
+          input: c.input_tokens,
+          output: c.output_tokens,
+          injected_block: c.injected_block_est_tokens,
         },
       },
-      arm_delta,
-      history,
       honesty: {
         transport: {
-          truncations: sum(cells, "truncated_turns"),
-          finalize_timeouts: sum(cells, "finalize_timeouts"),
-          finalize_timeout_turns: sum(cells, "finalize_timeout_turns"),
-          guard_aborts: sum(cells, "guard_aborted_turns"),
+          truncations: sum(one, "truncated_turns"),
+          finalize_timeouts: sum(one, "finalize_timeouts"),
+          finalize_timeout_turns: sum(one, "finalize_timeout_turns"),
+          guard_aborts: sum(one, "guard_aborted_turns"),
         },
         // Real turns, excluded from the measurement, from the status records.
-        recovered_turns:
-          sum(cells, "guard_aborted_turns") + sum(cells, "finalize_timeout_turns"),
+        recovered_turns: sum(one, "guard_aborted_turns") + sum(one, "finalize_timeout_turns"),
         serves: {
-          sent: nullSum(cells, "served_attempted"),
-          confirmed_on_chain: nullSum(cells, "served_confirmed"),
-          rejected: nullSum(cells, "served_failed"),
+          sent: nullSum(one, "served_attempted"),
+          confirmed_on_chain: nullSum(one, "served_confirmed"),
+          rejected: nullSum(one, "served_failed"),
         },
       },
     },

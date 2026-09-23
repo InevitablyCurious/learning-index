@@ -6,7 +6,7 @@
 // The failure line is the assertion's first line, verbatim (no stack, no
 // paraphrase). Missing descriptions are null. Read-only.
 
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 async function readJson(path) {
@@ -61,26 +61,11 @@ export function technicalLine(observed) {
   return { message: first.slice(0, 240), location };
 }
 
-/** The newest cell directory of a campaign, or null. */
-async function latestCellDir(runPath) {
-  const cells = [];
-  for (const arm of ["memoryOFF", "memoryON"]) {
-    let names = [];
-    try {
-      names = await readdir(join(runPath, arm));
-    } catch {
-      continue;
-    }
-    for (const n of names) if (n.startsWith("cell-")) cells.push(join(runPath, arm, n));
-  }
-  return cells.sort().pop() ?? null;
-}
-
 /**
  * Attach `detail` to every gate. Pure over its inputs apart from reading the
  * descriptions, the complaint sentences and the campaign's grading reports.
  */
-export async function attachGateDetail({ gates, attempts, runPath, graderDir }) {
+export async function attachGateDetail({ gates, attempts, cellPath, graderDir }) {
   const descriptions = graderDir ? await readJson(join(graderDir, "checks.json")) : null;
   const feedback = graderDir ? (await readJson(join(graderDir, "feedback.json")))?.gates ?? {} : {};
 
@@ -92,11 +77,11 @@ export async function attachGateDetail({ gates, attempts, runPath, graderDir }) 
   });
 
   // Grading reports, newest round first.
-  const cell = runPath ? await latestCellDir(runPath) : null;
+  // The cell whose attempts these are; no cell, no reports.
   const reports = [];
-  if (cell) {
+  if (cellPath) {
     for (const r of [...rounds].reverse()) {
-      const report = await readJson(join(cell, `attempt-${r.attempt}-report.json`));
+      const report = await readJson(join(cellPath, `attempt-${r.attempt}-report.json`));
       if (report) reports.push({ attempt: r.attempt, problems: report.problems ?? [] });
     }
   }

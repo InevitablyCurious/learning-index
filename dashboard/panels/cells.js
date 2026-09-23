@@ -211,16 +211,3 @@ export function observeCellStrip() {
   }
   mark();
 }
-
-/**
- * The mark for a panel that cannot follow the strip yet. Its source reads one
- * cell the control plane chooses, and records not which — so with two or more
- * cells it may be showing a different cell than the strip's. Said on the panel,
- * never left for the operator to assume. Nothing with a single cell.
- */
-export function notPerCellMark(board) {
-  if ((board?.cells?.list ?? []).length < 2) return "";
-  return `<span class="tag cc-notcell" title="${esc(
-    "this panel reads one cell chosen by the control plane, not the cell selected in the strip — per-cell reads for it are not built yet",
-  )}">NOT PER-CELL</span>`;
-}

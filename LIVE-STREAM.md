@@ -14,9 +14,11 @@ onto the CAMPAIGN directory (the one holding `manifest.json`, one level above
 the arm), opened a path that never exists, and reported *"no live.jsonl yet"* for
 the entire life of every run — a reason indistinguishable from a run that never
 wrote one. **Readers must resolve the path, never construct it**;
-`control/board/sources/_runtime.mjs::liveStreamPath` is the one resolver, and
-`scripts/bench_preflight.py::check_live_stream` blocks a launch when it stops
-finding what the harness writes.
+`control/board/sources/_runtime.mjs::cellLiveStreamPath` is the one resolver,
+addressed by the cell (`run_dir`, `sequence_index`) — never "the newest stream
+in the campaign", which with concurrent cells changes with every write — and
+`scripts/bench_preflight.py::check_live_stream` blocks a launch when any cell's
+stream on disk does not resolve from that cell's own address.
 
 Every panel that wants to show something *while a run is happening* reads this
 file and nothing else. It exists because the alternative — reading
@@ -47,7 +49,7 @@ Every line is one JSON object.
 | `v` | yes | Envelope version. `1`. Bumped only for a breaking change. |
 | `ts` | yes | Unix ms when the record was emitted. |
 | `kind` | yes | One of the core kinds, or `ext`. |
-| `run_id` | when known | The run this belongs to — the harness `run_label` (`cumulative-{seq:04d}-{arm}-{model}`), NOT the control-plane ledger `run_id` (a separate in-memory uuid) nor `manifest.run_id` (the manifest parent-dir basename). |
+| `run_id` | when known | The run this belongs to — the harness `run_label` (`cumulative-{seq:04d}-{arm}-{model}`), NOT the control-plane launch-record `run_id` (a uuid, now durable — it names the launch record `runs/<tree>/launches/<run_id>.json`) nor `manifest.run_id` (the manifest parent-dir basename). |
 | `cell_seq` | on cell-scoped records | Which cell in the campaign. |
 | `session_id` | on cell-scoped records | **The join key.** Present from `cell.start`. |
 

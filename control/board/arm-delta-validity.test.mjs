@@ -33,7 +33,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { cellValidity, finalizeDelta, MIN_CELLS_PER_ARM } from "./contract.mjs";
-import { read } from "./sources/status-stream.mjs";
+import { read, readCell } from "./sources/status-stream.mjs";
 
 // ── fixture builders ─────────────────────────────────────────────────────────
 
@@ -84,6 +84,23 @@ async function boardFrom(records) {
     const res = await read({ runsRoot: root, benchRoot: root, config: {} });
     assert.equal(res.ok, true, `source should read: ${res.reason ?? ""}`);
     return res.patch;
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+/** One cell's view (readCell) over the same records, in a run named "cumulative". */
+async function cellFrom(records, seq) {
+  const root = await mkdtemp(join(tmpdir(), "okp-dash-cell-"));
+  try {
+    const dir = join(root, "cumulative");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "manifest.status.jsonl"),
+      records.map((r) => JSON.stringify(r)).join("\n") + "\n",
+      "utf8",
+    );
+    return await readCell({ runsRoot: root, benchRoot: root, config: {}, cell: { run_dir: "cumulative", sequence_index: seq } });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -356,8 +373,30 @@ test("LOOP-GUARD: a recovered cell (truncated_turns > 0, unrecovered 0) SCORES o
   assert.equal(b.cells, 1, "the recovered cell is an observation, not an instrument failure");
   assert.equal(b.excluded.void_instrument, 0);
   assert.equal(b.resolution_rate, 0.5, "G01 went red -> absent; the rate is real");
-  // The recovered turns are still honest transport data — reported, not hidden.
-  assert.equal(patch.honesty.transport.truncations, 9, "truncated_turns still feeds the honesty metric");
+  // The recovered turns are still honest transport data — reported, not hidden,
+  // on the cell's own view.
+  const cell = await cellFrom([
+    attempt({ seq: 0, attempt: 1, mode: "off", truncatedTurns: 9, unrecoveredAnomalyTurns: 0 }),
+  ], 0);
+  assert.equal(cell.patch.honesty.transport.truncations, 9, "truncated_turns still feeds the honesty metric");
+});
+
+test("ONE CELL: readCell is the named cell's own record, never the newest cell's", async () => {
+  const records = [
+    attempt({ seq: 0, attempt: 1, mode: "off", turns: 11, truncatedTurns: 1 }),
+    attempt({ seq: 1, attempt: 1, mode: "off", turns: 22, truncatedTurns: 2 }),
+    attempt({ seq: 1, attempt: 2, mode: "off", turns: 33, truncatedTurns: 2 }),
+  ];
+  const zero = await cellFrom(records, 0);
+  assert.equal(zero.patch.run.turns, 11);
+  assert.equal(zero.patch.run.attempt.current, 1);
+  assert.equal(zero.patch.honesty.transport.truncations, 1, "a cell's transport is its own, never a batch sum");
+  const one = await cellFrom(records, 1);
+  assert.equal(one.patch.run.attempt.current, 2);
+  const none = await cellFrom(records, 7);
+  assert.equal(none.ok, false, "a cell with no record says so rather than borrowing another's");
+  // The board-wide read carries no one cell's run fields.
+  assert.equal((await boardFrom(records)).run, undefined);
 });
 
 // ── ONE RUN ON SCREEN: no cross-run contamination ────────────────────────────

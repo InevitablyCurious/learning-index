@@ -35,12 +35,12 @@ from preflight.core import REPO, Check
 # only something that reads the writer's real output with the reader's real code
 # can, and that is this check.
 STREAM_SEAM_JS = """
-import { activeRun, liveStreamPath } from './sources/_runtime.mjs';
+import { activeRun, cellLiveStreamPath } from './sources/_runtime.mjs';
 import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 // GROUND TRUTH, gathered WITHOUT the resolver — a check that used
-// liveStreamPath to find what liveStreamPath should find proves nothing.
+// cellLiveStreamPath to find what it should find proves nothing.
 // Skips worktree/.git: the model's checkout is large and never holds a stream.
 async function walk(dir, depth, hits) {
   if (depth > 4) return hits;
@@ -55,12 +55,19 @@ async function walk(dir, depth, hits) {
   return hits;
 }
 
+// Each stream on disk, and what the board's per-cell resolver answers for
+// the address the path names (<run_dir>/memory<ARM>/cell-<seq>/live.jsonl).
 const runsRoot = process.env.SEAM_RUNS_ROOT;
 const run = await activeRun(runsRoot);
-const out = { run_dir: run?.dir ?? null, resolved: null, on_disk: [] };
+const out = { run_dir: run?.dir ?? null, on_disk: [], pairs: [] };
 if (run?.dir) {
-  out.resolved = await liveStreamPath(run.dir);
   out.on_disk = await walk(run.dir, 0, []);
+  const runDir = relative(runsRoot, run.dir);
+  for (const path of out.on_disk) {
+    const m = /\\/memory[^/]+\\/cell-(\\d+)\\/live\\.jsonl$/.exec(path);
+    const address = m ? { run_dir: runDir, sequence_index: Number(m[1]) } : null;
+    out.pairs.push({ path, resolved: address ? await cellLiveStreamPath(runsRoot, address) : null });
+  }
 }
 process.stdout.write(JSON.stringify(out));
 """
@@ -115,8 +122,8 @@ def check_live_stream(c: Check) -> None:
         return
 
     run_dir = res.get("run_dir")
-    resolved = res.get("resolved")
     on_disk = res.get("on_disk") or []
+    pairs = res.get("pairs") or []
 
     if not run_dir:
         c.add(
@@ -138,35 +145,21 @@ def check_live_stream(c: Check) -> None:
         )
         return
 
-    if resolved is None:
-        found = (
-            Path(on_disk[0]).relative_to(Path(run_dir).parent.parent)
-            if len(on_disk)
-            else ""
-        )
+    wrong = [p for p in pairs if p.get("resolved") != p.get("path")]
+    if wrong:
+        first = wrong[0]
         c.add(
             "board live stream",
             False,
-            f"BOARD IS BLIND: {len(on_disk)} live.jsonl on disk under the active run but the "
-            f"dashboard resolver found NONE (e.g. .../{found}). The gate wall and the learning "
-            "matrix will read 'no live.jsonl yet' for the WHOLE run. Fix "
-            "control/board/sources/_runtime.mjs::liveStreamPath — do NOT launch onto a blind board.",
+            f"BOARD IS BLIND: {len(wrong)} of {len(on_disk)} cell stream(s) on disk do not resolve "
+            f"from their own cell address (e.g. {first.get('path')!r} -> {first.get('resolved')!r}). "
+            "That cell's gate wall and learning matrix would read 'no live.jsonl yet'. Fix "
+            "control/board/sources/_runtime.mjs::cellLiveStreamPath — do NOT launch onto a blind board.",
         )
         return
 
-    if resolved not in on_disk:
-        c.add(
-            "board live stream",
-            False,
-            f"resolver returned {resolved!r}, which is not among the {len(on_disk)} stream(s) "
-            "actually on disk — reader and writer disagree about WHERE the stream lives.",
-        )
-        return
-
-    extra = f" ({len(on_disk)} on disk, newest wins)" if len(on_disk) > 1 else ""
     c.add(
         "board live stream",
         True,
-        f"reader resolves the harness's own stream{extra}: "
-        f"{Path(resolved).relative_to(Path(run_dir))}",
+        f"reader resolves every cell's own stream: {len(on_disk)} on disk, each from its own address",
     )

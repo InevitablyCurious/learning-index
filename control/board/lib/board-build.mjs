@@ -25,12 +25,26 @@ import * as cells from "../sources/cells.mjs";
 
 // Every source is always on: each one reports its own absence ("unwired",
 // with a reason) instead of being switched off by configuration.
+//
+// Board-wide sources: one read for the whole board.
 const MODS = [
-  runManifest, statusStream, runLog, stackLedger, funnelCells, pluginLog,
-  opencodeServe, controlPlane, gateSuite, learning, liveStream,
-  toolJobs,
-  cells,
+  runManifest, statusStream, stackLedger, funnelCells, pluginLog,
+  controlPlane, toolJobs, cells,
 ];
+
+// ── PER-CELL SOURCES ── everything that describes ONE cell. Each exports
+// readCell(ctx) and is run once per cell of the strip, with ctx.cell = that
+// strip entry, into board.by_cell["<run_dir>::<seq>"]. None of them may pick a
+// cell on its own: with N concurrent cells "the newest" changes with every
+// write, and the board showed whichever cell wrote last under the strip's
+// selection. Merge order as ORDER: the status stream, then the log pulse, then
+// the live stream, then the serve API (freshest).
+const CELL_MODS = [statusStream, learning, runLog, liveStream, opencodeServe, gateSuite];
+
+/** The address a cell is keyed by everywhere: `<run_dir>::<sequence_index>`. */
+export function cellKey(cell) {
+  return `${cell.run_dir}::${cell.sequence_index}`;
+}
 
 // ── board assembly ───────────────────────────────────────────────────────────
 
@@ -79,7 +93,7 @@ async function buildBoard(cfg) {
     if (r.ok) mergePatch(board, r.patch);
   }
 
-  reconcileRunLiveness(board);
+  board.by_cell = await buildCellViews(board.cells?.list ?? [], ctx);
 
   board.sources = results.map((r) => ({
     id: r.id,
@@ -92,6 +106,33 @@ async function buildBoard(cfg) {
 
   board.generated_at = Date.now();
   return board;
+}
+
+/**
+ * One view per cell: the per-cell sources' patches merged in ORDER, the cell's
+ * liveness reconciled against the control plane's verdict for THAT cell (its
+ * strip entry), and each source's own ok/reason so an absence is stated.
+ */
+async function buildCellViews(list, ctx) {
+  const ordered = [...CELL_MODS].sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
+  const views = {};
+  await Promise.all(
+    list
+      .filter((c) => typeof c?.run_dir === "string" && c.run_dir && Number.isInteger(c.sequence_index))
+      .map(async (cell) => {
+        const cctx = { ...ctx, cell };
+        const results = await Promise.all(ordered.map((mod) => runSource(mod, cctx, mod.readCell)));
+        const view = {};
+        for (const r of results) {
+          if (r.ok) mergePatch(view, r.patch);
+        }
+        // The strip entry IS the control plane's verdict for this cell.
+        if (view.run) view.run = reconcileRunLiveness({ control: { run: cell }, run: view.run }).run;
+        view.sources = results.map((r) => ({ id: r.id, ok: r.ok, reason: r.reason, ms: r.ms }));
+        views[cellKey(cell)] = view;
+      }),
+  );
+  return views;
 }
 
 // ── poll cache ───────────────────────────────────────────────────────────────

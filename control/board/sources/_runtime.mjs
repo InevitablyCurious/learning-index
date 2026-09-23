@@ -8,6 +8,7 @@ import { createReadStream } from "node:fs";
 import { join } from "node:path";
 import { isTreeId, activeTreeId as treeActiveId, listLiveCampaignDirs } from "../../tree.mjs";
 import { statOrNull, listDir } from "../../lib/fs.mjs";
+import { cellDirForRun } from "../../runstate.mjs";
 export { statOrNull, listDir };
 
 /** Never read more than this from the tail of any log. */
@@ -156,32 +157,17 @@ export async function activeRun(runsRoot) {
   return best;
 }
 
-// ── WHERE THE LIVE STREAM IS ── the harness writes it per cell
-// (<campaign>/memory<ARM>/cell-<seq>/live.jsonl), one level below the campaign
-// folder activeRun() resolves. A campaign-level stream wins if present (where
-// LIVE-STREAM.md documents it); otherwise the newest per-cell stream. null when
-// neither exists.
+// ── WHERE A CELL'S LIVE STREAM IS ── the harness writes one per cell
+// (<campaign>/memory<ARM>/cell-<seq>/live.jsonl). Addressed by the cell
+// (run_dir, sequence_index), never by "the newest stream in the campaign":
+// with N concurrent cells that answer changes with every write. null when the
+// cell's directory does not exist yet.
 export const LIVE_STREAM_FILENAME = "live.jsonl";
 
-export async function liveStreamPath(runDir) {
-  if (!runDir) return null;
-
-  const top = join(runDir, LIVE_STREAM_FILENAME);
-  if ((await statOrNull(top))?.isFile()) return top;
-
-  let best = null;
-  for (const arm of await listDir(runDir)) {
-    if (!arm.isDirectory() || !/^memory/i.test(arm.name)) continue;
-    const armDir = join(runDir, arm.name);
-    for (const cell of await listDir(armDir)) {
-      if (!cell.isDirectory() || !/^cell-/i.test(cell.name)) continue;
-      const path = join(armDir, cell.name, LIVE_STREAM_FILENAME);
-      const st = await statOrNull(path);
-      if (!st?.isFile()) continue;
-      if (!best || st.mtimeMs > best.mtimeMs) best = { path, mtimeMs: st.mtimeMs };
-    }
-  }
-  return best?.path ?? null;
+export async function cellLiveStreamPath(runsRoot, cell) {
+  if (!cell?.run_dir || !Number.isInteger(cell.sequence_index)) return null;
+  const found = await cellDirForRun(runsRoot, cell.run_dir, cell.sequence_index);
+  return found ? join(runsRoot, found.cellDir, LIVE_STREAM_FILENAME) : null;
 }
 
 /** Is `a` more current than `b`? Declared start, then attempt data, then mtime. */
@@ -196,11 +182,11 @@ function newerRun(a, b) {
 }
 
 /** Run one source with full isolation. Never throws. */
-export async function runSource(mod, ctx) {
+export async function runSource(mod, ctx, read = mod.read) {
   const started = Date.now();
   try {
     const res = await withTimeout(
-      Promise.resolve(mod.read(ctx)),
+      Promise.resolve(read(ctx)),
       READ_TIMEOUT_MS,
       mod.id,
     );

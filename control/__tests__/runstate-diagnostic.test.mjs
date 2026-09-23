@@ -175,7 +175,7 @@ test("WALL: a per-model campaign's outcomes are served, never a zeroed suite", a
         heartbeatProbe: async () => 1000,
       })
     ).run_dir;
-    const wall = await readWall({ runsRoot: runs, runDir });
+    const wall = await readWall({ runsRoot: runs, runDir, sequenceIndex: 0 });
 
     assert.equal(wall.run_dir, dir);
     assert.equal(wall.suite_source, "run", "the run's own pinned roster is authoritative");
@@ -284,6 +284,7 @@ function writeGradabilityRun(runs, dir, attempt) {
     JSON.stringify({
       type: "attempt",
       attempt: 1,
+      sequence_index: 0,
       gate_results: [
         { id: "A", status: "pass" },
         { id: "B", status: "not_run" },
@@ -292,6 +293,43 @@ function writeGradabilityRun(runs, dir, attempt) {
     }) + "\n",
   );
 }
+
+test("WALL: folds ONE cell's records — never the latest grade across cells", async () => {
+  const root = mkdtempSync(join(tmpdir(), "wall-cell-"));
+  try {
+    const runs = join(root, "runs");
+    mkdirSync(join(runs, "cumulative"), { recursive: true });
+    writeFileSync(
+      join(runs, "cumulative", "gate-roster.json"),
+      JSON.stringify({ total: 2, enumeration: { complete: true }, gates: [{ id: "A" }, { id: "B" }] }),
+    );
+    const rec = (seq, attempt, a, b) =>
+      JSON.stringify({ type: "attempt", attempt, sequence_index: seq,
+        gate_results: [{ id: "A", status: a }, { id: "B", status: b }] });
+    // Cell 1 grades AFTER cell 0; folding across cells painted cell 1's A over cell 0's.
+    writeFileSync(
+      join(runs, "cumulative", "manifest.status.jsonl"),
+      [rec(0, 1, "pass", "fail"), rec(1, 1, "fail", "pass")].join("\n") + "\n",
+    );
+    const zero = await readWall({ runsRoot: runs, runDir: "cumulative", sequenceIndex: 0 });
+    assert.equal(zero.sequence_index, 0);
+    assert.deepEqual(zero.gates.map((g) => g.state), ["passing", "failing"]);
+    const one = await readWall({ runsRoot: runs, runDir: "cumulative", sequenceIndex: 1 });
+    assert.deepEqual(one.gates.map((g) => g.state), ["failing", "passing"]);
+    // A cell of a run with no status file yet: untested, never an error.
+    const fresh = join(runs, "fresh");
+    mkdirSync(fresh, { recursive: true });
+    writeFileSync(join(fresh, "gate-roster.json"), JSON.stringify({ total: 1, gates: [{ id: "A" }] }));
+    const early = await readWall({ runsRoot: runs, runDir: "fresh", sequenceIndex: 0 });
+    assert.equal(early.ok, true, early.reason);
+    assert.deepEqual(early.totals, { passing: 0, failing: 0, untested: 1 });
+    // No cell named: the roster alone, every gate untested — never a mix.
+    const none = await readWall({ runsRoot: runs, runDir: "cumulative" });
+    assert.deepEqual(none.totals, { passing: 0, failing: 0, untested: 2 });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("WALL: an ungradable attempt is published as ungradable, with its reason", async () => {
   const root = mkdtempSync(join(tmpdir(), "gradable-"));
@@ -303,7 +341,7 @@ test("WALL: an ungradable attempt is published as ungradable, with its reason", 
       aborted_runners: ["backend gates-13-16.test.ts"],
     });
 
-    const wall = await readWall({ runsRoot: runs, runDir: "cumulative" });
+    const wall = await readWall({ runsRoot: runs, runDir: "cumulative", sequenceIndex: 0 });
     assert.equal(wall.gradable, false);
     assert.match(wall.ungradable_reason, /aborted without reporting a failing test/);
     assert.deepEqual(wall.aborted_runners, ["backend gates-13-16.test.ts"]);
@@ -322,7 +360,7 @@ test("WALL: gradability is null — never true — for an attempt recorded befor
     const runs = join(root, "runs");
     writeGradabilityRun(runs, "cumulative", {});
 
-    const wall = await readWall({ runsRoot: runs, runDir: "cumulative" });
+    const wall = await readWall({ runsRoot: runs, runDir: "cumulative", sequenceIndex: 0 });
     assert.equal(
       wall.gradable,
       null,
@@ -341,7 +379,7 @@ test("WALL: a completed run is gradable and carries no reason", async () => {
     const runs = join(root, "runs");
     writeGradabilityRun(runs, "cumulative", { gradable: true, ungradable_reason: null, aborted_runners: [] });
 
-    const wall = await readWall({ runsRoot: runs, runDir: "cumulative" });
+    const wall = await readWall({ runsRoot: runs, runDir: "cumulative", sequenceIndex: 0 });
     assert.equal(wall.gradable, true);
     assert.equal(wall.ungradable_reason, null);
   } finally {

@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { spine } from "./panels/live.js";
-import { read } from "../control/board/sources/live-stream.mjs";
+import { readCell } from "../control/board/sources/live-stream.mjs";
 
 const STOPPED = { state: "complete", chunk: { current: 6, total: 6 } };
 
@@ -68,7 +68,7 @@ test("the stream reader counts fixed and broke per attempt and reports how the c
     { kind: "cell.end", verdict: "FAIL", terminal_reason: "context_exhausted" },
   ];
   writeFileSync(join(cell, "live.jsonl"), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
-  const out = await read({ runsRoot: root });
+  const out = await readCell({ runsRoot: root, cell: { run_dir: "1789632137/local/p/m", sequence_index: 0 } });
   if (!out.ok) {
     rmSync(root, { recursive: true, force: true });
     assert.fail(`reader did not open the fixture: ${out.reason}`);

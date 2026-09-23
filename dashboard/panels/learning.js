@@ -10,7 +10,6 @@
 // Read-only.
 
 import { esc } from "../board.js";
-import { notPerCellMark } from "./cells.js";
 
 const VIEWS = ["matrix", "claims", "live"];
 let view = "matrix";
@@ -39,7 +38,6 @@ export function renderLearningBody(board) {
       <div class="learn-bar">
         <span class="learn-brand">LEARNING</span>
         <span class="learn-note">how this model is learning, in real time</span>
-        ${notPerCellMark(board)}
         <span class="spacer"></span>
         <span class="seg" data-seg="learnview">
           ${viewBtn("matrix", "MATRIX")}

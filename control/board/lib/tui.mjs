@@ -4,17 +4,6 @@
 import { streamClients } from "./state.mjs";
 
 /**
- * The TUI section reduced to its status unless the client asked for frames
- * (`?tui=1`, sent while the TUI MIRROR tab is on screen). The frame is the
- * largest section; this only saves bandwidth, it hides nothing.
- */
-export function tuiForClient(section, wantsFrame) {
-  if (!section || wantsFrame) return section;
-  const { frame: _f, ...status } = section;
-  return { ...status, frame: null, frame_withheld: true };
-}
-
-/**
  * The mirror's own cadence (250ms). Riding the board's 2s build-and-push loop
  * made it repaint every 2–4s; a terminal someone is reading needs better. Runs
  * only while a client subscribes: polling is what keeps the capture alive.
@@ -30,6 +19,8 @@ export function groupTuiSubscribers(clients) {
   const groups = new Map();
   for (const res of clients) {
     if (res.okpWantsTui !== true) continue;
+    // Its board frame is not written yet (routes/board.mjs); frames wait for it.
+    if (res.okpBoardSent === false) continue;
     const key = res.okpTuiCell || null;
     if (key === null) continue;
     const subs = groups.get(key);
@@ -82,22 +73,28 @@ async function pushTuiGroup(base, runId, subs) {
     if (!res.ok) return;
     const data = await res.json();
     const sig = JSON.stringify(data);
-    if (sig === memo.sig) return; // an unchanged terminal sends nothing
+    // The memo is the cell's, not the subscriber's: a client joining a cell
+    // someone already watches has no frame to splice rows into, so it is sent
+    // a full frame first, changed or not.
+    const unframed = subs.filter((r) => r.okpTuiFramed !== runId);
+    const changed = sig !== memo.sig;
+    if (!changed && !unframed.length) return; // an unchanged terminal sends nothing
     memo.sig = sig;
 
     // Changed rows only, by index; a full frame when there's nothing to splice.
     const rows = diffTuiRows(memo.rows, data.frame);
     const { frame: _f, ...meta } = data;
     const key = data.cell ?? runId;
-    const body =
-      rows === null
-        ? JSON.stringify({ tui: { ...data, cell: key } })
-        : JSON.stringify({ tui_rows: { rows, meta, cell: key } });
+    const full = JSON.stringify({ tui: { ...data, cell: key } });
+    const body = rows === null ? full : JSON.stringify({ tui_rows: { rows, meta, cell: key } });
     memo.rows = data.frame ?? null;
 
     for (const r of subs) {
+      const fresh = r.okpTuiFramed !== runId;
+      if (!fresh && !changed) continue;
       try {
-        r.write(`event: patch\ndata: ${body}\n\n`);
+        r.write(`event: patch\ndata: ${fresh ? full : body}\n\n`);
+        r.okpTuiFramed = runId;
       } catch {
         streamClients.delete(r);
       }

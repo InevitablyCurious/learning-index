@@ -1,5 +1,6 @@
-// SOURCE: live-stream — the cell's live.jsonl, the benchmark's one
-// during-the-run surface (LIVE-STREAM.md), located via liveStreamPath. Other
+// SOURCE: live-stream — ONE CELL's live.jsonl, the benchmark's one
+// during-the-run surface (LIVE-STREAM.md), at the cell's own directory
+// (cellLiveStreamPath). Per cell (readCell): built for every cell of the strip. Other
 // sources read files written when something ends; this is what makes the gate
 // wall and the learning panel move during a run.
 //
@@ -8,7 +9,7 @@
 // backend-specific logic lives here.
 
 import { int, str } from "../contract.mjs";
-import { readTail, parseJsonl, activeRun, liveStreamPath } from "./_runtime.mjs";
+import { readTail, parseJsonl, cellLiveStreamPath } from "./_runtime.mjs";
 
 export const id = "live-stream";
 export const fields = ["live"];
@@ -21,12 +22,8 @@ const EXT_KEEP = 12;
 /** Tail bound: the newest records are the live ones. */
 const TAIL_BYTES = 512 * 1024;
 
-export async function read(ctx) {
-  const run = await activeRun(ctx.runsRoot);
-  if (!run) return { ok: false, reason: "no active run directory — nothing to read yet" };
-
-  // The stream is in the cell folder, not run.dir (see liveStreamPath).
-  const path = await liveStreamPath(run.dir);
+export async function readCell(ctx) {
+  const path = await cellLiveStreamPath(ctx.runsRoot, ctx.cell);
   const raw = path ? await readTail(path, TAIL_BYTES) : "";
   if (!raw) {
     return {

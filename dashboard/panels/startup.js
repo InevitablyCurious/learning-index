@@ -13,6 +13,7 @@
 // Only `bad` raises the feed on its own.
 
 import { esc, nul } from "../board.js";
+import { activeCell } from "./cells.js";
 
 /** Worst first; drives ordering and the headline verdict. */
 const SEVERITY = { bad: 0, unknown: 1, busy: 2, ok: 3, idle: 4, off: 5 };
@@ -73,30 +74,32 @@ function controlPlane(b) {
 }
 
 /**
- * The runner: the control plane's view of its launcher and the manifest's view
- * of the cell, both shown (disagreement is worth seeing).
+ * The runner: the harness process of the cell the strip points at — its own
+ * state and its own launch log, never the newest cell's.
  */
 function runner(b) {
-  const r = b.control?.run ?? null;
   const why =
     "the harness process that actually runs the cell — spawned by the control plane, writes the run log the whole board reads.";
-  if (!r) {
+  if (!b.control) {
     return proc("runner", "benchmark runner", "unknown", null, null, why,
       "the control plane did not report a run state");
   }
-  const detail = [r.state ?? "unknown", r.log_name ? String(r.log_name) : null].filter(Boolean).join(" · ");
-  if (r.state === "running") {
+  const c = activeCell(b);
+  if (!c) {
+    return proc("runner", "benchmark runner", "idle", "idle", null, why,
+      "no cell in this batch; the runner is free to start one.");
+  }
+  const label = `s${String(c.sequence_index).padStart(4, "0")}`;
+  const log = c.log_path ? String(c.log_path).split("/").pop() : null;
+  const detail = [label, c.state ?? "unknown", log].filter(Boolean).join(" · ");
+  if (c.running) {
     return proc("runner", "benchmark runner", "busy", detail, null, why,
-      r.log_silent_s != null && r.log_silent_s > 300
-        ? `the log has been silent for ${r.log_silent_s}s — at high accumulated context this can be normal prefill, but it is worth watching`
+      Number.isFinite(c.heartbeat_age_s) && c.heartbeat_age_s > 90
+        ? `the cell's heartbeat has been silent for ${c.heartbeat_age_s}s — at high accumulated context this can be normal prefill, but it is worth watching`
         : null);
   }
-  if (r.can_start === false) {
-    return proc("runner", "benchmark runner", "busy", detail, null, why,
-      r.blocked_reason ?? "a cell is already in flight — runs are strictly serial");
-  }
-  return proc("runner", "benchmark runner", "idle", detail || "idle", null, why,
-    "no cell in flight; the runner is free to start one.");
+  return proc("runner", "benchmark runner", "idle", detail, null, why,
+    c.void_reason ? `this cell ended — ${c.void_reason}` : "this cell is not running.");
 }
 
 /**
@@ -155,7 +158,9 @@ function tuiMirror(b) {
     "a strictly read-only mirror of the run's terminal. It attaches to the session the runner opens; it never writes to the pty.";
   if (!t) {
     return proc("tui-mirror", "TUI mirror", "off", "not attached", null, why,
-      "the control plane is not enabled, so no capture can be started");
+      activeCell(b)
+        ? "no frame received for this cell yet — the mirror attaches to its session when the TUI MIRROR tab is open"
+        : "no cell selected — the mirror follows the cell strip");
   }
   if (t.status === "failed") {
     return proc("tui-mirror", "TUI mirror", "bad", "failed", null, why,

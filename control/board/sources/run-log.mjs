@@ -1,5 +1,6 @@
-// SOURCE: run-log — the live pulse between status records, parsed from the
-// runner's PROGRESS lines in the launch log (every few minutes; the status stream
+// SOURCE: run-log — ONE CELL's live pulse between status records (readCell;
+// built for every cell of the strip), parsed from the runner's PROGRESS lines
+// in that cell's own launch log (every few minutes; the status stream
 // lands only at attempt end). A fallback: live.jsonl is authoritative.
 //
 // `turns=` is scoring turns (raw minus guard- and finalize-killed); the board
@@ -9,8 +10,7 @@
 
 import { join } from "node:path";
 import { int, str } from "../contract.mjs";
-import { readTail } from "./_runtime.mjs";
-import { newestLog } from "../../runstate.mjs";
+import { readTail, statOrNull } from "./_runtime.mjs";
 import { countChunkPrompts } from "../../challenges.mjs";
 
 /**
@@ -44,18 +44,18 @@ function parseKV(line) {
   return out;
 }
 
-// The newest live launch log comes from control/runstate.mjs, so the board and
-// the control plane agree on which run is live.
-
 /** "initial-chunk-5" -> 5 ; "feedback-2" -> null (no longer a build chunk) */
 function chunkOf(phase) {
   const m = /^initial-chunk-(\d+)$/.exec(phase ?? "");
   return m ? Number(m[1]) : null;
 }
 
-export async function read(ctx) {
-  const log = await newestLog(ctx.runsRoot);
-  if (!log) return { ok: false, reason: "no cell launch log under runs root" };
+export async function readCell(ctx) {
+  const path = ctx.cell.log_path ?? null;
+  if (!path) return { ok: false, reason: "the cell's launch record names no log" };
+  const st = await statOrNull(path);
+  if (!st?.isFile()) return { ok: false, reason: `the cell's launch log is missing: ${path}` };
+  const log = { path, mtime: st.mtimeMs, size: st.size };
 
   const text = await readTail(log.path);
   const lines = text.split("\n").filter((l) => l.includes("PROGRESS"));

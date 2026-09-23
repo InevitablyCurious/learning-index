@@ -35,6 +35,13 @@ export function boardWithoutEvents(board) {
  */
 const SPLIT_SECTIONS = { control: ["capabilities", "roster", "run", "notes"] };
 
+/**
+ * Sections split by EVERY child: `by_cell` holds one view per cell, keyed by
+ * the cell's address, so a write in one cell resends that cell's view alone.
+ * A child that disappears is sent as null. Client: board.js patch handler.
+ */
+const SPLIT_ALL = new Set(["by_cell"]);
+
 /** Flatten split sections into `parent.child` keys; leave everything else. */
 export function granularSignatures(board) {
   const b = boardWithoutEvents(board);
@@ -43,6 +50,10 @@ export function granularSignatures(board) {
     if (k === "generated_at") continue;
     if (k === "sources") {
       out[k] = JSON.stringify((v ?? []).map((s) => ({ id: s.id, ok: s.ok, reason: s.reason })));
+      continue;
+    }
+    if (SPLIT_ALL.has(k)) {
+      for (const [child, cv] of Object.entries(v ?? {})) out[`${k}.${child}`] = JSON.stringify(cv ?? null);
       continue;
     }
     const split = SPLIT_SECTIONS[k];
@@ -100,13 +111,7 @@ export async function tick(cfg) {
     }
     lastSections = sections;
 
-    if (changed) {
-      // The TUI section belongs to the fast path; this slower copy would overwrite a
-      // newer frame.
-      delete patch.tui;
-      if (!Object.keys(patch).length) return;
-      broadcast("patch", patch);
-    }
+    if (changed) broadcast("patch", patch);
   }
 
   // Event deltas per client, each at its own cursor.

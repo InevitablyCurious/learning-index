@@ -14,8 +14,6 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { STALL_THRESHOLD_S } from "./contract.mjs";
 import { activeTreeRoot } from "./tree.mjs";
-// The one live-stream path resolver (LIVE-STREAM.md); never build the path by hand.
-import { liveStreamPath } from "./board/sources/_runtime.mjs";
 import { statOrNull, listDir } from "./lib/fs.mjs";
 import { liveRuns, evictRun } from "./run-ledger.mjs";
 import { endRecord, listRecords } from "./cell-registry.mjs";
@@ -50,27 +48,8 @@ export async function heartbeatAgeAtPath(path, now = Date.now()) {
 }
 
 /**
- * Age in ms of the newest heartbeat in this run's live stream, or null when
- * there is none. The stream is resolved through the designated live-stream
- * path resolver (LIVE-STREAM.md).
- */
-export async function heartbeatAge({ runsRoot, runDir, now = Date.now() }) {
-  if (!runDir) return null;
-  let path;
-  try {
-    path = await liveStreamPath(join(runsRoot, runDir));
-  } catch {
-    return null;
-  }
-  if (!path) return null;
-  return heartbeatAgeAtPath(path, now);
-}
-
-/**
  * Age in ms of the newest heartbeat of ONE CELL — the cell's own live.jsonl,
- * resolved from (run_dir, sequence_index) through cellDirForRun. Never the
- * run_dir-wide resolver, which reads whichever cell stream has the newest
- * mtime and so cannot attribute a beat to a specific cell. null when the
+ * resolved from (run_dir, sequence_index) through cellDirForRun. null when the
  * cell's directory cannot be resolved or the cell never beat.
  */
 export async function cellHeartbeatAge({ runsRoot, runDir, sequenceIndex, now = Date.now() }) {

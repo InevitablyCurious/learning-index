@@ -1,4 +1,5 @@
-// SOURCE: learning — behind the LEARNING panel: the model's own in-session
+// SOURCE: learning — behind the LEARNING panel, for ONE CELL (readCell; the
+// board builds it for every cell of the strip): the model's own in-session
 // account of what it learned (the plugin's mark-keyed master), the gate ×
 // attempt matrix, and the harness's learning ledger.
 //
@@ -21,9 +22,9 @@ import {
   readJson,
   listDir,
   statOrNull,
-  activeRun,
-  liveStreamPath,
+  cellLiveStreamPath,
 } from "./_runtime.mjs";
+import { cellDirForRun } from "../../runstate.mjs";
 import { join } from "node:path";
 
 export const id = "learning";
@@ -38,35 +39,35 @@ export const PHASES_PER_CELL = 5;
 /** The four capture states, in the panel's words. */
 export const CAPTURE_STATES = ["unwired", "unobserved", "captured", "anomaly"];
 
-// Cross-poll mark count for anomaly detection, per session id.
-let lastMarks = null;
+// Cross-poll mark count for anomaly detection, per session id (one entry per
+// cell's session, so cells never compare against each other's counts).
+const lastMarks = new Map();
 
-export async function read(ctx) {
-  const run = await activeRun(ctx.runsRoot);
-  if (!run?.dir) {
-    return { ok: false, reason: "no active run directory — nothing to learn from yet" };
-  }
+export async function readCell(ctx) {
+  const seq = ctx.cell.sequence_index;
+  const run = { name: ctx.cell.run_dir, dir: join(ctx.runsRoot, ctx.cell.run_dir) };
+  const found = await cellDirForRun(ctx.runsRoot, run.name, seq);
+  const cellDir = found ? join(ctx.runsRoot, found.cellDir) : null;
 
   // ── THE MATRIX ── roster (rows) × outcomes (pass and fail).
   const rosterPath = join(run.dir, "gate-roster.json");
   const roster = await readJson(rosterPath);
   const outcomesPath = join(run.dir, "predicate-outcomes.jsonl");
-  const outcomes = parseJsonl(await readTail(outcomesPath));
+  // The campaign's file holds every cell; only this cell's rows are its matrix.
+  const outcomes = parseJsonl(await readTail(outcomesPath)).filter((o) => int(o?.sequence_index) === seq);
 
   // During the run, gate.result records from the live stream fill the matrix
   // (predicate-outcomes.jsonl is written only when the campaign exits). The
   // post-mortem file stays authoritative and overwrites per (gate, attempt).
-  const livePath = await liveStreamPath(run.dir);
+  const livePath = await cellLiveStreamPath(ctx.runsRoot, ctx.cell);
   const liveRecs = livePath ? parseJsonl(await readTail(livePath)) : [];
   const liveOutcomes = [];
   let liveSession = null;
   let liveArm = null;
-  let liveCellSeq = null;
   for (const r of liveRecs) {
     if (!r || typeof r !== "object") continue;
     const sid = str(r.session_id);
     if (sid) liveSession = sid;
-    if (int(r.cell_seq) !== null) liveCellSeq = int(r.cell_seq);
     const kind = str(r.kind);
     if (kind === "cell.start") {
       liveArm = str(r.arm) ?? liveArm;
@@ -90,7 +91,7 @@ export async function read(ctx) {
   const manifest = await readJson(join(run.dir, "manifest.json"));
   const cell = {
     memory_mode: str(newest?.memory_mode) ?? liveArm ?? null,
-    sequence_index: int(newest?.sequence_index) ?? liveCellSeq ?? null,
+    sequence_index: seq,
     // The model is a manifest fact.
     model: str(manifest?.roster?.[0]?.model) ?? null,
     org_id: str(newest?.org_id) ?? str(manifest?.org_id) ?? null,
@@ -125,12 +126,13 @@ export async function read(ctx) {
       };
       // A mark count that shrank since the last poll is a capture defect, reported.
       const marks = Array.isArray(m.merge?.marks_seen) ? m.merge.marks_seen.length : 0;
-      if (lastMarks && lastMarks.sessionId === sessionId && marks < lastMarks.marks) {
+      const prev = lastMarks.get(sessionId);
+      if (prev !== undefined && marks < prev) {
         captureState = "anomaly";
       } else {
         captureState = "captured";
       }
-      lastMarks = { sessionId, marks };
+      lastMarks.set(sessionId, marks);
     }
     const cl = await readJson(active.changedLinesPath);
     if (Array.isArray(cl)) {
@@ -147,13 +149,13 @@ export async function read(ctx) {
   }
 
   // ── THE LEARNING LEDGER ── harness-produced; absent = unobserved.
-  const ledger = await findLedger(run.dir);
+  const ledger = cellDir ? await findLedger(cellDir) : null;
 
   return {
     ok: true,
     provenance: {
       path: run.dir,
-      mtime: run.mtime ?? null,
+      mtime: null,
       run: run.name,
       sessions: sessions.length,
       live_stream: livePath,
