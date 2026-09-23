@@ -1,10 +1,11 @@
-// THE TUI CELL SELECTOR — the subscription carries the selected run_id, the
-// selector lists the live runs, and the selection state round-trips.
+// THE TUI MIRROR'S CELL — the subscription carries the address of the cell
+// the strip points at (`<run_dir>::<sequence_index>`), and the selection state
+// round-trips.
 //
-// WHY: the board's SSE fast path is keyed by run_id (control/board/lib/tui.mjs
-// groups frame subscribers by it, and every TUI patch carries its run_id). A
-// dashboard that subscribed with tui=1 only could never mirror anything but
-// the default/newest cell — the operator had no way to pick another live one.
+// WHY THE ADDRESS AND NOT run_id: the ledger run_id lives only in the control
+// plane's memory. An ended cell, a CLI launch, or any cell after a control-plane
+// restart had none, and a missing key fell back to "the newest cell" — another
+// cell's terminal under this one's name.
 //
 // Zero dependencies. Stock `node --test`, no install, no build step:
 //
@@ -13,59 +14,42 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { streamUrl, tuiRunId, setTuiRunId } from "./board.js";
+import { streamUrl, tuiCell, setTuiCell, cellKey } from "./board.js";
 import { renderTuiBody } from "./panels/tui.js";
 
 // ── the subscription URL ──
 
-test("stream URL omits run_id when no cell is selected", () => {
+test("stream URL carries no cell when none is selected", () => {
   assert.equal(streamUrl(0, true, null), "/api/stream?since=0&tui=1");
   assert.equal(streamUrl(42, false, null), "/api/stream?since=42");
 });
 
-test("stream URL carries the selected run_id alongside tui=1", () => {
-  const url = streamUrl(7, true, "3f2a1b0c-0000-4000-8000-000000000009");
+test("stream URL carries the cell address, URI-encoded", () => {
   assert.equal(
-    url,
-    "/api/stream?since=7&tui=1&run_id=3f2a1b0c-0000-4000-8000-000000000009",
+    streamUrl(7, true, "1790/local/x::3"),
+    "/api/stream?since=7&tui=1&cell=1790%2Flocal%2Fx%3A%3A3",
   );
 });
 
-test("run_id is URI-encoded into the subscription", () => {
-  assert.ok(streamUrl(0, true, "a b&c").includes("run_id=a%20b%26c"));
+// ── the cell address ──
+
+test("cellKey is run_dir::sequence_index, and null when either is missing", () => {
+  assert.equal(cellKey({ run_dir: "r/x", sequence_index: 2 }), "r/x::2");
+  assert.equal(cellKey({ run_dir: "r/x", sequence_index: 0, run_id: null }), "r/x::0", "no ledger run_id needed");
+  assert.equal(cellKey({ run_dir: null, sequence_index: 2 }), null);
+  assert.equal(cellKey({ run_dir: "r/x", sequence_index: null }), null);
+  assert.equal(cellKey(null), null);
 });
 
 // ── the selection state ──
 
-test("setTuiRunId round-trips; empty values mean the default (null)", () => {
+test("setTuiCell round-trips; an empty value means no cell", () => {
   // No EventSource under Node: connect() is guarded, so this is pure state.
-  setTuiRunId("run-1");
-  assert.equal(tuiRunId(), "run-1");
-  setTuiRunId("");
-  assert.equal(tuiRunId(), null);
+  setTuiCell("r/x::1");
+  assert.equal(tuiCell(), "r/x::1");
+  setTuiCell("");
+  assert.equal(tuiCell(), null);
 });
-
-// ── the selector + identity label ──
-
-/** A board with two addressable live runs and one external (no run_id). */
-function boardWithRuns(tui = {}) {
-  return {
-    control: {
-      run: {
-        runs: [
-          { run_id: "run-b", session_id: "bbbb2222-xyz", model: "m2", arm: "off", state: "running" },
-          { run_id: "run-a", session_id: "aaaa1111-xyz", model: "m1", arm: "on", state: "running" },
-          { run_id: null, session_id: "cccc3333-xyz", model: "m3", arm: "on", state: "running" },
-        ],
-        live_count: 3,
-      },
-    },
-    run: {},
-    events: { connected: true, total: 0 },
-    tui: { status: "live", frame: null, ...tui },
-    hold: null,
-  };
-}
 
 // ── THE HEAD CARRIES NONE OF IT ANY MORE ────────────────────────────────────
 //

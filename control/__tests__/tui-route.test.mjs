@@ -1,15 +1,21 @@
-// GET /api/tui — run_id selection: an unknown run_id is a 404 (never a silent
-// fall back to the newest cell), and a registered run whose cell.start record
-// is absent still answers 200 keyed on its run_id (session unresolved → the
-// mirror reports "no session observed yet" without spawning a capture).
+// GET /api/tui — keyed on the cell's ADDRESS, `<run_dir>::<sequence_index>`:
+// the key every per-cell read uses, and one that survives a control-plane
+// restart (the ledger's run_id did not). No cell is a 400 — there is no
+// "newest cell" to fall back to — and a cell whose cell.start record is absent
+// answers 200 with "no session observed yet", spawning no capture.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 
-import { routes } from "../routes/run.mjs";
-import { registerRun, unregisterRun } from "../run-ledger.mjs";
+// state.mjs reads the bench root once at import: point it at a temp dir first,
+// so nothing here touches the real runs root. (node --test runs each file in
+// its own process: this never leaks elsewhere.)
+process.env.OKP_CONTROL_BENCH_ROOT = mkdtempSync(join(tmpdir(), "tui-route-bench-"));
+const { routes } = await import("../routes/run.mjs");
+const { RUNS_ROOT } = await import("../state.mjs");
 
 function tuiRoute() {
   const r = routes.find((r) => r.method === "GET" && r.path === "/api/tui");
@@ -26,45 +32,24 @@ function fakeRes() {
   };
 }
 
-test("GET /api/tui?run_id=<unknown> → 404, never a newest-cell fallback", async () => {
-  const res = fakeRes();
-  await tuiRoute().handle(
-    {},
-    res,
-    new URL("http://x/api/tui?run_id=does-not-exist"),
-  );
-  assert.equal(res.status, 404);
-  assert.match(res.body.error, /unknown run_id does-not-exist/);
+test("GET /api/tui with no cell, or a malformed one → 400, never a newest-cell fallback", async () => {
+  for (const q of ["", "?cell=", "?cell=no-separator", "?cell=r%2Fx%3A%3A-1"]) {
+    const res = fakeRes();
+    await tuiRoute().handle({}, res, new URL(`http://x/api/tui${q}`));
+    assert.equal(res.status, 400, q);
+    assert.match(res.body.error, /cell required/);
+  }
 });
 
-test("GET /api/tui?run_id=<registered> → 200 keyed on run_id, session unresolved", async (t) => {
-  const runId = "test-run-tui-route";
-  registerRun({
-    run_id: runId,
-    sequence_index: 0,
-    model: "m-a",
-    arm: "off",
-    kind: "bench",
-    org: null,
-    context: null,
-    manifest_arg: null,
-    pid: null,
-    started_at: null,
-    log_path: null,
-    // A real but empty dir: no cell.start record exists, so the session and
-    // serve_url resolve to null without touching the actual runs root.
-    run_dir: mkdtempSync(`${tmpdir()}/tui-route-`),
-    finished: false,
-    terminal_status: null,
-    terminal_ok: null,
-  });
-  t.after(() => unregisterRun(runId));
-
+test("GET /api/tui?cell=<a cell that has not started> → 200 keyed on the cell, session unresolved", async () => {
+  mkdirSync(RUNS_ROOT, { recursive: true });
+  const runDir = relative(RUNS_ROOT, mkdtempSync(join(RUNS_ROOT, "tui-route-")));
+  const cell = `${runDir}::0`;
   const res = fakeRes();
-  await tuiRoute().handle({}, res, new URL(`http://x/api/tui?run_id=${runId}`));
+  await tuiRoute().handle({}, res, new URL(`http://x/api/tui?cell=${encodeURIComponent(cell)}`));
 
   assert.equal(res.status, 200);
-  assert.equal(res.body.run_id, runId, "response is keyed on the run identity");
+  assert.equal(res.body.cell, cell, "response is keyed on the cell address");
   assert.equal(res.body.running, false);
   assert.equal(res.body.session_id, null);
   assert.match(res.body.reason, /no session observed yet/);

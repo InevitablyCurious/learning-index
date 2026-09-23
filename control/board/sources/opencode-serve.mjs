@@ -1,7 +1,9 @@
-// SOURCE: opencode-serve — the live agent session API (the control plane's
-// --serve-url, default http://127.0.0.1:8719): turn count and token burn while a
-// chunk is still running. Unreachable = unwired; the board loses only this
-// liveness. Read-only, GET /session only: counters, never the transcript (the
+// SOURCE: opencode-serve — the live agent session API of the NEWEST live cell
+// (the same cell run-log describes), on that cell's own serve port from its
+// cell.start record: token burn and elapsed while a chunk is still running.
+// It read one fixed --serve-url (:8719) until per-cell ports left nothing
+// there. No live cell, or an unreachable one = unwired; the board loses only
+// this liveness. Read-only, GET /session only: counters, never the transcript (the
 // model's raw output; everything on the board is public).
 //
 // The TUI's "context" figure is a different quantity (occupancy of the last
@@ -9,6 +11,7 @@
 // it and says so in words.
 
 import { int, str } from "../contract.mjs";
+import { readRunState, cellServeUrl } from "../../runstate.mjs";
 
 export const id = "opencode-serve";
 export const fields = ["run.tokens", "run.elapsed_s", "run.session_id"];
@@ -17,7 +20,11 @@ export function describe() {
 }
 
 export async function read(ctx) {
-  const base = ctx.config?.opencodeServeUrl ?? "http://127.0.0.1:8719";
+  const state = await readRunState({ runsRoot: ctx.runsRoot });
+  const newest = (state?.runs ?? []).find((r) => r.running) ?? null;
+  if (!newest) return { ok: false, reason: "no cell is running" };
+  const base = await cellServeUrl(ctx.runsRoot, newest.run_dir, newest.sequence_index);
+  if (!base) return { ok: false, reason: "the running cell has not published its serve address yet" };
 
   let res;
   try {

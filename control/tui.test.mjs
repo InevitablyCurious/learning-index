@@ -1,4 +1,4 @@
-// TuiMirror.pollFor — one bounded capture per run identity. The captures are
+// TuiMirror.pollFor — one bounded capture per cell address. The captures are
 // real (PTY child processes) but exec /usr/bin/true, so they start and exit
 // immediately without an opencode binary, a cell, or a serve port.
 
@@ -10,18 +10,18 @@ import { TuiMirror, MAX_CAPTURES } from "./tui.mjs";
 const HARMLESS_BIN = "/usr/bin/true";
 
 function makeMirror() {
-  return new TuiMirror({ serveUrl: "http://127.0.0.1:1", bin: HARMLESS_BIN });
+  return new TuiMirror({ bin: HARMLESS_BIN });
 }
 
-test("pollFor keys one capture per runId and echoes run_id in the payload", (t) => {
+test("pollFor keys one capture per cell and echoes the cell in the payload", (t) => {
   const m = makeMirror();
   t.after(() => m.shutdown());
 
   const a = m.pollFor("run-a", "ses_a", "http://127.0.0.1:9001");
   const b = m.pollFor("run-b", "ses_b", "http://127.0.0.1:9002");
 
-  assert.equal(a.run_id, "run-a");
-  assert.equal(b.run_id, "run-b");
+  assert.equal(a.cell, "run-a");
+  assert.equal(b.cell, "run-b");
   assert.equal(a.session_id, "ses_a");
   assert.equal(b.session_id, "ses_b");
   assert.equal(m.captures.size, 2);
@@ -31,7 +31,7 @@ test("pollFor keys one capture per runId and echoes run_id in the payload", (t) 
   assert.equal(m.captures.get("run-b").serveUrl, "http://127.0.0.1:9002");
 });
 
-test("pollFor replaces the capture when a runId's sessionId changes", (t) => {
+test("pollFor replaces the capture when a cell's sessionId changes", (t) => {
   const m = makeMirror();
   t.after(() => m.shutdown());
 
@@ -43,17 +43,27 @@ test("pollFor replaces the capture when a runId's sessionId changes", (t) => {
   assert.notEqual(m.captures.get("run-a"), old);
   assert.equal(old.detached, true, "old capture was stopped");
   assert.equal(res.session_id, "ses_new");
-  assert.equal(res.run_id, "run-a");
+  assert.equal(res.cell, "run-a");
 });
 
-test("pollFor without a sessionId reports not-running with the run_id", (t) => {
+test("pollFor without a sessionId reports not-running with the cell", (t) => {
   const m = makeMirror();
   t.after(() => m.shutdown());
 
   const res = m.pollFor("run-a", null, "http://127.0.0.1:9001");
   assert.equal(res.running, false);
-  assert.equal(res.run_id, "run-a");
+  assert.equal(res.cell, "run-a");
   assert.equal(res.session_id, null);
+  assert.equal(m.captures.size, 0);
+});
+
+test("pollFor without a serve URL attaches nothing — there is no default port", (t) => {
+  const m = makeMirror();
+  t.after(() => m.shutdown());
+
+  const res = m.pollFor("run-a", "ses_a", null);
+  assert.equal(res.running, false);
+  assert.match(res.reason, /not published its serve address/);
   assert.equal(m.captures.size, 0);
 });
 

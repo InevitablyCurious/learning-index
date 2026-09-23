@@ -78,7 +78,6 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_CONTROL_BENCH_ROOT | .. | control bench root | env |
 | OKP_CONTROL_PROXY_URL | http://127.0.0.1:4545 | model proxy: the control roster AND the harness model list (`GET /v1/models`) | env |
 | OKP_CONTROL_RUNTIME_URL | http://127.0.0.1:1234 | LM Studio runtime | env |
-| OKP_CONTROL_SERVE_URL | http://127.0.0.1:8719 | serve API — **same-cell legacy fallback only** (control/state.mjs:25); the per-cell live-view URL is resolved from the cell's `cell.start` `serve_url` first (`routes/run.mjs` `cellServeUrl`), never cross-cell | env |
 | OKP_CONTROL_PYTHON | null | python binary | env |
 | OKP_IDENTITY_SEED_HEX | (none) | leader-signer seed | env or --seed-hex |
 | OKP_ENV | local | base-URL switch | env =production |

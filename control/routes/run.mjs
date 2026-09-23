@@ -26,7 +26,7 @@ import { ensureTree } from "../tree.mjs";
 import { attachRemedies, describeBuiltinTools } from "../tools.mjs";
 // The N-slot run ledger: every cell this service spawns holds a slot, so N
 // concurrent cells are tracked at once (the launcher singleton is gone).
-import { inFlightModels, newRunId, registerRun, unregisterRun, getRun } from "../run-ledger.mjs";
+import { inFlightModels, newRunId, registerRun, unregisterRun } from "../run-ledger.mjs";
 import {
   args,
   BENCH_ROOT,
@@ -48,6 +48,17 @@ function stopToken(state) {
     .map((r) => `${r.pid ?? "external"}:${r.log_name ?? ""}:${r.started_at ?? ""}`)
     .sort();
   return createHash("sha256").update(`stop:${runs.join("|")}`).digest("hex").slice(0, 12);
+}
+
+/** "<run_dir>::<sequence_index>" → its parts, or null when it is not one. */
+function parseCellKey(raw) {
+  if (typeof raw !== "string") return null;
+  const at = raw.lastIndexOf("::");
+  if (at <= 0) return null;
+  const runDir = raw.slice(0, at);
+  const sequenceIndex = Number(raw.slice(at + 2));
+  if (!Number.isInteger(sequenceIndex) || sequenceIndex < 0) return null;
+  return { key: raw, runDir, sequenceIndex };
 }
 
 export const routes = [
@@ -550,37 +561,24 @@ export const routes = [
 
   {
     // ── GET /api/tui ── a frame of the attached view, from a read-only pty
-    // capture. Polling keeps it alive; it stops when polling stops. With
-    // ?run_id=, the mirror selects exactly that cell: its session id and its
-    // own serve URL come from its cell.start record, never from another cell's
-    // launch log. An unknown run_id is a 404 — never a silent fall back to
-    // the newest cell. Without run_id, the legacy single-cell surface mirrors
-    // the newest live run using the process-default serve URL.
+    // capture. Polling keeps it alive; it stops when polling stops. `?cell=`
+    // is the cell's address, `<run_dir>::<sequence_index>` — the key every
+    // per-cell read uses, and one that survives a control-plane restart (the
+    // ledger's run_id does not). Its session id and its own serve URL come from
+    // its cell.start record. There is no default cell: none given is a 400.
     method: "GET",
     path: "/api/tui",
     async handle(req, res, url) {
-      const runId = url.searchParams.get("run_id");
-      if (runId) {
-        const rec = getRun(runId);
-        if (!rec) {
-          sendJson(res, 404, { error: `unknown run_id ${runId}` });
-          return;
-        }
-        const sessionId = await cellSessionId(RUNS_ROOT, rec.run_dir, rec.sequence_index);
-        // Each concurrent cell has its own serve port; the process default is
-        // a same-cell legacy fallback, NOT a cross-cell one.
-        const serveUrl =
-          (await cellServeUrl(RUNS_ROOT, rec.run_dir, rec.sequence_index)) ?? args.serveUrl;
-        sendJson(res, 200, {
-          ...tui.pollFor(runId, sessionId, serveUrl),
-          // Stated on the surface: this is a second client, not a screen-share.
-          note: "second attach client — same session, independent scroll position",
-        });
+      const cell = parseCellKey(url.searchParams.get("cell"));
+      if (!cell) {
+        sendJson(res, 400, { error: "cell required: <run_dir>::<sequence_index>" });
         return;
       }
-      const run = await readRunState({ runsRoot: RUNS_ROOT });
+      const sessionId = await cellSessionId(RUNS_ROOT, cell.runDir, cell.sequenceIndex);
+      const serveUrl = await cellServeUrl(RUNS_ROOT, cell.runDir, cell.sequenceIndex);
       sendJson(res, 200, {
-        ...tui.pollFor(run.runs?.[0]?.run_id ?? "default", run.session_id, args.serveUrl),
+        ...tui.pollFor(cell.key, sessionId, serveUrl),
+        // Stated on the surface: this is a second client, not a screen-share.
         note: "second attach client — same session, independent scroll position",
       });
       return;

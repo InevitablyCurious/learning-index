@@ -88,37 +88,48 @@ function capWindow(rows, cap) {
 
 let stream = null;
 
-// ── TUI MIRROR CELL SELECTION ── WHICH live cell's terminal the mirror
-// follows, keyed on the control-plane ledger run_id. null is the unkeyed
-// default — the newest cell — matching the server's own contract
-// (control/board/lib/tui.mjs groups frame subscribers by this key).
-let selectedRunId = null;
+// ── TUI MIRROR CELL ── which cell's terminal the mirror follows: the cell
+// the strip points at (panels/cells.js activeCell), by its address
+// `<run_dir>::<sequence_index>` — the key every per-cell read uses. It was the
+// control-plane ledger run_id, which exists only in that process's memory: an
+// ended cell, a CLI launch, or any cell after a control-plane restart had
+// none, and a missing key fell back to "the newest cell" — another cell's
+// terminal under this one's name. No cell, no mirror.
+let selectedTuiCell = null;
 
-/** The run_id this client's TUI subscription is keyed on; null = default/newest. */
-export function tuiRunId() {
-  return selectedRunId;
+/** The cell address this client's TUI subscription is keyed on, or null. */
+export function tuiCell() {
+  return selectedTuiCell;
+}
+
+/** A cell's address, or null when it has none. */
+export function cellKey(c) {
+  if (!c || typeof c.run_dir !== "string" || !c.run_dir) return null;
+  if (!Number.isInteger(c.sequence_index) || c.sequence_index < 0) return null;
+  return `${c.run_dir}::${c.sequence_index}`;
 }
 
 /**
- * Point the TUI mirror at one live cell (empty/falsy = the default). Changing
- * the selection resubscribes, so the server's fast path regroups this client
- * under the new run_id; the cursor is kept, so no event is replayed or skipped.
+ * Point the mirror at one cell (null = none). A change resubscribes, so the
+ * server regroups this client under the new cell, and drops the terminal on
+ * screen — it belongs to the cell being left.
  */
-export function setTuiRunId(id) {
-  const next = id || null;
-  if (next === selectedRunId) return;
-  selectedRunId = next;
+export function setTuiCell(key) {
+  const next = key || null;
+  if (next === selectedTuiCell) return;
+  selectedTuiCell = next;
+  if (board) board.tui = null;
   resubscribe();
 }
 
 /**
  * The subscription URL, pure and exported for tests. `tui=1` (the TUI MIRROR
  * tab is selected) opts into full terminal frames; otherwise only the mirror's
- * status is sent. `run_id` keys the mirror to one live cell; absent = default.
+ * status is sent. `cell` keys the mirror to one cell; absent = none.
  */
-export function streamUrl(cursor, wantsTui, runId) {
+export function streamUrl(cursor, wantsTui, cell) {
   const tui = wantsTui ? "&tui=1" : "";
-  const key = runId ? `&run_id=${encodeURIComponent(runId)}` : "";
+  const key = cell ? `&cell=${encodeURIComponent(cell)}` : "";
   return `/api/stream?since=${cursor}${tui}${key}`;
 }
 
@@ -137,10 +148,10 @@ export function resubscribe() {
 
 function connect() {
   // Guarded like the boot block below: this module is also a library that panel
-  // tests import under Node, where setTuiRunId still runs.
+  // tests import under Node, where setTuiCell still runs.
   if (typeof EventSource === "undefined") return;
   // Resume from the cursor; the subscription carries the TUI tab and the cell.
-  stream = new EventSource(streamUrl(eventCursor, curveTab() === "tui", selectedRunId));
+  stream = new EventSource(streamUrl(eventCursor, curveTab() === "tui", selectedTuiCell));
 
   stream.addEventListener("board", (msg) => {
     try {
@@ -182,7 +193,9 @@ function connect() {
         }
         if (k === "tui_rows") {
           // Row splice: only changed terminal rows arrive. With no frame to splice into,
-          // the splice is dropped; the server sends a full frame next.
+          // the splice is dropped; the server sends a full frame next. A splice for
+          // any cell but the selected one is late traffic from a switch: dropped.
+          if (v?.cell !== selectedTuiCell) continue;
           if (!board.tui?.frame) continue;
           const frame = board.tui.frame.slice();
           for (const [i, row] of v.rows ?? []) frame[i] = row;
@@ -190,6 +203,7 @@ function connect() {
           continue;
         }
         if (k === "tui") {
+          if (v && v.cell !== undefined && v.cell !== selectedTuiCell) continue;
           // A withheld frame must not erase the one on screen.
           board.tui = v?.frame_withheld && board.tui?.frame ? { ...v, frame: board.tui.frame } : v;
           continue;
@@ -294,7 +308,7 @@ import {
   feedExportLabel,
 } from "./panels/live.js";
 import { renderHold } from "./panels/hold.js";
-import { renderCells, setSelectedCell, selectedCell, observeCellStrip } from "./panels/cells.js";
+import { renderCells, setSelectedCell, selectedCell, observeCellStrip, activeCell } from "./panels/cells.js";
 import { renderRail } from "./panels/rail.js";
 import { renderRecall } from "./panels/recall.js";
 import {
@@ -344,7 +358,6 @@ import {
   doCommitRestore,
   doArmReset,
   doCommitReset,
-  doSelectTuiRun,
   doPickBatch,
 } from "./board-actions.js";
 
@@ -364,6 +377,9 @@ function render() {
       </div>`);
     return;
   }
+
+  // The mirror follows the cell the strip points at, selected or default.
+  setTuiCell(cellKey(activeCell(board)));
 
   // Panel order is the board's argument: hold (a blocked run) first; the curve
   // and the gate wall side by side; the batches (their cells, their floor and
@@ -622,12 +638,8 @@ function onClick(e) {
     const n = Number(t.dataset.cellPick);
     const clearing = selectedCell() === n;
     setSelectedCell(clearing ? null : n);
-    // AND REPOINT THE MIRROR. These were two selections: the strip chose what
-    // the board was ABOUT, and the TUI kept its own run_id, so clicking a card
-    // changed the panels and left the terminal showing whichever cell the
-    // server defaulted to. One click, one subject. Clearing goes back to the
-    // unkeyed default (newest), which is what the server does with no key.
-    setTuiRunId(clearing ? null : t.dataset.cellRun || null);
+    // The mirror follows on render (setTuiCell from activeCell): one click,
+    // one subject.
     render();
     return;
   }
@@ -667,7 +679,6 @@ function onRunSel(e) {
   const ri = e.target.closest("[data-router-input]");
   if (ri) { setRouterDraft(ri.dataset.routerInput, e.target.value); return; }
   // The TUI cell selector is a change, never a keystroke: resubscribe at once.
-  if (e.target.closest("[data-tui-run]")) { doSelectTuiRun(e.target.value); return; }
   if (e.target.closest("[data-create-query]")) { setCreateQuery(e.target.value); render(); return; }
   if (e.target.closest("[data-create-provider]")) { setCreateProvider(e.target.value); render(); }
   if (e.target.closest("[data-create-concurrency-n]")) { setCreateConcurrencyN(e.target.value); render(); return; }

@@ -23,7 +23,6 @@ function parseArgs(argv) {
     benchRoot: process.env.OKP_CONTROL_BENCH_ROOT ?? resolve(HERE, ".."),
     proxyUrl: process.env.OKP_CONTROL_PROXY_URL ?? "http://127.0.0.1:4545",
     runtimeUrl: process.env.OKP_CONTROL_RUNTIME_URL ?? "http://127.0.0.1:1234",
-    serveUrl: process.env.OKP_CONTROL_SERVE_URL ?? "http://127.0.0.1:8719",
     python: process.env.OKP_CONTROL_PYTHON ?? null,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -32,7 +31,6 @@ function parseArgs(argv) {
     else if (a === "--bench-root") out.benchRoot = String(argv[++i]);
     else if (a === "--proxy-url") out.proxyUrl = String(argv[++i]);
     else if (a === "--runtime-url") out.runtimeUrl = String(argv[++i]);
-    else if (a === "--serve-url") out.serveUrl = String(argv[++i]);
     else if (a === "--help" || a === "-h") out.help = true;
   }
   return out;
@@ -50,7 +48,6 @@ bench control plane
   --bench-root <dir>  default: the parent of this file
   --proxy-url <url>   default http://127.0.0.1:4545   (model roster)
   --runtime-url <url> default http://127.0.0.1:1234   (residency + context)
-  --serve-url <url>   default http://127.0.0.1:8719   (TUI fallback; events follow each cell's own port)
 
   Binds 127.0.0.1 only. There is deliberately no --host flag.
 `);
@@ -78,7 +75,9 @@ export function setRingRunDir(next) { ringRunDir = next; }
 
 // On demand: starts on the first poll, stops when nothing reads it. Never
 // writes to the pty.
-export const tui = new TuiMirror({ serveUrl: args.serveUrl });
+// Each cell serves on its own port (harness/free_port.py); the mirror is told
+// which one per poll, from the cell's cell.start record — there is no default.
+export const tui = new TuiMirror();
 
 // Per-run memory for the external-counter watch (lib/lifecycle.mjs).
 let counterWatch = { logPath: null, seen: new Map() };

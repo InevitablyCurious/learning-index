@@ -22,16 +22,16 @@ export function tuiForClient(section, wantsFrame) {
 export const TUI_STREAM_MS = 250;
 
 /**
- * Clients that asked for frames, grouped by the run_id of the cell each one
- * mirrors (`res.okpTuiRunId`, from /api/stream's `?run_id=` param). `null` is
- * the unkeyed default group — the newest cell — matching /api/tui's own
- * truthiness contract: an empty string counts as default too.
+ * Clients that asked for frames, grouped by the cell each one mirrors
+ * (`res.okpTuiCell`, from /api/stream's `?cell=` param — the cell's address).
+ * A client with no cell mirrors nothing: there is no "default" cell to guess.
  */
 export function groupTuiSubscribers(clients) {
   const groups = new Map();
   for (const res of clients) {
     if (res.okpWantsTui !== true) continue;
-    const key = res.okpTuiRunId || null;
+    const key = res.okpTuiCell || null;
+    if (key === null) continue;
     const subs = groups.get(key);
     if (subs) subs.push(res);
     else groups.set(key, [res]);
@@ -54,17 +54,15 @@ export function diffTuiRows(prev, next) {
 
 // ── THE FAST PATH LOOP ──
 /**
- * run_id (null = the default newest cell) → { sig, rows, inFlight }: one memo
+ * cell address → { sig, rows, inFlight }: one memo
  * per mirrored cell, so each subscriber receives the frame of the cell IT
  * selected rather than whichever single cell the unkeyed path last saw.
  */
 const tuiMemo = new Map();
 
 /**
- * Fetch, diff, and push for ONE run_id group. `runId === null` fetches
- * /api/tui unkeyed (the default newest cell); a string run_id fetches exactly
- * that cell. Every patch carries the run_id it belongs to so the client can
- * key its render.
+ * Fetch, diff, and push for ONE cell's group. Every patch carries the cell
+ * it belongs to so the client can key its render.
  */
 async function pushTuiGroup(base, runId, subs) {
   let memo = tuiMemo.get(runId);
@@ -76,10 +74,7 @@ async function pushTuiGroup(base, runId, subs) {
   if (memo.inFlight) return;
   memo.inFlight = true;
   try {
-    const url =
-      runId === null
-        ? `${base}/api/tui`
-        : `${base}/api/tui?run_id=${encodeURIComponent(runId)}`;
+    const url = `${base}/api/tui?cell=${encodeURIComponent(runId)}`;
     const res = await fetch(url, {
       signal: AbortSignal.timeout(2000),
       headers: { accept: "application/json" },
@@ -93,11 +88,11 @@ async function pushTuiGroup(base, runId, subs) {
     // Changed rows only, by index; a full frame when there's nothing to splice.
     const rows = diffTuiRows(memo.rows, data.frame);
     const { frame: _f, ...meta } = data;
-    const key = data.run_id ?? runId;
+    const key = data.cell ?? runId;
     const body =
       rows === null
-        ? JSON.stringify({ tui: { ...data, run_id: key } })
-        : JSON.stringify({ tui_rows: { rows, meta, run_id: key } });
+        ? JSON.stringify({ tui: { ...data, cell: key } })
+        : JSON.stringify({ tui_rows: { rows, meta, cell: key } });
     memo.rows = data.frame ?? null;
 
     for (const r of subs) {

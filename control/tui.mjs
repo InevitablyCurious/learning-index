@@ -471,8 +471,7 @@ function shQuote(s) {
 
 /** One bounded capture per mirrored cell, keyed on the run identity. */
 export class TuiMirror {
-  constructor({ serveUrl, bin = DEFAULT_ATTACH_BIN }) {
-    this.serveUrl = serveUrl;
+  constructor({ bin = DEFAULT_ATTACH_BIN } = {}) {
     this.bin = bin;
     /** runId → Capture, bounded by MAX_CAPTURES with LRU eviction. */
     this.captures = new Map();
@@ -482,20 +481,22 @@ export class TuiMirror {
   }
 
   /**
-   * Poll a frame of the cell identified by `runId`, starting its capture if
-   * needed. Polling is the keepalive. `serveUrl` is that cell's own serve URL
-   * (each concurrent cell has its own port); it falls back to the process
-   * default only when unresolved. The payload carries `run_id` so downstream
-   * can key on it.
+   * Poll a frame of the cell identified by `key` (its address,
+   * `<run_dir>::<sequence_index>`), starting its capture if needed. Polling is
+   * the keepalive. `serveUrl` is that cell's own serve URL, from its
+   * cell.start record; with none there is nothing to attach to, and it says so.
    */
-  pollFor(runId, sessionId, serveUrl) {
-    if (!sessionId) {
+  pollFor(key, sessionId, serveUrl) {
+    const runId = key;
+    if (!sessionId || !serveUrl) {
       return {
         running: false,
-        run_id: runId ?? null,
-        session_id: null,
+        cell: key ?? null,
+        session_id: sessionId ?? null,
         frame: null,
-        reason: "no session observed yet — the TUI mirror attaches to the running cell's session.",
+        reason: !sessionId
+          ? "no session observed yet — the mirror attaches once the cell has started its session"
+          : "the cell has not published its serve address yet",
       };
     }
 
@@ -510,7 +511,7 @@ export class TuiMirror {
     if (!capture) {
       capture = new Capture({
         sessionId,
-        serveUrl: serveUrl ?? this.serveUrl,
+        serveUrl,
         bin: this.bin,
       });
       this.captures.set(runId, capture);
@@ -525,7 +526,7 @@ export class TuiMirror {
     this.captures.delete(runId);
     this.captures.set(runId, capture);
 
-    return { ...capture.read(), run_id: runId };
+    return { ...capture.read(), cell: key };
   }
 
   /** Enforce MAX_CAPTURES by stopping the least-recently-polled captures. */

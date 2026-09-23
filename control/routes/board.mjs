@@ -10,8 +10,8 @@
 //
 // `?since=` carries the client's event cursor so a reconnect resumes without a
 // gap. `?tui=1` asks for full terminal frames, which are withheld otherwise.
-// `?run_id=` keys the TUI mirror to one specific cell (the control-plane
-// ledger uuid); absent/empty mirrors the default newest cell.
+// `?cell=` keys the TUI mirror to one cell by its address (`<run_dir>::<seq>`,
+// the same address every per-cell read uses); absent mirrors nothing.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { args, BENCH_ROOT, RUNS_ROOT } from "../state.mjs";
@@ -26,7 +26,6 @@ const cfg = {
   runsRoot: RUNS_ROOT,
   pollMs: 2000,
   controlUrl: `http://127.0.0.1:${args.port}`,
-  opencodeServeUrl: args.serveUrl,
 };
 
 /** Start the board's push loops. Called once from server.mjs after listen. */
@@ -64,7 +63,7 @@ export const routes = [
       res.okpWantsTui = url.searchParams.get("tui") === "1";
       // Which cell this client mirrors; the TUI fast path (board/lib/tui.mjs)
       // fetches and pushes that cell's frames to it — and only to it.
-      res.okpTuiRunId = url.searchParams.get("run_id") ?? null;
+      res.okpTuiCell = url.searchParams.get("cell") || null;
 
       try {
         const board = await getBoard(cfg);

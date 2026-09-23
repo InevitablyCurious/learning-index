@@ -6,7 +6,7 @@
 // clicked (the board can lose the control plane between render and click);
 // dom-patch.test.mjs pins that.
 
-import { board, render, controlReachability, setTuiRunId, nul } from "./board.js";
+import { board, render, controlReachability, nul } from "./board.js";
 import { armReset, commitReset } from "./panels/treereset.js";
 import { loadRouters, saveRouterKey } from "./panels/routers.js";
 import { setDevMode, isDevModeBusy } from "./panels/devmode.js";
@@ -122,16 +122,6 @@ export async function detachTui() {
   } catch (err) {
     console.error("tui detach failed:", err);
   }
-  render();
-}
-
-/**
- * The TUI mirror's cell selector: re-key the SSE subscription to one live cell
- * ("" = the default/newest). Not a control-plane write — the resubscribe inside
- * setTuiRunId IS the act; the render refreshes the selector and the label.
- */
-export function doSelectTuiRun(runId) {
-  setTuiRunId(runId);
   render();
 }
 
