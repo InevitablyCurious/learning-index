@@ -126,7 +126,7 @@ export async function readModelsLedger({ runsRoot, benchModels, inFlightModels =
 function runRefusal(b) {
   if (b.reason === "awaiting_selection") return "pick a floor from this batch first — an ON run is measured against one picked cell";
   if (b.reason === "batch_void") {
-    return `this batch is void — ${b.void_input ?? "an input"} changed since it ran, so no run can be measured against it`;
+    return `this batch can never be a floor — ${b.void_reason ?? "it is void"}`;
   }
   return b.reason;
 }

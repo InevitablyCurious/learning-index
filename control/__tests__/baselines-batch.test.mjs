@@ -8,11 +8,12 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { collectFingerprintInputs, assembleBatchForCells, collectCells } from "../baselines.mjs";
-import { FINGERPRINT_INPUTS } from "../batch.mjs";
+import { assembleBatchForCells, collectCells } from "../baselines.mjs";
+import { FINGERPRINT_INPUTS, hashDir } from "../batch.mjs";
+import { BENCH, FIXTURE_FP, setFixtureCode } from "./_shared.mjs";
 
-// Frozen by the Python compute_task_template_hash over task/backgammon/{scaffold,golden}.
-// Byte-exact anchors — if these fail, the collector hashes the wrong trees.
+// Frozen by the Python hash (harness/fingerprint.py dir_hash, and the older
+// compute_task_template_hash) over task/backgammon/{scaffold,golden}.
 const FROZEN_SCAFFOLD_HASH =
   "d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee";
 const FROZEN_GOLDEN_HASH =
@@ -46,18 +47,14 @@ function cell(overrides = {}) {
     terminal_reason: null,
     problems_before: 0,
     contention: null,
+    // What the cell recorded it ran on (harness/fingerprint.py).
+    fingerprint: FIXTURE_FP,
     ...overrides,
   };
 }
 
 test("BASELINES-BATCH: assembleBatchForCells persists batch.json — scored/void split, median, fingerprint", async (t) => {
-  const runDir = await makeRunDir(t, {
-    requested_model: "local-llm-proxy/test-model",
-    served_model: null,
-    challenge: "backgammon",
-    compact: true,
-    worker_image_fingerprint: { image_id: "sha256:img-test", created: "2026-01-01T00:00:00Z" },
-  });
+  const runDir = await makeRunDir(t);
 
   const cells = [
     cell({ sequence_index: 0, problems_before: 10 }),
@@ -69,7 +66,6 @@ test("BASELINES-BATCH: assembleBatchForCells persists batch.json — scored/void
     cell({ sequence_index: 6, problems_before: 30 }),
   ];
 
-  // repoRoot omitted: defaults to the real repo resolved from the module.
   const batch = await assembleBatchForCells({ runDir, cells });
 
   // Persisted atomically, and byte-identical to the returned record.
@@ -95,20 +91,52 @@ test("BASELINES-BATCH: assembleBatchForCells persists batch.json — scored/void
     ],
   );
 
-  // Canonical order is contract (computeFingerprint canonicalizes by FINGERPRINT_INPUTS).
+  // The fingerprint is what the CELLS recorded, in canonical order — never the repo.
   assert.deepEqual(Object.keys(batch.fingerprint.values), INPUT_NAMES);
   assert.match(batch.fingerprint.hash, /^[0-9a-f]{64}$/);
-  assert.equal(batch.fingerprint.values.model, "local-llm-proxy/test-model");
-  assert.equal(batch.fingerprint.values.challenge, "backgammon");
-  assert.equal(batch.fingerprint.values.compaction, true);
-  assert.deepEqual(batch.fingerprint.values.worker_image, {
-    image_id: "sha256:img-test",
-    created: "2026-01-01T00:00:00Z",
+  assert.deepEqual(batch.fingerprint.values, FIXTURE_FP);
+});
+
+test("BASELINES-BATCH: a cell that ran without recording makes the batch unfingerprinted — never a floor", async (t) => {
+  const runDir = await makeRunDir(t);
+  const batch = await assembleBatchForCells({
+    runDir,
+    cells: [cell({ sequence_index: 0, problems_before: 5 }), cell({ sequence_index: 1, problems_before: 6, fingerprint: null })],
   });
+  assert.equal(batch.void, true);
+  assert.equal(batch.void_kind, "unfingerprinted");
+  assert.equal(batch.fingerprint, null, "no fingerprint is made up for it");
+  assert.match(batch.void_reason, /s0001 recorded nothing/);
+});
+
+test("BASELINES-BATCH: cells that ran on different inputs make the batch mixed, naming the input", async (t) => {
+  const runDir = await makeRunDir(t);
+  const batch = await assembleBatchForCells({
+    runDir,
+    cells: [
+      cell({ sequence_index: 0, problems_before: 5 }),
+      cell({ sequence_index: 1, problems_before: 6, fingerprint: { ...FIXTURE_FP, grader_hash: "x".repeat(64) } }),
+    ],
+  });
+  assert.equal(batch.void, true);
+  assert.equal(batch.void_kind, "mixed");
+  assert.equal(batch.void_input, "grader_hash");
+  assert.match(batch.void_reason, /s0000 and s0001 ran on different grader_hash/);
+});
+
+test("BASELINES-BATCH: a batch whose recorded code differs from the current code is superseded", async (t) => {
+  const runDir = await makeRunDir(t);
+  setFixtureCode({ golden_hash: "n".repeat(64) });
+  t.after(() => setFixtureCode());
+  const batch = await assembleBatchForCells({ runDir, cells: [cell({ problems_before: 5 })] });
+  assert.equal(batch.void, true);
+  assert.equal(batch.void_kind, "superseded");
+  assert.equal(batch.void_input, "golden_hash");
+  assert.deepEqual(batch.fingerprint.values, FIXTURE_FP, "the recorded fingerprint is kept, not overwritten");
 });
 
 test("BASELINES-BATCH: a context-exhausted cell is excluded from the median, not treated as a failure", async (t) => {
-  const runDir = await makeRunDir(t); // no manifest: identity fields null/false
+  const runDir = await makeRunDir(t);
 
   const cells = [
     cell({ sequence_index: 0, problems_before: 24 }),
@@ -131,23 +159,12 @@ test("BASELINES-BATCH: a context-exhausted cell is excluded from the median, not
   });
 });
 
-test("BASELINES-BATCH: collectFingerprintInputs returns the eight inputs (frozen scaffold+golden anchors)", async (t) => {
-  const runDir = await makeRunDir(t); // no manifest
-
-  // repoRoot omitted: must default to the real repo resolved from the module.
-  const values = await collectFingerprintInputs({ runDir });
-
-  assert.deepEqual(Object.keys(values).sort(), [...INPUT_NAMES].sort());
-  assert.equal(values.scaffold_hash, FROZEN_SCAFFOLD_HASH);
-  assert.equal(values.golden_hash, FROZEN_GOLDEN_HASH);
-  // grader/prompts hashes may drift — presence only.
-  assert.match(values.chunk_plan_hash, /^[0-9a-f]{64}$/);
-  assert.match(values.grader_hash, /^[0-9a-f]{64}$/);
-  // No run-manifest: genuinely unidentifiable, never fabricated.
-  assert.equal(values.model, null);
-  assert.equal(values.challenge, null);
-  assert.equal(values.compaction, false);
-  assert.equal(values.worker_image, null);
+test("BASELINES-BATCH: hashDir matches the Python hash of the frozen scaffold and golden, byte for byte", async () => {
+  // harness/fingerprint.py records these at a cell's start with the same
+  // algorithm; the control plane re-hashes the current tree with hashDir to
+  // compare. If these drift, every batch would read as superseded.
+  assert.equal(await hashDir(path.join(BENCH, "task", "backgammon", "scaffold")), FROZEN_SCAFFOLD_HASH);
+  assert.equal(await hashDir(path.join(BENCH, "task", "backgammon", "golden")), FROZEN_GOLDEN_HASH);
 });
 
 test("BASELINES-BATCH: per-run contention rides onto batch.runs[] and the summary aggregates scored runs only", async (t) => {
@@ -246,4 +263,62 @@ test("BASELINES-BATCH: collectCells folds the seven contention covariates out of
     http_429_count: null, http_402_count: null, retry_count: null, upstream_error_count: null,
     max_request_ms: null, median_request_ms: null, wall_near_timeout: null,
   }, "never measured → all seven null, never 0/false");
+});
+
+test("BASELINES-BATCH: collectCells reads each cell's recorded fingerprint, null where none was written", async (t) => {
+  const { writeRun } = await import("./_shared.mjs");
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "baselines-fp-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const status = { type: "attempt", sequence_index: 0, attempt: 1, verdict: "FAIL", progress: { problems_before: 4 } };
+  writeRun(root, "with-fp", { status });
+  const bare = path.join(root, "without-fp");
+  await fs.mkdir(bare, { recursive: true });
+  await fs.writeFile(path.join(bare, "manifest.json"), JSON.stringify({ schedule: [{ sequence_index: 0, memory_mode: "off", provider_pin: "m-b" }] }));
+  await fs.writeFile(path.join(bare, "manifest.status.jsonl"), `${JSON.stringify(status)}\n`);
+
+  const cells = await collectCells(root);
+  assert.deepEqual(cells.find((c) => c.run_dir === "with-fp").fingerprint, FIXTURE_FP);
+  assert.equal(cells.find((c) => c.run_dir === "without-fp").fingerprint, null);
+});
+
+test("BASELINES-BATCH: a picked floor turns superseded on the next read once the code moves", async (t) => {
+  const { writeRun } = await import("./_shared.mjs");
+  const { baselineFor, collectOffCells } = await import("../baselines.mjs");
+  const { readBatch, selectRun, writeBatch } = await import("../batch.mjs");
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "baselines-sup-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  writeRun(root, "camp", {
+    status: { type: "attempt", sequence_index: 0, attempt: 1, verdict: "FAIL", progress: { problems_before: 4 } },
+  });
+  const cells = await collectOffCells(root);
+  await baselineFor("m-a", cells, { runsRoot: root });
+  const batch = await readBatch(path.join(root, "camp"));
+  selectRun(batch, 0);
+  await writeBatch(path.join(root, "camp"), batch);
+  assert.equal((await baselineFor("m-a", cells, { runsRoot: root })).scorable, true, "current code: a floor");
+
+  setFixtureCode({ grader_hash: "z".repeat(64) });
+  t.after(() => setFixtureCode());
+  const after = await baselineFor("m-a", cells, { runsRoot: root });
+  assert.equal(after.scorable, false, "the selection does not rescue it");
+  assert.equal(after.reason, "batch_void");
+  assert.equal(after.void_kind, "superseded");
+  assert.equal(after.void_input, "grader_hash");
+  assert.equal((await readBatch(path.join(root, "camp"))).void, true, "and the void is persisted");
+});
+
+test("BASELINES-BATCH: a stored batch whose fingerprint its cells never recorded is stale, and re-assembles void", async (t) => {
+  const { batchIsStale } = await import("../baselines.mjs");
+  const runDir = await makeRunDir(t);
+  const recorded = [cell({ sequence_index: 0, problems_before: 5 })];
+  const batch = await assembleBatchForCells({ runDir, cells: recorded });
+  assert.equal(batchIsStale(batch, recorded), false, "matches what its cells recorded");
+
+  // The same batch, read against cells that recorded nothing — the pre-fix
+  // state, where the fingerprint came from the repo at assembly.
+  const bare = [cell({ sequence_index: 0, problems_before: 5, fingerprint: null })];
+  assert.equal(batchIsStale(batch, bare), true);
+  const again = await assembleBatchForCells({ runDir, cells: bare });
+  assert.equal(again.void_kind, "unfingerprinted");
+  assert.equal(batchIsStale(again, bare), false, "and, once void for that reason, stays settled");
 });

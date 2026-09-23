@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 import { readBaselines, collectOffCells, assembleBatchForCells } from "../baselines.mjs";
 import { selectRun, writeBatch } from "../batch.mjs";
+import { writeCellFingerprint } from "./_shared.mjs";
 
 function campaign(records) {
   const root = mkdtempSync(join(tmpdir(), "ctx-bl-"));
@@ -21,6 +22,7 @@ function campaign(records) {
     schedule: [{ sequence_index: 0, memory_mode: "off", model: "orcarouter/anthropic/claude-opus-5", provider_pin: "orcarouter" }],
   }));
   writeFileSync(join(dir, "manifest.status.jsonl"), records.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  writeCellFingerprint(dir, 0);
   return root;
 }
 

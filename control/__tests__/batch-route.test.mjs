@@ -1,10 +1,10 @@
-// Pins the fingerprint-invalidation VERIFICATION and the batch HTTP surface:
-// verifyBatchFingerprint (injected inputs + the live-repo default path),
+// Pins the check of a batch's RECORDED fingerprint against the current code
+// and the batch HTTP surface: verifyAgainstCurrentCode (code inputs only),
 // readBatchForRunDir (a detected void is PERSISTED; an absent batch is
 // {ok:false}), baselineFor's batch_void refusal, selectRun's signed deviation,
 // and the two routes — GET /api/batch, POST /api/batch/select — including the
-// 400/404/409 refusals. Temp dirs for run dirs; default-path repo hashes are
-// live (the baselines-batch.test.mjs tolerance).
+// 400/404/409 refusals. "The current code" is the fixture's (_shared.mjs), so
+// no test reads the repo or docker.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -23,8 +23,9 @@ import {
   assembleBatchForCells,
   baselineFor,
   readBatchForRunDir,
-  verifyBatchFingerprint,
+  verifyAgainstCurrentCode,
 } from "../baselines.mjs";
+import { FIXTURE_FP, FIXTURE_CODE } from "./_shared.mjs";
 
 // The routes capture RUNS_ROOT at import time (state.mjs reads
 // OKP_CONTROL_BENCH_ROOT once), so the fake bench root must be in the env
@@ -36,19 +37,9 @@ process.env.OKP_CONTROL_BENCH_ROOT = BENCH_ROOT;
 const { routes } = await import("../routes/roster.mjs");
 const RUNS_ROOT = path.join(BENCH_ROOT, "runs");
 
-/** A complete fingerprint values map that can never match the live repo. */
+/** A recorded fingerprint: the fixture's, which the fixture code matches. */
 function syntheticValues(overrides = {}) {
-  return {
-    chunk_plan_hash: "aa".repeat(32),
-    grader_hash: "bb".repeat(32),
-    scaffold_hash: "cc".repeat(32),
-    golden_hash: "dd".repeat(32),
-    model: "test/model",
-    challenge: "backgammon",
-    compaction: false,
-    worker_image: { image_id: "sha256:img-test", created: "2026-01-01T00:00:00Z" },
-    ...overrides,
-  };
+  return { ...FIXTURE_FP, ...overrides };
 }
 
 /** A batch with scored counts {10,20,30} → median 20, plus one void run. */
@@ -84,80 +75,50 @@ function cell(overrides = {}) {
     terminal_reason: null,
     problems_before: 10,
     created_at: "2026-09-22T00:00:00Z",
+    fingerprint: FIXTURE_FP,
     ...overrides,
   };
 }
 
-// ── verifyBatchFingerprint ─────────────────────────────────────────────────
+// ── verifyAgainstCurrentCode ───────────────────────────────────────────────
 
-test("VERIFY: injected currentInputs that match → void:false, batch untouched", async () => {
-  const values = syntheticValues();
-  const batch = syntheticBatch("/tmp/never-read", values);
-  const out = await verifyBatchFingerprint(batch, { currentInputs: values });
-  assert.equal(out.void, false);
-  assert.equal(out.void_input, null);
-  assert.equal(out.batch, batch, "the same batch object comes back");
+test("VERIFY: recorded code that matches the current code → unchanged", async () => {
+  const batch = syntheticBatch("/tmp/never-read");
+  assert.equal(await verifyAgainstCurrentCode(batch, { current: FIXTURE_CODE }), false);
   assert.equal(batch.void, false);
   assert.equal(batch.void_input, null);
 });
 
-test("VERIFY: one changed input (grader_hash) → void:true naming it, batch marked", async () => {
+test("VERIFY: a changed grader → superseded, naming it, the recorded fingerprint kept", async () => {
   const batch = syntheticBatch("/tmp/never-read");
-  const out = await verifyBatchFingerprint(batch, {
-    currentInputs: syntheticValues({ grader_hash: "ff".repeat(32) }),
-  });
-  assert.equal(out.void, true);
-  assert.equal(out.void_input, "grader_hash");
-  assert.equal(batch.void, true, "markVoid mutated the batch in place");
+  const changed = await verifyAgainstCurrentCode(batch, { current: { ...FIXTURE_CODE, grader_hash: "ff".repeat(32) } });
+  assert.equal(changed, true);
+  assert.equal(batch.void, true);
+  assert.equal(batch.void_kind, "superseded");
   assert.equal(batch.void_input, "grader_hash");
-  assert.equal(
-    batch.void_reason,
-    "grader/gate suite — a changed test changes what a failure count means",
-  );
+  assert.match(batch.void_reason, /^grader_hash changed since this batch ran/);
+  assert.deepEqual(batch.fingerprint.values, FIXTURE_FP);
 });
 
-test("VERIFY: a changed worker_image object names worker_image", async () => {
+test("VERIFY: a rebuilt worker image names worker_image", async () => {
   const batch = syntheticBatch("/tmp/never-read");
-  const out = await verifyBatchFingerprint(batch, {
-    currentInputs: syntheticValues({
-      worker_image: { image_id: "sha256:img-other", created: "2026-01-01T00:00:00Z" },
-    }),
+  await verifyAgainstCurrentCode(batch, {
+    current: { ...FIXTURE_CODE, worker_image: { image_id: "sha256:other", created: "2026-09-02T00:00:00Z" } },
   });
-  assert.equal(out.void, true);
-  assert.equal(out.void_input, "worker_image");
   assert.equal(batch.void_input, "worker_image");
 });
 
-test("VERIFY: default path re-collects live inputs — fresh batch valid, edited manifest voids naming 'model'", async (t) => {
-  const runDir = await fs.mkdtemp(path.join(os.tmpdir(), "batch-route-run-"));
-  t.after(() => fs.rm(runDir, { recursive: true, force: true }));
-  const manifestPath = path.join(runDir, "manifest.run-manifest.json");
-  const manifest = {
-    requested_model: "local-llm-proxy/test-model",
-    challenge: "backgammon",
-    compact: false,
-    worker_image_fingerprint: null,
-  };
-  await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+test("VERIFY: model, challenge and compaction are the batch's own identity, never compared", async () => {
+  const batch = syntheticBatch("/tmp/never-read", syntheticValues({ model: "another/model", compaction: true }));
+  assert.equal(await verifyAgainstCurrentCode(batch, { current: FIXTURE_CODE }), false);
+  assert.equal(batch.void, false);
+});
 
-  // repoRoot omitted: the REAL repo, live hashes (baselines-batch tolerance).
-  const batch = await assembleBatchForCells({ runDir, cells: [cell({ run_dir: runDir })] });
-
-  const fresh = await verifyBatchFingerprint(batch);
-  assert.equal(fresh.void, false, "assembled from the current inputs → valid");
-  assert.equal(fresh.void_input, null);
-
-  // Same repo, changed run identity: the default path (no injection) must
-  // detect it and name the input — repo hashes are unchanged, so the first
-  // differing input in contract order is `model`.
-  await fs.writeFile(
-    manifestPath,
-    JSON.stringify({ ...manifest, requested_model: "local-llm-proxy/other-model" }, null, 2),
-    "utf8",
-  );
-  const drifted = await verifyBatchFingerprint(batch);
-  assert.equal(drifted.void, true);
-  assert.equal(drifted.void_input, "model");
+test("VERIFY: an already-void batch is left as it is", async () => {
+  const batch = syntheticBatch("/tmp/never-read");
+  markVoid(batch, "mixed", "grader_hash", "s0000 and s0001 ran on different grader_hash");
+  assert.equal(await verifyAgainstCurrentCode(batch, { current: { ...FIXTURE_CODE, golden_hash: "x" } }), false);
+  assert.equal(batch.void_kind, "mixed");
 });
 
 // ── readBatchForRunDir ─────────────────────────────────────────────────────
@@ -169,10 +130,9 @@ test("READ: absent batch → {ok:false}; a stale fingerprint is voided AND persi
   const missing = await readBatchForRunDir({ runsRoot, runDir: "no-such-campaign" });
   assert.deepEqual(missing, { ok: false, error: "no batch for run_dir" });
 
-  // A synthetic fingerprint can never match the live repo: the FIRST input in
-  // contract order (chunk_plan_hash) is the one named.
+  // A batch recorded on older prompts: the current code moved past it.
   const abs = path.join(runsRoot, "camp-stale");
-  await writeBatch(abs, syntheticBatch(abs));
+  await writeBatch(abs, syntheticBatch(abs, syntheticValues({ chunk_plan_hash: "aa".repeat(32) })));
 
   const out = await readBatchForRunDir({ runsRoot, runDir: "camp-stale" });
   assert.equal(out.ok, true);
@@ -194,7 +154,7 @@ test("BASELINEFOR: a void batch refuses to be a floor — reason 'batch_void' + 
   const abs = path.join(runsRoot, rel);
   const batch = syntheticBatch(abs);
   selectRun(batch, 2); // a selection does NOT rescue a void batch
-  markVoid(batch, "grader_hash", "grader/gate suite — a changed test changes what a failure count means");
+  markVoid(batch, "superseded", "grader_hash", "grader_hash changed since this batch ran");
   await writeBatch(abs, batch);
 
   const b = await baselineFor("m-x", [cell({ run_dir: rel, problems_before: 30, sequence_index: 2 })], { runsRoot });
@@ -257,19 +217,10 @@ function fakeReq(body) {
   return Readable.from([Buffer.from(JSON.stringify(body))]);
 }
 
-/** A real batch under the fake runs root, assembled against the LIVE repo. */
+/** A real batch under the fake runs root, its cells recording the current code. */
 async function seedLiveBatch(rel, counts) {
   const abs = path.join(RUNS_ROOT, rel);
   await fs.mkdir(abs, { recursive: true });
-  await fs.writeFile(
-    path.join(abs, "manifest.run-manifest.json"),
-    JSON.stringify({
-      requested_model: `local-llm-proxy/${rel}`,
-      challenge: "backgammon",
-      compact: false,
-    }),
-    "utf8",
-  );
   await assembleBatchForCells({
     runDir: abs,
     cells: counts.map((n, i) => cell({ run_dir: rel, sequence_index: i, problems_before: n })),
@@ -305,7 +256,7 @@ test("GET /api/batch → 200 with the batch; POST /api/batch/select persists the
   assert.equal(got.body.batch.median, 20);
   assert.equal(got.body.batch.scored_count, 3);
   assert.equal(got.body.batch.void_count, 0);
-  assert.equal(got.body.batch.void, false, "assembled from live inputs → verification passes");
+  assert.equal(got.body.batch.void, false, "recorded on the current code → current");
   assert.equal(got.body.batch.selection, null);
   assert.deepEqual(got.body.batch.runs.map((r) => r.sequence_index), [0, 1, 2]);
   assert.match(got.body.batch.fingerprint.hash, /^[0-9a-f]{64}$/, "the fingerprint rides along");
@@ -333,13 +284,13 @@ test("GET /api/batch → 200 with the batch; POST /api/batch/select persists the
 });
 
 test("POST /api/batch/select: void batch → 409 naming the changed input; unscored index → 400; missing run_dir → 400", async (t) => {
-  // Void: a synthetic fingerprint can never match the live repo, so the read
-  // inside the route voids + persists it before the 409.
+  // Void: recorded on older prompts, so the read inside the route voids +
+  // persists it before the 409.
   const rel = "camp-void";
   const abs = path.join(RUNS_ROOT, rel);
   await fs.mkdir(abs, { recursive: true });
   t.after(() => fs.rm(abs, { recursive: true, force: true }));
-  await writeBatch(abs, syntheticBatch(abs));
+  await writeBatch(abs, syntheticBatch(abs, syntheticValues({ chunk_plan_hash: "aa".repeat(32) })));
 
   const voided = fakeRes();
   await route("POST", "/api/batch/select").handle(
@@ -348,7 +299,8 @@ test("POST /api/batch/select: void batch → 409 naming the changed input; unsco
     new URL("http://x/api/batch/select"),
   );
   assert.equal(voided.status, 409);
-  assert.deepEqual(voided.body, { ok: false, error: "batch is void: chunk_plan_hash" });
+  assert.equal(voided.body.ok, false);
+  assert.match(voided.body.error, /^batch is void \(superseded\): chunk_plan_hash changed since this batch ran/);
 
   const onDisk = JSON.parse(await fs.readFile(path.join(abs, "batch.json"), "utf8"));
   assert.equal(onDisk.void, true, "the 409 came from a PERSISTED void");

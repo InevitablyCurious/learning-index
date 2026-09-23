@@ -13,7 +13,7 @@ import { manifestArgFor, campaignDirName } from "../campaign.mjs";
 import { mintTree } from "../tree.mjs";
 import { readModelsLedger } from "../models-ledger.mjs";
 
-import { BENCH, writeRun, writeCampaign, OFF_PASS, writeCampaignCell, treeFixture } from "./_shared.mjs";
+import { BENCH, writeRun, writeCampaign, OFF_PASS, writeCampaignCell, treeFixture, writeCellFingerprint } from "./_shared.mjs";
 
 /**
  * The operator's pick: assemble the batch for one model's OFF cells and select
@@ -92,7 +92,7 @@ test("LEDGER: a batch_void row names the changed input — void_input rides thro
   const runDir = join(root, "cumulative");
   const cells = (await collectOffCells(root)).filter((c) => c.model === "m-a");
   const batch = await assembleBatchForCells({ runDir, cells });
-  markVoid(batch, "grader_hash", "grader/gate suite — a changed test changes what a failure count means");
+  markVoid(batch, "superseded", "grader_hash", "grader_hash changed since this batch ran");
   await writeBatch(runDir, batch);
 
   const led = await readModelsLedger({
@@ -629,6 +629,7 @@ test("BASELINE: the list is rooted in cells, so a cloud floor appears without a 
     gate_totals: { pass: 69, fail: 2, error: 0, not_run: 0, total: 71 },
     progress: { turns: 31, total_tokens: 900, wall_seconds: 120 },
   })}\n`);
+  writeCellFingerprint(dir, 0);
   await selectFloor(root, "cumulative-anthropic-claude-opus-5", "anthropic/claude-opus-5");
 
   // NOTE the empty roster: this is the cold case where the local proxy is down.
@@ -665,6 +666,7 @@ test("BASELINES: a tree-layout campaign carries the FULL relative run_dir, not t
       schedule: [{ sequence_index: 0, memory_mode: "off", provider_pin: "m-a" }],
     }));
     writeFileSync(join(dir, "manifest.status.jsonl"), `${JSON.stringify(OFF_PASS)}\n`);
+    writeCellFingerprint(dir, 0);
 
     // A legacy flat campaign beside the tree. A DIFFERENT model, because the
     // list is one row per model — two m-a floors would fold into a single row.

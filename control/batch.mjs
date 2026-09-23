@@ -11,6 +11,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 /**
+ * The inputs that are CODE — what a later edit or rebuild can change under a
+ * batch. A recorded fingerprint is compared against the current tree on these
+ * only; model, challenge and compaction are the batch's own identity.
+ */
+export const CODE_INPUTS = ["chunk_plan_hash", "grader_hash", "scaffold_hash", "golden_hash", "worker_image"];
+
+/**
  * The ordered fingerprint inputs. Order is contract: computeFingerprint
  * canonicalizes by this order and fingerprintVerdict reports the FIRST
  * differing input by this order.
@@ -220,14 +227,19 @@ export function assembleBatch({ runDir, runs, fingerprint, now = new Date().toIS
     contention: contentionSummary(normalized),
     selection: null,
     void: false,
+    // Why the batch is void: "superseded" (the code changed since it ran),
+    // "mixed" (its cells ran on different inputs) or "unfingerprinted" (its
+    // cells recorded nothing to bind it to). null while valid.
+    void_kind: null,
     void_input: null,
     void_reason: null,
   };
 }
 
-/** Void the batch, naming the fingerprint input that changed. Mutates + returns batch. */
-export function markVoid(batch, changedInput, changedReason) {
+/** Void the batch, naming why and the input concerned. Mutates + returns batch. */
+export function markVoid(batch, kind, changedInput, changedReason) {
   batch.void = true;
+  batch.void_kind = kind;
   batch.void_input = changedInput;
   batch.void_reason = changedReason;
   batch.updated_at = new Date().toISOString();

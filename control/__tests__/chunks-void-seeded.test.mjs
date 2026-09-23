@@ -16,7 +16,7 @@ import { readBatch, selectRun, writeBatch } from "../batch.mjs";
 import { campaignDirName } from "../campaign.mjs";
 import { readRunState } from "../runstate.mjs";
 import { readModelsLedger } from "../models-ledger.mjs";
-import { writeCampaignCell } from "./_shared.mjs";
+import { writeCampaignCell, writeCellFingerprint } from "./_shared.mjs";
 
 test("RUN STATE: a killed CLI-launched run does not block reset behind a fresh log", async () => {
   const root = mkdtempSync(join(tmpdir(), "runstate-dead-"));
@@ -299,6 +299,7 @@ function writeSeededRun(root, { dir = "cumulative", snapshotId = "snap-fixture-1
   // TOP-LEVEL — sibling of `progress`, never inside it.
   if (snapshotId !== null) a1.seeded_from_snapshot = snapshotId;
   writeFileSync(join(d, "manifest.status.jsonl"), `${JSON.stringify(a1)}\n`);
+  writeCellFingerprint(d, 0);
   return d;
 }
 
@@ -400,6 +401,7 @@ function writeMixedCampaign(root, dir) {
   };
   writeFileSync(join(d, "manifest.status.jsonl"),
     [seeded, r1, r2].map((r) => JSON.stringify(r)).join("\n") + "\n");
+  for (const seq of [0, 1, 2]) writeCellFingerprint(d, seq);
   return d;
 }
 

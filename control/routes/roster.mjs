@@ -133,7 +133,7 @@ export const routes = [
       }
       const { batch } = out;
       if (batch.void === true) {
-        sendJson(res, 409, { ok: false, error: `batch is void: ${batch.void_input}` });
+        sendJson(res, 409, { ok: false, error: `batch is void (${batch.void_kind}): ${batch.void_reason}` });
         return;
       }
       try {

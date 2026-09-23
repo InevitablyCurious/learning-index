@@ -397,8 +397,9 @@ test("BATCH: selectRun stores the signed deviation and fails loud otherwise", ()
 
 test("BATCH: markVoid flags the batch with the changed input", () => {
   const batch = makeBatch();
-  markVoid(batch, "grader_hash", "grader/gate suite changed");
+  markVoid(batch, "superseded", "grader_hash", "grader/gate suite changed");
   assert.equal(batch.void, true);
+  assert.equal(batch.void_kind, "superseded");
   assert.equal(batch.void_input, "grader_hash");
   assert.equal(batch.void_reason, "grader/gate suite changed");
   assert.notEqual(batch.updated_at, "2026-01-01T00:00:00.000Z", "updated_at touched");

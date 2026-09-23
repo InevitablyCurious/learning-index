@@ -14,8 +14,11 @@ import { promises as fs } from "node:fs";
 import { createHash } from "node:crypto";
 import path, { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { listLiveCampaignDirs } from "./tree.mjs";
 import {
+  CODE_INPUTS,
   hashDir,
   computeFingerprint,
   fingerprintVerdict,
@@ -266,6 +269,12 @@ export async function collectCells(runsRoot) {
           || (meas.unrecovered_anomaly_turns ?? 0) > 0),
       );
 
+      // What the cell recorded it ran on, at its start (harness/fingerprint.py);
+      // null for a cell that recorded nothing.
+      const fingerprint = await readCellFingerprint(
+        join(dir, `memory${String(arm ?? "unknown").toUpperCase()}`, `cell-${String(seq).padStart(4, "0")}`),
+      );
+
       cells.push({
         id: baselineId(ent.relative, seq),
         run_dir: ent.relative,
@@ -301,6 +310,7 @@ export async function collectCells(runsRoot) {
         // Out of context room: a result, not an instrument fault.
         context_exhausted: meas?.terminal_reason === "context_exhausted",
         created_at: str(manifest.created_at),
+        fingerprint,
       });
     }
   }
@@ -308,41 +318,99 @@ export async function collectCells(runsRoot) {
   return cells;
 }
 
+/** A cell's recorded fingerprint values (harness/fingerprint.py), or null. */
+async function readCellFingerprint(cellDir) {
+  const rec = await readJsonOrNull(join(cellDir, "fingerprint.json"));
+  return rec?.values && typeof rec.values === "object" ? rec.values : null;
+}
+
+const execFileP = promisify(execFile);
+const WORKER_IMAGE_TAG = "bench-worker:v1";
+
 /**
- * The eight fingerprint inputs that determine what a batch measured: four
- * directory hashes over the measured repo, plus identity fields from the
- * run-manifest. A run without a manifest is genuinely unidentifiable — the
- * identity fields are null/false, never fabricated.
+ * The CODE inputs as they stand now: the four directory hashes over the
+ * measured repo (harness/fingerprint.py hashes them the same way at a cell's
+ * start) and the worker image docker holds under the bench tag. Throws when
+ * the image cannot be read: a batch that cannot be checked is not called
+ * current.
  */
-export async function collectFingerprintInputs({ repoRoot = REPO_ROOT, runDir }) {
-  const [chunk_plan_hash, grader_hash, scaffold_hash, golden_hash] = await Promise.all([
+export async function currentCodeInputs({ repoRoot = REPO_ROOT } = {}) {
+  const [chunk_plan_hash, grader_hash, scaffold_hash, golden_hash, image] = await Promise.all([
     hashDir(path.join(repoRoot, "task", "backgammon", "prompts")),
     hashDir(path.join(repoRoot, "grader"), {
       exclude: new Set(["node_modules", ".git", "test-results"]),
     }),
     hashDir(path.join(repoRoot, "task", "backgammon", "scaffold")),
     hashDir(path.join(repoRoot, "task", "backgammon", "golden")),
+    execFileP("docker", ["image", "inspect", WORKER_IMAGE_TAG, "--format", "{{.Id}}\n{{.Created}}"]),
   ]);
-
-  const manifest = await readJsonOrNull(path.join(runDir, "manifest.run-manifest.json"));
-
-  return {
-    chunk_plan_hash,
-    grader_hash,
-    scaffold_hash,
-    golden_hash,
-    model: str(manifest?.requested_model) ?? str(manifest?.served_model) ?? null,
-    challenge: str(manifest?.challenge) ?? null,
-    compaction: manifest?.compact === true,
-    worker_image: manifest?.worker_image_fingerprint ?? null,
-  };
+  const [image_id, created] = String(image.stdout).trim().split("\n");
+  if (!image_id || !created) throw new Error(`docker did not identify ${WORKER_IMAGE_TAG}`);
+  return { chunk_plan_hash, grader_hash, scaffold_hash, golden_hash, worker_image: { image_id, created } };
 }
 
 /**
- * Build and persist the batch record for one model's OFF cells: the median
- * problem count over SCORED runs (voids excluded, never counted as failures),
- * bound to the current fingerprint. Written atomically to <runDir>/batch.json.
+ * Where "the code as it stands now" comes from. The default reads the repo and
+ * docker; tests replace it (setCodeInputsProvider) so they depend on neither.
  */
+let codeInputsProvider = currentCodeInputs;
+export function setCodeInputsProvider(fn) {
+  codeInputsProvider = typeof fn === "function" ? fn : currentCodeInputs;
+}
+
+/** One read of the current code per index build, and only if a batch needs it. */
+function currentGetter(repoRoot) {
+  let pending = null;
+  return () => (pending ??= codeInputsProvider({ repoRoot }));
+}
+
+const seqName = (c) => `s${String(c.sequence_index).padStart(4, "0")}`;
+
+/**
+ * A batch's fingerprint, from what its cells RECORDED — never from the repo.
+ *   recorded         every cell that ran recorded the same inputs
+ *   unfingerprinted  a cell ran without recording (ran before recording existed)
+ *   mixed            its cells ran on different inputs; names the first one
+ *   pending          nothing has recorded yet (no cell has started)
+ */
+export function batchFingerprintOf(cells) {
+  const ran = cells.filter((c) => c.state === "complete" || c.fingerprint);
+  const missing = ran.filter((c) => !c.fingerprint);
+  if (missing.length) {
+    return {
+      status: "unfingerprinted",
+      fingerprint: null,
+      void_input: null,
+      void_reason: `${missing.map(seqName).join(", ")} recorded nothing about what ${missing.length === 1 ? "it" : "they"} ran on — there is nothing to bind this batch to`,
+    };
+  }
+  const recorded = cells.filter((c) => c.fingerprint);
+  if (!recorded.length) return { status: "pending", fingerprint: null, void_input: null, void_reason: null };
+  let fingerprint;
+  try {
+    fingerprint = computeFingerprint(recorded[0].fingerprint);
+  } catch (err) {
+    return {
+      status: "unfingerprinted",
+      fingerprint: null,
+      void_input: null,
+      void_reason: `${seqName(recorded[0])}'s record is incomplete — ${err.message}`,
+    };
+  }
+  for (const c of recorded.slice(1)) {
+    const v = fingerprintVerdict(fingerprint, c.fingerprint);
+    if (!v.valid) {
+      return {
+        status: "mixed",
+        fingerprint: null,
+        void_input: v.changedInput,
+        void_reason: `${seqName(recorded[0])} and ${seqName(c)} ran on different ${v.changedInput} — ${v.changedReason}`,
+      };
+    }
+  }
+  return { status: "recorded", fingerprint, void_input: null, void_reason: null };
+}
+
 /**
  * Does this persisted batch disagree with the cells now on disk?
  *
@@ -370,7 +438,16 @@ export function batchIsStale(batch, cells) {
   }
   // A cell that exists and is not in the record at all is also missing data.
   const known = new Set((batch?.runs ?? []).map((r) => r?.sequence_index));
-  return cells.some((c) => !known.has(c.sequence_index));
+  if (cells.some((c) => !known.has(c.sequence_index))) return true;
+  // A record whose fingerprint is not what its cells RECORDED is stale too —
+  // including one written before cells recorded anything, whose fingerprint
+  // was hashed from the repo when it was assembled.
+  const fp = batchFingerprintOf(cells);
+  if (fp.status === "recorded") return batch?.fingerprint?.hash !== fp.fingerprint.hash;
+  if (fp.status === "pending") return false;
+  return batch?.void_kind !== fp.status
+    || batch?.void_input !== fp.void_input
+    || batch?.void_reason !== fp.void_reason;
 }
 
 /**
@@ -381,8 +458,8 @@ export function batchIsStale(batch, cells) {
  * pick that is no longer scored is dropped rather than carried — a floor must
  * never point at a run the batch does not consider measured.
  */
-export async function reassemblePreservingSelection({ repoRoot = REPO_ROOT, runDir, cells, persisted = null }) {
-  const fresh = await assembleBatchForCells({ repoRoot, runDir, cells });
+export async function reassemblePreservingSelection({ repoRoot = REPO_ROOT, runDir, cells, persisted = null, current = null }) {
+  const fresh = await assembleBatchForCells({ repoRoot, runDir, cells, current });
   const pick = persisted?.selection?.sequence_index;
   if (pick === undefined || pick === null) return fresh;
   const stillScored = (fresh.runs ?? []).some(
@@ -394,7 +471,7 @@ export async function reassemblePreservingSelection({ repoRoot = REPO_ROOT, runD
   return fresh;
 }
 
-export async function assembleBatchForCells({ repoRoot = REPO_ROOT, runDir, cells }) {
+export async function assembleBatchForCells({ repoRoot = REPO_ROOT, runDir, cells, current = null }) {
   // The same scorability rule baselineFor applies: complete, not void-instrument,
   // not seeded, and not out of context before anything was graded.
   const scored = (c) => c.state === "complete" && !c.void_instrument && !c.seeded_from_snapshot && !(c.context_exhausted === true && !c.gates);
@@ -411,47 +488,55 @@ export async function assembleBatchForCells({ repoRoot = REPO_ROOT, runDir, cell
     // Rides along for visibility (batch.runs[].contention); never scored on.
     contention: c.contention ?? null,
   }));
-  const values = await collectFingerprintInputs({ repoRoot, runDir });
-  const fingerprint = computeFingerprint(values);
-  const batch = assembleBatch({ runDir, runs, fingerprint });
+  const fp = batchFingerprintOf(cells);
+  const batch = assembleBatch({ runDir, runs, fingerprint: fp.fingerprint });
+  if (fp.status === "unfingerprinted" || fp.status === "mixed") {
+    markVoid(batch, fp.status, fp.void_input, fp.void_reason);
+  } else {
+    await verifyAgainstCurrentCode(batch, { repoRoot, current });
+  }
   await writeBatch(runDir, batch);
   return batch;
 }
 
 /**
- * Verify a persisted batch's fingerprint against the CURRENT inputs: any
- * changed input voids the batch (markVoid mutates it) and is named — the
- * first differing one in FINGERPRINT_INPUTS order. This helper never writes;
- * persisting the void is the CALLER's decision. `currentInputs` (a bare
- * values map) is injectable for tests; the default re-collects the eight
- * live inputs from the measured repo plus the batch's own run_dir manifest.
+ * Compare a batch's RECORDED fingerprint with the code as it stands now, on
+ * the CODE inputs only. A difference voids the batch as superseded, naming
+ * the first changed input. Mutates the batch; returns whether it changed.
+ * An already-void batch is left as it is. `current` is the code-inputs map or
+ * a getter for it; the default asks codeInputsProvider.
  */
-export async function verifyBatchFingerprint(batch, { repoRoot = REPO_ROOT, currentInputs = null } = {}) {
-  const current = currentInputs
-    ? computeFingerprint(currentInputs)
-    : computeFingerprint(await collectFingerprintInputs({ repoRoot, runDir: batch.run_dir }));
-  const verdict = fingerprintVerdict(batch.fingerprint, current);
-  if (!verdict.valid) {
-    markVoid(batch, verdict.changedInput, verdict.changedReason);
-    return { batch, void: true, void_input: verdict.changedInput };
-  }
-  return { batch, void: false, void_input: null };
+export async function verifyAgainstCurrentCode(batch, { repoRoot = REPO_ROOT, current = null } = {}) {
+  if (batch.void === true || !batch.fingerprint?.values) return false;
+  const currentInputs = typeof current === "function"
+    ? await current()
+    : (current ?? (await codeInputsProvider({ repoRoot })));
+  const code = {};
+  for (const name of CODE_INPUTS) code[name] = currentInputs[name];
+  const verdict = fingerprintVerdict(batch.fingerprint, { ...batch.fingerprint.values, ...code });
+  if (verdict.valid) return false;
+  markVoid(
+    batch,
+    "superseded",
+    verdict.changedInput,
+    `${verdict.changedInput} changed since this batch ran — ${verdict.changedReason}`,
+  );
+  return true;
 }
 
 /**
- * Read the batch for a runs-root-RELATIVE run_dir and verify its fingerprint
- * against the current inputs. A batch the verification voids is persisted
- * void right here — the record must not keep claiming a validity it lost.
- * No batch is {ok:false}: this path never assembles one (assembly needs the
- * cells, which only baselineFor has).
+ * Read the batch for a runs-root-RELATIVE run_dir and check it against the
+ * current code. A batch the check voids is persisted void right here — the
+ * record must not keep claiming a validity it lost. No batch is {ok:false}:
+ * this path never assembles one (assembly needs the cells, which only
+ * baselineFor has).
  */
 export async function readBatchForRunDir({ runsRoot, runDir, repoRoot = REPO_ROOT }) {
   const abs = join(runsRoot, runDir);
   const batch = await readBatch(abs);
   if (!batch) return { ok: false, error: "no batch for run_dir" };
-  const verified = await verifyBatchFingerprint(batch, { repoRoot });
-  if (verified.void) await writeBatch(abs, verified.batch);
-  return { ok: true, batch: verified.batch };
+  if (await verifyAgainstCurrentCode(batch, { repoRoot })) await writeBatch(abs, batch);
+  return { ok: true, batch };
 }
 
 /**
@@ -527,7 +612,7 @@ export function batchView(cells, batch) {
  * batch is assembled on first read and never rewritten here, so a persisted
  * selection survives every derivation; a selection is never fabricated.
  */
-export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsRoot = null } = {}) {
+export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsRoot = null, current = currentGetter(repoRoot) } = {}) {
   const mine = offCells.filter((c) => c.model === model);
   // Out of room with nothing graded is not a floor.
   const exhaustedUngraded = (c) => c.context_exhausted === true && !c.gates;
@@ -575,7 +660,10 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
     const persisted = await readBatch(runDir);
     const batch = persisted && !batchIsStale(persisted, batchCells)
       ? persisted
-      : await reassemblePreservingSelection({ repoRoot, runDir, cells: batchCells, persisted });
+      : await reassemblePreservingSelection({ repoRoot, runDir, cells: batchCells, persisted, current });
+    // Every read checks the recorded fingerprint against the code as it is
+    // now: a batch the code has moved past is void, and says which input.
+    if (await verifyAgainstCurrentCode(batch, { repoRoot, current })) await writeBatch(runDir, batch);
 
     // A fingerprint-void batch is never a floor: its numbers measured a
     // different grader/prompts/scaffold/golden/image than the current one, so
@@ -598,7 +686,9 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
         model_slug: rep.model_slug,
         candidates: batch.scored_count,
         median: batch.median,
+        void_kind: batch.void_kind ?? null,
         void_input: batch.void_input,
+        void_reason: batch.void_reason ?? null,
         batch: batchView(batchCells, batch),
         reason: "batch_void",
       };
@@ -756,7 +846,7 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
  * (in flight, refuses runs), void (ran but measured the harness), exhausted
  * (out of context before grading), none (no row — e.g. only seeded cells).
  */
-async function baselineList(offCells, { repoRoot = REPO_ROOT, runsRoot = null } = {}) {
+async function baselineList(offCells, { repoRoot = REPO_ROOT, runsRoot = null, current = currentGetter(repoRoot) } = {}) {
   const byModel = new Map();
   for (const c of offCells) {
     if (!c.model) continue;
@@ -766,7 +856,7 @@ async function baselineList(offCells, { repoRoot = REPO_ROOT, runsRoot = null } 
 
   const rows = [];
   for (const [model, cells] of byModel) {
-    const b = await baselineFor(model, cells, { repoRoot, runsRoot });
+    const b = await baselineFor(model, cells, { repoRoot, runsRoot, current });
     // An awaiting-selection batch is a VISIBLE row: the operator must see the
     // batch (and its median) to pick from it — dropping it hides the pick.
     const state = b.scorable
@@ -811,8 +901,11 @@ async function baselineList(offCells, { repoRoot = REPO_ROOT, runsRoot = null } 
       // The batch's median problem count — the awaiting row's measurement and
       // the void row's stale one. Null when no batch was ever assembled.
       median: b.median ?? null,
-      // The fingerprint input that voided the batch (state "void"); else null.
+      // Why the batch is void (state "void"): superseded / mixed /
+      // unfingerprinted, the input concerned, and the sentence; else null.
+      void_kind: b.void_kind ?? null,
       void_input: b.void_input ?? null,
+      void_reason: b.void_reason ?? null,
       // The batch's cells, median, spread and pick (batchView); null for a row
       // with no batch behind it.
       batch: b.batch ?? null,
@@ -840,10 +933,13 @@ async function buildBaselineIndex({ runsRoot, models }) {
   const offCells = await collectOffCells(runsRoot);
   const ids = (models ?? []).map((m) => (typeof m === "string" ? m : str(m?.id))).filter(Boolean);
 
+  // One read of the current code for the whole index, taken only if a batch
+  // needs checking.
+  const current = currentGetter(REPO_ROOT);
   const out = {};
-  for (const id of ids) out[id] = await baselineFor(id, offCells, { runsRoot });
+  for (const id of ids) out[id] = await baselineFor(id, offCells, { runsRoot, current });
 
-  const list = await baselineList(offCells, { runsRoot });
+  const list = await baselineList(offCells, { runsRoot, current });
 
   return {
     contract_version: BASELINES_CONTRACT_VERSION,
