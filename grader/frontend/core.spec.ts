@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { expect, playerClick, test } from "./fixtures.ts";
+import { expect, playerClick, setupState, test } from "./fixtures.ts";
 
 type Player = "white" | "black";
 type Difficulty = "easy" | "medium" | "hard";
@@ -278,7 +278,7 @@ test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {
   points[24] = -11; // remaining black checkers — the golden client requires exactly 15 per side
   points[1] = 14; // 14 white in home; the 15th white checker is on the bar (below)
 
-  await postJson<ApiState>(page, "/api/debug/state", {
+  await setupState(page, {
     points,
     bar: { white: 1, black: 0 },
     off: { white: 0, black: 0 },
@@ -309,7 +309,7 @@ test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
   points[24] = -11; // remaining black checkers — the golden client requires exactly 15 per side
   points[1] = 14; // 14 white in home; the 15th white checker is on the bar (below)
 
-  await postJson<ApiState>(page, "/api/debug/state", {
+  await setupState(page, {
     points,
     bar: { white: 1, black: 0 },
     off: { white: 0, black: 0 },
@@ -361,7 +361,7 @@ test("[F06] REQ-PIPUI — pip display cross-checked vs engine", async ({ page })
   custom[19] = -5;
   custom[21] = -5;
 
-  await postJson<ApiState>(page, "/api/debug/state", {
+  await setupState(page, {
     points: custom,
     bar: { white: 0, black: 0 },
     off: { white: 5, black: 5 },
@@ -434,7 +434,7 @@ test("[F08] REQ-TESTID — difficulty selector", async ({ page }) => {
 test("[F16] REQ-RELOAD — whose turn survives a reload", async ({ page }) => {
   await openApp(page);
   await postJson<ApiState>(page, "/api/new", {});
-  await postJson<ApiState>(page, "/api/debug/state", { turn: "black" });
+  await setupState(page, { turn: "black" });
   await page.reload();
   await expect(page.getByTestId("board")).toBeVisible();
   await expect(page.getByTestId("checker")).toHaveCount(30);
@@ -445,7 +445,7 @@ test("[F16] REQ-RELOAD — whose turn survives a reload", async ({ page }) => {
 test("[F17] REQ-RELOAD — match score survives a reload", async ({ page }) => {
   await openApp(page);
   await postJson<ApiState>(page, "/api/new", {});
-  await postJson<ApiState>(page, "/api/debug/state", { score: { white: 3, black: 5 } });
+  await setupState(page, { score: { white: 3, black: 5 } });
   await page.reload();
   await expect(page.getByTestId("board")).toBeVisible();
   await expect(page.getByTestId("checker")).toHaveCount(30);
@@ -457,7 +457,7 @@ test("[F17] REQ-RELOAD — match score survives a reload", async ({ page }) => {
 test("[F18] REQ-RELOAD — dice values survive a reload", async ({ page }) => {
   await openApp(page);
   await postJson<ApiState>(page, "/api/new", {});
-  await postJson<ApiState>(page, "/api/debug/state", {
+  await setupState(page, {
     phase: "move",
     turn: "white",
     dice: [5, 2],
@@ -473,7 +473,7 @@ test("[F18] REQ-RELOAD — dice values survive a reload", async ({ page }) => {
 test("[F19] REQ-RELOAD — difficulty survives a reload", async ({ page }) => {
   await openApp(page);
   await postJson<ApiState>(page, "/api/new", {});
-  await postJson<ApiState>(page, "/api/debug/state", { difficulty: "hard" });
+  await setupState(page, { difficulty: "hard" });
   await page.reload();
   await expect(page.getByTestId("board")).toBeVisible();
   await expect(page.getByTestId("checker")).toHaveCount(30);
@@ -484,7 +484,7 @@ test("[F19] REQ-RELOAD — difficulty survives a reload", async ({ page }) => {
 test("[F20] REQ-RELOAD — the doubling cube survives a reload", async ({ page }) => {
   await openApp(page);
   await postJson<ApiState>(page, "/api/new", {});
-  await postJson<ApiState>(page, "/api/debug/state", { cube: { value: 2, owner: "black" } });
+  await setupState(page, { cube: { value: 2, owner: "black" } });
   await page.reload();
   await expect(page.getByTestId("board")).toBeVisible();
   await expect(page.getByTestId("checker")).toHaveCount(30);
@@ -495,7 +495,7 @@ test("[F20] REQ-RELOAD — the doubling cube survives a reload", async ({ page }
 test("[F21] REQ-RELOAD — remaining dice survive a reload", async ({ page }) => {
   await openApp(page);
   await postJson<ApiState>(page, "/api/new", {});
-  await postJson<ApiState>(page, "/api/debug/state", {
+  await setupState(page, {
     phase: "move",
     turn: "white",
     dice: [5, 2],

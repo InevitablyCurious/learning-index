@@ -5,6 +5,7 @@ import {
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -127,6 +128,26 @@ export interface ServerHandle {
   baseUrl: string;
   stdout?: string;
   stderr?: string;
+  /** The writable checkout this server runs from (freshCheckout), removed on stop. */
+  checkout?: string;
+}
+
+/**
+ * A FRESH, WRITABLE COPY of the candidate for one server to run from.
+ *
+ * The candidate is mounted read-only (harness/grader_run.py), which no
+ * deployment an app is written for looks like. An app that keeps a file of its
+ * own — a perfectly ordinary design — worked in the model's container and died
+ * here on EROFS, and every later gate reported a failure the model could not
+ * see (run 1790183923, attempt 3: 44 gates). Each server now boots from its own
+ * copy: writes succeed, and nothing written survives into the next server, so
+ * every boot is the clean checkout the feedback promises. The mount stays
+ * read-only: grading never changes the model's tree.
+ */
+export function freshCheckout(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "candidate-"));
+  fs.cpSync(TARGET_DIR, dir, { recursive: true });
+  return dir;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -183,9 +204,10 @@ export async function startServer(opts?: {
 }): Promise<ServerHandle> {
   // The artifact's OWN start command, flags included. See `lib/entrypoint.mjs`
   // for why discarding them made grading depend on the operator's host Node.
-  const { entrypoint, flags } = resolveStartCommand(TARGET_DIR);
+  const checkout = freshCheckout();
+  const { entrypoint, flags } = resolveStartCommand(checkout);
   const proc = spawn("node", [...flags, entrypoint], {
-    cwd: TARGET_DIR,
+    cwd: checkout,
     env: {
       ...process.env,
       // Authoritative: the harness assigns the port, never the operator's
@@ -197,17 +219,12 @@ export async function startServer(opts?: {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  // Recorded BEFORE the health wait, not after it. A server that dies during
-  // startup is exactly the kind most likely to be left behind, and a record
-  // written only on success would miss it.
-  if (proc.pid) {
-  }
-
   const handle: ServerHandle = {
     proc,
     baseUrl: BASE_URL,
     stdout: "",
     stderr: "",
+    checkout,
   };
   attachOutput(proc as ChildProcessWithoutNullStreams, handle);
 
@@ -252,6 +269,14 @@ export async function startServer(opts?: {
 }
 
 export async function stopServer(h: ServerHandle): Promise<void> {
+  try {
+    await stopProcess(h);
+  } finally {
+    if (h.checkout) fs.rmSync(h.checkout, { recursive: true, force: true });
+  }
+}
+
+async function stopProcess(h: ServerHandle): Promise<void> {
   const proc = h.proc;
   if (!proc) {
     return;
@@ -317,8 +342,58 @@ export async function getState(): Promise<any> {
   return api("/api/state");
 }
 
+// ── A SETUP THAT DID NOT TAKE IS NOT THE BEHAVIOUR UNDER TEST ────────────────
+//
+// Most gates reach their situation through the candidate's own debug endpoint
+// and then judge player behaviour. When the endpoint refused or dropped part of
+// the setup, the gate failed anyway — and the model was told the PLAYER story
+// ("I picked the hard computer, refreshed the page…") about a thing that never
+// happened (run 1790183923: the endpoint rejected every partial body). So the
+// setup is checked against what the endpoint echoes BEFORE the behaviour is
+// judged, and a setup that did not take fails with this marker. The harness
+// routes a marked failure to a true line about the debug endpoint
+// (harness/adapters/challenge/feedback.py SETUP_REFUSED), never the gate's own.
+export const SETUP_REFUSED = "SETUP REFUSED";
+
+// Display text the app may legitimately rewrite as the state changes.
+const SETUP_UNCHECKED = new Set(["message"]);
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => sameValue(v, b[i]));
+  }
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    const ka = Object.keys(a as object);
+    return ka.length === Object.keys(b as object).length &&
+      ka.every((k) => sameValue((a as any)[k], (b as any)[k]));
+  }
+  return a === b;
+}
+
+/** The fields of `sent` that the echo does not carry back unchanged. */
+export function setupNotTaken(sent: Record<string, any>, echo: unknown): string[] {
+  if (!echo || typeof echo !== "object") return Object.keys(sent).filter((k) => !SETUP_UNCHECKED.has(k));
+  return Object.keys(sent).filter(
+    (k) => !SETUP_UNCHECKED.has(k) && !sameValue(sent[k], (echo as any)[k]),
+  );
+}
+
+export function assertSetupTook(sent: Record<string, any>, echo: unknown): void {
+  const missed = setupNotTaken(sent, echo);
+  if (missed.length) {
+    throw new Error(`${SETUP_REFUSED}: /api/debug/state did not take ${missed.join(", ")}`);
+  }
+}
+
 export async function debugSetState(partial: Record<string, any>): Promise<any> {
-  return api("/api/debug/state", partial);
+  let echo: any;
+  try {
+    echo = await api("/api/debug/state", partial);
+  } catch (error) {
+    throw new Error(`${SETUP_REFUSED}: /api/debug/state answered ${String((error as Error).message).split("\n")[0]}`);
+  }
+  assertSetupTook(partial, echo);
+  return echo;
 }
 
 export async function debugRoll(dice: number[]): Promise<any> {

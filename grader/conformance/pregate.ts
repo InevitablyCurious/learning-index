@@ -4,7 +4,7 @@ import {
   BASE_URL,
   api,
   debugRoll,
-  debugSetState,
+  emptyPoints,
   health,
   makeState,
   startServer,
@@ -294,14 +294,16 @@ export async function runPreGate(): Promise<PreGateResult> {
     // Reached either way: the catch above is this check's own verdict.
     resolve("REQ-BIND/health");
 
+    // ── WHAT THE STATE CARRIES: read plainly, no setup needed ─────────────
+    //
+    // Whether the reported state HAS a field, and whether it has the right
+    // shape, is answered by reading it. It used to be read off the debug
+    // endpoint's echo of a seeded board, so a refused seed took all twenty
+    // presence gates with it — and the seed was an impossible board (7 white
+    // checkers, 0 black), which an app that validates positions rightly
+    // refuses (run 1790183923's baseline).
     try {
-      const echoed = await debugSetState(
-        makeState({
-          off: { white: 7, black: 0 },
-          turn: "white",
-          phase: "roll",
-        }),
-      );
+      const state = await api("/api/state");
 
       // ── MISSING AND WRONG-SHAPE ARE ONE FINDING, NOT TWO ────────────────
       //
@@ -312,7 +314,7 @@ export async function runPreGate(): Promise<PreGateResult> {
       // count on the wall disagree with the count on the attempt row by
       // exactly the number of absent typed fields.
       const present = (key: string) =>
-        isRecord(echoed) && Object.prototype.hasOwnProperty.call(echoed, key);
+        isRecord(state) && Object.prototype.hasOwnProperty.call(state, key);
 
       for (const key of REQUIRED_STATE_KEYS) {
         if (!present(key)) {
@@ -320,18 +322,8 @@ export async function runPreGate(): Promise<PreGateResult> {
         }
       }
 
-      // Guarded for the same reason: a missing `off` is already reported by the
-      // loop, and re-reporting it here as a wrong VALUE would accuse the model
-      // of a bug it does not have.
-      if (present("off")) {
-        const offWhite = (echoed as any)?.off?.white;
-        if (offWhite !== 7) {
-          add("REQ-STATE/state.off.white — seeded off counts survive the state echo", "7", String(offWhite));
-        }
-      }
-
       if (present("pip")) {
-        const pip = (echoed as any)?.pip;
+        const pip = (state as any)?.pip;
         const pipOk =
           isRecord(pip) && typeof pip.white === "number" && typeof pip.black === "number";
         if (!pipOk) {
@@ -344,7 +336,7 @@ export async function runPreGate(): Promise<PreGateResult> {
       }
 
       if (present("points")) {
-        const points = (echoed as any)?.points;
+        const points = (state as any)?.points;
         const pointsOk =
           Array.isArray(points) && points.length === 26 && points.every((p) => typeof p === "number");
         if (!pointsOk) {
@@ -356,20 +348,48 @@ export async function runPreGate(): Promise<PreGateResult> {
         }
       }
 
-      if (present("legalMoves") && !Array.isArray((echoed as any)?.legalMoves)) {
-        add("REQ-STATE/state.legalMoves — state carries legalMoves as an array", "array", asObserved((echoed as any)?.legalMoves));
+      if (present("legalMoves") && !Array.isArray((state as any)?.legalMoves)) {
+        add("REQ-STATE/state.legalMoves — state carries legalMoves as an array", "array", asObserved((state as any)?.legalMoves));
       }
 
-      if (present("canDouble") && typeof (echoed as any)?.canDouble !== "boolean") {
-        add("REQ-STATE/state.canDouble — state carries canDouble as a boolean", "boolean", asObserved((echoed as any)?.canDouble));
+      if (present("canDouble") && typeof (state as any)?.canDouble !== "boolean") {
+        add("REQ-STATE/state.canDouble — state carries canDouble as a boolean", "boolean", asObserved((state as any)?.canDouble));
       }
       resolve(
         ...REQUIRED_STATE_KEYS.map((key) => `REQ-STATE/state.${key}`),
-        "REQ-STATE/state.off.white",
         "REQ-STATE/state.points.length",
         "REQ-STATE/state.legalMoves",
         "REQ-STATE/state.canDouble",
       );
+    } catch {
+      // Unresolved, so each presence gate reports "never evaluated": nothing
+      // was read, so nothing about the fields can be said. A broken
+      // /api/state is observed, and told, by the gates that use it.
+    }
+
+    // ── A POSITION SET, THEN READ BACK ────────────────────────────────────
+    //
+    // A LEGAL board (15 a side): white 8 on its six-point and 7 borne off,
+    // black 15 on its own home point. The borne-off count is the property.
+    try {
+      const points = emptyPoints();
+      points[6] = 8;
+      points[24] = -15;
+      // The plain call, not debugSetState: the echo IS what this check reads,
+      // and the verifying helper would throw on the very value it grades.
+      const echoed = await api(
+        "/api/debug/state",
+        makeState({ points, off: { white: 7, black: 0 }, turn: "white", phase: "roll" }),
+      );
+      // Guarded: a missing `off` is the presence gate's finding above, and
+      // re-reporting it here as a wrong VALUE would count one absence twice.
+      if (isRecord(echoed) && Object.prototype.hasOwnProperty.call(echoed, "off")) {
+        const offWhite = (echoed as any)?.off?.white;
+        if (offWhite !== 7) {
+          add("REQ-STATE/state.off.white — seeded off counts survive the state echo", "7", String(offWhite));
+        }
+      }
+      resolve("REQ-STATE/state.off.white");
     } catch (error) {
       add("REQ-DEBUG/debug.setState — debug.setState seeds a board and /api/state echoes it", "debug state can be set and echoed", errorLine(error));
     }

@@ -1,13 +1,14 @@
+import fs from "node:fs";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   PORT,
-  TARGET_DIR,
   api,
   debugRoll,
   debugSetState,
   emptyPoints,
   freePort,
+  freshCheckout,
   getState,
   loadEngine,
   makeState,
@@ -79,7 +80,11 @@ function waitForExitWithTimeout(
       resolve({ code: proc.exitCode, signal: proc.signalCode, timedOut: true });
     }, timeoutMs);
 
-    proc.once("exit", (code, signal) => {
+    // `close`, not `exit`: `exit` can fire before the piped stdout/stderr are
+    // drained, so the port-in-use message the gate reads could still be in
+    // flight — a correct app failing on a partial read (lib/harness.ts waits
+    // on `close` for the same reason).
+    proc.once("close", (code, signal) => {
       clearTimeout(timer);
       resolve({ code, signal, timedOut: false });
     });
@@ -164,9 +169,17 @@ describe("Backgammon backend gates 13-16", () => {
     });
 
     it("[G13] REQ-TURN — auto-pass when stuck on bar", async () => {
+      // A REAL position, 15 a side, as the spec promises every seed is
+      // (chunk-03.md: "exactly 15 checkers per side"). It was 1 white and 4
+      // black, which an app that validates positions rightly refuses — failing
+      // a turn-flow gate over our board. White's entry points for the 2-4
+      // (23 and 21) are blocked; the other checkers sit where they touch
+      // neither entry nor the pass.
       const points = emptyPoints();
       points[23] = -2;
       points[21] = -2;
+      points[24] = -11;
+      points[6] = 14;
 
       await debugSetState(
         makeState({
@@ -340,7 +353,11 @@ describe("Backgammon backend gates 13-16", () => {
   describe("[G16] REQ-BIND — port 8002 bind + clear failure when taken", () => {
     it("[G16] REQ-BIND — second server exits non-zero with clear 8002 in-use message", async () => {
       await freePort(PORT);
-      const startCmd = resolveStartCommand(TARGET_DIR);
+      // Its own writable checkout, like every server the gates boot: on the
+      // read-only mount an app that writes a file would fail for THAT reason,
+      // and this gate would pass or fail on EROFS instead of on the port.
+      const checkout2 = freshCheckout();
+      const startCmd = resolveStartCommand(checkout2);
       const h = await startServer({ debug: true });
 
       let p2: ChildProcessWithoutNullStreams | null = null;
@@ -351,7 +368,7 @@ describe("Backgammon backend gates 13-16", () => {
         // The SAME start command the first server used — a second copy that
         // could not boot at all would "pass" this gate for the wrong reason.
         p2 = spawn("node", [...startCmd.flags, startCmd.entrypoint], {
-          cwd: TARGET_DIR,
+          cwd: checkout2,
           // PORT must match the first server's, or there is no collision to
           // observe: this gate is about what happens when the port is TAKEN,
           // and a second copy left to its own default would simply bind a
@@ -386,6 +403,7 @@ describe("Backgammon backend gates 13-16", () => {
         }
 
         await stopServer(h);
+        fs.rmSync(checkout2, { recursive: true, force: true });
         await freePort(PORT);
       }
     });

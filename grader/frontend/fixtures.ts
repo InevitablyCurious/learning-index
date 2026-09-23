@@ -30,9 +30,9 @@
 // every worker at worker 0's server. It is overridden per worker instead.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { test as base, expect, type Locator } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
-import { BASE_URL, PORT, startServer, stopServer, type ServerHandle } from "../lib/harness.ts";
+import { BASE_URL, PORT, SETUP_REFUSED, assertSetupTook, startServer, stopServer, type ServerHandle } from "../lib/harness.ts";
 
 export const test = base.extend<{}, { gameServer: ServerHandle }>({
   gameServer: [
@@ -58,6 +58,22 @@ export const test = base.extend<{}, { gameServer: ServerHandle }>({
 });
 
 export { expect, PORT, BASE_URL };
+
+/**
+ * Put the server into a position through the candidate's debug endpoint, and
+ * fail with the SETUP_REFUSED marker when it did not take (see lib/harness.ts
+ * assertSetupTook) — so a refused setup is never reported as the behaviour
+ * the gate goes on to judge.
+ */
+export async function setupState(page: Page, body: Record<string, any>): Promise<any> {
+  const response = await page.request.post("/api/debug/state", { data: body });
+  if (!response.ok()) {
+    throw new Error(`${SETUP_REFUSED}: /api/debug/state answered HTTP ${response.status()}`);
+  }
+  const echo = await response.json().catch(() => null);
+  assertSetupTook(body, echo);
+  return echo;
+}
 
 // ── CLICK WHERE A PLAYER CLICKS ─────────────────────────────────────────────
 //
