@@ -203,8 +203,14 @@ export async function collectCells(runsRoot) {
       const attempts = new Set(prev.attempts ?? []);
       const attemptNo = int(r.attempt);
       if (attemptNo !== null) attempts.add(attemptNo);
+      // Failures per attempt: the repair trajectory (27 -> 28 -> 27 -> 26 -> 24).
+      // The last record for an attempt wins; an attempt with no gate total is absent.
+      const attemptFailed = new Map(prev.attemptFailed ?? []);
+      const g = gateTotals(r);
+      if (attemptNo !== null && g && Number.isInteger(g.failed)) attemptFailed.set(attemptNo, g.failed);
       folded.set(seq, {
         attempts,
+        attemptFailed,
         verdict: str(r.verdict) ?? prev.verdict ?? null,
         turns: int(p.turns) ?? prev.turns ?? null,
         tokens: int(p.total_tokens) ?? int(p.tokens) ?? prev.tokens ?? null,
@@ -287,6 +293,10 @@ export async function collectCells(runsRoot) {
         gates: meas?.gates ?? null,
         // null means no data, never "every chunk incomplete".
         build_chunks: meas?.build_chunks ?? null,
+        // Failed gates per graded attempt, in attempt order ([] = none graded).
+        attempt_failures: meas
+          ? [...meas.attemptFailed.entries()].sort((a, b) => a[0] - b[0]).map(([, n]) => n)
+          : [],
         terminal_reason: meas?.terminal_reason ?? null,
         // Out of context room: a result, not an instrument fault.
         context_exhausted: meas?.terminal_reason === "context_exhausted",
@@ -445,6 +455,69 @@ export async function readBatchForRunDir({ runsRoot, runDir, repoRoot = REPO_ROO
 }
 
 /**
+ * What the BASELINES row shows inside a batch: every cell of it with its own
+ * numbers, the median and the spread of the scored problem counts, and the
+ * operator's pick with its distance from the median.
+ *
+ * The problem count and the scored/void verdict come from the batch record
+ * (batch.mjs) — the same numbers the median is taken over — never re-derived.
+ * With no batch record yet (a batch still running) the cells come from disk
+ * alone and carry no verdict. Voids are listed, never dropped: a batch that
+ * hid its failures would present fewer samples with the confidence of more.
+ */
+export function batchView(cells, batch) {
+  const median = Number.isFinite(batch?.median) ? batch.median : null;
+  const runs = new Map((batch?.runs ?? []).map((r) => [r.sequence_index, r]));
+  const scoredCounts = (batch?.runs ?? [])
+    .filter((r) => r.scored === true && Number.isFinite(r.problem_count))
+    .map((r) => r.problem_count);
+  const pickIdx = Number.isInteger(batch?.selection?.sequence_index) ? batch.selection.sequence_index : null;
+
+  const list = [...cells]
+    .sort((a, b) => a.sequence_index - b.sequence_index)
+    .map((c) => {
+      const r = runs.get(c.sequence_index) ?? null;
+      const problems = r ? (Number.isFinite(r.problem_count) ? r.problem_count : null) : null;
+      return {
+        sequence_index: c.sequence_index,
+        state: c.state,
+        scored: r ? r.scored === true : null,
+        void_reason: r?.void_reason ?? null,
+        problems,
+        vs_median: r?.scored === true && median !== null && problems !== null ? problems - median : null,
+        picked: pickIdx === c.sequence_index,
+        turns: c.turns ?? null,
+        tokens: c.tokens ?? null,
+        wall_seconds: c.wall_seconds ?? null,
+        gates: c.gates ?? null,
+        verdict: c.verdict ?? null,
+        terminal_reason: c.terminal_reason ?? null,
+        context_exhausted: c.context_exhausted === true,
+        attempt_failures: c.attempt_failures ?? [],
+      };
+    });
+
+  const picked = list.find((c) => c.picked) ?? null;
+  return {
+    median,
+    spread: scoredCounts.length ? { min: Math.min(...scoredCounts), max: Math.max(...scoredCounts) } : null,
+    scored_count: batch ? (batch.scored_count ?? scoredCounts.length) : 0,
+    void_count: batch ? (batch.void_count ?? 0) : 0,
+    cells: list,
+    // The floor: which cell, its signed deviation as stored with the pick, and
+    // that deviation as a share of the median (null when the median is 0).
+    pick: picked
+      ? {
+          sequence_index: picked.sequence_index,
+          problems: picked.problems,
+          signed_deviation: batch.selection.signed_deviation ?? null,
+          pct_from_median: median ? Math.round(((picked.problems - median) / median) * 1000) / 10 : null,
+        }
+      : null,
+  };
+}
+
+/**
  * The baseline for one model: the operator's SELECTED run from the model's
  * persisted batch — never an arbitrary pick. A single run is not a baseline;
  * the batch (<runsRoot>/<run_dir>/batch.json: median problem count over the
@@ -526,6 +599,7 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
         candidates: batch.scored_count,
         median: batch.median,
         void_input: batch.void_input,
+        batch: batchView(batchCells, batch),
         reason: "batch_void",
       };
     }
@@ -559,6 +633,8 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
         context_exhausted: sel.context_exhausted === true,
         // The batch's scored-run count; only the selected run is the floor.
         candidates: batch.scored_count,
+        median: batch.median,
+        batch: batchView(batchCells, batch),
         reason: null,
       };
     }
@@ -577,6 +653,7 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
       model_slug: rep.model_slug,
       candidates: batch.scored_count,
       median: batch.median,
+      batch: batchView(batchCells, batch),
       reason: "awaiting_selection",
     };
   }
@@ -658,6 +735,8 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
       // When the campaign folder was created, not this attempt.
       campaign_started_at: r.created_at,
       candidates: 0,
+      // No batch record until a cell scores: the cells, from disk, no verdicts.
+      batch: batchView(mine.filter((c) => c.run_dir === r.run_dir), null),
       reason: `an OFF cell for ${model} is scheduled or in flight but has not produced a measurement yet`,
     };
   }
@@ -734,6 +813,9 @@ async function baselineList(offCells, { repoRoot = REPO_ROOT, runsRoot = null } 
       median: b.median ?? null,
       // The fingerprint input that voided the batch (state "void"); else null.
       void_input: b.void_input ?? null,
+      // The batch's cells, median, spread and pick (batchView); null for a row
+      // with no batch behind it.
+      batch: b.batch ?? null,
       reason: b.reason ?? null,
     });
   }

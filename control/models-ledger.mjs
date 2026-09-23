@@ -59,7 +59,7 @@ export async function readModelsLedger({ runsRoot, benchModels, inFlightModels =
     // baselineFor rule /api/run/start applies.
     const canRun = {
       allowed: !inFlight && baseline.scorable,
-      reason: inFlight ? serialReasonFor(id) : (baseline.scorable ? null : baseline.reason),
+      reason: inFlight ? serialReasonFor(id) : (baseline.scorable ? null : runRefusal(baseline)),
     };
 
     return {
@@ -119,6 +119,18 @@ export async function readModelsLedger({ runsRoot, benchModels, inFlightModels =
   };
 }
 
+/**
+ * Why [+ run] is refused on a floor that is not scorable, in words. The batch
+ * states are codes on the record (baselines.mjs); a refusal is read by a person.
+ */
+function runRefusal(b) {
+  if (b.reason === "awaiting_selection") return "pick a floor from this batch first — an ON run is measured against one picked cell";
+  if (b.reason === "batch_void") {
+    return `this batch is void — ${b.void_input ?? "an input"} changed since it ran, so no run can be measured against it`;
+  }
+  return b.reason;
+}
+
 /** One row per measured floor, every gate resolved here. */
 function baselineRows({ baselines, allCells, inFlightModels }) {
   const rows = Array.isArray(baselines?.list) ? baselines.list : [];
@@ -133,7 +145,7 @@ function baselineRows({ baselines, allCells, inFlightModels }) {
     // reasons (wait vs archive and re-run).
     const canRun = {
       allowed: !inFlight && b.scorable === true,
-      reason: inFlight ? serialReasonFor(b.model) : (b.scorable ? null : b.reason),
+      reason: inFlight ? serialReasonFor(b.model) : (b.scorable ? null : runRefusal(b)),
     };
 
     return {

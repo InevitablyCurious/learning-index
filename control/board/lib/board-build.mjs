@@ -20,7 +20,6 @@ import * as controlPlane from "../sources/control-plane.mjs";
 import * as gateSuite from "../sources/gate-suite.mjs";
 import * as learning from "../sources/learning.mjs";
 import * as liveStream from "../sources/live-stream.mjs";
-import * as resultsLedger from "../sources/results-ledger.mjs";
 import * as toolJobs from "../sources/tool-jobs.mjs";
 import * as cells from "../sources/cells.mjs";
 
@@ -28,7 +27,7 @@ import * as cells from "../sources/cells.mjs";
 // with a reason) instead of being switched off by configuration.
 const MODS = [
   runManifest, statusStream, runLog, stackLedger, funnelCells, pluginLog,
-  opencodeServe, controlPlane, gateSuite, learning, liveStream, resultsLedger,
+  opencodeServe, controlPlane, gateSuite, learning, liveStream,
   toolJobs,
   cells,
 ];
@@ -53,8 +52,6 @@ const ORDER = [
   "learning",
   "run-log",
   "live-stream",
-  // Owns `results`, conflicts with nothing.
-  "results-ledger",
   "opencode-serve",
   // Owns `tool_jobs` alone; in-memory, so it is never the slow source.
   "tool-jobs",

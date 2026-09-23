@@ -79,7 +79,7 @@ test("LEDGER: an UNSELECTED batch is a VISIBLE 'awaiting' row carrying the media
   assert.equal(row.void_input, null, "nothing is void here");
   assert.equal(row.candidates, 1, "the batch's scored-run count rides the row");
   assert.equal(row.can_run.allowed, false, "no floor — nothing may be measured against it");
-  assert.equal(row.can_run.reason, "awaiting_selection");
+  assert.match(row.can_run.reason, /^pick a floor from this batch first/);
   rmSync(root, { recursive: true, force: true });
 });
 
