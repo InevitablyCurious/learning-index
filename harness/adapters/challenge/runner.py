@@ -49,6 +49,7 @@ from harness.checkpoint import checkpoint_root, record_checkpoint
 from harness.context_budget import CONTEXT_EXHAUSTED
 from harness.serve_client import WORKER_DIED
 from harness.egress import egress_container_name
+from harness.fingerprint import cell_fingerprint, write_cell_fingerprint
 from harness.live_stream import Heartbeat, LiveStream
 from harness.outcomes.predicate_emitter import STATE_ALG
 from harness.runner import AgentRunner
@@ -961,6 +962,20 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     "Docker worker image missing. "
                     "Build it with: .venv/bin/python scripts/rebuild_worker_image.py"
                 )
+            # WHAT THIS CELL RUNS ON, recorded before it runs (harness/fingerprint.py).
+            # The batch is fingerprinted from these files alone; a cell that
+            # cannot record one refuses to start rather than run unrecorded.
+            write_cell_fingerprint(
+                run_dir,
+                cell_fingerprint(
+                    task_dir=self.task_dir,
+                    grader_dir=_GRADER_DIR,
+                    model=self.model,
+                    challenge=self.task_dir.name,
+                    compaction=self.compact,
+                    worker_image=worker_image_identity.to_dict(),
+                ),
+            )
             # WO-SEP-02 phase 3: read the image-baked plugin label ONCE per cell,
             # next to the image identity probe, and stash it on self. The
             # per-cell opencode.json plugin/mcp paths are gated on it. The flag
