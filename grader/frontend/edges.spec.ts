@@ -399,15 +399,6 @@ test("[F15] REQ-SAME-ORIGIN — the app works on either host name", async ({
     page.on("console", onConsole);
     page.on("pageerror", onPageError);
 
-    // A fresh game first. The server is shared with the tests before this one
-    // on the worker (fixtures.ts), and the page shows whatever game the server
-    // holds (the spec: load the current state, never start one on load) — so
-    // without this the 30-checker count below read the previous test's board.
-    // Measured: F12's finished game, 13 checkers on the board, reported to the
-    // model as a host-name fault (run 1790161152, s0000). Borne-off checkers
-    // are F11's to check, not this gate's.
-    const fresh = await page.request.post(`${origin}/api/new`, { data: {} });
-    expect(fresh.ok(), `starting a new game failed at ${origin}`).toBe(true);
     await page.goto(`${origin}/`);
     await expect(
       page.getByTestId("board"),

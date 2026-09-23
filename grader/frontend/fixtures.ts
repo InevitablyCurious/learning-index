@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// ONE SERVER PER WORKER — what makes the frontend gates parallelisable.
+// ONE SERVER PER TEST — parallel across workers, isolated between tests.
 //
 // ── WHAT THIS REPLACES ──────────────────────────────────────────────────────
 //
@@ -13,13 +13,17 @@
 // entire board and pushes it in. They needed to not be DISTURBED, not to run in
 // order. A server each gives them that, and the ordering constraint disappears.
 //
-// ── WHY A WORKER FIXTURE AND NOT A TEST FIXTURE ─────────────────────────────
+// ── ONE SERVER PER TEST, NOT PER WORKER ─────────────────────────────────────
 //
-// `scope: "worker"` boots one server per worker PROCESS and reuses it across
-// every test that worker runs. Per-test would be correct too and hopelessly
-// slow — fifteen server boots instead of N — and the isolation that matters is
-// between workers running AT THE SAME TIME, not between consecutive tests on
-// one worker, which were already fine sharing a server when they were serial.
+// It was one server per worker PROCESS, reused across every test that worker
+// ran, on the belief that consecutive tests were fine sharing one. They were
+// not: the page shows whatever game the server holds (the spec: load the
+// current state, never start one on load), so a test read what the test
+// before it left. F15 counted F12's finished board (13 checkers) and blamed the
+// host name; F09 passed or failed on the same code depending on whether F08
+// had changed the difficulty first (run 1790194347). Each test now gets its
+// own server from its own clean checkout — about a second of boot per test,
+// and no result depends on what ran before it.
 //
 // ── WHY baseURL IS OVERRIDDEN HERE ──────────────────────────────────────────
 //
@@ -34,7 +38,7 @@ import { test as base, expect, type Locator, type Page } from "@playwright/test"
 
 import { BASE_URL, PORT, SETUP_REFUSED, assertSetupTook, startServer, stopServer, type ServerHandle } from "../lib/harness.ts";
 
-export const test = base.extend<{}, { gameServer: ServerHandle }>({
+export const test = base.extend<{ gameServer: ServerHandle }>({
   gameServer: [
     async ({}, use) => {
       // DEBUG_API on: the gates drive positions and dice through it, exactly as
@@ -43,7 +47,7 @@ export const test = base.extend<{}, { gameServer: ServerHandle }>({
       await use(handle);
       await stopServer(handle);
     },
-    { scope: "worker", auto: true },
+    { scope: "test", auto: true },
   ],
 
   // Every worker talks to its OWN server. `PORT` already carries the worker
