@@ -306,15 +306,32 @@ def _default_progress(message: str) -> None:
 # position through the app's debug endpoint and it did not read back. Said in
 # the team's voice, naming the fields the grader found missing.
 SETUP_REFUSED = "SETUP REFUSED"
-_SETUP_FIELDS_RE = re.compile(r"did not take (.+)$")
+_SETUP_FIELDS_RE = re.compile(
+    r"did not take (?P<missed>.+?)(?: \(sent (?P<sent>.+?)\))?(?: \[error: (?P<error>.*)\])?$"
+)
+_SETUP_HTTP_RE = re.compile(r"answered HTTP (?P<code>\d{3})")
+# Names what they SENT, because the request is the finding: a whole position
+# and a one-field update are different calls (run 1790191629 — told "a
+# position", the model tested a full board, saw it work, and never tried the
+# one-field update the gate had sent).
 _SETUP_LINE_FIRST = (
-    "They set up a specific game position through your app's debug endpoint to check "
-    "something, and it didn't take: {what} didn't read back as what they sent."
+    "They sent your app's debug endpoint {sent} to set up something they were checking, "
+    "and it didn't take: {missed} didn't read back as what they sent."
 )
 _SETUP_LINE_REPEAT = (
-    "They set a position through your debug endpoint again and it still didn't take: "
-    "{what} still didn't read back as what they sent."
+    "They sent your debug endpoint {sent} again and it still didn't take: "
+    "{missed} still didn't read back as what they sent."
 )
+# A body carrying the board is a whole position; anything less is an update of
+# just those fields.
+_POSITION_KEYS = {"points", "bar", "off"}
+
+
+def _describe_sent(keys: list[str]) -> str:
+    if _POSITION_KEYS <= set(keys):
+        return "a whole game position"
+    quoted = ", ".join(f'"{k}"' for k in keys)
+    return f"an update with just {quoted}"
 
 
 # ── THE APP ANSWERED AN API CALL WITH AN ERROR ─────────────────────────────
@@ -355,10 +372,20 @@ def setup_refusal_line(observed: str, *, pass_kind: str) -> str | None:
     if SETUP_REFUSED not in text:
         return None
     first = text[text.index(SETUP_REFUSED):].split("\n", 1)[0]
+    if h := _SETUP_HTTP_RE.search(first):
+        if pass_kind == "repeat":
+            return f"They sent your debug endpoint the same setup again and it still answers HTTP {h.group('code')}."
+        return (
+            "They sent your app's debug endpoint a request to set up something they were checking, "
+            f"and it answered HTTP {h.group('code')}."
+        )
     m = _SETUP_FIELDS_RE.search(first)
-    what = f'"{m.group(1).strip()}"' if m else "the position"
+    missed = ", ".join(f'"{k.strip()}"' for k in m.group("missed").split(",")) if m else "what they set"
+    sent_keys = [k.strip() for k in m.group("sent").split(",")] if m and m.group("sent") else []
+    sent = _describe_sent(sent_keys) if sent_keys else "a request"
     template = _SETUP_LINE_REPEAT if pass_kind == "repeat" else _SETUP_LINE_FIRST
-    return template.format(what=what)
+    said = f' The response said: "{m.group("error").strip()[:140]}".' if m and m.group("error") else ""
+    return template.format(sent=sent, missed=missed) + said
 
 
 class FeedbackMixin:

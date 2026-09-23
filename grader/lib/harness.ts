@@ -381,7 +381,17 @@ export function setupNotTaken(sent: Record<string, any>, echo: unknown): string[
 export function assertSetupTook(sent: Record<string, any>, echo: unknown): void {
   const missed = setupNotTaken(sent, echo);
   if (missed.length) {
-    throw new Error(`${SETUP_REFUSED}: /api/debug/state did not take ${missed.join(", ")}`);
+    // What was SENT travels with what did not take: "a position" and "just
+    // difficulty" are different requests, and a candidate that tested the one
+    // it was told about found it working (run 1790191629: the gate sent only
+    // {difficulty}, the model was told "a position", sent a full board, and
+    // saw it take).
+    // And the app's own error text, when it answered with one: it is what the
+    // integrating team would have in front of them.
+    const said = echo && typeof (echo as any).error === "string" ? ` [error: ${(echo as any).error}]` : "";
+    throw new Error(
+      `${SETUP_REFUSED}: /api/debug/state did not take ${missed.join(", ")} (sent ${Object.keys(sent).join(", ")})${said}`,
+    );
   }
 }
 

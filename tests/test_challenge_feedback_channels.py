@@ -404,17 +404,23 @@ def test_a_refused_setup_is_told_as_the_team_saw_it_never_as_the_gates_player_st
     problems = [
         {
             "check": "[F19] REQ-RELOAD — difficulty survives a reload",
-            "observed": "Error: SETUP REFUSED: /api/debug/state did not take difficulty",
+            "observed": "Error: SETUP REFUSED: /api/debug/state did not take difficulty (sent difficulty)"
+            " [error: invalid position: white=0, black=0 (must be 15 each)]",
         },
         {
             "check": "[F17] REQ-RELOAD — match score survives a reload",
-            "observed": "Error: SETUP REFUSED: /api/debug/state did not take difficulty",
+            "observed": "Error: SETUP REFUSED: /api/debug/state did not take difficulty (sent difficulty)"
+            " [error: invalid position: white=0, black=0 (must be 15 each)]",
         },
     ]
     msg = ChallengeRunner._build_feedback_prompt(problems=problems)
     assert "hard computer" not in msg, "the gate's player story must not be told"
     assert msg.count("debug endpoint") == 1, "same finding twice is one line"
     assert '"difficulty"' in msg
+    # What was SENT is named (run 1790191629: told "a position", the model
+    # tested a full board and saw it work), and the app's own error text.
+    assert 'an update with just "difficulty"' in msg
+    assert "must be 15 each" in msg
     team = msg.split("software team", 1)[1]
     assert "debug endpoint" in team, "a refused setup is the team's finding"
     again = ChallengeRunner._build_feedback_prompt(
