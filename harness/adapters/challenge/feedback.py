@@ -583,8 +583,11 @@ class FeedbackMixin:
             # Same cap and reasoning as the failure list: a human symptom
             # sentence legitimately runs long, and a cut mid-clause is the tell
             # that no person wrote it.
-            if len(sanitized) > 200:
-                sanitized = f"{sanitized[:200].rsplit(' ', 1)[0]}…"
+            # 320, the failure list's cap: a told line quoted back must read
+            # whole — at 200 it cut the setup line mid-quote ("The response
+            # said:…", run 1790196821), the very tell this cap exists to avoid.
+            if len(sanitized) > 320:
+                sanitized = f"{sanitized[:320].rsplit(' ', 1)[0]}…"
             if not sanitized or sanitized in seen:
                 continue
             seen.add(sanitized)
