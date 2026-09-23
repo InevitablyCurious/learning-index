@@ -412,6 +412,11 @@ export async function runPreGate(): Promise<PreGateResult> {
     try {
       browser = await chromium.launch();
       const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+      // No single action may spend the pre-gate's whole budget: Playwright's
+      // default is 30s, the same as the beforeAll limit (pregate.spec.ts), so
+      // one stuck action published the pass ungradable. The reference runs the
+      // whole pre-gate in under a second.
+      page.setDefaultTimeout(5_000);
 
       // Fresh game BEFORE the frontend's first load, so the server is in the
       // "roll" phase when the page arrives and the roll button is enabled.
@@ -435,7 +440,12 @@ export async function runPreGate(): Promise<PreGateResult> {
       // the whole pre-gate — its absence is already reported by the testid
       // loop above.
       await debugRoll([3, 1]);
-      await page.locator('[data-testid="rollBtn"]').click().catch(() => undefined);
+      // Bounded: a Roll button that is disabled (an app that opens a game with
+      // the opening roll already made) was retried for Playwright's default
+      // 30s — the whole pre-gate budget — so a candidate that passed every
+      // conformance check overran it and the pass was published ungradable
+      // (run 1790200233: 30.46s against the reference's 0.61s).
+      await page.locator('[data-testid="rollBtn"]').click({ timeout: 2_000 }).catch(() => undefined);
       await page
         .waitForFunction(
           () => document.querySelectorAll('[data-testid="die"]').length >= 2,
