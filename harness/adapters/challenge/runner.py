@@ -121,6 +121,7 @@ from .telemetry import (
 )
 from .transport import (
     TransportMixin,
+    _is_instrument_anomaly,
     _is_unrecovered_anomaly,
 )
 from .utils import UtilsMixin
@@ -2187,17 +2188,10 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 for record in turn_anomalies_all
                 if record.get("terminal") == TURN_TERMINAL_GUARD_ABORT
             ),
-            # Every anomaly EXCEPT the loop guard and the stall watchdog — both
-            # are the harness catching the model wedging a turn (looping, or a
-            # tool call that never returned): model behaviour, not a broken
-            # instrument.
+            # Every anomaly EXCEPT the model's own (loop guard, stall
+            # watchdog, cap cut-off): see _is_instrument_anomaly.
             instrument_anomaly_turns=sum(
-                1
-                for record in turn_anomalies_all
-                if record.get("terminal") not in (
-                    TURN_TERMINAL_GUARD_ABORT,
-                    TURN_TERMINAL_STALLED,
-                )
+                1 for record in turn_anomalies_all if _is_instrument_anomaly(record)
             ),
             # WO-I1: the UNRECOVERED complement — every anomaly except the
             # recoverability gate's RECOVERABLE set (guard_abort,

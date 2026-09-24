@@ -645,9 +645,10 @@ def build_scorecard(
         # nothing on the board.
         #
         # `instrument_anomaly_turns` is the honest denominator: every anomalous
-        # turn EXCEPT guard_abort, which is the loop guard and has its own slot.
-        # It already contains the finalize-timeout subset, so this neither
-        # double-counts nor loses the narrower kind.
+        # turn EXCEPT the model's own (loop guard, stall watchdog, cap cut-off —
+        # each has its own slot; adapters/challenge/transport.py
+        # _is_instrument_anomaly). It already contains the finalize-timeout
+        # subset, so this neither double-counts nor loses the narrower kind.
         "instrument_anomaly_turns": sum(
             int(r.get("instrument_anomaly_turns") or 0) for r in best_by_cell.values()
         ),

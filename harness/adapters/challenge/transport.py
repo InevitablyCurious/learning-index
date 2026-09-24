@@ -56,6 +56,24 @@ def _provider_backoff_seconds(attempt_index: int) -> float:
     return PROVIDER_BACKOFF_SCHEDULE_S[idx]
 
 
+# The harness catching MODEL behaviour, not a broken instrument: the loop guard
+# (looping), the stall watchdog (a turn that stopped moving), a cap cut-off
+# (running into the fixed per-response output cap).
+_MODEL_BEHAVIOUR_TERMINALS = frozenset(
+    {TURN_TERMINAL_GUARD_ABORT, TURN_TERMINAL_STALLED, TURN_TERMINAL_CAP_CUTOFF}
+)
+
+
+def _is_instrument_anomaly(record: dict[str, Any]) -> bool:
+    """True when an anomaly record is the instrument's, not the model's.
+
+    Every terminal except :data:`_MODEL_BEHAVIOUR_TERMINALS`. A cap cut-off
+    used to count here: run 1790258326's three cut-offs read as three stream
+    (instrument) errors on the board beside the same three CUT-OFFS.
+    """
+    return record.get("terminal") not in _MODEL_BEHAVIOUR_TERMINALS
+
+
 def _is_unrecovered_anomaly(record: dict[str, Any]) -> bool:
     """True when an anomaly record is an instrument failure the harness did
     NOT recover (it ended the phase and was graded).

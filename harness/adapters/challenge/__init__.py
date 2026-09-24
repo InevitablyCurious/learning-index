@@ -117,6 +117,7 @@ from .telemetry import (
 from .transport import (
     compact_phase_for,
     _build_truncation_evidence,
+    _is_instrument_anomaly,
     _is_unrecovered_anomaly,
     _iso_utc,
     _provider_backoff_seconds,

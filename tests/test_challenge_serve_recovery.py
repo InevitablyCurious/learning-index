@@ -882,3 +882,17 @@ def test_serve_drive_finalize_timeout_burst_recovers_within_budget(
     assert stats.output_tokens == 90
     assert stats.turns == 8
     assert stats.finalize_timeout_turns == 1
+
+
+def test_the_models_own_terminals_are_not_instrument_anomalies() -> None:
+    """Run 1790258326: three cap cut-offs read as three stream (instrument)
+    errors on the board beside the same three CUT-OFFS. A cut-off is the model
+    running into the fixed output cap — model behaviour, like a loop-guard kill
+    or a stall; each has its own slot and none is the instrument breaking."""
+    from harness.adapters.challenge import _is_instrument_anomaly
+    from harness.adapters.challenge.constants import TURN_TERMINAL_CAP_CUTOFF
+
+    for terminal in (TURN_TERMINAL_GUARD_ABORT, TURN_TERMINAL_STALLED, TURN_TERMINAL_CAP_CUTOFF):
+        assert _is_instrument_anomaly({"terminal": terminal, "reason": "stream-incomplete"}) is False
+    for terminal in (TURN_TERMINAL_TRANSPORT_ERROR, TURN_TERMINAL_TRUNCATED):
+        assert _is_instrument_anomaly({"terminal": terminal, "reason": "stream-incomplete"}) is True
