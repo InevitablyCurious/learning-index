@@ -28,5 +28,8 @@ def test_the_texts_the_model_receives() -> None:
     assert _NO_CHANGE_NOTE.strip() == "You didn't change any code since my last message."
     assert _LOOP_RECOVERY_NUDGE.strip() == (
         "You started going in circles there and repeating yourself, so I stopped it. "
-        "You may continue where you left off."
+        # Not "continue where you left off": after a real loop that is an
+        # instruction to resume it — run 1790202713 answered 21 nudges by
+        # re-reading the same board, with no edit and no tool call.
+        "Try another way."
     )
