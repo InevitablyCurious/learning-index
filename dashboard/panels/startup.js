@@ -171,10 +171,13 @@ function tuiMirror(b) {
   const why =
     "a strictly read-only mirror of the run's terminal. It attaches to the session the runner opens; it never writes to the pty.";
   if (!t) {
+    const c = activeCell(b);
     return proc("tui-mirror", "TUI mirror", "off", "not attached", null, why,
-      activeCell(b)
-        ? "no frame received for this cell yet — the mirror attaches to its session when the TUI MIRROR tab is open"
-        : "no cell selected — the mirror follows the cell strip");
+      !c
+        ? "no cell selected — the mirror follows the cell strip"
+        : c.archived === true
+          ? "this run is archived — it has ended, so there is no session to mirror"
+          : "no frame received for this cell yet — the mirror attaches to its session when the TUI MIRROR tab is open");
   }
   if (t.status === "failed") {
     return proc("tui-mirror", "TUI mirror", "bad", "failed", null, why,

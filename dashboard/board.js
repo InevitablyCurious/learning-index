@@ -382,8 +382,8 @@ function render() {
     return;
   }
 
-  // The mirror follows the cell the strip points at, selected or default.
-  setTuiCell(cellKey(activeCell(board)));
+  // The page follows the run the strip points at, selected or default.
+  followActiveCell(board, render);
   // Every panel below draws the strip's cell: the board with that cell's view
   // laid over it. The board itself carries no cell's state.
   const view = cellView(board);
@@ -429,15 +429,19 @@ function render() {
 
 /**
  * The board as ONE CELL sees it: board-wide sections as they are, and the
- * strip's active cell's own view (board.by_cell[address] — run, live, suite,
- * learning, honesty) laid over them; `run` merges, so the board-wide model
- * and org stay. No active cell, or a cell with no view yet: those sections are
- * absent and every panel says so — never another cell's. Pure; exported for
- * tests.
+ * strip's active cell's own view (run, live, suite, learning, honesty — from
+ * board.by_cell for a current cell, from the archived-view cache for an
+ * archived run) laid over them; `run` merges, so the board-wide model and org
+ * stay. No active cell, or a cell with no view yet: those sections are absent
+ * and every panel says so — never another cell's. Pure over the board and
+ * the cache; exported for tests.
  */
 export function cellView(b) {
-  const key = cellKey(activeCell(b));
-  const own = key ? b?.by_cell?.[key] ?? null : null;
+  const active = activeCell(b);
+  const key = cellKey(active);
+  const archived = active?.archived === true;
+  const load = archived && key !== null ? runViews.get(key) ?? null : null;
+  const own = archived ? (load?.state === "ready" ? load.view : null) : key ? b?.by_cell?.[key] ?? null : null;
   const view = { ...b };
   for (const k of ["live", "suite", "learning"]) view[k] = own?.[k] ?? null;
   view.run = { ...(b?.run ?? {}), ...(own?.run ?? {}) };
@@ -445,6 +449,17 @@ export function cellView(b) {
   // ON-only funnel and plugin-log sources, which are not per-cell yet).
   view.honesty = { ...(b?.honesty ?? {}), ...(own?.honesty ?? {}) };
   view.cell_sources = own?.sources ?? null;
+  // An archived run's view while it loads, or why it could not: the wall
+  // states it rather than drawing an absence. null for anything loaded.
+  view.run_view = !archived || load?.state === "ready"
+    ? null
+    : key === null
+      ? { state: "failed", reason: "the card carries no run_dir::sequence_index address to fetch" }
+      : load ?? { state: "loading" };
+  // The mirror follows current cells only (followActiveCell): an archived run
+  // has no session, and frames still arriving belong to the cell the stream
+  // stayed on — never drawn under this run's name.
+  if (archived) view.tui = null;
   return view;
 }
 
@@ -474,33 +489,71 @@ function bindInteraction() {
   document.addEventListener("keydown", onKeydown);
 }
 
+// ── ARCHIVED RUN VIEWS ── the client's own, so they live OUTSIDE the board.
+//
+// by_cell is built server-side for the CURRENT tree only; an archived run's
+// view comes from /api/run-view. It was cached INTO board.by_cell, and every
+// stream (re)connect sends a full "board" frame that replaces the board —
+// selecting a run re-keyed the TUI mirror, which reconnects — so the wall drew
+// the run's gates, then emptied, and the mirror blanked: the flash on every
+// card switch. A completed run never changes: its view is fetched ONCE per
+// page load and kept here, where no frame or patch can reach it.
+
+/** cell address → { state: "loading" } | { state: "ready", view } | { state: "failed", reason } */
+const runViews = new Map();
+
+/** One archived run's load state, or null when it was never requested. */
+export function runViewEntry(key) {
+  return runViews.get(key) ?? null;
+}
+
 /**
- * ONE ARCHIVED RUN'S PER-CELL VIEW. by_cell is built server-side for the
- * CURRENT batch only; an archived run's view exists on the board when, and
- * only when, this fetch has landed. It is cached on the client (a full board
- * frame replaces it; re-clicking re-fetches), selected on success, and on
- * failure printed and NOT selected — the board never shows a view it could
- * not fetch. Same-origin like every board read: the dashboard relays /api/*
- * to the control plane, the only process that reads run files.
+ * Fetch one archived run's view unless this page already holds it, is
+ * fetching it, or recorded why it could not. Returns the settling promise, or
+ * null when nothing was started; the caller repaints when it settles.
+ * Same-origin like every board read: the dashboard relays /api/* to the
+ * control plane, the only process that reads run files.
  */
-async function fetchRunView(card, key) {
+export function loadRunView(card) {
+  const key = cellKey(card);
+  if (key === null || runViews.has(key)) return null;
+  runViews.set(key, { state: "loading" });
   const url =
     `/api/run-view?run_dir=${encodeURIComponent(card.run_dir)}` +
     `&sequence_index=${encodeURIComponent(card.sequence_index)}`;
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-    if (!res.ok || data?.ok !== true || !data.view) {
-      console.error("run-view fetch failed:", data?.reason ?? `HTTP ${res.status}`);
-      return;
-    }
-    if (!board.by_cell || typeof board.by_cell !== "object") board.by_cell = {};
-    board.by_cell[key] = data.view;
-    setSelectedCell(key);
-    render();
-  } catch (err) {
-    console.error("run-view fetch failed:", err);
-  }
+  return fetch(url)
+    .then(async (res) => {
+      // A relay error page is not JSON; its status is the reason then.
+      const data = await res.json().catch(() => null);
+      if (!res.ok || data?.ok !== true || !data.view) {
+        throw new Error(data?.reason ?? `HTTP ${res.status}`);
+      }
+      runViews.set(key, { state: "ready", view: data.view });
+    })
+    .catch((err) => {
+      runViews.set(key, { state: "failed", reason: String(err?.message ?? err) });
+      console.error("run-view fetch failed:", err);
+    });
+}
+
+/** Forget a FAILED load so the next render fetches again. A view is kept. */
+export function retryRunView(key) {
+  if (runViews.get(key)?.state === "failed") runViews.delete(key);
+}
+
+/**
+ * Point the page at the strip's active run: an archived run's view loads
+ * (once); a current cell's terminal is mirrored. An archived run ended before
+ * this page could mirror it, so selecting one leaves the stream's
+ * subscription where it is — re-keying reconnects the stream, and a reconnect
+ * replays the whole board and blanks the mirror only to show "no session".
+ * Returns the pending load, if one started; `repaint` runs when it settles.
+ */
+export function followActiveCell(b, repaint) {
+  const active = activeCell(b);
+  if (active?.archived === true) return loadRunView(active)?.then(repaint) ?? null;
+  setTuiCell(cellKey(active));
+  return null;
 }
 
 function onClick(e) {
@@ -687,9 +740,10 @@ function onClick(e) {
   if (t.dataset.batchPick) { void doPickBatch(t.dataset.batchDir, Number(t.dataset.batchPick)); return; }
   // ── RUN STRIP ── which run the board is about, selected by its cell address
   // (`<run_dir>::<seq>`), so an ARCHIVED run selects like any other. Local view
-  // state plus one read: it starts nothing and picks no floor (that is
-  // [data-batch-pick] above). An archived run's per-cell view is not on the
-  // board until this click fetches it; a current cell is already in by_cell.
+  // state plus at most one read: it starts nothing and picks no floor (that is
+  // [data-batch-pick] above). The selection is immediate; render follows it
+  // (followActiveCell) — an archived run's view loads once and is kept, a
+  // current cell's is already in by_cell.
   // Clicking the selected card again clears back to "follow the live cell", so
   // the strip is never a state the operator is stuck in. A void run selects
   // like any other — it is where they find out why it died.
@@ -703,13 +757,9 @@ function onClick(e) {
     const card = (board?.runs?.list ?? []).find((c) => cellKey(c) === key);
     // The card left the board between render and click: nothing to select.
     if (!card) return;
-    if (card.archived && !board?.by_cell?.[key]) {
-      void fetchRunView(card, key);
-      return;
-    }
+    // Selecting a run whose view failed to load is the retry.
+    if (card.archived) retryRunView(key);
     setSelectedCell(key);
-    // The mirror follows on render (setTuiCell from activeCell): one click,
-    // one subject.
     render();
     return;
   }

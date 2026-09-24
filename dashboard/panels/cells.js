@@ -12,8 +12,8 @@
 // measurements it stated. The strip spans the CURRENT tree plus every
 // ARCHIVED run (board.runs, built by control/board/sources/runs.mjs, newest
 // tree first); selecting a card re-renders the board beneath it against that
-// run. An archived run's per-cell view is not on the board until its card is
-// clicked — board.js fetches /api/run-view and caches it into by_cell.
+// run. An archived run's per-cell view is not on the board: board.js fetches
+// it from /api/run-view once per page load and keeps it outside the board.
 //
 // ── SIX THINGS, STATED ───────────────────────────────────────────────────────
 //

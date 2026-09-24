@@ -190,6 +190,8 @@ export function refitGateCard(doc = globalThis.document) {
 }
 
 export function renderWall(board) {
+  // An archived run whose view is still loading, or could not be fetched.
+  if (board.run_view) return runViewWall(board.run_view);
   const suite = board.suite ?? null;
   const gates = overlayLive(suite?.gates ?? [], board.live ?? null);
 
@@ -205,6 +207,30 @@ export function renderWall(board) {
       ${gates.length ? gateCard(gates) : ""}
       ${gates.length ? legend(suite) : ""}
       ${runBlock(board)}
+    </section>`;
+}
+
+/**
+ * The wall of an archived run that has no view on this page (board.run_view,
+ * from cellView): loading, or the reason the fetch failed. Stated as what it
+ * is — not the "suite unavailable" absence, which blames the control plane,
+ * and nothing of another run's.
+ */
+function runViewWall(rv) {
+  const failed = rv.state === "failed";
+  return `
+    <section class="panel wall">
+      <div class="phead">
+        <span class="ttl">GATE WALL</span>
+        <span class="tag">${failed ? "RUN VIEW NOT LOADED" : "LOADING RUN VIEW"}</span>
+      </div>
+      <div class="wall-empty">${failed
+        ? `
+        <div class="bright">${esc(`could not load this run's view — ${rv.reason}`)}</div>
+        <div class="note">${esc("Click the card off and on again to fetch it again.")}</div>`
+        : `
+        <div class="note">loading this run's view…</div>`}
+      </div>
     </section>`;
 }
 
