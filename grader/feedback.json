@@ -592,8 +592,8 @@
       "first": "It locked up on me while I was playing — the whole page stopped responding and nothing I clicked did anything after that. I gave it {seconds}."
     },
     "G01.pieces": {
-      "first": "When I start a new game the pieces aren't where a real game starts them.",
-      "repeat": "Fresh game again, and the pieces still aren't set up where a real game starts them."
+      "first": "Fresh game again, The pieces are not in their correct starting positions, check the spacing and the quantity and orientate them correctly.",
+      "repeat": "Fresh game again, You still didn't place the pieces in the correct orientation and quantity, they are currently wrong — space and count them properly. Think about how normal backgammon works."
     },
     "G01.setup": {
       "first": "When I start a new game the rest of the setup is off — the cube, whose turn it is, or what the game is waiting for isn't how a real game begins.",
