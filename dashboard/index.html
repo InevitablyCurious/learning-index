@@ -88,9 +88,11 @@
   --link:      #aaffc8;
   --link-glow: #27ff7eaa;
   --cursor:    #6dff9e;
-  /* THE ONLY OFF-HUE. Reserved for: gate failure, regression, the
+  /* OFF-HUE #1. Reserved for: gate failure, regression, the
      and a LAN-exposed hold. Never decorative. */
   --danger:    #ff6b6b;
+  /* OFF-HUE #2 — deliberate deviation: the VOID status colour on run cards. */
+  --warn:      #e0b34d;
 
   /* semantic aliases — product code uses THESE */
   --surface:        var(--bg);
@@ -526,14 +528,14 @@ a:hover{color:var(--type)}
 </style>
 <style id="panelcss">
 /* panel CSS is appended below — see the second style block */
-/* THE CELL STRIP. Sits between the topbar and the first row of panels: with N
-   concurrent cells it is how the operator says which one the board is about.
-   Cards are 146px — ~20 characters of JetBrains Mono at 11px, which is what
-   every line inside is written to. A card that wraps loses its second row, so
-   the width is a budget, not a preference. */
+/* THE RUN STRIP. Sits between the topbar and the first row of panels: one
+   card per run — the current tree's cells, then every archived run — and how
+   the operator says which one the board is about. Cards are 192px — ~26
+   characters of JetBrains Mono at 10px, which is what every line inside is
+   written to. A card that wraps loses a row, so the width is a budget, not a
+   preference. */
 .cells{display:flex;flex-direction:column;gap:8px;min-width:0}
 .cells-head{display:flex;align-items:baseline;gap:10px}
-.cells-void{font:400 11px var(--font);color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 30%,transparent);border-radius:var(--radius-sm);padding:5px 8px}
 /* Horizontal scroll with snap: cards settle on their own edge instead of
    stopping mid-card. The right-edge fade is the "more this way" cue and is a
    gradient to the canvas colour, so the strip reads as running under the edge
@@ -551,36 +553,43 @@ a:hover{color:var(--type)}
 .cells-scroll::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--fg) 14%,transparent);border-radius:var(--radius-pill)}
 .cells-scroll:hover::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--fg) 26%,transparent)}
 .cells-scroll::-webkit-scrollbar-track{background:transparent}
-.cellcard{flex:0 0 146px;scroll-snap-align:start;display:flex;flex-direction:column;gap:5px;
+.cellcard{flex:0 0 192px;scroll-snap-align:start;display:flex;flex-direction:column;gap:6px;
   background:transparent;border:1px solid var(--border);border-radius:var(--radius-md);
   padding:8px 9px;font:400 11px var(--font);color:var(--fg);text-align:left;cursor:pointer;
   transition:border-color .12s ease,background .12s ease}
 .cellcard:hover{border-color:var(--border-strong);background:color-mix(in srgb,var(--fg) 4%,transparent)}
 .cellcard:focus-visible{outline:none;box-shadow:0 0 0 2px var(--focus-ring)}
 .cellcard.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
-/* A void cell is dimmed, never hidden: it is where the operator finds out why
-   it died, and a batch that dropped its failures would overstate itself. */
-.cellcard.cc-is-void{border-color:color-mix(in srgb,var(--danger) 28%,transparent);opacity:.8}
-.cellcard.cc-is-void .cc-state{color:var(--danger)}
-.cellcard.cc-is-quiet{border-color:color-mix(in srgb,var(--fg) 30%,transparent)}
-.cc-head{display:flex;align-items:center;gap:5px}
-.cc-seq{color:var(--type);font-size:12px}
+/* A void or harness-errored run is dimmed, never hidden: it is where the
+   operator finds out why it died, and a strip that dropped its failures would
+   overstate itself. */
+.cellcard.cc-is-void{border-color:color-mix(in srgb,var(--warn) 30%,transparent);opacity:.85}
+.cellcard.cc-is-harness{border-color:color-mix(in srgb,var(--danger) 30%,transparent);opacity:.85}
+.cc-head{display:flex;align-items:center;gap:5px;min-width:0}
+.cc-id{color:var(--type);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cc-dot{width:6px;height:6px;border-radius:50%;background:var(--fg);flex:0 0 auto}
+/* live/scored filled; void/harness-error hollow — the states stay distinct in
+   greyscale, not by hue alone. */
 .cc-dot.cc-live{background:var(--check)}
-.cc-dot.cc-quiet{background:var(--comment)}
-.cc-dot.cc-done{background:var(--fg)}
-.cc-dot.cc-void{background:var(--danger)}
-.cc-tag{margin-left:auto;font-size:10px;letter-spacing:.04em}
-.cc-tag.view{color:var(--accent)}
-.cc-tag.med{color:var(--comment)}
-.cc-tag.live{color:var(--check)}
-.cc-tag.live+.cc-tag{margin-left:6px}
-.cc-state{color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cc-bar{display:block;height:3px;border-radius:2px;background:color-mix(in srgb,var(--fg) 12%,transparent);overflow:hidden}
-.cc-bar>i{display:block;height:100%;background:var(--comment)}
-.cellcard.on .cc-bar>i{background:var(--accent)}
-.cellcard.cc-is-void .cc-bar>i{background:color-mix(in srgb,var(--danger) 50%,transparent)}
-.cc-meta{color:var(--dim);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-dot.cc-scored{background:var(--fg)}
+.cc-dot.cc-void{background:transparent;border:1px solid var(--warn)}
+.cc-dot.cc-harness{background:transparent;border:1px solid var(--danger)}
+.cc-dot.cc-unknown{background:transparent;border:1px solid var(--comment)}
+.cc-tag{margin-left:auto;font-size:10px;letter-spacing:.04em;white-space:nowrap;flex:0 0 auto}
+.cc-tag.t-live{color:var(--check)}
+.cc-tag.t-scored{color:var(--check)}
+.cc-tag.t-void{color:var(--warn)}
+.cc-tag.t-harness{color:var(--danger)}
+.cc-tag.t-unknown{color:var(--comment)}
+/* THE SIX-FIELD RECORD — label/value rows. Values reuse the .snum treatment
+   (bold, --type) scoped to card size — the same derivation as the rail's .8 of
+   --fs-metric; a null flows through the single .null renderer as
+   "not recorded". Labels are the --comment terminal voice. */
+.cc-fields{display:flex;flex-direction:column;gap:3px}
+.cc-f{display:flex;align-items:baseline;gap:6px}
+.cc-fl{font:700 10px var(--font);letter-spacing:.06em;color:var(--comment);white-space:nowrap}
+.cc-fv{margin-left:auto;font:400 10px var(--font);color:var(--dim);text-align:right;white-space:nowrap}
+.cc-fv .snum{font-size:10.5px;line-height:1.6}
 @media (prefers-reduced-motion:reduce){.cellcard{transition:none}}
 .axes-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--gap);align-items:stretch}
 /* THE PANEL. 12px radius + --border (not --hairline) is the artifact's own

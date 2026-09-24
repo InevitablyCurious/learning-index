@@ -12,7 +12,7 @@
 //   unknown  the board doesn't carry this fact (never assumed ok)
 // Only `bad` raises the feed on its own.
 
-import { esc, nul } from "../board.js";
+import { cellKey, esc, nul } from "../board.js";
 import { activeCell } from "./cells.js";
 
 /** Worst first; drives ordering and the headline verdict. */
@@ -76,6 +76,11 @@ function controlPlane(b) {
 /**
  * The runner: the harness process of the cell the strip points at — its own
  * state and its own launch log, never the newest cell's.
+ *
+ * The strip's card (board.runs) states MEASUREMENTS; the runner's operational
+ * state (harness state, launch log, heartbeat) belongs to the CURRENT batch's
+ * cell record (board.cells), resolved by the cell's address. An archived run
+ * is not in the batch: no live runner, and that is the truth, not a gap.
  */
 function runner(b) {
   const why =
@@ -89,17 +94,26 @@ function runner(b) {
     return proc("runner", "benchmark runner", "idle", "idle", null, why,
       "no cell in this batch; the runner is free to start one.");
   }
-  const label = `s${String(c.sequence_index).padStart(4, "0")}`;
-  const log = c.log_path ? String(c.log_path).split("/").pop() : null;
-  const detail = [label, c.state ?? "unknown", log].filter(Boolean).join(" · ");
-  if (c.running) {
+  const label = Number.isInteger(c.sequence_index) ? `s${String(c.sequence_index).padStart(4, "0")}` : null;
+  const key = cellKey(c);
+  const cur = key === null ? null : (b.cells?.list ?? []).find((x) => cellKey(x) === key) ?? null;
+  if (!cur) {
+    const detail = [label, c.status ?? "unknown"].filter(Boolean).join(" · ");
+    return proc("runner", "benchmark runner", "idle", detail || null, null, why,
+      c.archived
+        ? "the strip points at an archived run — it has no live runner; its record is read-only."
+        : "this cell has no record in the current batch — the control plane did not report a runner for it.");
+  }
+  const log = cur.log_path ? String(cur.log_path).split("/").pop() : null;
+  const detail = [label, cur.state ?? "unknown", log].filter(Boolean).join(" · ");
+  if (cur.running) {
     return proc("runner", "benchmark runner", "busy", detail, null, why,
-      Number.isFinite(c.heartbeat_age_s) && c.heartbeat_age_s > 90
-        ? `the cell's heartbeat has been silent for ${c.heartbeat_age_s}s — at high accumulated context this can be normal prefill, but it is worth watching`
+      Number.isFinite(cur.heartbeat_age_s) && cur.heartbeat_age_s > 90
+        ? `the cell's heartbeat has been silent for ${cur.heartbeat_age_s}s — at high accumulated context this can be normal prefill, but it is worth watching`
         : null);
   }
   return proc("runner", "benchmark runner", "idle", detail, null, why,
-    c.void_reason ? `this cell ended — ${c.void_reason}` : "this cell is not running.");
+    cur.void_reason ? `this cell ended — ${cur.void_reason}` : "this cell is not running.");
 }
 
 /**

@@ -1,8 +1,8 @@
 // DATA FEED — which cell's record the card shows, and keeping it fresh.
 //
 // ONE SUBJECT. The card shows the cell the cell strip is pointing at
-// (panels/cells.js activeCell: the operator's pick, else the newest running
-// cell, else the batch's first). It used to have its own selection — a live
+// (panels/cells.js activeCell: the operator's pick, else the newest live run,
+// else the first card). It used to have its own selection — a live
 // ring for "the" running cell, BASELINES rows for a concluded one, BACK TO LIVE
 // between them — and with N concurrent cells that ring held every cell's rows
 // at once. Now there is one read for every cell, running or ended: the cell's
@@ -38,7 +38,9 @@ function selectionFor(board) {
   return {
     run_dir: c.run_dir,
     sequence_index: c.sequence_index,
-    running: c.running === true,
+    // The strip's card (board.runs) STATES liveness as its status; "live" is
+    // the running cell. Producer states, consumer reads — never re-derived.
+    running: c.status === "live",
     label: `s${String(c.sequence_index).padStart(4, "0")}`,
   };
 }

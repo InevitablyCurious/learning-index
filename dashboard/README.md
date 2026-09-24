@@ -109,10 +109,12 @@ ablation receipts, shadow recall. If you see one, it is a bug.
 The run-summary stats strip (the ledger panel's head) has two zones, never
 merged, both served by `GET /api/stats` (`control/runstats.mjs`):
 
-- **BENCHMARK** — native, six slots: `scored` / `voided` / `unmeasured`, then
+- **BENCHMARK** — native, seven slots: `scored` / `voided` / `unmeasured`, then
   `loop_errors` / `stream_errors` / `stalled_errors` reading the run scorecard's
   `error_totals` (`guard_aborted_turns` / `finalize_timeout_turns` /
-  `stalled_turns`).
+  `stalled_turns`), then `cutoffs` counting the harness's `length_cutoff`
+  notices in the cells' live streams (`<total> · <nudged> nudged`; no live
+  stream reads "—", never 0).
 - **CUSTOM** — manifest-driven (`BENCH_STATS_MANIFEST`); now empty.
 
 The CUSTOM zone's old "LOOP ERRORS" slot was the **relay's** shared, monotonic,

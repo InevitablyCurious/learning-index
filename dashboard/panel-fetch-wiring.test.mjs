@@ -25,8 +25,9 @@ test("the live panel reads the strip's cell same-origin, keyed on run_dir + sequ
     };
   };
   const { renderLive } = await import("./panels/live.js");
-  const cell = { sequence_index: 2, run_dir: "r/x", running: true };
-  renderLive({ control: {}, run: {}, events: null, cells: { list: [cell] } });
+  // A board.runs card — the strip's data source; liveness is its stated status.
+  const cell = { run_dir: "r/x", sequence_index: 2, archived: false, status: "live" };
+  renderLive({ control: {}, run: {}, events: null, runs: { list: [cell] } });
   await new Promise((r) => setTimeout(r, 10));
   assert.deepEqual(seen.sort(), [
     "/api/backend-feed?run_dir=r%2Fx&sequence_index=2",

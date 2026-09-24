@@ -1,30 +1,44 @@
-// PANEL: CELLS — the batch strip, and what the rest of the board is showing.
+// PANEL: CELLS — the run strip, and what the rest of the board is showing.
 //
 // ── WHY A STRIP AND NOT A DROPDOWN ──────────────────────────────────────────
 //
-// With N concurrent cells of ONE model and arm, every label that distinguishes
-// a run elsewhere on this board is identical across them: same model, same
-// arm, same run_dir. A <select> of four entries reading "qwen3.6 · off" is not
-// a control, it is four indistinguishable rows.
+// Every label that distinguishes a run elsewhere on this board is identical
+// across the cells of one batch: same model, same arm, same run_dir. A
+// <select> of four entries reading "qwen3.6 · off" is not a control, it is
+// four indistinguishable rows.
 //
-// What actually differs is progress, outcome and health — so each cell gets a
-// card carrying its sequence index, where it has got to, how long and how many
-// turns it has spent, and a state dot. Selecting one re-renders the board
-// beneath it against that cell.
+// What actually differs is outcome and health — so each run gets a card
+// carrying its identity (tree + sequence index), its status, and the
+// measurements it stated. The strip spans the CURRENT tree plus every
+// ARCHIVED run (board.runs, built by control/board/sources/runs.mjs, newest
+// tree first); selecting a card re-renders the board beneath it against that
+// run. An archived run's per-cell view is not on the board until its card is
+// clicked — board.js fetches /api/run-view and caches it into by_cell.
 //
-// ── A VOID CELL IS STILL SELECTABLE ─────────────────────────────────────────
+// ── SIX THINGS, STATED ───────────────────────────────────────────────────────
 //
-// It is dimmed and marked, never hidden and never removed. A cell that died is
-// exactly where an operator finds out WHY it died, and a batch that quietly
+// A card shows exactly: the status header (dot + identity + tag), problems
+// before → after, peak context / window, turns, loop errors, and
+// stalled/limit errors. A field no artifact recorded is null and renders
+// "not recorded" — never 0, never derived. No progress bar, no meta line, no
+// median marker: the card is a measurement record, not a chart.
+//
+// ── A VOID RUN IS STILL SELECTABLE ──────────────────────────────────────────
+//
+// It is dimmed and marked, never hidden and never removed. A run that died is
+// exactly where an operator finds out WHY it died, and a strip that quietly
 // dropped its failures would present four samples with the confidence of six.
 //
-// The median marker is the batch's own (control/batch.mjs), carried through
-// rather than recomputed here, so this strip and the batch panel cannot
-// disagree about which run is representative.
+// ── EVERY STATE CLASS IS cc- PREFIXED ────────────────────────────────────────
+//
+// The board ships ONE global stylesheet, and a bare state class here (`live`)
+// once matched the live PANEL rule, which gave a 6px dot 12px of padding and
+// blew it to 26px. Every state class this panel emits carries the cc- prefix.
 
-import { esc, nul } from "../board.js";
+import { clip, esc, nul } from "../board.js";
 
-/** The selected cell's sequence index, or null for "the newest live one". */
+/** The selected run's cellKey `${run_dir}::${sequence_index}`, or null for
+ *  "follow the live cell". */
 let selected = null;
 
 export function selectedCell() {
@@ -32,161 +46,159 @@ export function selectedCell() {
 }
 
 /** Set by the click handler in board.js. Re-render is the caller's job. */
-export function setSelectedCell(index) {
-  selected = index === null || index === undefined ? null : Number(index);
+export function setSelectedCell(key) {
+  selected = key || null;
 }
 
 /**
- * Which cell the board is drawing. The operator's pick when they made one and
- * it is still in the batch; otherwise the newest live cell, then the first.
- * Never a stale index: a pick that no longer exists falls back rather than
- * rendering an empty board.
+ * A card's address: `${run_dir}::${sequence_index}` — the SAME format as
+ * board.js's cellKey. Deliberately local: board.js imports this module, so
+ * importing cellKey from there would be a cycle.
+ */
+function cellKeyOf(c) {
+  return `${c.run_dir}::${c.sequence_index}`;
+}
+
+/**
+ * Which run the board is drawing. The operator's pick when they made one and
+ * it is still on the strip; otherwise the newest live run (the producer sorts
+ * newest-tree-first, so the first live card is the newest), then the first
+ * card. Never a stale address: a pick that no longer exists falls back rather
+ * than rendering an empty board.
  */
 export function activeCell(board) {
-  const list = board?.cells?.list ?? [];
+  const list = board?.runs?.list ?? [];
   if (!list.length) return null;
   if (selected !== null) {
-    const hit = list.find((c) => c.sequence_index === selected);
+    const hit = list.find((c) => cellKeyOf(c) === selected);
     if (hit) return hit;
   }
-  return list.find((c) => c.running) ?? list[0];
+  return list.find((c) => c.status === "live") ?? list[0];
 }
 
-/** "18m", "2h 04m", or null when there is nothing to measure. */
-function shortDur(s) {
-  if (!Number.isFinite(s) || s < 0) return null;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
-}
-
-/**
- * Live, quiet, ended-clean, ended-void — the dot and what it means.
- *
- * NAMESPACED ON PURPOSE. The board ships ONE global stylesheet, and a bare
- * `live` class here matched `.curve,.wall,.ledger,.live,...` — the live PANEL
- * rule — which gave a 6px dot 12px of padding and blew it to 26px. Every state
- * class this panel emits carries the cc- prefix for that reason.
- */
-function health(c) {
-  // Running first: a batch record assembled while cells still run lists them
-  // unscored, and a live cell must never be drawn as void.
-  if (c.running) {
-    if (Number.isFinite(c.heartbeat_age_s) && c.heartbeat_age_s > 90) {
-      return { cls: "cc-is-quiet", dot: "cc-quiet" };
-    }
-    return { cls: "cc-is-live", dot: "cc-live" };
-  }
-  if (c.scored === false) return { cls: "cc-is-void", dot: "cc-void" };
-  return { cls: "cc-is-done", dot: "cc-done" };
-}
+/** Status → dot class, tag class, tag text, card class. The card's whole
+ *  state vocabulary; the producer's enum is these four. */
+const STATUS = {
+  live: { dot: "cc-live", tag: "t-live", text: "LIVE", card: "" },
+  scored: { dot: "cc-scored", tag: "t-scored", text: "SCORED", card: "" },
+  void: { dot: "cc-void", tag: "t-void", text: "VOID", card: "cc-is-void" },
+  harness_error: { dot: "cc-harness", tag: "t-harness", text: "HARNESS ERROR", card: "cc-is-harness" },
+};
 
 /**
- * The one line that says where a cell is. A running cell shows its build
- * chunk; a finished one its problem count; a void one why it is void. Kept
- * inside ~20 characters — the card is 146px of JetBrains Mono, and a line that
- * wraps costs the card its second row.
+ * A status the vocabulary does not know is still drawn — verbatim, undotted,
+ * as a designed absence. Never guessed as one of the four.
  */
-function stateLine(c) {
-  if (!c.running && c.scored === false) return esc(c.void_reason ?? "void");
-  if (Number.isFinite(c.problems)) return `done · ${c.problems}`;
-  const cur = c.chunk?.current;
-  const tot = c.chunk?.total;
-  if (Number.isFinite(cur)) return tot ? `chunk ${cur}/${tot}` : `chunk ${cur}`;
-  if (c.phase) return esc(String(c.phase).slice(0, 18));
-  return c.running ? "starting" : "—";
-}
-
-/** How far along, 0..1. Finished cells read full whatever their verdict. */
-function progress(c) {
-  if (!c.running) return 1;
-  const cur = c.chunk?.current;
-  const tot = c.chunk?.total;
-  if (Number.isFinite(cur) && Number.isFinite(tot) && tot > 0) return cur / tot;
-  return 0;
-}
-
-/** Is this the run nearest the batch median — the one usually worth picking? */
-function nearMedian(c, median) {
-  if (median === null || !Number.isFinite(c.problems)) return false;
+function statusOf(c) {
   return (
-    c.problems === median ||
-    c.problems === Math.floor(median) ||
-    c.problems === Math.ceil(median)
+    STATUS[c.status] ?? {
+      dot: "cc-unknown",
+      tag: "t-unknown",
+      text: c.status === null || c.status === undefined ? "UNOBSERVED" : esc(String(c.status)).toUpperCase(),
+      card: "",
+    }
   );
 }
 
-function card(c, median, activeIndex) {
-  const h = health(c);
-  const on = c.sequence_index === activeIndex;
-  const seq = `s${String(c.sequence_index ?? 0).padStart(4, "0")}`;
-  // Scoring turns of the build phases that have FINISHED (control/board/sources/
-  // cells.mjs): the phase in progress is added when it ends.
-  const bits = [shortDur(c.elapsed_s), Number.isFinite(c.turns) ? `${c.turns} turns` : null]
-    .filter(Boolean)
-    .join(" · ");
+/**
+ * The short tree label of a run_dir: the leading segment for a current run,
+ * the inner tree id of "backups/<stamp>/<oldTreeId>/…" for an archived one.
+ * A 9-11-digit epoch tree id (the same predicate as isTreeId in
+ * control/tree.mjs — the browser cannot import it) shortens to its last five
+ * digits; anything else is shown clipped. No identity is invented: no usable
+ * segment, no tree label.
+ */
+function treeLabel(runDir) {
+  const parts = String(runDir ?? "").split("/");
+  const seg = parts[0] === "backups" ? parts[2] : parts[0];
+  if (!seg) return null;
+  return /^\d{9,11}$/.test(seg) ? seg.slice(-5) : clip(seg, 8);
+}
+
+/** Context tokens as the card states them: 262144 → "262k". */
+function compact(n) {
+  return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
+}
+
+/** One label/value row. Labels are this file's own literals; value HTML comes
+ *  from statedPair/statedNum (which escape nothing user-made — numbers only)
+ *  or from nul(), the single null renderer. */
+function field(label, valueHtml) {
+  return `<span class="cc-f"><b class="cc-fl">${label}</b><span class="cc-fv">${valueHtml}</span></span>`;
+}
+
+/** A stated number, or the one rendering of null: never 0, never derived. */
+function statedNum(v) {
+  return Number.isFinite(v) ? `<span class="snum">${v}</span>` : nul("not recorded");
+}
+
+/** Two stated numbers as one value; either null ⇒ the whole field is
+ *  "not recorded" — a half-stated pair is not half-rendered. */
+function statedPair(a, b, fmt, join) {
+  return Number.isFinite(a) && Number.isFinite(b)
+    ? `<span class="snum">${fmt(a)} ${join} ${fmt(b)}</span>`
+    : nul("not recorded");
+}
+
+function card(c, activeKey) {
+  const st = statusOf(c);
+  const on = cellKeyOf(c) === activeKey;
+  const seq = Number.isInteger(c.sequence_index) ? `s${String(c.sequence_index).padStart(4, "0")}` : null;
+  const tree = treeLabel(c.run_dir);
+  const id = [tree, seq].filter(Boolean).map(esc).join("·") || nul("unnamed");
   return `
-    <button class="cellcard ${h.cls}${on ? " on" : ""}" data-cell-pick="${esc(String(c.sequence_index))}"
-            aria-pressed="${on ? "true" : "false"}" title="${esc(seq)} — ${esc(stateLine(c))}">
+    <button class="cellcard${st.card ? ` ${st.card}` : ""}${on ? " on" : ""}" data-cell-pick="${esc(cellKeyOf(c))}"
+            aria-pressed="${on ? "true" : "false"}" title="${esc(cellKeyOf(c))} — ${st.text}">
       <span class="cc-head">
-        <span class="cc-dot ${h.dot}"></span>
-        <span class="cc-seq">${esc(seq)}</span>
-        ${c.running ? `<span class="cc-tag live">LIVE</span>` : ""}
-        ${on ? `<span class="cc-tag view">VIEW</span>` : nearMedian(c, median) ? `<span class="cc-tag med">~med</span>` : ""}
+        <span class="cc-dot ${st.dot}"></span>
+        <span class="cc-id">${id}</span>
+        <span class="cc-tag ${st.tag}">${st.text}</span>
       </span>
-      <span class="cc-state">${stateLine(c)}</span>
-      <span class="cc-bar"><i style="width:${Math.round(progress(c) * 100)}%"></i></span>
-      <span class="cc-meta">${esc(bits || "—")}</span>
+      <span class="cc-fields">
+        ${field("problems", statedPair(c.problems_before, c.problems_after, String, "→"))}
+        ${field("peak ctx", statedPair(c.context_peak, c.context_window, compact, "/"))}
+        ${field("turns", statedNum(c.turns))}
+        ${field("loop errors", statedNum(c.loop_errors))}
+        ${field("stall/limit", statedNum(c.stalled_limit_errors))}
+      </span>
     </button>`;
 }
 
 export function renderCells(board) {
-  const cells = board?.cells;
-  const list = cells?.list ?? [];
-  // One cell is the board's ordinary state — the strip is what N looks like,
-  // and drawing it for a single cell is chrome with nothing to choose.
-  if (list.length < 2) return "";
-
+  const runs = board?.runs;
+  const list = runs?.list ?? [];
+  // The strip ALWAYS renders — one run is the board's ordinary state, and
+  // zero runs is a designed absence the header states, not a hidden section.
   const active = activeCell(board);
-  const activeIndex = active?.sequence_index ?? null;
-  const k = cells.counts ?? {};
-  const median = cells.median ?? null;
+  const activeKey = active ? cellKeyOf(active) : null;
+  const k = runs?.counts ?? {};
 
-  const summary = [
-    `${k.total ?? list.length} cells`,
-    median !== null ? `median ${median}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
+  const total = k.total ?? list.length;
+  const summary = `${total} run${total === 1 ? "" : "s"}`;
   const tally = [
     k.live ? `${k.live} live` : null,
     k.scored ? `${k.scored} scored` : null,
     k.void ? `${k.void} void` : null,
+    k.harness_error ? `${k.harness_error} harness error` : null,
   ]
     .filter(Boolean)
     .join(" · ");
 
-  const voidBanner = cells.batch_void
-    ? `<div class="cells-void">batch void — ${esc(cells.void_reason ?? "an input changed")}</div>`
-    : "";
-
   return `
-    <section class="cells" aria-label="cells in this batch">
+    <section class="cells" aria-label="runs, current and archived">
       <div class="cells-head">
-        <span class="kick">CELLS · ${esc(summary)}</span>
+        <span class="kick">RUNS · ${esc(summary)}</span>
         <span class="spacer"></span>
-        <span class="note">${esc(tally || nul("nothing running"))}</span>
+        <span class="note">${tally ? esc(tally) : nul("no runs recorded")}</span>
       </div>
-      ${voidBanner}
       <div class="cells-scroll">
-        ${list.map((c) => card(c, median, activeIndex)).join("")}
+        ${list.map((c) => card(c, activeKey)).join("")}
       </div>
     </section>`;
 }
 
 /**
- * Fade only the edges that actually have cells beyond them.
+ * Fade only the edges that actually have cards beyond them.
  *
  * A fixed both-edge mask dims the first card when there is nothing to its
  * left, and a right-only mask leaves a hard cut after the operator scrolls —

@@ -199,6 +199,11 @@ export function emptyBoard() {
     // on. Null until a run exists; never a partial object.
     cells: null,
 
+    // ── THE PER-RUN CARDS ── owned by sources/runs.mjs: one card per run,
+    // current-tree cells plus archived backups, newest tree first, with the
+    // status breakdown. Null until the source answers; never a partial object.
+    runs: null,
+
     history: [],
 
     sources: [],

@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,7 +38,7 @@ test("STATS: a fresh clone gets both zones, empty, and is told the manifest is a
   // claim the number had never been decided on.
   assert.deepEqual(
     out.bench.map((s) => s.id),
-    ["scored", "voided", "unmeasured", "loop_errors", "stream_errors", "stalled_errors"],
+    ["scored", "voided", "unmeasured", "loop_errors", "stream_errors", "stalled_errors", "cutoffs"],
   );
   // NO RUN IS `absent`, NEVER A ZERO AND NEVER A FAILURE. Nothing could not be
   // reached; there is no run for these to describe.
@@ -116,7 +116,7 @@ test("STATS: a live source is read through its dotted pick path", async () => {
     // "empty" would have stopped checking the separation the moment it filled.
     const customIds = out.custom.map((s) => s.id);
     const benchIds = out.bench.map((s) => s.id);
-    assert.deepEqual(benchIds, ["scored", "voided", "unmeasured", "loop_errors", "stream_errors", "stalled_errors"]);
+    assert.deepEqual(benchIds, ["scored", "voided", "unmeasured", "loop_errors", "stream_errors", "stalled_errors", "cutoffs"]);
     for (const id of customIds) {
       assert.ok(!benchIds.includes(id), `custom stat '${id}' leaked into the BENCHMARK zone`);
     }
@@ -175,7 +175,7 @@ test("STATS: a run with no scorecard yet is unavailable, NEVER zero", async () =
   try {
     const out = await withStatsManifest(null, () => collectStats({ runDir: dir }));
     const by = Object.fromEntries(out.bench.map((s) => [s.id, s]));
-    for (const id of ["scored", "voided", "loop_errors", "stream_errors", "stalled_errors"]) {
+    for (const id of ["scored", "voided", "loop_errors", "stream_errors", "stalled_errors", "cutoffs"]) {
       assert.equal(by[id].state, "unavailable", `${id} must not invent a reading`);
       assert.equal(by[id].value, null);
     }
@@ -196,7 +196,7 @@ test("STATS: a corrupt scorecard is unavailable and does not take the board down
     const by = Object.fromEntries(out.bench.map((s) => [s.id, s]));
     assert.equal(by.scored.state, "unavailable");
     assert.equal(by.voided.state, "unavailable");
-    for (const id of ["loop_errors", "stream_errors", "stalled_errors"]) {
+    for (const id of ["loop_errors", "stream_errors", "stalled_errors", "cutoffs"]) {
       assert.equal(by[id].state, "unavailable");
       assert.equal(by[id].value, null);
     }
@@ -244,13 +244,78 @@ test("STATS: error totals are per-run and do not leak across runs", async () => 
 
     const b = await withStatsManifest(null, () => collectStats({ runDir: dirB }));
     const byB = Object.fromEntries(b.bench.map((s) => [s.id, s]));
-    for (const id of ["loop_errors", "stream_errors", "stalled_errors"]) {
+    for (const id of ["loop_errors", "stream_errors", "stalled_errors", "cutoffs"]) {
       assert.equal(byB[id].state, "unavailable", `${id} must not leak across runs`);
       assert.equal(byB[id].value, null);
     }
   } finally {
     rmSync(dirA, { recursive: true, force: true });
     rmSync(dirB, { recursive: true, force: true });
+  }
+});
+
+// ── CUT-OFFS — the harness's length_cutoff notices, counted live ─────────────
+//
+// The seventh slot reads ONLY the cells' live.jsonl streams (never the
+// scorecard): a run with no stream reads unavailable, "—", never 0 — pinned by
+// the unavailable-on-empty / corrupt-scorecard / no-leak groups above. No run
+// artifact on disk carries a length_cutoff notice yet (the harness side landed
+// in 3fbe190), so the coverage here is synthetic fixtures in the exact record
+// shape serve.py writes.
+const cutoffNotice = (nudged, reason) =>
+  JSON.stringify({
+    v: 1,
+    kind: "notice",
+    event: "length_cutoff",
+    source: "harness",
+    detail: { nudged, reason, attempt: 1 },
+  });
+
+function cutoffRun(cells) {
+  const root = mkdtempSync(join(tmpdir(), "cutoffs-"));
+  cells.forEach((lines, i) => {
+    const dir = join(root, "memoryOFF", `cell-000${i}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "live.jsonl"), lines.join("\n") + "\n");
+  });
+  return root;
+}
+
+test("STATS: CUT-OFFS counts length_cutoff notices and how many were nudged", async () => {
+  const { collectStats } = await import("../runstats.mjs");
+  const root = cutoffRun([
+    [
+      cutoffNotice(true, "nudged"),
+      cutoffNotice(false, "budget_spent"),
+      // A different notice kind on the same stream must not be counted.
+      JSON.stringify({ v: 1, kind: "notice", event: "turn_truncated_retried", source: "harness", detail: { terminal: "guard_abort" } }),
+    ],
+  ]);
+  try {
+    const out = await withStatsManifest(null, () => collectStats({ runDir: root, runsRoot: root }));
+    const by = Object.fromEntries(out.bench.map((s) => [s.id, s]));
+    assert.deepEqual(
+      [by.cutoffs.label, by.cutoffs.state, by.cutoffs.value],
+      ["CUT-OFFS", "ok", "2 · 1 nudged"],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("STATS: a live stream with no length_cutoff reads a MEASURED 0, never '—'", async () => {
+  // The other half of the never-invent rule: a stream that ran and hit no cap
+  // cut-off is a real zero, and discarding it would read as "no stream".
+  const { collectStats } = await import("../runstats.mjs");
+  const root = cutoffRun([
+    [JSON.stringify({ v: 1, kind: "notice", event: "snapshot_validity_relaxed", source: "harness", detail: {} })],
+  ]);
+  try {
+    const out = await withStatsManifest(null, () => collectStats({ runDir: root, runsRoot: root }));
+    const by = Object.fromEntries(out.bench.map((s) => [s.id, s]));
+    assert.deepEqual([by.cutoffs.state, by.cutoffs.value], ["ok", "0"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

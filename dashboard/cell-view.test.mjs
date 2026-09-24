@@ -1,7 +1,10 @@
-// ONE SUBJECT PER PAGE — every panel draws the strip's active cell. The board
+// ONE SUBJECT PER PAGE — every panel draws the strip's active run. The board
 // carries one view per cell (by_cell, keyed `<run_dir>::<seq>`); cellView lays
-// the active cell's view over the board-wide sections. A cell with no view
-// shows nothing of its own, never another cell's.
+// the active cell's view over the board-wide sections. The strip's cards come
+// from board.runs (current tree + archived runs), so selection is a cellKey
+// string — and an archived run's view, fetched on click into by_cell, lays
+// over exactly like a current cell's. A cell with no view shows nothing of its
+// own, never another cell's.
 //
 //     cd dashboard && node --test cell-view.test.mjs
 
@@ -12,15 +15,18 @@ import { cellView } from "./board.js";
 import { setSelectedCell } from "./panels/cells.js";
 
 const RD = "1790/local/x";
+const AR = "backups/1789474325/1789474112/local/x";
+
 function board() {
   return {
     run: { model: "m", org_id: null },
-    cells: {
+    runs: {
       list: [
-        { run_dir: RD, sequence_index: 0, running: true },
-        { run_dir: RD, sequence_index: 1, running: true },
-        { run_dir: RD, sequence_index: 2, running: true },
+        { run_dir: RD, sequence_index: 0, archived: false, status: "live" },
+        { run_dir: RD, sequence_index: 1, archived: false, status: "live" },
+        { run_dir: RD, sequence_index: 2, archived: false, status: "live" },
       ],
+      counts: { total: 3, live: 3, scored: 0, void: 0, harness_error: 0 },
     },
     by_cell: {
       [`${RD}::0`]: { run: { phase: "initial-chunk-3", turns: 30 }, live: { session_id: "s0" }, suite: { gates: ["a"] }, learning: { session_id: "s0" } },
@@ -30,25 +36,42 @@ function board() {
 }
 
 test("the view is the selected cell's, and switches with the selection", () => {
-  setSelectedCell(1);
+  setSelectedCell(`${RD}::1`);
   const v1 = cellView(board());
   assert.equal(v1.run.phase, "feedback-2");
   assert.equal(v1.run.model, "m", "board-wide run fields stay");
   assert.equal(v1.live.session_id, "s1");
   assert.deepEqual(v1.suite.gates, ["b"]);
   assert.equal(v1.learning.session_id, "s1");
-  setSelectedCell(0);
+  setSelectedCell(`${RD}::0`);
   const v0 = cellView(board());
   assert.equal(v0.run.turns, 30);
   assert.equal(v0.live.session_id, "s0");
 });
 
 test("a cell with no view yet shows nothing of its own — never another cell's", () => {
-  setSelectedCell(2);
+  setSelectedCell(`${RD}::2`);
   const v = cellView(board());
   assert.equal(v.live, null);
   assert.equal(v.suite, null);
   assert.equal(v.learning, null);
   assert.equal(v.run.phase, undefined);
+  setSelectedCell(null);
+});
+
+test("an archived run's fetched view lays over like any cell's", () => {
+  // The click-fetch flow (board.js fetchRunView) caches the /api/run-view
+  // answer into by_cell under the archived cell's address; from cellView's
+  // side it is then indistinguishable from a server-built view.
+  const b = board();
+  b.runs.list.unshift({ run_dir: AR, sequence_index: 0, archived: true, status: "scored" });
+  b.by_cell[`${AR}::0`] = {
+    run: { phase: "archived-record" }, honesty: {}, live: null, suite: null, learning: null, sources: null,
+  };
+  setSelectedCell(`${AR}::0`);
+  const v = cellView(b);
+  assert.equal(v.run.phase, "archived-record");
+  assert.equal(v.run.model, "m", "board-wide run fields stay");
+  assert.equal(v.live, null, "an archived record states its own absence");
   setSelectedCell(null);
 });

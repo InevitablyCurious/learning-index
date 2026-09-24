@@ -526,7 +526,7 @@ function nesting() {
 // PLACEHOLDER; an unreachable source reads "—", never zero.
 
 /** Positions per row. Padding is layout, so it is decided here, not in the API. */
-const SLOTS = 6;
+const SLOTS = 7;
 
 let stats = { bench: [], custom: [], custom_manifest_attached: false, loaded: false };
 let statsAt = 0;

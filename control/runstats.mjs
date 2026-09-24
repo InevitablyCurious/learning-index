@@ -49,7 +49,7 @@ async function withTimeout(promise, ms) {
  * Benchmark-native providers. They answer the one question no other card owns:
  * did this run produce usable measurement at all? Gate counts, tokens, turns,
  * cost and verdicts belong to other cards and are deliberately not repeated
- * here. All six slots are claimed.
+ * here. All seven slots are claimed.
  */
 function benchProviders() {
   return [
@@ -137,6 +137,24 @@ function benchProviders() {
         return turnErrorSlot(ctx, "stalled");
       },
     },
+    {
+      id: "cutoffs",
+      label: "CUT-OFFS",
+      /**
+       * Turns the harness cut off at the context cap, counted live from the
+       * cells' streams (cutoffCounts), and how many were nudged into a retry.
+       * Stream-only by design: no live stream reads unavailable ("—"), never 0.
+       */
+      async read(ctx) {
+        const dir = runPath(ctx);
+        if (!dir) return { state: "absent", value: null };
+        const counts = await cutoffCounts(dir);
+        // No live stream: unavailable, never a fabricated zero.
+        if (!counts) return { state: "unavailable", value: null };
+        if (counts.total === 0) return { state: "ok", value: "0" };
+        return { state: "ok", value: `${counts.total} · ${counts.nudged} nudged` };
+      },
+    },
   ];
 }
 
@@ -191,6 +209,58 @@ export async function turnErrors(runDir) {
     }
   }
   return streams ? counts : null;
+}
+
+/**
+ * Length cut-offs counted from the cells' live.jsonl notices: the harness
+ * emits `length_cutoff` when a turn hits the context cap, and `detail.nudged`
+ * says whether the retry nudge fired. The same walk and the same
+ * null-on-zero-streams convention as turnErrors — a run with no live stream
+ * has no reading, never a zero.
+ */
+async function cutoffCounts(runDir) {
+  let total = 0;
+  let nudged = 0;
+  let streams = 0;
+  let arms = [];
+  try {
+    arms = await readdir(runDir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const arm of arms) {
+    if (!arm.isDirectory() || !/^memory/i.test(arm.name)) continue;
+    let cells = [];
+    try {
+      cells = await readdir(join(runDir, arm.name), { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const cell of cells) {
+      if (!cell.isDirectory() || !/^cell-/i.test(cell.name)) continue;
+      let raw;
+      try {
+        raw = await readFile(join(runDir, arm.name, cell.name, "live.jsonl"), "utf8");
+      } catch {
+        continue;
+      }
+      streams += 1;
+      for (const line of raw.split("\n")) {
+        if (!line.includes('"notice"')) continue;
+        let r;
+        try {
+          r = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (r?.kind !== "notice") continue;
+        if (r.event !== "length_cutoff") continue;
+        total += 1;
+        if (r.detail?.nudged === true) nudged += 1;
+      }
+    }
+  }
+  return streams ? { total, nudged, streams } : null;
 }
 
 /** The sequence indexes of the run's cell directories (memory<ARM>/cell-NNNN). */

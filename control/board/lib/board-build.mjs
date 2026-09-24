@@ -22,6 +22,7 @@ import * as learning from "../sources/learning.mjs";
 import * as liveStream from "../sources/live-stream.mjs";
 import * as toolJobs from "../sources/tool-jobs.mjs";
 import * as cells from "../sources/cells.mjs";
+import * as runs from "../sources/runs.mjs";
 
 // Every source is always on: each one reports its own absence ("unwired",
 // with a reason) instead of being switched off by configuration.
@@ -29,7 +30,7 @@ import * as cells from "../sources/cells.mjs";
 // Board-wide sources: one read for the whole board.
 const MODS = [
   runManifest, statusStream, stackLedger, funnelCells, pluginLog,
-  controlPlane, toolJobs, cells,
+  controlPlane, toolJobs, cells, runs,
 ];
 
 // ── PER-CELL SOURCES ── everything that describes ONE cell. Each exports
@@ -73,6 +74,9 @@ const ORDER = [
   // indexOf returns -1 for an unlisted source, which sorts it FIRST, so an
   // omission here is an accidental merge position rather than a no-op.
   "cells",
+  // Owns `runs` alone — the per-run cards (current tree + archived backups).
+  // Listed for the same reason as cells: an unlisted source sorts FIRST.
+  "runs",
   // Owns `suite` alone (split from control-plane so a slow suite can't hold the
   // TUI); position not load-bearing.
   "gate-suite",
@@ -112,8 +116,11 @@ async function buildBoard(cfg) {
  * One view per cell: the per-cell sources' patches merged in ORDER, the cell's
  * liveness reconciled against the control plane's verdict for THAT cell (its
  * strip entry), and each source's own ok/reason so an absence is stated.
+ * Exported: GET /api/run-view builds ONE cell's view through this same path —
+ * a current strip cell and an archived run are viewed by the identical
+ * assembly, never a second one.
  */
-async function buildCellViews(list, ctx) {
+export async function buildCellViews(list, ctx) {
   const ordered = [...CELL_MODS].sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
   const views = {};
   await Promise.all(

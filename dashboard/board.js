@@ -474,6 +474,35 @@ function bindInteraction() {
   document.addEventListener("keydown", onKeydown);
 }
 
+/**
+ * ONE ARCHIVED RUN'S PER-CELL VIEW. by_cell is built server-side for the
+ * CURRENT batch only; an archived run's view exists on the board when, and
+ * only when, this fetch has landed. It is cached on the client (a full board
+ * frame replaces it; re-clicking re-fetches), selected on success, and on
+ * failure printed and NOT selected — the board never shows a view it could
+ * not fetch. Same-origin like every board read: the dashboard relays /api/*
+ * to the control plane, the only process that reads run files.
+ */
+async function fetchRunView(card, key) {
+  const url =
+    `/api/run-view?run_dir=${encodeURIComponent(card.run_dir)}` +
+    `&sequence_index=${encodeURIComponent(card.sequence_index)}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok || data?.ok !== true || !data.view) {
+      console.error("run-view fetch failed:", data?.reason ?? `HTTP ${res.status}`);
+      return;
+    }
+    if (!board.by_cell || typeof board.by_cell !== "object") board.by_cell = {};
+    board.by_cell[key] = data.view;
+    setSelectedCell(key);
+    render();
+  } catch (err) {
+    console.error("run-view fetch failed:", err);
+  }
+}
+
 function onClick(e) {
   const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
   if (!t) return;
@@ -656,16 +685,29 @@ function onClick(e) {
   // median. The run_dir rides on the button as a companion attribute, like
   // model/kind ride on [+ run].
   if (t.dataset.batchPick) { void doPickBatch(t.dataset.batchDir, Number(t.dataset.batchPick)); return; }
-  // ── CELL STRIP ── which cell of the batch the board is about. Local view
-  // state only: it selects nothing, starts nothing and picks no floor (that is
-  // [data-batch-pick] above). Clicking the selected card again clears back to
-  // "follow the live cell", so the strip is never a state the operator is
-  // stuck in. A void cell selects like any other — it is where they find out
-  // why it died.
+  // ── RUN STRIP ── which run the board is about, selected by its cell address
+  // (`<run_dir>::<seq>`), so an ARCHIVED run selects like any other. Local view
+  // state plus one read: it starts nothing and picks no floor (that is
+  // [data-batch-pick] above). An archived run's per-cell view is not on the
+  // board until this click fetches it; a current cell is already in by_cell.
+  // Clicking the selected card again clears back to "follow the live cell", so
+  // the strip is never a state the operator is stuck in. A void run selects
+  // like any other — it is where they find out why it died.
   if (t.dataset.cellPick !== undefined) {
-    const n = Number(t.dataset.cellPick);
-    const clearing = selectedCell() === n;
-    setSelectedCell(clearing ? null : n);
+    const key = t.dataset.cellPick;
+    if (selectedCell() === key) {
+      setSelectedCell(null);
+      render();
+      return;
+    }
+    const card = (board?.runs?.list ?? []).find((c) => cellKey(c) === key);
+    // The card left the board between render and click: nothing to select.
+    if (!card) return;
+    if (card.archived && !board?.by_cell?.[key]) {
+      void fetchRunView(card, key);
+      return;
+    }
+    setSelectedCell(key);
     // The mirror follows on render (setTuiCell from activeCell): one click,
     // one subject.
     render();

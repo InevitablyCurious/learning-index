@@ -1,8 +1,9 @@
 // THE DATA FEED CARD — one subject: the cell the strip points at.
 //
 // ONE READ FOR EVERY CELL. The card shows the cell panels/cells.js activeCell
-// names (the operator's pick, else the newest running cell, else the batch's
-// first), read by (run_dir, sequence_index) — running or ended, the same read.
+// names (the operator's pick, else the newest live run, else the first card),
+// read by (run_dir, sequence_index) — running or ended, the same read. The
+// strip's cards come from board.runs; liveness is the card's stated status.
 // A running cell is re-read on a timer; an ended one once more after it ends.
 //
 // THE DEFECT THIS FILE REPLACED. The card had its own selection: a live ring for
@@ -30,8 +31,9 @@ import { setSelectedCell } from "./panels/cells.js";
 import { renderLedger } from "./panels/ledger.js";
 
 const RUN_DIR = "1788717847/local/omlx/model-a";
-const ENDED = { sequence_index: 0, run_dir: RUN_DIR, running: false };
-const LIVE = { sequence_index: 1, run_dir: RUN_DIR, running: true };
+// board.runs cards: liveness is the STATED status, never a derived flag.
+const ENDED = { run_dir: RUN_DIR, sequence_index: 0, archived: false, status: "scored" };
+const LIVE = { run_dir: RUN_DIR, sequence_index: 1, archived: false, status: "live" };
 
 /** The persisted /api/events envelope, in the shape control/server.mjs serves. */
 const EVENTS = {
@@ -77,8 +79,8 @@ function boardWith(list, over = {}) {
   return {
     control: {},
     events: { connected: true, reason: null },
-    cells: { list },
-    models_ledger: { run_in_flight: list.some((c) => c.running) },
+    runs: { list },
+    models_ledger: { run_in_flight: list.some((c) => c.status === "live") },
     ...over,
   };
 }
@@ -117,7 +119,7 @@ test("the card follows the cell strip", async (t) => {
   });
 
   await t.test("picking a card re-points the card — no second selector, no BACK TO LIVE", async () => {
-    setSelectedCell(0);
+    setSelectedCell(`${RUN_DIR}::0`);
     await withFetch(async (seen) => {
       renderLive(boardWith([ENDED, LIVE]));
       await tick();
@@ -140,7 +142,7 @@ test("the card follows the cell strip", async (t) => {
       assert.equal(seen.length, 2, "a running cell is re-read");
     });
     // It ends: exactly one more read (rows written after the last poll), then none.
-    const ended = { ...LIVE, running: false };
+    const ended = { ...LIVE, status: "scored" };
     hist.at = 0;
     await withFetch(async (seen) => {
       renderLive(boardWith([ended]));
