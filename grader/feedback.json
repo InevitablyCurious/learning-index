@@ -602,6 +602,18 @@
     "G01.opponent": {
       "first": "The game gets mixed up about who is playing against whom.",
       "repeat": "It's still mixed up about who is playing against whom."
+    },
+    "F06.value": {
+      "first": "The pip counts on screen are the wrong numbers for the position on the board.",
+      "repeat": "Checked the pip counts again and they're still the wrong numbers for the board."
+    },
+    "F06.sync": {
+      "first": "The pip numbers on screen don't match the game's own count.",
+      "repeat": "The pip numbers on screen still disagree with the game."
+    },
+    "F06.format": {
+      "first": "The pip counts on screen aren't readable as plain numbers.",
+      "repeat": "The pip counts still aren't plain numbers."
     }
   }
 }

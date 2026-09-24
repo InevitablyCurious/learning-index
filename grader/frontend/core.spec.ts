@@ -105,7 +105,7 @@ async function readInt(locator: Locator): Promise<number> {
   // the game state arrives from the server show an empty box for a moment, and
   // reading it at that instant failed F06 for three rounds in two runs
   // (1789664067, 1789712833) while the page showed the right number.
-  await expect(locator).toHaveText(/^\s*-?\d+\s*$/);
+  await expect(locator, "[aspect: format]").toHaveText(/^\s*-?\d+\s*$/);
   const text = (await locator.innerText()).trim();
   return Number.parseInt(text, 10);
 }
@@ -350,10 +350,10 @@ test("[F06] REQ-PIPUI — pip display cross-checked vs engine", async ({ page })
   const openingDomBlack = await readInt(page.getByTestId("pipBlack"));
   const openingState = await readState(page);
 
-  expect(openingDomWhite).toBe(openingState.pip.white);
-  expect(openingDomBlack).toBe(openingState.pip.black);
-  expect(openingDomWhite).toBe(167);
-  expect(openingDomBlack).toBe(167);
+  expect(openingDomWhite, "[aspect: sync]").toBe(openingState.pip.white);
+  expect(openingDomBlack, "[aspect: sync]").toBe(openingState.pip.black);
+  expect(openingDomWhite, "[aspect: value]").toBe(167);
+  expect(openingDomBlack, "[aspect: value]").toBe(167);
 
   const custom = emptyPoints();
   custom[6] = 5;
@@ -378,8 +378,8 @@ test("[F06] REQ-PIPUI — pip display cross-checked vs engine", async ({ page })
   const customDomBlack = await readInt(page.getByTestId("pipBlack"));
   const customState = await readState(page);
 
-  expect(customDomWhite).toBe(customState.pip.white);
-  expect(customDomBlack).toBe(customState.pip.black);
+  expect(customDomWhite, "[aspect: sync]").toBe(customState.pip.white);
+  expect(customDomBlack, "[aspect: sync]").toBe(customState.pip.black);
 });
 
 test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {

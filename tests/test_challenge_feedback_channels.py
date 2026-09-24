@@ -480,3 +480,32 @@ def test_a_labelled_assertion_is_told_as_that_aspect() -> None:
     assert "pieces" in pieces and "cube" not in pieces
     plain = R._humanize_check("[G01] REQ-INIT — initial position", observed="AssertionError: x")
     assert plain != pieces
+
+
+def test_f06_aspects_resolve_to_three_distinct_complaints() -> None:
+    # Run 1790237137: F06 failed on VALUE — the screen showed 208 where the
+    # engine said 167 — but the model was told the sync-flavoured gate line
+    # and hunted a screen-vs-game disagreement that didn't exist. The three
+    # failure causes must name three DIFFERENT complaint lines, and an
+    # unmarked finding must fall back to the gate's own line.
+    from harness.adapters.challenge import ChallengeRunner as R
+
+    check = "[F06] REQ-PIPUI — pip display cross-checked vs engine"
+
+    value = R._humanize_check(check, observed="AssertionError: [aspect: value]: expected 208 to be 167")
+    assert "wrong numbers for the position" in value
+    # A wrong-number failure must NOT read as a sync problem.
+    assert "own count" not in value
+
+    sync = R._humanize_check(check, observed="AssertionError: [aspect: sync]: expected 208 to be 167")
+    assert "own count" in sync  # the screen disagrees with the game's count
+
+    fmt = R._humanize_check(check, observed="AssertionError: [aspect: format]: expected '208' to match")
+    assert "aren't readable" in fmt and "plain numbers" in fmt  # not a plain number
+
+    # Three causes, three different lines.
+    assert len({value, sync, fmt}) == 3
+
+    plain = R._humanize_check(check, observed="Error: x")
+    assert "drift after a change" in plain  # the gate-level fallback
+    assert plain not in (value, sync, fmt)
