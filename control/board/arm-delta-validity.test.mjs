@@ -62,7 +62,7 @@ function attempt({
     terminal_outcome: false,
     terminal_reason: terminalReason,
     termination_reason: terminalReason,
-    length_truncations: lengthTruncations,
+    provider_truncations: lengthTruncations,
     truncated_turns: truncatedTurns,
     unrecovered_anomaly_turns: unrecoveredAnomalyTurns,
     failed_gates: gates,
@@ -191,7 +191,7 @@ test("cellValidity: a GREEN terminal attempt scores despite earlier truncation",
     full_green: true,
     terminal_reason: "gates_green",
     truncated_turns: 9,
-    length_truncations: 40,
+    provider_truncations: 40,
     attempt_count: 2,
   });
   assert.equal(v.scored, true);

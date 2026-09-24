@@ -307,7 +307,7 @@ export function cellValidity(cell) {
   if (!terminalGreen) {
     const truncationSignal =
       str(c.terminal_reason) === "transport_incomplete" ||
-      (int(c.length_truncations) ?? 0) > 0 ||
+      (int(c.provider_truncations) ?? 0) > 0 ||
       (int(c.unrecovered_anomaly_turns) ?? 0) > 0;
     if (truncationSignal) return { scored: false, reason: "void_instrument" };
   }

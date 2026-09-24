@@ -83,7 +83,7 @@ def _client(metrics: dict[str, Any] | None = None) -> _FakeServeClient:
     client = _FakeServeClient()
     client.metrics_result = metrics or {
         "turns": 3, "input_tokens": 100, "output_tokens": 50, "reasoning_tokens": 0,
-        "cost_usd": 0.0, "truncations": 0, "error_parts": 0,
+        "cost_usd": 0.0, "provider_truncations": 0, "error_parts": 0,
     }
     return client
 

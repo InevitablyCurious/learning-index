@@ -198,7 +198,7 @@ test("CHUNKS: a cell that never ran a build reports null, never 'all incomplete'
   }
 });
 
-// ── VOID-INSTRUMENT: truncated_turns/length_truncations live on the record,
+// ── VOID-INSTRUMENT: truncated_turns/provider_truncations live on the record,
 // not on `progress` ──────────────────────────────────────────────────────────
 //
 // THE MEASURED DEFECT (found via a real OFF baseline, run 1788537083,
@@ -206,7 +206,7 @@ test("CHUNKS: a cell that never ran a build reports null, never 'all incomplete'
 // (`provider_truncation`, 35 truncated turns) while this file's own fold
 // reported `scorable: true` with a real 44/53 gate tally — the two void
 // definitions the header comment says must never disagree, disagreeing. Cause:
-// the fold read `p.truncated_turns` / `p.length_truncations` where
+// the fold read `p.truncated_turns` / `p.provider_truncations` where
 // `p = r.progress`, but the harness writes both fields as SIBLINGS of
 // `progress`, not inside it. `int(undefined) ?? 0` is always zero, so the
 // `truncated_turns > 0` void condition could never fire — a `terminal_reason`
@@ -233,7 +233,7 @@ function writeTruncatedRun(root, {
     terminal_reason: terminalReason,
     truncated_turns: truncatedTurns,
     unrecovered_anomaly_turns: unrecoveredAnomalyTurns ?? truncatedTurns,
-    length_truncations: 0,
+    provider_truncations: 0,
     progress: { turns: 479, total_tokens: 297344, build_chunks: [] },
   };
   writeFileSync(join(d, "manifest.status.jsonl"), `${JSON.stringify(a1)}\n`);

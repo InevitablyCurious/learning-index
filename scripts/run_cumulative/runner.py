@@ -661,12 +661,18 @@ class RealSessionRunner:
             # stream died" (transport_incomplete / harness_error).
             "terminal_outcome": verdict_str == "PASS",
             "terminal_reason": str(getattr(result, "termination_reason", "") or ""),
-            # Truncated-turn accounting (WO-TRUNC-1): anomalous turn endings are
-            # first-class. length_truncations is the metered finish_reason=
-            # length class; the truncated_* fields are the no-signal classes
-            # whose upstream token burn is unmetered client-side (never
-            # synthesized) but whose wall-clock is measured and real.
-            "length_truncations": int(getattr(result, "truncations", 0) or 0),
+            # Truncation accounting split (WO-CUTOFF). provider_truncations are
+            # genuine provider truncations (unknown / stream-incomplete / length
+            # BELOW the cap); cap_cutoffs are the model hitting OUR output cap
+            # (length AT/above the cap) — a fixed limit, never a void signal;
+            # cap_cutoffs_nudged is how many of those cap cut-offs the harness
+            # nudged. All cell-level (copied to every attempt row), like the
+            # old length_truncations.
+            "provider_truncations": int(
+                getattr(result, "provider_truncations", 0) or 0
+            ),
+            "cap_cutoffs": int(getattr(result, "cap_cutoffs", 0) or 0),
+            "cap_cutoffs_nudged": int(getattr(result, "cap_cutoffs_nudged", 0) or 0),
             "truncated_turns": int(getattr(result, "truncated_turns", 0) or 0),
             "truncated_turns_retried": int(
                 getattr(result, "truncated_turns_retried", 0) or 0
@@ -812,6 +818,10 @@ class RealSessionRunner:
                     attempt_record["player_stage"] = attempt.get("player_stage")
                     attempt_record["player_stage_name"] = attempt.get("player_stage_name")
                     attempt_record["withheld_checks"] = attempt.get("withheld_checks")
+                    if attempt.get("context_peak") is not None:
+                        attempt_record["context_peak"] = attempt.get("context_peak")
+                    if attempt.get("context_window") is not None:
+                        attempt_record["context_window"] = attempt.get("context_window")
                 else:
                     attempt_record["attempt"] = idx
                     attempt_record["verdict"] = result.verdict

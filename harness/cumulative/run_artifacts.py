@@ -69,7 +69,10 @@ disposition excludes a cell; any other value is ignored by the reader —
 ``not_scored_reason`` (str, the reason the cell was not scored).
 
 Turn-terminal accounting (WO-TRUNC-1):
-- ``length_truncations``: int — metered ``finish_reason=length`` turns.
+- ``provider_truncations``: int — genuine provider truncations (``unknown`` /
+  ``stream-incomplete`` / ``finish_reason=length`` BELOW the output cap).
+- ``cap_cutoffs``: int — ``finish_reason=length`` AT/above OUR output cap — a
+  fixed limit, never a provider failure, never a void signal.
 - ``truncated_turns`` / ``truncated_turns_retried``: int — anomalous turn
   endings (no-signal truncations, guard aborts, transport deaths) and how many
   of them a later step or resume picked up.
@@ -499,7 +502,7 @@ def build_scorecard(
     # is non-green AND carries a provider-side truncation signal is VOID-
     # INSTRUMENT per RUNBOOK rule 5.10 — never scored as a capability FAIL. The
     # signal reads ONLY per-attempt truncation fields on the terminal attempt:
-    # terminal_reason=="transport_incomplete" OR length_truncations>0 OR
+    # terminal_reason=="transport_incomplete" OR provider_truncations>0 OR
     # unrecovered_anomaly_turns>0 OR observation_lost_turns>0. A green terminal
     # attempt is always scored PASS regardless of earlier truncation; a
     # non-green terminal attempt with NO truncation signal is a genuine scored
@@ -519,7 +522,7 @@ def build_scorecard(
         # InstrumentFaultError): the instrument's failure, never the model's.
         if str(record.get("terminal_reason") or "") == "instrument_fault":
             return True
-        if int(record.get("length_truncations") or 0) > 0:
+        if int(record.get("provider_truncations") or 0) > 0:
             return True
         # ── NOT `truncated_turns` (fixed 2026-09-05), and NOT
         # `instrument_anomaly_turns` either (fixed 2026-09-07, WO-I2) ───────
@@ -532,7 +535,7 @@ def build_scorecard(
         # Measured on run 1788599410: five graded attempts, 39/53 passing,
         # discarded. All three "truncations" were `terminal: guard_abort,
         # reason: loop_guard`, with `finish_reason: "tool-calls"` (a clean
-        # finish, not `length`), `truncations_seen: 0`, `length_truncations: 0`,
+        # finish, not `length`), `truncations_seen: 0`, `provider_truncations: 0`,
         # and `retried: true` on every one.
         #
         # The corrected rule: this leg voids on a NON-RECOVERABLE anomaly —

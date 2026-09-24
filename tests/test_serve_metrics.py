@@ -170,8 +170,10 @@ def test_extract_transcript_metrics_realistic():
     assert m["cache_write_tokens"] == 400
     # sum cost: 0.01+0.005+0.001
     assert abs(m["cost_usd"] - 0.016) < 1e-9
-    # truncations: length + stream-incomplete = 2
-    assert m["truncations"] == 2
+    # s2's length finish is BELOW the cap (output 20 + reasoning 4 << 32000)
+    # and s3 is stream-incomplete: both are genuine provider truncations.
+    assert m["provider_truncations"] == 2
+    assert m["cap_cutoffs"] == 0
     # last step-finish reason seen is stream-incomplete
     assert m["last_finish"] == "stream-incomplete"
     # error parts: one "error" part
@@ -208,7 +210,8 @@ def test_extract_transcript_metrics_empty():
         "cache_read_tokens": 0,
         "cache_write_tokens": 0,
         "cost_usd": 0.0,
-        "truncations": 0,
+        "provider_truncations": 0,
+        "cap_cutoffs": 0,
         "last_finish": None,
         "error_parts": 0,
         "info_errors": 0,
@@ -252,29 +255,148 @@ def test_extract_transcript_metrics_tool_calls_not_truncation():
         }
     ]
     m = extract_transcript_metrics(transcript)
-    assert m["truncations"] == 0
+    assert m["provider_truncations"] == 0
+    assert m["cap_cutoffs"] == 0
     assert m["last_finish"] == "tool-calls"
+
+
+# ---------------------------------------------------------------------------
+# cap-cut-off split: provider_truncations vs cap_cutoffs
+# ---------------------------------------------------------------------------
+def _finish_transcript(output: int, reasoning: int, reason: str):
+    """One assistant message whose step-finish carries ``reason``."""
+    return [
+        {
+            "info": {
+                "role": "assistant",
+                "tokens": {
+                    "input": 200,
+                    "output": output,
+                    "reasoning": reasoning,
+                    "total": 200 + output + reasoning,
+                },
+                "finish": reason,
+            },
+            "parts": [
+                {"type": "step-start", "id": "s1"},
+                {"type": "text", "text": "partial work"},
+                {"type": "step-finish", "id": "s1", "reason": reason},
+            ],
+        }
+    ]
+
+
+def test_length_finish_at_cap_is_cap_cutoff():
+    # output+reasoning == 32000 (the built-in cap): opencode cut the turn at
+    # its output cap — a cap cut-off, NOT a provider truncation.
+    m = extract_transcript_metrics(_finish_transcript(31_990, 10, "length"))
+    assert m["provider_truncations"] == 0
+    assert m["cap_cutoffs"] == 1
+    assert m["last_finish"] == "length"
+
+
+def test_length_finish_above_cap_is_cap_cutoff():
+    m = extract_transcript_metrics(_finish_transcript(32_000, 500, "length"))
+    assert m["provider_truncations"] == 0
+    assert m["cap_cutoffs"] == 1
+
+
+def test_length_finish_below_cap_is_provider_truncation():
+    # A length finish well BELOW the cap is the provider itself stopping short.
+    m = extract_transcript_metrics(_finish_transcript(1_200, 300, "length"))
+    assert m["provider_truncations"] == 1
+    assert m["cap_cutoffs"] == 0
+
+
+def test_unknown_and_stream_incomplete_are_provider_truncations():
+    m = extract_transcript_metrics(
+        _finish_transcript(500, 0, "unknown")
+        + _finish_transcript(500, 0, "stream-incomplete")
+    )
+    assert m["provider_truncations"] == 2
+    assert m["cap_cutoffs"] == 0
+
+
+def test_explicit_output_cap_parameter_moves_the_boundary():
+    # The cap is a parameter: the same 1500-token length finish is a cap
+    # cut-off when the run's effective cap is 1500.
+    m = extract_transcript_metrics(
+        _finish_transcript(1_200, 300, "length"), output_cap=1_500
+    )
+    assert m["provider_truncations"] == 0
+    assert m["cap_cutoffs"] == 1
+
+
+def test_classify_transport_anomaly_cap_cutoff_is_truncated():
+    assert classify_transport_anomaly(
+        {"provider_truncations": 0, "cap_cutoffs": 1, "error_parts": 0}
+    ) == ("truncated", "stream-incomplete")
+
+
+# ---------------------------------------------------------------------------
+# per-message token helpers (cap-cutoff trigger + peak-context metering)
+# ---------------------------------------------------------------------------
+def test_message_token_helpers():
+    from harness.serve_transport import (
+        last_assistant_message,
+        max_request_context_tokens,
+        message_generation_tokens,
+        message_has_tool_part,
+        message_request_context_tokens,
+    )
+
+    msg = {
+        "info": {
+            "role": "assistant",
+            "tokens": {
+                "input": 50,
+                "output": 30,
+                "reasoning": 12,
+                "total": 92,
+                "cache": {"read": 1000, "write": 400},
+            },
+        },
+        "parts": [{"type": "tool", "id": "t1"}],
+    }
+    # Request-side context: input + cache read + cache write (PROMPT side —
+    # output/reasoning excluded).
+    assert message_request_context_tokens(msg) == 1450
+    assert message_generation_tokens(msg) == (30, 12)
+    assert message_has_tool_part(msg) is True
+    assert message_has_tool_part({"info": {"role": "assistant"}, "parts": []}) is False
+
+    bare = {"info": {"role": "assistant"}}
+    transcript = [{"info": {"role": "user"}}, msg, bare]
+    assert last_assistant_message(transcript) is bare
+    assert max_request_context_tokens(transcript) == 1450
+    # Absent, never 0: no assistant messages -> None.
+    assert max_request_context_tokens([{"info": {"role": "user"}}]) is None
+    assert last_assistant_message([]) is None
+    # Malformed input must not raise.
+    assert message_request_context_tokens(None) == 0
+    assert message_generation_tokens("nope") == (0, 0)
+    assert message_has_tool_part(42) is False
 
 
 # ---------------------------------------------------------------------------
 # classify_transport_anomaly
 # ---------------------------------------------------------------------------
 def test_classify_transport_anomaly_truncated():
-    assert classify_transport_anomaly({"truncations": 1, "error_parts": 0}) == (
+    assert classify_transport_anomaly({"provider_truncations": 1, "error_parts": 0}) == (
         "truncated",
         "stream-incomplete",
     )
 
 
 def test_classify_transport_anomaly_error():
-    assert classify_transport_anomaly({"truncations": 0, "error_parts": 1}) == (
+    assert classify_transport_anomaly({"provider_truncations": 0, "error_parts": 1}) == (
         "transport_error",
         "error_event",
     )
 
 
 def test_classify_transport_anomaly_clean():
-    assert classify_transport_anomaly({"truncations": 0, "error_parts": 0}) == (
+    assert classify_transport_anomaly({"provider_truncations": 0, "error_parts": 0}) == (
         None,
         None,
     )
@@ -420,7 +542,7 @@ def test_classify_transport_anomaly_loop_guard_from_info_error_text():
 def test_classify_transport_anomaly_loop_guard_beats_truncation():
     assert classify_transport_anomaly(
         {
-            "truncations": 1,
+            "provider_truncations": 1,
             "error_parts": 0,
             "info_errors": 1,
             "error_texts": ["relay_loop_detected n=40 limit=3"],
@@ -433,7 +555,7 @@ def test_classify_transport_anomaly_loop_guard_legacy_shape_still_matches():
     # must keep classifying as the guard terminal alongside the live shape.
     assert classify_transport_anomaly(
         {
-            "truncations": 0,
+            "provider_truncations": 0,
             "error_parts": 0,
             "info_errors": 1,
             "error_texts": ["relay_loop_detected n=40 limit=3"],
@@ -448,7 +570,7 @@ def test_classify_transport_anomaly_finalize_timeout_is_not_loop_guard():
     # anti-repetition nudge.
     assert classify_transport_anomaly(
         {
-            "truncations": 0,
+            "provider_truncations": 0,
             "error_parts": 0,
             "info_errors": 1,
             "error_texts": [
@@ -470,7 +592,7 @@ def test_classify_transport_anomaly_relay_stream_incomplete_is_named():
     """
     assert classify_transport_anomaly(
         {
-            "truncations": 0,
+            "provider_truncations": 0,
             "error_parts": 0,
             "info_errors": 1,
             "error_texts": [
@@ -501,7 +623,7 @@ def test_classify_transport_anomaly_keys_on_the_relays_typed_codes():
         assert (
             classify_transport_anomaly(
                 {
-                    "truncations": 0,
+                    "provider_truncations": 0,
                     "error_parts": 0,
                     "info_errors": 1,
                     "error_texts": [typed],
@@ -520,7 +642,7 @@ def test_classify_transport_anomaly_unnamed_info_error_is_generic():
     """
     assert classify_transport_anomaly(
         {
-            "truncations": 0,
+            "provider_truncations": 0,
             "error_parts": 0,
             "info_errors": 1,
             "error_texts": ["ProviderModelError something went wrong"],

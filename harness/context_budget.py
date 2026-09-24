@@ -39,6 +39,22 @@ CONTEXT_OVERFLOW_ERROR_NAME = "ContextOverflowError"
 OPENCODE_OUTPUT_TOKEN_CAP = 32_000
 
 
+def output_cap(output_token_max: int | None = None) -> int:
+    """The effective per-response output cap for this run.
+
+    ``RunConfig.max_output_tokens`` is inert in production (None → the Docker
+    env ``OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`` is never set) and opencode
+    then applies its own built-in default, modeled here as
+    ``OPENCODE_OUTPUT_TOKEN_CAP``.
+    """
+    if output_token_max is None:
+        return OPENCODE_OUTPUT_TOKEN_CAP
+    cap = int(output_token_max)
+    if cap <= 0:
+        raise ValueError(f"output token cap must be positive, got {output_token_max!r}")
+    return cap
+
+
 def model_limits(model: str) -> dict[str, int]:
     """The context and output limits the worker's opencode.json declares."""
     provider_id, _, model_id = str(model).partition("/")
@@ -60,7 +76,7 @@ def model_limits(model: str) -> dict[str, int]:
 def context_limit_tokens(model: str, *, output_token_max: int | None = None) -> int:
     """The token count at which this model's session is out of room."""
     limits = model_limits(model)
-    cap = OPENCODE_OUTPUT_TOKEN_CAP if output_token_max is None else int(output_token_max)
+    cap = output_cap(output_token_max)
     return limits["context"] - min(limits["output"], cap)
 
 

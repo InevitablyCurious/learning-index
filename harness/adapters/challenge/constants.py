@@ -170,6 +170,12 @@ _WRITE_CHUNKING_DIRECTIVE = _PACK.text("nudges/write-limit.md")
 _LOOP_RECOVERY_NUDGE = _PACK.nudge("nudges/loop.md")
 _FINALIZE_RECOVERY_NUDGE = _PACK.nudge("nudges/cut-off.md")
 
+# CAP CUT-OFF (WO-CUTOFF): the model hit OUR output cap (finish_reason=length at
+# 32,000 output tokens). Recovered with its OWN nudge — a plain "take the next
+# concrete step", NOT the write-in-chunks directive (that one belongs to a tool
+# call that was cut mid-write).
+_CAP_CUTOFF_RECOVERY_NUDGE = _PACK.nudge("nudges/cap-cutoff.md")
+
 # STALLED TOOL CALL RECOVERY (2026-09-11).
 #
 # A wedged tool call used to END THE CELL. The stall watchdog caught it — that
@@ -238,6 +244,11 @@ PROVIDER_BACKOFF_SCHEDULE_S = (15.0, 30.0, 60.0, 120.0)
 # ledger.
 _MAX_SERVE_RECOVERY_NUDGES = 20
 
+# Cap cut-off budget (WO-CUTOFF): 2 nudges per repair round AND per build chunk,
+# SEPARATE from _MAX_SERVE_RECOVERY_NUDGES, so a chatty model that repeatedly
+# hits the cap can never starve outage/stall/loop recovery.
+_MAX_CAP_CUTOFF_NUDGES = 2
+
 
 # Turn-terminal taxonomy (WO-TRUNC-1). A turn is one model generation step,
 # delimited by step_start/step_finish on the worker's JSON event stream.
@@ -273,6 +284,10 @@ TURN_TERMINAL_OBSERVATION_LOST = "observation_lost"
 # server, so the command hung and took the whole cell with it after 10 minutes
 # of silence.
 TURN_TERMINAL_STALLED = "turn_stalled"
+# WO-CUTOFF: the model hit OUR output cap (finish_reason=length at the cap).
+# Distinct from truncated_no_signal so it is never a void signal and never an
+# unrecovered anomaly — it is a fixed limit, not a provider failure.
+TURN_TERMINAL_CAP_CUTOFF = "cap_cutoff"
 REASON_TOOL_CALL_TIMEOUT = "tool_call_exceeded_stall_timeout"
 REASON_OBSERVATION_LOST = "transcript_read_failed_past_retries"
 # WO-WATCH-1E evidence file name, written next to the cell's events file under

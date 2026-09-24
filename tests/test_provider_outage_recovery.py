@@ -40,7 +40,7 @@ LIVE_ERROR = json.dumps(
 class TestClassification:
     def test_the_real_live_payload_is_recognised(self):
         terminal, reason = classify_transport_anomaly(
-            {"error_texts": [LIVE_ERROR], "truncations": 1}
+            {"error_texts": [LIVE_ERROR], "provider_truncations": 1}
         )
         assert (terminal, reason) == (
             TERMINAL_TRANSPORT_ERROR,
@@ -52,7 +52,7 @@ class TestClassification:
         # "the stream stopped" would hide why it stopped, and "stream
         # incomplete" is not recoverable while an outage is.
         terminal, reason = classify_transport_anomaly(
-            {"error_texts": [LIVE_ERROR], "truncations": 5, "error_parts": 2}
+            {"error_texts": [LIVE_ERROR], "provider_truncations": 5, "error_parts": 2}
         )
         assert reason == REASON_PROVIDER_UNAVAILABLE
 
@@ -64,18 +64,18 @@ class TestClassification:
             ("stream did not finalize", REASON_STREAM_FINALIZE_TIMEOUT),
         ):
             _, reason = classify_transport_anomaly(
-                {"error_texts": [text, LIVE_ERROR], "truncations": 1}
+                {"error_texts": [text, LIVE_ERROR], "provider_truncations": 1}
             )
             assert reason == expected
 
     def test_a_plain_truncation_is_unchanged(self):
         terminal, reason = classify_transport_anomaly(
-            {"error_texts": [], "truncations": 1}
+            {"error_texts": [], "provider_truncations": 1}
         )
         assert reason == REASON_STREAM_INCOMPLETE
 
     def test_a_clean_window_is_still_clean(self):
-        assert classify_transport_anomaly({"error_texts": [], "truncations": 0}) == (
+        assert classify_transport_anomaly({"error_texts": [], "provider_truncations": 0}) == (
             None,
             None,
         )
@@ -87,7 +87,7 @@ class TestClassification:
         assert classify_transport_anomaly(
             {
                 "error_texts": [],
-                "truncations": 0,
+                "provider_truncations": 0,
                 "assistant_text": "the service is temporarily unavailable",
             }
         ) == (None, None)

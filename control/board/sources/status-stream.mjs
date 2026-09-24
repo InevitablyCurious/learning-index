@@ -162,7 +162,7 @@ function cellsFromRecords(records, dirName) {
         // Void-instrument inputs (RUNBOOK 5.10; see contract.cellValidity).
         full_green: false,
         terminal_reason: null,
-        length_truncations: 0,
+        provider_truncations: 0,
         unrecovered_anomaly_turns: 0,
         last_seen: 0,
         resolved_gates: [],
@@ -227,7 +227,7 @@ function cellsFromRecords(records, dirName) {
     // Validity inputs from the last (terminal) attempt, as the scorecard does.
     c.full_green = p.full_green === true;
     c.terminal_reason = str(r.terminal_reason) ?? c.terminal_reason;
-    c.length_truncations = Math.max(c.length_truncations, int(r.length_truncations) ?? 0);
+    c.provider_truncations = Math.max(c.provider_truncations, int(r.provider_truncations) ?? 0);
     // The unrecovered subset decides validity; truncated_turns (which counts
     // recovered loops too) feeds only the transport honesty figure.
     c.unrecovered_anomaly_turns = Math.max(

@@ -47,7 +47,7 @@ def test_the_drive_stops_on_a_dead_worker_without_nudging(tmp_path: Path) -> Non
     runner = _make_runner(tmp_path)
     client = _FakeServeClient()
     client.metrics_result = {"turns": 1, "input_tokens": 1, "output_tokens": 1, "reasoning_tokens": 0,
-                             "cost_usd": 0.0, "truncations": 0, "error_parts": 0}
+                             "cost_usd": 0.0, "provider_truncations": 0, "error_parts": 0}
     client.wait_script = [(False, WORKER_DIED)]
     stats = runner._run_opencode_serve(
         active_cell=_DeadCell(), serve_client=client, session_id="s", prompt="fix",

@@ -238,7 +238,7 @@ export async function collectCells(runsRoot) {
         // Unrecovered anomalies — the one the void check reads. Summed the same way.
         unrecovered_anomaly_turns:
           (prev.unrecovered_anomaly_turns ?? 0) + (int(r.unrecovered_anomaly_turns) ?? 0),
-        length_truncations: (prev.length_truncations ?? 0) + (int(r.length_truncations) ?? 0),
+        provider_truncations: (prev.provider_truncations ?? 0) + (int(r.provider_truncations) ?? 0),
         // Green only if it actually passed.
         full_green: str(r.verdict) === "PASS" || prev.full_green === true,
       });
@@ -268,7 +268,7 @@ export async function collectCells(runsRoot) {
           || meas.terminal_reason === "harness_error"
           // Grading measured nothing twice on the same code: the instrument's.
           || meas.terminal_reason === "instrument_fault"
-          || (meas.length_truncations ?? 0) > 0
+          || (meas.provider_truncations ?? 0) > 0
           || (meas.unrecovered_anomaly_turns ?? 0) > 0),
       );
 

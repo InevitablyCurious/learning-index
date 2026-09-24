@@ -35,6 +35,8 @@ from harness.context_budget import (
     context_exhausted,
     context_limit_tokens,
     latest_context_tokens,
+    model_limits,
+    output_cap,
 )
 from harness.serve_client import (
     LOOP_KILL_WAIT_REASON,
@@ -48,13 +50,22 @@ from harness.serve_client import (
     classify_transport_anomaly,
     set_read_retry_observer,
 )
+from harness.serve_transport import (
+    last_assistant_message,
+    max_request_context_tokens,
+    message_generation_tokens,
+    message_has_tool_part,
+    message_request_context_tokens,
+)
 
 from ..docker_worker import LOOP_KILL_MARKER_DIRNAME, DockerCell
 from .constants import (
+    _CAP_CUTOFF_RECOVERY_NUDGE,
     _COMPACT_SETTLE_GRACE_S,
     _COMPACT_SETTLE_TIMEOUT_S,
     _FINALIZE_RECOVERY_NUDGE,
     _LOOP_RECOVERY_NUDGE,
+    _MAX_CAP_CUTOFF_NUDGES,
     _MAX_SERVE_RECOVERY_NUDGES,
     _PROVIDER_RECOVERY_NUDGE,
     _STALL_RECOVERY_NUDGE,
@@ -62,6 +73,7 @@ from .constants import (
     REASON_OBSERVATION_LOST,
     REASON_TOOL_CALL_TIMEOUT,
     TRUNCATION_EVIDENCE_FILENAME,
+    TURN_TERMINAL_CAP_CUTOFF,
     TURN_TERMINAL_GUARD_ABORT,
     TURN_TERMINAL_OBSERVATION_LOST,
     TURN_TERMINAL_STALLED,
@@ -86,6 +98,7 @@ class ServeMixin:
         prior_cost_usd: float = 0.0,
         timeout_s: float = 5400.0,
         kill_hook: Callable[[], None] | None = None,
+        attempt: int | None = None,
     ) -> _OpencodeRunStats:
         """Drive ONE scoring attempt through the persistent opencode serve.
 
@@ -219,6 +232,11 @@ class ServeMixin:
         except ServeClientError:
             class_watermark = 0
 
+        # WO-CUTOFF: phase-start message count for the context-peak read.
+        # Unlike class_watermark this NEVER advances — the peak must span the
+        # whole phase, including any recovery re-drives.
+        context_peak_watermark = class_watermark
+
         # A SECOND WATERMARK, TAKEN ONCE AND NEVER MOVED.
         #
         # `class_watermark` advances past each classified kill, which is right
@@ -256,6 +274,11 @@ class ServeMixin:
         # compaction-looping incident, which rode this loop to 126+ recovery
         # events with no exit.)
         recovery_nudges = 0
+        # WO-CUTOFF: cap cut-off nudges have their OWN budget, separate from
+        # recovery_nudges/_MAX_SERVE_RECOVERY_NUDGES — a length cut at OUR cap
+        # is not a transport fault and must not spend (or be starved by) the
+        # transport-recovery budget.
+        cap_cutoffs_nudged = 0
         provider_outages = 0
         # WO-LOOPKILL-1: count of turns in THIS drive ended by a fresh loop-kill
         # marker (wait_reason == LOOP_KILL_WAIT_REASON). The sidecar kills the
@@ -270,6 +293,11 @@ class ServeMixin:
         context_limit = context_limit_tokens(
             self.model, output_token_max=getattr(self, "max_output_tokens", None)
         )
+        # WO-CUTOFF: the effective per-response output cap and the model's full
+        # context window. context_limit_tokens above already validated the
+        # model, so model_limits cannot raise here.
+        cap = output_cap(getattr(self, "max_output_tokens", None))
+        context_window = model_limits(self.model)["context"]
         context_hit = False
         context_size = 0
         # WORKER DIED: asked only when the serve stops answering. A cell with no
@@ -496,7 +524,8 @@ class ServeMixin:
                 # This is NOT a capability result and must never be scored as
                 # one: the classification window is empty, so the recovery
                 # classifier below is blind by construction (it reads only
-                # error_texts/truncations/error_parts/info_errors) and would
+                # error_texts/provider_truncations/cap_cutoffs/error_parts/
+                # info_errors) and would
                 # report "no anomaly" for a session that may still be running.
                 # That blindness is exactly what voided the 2026-08-11 cell.
                 #
@@ -660,6 +689,36 @@ class ServeMixin:
                     mapped_terminal = TURN_TERMINAL_TRANSPORT_ERROR
                 else:
                     mapped_terminal = terminal
+                # ── CAP CUT-OFF (WO-CUTOFF): "length" at OUR output cap ──────
+                # A turn that ends finish_reason=length AT/above our own cap is
+                # not a provider truncation: it is the model running into the
+                # fixed per-response limit. Detected here, BEFORE the anomaly
+                # record is built, so the record's terminal reads "cap_cutoff".
+                is_cap_cutoff = False
+                cap_cutoff_has_tool_part = False
+                cap_cutoff_output = 0
+                cap_cutoff_reasoning = 0
+                cap_cutoff_last_context = 0
+                if (
+                    mapped_terminal == TURN_TERMINAL_TRUNCATED
+                    and m.get("last_finish") == "length"
+                ):
+                    try:
+                        _cap_msgs = serve_client.get_messages(session_id)
+                    except ServeClientError:
+                        _cap_msgs = []
+                    _cap_last = last_assistant_message(_cap_msgs)
+                    cap_cutoff_output, cap_cutoff_reasoning = (
+                        message_generation_tokens(_cap_last)
+                    )
+                    if cap_cutoff_output + cap_cutoff_reasoning >= cap:
+                        is_cap_cutoff = True
+                        cap_cutoff_has_tool_part = message_has_tool_part(_cap_last)
+                        cap_cutoff_last_context = message_request_context_tokens(
+                            _cap_last
+                        )
+                if is_cap_cutoff:
+                    mapped_terminal = TURN_TERMINAL_CAP_CUTOFF
                 anomaly_record: dict[str, Any] = {
                     "phase": str(phase),
                     "turn_index": int(m.get("turns", 0)),
@@ -707,10 +766,70 @@ class ServeMixin:
                         reasoning_tokens_received=int(
                             m.get("reasoning_tokens", 0) or 0
                         ),
-                        truncations_seen=int(m.get("truncations", 0) or 0),
+                        truncations_seen=int(m.get("provider_truncations", 0) or 0)
+                        + int(m.get("cap_cutoffs", 0) or 0),
                     ),
                     evidence_path=evidence_path,
                 )
+                # ── CAP CUT-OFF RECOVERY (WO-CUTOFF): own budget, own guard ─────
+                # A cap cut-off is the fifth recovery member but rides NONE of
+                # the shared path below: it has its own nudge budget
+                # (_MAX_CAP_CUTOFF_NUDGES, separate from
+                # _MAX_SERVE_RECOVERY_NUDGES) and a context guard — nudging is
+                # pointless when the last request's context plus one full-cap
+                # response cannot fit the model's window. This block always
+                # continues (nudged) or breaks (not nudged), so a cap cut-off
+                # never reaches the shared `recoverable` set.
+                if is_cap_cutoff:
+                    cap_nudged = False
+                    cap_reason = "budget_spent"
+                    if killed_reason is None and exit_code == 0:
+                        if (cap_cutoff_last_context + cap) >= context_window:
+                            cap_reason = "no_context_room"
+                        elif cap_cutoffs_nudged >= _MAX_CAP_CUTOFF_NUDGES:
+                            cap_reason = "budget_spent"
+                        else:
+                            cap_nudged = True
+                            cap_reason = "nudged"
+                    live = getattr(self, "_live", None)
+                    if live is not None:
+                        live.notice(
+                            "harness",
+                            "length_cutoff",
+                            level="warn" if cap_nudged else "error",
+                            cell_seq=getattr(self, "_cell_seq", None),
+                            session_id=session_id,
+                            detail={
+                                "phase": phase,
+                                "attempt": attempt,
+                                "nudged": cap_nudged,
+                                "reason": cap_reason,
+                                "output_tokens": cap_cutoff_output,
+                                "reasoning_tokens": cap_cutoff_reasoning,
+                                "cap": cap,
+                                "wording": (
+                                    "cut-off" if cap_cutoff_has_tool_part
+                                    else "cap-cutoff"
+                                ),
+                            },
+                        )
+                    if cap_nudged:
+                        anomaly_record["retried"] = True
+                        anomaly_record["retry_kind"] = "cap_cutoff_nudge"
+                        cap_cutoffs_nudged += 1
+                        prompt_to_send = (
+                            _FINALIZE_RECOVERY_NUDGE
+                            if cap_cutoff_has_tool_part
+                            else _CAP_CUTOFF_RECOVERY_NUDGE
+                        )
+                        try:
+                            class_watermark = len(
+                                serve_client.get_messages(session_id)
+                            )
+                        except ServeClientError:
+                            pass
+                        continue
+                    break
                 is_provider_outage = (
                     mapped_terminal == TURN_TERMINAL_TRANSPORT_ERROR
                     and str(reason or "") == REASON_PROVIDER_UNAVAILABLE
@@ -969,7 +1088,8 @@ class ServeMixin:
         # the same scoring turns as one that was never nudged, while every
         # burned token stays on the token counters.
         scoring_turns = max(0, d_turns - d_guard_aborted - d_finalize_timeouts)
-        d_truncations = _d("truncations")
+        d_provider_truncations = _d("provider_truncations")
+        d_cap_cutoffs = _d("cap_cutoffs")
         d_cost = float(m.get("cost_usd", 0.0) or 0.0) - float(
             baseline.get("cost_usd", 0.0) or 0.0
         )
@@ -1007,6 +1127,17 @@ class ServeMixin:
             f"status={'ok' if idle else 'timeout'}"
         )
 
+        # WO-CUTOFF Part D: the largest per-request context (input + cache
+        # read + cache write) of this phase, measured over the messages at/
+        # after the phase-start watermark. None when absent — never 0.
+        try:
+            _context_msgs = serve_client.get_messages(session_id)[
+                context_peak_watermark:
+            ]
+        except ServeClientError:
+            _context_msgs = []
+        context_peak = max_request_context_tokens(_context_msgs)
+
         return _OpencodeRunStats(
             input_tokens=d_input,
             output_tokens=d_output,
@@ -1020,7 +1151,9 @@ class ServeMixin:
             cost_usd=d_cost,
             budget_stop_detected=False,
             budget_stop_signature=None,
-            truncations=d_truncations,
+            provider_truncations=d_provider_truncations,
+            cap_cutoffs=d_cap_cutoffs,
+            cap_cutoffs_nudged=cap_cutoffs_nudged,
             zero_tool_turns=0,
             terminal_zero_tool_turn=False,
             zero_tool_resumes=0,
@@ -1036,6 +1169,7 @@ class ServeMixin:
             context_exhausted=context_hit,
             context_tokens=context_size,
             context_limit_tokens=context_limit,
+            context_peak_tokens=context_peak,
         )
 
     def _run_opencode_serve_chunked(
@@ -1075,7 +1209,12 @@ class ServeMixin:
         sum_cache_write = 0
         sum_turns = 0
         sum_cost = 0.0
-        sum_truncations = 0
+        sum_provider_truncations = 0
+        sum_cap_cutoffs = 0
+        sum_cap_cutoffs_nudged = 0
+        # Part D peak is MAXED across chunks, never summed — it is a size, not
+        # a count. None until some chunk records one (absent, never 0).
+        sum_context_peak: int | None = None
         sum_recovery_nudges = 0
         sum_guard_aborted = 0
         sum_finalize_timeouts = 0
@@ -1100,7 +1239,9 @@ class ServeMixin:
                 killed_reason=killed_reason,
                 exit_code=exit_code,
                 cost_usd=sum_cost,
-                truncations=sum_truncations,
+                provider_truncations=sum_provider_truncations,
+                cap_cutoffs=sum_cap_cutoffs,
+                cap_cutoffs_nudged=sum_cap_cutoffs_nudged,
                 turn_anomalies=tuple(anomalies),
                 chunk_reports=tuple(chunk_reports),
                 recovery_nudges=sum_recovery_nudges,
@@ -1110,6 +1251,7 @@ class ServeMixin:
                 context_exhausted=bool(context and context.context_exhausted),
                 context_tokens=context.context_tokens if context else 0,
                 context_limit_tokens=context.context_limit_tokens if context else None,
+                context_peak_tokens=sum_context_peak,
             )
 
         def _drive(phase: str, prompt: str) -> _OpencodeRunStats:
@@ -1119,7 +1261,10 @@ class ServeMixin:
                 sum_reasoning, \
                 sum_turns, \
                 sum_cost, \
-                sum_truncations
+                sum_provider_truncations, \
+                sum_cap_cutoffs, \
+                sum_cap_cutoffs_nudged, \
+                sum_context_peak
             nonlocal sum_cache_read, sum_cache_write
             nonlocal sum_recovery_nudges, sum_guard_aborted, sum_finalize_timeouts
             nonlocal sum_observation_lost
@@ -1133,6 +1278,7 @@ class ServeMixin:
                 prior_cost_usd=prior_cost_usd + sum_cost,
                 timeout_s=timeout_s,
                 kill_hook=kill_hook,
+                attempt=1,
             )
             sum_input += stats.input_tokens
             sum_output += stats.output_tokens
@@ -1141,7 +1287,13 @@ class ServeMixin:
             sum_cache_write += stats.cache_write_tokens
             sum_turns += stats.turns
             sum_cost += stats.cost_usd
-            sum_truncations += stats.truncations
+            sum_provider_truncations += stats.provider_truncations
+            sum_cap_cutoffs += stats.cap_cutoffs
+            sum_cap_cutoffs_nudged += stats.cap_cutoffs_nudged
+            if stats.context_peak_tokens is not None and (
+                sum_context_peak is None or stats.context_peak_tokens > sum_context_peak
+            ):
+                sum_context_peak = stats.context_peak_tokens
             sum_recovery_nudges += stats.recovery_nudges
             sum_guard_aborted += stats.guard_aborted_turns
             sum_finalize_timeouts += stats.finalize_timeout_turns

@@ -34,6 +34,7 @@ from harness.serve_client import (
 from .constants import (
     PROVIDER_BACKOFF_SCHEDULE_S,
     TRUNCATED_STEP_FINISH_REASONS,
+    TURN_TERMINAL_CAP_CUTOFF,
     TURN_TERMINAL_GUARD_ABORT,
     TURN_TERMINAL_STALLED,
     TURN_TERMINAL_TRANSPORT_ERROR,
@@ -72,6 +73,8 @@ def _is_unrecovered_anomaly(record: dict[str, Any]) -> bool:
     if terminal == TURN_TERMINAL_TRANSPORT_ERROR and str(
         record.get("reason") or ""
     ) in ({REASON_PROVIDER_UNAVAILABLE} | RECOVERABLE_STREAM_DEATH_REASONS):
+        return False
+    if terminal == TURN_TERMINAL_CAP_CUTOFF:
         return False
     return True
 

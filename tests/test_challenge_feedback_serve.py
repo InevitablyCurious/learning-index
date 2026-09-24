@@ -42,7 +42,7 @@ def test_run_cell_attempt_serve_driven_feedback_delivered_via_prompt_async(
         "output_tokens": 20,
         "reasoning_tokens": 5,
         "cost_usd": 0.003,
-        "truncations": 0,
+        "provider_truncations": 0,
         "error_parts": 0,
     }
     cell = _FakeCell()
@@ -144,7 +144,7 @@ def test_run_cell_attempt_serve_driven_resume_truncation_writes_evidence(
     as it does on an initial one — proven by a deliberately induced truncation
     on a RESUME (serve-drive phase ``feedback-1``, attempt 2), not by
     inspection. The serve-path evidence write is gated on
-    ``classify_transport_anomaly`` returning a terminal; here ``truncations: 1``
+    ``classify_transport_anomaly`` returning a terminal; here ``provider_truncations: 1``
     forces ``(TERMINAL_TRUNCATED, "stream-incomplete")``, so the anomaly entry
     AND the truncation-evidence.jsonl record must both be produced. A hermetic
     ``_FakeCell`` has no ``.config`` worktree, so the evidence falls back to
@@ -158,7 +158,7 @@ def test_run_cell_attempt_serve_driven_resume_truncation_writes_evidence(
         "output_tokens": 40,
         "reasoning_tokens": 15,
         "cost_usd": 0.0,
-        "truncations": 1,
+        "provider_truncations": 1,
         "error_parts": 0,
     }
     cell = _FakeCell()

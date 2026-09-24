@@ -43,7 +43,9 @@ class _OpencodeRunStats:
     cache_write_tokens: int = 0
     budget_stop_detected: bool = False
     budget_stop_signature: str | None = None
-    truncations: int = 0
+    provider_truncations: int = 0
+    cap_cutoffs: int = 0
+    cap_cutoffs_nudged: int = 0
     zero_tool_turns: int = 0
     terminal_zero_tool_turn: bool = False
     zero_tool_resumes: int = 0
@@ -85,6 +87,9 @@ class _OpencodeRunStats:
     context_exhausted: bool = False
     context_tokens: int = 0
     context_limit_tokens: int | None = None
+    # Part D: the largest per-request context (input + cache read + cache write)
+    # of this phase. None = not recorded (absent, never 0).
+    context_peak_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -138,7 +143,13 @@ class ChallengeCellResult:
     served_failed: int | None = None
     served_confirmed: int | None = None
     funnel_snapshot: dict[str, dict[str, int | None]] | None = None
-    truncations: int = 0
+    # Truncation accounting split (WO-CUTOFF): provider_truncations are genuine
+    # provider truncations (unknown / stream-incomplete / length BELOW our cap);
+    # cap_cutoffs are the model hitting OUR output cap (length AT/above the cap),
+    # a fixed limit, never a provider failure, never a void.
+    provider_truncations: int = 0
+    cap_cutoffs: int = 0
+    cap_cutoffs_nudged: int = 0
     zero_tool_turns: int = 0
     zero_tool_resumes: int = 0
     zero_tool_turn_honest_fails: int = 0

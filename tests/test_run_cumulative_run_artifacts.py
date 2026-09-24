@@ -40,6 +40,11 @@ def _cell_result() -> Any:
                 "n_problems": 0,
                 "failed_gates": [],
                 "attempt_cost_usd": 0.0,
+                # WO-CUTOFF: per-attempt context figures sourced from
+                # attempt_reports; the ledger writer copies them onto the
+                # attempt row only when present (None = not recorded).
+                "context_peak": 1234,
+                "context_window": 200000,
             }
         ]
         session_id = "sid-1"
@@ -217,7 +222,12 @@ def test_run_manifest_and_status_stream_written(tmp_path: Path) -> None:
         # WO-TRUNC-1: terminal outcome is recorded, never placeholder-null.
         assert record["terminal_outcome"] is True  # verdict PASS
         assert record["terminal_reason"] == "gates_green"
-        assert record["length_truncations"] == 0
+        assert record["provider_truncations"] == 0
+        assert record["cap_cutoffs"] == 0
+        assert record["cap_cutoffs_nudged"] == 0
+        # WO-CUTOFF: per-attempt context figures flow from attempt_reports.
+        assert record["context_peak"] == 1234
+        assert record["context_window"] == 200000
         assert record["truncated_turns"] == 0
         assert record["truncated_turns_retried"] == 0
         assert record["unmetered_turns"] == 0
@@ -276,7 +286,9 @@ def test_turn_terminal_records_appended_for_truncated_turns(tmp_path: Path) -> N
     result = _cell_result()
     result.verdict = "FAIL"
     result.termination_reason = "transport_incomplete"
-    result.truncations = 1
+    result.provider_truncations = 1
+    result.cap_cutoffs = 2
+    result.cap_cutoffs_nudged = 1
     result.truncated_turns = 1
     result.truncated_turns_retried = 1
     result.unmetered_turns = 1
@@ -326,7 +338,9 @@ def test_turn_terminal_records_appended_for_truncated_turns(tmp_path: Path) -> N
     attempt = attempt_records[0]
     assert attempt["terminal_outcome"] is False  # FAIL, not a placeholder null
     assert attempt["terminal_reason"] == "transport_incomplete"
-    assert attempt["length_truncations"] == 1
+    assert attempt["provider_truncations"] == 1
+    assert attempt["cap_cutoffs"] == 2
+    assert attempt["cap_cutoffs_nudged"] == 1
     assert attempt["truncated_turns"] == 1
     assert attempt["truncated_turns_retried"] == 1
     assert attempt["unmetered_turns"] == 1

@@ -46,7 +46,7 @@ from typing import Any, Callable
 
 from harness.backends.base import NeedCard
 from harness.checkpoint import checkpoint_root, record_checkpoint
-from harness.context_budget import CONTEXT_EXHAUSTED
+from harness.context_budget import CONTEXT_EXHAUSTED, model_limits
 from harness.serve_client import WORKER_DIED
 from harness.egress import egress_container_name
 from harness.fingerprint import cell_fingerprint, write_cell_fingerprint
@@ -898,7 +898,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         cache_read_total = 0
         cache_write_total = 0
         turns_total = 0
-        truncations_total = 0
+        provider_truncations_total = 0
+        cap_cutoffs_total = 0
+        cap_cutoffs_nudged_total = 0
         zero_tool_turns_total = 0
         zero_tool_resumes_total = 0
         zero_tool_turn_honest_fails_total = 0
@@ -1243,7 +1245,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     cache_read_total += first_run.cache_read_tokens
                     cache_write_total += first_run.cache_write_tokens
                     turns_total += first_run.turns
-                    truncations_total += first_run.truncations
+                    provider_truncations_total += first_run.provider_truncations
+                    cap_cutoffs_total += first_run.cap_cutoffs
+                    cap_cutoffs_nudged_total += first_run.cap_cutoffs_nudged
                     zero_tool_turns_total += first_run.zero_tool_turns
                     zero_tool_resumes_total += first_run.zero_tool_resumes
                     if first_run.zero_tool_turn_honest_fail:
@@ -1305,7 +1309,10 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                                 cost_usd=first_run.cost_usd,
                                 budget_stop_detected=first_run.budget_stop_detected,
                                 budget_stop_signature=first_run.budget_stop_signature,
-                                truncations=first_run.truncations,
+                                provider_truncations=first_run.provider_truncations,
+                                cap_cutoffs=first_run.cap_cutoffs,
+                                cap_cutoffs_nudged=first_run.cap_cutoffs_nudged,
+                                context_peak_tokens=first_run.context_peak_tokens,
                                 zero_tool_turns=first_run.zero_tool_turns,
                                 terminal_zero_tool_turn=first_run.terminal_zero_tool_turn,
                                 zero_tool_resumes=first_run.zero_tool_resumes,
@@ -1562,6 +1569,16 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 stage_view = player_view(
                     problems, self._player_stages(), is_infra=self._is_harness_infra_check
                 )
+                context_peak = (
+                    prev_run_stats.context_peak_tokens
+                    if prev_run_stats is not None
+                    else None
+                )
+                context_window = (
+                    model_limits(self.model)["context"]
+                    if prev_run_stats is not None
+                    else None
+                )
                 live = getattr(self, "_live", None)
                 if live is not None:
                     # No `phase.start` here: this site is where an attempt
@@ -1595,6 +1612,8 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         told=len(stage_view.visible),
                         withheld=len(stage_view.withheld),
                         unevaluated=len(stage_view.unevaluated),
+                        context_peak=context_peak,
+                        context_window=context_window,
                     )
 
                 if _worker_exit_annot != "harness_error":
@@ -1622,6 +1641,8 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                             "told_checks": len(stage_view.visible),
                             "withheld_checks": len(stage_view.withheld),
                             "unevaluated_checks": len(stage_view.unevaluated),
+                            "context_peak": context_peak,
+                            "context_window": context_window,
                             # Scored cell whose metering awaits parity confirmation against the
                             # first scored cell / the proxy log before it is treated as data.
                             "parity_pending": True,
@@ -1904,6 +1925,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     prior_cost_usd=cell_cost_usd,
                     kill_hook=active_cell.kill_worker_processes,
                     stdin_text=feedback,
+                    attempt=next_attempt,
                 )
                 next_attempt_cost_usd += feedback_run.cost_usd
                 attempt_costs_usd[next_attempt] = next_attempt_cost_usd
@@ -1917,7 +1939,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     feedback_run.output_tokens + feedback_run.reasoning_tokens
                 )
                 turns_total += feedback_run.turns
-                truncations_total += feedback_run.truncations
+                provider_truncations_total += feedback_run.provider_truncations
+                cap_cutoffs_total += feedback_run.cap_cutoffs
+                cap_cutoffs_nudged_total += feedback_run.cap_cutoffs_nudged
                 zero_tool_turns_total += feedback_run.zero_tool_turns
                 zero_tool_resumes_total += feedback_run.zero_tool_resumes
                 if feedback_run.zero_tool_turn_honest_fail:
@@ -2146,7 +2170,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
             served_failed=served_failed,
             served_confirmed=served_confirmed,
             funnel_snapshot=funnel_snapshot,
-            truncations=truncations_total,
+            provider_truncations=provider_truncations_total,
+            cap_cutoffs=cap_cutoffs_total,
+            cap_cutoffs_nudged=cap_cutoffs_nudged_total,
             zero_tool_turns=zero_tool_turns_total,
             zero_tool_resumes=zero_tool_resumes_total,
             zero_tool_turn_honest_fails=zero_tool_turn_honest_fails_total,
@@ -2211,6 +2237,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         prior_cost_usd: float,
         kill_hook: Callable[[], None] | None,
         stdin_text: str,
+        attempt: int | None = None,
     ) -> _OpencodeRunStats:
         """Run ONE cell attempt, delivered over the serve session.
 
@@ -2254,6 +2281,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 prior_cost_usd=prior_cost_usd,
                 timeout_s=self.run_timeout_s,
                 kill_hook=kill_hook,
+                attempt=attempt,
             )
         except ServeTransportError:
             raise

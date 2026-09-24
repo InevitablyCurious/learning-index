@@ -656,7 +656,7 @@ def test_serve_drive_provider_outage_is_recovered_not_scored(tmp_path: Path) -> 
     client = _FakeServeClient()
     client.assistant_terminal_script = [{"info_error": live_error}]
     outage = dict(_ZERO_METRICS)
-    outage.update(info_errors=1, truncations=1, error_texts=[live_error])
+    outage.update(info_errors=1, provider_truncations=1, error_texts=[live_error])
     client.metrics_script = [
         dict(_ZERO_METRICS),  # baseline
         outage,  # the provider goes away

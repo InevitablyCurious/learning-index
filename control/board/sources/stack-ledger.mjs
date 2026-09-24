@@ -252,7 +252,7 @@ function cellsInRun(run) {
         terminal: false,
         terminal_reason: null,
         full_green: false,
-        length_truncations: 0,
+        provider_truncations: 0,
         truncated_turns: 0,
       });
     }
@@ -298,7 +298,7 @@ function cellsInRun(run) {
     if (r.terminal_outcome === true || str(r.terminal_reason)) c.terminal = true;
     c.terminal_reason = str(r.terminal_reason) ?? c.terminal_reason;
     c.full_green = p.full_green === true;
-    c.length_truncations = Math.max(c.length_truncations, int(r.length_truncations) ?? 0);
+    c.provider_truncations = Math.max(c.provider_truncations, int(r.provider_truncations) ?? 0);
     c.truncated_turns = Math.max(c.truncated_turns, int(r.truncated_turns) ?? 0);
     // The unrecovered-anomaly subset is what the void rule reads; truncated_turns
     // also counts recovered loops and never decides a measurement.
@@ -368,7 +368,7 @@ function cellsInRun(run) {
       void_instrument: meas
         ? !meas.full_green &&
           (meas.terminal_reason === "transport_incomplete" ||
-            meas.length_truncations > 0 ||
+            meas.provider_truncations > 0 ||
             meas.unrecovered_anomaly_turns > 0)
         : false,
 

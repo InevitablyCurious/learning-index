@@ -402,7 +402,7 @@ def _write_truncated_attempt(
     full_green: bool,
     memory_mode: str = "on",
     terminal_reason: str | None = None,
-    length_truncations: int = 0,
+    provider_truncations: int = 0,
     truncated_turns: int = 0,
     instrument_anomaly_turns: int | None = None,
     unrecovered_anomaly_turns: int | None = None,
@@ -411,7 +411,7 @@ def _write_truncated_attempt(
     """Mirror ``_write_scored_attempt`` but with the per-attempt truncation
     fields that the scorecard's VOID-INSTRUMENT signal reads.
 
-    Defaults carry NO truncation signal (``terminal_reason``/``length_truncations``/
+    Defaults carry NO truncation signal (``terminal_reason``/``provider_truncations``/
     ``truncated_turns`` absent or zero) so a caller may also use it for a plain
     non-truncated non-green cell.
 
@@ -454,8 +454,8 @@ def _write_truncated_attempt(
     }
     if terminal_reason is not None:
         record["terminal_reason"] = terminal_reason
-    if length_truncations:
-        record["length_truncations"] = length_truncations
+    if provider_truncations:
+        record["provider_truncations"] = provider_truncations
     if truncated_turns:
         record["truncated_turns"] = truncated_turns
     if instrument_anomaly_turns:
@@ -787,7 +787,7 @@ def test_a_looping_model_is_scored_not_voided(tmp_path: Path) -> None:
     graded attempts and finished at 39/53 — and was voided. All three of its
     "truncations" were ``terminal: guard_abort, reason: loop_guard``, each with
     ``finish_reason: "tool-calls"`` (a clean finish, not ``length``),
-    ``truncations_seen: 0``, ``length_truncations: 0``, and ``retried: true``.
+    ``truncations_seen: 0``, ``provider_truncations: 0``, and ``retried: true``.
     Nothing had truncated anything; the harness caught a looping model, nudged
     it, and the run carried on.
 

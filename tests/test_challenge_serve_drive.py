@@ -44,7 +44,7 @@ def test_serve_drive_happy_path(tmp_path: Path) -> None:
         "output_tokens": 50,
         "reasoning_tokens": 25,
         "cost_usd": 0.012,
-        "truncations": 0,
+        "provider_truncations": 0,
         "error_parts": 0,
     }
     cell = _FakeCell()
@@ -69,7 +69,7 @@ def test_serve_drive_happy_path(tmp_path: Path) -> None:
     assert stats.output_tokens == 50
     assert stats.reasoning_tokens == 25
     assert stats.cost_usd == 0.012
-    assert stats.truncations == 0
+    assert stats.provider_truncations == 0
     assert stats.turn_anomalies == ()
     assert stats.zero_tool_turn_honest_fail is False
     assert stats.resume_count == 0
@@ -89,7 +89,7 @@ def test_serve_drive_timeout_calls_kill_hook(tmp_path: Path) -> None:
         "output_tokens": 30,
         "reasoning_tokens": 10,
         "cost_usd": 0.0,
-        "truncations": 0,
+        "provider_truncations": 0,
         "error_parts": 0,
     }
     cell = _FakeCell()
@@ -189,7 +189,7 @@ def test_serve_drive_timeout_abort_failure_still_timeout(tmp_path: Path) -> None
         "output_tokens": 5,
         "reasoning_tokens": 0,
         "cost_usd": 0.0,
-        "truncations": 0,
+        "provider_truncations": 0,
         "error_parts": 0,
     }
     cell = _FakeCell()
@@ -253,7 +253,7 @@ def test_serve_drive_never_busy_is_loud_exit1_not_clean_zero(tmp_path: Path) -> 
         "output_tokens": 0,
         "reasoning_tokens": 0,
         "cost_usd": 0.0,
-        "truncations": 0,
+        "provider_truncations": 0,
         "error_parts": 0,
     }
     cell = _FakeCell()
@@ -293,7 +293,7 @@ def test_serve_drive_busy_window_raced_turn_is_metered_not_voided(
         "output_tokens": 20,
         "reasoning_tokens": 5,
         "cost_usd": 0.0,
-        "truncations": 0,
+        "provider_truncations": 0,
         "error_parts": 0,
     }
     cell = _FakeCell()
@@ -325,7 +325,7 @@ def test_serve_drive_truncation_produces_anomaly(tmp_path: Path) -> None:
         "output_tokens": 40,
         "reasoning_tokens": 15,
         "cost_usd": 0.0,
-        "truncations": 1,
+        "provider_truncations": 1,
         "error_parts": 0,
     }
     cell = _FakeCell()
@@ -361,7 +361,7 @@ def test_serve_drive_transport_error_produces_anomaly(tmp_path: Path) -> None:
         "output_tokens": 5,
         "reasoning_tokens": 0,
         "cost_usd": 0.0,
-        "truncations": 0,
+        "provider_truncations": 0,
         "error_parts": 1,
     }
     cell = _FakeCell()
