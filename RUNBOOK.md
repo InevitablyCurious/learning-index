@@ -106,8 +106,10 @@ curl -s -X POST 127.0.0.1:8718/api/run/start -d '{"confirm":"<token>"}'
 
 The control plane spawns `run_cumulative.py [--cloud --provider <vendor> --model <model> |
 --model <alias>] [--org <org>] run --mode <arm>` and writes the launch log IN-TREE at
-`runs/<tree>/<arm>-cell-<ts>.log`. The direct `nohup` CLI launch (step 3 below) remains a valid
-SECONDARY path.
+`runs/<tree>/<arm>-cell-<stamp>-s<NNNN>.log` plus a durable per-cell launch record at
+`runs/<tree>/launches/<run_id>.json` (the record's `log_path` keys the log; enumeration and
+STOP read the records, not the logs — §7). The direct `nohup` CLI launch (step 3 below)
+remains a valid SECONDARY path.
 
 The manual equivalents below are reference for debugging a NO-GO.
 
@@ -127,7 +129,7 @@ docker image inspect bench-worker:v1 --format '{{index .Config.Labels "okp.worke
 
 # 3. Run one cell — SECONDARY PATH. The control plane (127.0.0.1:8718) is the
 #    recommended start (above): it owns backgrounding, stdin discipline and log
-#    placement, and writes the log IN-TREE at runs/<tree>/<arm>-cell-<ts>.log —
+#    placement, and writes the log IN-TREE at runs/<tree>/<arm>-cell-<stamp>-s<NNNN>.log —
 #    NOT runs/off-cell-$TS.log. This direct launch places its own log via the
 #    shell redirect below. (OFF; ON cells add `--mode on --org <org>`, §2).
 #    `--model <alias>` pins the subject: the proxy makes that exact model
@@ -164,7 +166,7 @@ curl -s -X POST 127.0.0.1:8718/api/tree/reset -d '{"confirm":"<token>"}'
 #    memory<ARM>/cell-NNNN/live-view.txt):
 sed -n 's/^attach_cmd=//p' runs/*/*/*/*/*/memory*/cell-*/live-view.txt
 #    (equivalently, from the launch log — in-tree for control-plane starts:)
-grep -E 'attach_cmd|session_id' runs/<tree>/<arm>-cell-<ts>.log | tail -5
+grep -E 'attach_cmd|session_id' runs/<tree>/<arm>-cell-<stamp>-s<NNNN>.log | tail -5
 #    then attach to the cell's live worker serve — the id is per-run, e.g.:
 opencode attach http://127.0.0.1:<port> --session ses_00b54ddb7ffemO5eRSBu0ni034
 #    Each cell's live view is published on its OWN host port — free-port allocated
@@ -996,8 +998,10 @@ preflight's `assert_no_docker_residue` checks the cell container, never a stale 
 (`docker_worker.py:374-375`) with no watcher, so a silently-restarted sidecar goes unnoticed.
 
 **Why no run can hang forever on a nudge loop anymore.** The pre-purge stdout transport re-spawned
-a fresh subprocess per zero-tool resume, so neither the mtime-keyed stall detector (every nudge
-wrote a PROGRESS line, keeping the launch log fresh — `control/runstate.mjs:344,:371`) nor the
+a fresh subprocess per zero-tool resume, so neither the control-plane stall detector (every nudge
+wrote a PROGRESS line, keeping the launch log fresh — liveness is now the per-cell heartbeat
+`cellHeartbeatAge`, `control/runstate.mjs:76-80`; log mtime is informational-only `log_silent_s`,
+`runstate.mjs:541-542`) nor the
 run-level `run_timeout_s` (default `5400`, `backgammon.py:641`) could bound it: each respawn reset
 the clock, and a text-only "done" ran forever with no automatic kill. That loop is gone. Every
 surviving nudge path has a budget that fails closed (`_MAX_SERVE_RECOVERY_NUDGES=20` per phase —
@@ -1031,17 +1035,18 @@ cause):**
   (`docker_worker.py:374-375`) has no watcher (no `RestartCount` consumer anywhere).
 - The reaper's dead filter never matches real cells (cells named `bench-cell-cumulative-…`,
   `backgammon.py:2176-2177`; reaper filters `bench-cell-<task-label>`,
-  `process_reaper.py:296-311`). The mtime-keyed stall detector is likewise blind while nudges write
-  PROGRESS lines (`control/runstate.mjs:344,:371`) — but since the 2026-09-03 purge every nudge
+  `process_reaper.py:296-311`). The launch-log-mtime stall detector is likewise blind while nudges write
+  PROGRESS lines (liveness is now the per-cell heartbeat, `control/runstate.mjs:76-80`) — but since the 2026-09-03 purge every nudge
   budget is bounded and fails closed, so there is no longer an infinite deadlock for either to hide;
   the reaper gap still leaks containers, just not runs.
 - Stray containers are unwatched: the reaper never matches auto-named leftovers (a
   `bench-worker:v1` container has been observed up for hours with no owner).
 
-### Bench board operations — RESET and RESTORE
+### Bench board operations — RESET, RESTORE and STOP
 
-The bench board (dashboard `:8717`) drives two run-tree operations through the control service
-(`127.0.0.1:8718`); there is no CLI for either, and both refuse while a cell is in flight.
+The bench board (dashboard `:8717`) drives three operations through the control service
+(`127.0.0.1:8718`); there is no CLI for any of them, and each refuses while a cell is in
+flight.
 
 - **RESET** — backs up first, then mints a fresh tree. Everything currently under `runs/` that is
   benchmark data (the `active-tree.json` pointer and any `runs/<unix-seconds>/` trees) is swept into
@@ -1058,12 +1063,21 @@ The bench board (dashboard `:8717`) drives two run-tree operations through the c
   backup. `POST /api/backups/restore` (preview: `POST /api/backups/restore/preview`). Same
   preview → confirm flow: the preview returns `token` + `restatement`; the commit requires
   `{"id": "<backup-id>", "confirm": "<token>"}`.
+- **STOP** — aborts every live cell, found from the SAME enumeration the board shows (the durable
+  launch records + process scan — never the launch logs, which may already be deleted). Two-step
+  confirm: `POST /api/run/stop/preview` (returns `token` + restatement) → `POST /api/run/stop`
+  `{"confirm":"<token>"}`; both refuse 409 while no cell is in flight. `stopAll` sends each harness
+  one SIGINT so it tears its own cell down, then records each stopped cell as
+  `ended "stopped by operator"` on its durable launch record — a stopped cell is listed ENDED,
+  never dropped, and never deleted.
 
 Run-tree layout:
 
     runs/
       active-tree.json                # the pointer — one line of truth
       <unix-seconds>/                 # a TREE, minted on RESET
+        launches/                     # durable per-cell launch records (<run_id>.json)
+        <arm>-cell-<stamp>-s<NNNN>.log # launch logs live at the TREE ROOT, not in run_dir
         local|cloud/                  # substrate
           <router>/                   # local-llm-proxy (local) or orcarouter (cloud)
             <provider>/
@@ -1325,6 +1339,39 @@ is the same signal production reads in the field. Corollary, cross-referenced on
 in RECALL-PIVOT-SPEC's funnel, not restated here): the normalizer is the sensitivity dial with a
 silent failure mode, detectable only as a ratio between two seams (episodes opened vs repeats
 detected); its counter is not optional instrumentation.
+
+### Hard-won — MODEL-STUCK cell diagnosis (WO-ROUND-DIAGNOSIS-R4)
+
+Three process-knowledge findings from the first scope-only cell diagnosis (run `1790196821`, seeded
+from snapshot `1790178944418-0c648b67a802`; report
+`dev/workspace/reports/1790204512-WO-ROUND-DIAGNOSIS-R4.md`). The cell verdict was **MODEL-STUCK** —
+28/35 checks stuck, the 3 told checks (G01/G02/F06) all MODEL.
+
+- **The backgammon knowledge gates are DELIBERATE, not spec omissions (commit `6eb5832`,
+  2026-09-21).** The opening layout, pip formula, movement rules, and the higher-die rule were
+  removed from `chunk-01.md` on the stated premise "the model should know it"; the commit message
+  documents the intent ("now it has to know it, and it does not … the benchmark finally measuring the
+  model rather than its reading") and the measured consequence (G05 higher-die went from 2/4 to 5/5
+  failing). G01 (opening), G02 (pip), E06 (bar-pip), and G05 grade knowledge the spec deliberately
+  withholds, while the grader still asserts the standard layout (`grader/backend/gates-01-08.test.ts:21-24`)
+  and pip 167 (`:75-76`). **A cell stuck on G01/G02/E06/G05 is the benchmark measuring knowledge the
+  spec withholds by design — read it as MODEL-STUCK, never "restore the rules."** This refines, not
+  contradicts, the Option-A invariant and rule 5.7: the published "requirements" remain the
+  *representation* (function names, data shapes, endpoints, test ids — still published); the *game
+  knowledge* is withheld on purpose. (The 3 TOLD checks were G01/G02/F06 — F06 pip-UI *is* stated in
+  the spec (`chunk-04.md:14,21`) but fails downstream of G02.)
+- **Do not enumerate decoy candidates as a disjunction in a complaint line.** G01's line ("the
+  pieces, the cube, or whose turn it is is off", `grader/feedback.json:71`) named three candidates;
+  the model re-verified cube and turn ~6 times while the real defect (the black 8/15-point layout)
+  went unexamined. A disjunction licenses the model to verify the easy named facets and skip the real
+  one. Name the actual defect's facet first, or report a single accurately-located symptom. (G02's
+  "moves are left" — `feedback.json:75` — mislabels the pip count and sent the model hunting a
+  nonexistent counter; a second wording hazard.)
+- **`live.jsonl` `attempt.end` carries NO `told` field** — `failed` is the total failing-check count,
+  not the told count (`harness/adapters/challenge/runner.py:1584-1595` emits `failed`, `withheld`,
+  `unevaluated`, `stage`, `stage_name` only). Derive `told = failed − withheld` (=
+  `n_problems − withheld − unevaluated`); in this cell `failed`=28/35 while `told`=3. (Code-owner: an
+  `attempt.end` `told` field would remove the derivation — flagged, not edited.)
 
 ---
 

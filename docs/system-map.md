@@ -24,7 +24,7 @@ system.
 | Harness | `harness/` | The Python measuring instrument: campaign sequencer + manifest, task adapters, scoring/scorecard, cell isolation, egress, image identity, blinding. |
 | Task | `task/backgammon/` | The instrument's task: `scaffold/` (stubs the model builds from), `golden/` (reference solution, never shown), `prompts/` (chunked build prompts). |
 | Grader | `grader/` | `report.mjs` + the gate suite (conformance / backend / frontend, plus `meta/` and `quarantine/`). The only component that sees the golden. |
-| Control plane | `control/` | Node stdlib-only `server.mjs`, loopback :8718 — the only process that reads run files (`control/board/sources/`) or changes anything; assembles and pushes the board, spawns the harness, N concurrent cells at a time. |
+| Control plane | `control/` | Node stdlib-only `server.mjs`, loopback :8718 — the only process that reads run files (`control/board/sources/`) or changes anything; assembles and pushes the board, spawns the harness, N concurrent cells at a time, each tracked in a durable launch record (`cell-registry.mjs`, §9). |
 | Dashboard | `dashboard/` | Container at :8717: serves the board page and relays `/api/*` to the control plane (`lib/control-relay.mjs`); holds no run data. Optional LAN publish (`docker-compose.lan.yml`) with a peer check (`lib/net-policy.mjs`). |
 | Images | `images/` | `worker/Dockerfile`, `grader/Dockerfile`, `sidecar/` (egress + loop-kill scanner + supervised shell). |
 | Scripts | `scripts/` | Entrypoints: `run_cumulative.py` (canonical), `rebuild_worker_image.py`, `rebuild_grader_image.py`, `bench_preflight.py`. |
@@ -51,7 +51,10 @@ system.
 The **control plane** (`control/server.mjs`, binds 127.0.0.1:8718, no shell, N
 concurrent cells at a time) spawns the entrypoint
 `.venv/bin/python scripts/run_cumulative.py run --mode <arm>` and observes
-read-only. The board (`:8717`) is a separate, read-only viewer.
+read-only. Every cell it spawns is written at launch as a durable launch
+record (`runs/<treeId>/launches/<run_id>.json`, §9), so a control-plane restart
+re-adopts running cells instead of losing their pids. The board (`:8717`) is a
+separate, read-only viewer.
 
 ## 4. Memory story — OFF vs ON
 
@@ -167,10 +170,11 @@ stale-name `docker rm -f` guard.
 it); the port rides the `cell.start` record and is surfaced by the board. The fixed
 `:8719` is retired.
 
-**N-concurrent control plane.** `control/run-ledger.mjs` (N-slot run registry),
-`readRunState` returns `runs[]`, launch is gated **per model** (`models-ledger.mjs`
-`inFlightModels`), and `allocateSequenceIndex` is atomic. `/api/run/start` accepts
-`concurrency` N (default 1) and pre-flights all N before spawning.
+**N-concurrent control plane.** `control/run-ledger.mjs` (the in-memory live-cell
+cache over the durable cell registry — see §9), `readRunState` returns `runs[]`,
+launch is gated **per model** (`inFlightModels` in `run-ledger.mjs`, consumed by
+`lib/validate.mjs:65`), and `allocateSequenceIndex` is atomic. `/api/run/start`
+accepts `concurrency` N (default 1) and pre-flights all N before spawning.
 
 **Batch baseline.** `control/batch.mjs` computes the median of scored runs (voids
 excluded, never counted as failures) over a fingerprint of 8 inputs (build prompts,
@@ -191,11 +195,14 @@ has not been run — whether the load-fragile in-gate timers (`pregate.ts:563` 2
 
 ### Hard-won notes (charted from the concurrency workstream)
 
-- **run_id is triple-overloaded** — control-plane ledger uuid (`run-ledger.mjs:34`,
-  in-memory only) · harness live-stream `run_label` = `cumulative-{seq:04d}-{arm}-{model}`
-  (`scripts/run_cumulative/runner.py:878`) · harness `manifest.run_id` = manifest
-  parent-dir basename (`scripts/run_cumulative/runner.py:516`). Durable feed identity is
-  `(run_dir, sequence_index)`; `run_id` is live-only.
+- **run_id is triple-overloaded** — control-plane launch-record id, now DURABLE
+  (it names the launch record `runs/<treeId>/launches/<run_id>.json`,
+  `cell-registry.mjs:60-62`) · harness live-stream `run_label` =
+  `cumulative-{seq:04d}-{arm}-{model}` (`scripts/run_cumulative/runner.py:878`) ·
+  harness `manifest.run_id` = manifest parent-dir basename
+  (`scripts/run_cumulative/runner.py:516`). Durable feed identity is still
+  `(run_dir, sequence_index)` (the per-cell key that survives a restart); `run_id`
+  is durable too — the record's filename.
 - **serve fields are HEAD-only** — `serve_host_port`/`serve_url` live only in the
   `cell.start` record at the HEAD of `live.jsonl`; the tail readers (`backend-feed.mjs`
   256 KB, `live-stream.mjs` 512 KB) miss them on long streams. Read via
@@ -212,9 +219,9 @@ has not been run — whether the load-fragile in-gate timers (`pregate.ts:563` 2
 - **`session_records: []` before population** — the manifest hits disk empty
   (`manifest.py:224`) before the sequencer fills it; a JS mirror of the index bound must
   treat `[]` as absent (Python truthiness).
-- **cellDirForRun is `/^memory/i`-only** (`runstate.mjs:258`) — pre-arm-layout `sessions/`
-  cells are unresolvable and keyed reads yield empty, even though `runstate.mjs:132`
-  recognizes `sessions/` in its run-dir regex (the two disagree in one file).
+- **cellDirForRun is `/^memory/i`-only** (`runstate.mjs:307`) — pre-arm-layout `sessions/`
+  cells are unresolvable and keyed reads yield empty, even though `runstate.mjs:180`
+  (`runDirOf`) recognizes `sessions/` in its run-dir regex (the two disagree in one file).
 - **gate PROGRESS ↔ sequence_index link is the `-sNNNN.log` filename** — the cell dir
   holds `live.jsonl`, not the `step=gate-` text `readGateActivity` parses; keyed gate
   reads depend on the launch-log `-sNNNN.log` suffix.
@@ -237,3 +244,68 @@ has not been run — whether the load-fragile in-gate timers (`pregate.ts:563` 2
 - **"roster" names three unrelated things** — `grader/roster.mjs` (gate enumeration), the
   control-plane model roster (`control/roster.mjs`), and the run arm/mode (`arm` on/off in
   `control/lib/validate.mjs`). Name the file when citing "roster".
+
+## 9. Durable cell registry (2026-09-23)
+
+Commit `859e492` (`feat(control): durable cell registry — launch records + ledger cache +
+process-scan enumeration`). The control plane's knowledge of cells no longer comes from
+launch-log files — it comes from durable per-cell launch records. A launch log is now
+diagnostics only: it can be deleted, and the cell stays visible and stoppable.
+
+**Launch records.** One JSON per launched cell at
+`runs/<treeId>/launches/<run_id>.json` (flat fallback `runs/launches/` for a non-tree
+run_dir), written atomically (tmp+rename) by the control plane at spawn INTO THE ACTIVE
+TREE, so a RESET archives them with the tree (`tree.mjs` `isBenchmarkData("launches")` →
+true). Nothing ever deletes a record. Schema: `run_id, sequence_index, model, arm, kind,
+org, context, manifest_arg, pid, started_at, log_path, run_dir, finished, terminal_status,
+terminal_ok, ended{at, code, signal, reason, log_tail}` (`control/cell-registry.mjs`).
+
+**Ledger-as-cache.** `control/run-ledger.mjs` is now a LIVE-ONLY CACHE: the Map holds only
+`finished === false` records, hydrated at startup (`initLedger`, called first from
+`state.mjs` `initState`) and written through to disk on every change. A finished/ended cell
+lives on disk, not in memory — that is the bound on the module's state.
+`markRunFinished`/`unregisterRun` are gone, replaced by
+`recordCellEnded(runId, runDir, {reason,…})`, which durably merges the end and evicts the
+cache slot. `evictRun` is a pure cache delete.
+
+**Every exit recorded.** `routes/run.mjs` attaches `child.on("exit")` between spawn and
+`unref`, capturing code/signal/log-tail → `recordCellEnded`. A startup death records
+`"startup failed"`. A record whose pid is gone with no observed exit reconciles to
+`ended "exit not observed"` (`runstate.mjs`); a failed `ps` scan ends nothing
+(indeterminate). A vanishing log NEVER ends a record.
+
+**Enumeration = records + process scan.** `readRunState` (`runstate.mjs`) enumerates from
+the durable records — the live set via `liveRuns()` (the cache) and the ended set via
+`listRecords()` (disk) — plus ONE `ps` scan (`findHarnessProcs`). The scan recovers a
+cell's address from its argv (`--manifest <campaign>/manifest.json`,
+`--sequence-index N`) via `parseHarnessArgv`; only a `run_cumulative.py` command line
+counts as a harness (the pid-reuse guard). Liveness = pid-in-scan, plus the PER-CELL
+heartbeat (`cellHeartbeatAge`, the cell's own `live.jsonl`) — never a run_dir-wide mtime
+proxy.
+
+**STOP from the same enumeration.** `stopAll`/`planStop` (`lib/lifecycle.mjs`) plan from
+`readRunState`; a stopped cell is recorded `ended "stopped by operator"` (signal SIGINT),
+NEVER deleted. `sweepDocker` derives container names from the run's own launch log; with
+no log it derives nothing and sweeps nothing (it never guesses).
+
+**Cleanup folded in.** `run-ledger` evict-on-finish bounds the Map; the SIGKILLed-harness
+wedge (a log+run_dir with `finished:false` blocking its model via `lib/validate.mjs:65`
+`inFlightModels`) is fixed by process reconciliation; `backend-feed.mjs` `errorScans` is
+FIFO-capped at 256 paths.
+
+**Live-verified 2026-09-23.** Broken tree archived; N=2 cells survived launch-log deletion +
+a control-plane restart and stayed `live_count:2`; STOP then cleaned them (zero leftover
+containers/volumes) with both recorded ended-not-dropped.
+
+### Hard-won (live reproduction)
+
+- **Model slug resolution** — bench slugs resolve against the LIVE proxy catalog
+  (`Local LLM Proxy/config/models.yaml`, `GET :4545/v1/models`), never in-repo mirrors
+  (the `bench/` mirror's `roster.mjs`/`config.py` lag and omit aliases).
+- **Two-step API** — launch/stop/reset are all `POST /api/*/preview` (mints a `token`)
+  then `POST /api/*` with `{"confirm": token}`.
+- **Launch-log location** — the `.log` and its `.log.notices.jsonl` sidecar live at the
+  RUN-TREE ROOT (`runs/<tree>/off-cell-<stamp>-s<NNNN>.log`), keyed off the record's
+  `log_path`; NOT inside `run_dir`.
+- **Module rename** — the design report cited `control/launches.mjs`; the committed module
+  is `control/cell-registry.mjs` (same module, renamed).
