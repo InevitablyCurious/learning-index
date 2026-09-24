@@ -225,28 +225,53 @@ test("runs source: each card carries EXACTLY the contract keys, with the stated 
   }
 });
 
-test("runs source: a scored archived run reads conformed/full_green/verdict in precedence", async () => {
+test("runs source: an archived run's status is its scorecard's verdict — scored is not passed", async () => {
   const runsRoot = fixture();
   try {
-    // The archived cell ends green: conformed on its attempt.end record.
-    const livePath = join(runsRoot, ARCHIVED_RUN, "memoryOFF", "cell-0000", "live.jsonl");
+    const modelDir = join(runsRoot, ARCHIVED_RUN);
+    const livePath = join(modelDir, "memoryOFF", "cell-0000", "live.jsonl");
+    // A FAILING cell (never green, never PASS) that the harness scored.
+    writeFileSync(livePath, JSON.stringify({ kind: "cell.end", verdict: "FAIL", terminal_reason: "attempt_ceiling_reached" }) + "\n");
     writeFileSync(
-      livePath,
-      [
-        JSON.stringify({ kind: "attempt.end", attempt: 2, verdict: "PASS", conformed: true, failed: 0 }),
-        JSON.stringify({ kind: "cell.end", verdict: "PASS", terminal_reason: "converged" }),
-      ].join("\n") + "\n",
+      join(modelDir, "manifest.scorecard.json"),
+      JSON.stringify({ scored_sessions: 1, void_instrument: [], not_scored: [] }),
     );
-    // And the (still empty-ledger) run states its numbers nowhere else: the
-    // measurement fields stay null even for a scored run.
-    const res = await read({ runsRoot, benchRoot: runsRoot });
-    const archived = fixtureCards(res.patch.runs.list).find((c) => c.archived);
-    assert.equal(archived.status, "scored");
+    let res = await read({ runsRoot, benchRoot: runsRoot });
+    let archived = fixtureCards(res.patch.runs.list).find((c) => c.archived);
+    assert.equal(archived.status, "scored", "a failing cell the harness scored is scored");
     assert.equal(archived.turns, null);
-    assert.equal(archived.problems_before, null);
     // No notices in this stream: a live stream with none reads 0, not null.
     assert.equal(archived.loop_errors, 0);
-    assert.equal(archived.stalled_limit_errors, 0);
+
+    // The harness dropped it (run 1790200233: instrument_fault, once shown SCORED).
+    writeFileSync(
+      join(modelDir, "manifest.scorecard.json"),
+      JSON.stringify({ scored_sessions: 0, void_instrument: [{ sequence_index: 0, void_reason: "instrument_fault" }], not_scored: [] }),
+    );
+    res = await read({ runsRoot, benchRoot: runsRoot });
+    archived = fixtureCards(res.patch.runs.list).find((c) => c.archived);
+    assert.equal(archived.status, "void");
+  } finally {
+    rmSync(runsRoot, { recursive: true, force: true });
+  }
+});
+
+test("runs source: a run that aborted before its status stream reads problems from the grader's reports", async () => {
+  // Run 1790202713 (harness_error) wrote no status stream; its attempt reports
+  // state the counts. A pass the grader marked not gradable is not one.
+  const runsRoot = fixture();
+  try {
+    const cellDir = join(runsRoot, ARCHIVED_RUN, "memoryOFF", "cell-0000");
+    writeFileSync(join(cellDir, "live.jsonl"), JSON.stringify({ kind: "cell.end", verdict: "FAIL", terminal_reason: "harness_error" }) + "\n");
+    const probs = (n) => JSON.stringify({ gradable: true, problems: Array.from({ length: n }, (_, i) => ({ check: `c${i}` })) });
+    writeFileSync(join(cellDir, "attempt-1-report.json"), probs(28));
+    writeFileSync(join(cellDir, "attempt-2-report.json"), probs(27));
+    writeFileSync(join(cellDir, "attempt-3-report.json"), JSON.stringify({ gradable: false, problems: [] }));
+    const res = await read({ runsRoot, benchRoot: runsRoot });
+    const archived = fixtureCards(res.patch.runs.list).find((c) => c.archived);
+    assert.equal(archived.status, "harness_error");
+    assert.equal(archived.problems_before, 28);
+    assert.equal(archived.problems_after, 27, "the unmeasured third pass is not the last measurement");
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
   }

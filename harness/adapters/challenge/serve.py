@@ -703,10 +703,17 @@ class ServeMixin:
                     mapped_terminal == TURN_TERMINAL_TRUNCATED
                     and m.get("last_finish") == "length"
                 ):
+                    # Fail loud: an unread session would score the cut
+                    # response as 0 tokens, i.e. a provider truncation, and
+                    # void a cell over our own cap — the exact error this
+                    # classification exists to remove.
                     try:
                         _cap_msgs = serve_client.get_messages(session_id)
-                    except ServeClientError:
-                        _cap_msgs = []
+                    except ServeClientError as exc:
+                        raise ServeTransportError(
+                            f"could not read session {session_id} to classify a length "
+                            f"finish as a cap cut-off: {exc}"
+                        ) from exc
                     _cap_last = last_assistant_message(_cap_msgs)
                     cap_cutoff_output, cap_cutoff_reasoning = (
                         message_generation_tokens(_cap_last)

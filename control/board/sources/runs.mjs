@@ -44,7 +44,7 @@
 // follow, newest first.
 
 import { join, sep } from "node:path";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 
 import { int, str } from "../contract.mjs";
 import {
@@ -350,6 +350,7 @@ export async function read(ctx) {
   // polls).
   const manifestCache = new Map();
   const ledgerCache = new Map();
+  const scorecardCache = new Map();
   const cards = [];
   for (const b of bases) {
     const modelDir = b.run_dir ? join(ctx.runsRoot, b.run_dir) : null;
@@ -371,13 +372,18 @@ export async function read(ctx) {
       ledger = matchLedger(rows, b.tree_id, b.model_name, b.sequence_index);
     }
 
+    // A run that aborted before its status stream was written (run 1790202713,
+    // harness_error) still has the grader's own per-attempt reports beside its
+    // stream: the problem counts they state, first and last MEASURED attempt.
+    const graded = man || ledger ? null : await gradedCounts(b.live_path);
+
     // status: live → harness_error → scored → void, in that precedence.
     const terminalReason =
       man?.terminal_reason ?? (stream?.cell_end ? str(stream.cell_end.terminal_reason) : null);
     let status;
     if (b.running) status = "live";
     else if (terminalReason === "harness_error") status = "harness_error";
-    else if (isScored(b, stream, ledger)) status = "scored";
+    else if (await isScored(b, modelDir, scorecardCache)) status = "scored";
     else status = "void";
 
     // Error counts: the cell's own stream when it has one (0 = stream, none);
@@ -418,8 +424,8 @@ export async function read(ctx) {
         model: b.model ?? man?.model ?? (b.archived ? str(ledger?.model) : null) ?? null,
         arm: b.arm ?? man?.arm ?? (b.archived ? str(ledger?.arm) : null) ?? null,
         status,
-        problems_before: man?.problems_before ?? int(ledger?.problems_before) ?? null,
-        problems_after: man?.problems_after ?? int(ledger?.problems_after) ?? null,
+        problems_before: man?.problems_before ?? int(ledger?.problems_before) ?? graded?.first ?? null,
+        problems_after: man?.problems_after ?? int(ledger?.problems_after) ?? graded?.last ?? null,
         context_peak: contextPeak,
         context_window: contextWindow,
         turns: man?.turns ?? int(ledger?.turns) ?? null,
@@ -452,16 +458,57 @@ export async function read(ctx) {
 }
 
 /**
- * Did this run score? Current: the batch record's own verdict, never
- * re-derived. Archived: the harness's `conformed` on any attempt.end record
- * (a stated true is final — attempts stop at green), else the ledger's
- * full_green, else a stated PASS verdict (the ledger's, else the stream's
- * cell.end). Anything else is NOT scored.
+ * The failing counts the grader's own attempt-N-report.json files state, for
+ * the first and last attempt it MEASURED (a report it marked gradable:false is
+ * not a measurement). null when the cell has no readable report.
  */
-function isScored(base, stream, ledger) {
+async function gradedCounts(livePath) {
+  if (!livePath) return null;
+  const cellDir = livePath.slice(0, livePath.lastIndexOf(sep));
+  let names = [];
+  try {
+    names = await readdir(cellDir);
+  } catch {
+    return null;
+  }
+  const counts = [];
+  for (const name of names) {
+    const m = /^attempt-(\d+)-report\.json$/.exec(name);
+    if (!m) continue;
+    try {
+      const report = JSON.parse(await readFile(join(cellDir, name), "utf8"));
+      if (report?.gradable === false || !Array.isArray(report?.problems)) continue;
+      counts.push([Number(m[1]), report.problems.length]);
+    } catch {
+      continue;
+    }
+  }
+  if (!counts.length) return null;
+  counts.sort((a, b) => a[0] - b[0]);
+  return { first: counts[0][1], last: counts[counts.length - 1][1] };
+}
+
+/**
+ * Did this run SCORE — produce a measurement — as the harness stated it?
+ * Scored is not passed: a failing cell is scored. Current: the batch record's
+ * verdict. Archived: the run's own manifest.scorecard.json, which lists every
+ * cell dropped from the scored set (void_instrument, not_scored); a cell it
+ * does not drop scored. No scorecard = the run never published a measurement
+ * (it wrote one only when a cell completed) = void. It used to count only a
+ * green or PASS cell as scored, and a `conformed` attempt (the pre-gate passed)
+ * as scored — run 1790200233, voided instrument_fault, showed SCORED.
+ */
+async function isScored(base, modelDir, cache) {
   if (!base.archived) return base.scored === true;
-  if (stream?.attempt_ends?.some((r) => r?.conformed === true)) return true;
-  if (ledger?.full_green === true) return true;
-  const verdict = str(ledger?.verdict) ?? (stream?.cell_end ? str(stream.cell_end.verdict) : null);
-  return verdict === "PASS";
+  if (!modelDir || base.sequence_index === null) return false;
+  const card = await memo(cache, modelDir, async () => {
+    try {
+      return JSON.parse(await readFile(join(modelDir, "manifest.scorecard.json"), "utf8"));
+    } catch {
+      return null;
+    }
+  });
+  if (!card) return false;
+  const dropped = [...(card.void_instrument ?? []), ...(card.not_scored ?? [])];
+  return !dropped.some((r) => int(r?.sequence_index) === base.sequence_index);
 }

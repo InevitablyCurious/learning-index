@@ -442,3 +442,32 @@ def test_cap_cutoff_behaviour_is_identical_across_arms_and_paths(
         "cap": _CAP,
         "wording": "cap-cutoff",
     }
+
+
+def test_an_unreadable_session_fails_loud_never_scores_the_cut_as_a_provider_truncation(
+    tmp_path: Path,
+) -> None:
+    """The cap check reads the cut message's token counts from the session. If
+    that read fails, the cut must not be scored as 0 tokens — that makes it a
+    provider truncation and voids the cell over OUR cap. It aborts loudly."""
+    from harness.adapters.challenge.exceptions import ServeTransportError
+    from harness.serve_transport import ServeClientError
+
+    class _UnreadableAfterSend(_FakeServeClient):
+        sent = False
+
+        def send_prompt(self, session_id: str, prompt: str) -> None:
+            super().send_prompt(session_id, prompt)
+            self.sent = True
+
+        def get_messages(self, session_id: str):  # type: ignore[override]
+            if self.sent:
+                raise ServeClientError("session read failed")
+            return super().get_messages(session_id)
+
+    runner = _make_runner(tmp_path)
+    client = _UnreadableAfterSend()
+    client.assistant_terminal_script = [_length_at_cap()]
+    client.metrics_script = [dict(_ZERO_METRICS), _cum_read(turns=1, out=_CAP, cap_cutoffs=1)]
+    with pytest.raises(ServeTransportError, match="cap cut-off"):
+        _drive(runner, client, tmp_path)
