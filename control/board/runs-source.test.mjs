@@ -84,6 +84,11 @@ function fixture() {
       median: 12,
     }),
   );
+  // The harness's own verdict, written when the cell completed: the card's status.
+  writeFileSync(
+    join(campaign, "manifest.scorecard.json"),
+    JSON.stringify({ scored_sessions: 1, void_instrument: [], not_scored: [] }),
+  );
   // The durable launch record (finished): the enumeration's ended source.
   mkdirSync(join(runsRoot, CURRENT_TREE, "launches"), { recursive: true });
   writeFileSync(
@@ -185,7 +190,7 @@ test("runs source: each card carries EXACTLY the contract keys, with the stated 
     }
 
     // Current: the launch record states model/arm; the manifest states the
-    // measurement; the batch states the verdict; the stream states the kills.
+    // measurement; the scorecard states the verdict; the stream states the kills.
     assert.deepEqual(current, {
       run_dir: CURRENT_RUN,
       sequence_index: 0,
@@ -251,6 +256,38 @@ test("runs source: an archived run's status is its scorecard's verdict — score
     res = await read({ runsRoot, benchRoot: runsRoot });
     archived = fixtureCards(res.patch.runs.list).find((c) => c.archived);
     assert.equal(archived.status, "void");
+  } finally {
+    rmSync(runsRoot, { recursive: true, force: true });
+  }
+});
+
+test("runs source: a CURRENT run's status is its scorecard's too — never the BASELINES batch record", async () => {
+  // Run 1790258326 (seeded from a snapshot, context_exhausted, scored FAIL by
+  // the harness) read VOID while current and SCORED once archived: the current
+  // path read batch.json, which marks every seeded run not-scored because a
+  // seeded run is no floor. That is baseline eligibility, not measurement.
+  const runsRoot = fixture();
+  try {
+    const campaign = join(runsRoot, CURRENT_RUN);
+    writeFileSync(
+      join(campaign, "batch.json"),
+      JSON.stringify({
+        schema_version: 1, run_dir: CURRENT_RUN,
+        runs: [{ sequence_index: 0, problem_count: null, scored: false, void_reason: "seeded_from_snapshot" }],
+        median: null,
+      }),
+    );
+    let res = await read({ runsRoot, benchRoot: runsRoot });
+    let current = fixtureCards(res.patch.runs.list).find((c) => !c.archived);
+    assert.equal(current.status, "scored", "the harness scored it; the batch only says it is no floor");
+
+    writeFileSync(
+      join(campaign, "manifest.scorecard.json"),
+      JSON.stringify({ scored_sessions: 0, void_instrument: [{ sequence_index: 0, void_reason: "instrument_fault" }], not_scored: [] }),
+    );
+    res = await read({ runsRoot, benchRoot: runsRoot });
+    current = fixtureCards(res.patch.runs.list).find((c) => !c.archived);
+    assert.equal(current.status, "void", "a cell the harness dropped is void, current or archived");
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
   }

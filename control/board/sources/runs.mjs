@@ -254,29 +254,27 @@ export async function read(ctx) {
       batch = null;
     }
   }
-  const scoredByIndex = new Map();
+  const batchByIndex = new Map();
   for (const r of batch?.runs ?? []) {
-    if (Number.isFinite(r?.sequence_index)) scoredByIndex.set(r.sequence_index, r);
+    if (Number.isFinite(r?.sequence_index)) batchByIndex.set(r.sequence_index, r);
   }
 
   const seen = new Set();
   for (const r of live) {
     const idx = r.sequence_index;
     if (idx !== null && idx !== undefined) seen.add(idx);
-    const rec = scoredByIndex.get(idx) ?? null;
     bases.push({
       sequence_index: idx ?? null,
       run_dir: r.run_dir ?? null,
       model: r.model ?? null,
       arm: r.arm ?? null,
       running: true,
-      scored: rec?.scored ?? null,
       archived: false,
       sort_key: null, // filled below, once the active tree id is known
       live_path: await cellLiveStreamPath(ctx.runsRoot, { run_dir: r.run_dir ?? null, sequence_index: idx ?? null }),
     });
   }
-  for (const [idx, rec] of scoredByIndex) {
+  for (const [idx] of batchByIndex) {
     if (seen.has(idx)) continue;
     const e = endedByIndex.get(idx);
     bases.push({
@@ -285,7 +283,6 @@ export async function read(ctx) {
       model: e?.model ?? null,
       arm: e?.arm ?? "off",
       running: false,
-      scored: rec?.scored === true ? true : (rec?.scored === false || e ? false : null),
       archived: false,
       sort_key: null,
       live_path: await cellLiveStreamPath(ctx.runsRoot, { run_dir: e?.run_dir ?? runDir, sequence_index: idx }),
@@ -294,14 +291,13 @@ export async function read(ctx) {
   for (const e of ended) {
     const idx = e?.sequence_index;
     if (!Number.isFinite(idx)) continue;
-    if (seen.has(idx) || scoredByIndex.has(idx)) continue;
+    if (seen.has(idx) || batchByIndex.has(idx)) continue;
     bases.push({
       sequence_index: idx,
       run_dir: e.run_dir ?? runDir,
       model: e.model ?? null,
       arm: e.arm ?? "off",
       running: false,
-      scored: false,
       archived: false,
       sort_key: null,
       live_path: await cellLiveStreamPath(ctx.runsRoot, { run_dir: e.run_dir ?? runDir, sequence_index: idx }),
@@ -324,7 +320,6 @@ export async function read(ctx) {
       model: null,
       arm: armMatch ? armMatch[1].toLowerCase() : null,
       running: false,
-      scored: null,
       archived: true,
       // The inner archived tree id (null on an unrecognised layout → sorts oldest).
       sort_key: Number(row.tree_id) || 0,
@@ -490,16 +485,18 @@ async function gradedCounts(livePath) {
 
 /**
  * Did this run SCORE — produce a measurement — as the harness stated it?
- * Scored is not passed: a failing cell is scored. Current: the batch record's
- * verdict. Archived: the run's own manifest.scorecard.json, which lists every
- * cell dropped from the scored set (void_instrument, not_scored); a cell it
- * does not drop scored. No scorecard = the run never published a measurement
- * (it wrote one only when a cell completed) = void. It used to count only a
- * green or PASS cell as scored, and a `conformed` attempt (the pre-gate passed)
- * as scored — run 1790200233, voided instrument_fault, showed SCORED.
+ * Scored is not passed: a failing cell is scored. The run's own
+ * manifest.scorecard.json, current or archived, lists every cell dropped from
+ * the scored set (void_instrument, not_scored); a cell it does not drop
+ * scored. No scorecard = the run never published a measurement (it wrote one
+ * only when a cell completed) = void. It used to count only a green or PASS
+ * cell as scored, and a `conformed` attempt (the pre-gate passed) as scored —
+ * run 1790200233, voided instrument_fault, showed SCORED. A CURRENT run read
+ * the batch record instead — the BASELINES record, which marks every seeded
+ * run not-scored because it is no floor — so seeded run 1790258326 read VOID
+ * while current and SCORED once archived.
  */
 async function isScored(base, modelDir, cache) {
-  if (!base.archived) return base.scored === true;
   if (!modelDir || base.sequence_index === null) return false;
   const card = await memo(cache, modelDir, async () => {
     try {
