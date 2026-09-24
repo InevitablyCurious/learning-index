@@ -430,14 +430,24 @@ function legend(suite) {
     </div>`;
 }
 
-/** Which attempt these squares came from, and whether it has closed. */
+/**
+ * Which attempt these squares came from, and whether it has closed — as the
+ * producer said it: attempt.end closes an attempt (live.attempts), cell.end
+ * ends the cell (live.ended). Only an attempt with neither is being graded.
+ * The fold's attempt (manifest.status.jsonl) lands when a cell completes, so
+ * the live account is the only one during a run and for a cell that ended early.
+ */
 export function attemptTag(suite, live) {
   const attempt = suite?.attempt ?? null;
   if (attempt !== null) return `<span class="tag">ATTEMPT ${esc(String(attempt))}</span>`;
-  if (Number.isFinite(live?.attempt)) {
-    return `<span class="tag warn">ATTEMPT ${esc(String(live.attempt))} · IN FLIGHT</span>`;
+  if (!Number.isFinite(live?.attempt)) return "";
+  const n = esc(String(live.attempt));
+  if ((live.attempts ?? []).some((a) => a.attempt === live.attempt)) return `<span class="tag">ATTEMPT ${n}</span>`;
+  if (live.ended) {
+    const why = live.ended.terminal_reason ? `CELL ${live.ended.terminal_reason}` : "CELL ENDED";
+    return `<span class="tag warn">ATTEMPT ${n} · NEVER CLOSED — ${esc(why.toUpperCase())}</span>`;
   }
-  return "";
+  return `<span class="tag warn">ATTEMPT ${n} · IN FLIGHT</span>`;
 }
 
 /** Why this attempt is not a measurement, in the harness's own sentence. */

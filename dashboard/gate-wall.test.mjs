@@ -679,6 +679,36 @@ test("an in-flight attempt is not described as a completed test run", () => {
   assert.doesNotMatch(done, /IN FLIGHT/);
 });
 
+test("a closed attempt is never in flight — the producer's attempt.end and cell.end are read", () => {
+  // The fold's attempt lands only when a cell completes, so during a run (the
+  // model repairing after attempt 2) and for a cell that ended early, the live
+  // account is all there is. It said IN FLIGHT for every one of them: the live
+  // run between gradings, a harness-error run and an operator-stopped run.
+  const gates = GATES.map((g) => ({ ...g, state: "untested" }));
+  const suite = suiteWith(gates, { attempt: null, totals: { passing: 0, failing: 0, untested: gates.length } });
+  const graded = [{ id: "C:a", status: "fail", phase: "backend", attempt: 2, ts: 5 }];
+  const closed = [{ attempt: 1, verdict: "FAIL", failed: 28, ts: 2 }, { attempt: 2, verdict: "FAIL", failed: 27, ts: 6 }];
+
+  const repairing = renderWall({ suite, live: { attempt: 2, gates: graded, attempts: closed, ended: null } });
+  assert.match(repairing, /ATTEMPT 2</);
+  assert.doesNotMatch(repairing, /IN FLIGHT|NEVER CLOSED/);
+
+  const stoppedAfterClose = renderWall({
+    suite, live: { attempt: 2, gates: graded, attempts: closed, ended: { terminal_reason: "stopped", ts: 9 } },
+  });
+  assert.match(stoppedAfterClose, /ATTEMPT 2</);
+  assert.doesNotMatch(stoppedAfterClose, /IN FLIGHT|NEVER CLOSED/);
+
+  const stoppedMidGrading = renderWall({
+    suite, live: { attempt: 2, gates: graded, attempts: closed.slice(0, 1), ended: { terminal_reason: "stopped", ts: 9 } },
+  });
+  assert.match(stoppedMidGrading, /ATTEMPT 2 · NEVER CLOSED — CELL STOPPED/);
+  assert.doesNotMatch(stoppedMidGrading, /IN FLIGHT/);
+
+  const grading = renderWall({ suite, live: { attempt: 2, gates: graded, attempts: closed.slice(0, 1), ended: null } });
+  assert.match(grading, /ATTEMPT 2 · IN FLIGHT/);
+});
+
 test("an empty grid still says nothing was measured, never 0 passing", () => {
   const html = renderWall({ suite: suiteWith([], { totals: null, attempt: null }), live: null });
   assert.match(html, /NO GATE OUTCOMES YET/);
