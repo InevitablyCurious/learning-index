@@ -206,3 +206,23 @@ def test_running_out_during_the_build_stops_the_run_and_grades_nothing(
     assert result.termination_reason == CONTEXT_EXHAUSTED
     assert grades["count"] == 0
     assert phases == ["initial-chunk-1"], "the next build step never starts"
+
+
+def test_the_peak_is_counted_as_opencode_counts_it() -> None:
+    """Run 1790258326: the card said peak 192,334 — the REQUEST side of the
+    07:27 cut-off — while opencode's TUI showed 256,688 when the cell ended.
+    The peak is prompt + output, the size the out-of-room check compares and
+    the TUI shows; an aborted turn (no tokens) is not a zero."""
+    from harness.context_budget import max_context_tokens
+
+    def msg(total: int | None = None, **tokens: object) -> dict:
+        body = {**tokens, **({"total": total} if total is not None else {})}
+        return {"info": {"role": "assistant", "tokens": body}}
+
+    cut = msg(total=224_334, input=65_358, output=32_000, reasoning=0, cache={"read": 126_976, "write": 0})
+    killed = msg(input=0, output=0, reasoning=0, cache={"read": 0, "write": 0})
+    last = msg(total=256_688, input=68_093, output=179, reasoning=0, cache={"read": 188_416, "write": 0})
+    user = {"info": {"role": "user"}}
+    assert max_context_tokens([user, cut, killed, last, killed]) == 256_688
+    assert max_context_tokens([user, killed]) is None, "absent, never 0"
+    assert max_context_tokens([]) is None

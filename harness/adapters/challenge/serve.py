@@ -35,6 +35,8 @@ from harness.context_budget import (
     context_exhausted,
     context_limit_tokens,
     latest_context_tokens,
+    max_context_tokens,
+    message_context_tokens,
     model_limits,
     output_cap,
 )
@@ -54,10 +56,8 @@ from harness.serve_client import (
 )
 from harness.serve_transport import (
     last_assistant_message,
-    max_request_context_tokens,
     message_generation_tokens,
     message_has_tool_part,
-    message_request_context_tokens,
 )
 
 from ..docker_worker import LOOP_KILL_MARKER_DIRNAME, DockerCell
@@ -731,9 +731,9 @@ class ServeMixin:
                     if cap_cutoff_output + cap_cutoff_reasoning >= cap:
                         is_cap_cutoff = True
                         cap_cutoff_has_tool_part = message_has_tool_part(_cap_last)
-                        cap_cutoff_last_context = message_request_context_tokens(
-                            _cap_last
-                        )
+                        # Prompt + the cut output: all of it is in the context
+                        # the nudge's answer has to fit beside.
+                        cap_cutoff_last_context = message_context_tokens(_cap_last)
                 if is_cap_cutoff:
                     mapped_terminal = TURN_TERMINAL_CAP_CUTOFF
                 anomaly_record: dict[str, Any] = {
@@ -1145,16 +1145,21 @@ class ServeMixin:
             f"status={'ok' if idle else 'timeout'}"
         )
 
-        # WO-CUTOFF Part D: the largest per-request context (input + cache
-        # read + cache write) of this phase, measured over the messages at/
-        # after the phase-start watermark. None when absent — never 0.
+        # The largest context of this phase, counted as opencode counts it
+        # (prompt + output — the size the out-of-room check and opencode's own
+        # TUI use), over the messages at/after the phase-start watermark. None
+        # when absent — never 0. The request side alone read 192,334 on a run
+        # whose TUI showed 256,688 (1790258326). Maxed into the cell's peak,
+        # which cell.end states: a last round that never reaches grading counts.
         try:
             _context_msgs = serve_client.get_messages(session_id)[
                 context_peak_watermark:
             ]
         except ServeClientError:
             _context_msgs = []
-        context_peak = max_request_context_tokens(_context_msgs)
+        context_peak = max_context_tokens(_context_msgs)
+        if context_peak is not None:
+            self._cell_context_peak = max(context_peak, self._cell_context_peak or 0)
 
         return _OpencodeRunStats(
             input_tokens=d_input,

@@ -419,6 +419,12 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
             allowed = ", ".join(sorted(allowed_reasoning_efforts))
             raise ValueError(f"reasoning_effort must be one of: {allowed}")
 
+        # The largest context this cell's session held, maxed over every drive
+        # (serve.py) and stated on cell.end, so a last round that never reaches
+        # grading still counts (1790258326: out of room at 256,688 after its
+        # last attempt.end said 192,334). Reset when each cell's session opens.
+        self._cell_context_peak: int | None = None
+
     def build_need_card(self, task_id: str) -> NeedCard:
         intent = "debug" if "debug" in task_id.lower() else "build"
         # The challenge says what it is; the adapter only says what kind of
@@ -784,6 +790,14 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 # clean cell carries no exception field at all rather than an
                 # empty one a reader has to interpret.
                 terminal_exception=terminal_exception,
+                # The cell's largest context, as opencode counts it (serve.py);
+                # absent when no drive recorded one.
+                context_peak=self._cell_context_peak,
+                context_window=(
+                    model_limits(self.model)["context"]
+                    if self._cell_context_peak is not None
+                    else None
+                ),
             )
 
     @staticmethod
@@ -1093,6 +1107,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         "cannot run without it"
                     ) from exc
                 self._cell_session_id = cell_session_id
+                self._cell_context_peak = None
                 # ── LIVE: THE JOIN KEY, PUBLISHED AT THE MOMENT IT EXISTS ───
                 # Every consumer keys on session_id. Until this record existed
                 # the only place it appeared was predicate-outcomes.jsonl,

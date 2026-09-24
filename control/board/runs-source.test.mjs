@@ -293,6 +293,33 @@ test("runs source: a CURRENT run's status is its scorecard's too — never the B
   }
 });
 
+test("runs source: peak context counts the cell.end peak — a last round that never reached grading", async () => {
+  // Run 1790258326: its last attempt.end said 192,334; the round after it ran
+  // out of room at 256,688 and never reached grading, so only cell.end states
+  // it. The card said 192k while the TUI said 256k.
+  const runsRoot = fixture();
+  try {
+    const live = join(runsRoot, CURRENT_RUN, "memoryOFF", "cell-0000", "live.jsonl");
+    const stream = (endPeak) => writeFileSync(live, [
+      JSON.stringify({ kind: "attempt.end", attempt: 1, verdict: "FAIL", failed: 3, context_peak: 120000, context_window: 131072 }),
+      JSON.stringify({ kind: "cell.end", verdict: "FAIL", terminal_reason: "context_exhausted", context_peak: endPeak, context_window: 131072 }),
+    ].join("\n") + "\n");
+
+    stream(130500);
+    let res = await read({ runsRoot, benchRoot: runsRoot });
+    let current = fixtureCards(res.patch.runs.list).find((c) => !c.archived);
+    assert.equal(current.context_peak, 130500, "the cell's own peak, beyond every attempt.end");
+    assert.equal(current.context_window, 131072);
+
+    stream(90000);
+    res = await read({ runsRoot, benchRoot: runsRoot });
+    current = fixtureCards(res.patch.runs.list).find((c) => !c.archived);
+    assert.equal(current.context_peak, 120000, "the largest stated peak wins; a smaller one never lowers it");
+  } finally {
+    rmSync(runsRoot, { recursive: true, force: true });
+  }
+});
+
 test("runs source: a run that aborted before its status stream reads problems from the grader's reports", async () => {
   // Run 1790202713 (harness_error) wrote no status stream; its attempt reports
   // state the counts. A pass the grader marked not gradable is not one.

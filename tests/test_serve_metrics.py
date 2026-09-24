@@ -334,15 +334,13 @@ def test_classify_transport_anomaly_cap_cutoff_is_truncated():
 
 
 # ---------------------------------------------------------------------------
-# per-message token helpers (cap-cutoff trigger + peak-context metering)
+# per-message token helpers (cap-cutoff trigger)
 # ---------------------------------------------------------------------------
 def test_message_token_helpers():
     from harness.serve_transport import (
         last_assistant_message,
-        max_request_context_tokens,
         message_generation_tokens,
         message_has_tool_part,
-        message_request_context_tokens,
     )
 
     msg = {
@@ -358,9 +356,6 @@ def test_message_token_helpers():
         },
         "parts": [{"type": "tool", "id": "t1"}],
     }
-    # Request-side context: input + cache read + cache write (PROMPT side —
-    # output/reasoning excluded).
-    assert message_request_context_tokens(msg) == 1450
     assert message_generation_tokens(msg) == (30, 12)
     assert message_has_tool_part(msg) is True
     assert message_has_tool_part({"info": {"role": "assistant"}, "parts": []}) is False
@@ -368,12 +363,8 @@ def test_message_token_helpers():
     bare = {"info": {"role": "assistant"}}
     transcript = [{"info": {"role": "user"}}, msg, bare]
     assert last_assistant_message(transcript) is bare
-    assert max_request_context_tokens(transcript) == 1450
-    # Absent, never 0: no assistant messages -> None.
-    assert max_request_context_tokens([{"info": {"role": "user"}}]) is None
     assert last_assistant_message([]) is None
     # Malformed input must not raise.
-    assert message_request_context_tokens(None) == 0
     assert message_generation_tokens("nope") == (0, 0)
     assert message_has_tool_part(42) is False
 

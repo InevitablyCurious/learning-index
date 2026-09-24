@@ -102,6 +102,20 @@ def message_context_tokens(message: Any) -> int:
     )
 
 
+def max_context_tokens(messages: list[Any]) -> int | None:
+    """The largest context an assistant message occupied, counted as opencode
+    counts it (:func:`message_context_tokens`: prompt + output — the size the
+    out-of-room check compares and opencode's own TUI shows). None when no
+    message reported tokens (absent, never 0); an aborted turn reports none.
+    """
+    sizes = [
+        message_context_tokens(m)
+        for m in messages or []
+        if _info(m).get("role") == "assistant"
+    ]
+    return max((s for s in sizes if s > 0), default=None)
+
+
 def latest_context_tokens(messages: list[Any]) -> int:
     """The newest assistant message's size; 0 when none has reported tokens."""
     for message in reversed(messages or []):

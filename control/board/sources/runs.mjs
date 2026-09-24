@@ -409,6 +409,14 @@ export async function read(ctx) {
         contextWindow = int(r?.context_window) ?? contextWindow;
       }
     }
+    // The cell's own peak, stated on cell.end: a last round that never reached
+    // grading counts (1790258326 ran out of room at 256,688 after its last
+    // attempt.end said 192,334).
+    const endPeak = int(stream?.cell_end?.context_peak);
+    if (endPeak !== null) {
+      contextPeak = contextPeak === null ? endPeak : Math.max(contextPeak, endPeak);
+      contextWindow = contextWindow ?? int(stream.cell_end.context_window);
+    }
 
     cards.push({
       sort_key: b.sort_key,

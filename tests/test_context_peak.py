@@ -1,8 +1,9 @@
-"""WO-CUTOFF Parts C/D: context_peak_tokens — the phase's request-context peak.
+"""WO-CUTOFF Parts C/D: context_peak_tokens — the phase's context peak.
 
-``context_peak_tokens`` is the LARGEST per-request context (input + cache
-read + cache write) across the phase's assistant messages, measured from the
-phase-start watermark — which NEVER advances, so the peak spans recovery
+``context_peak_tokens`` is the LARGEST context an assistant message held,
+counted as opencode counts it (prompt + output: input + cache read + cache
+write + output — the out-of-room check's measure), across the phase's
+assistant messages, measured from the phase-start watermark — which NEVER advances, so the peak spans recovery
 re-drives. It is None (ABSENT, never 0) when the phase produced no assistant
 messages. The ledger writer copies the per-attempt figures onto the status
 record ONLY when present: None writes no key, never a null and never a 0.
@@ -41,25 +42,27 @@ from tests.test_run_cumulative_run_artifacts import (  # noqa: E402
     _session,
 )
 
-# ── 1. the peak is the LARGEST request context, spanning recovery re-drives ──
+# ── 1. the peak is the LARGEST held context, spanning recovery re-drives ──
 
 
-def test_context_peak_is_the_largest_request_context_of_the_phase(
+def test_context_peak_is_the_largest_context_of_the_phase(
     tmp_path: Path,
 ) -> None:
-    """Two turns, driven through a cap cut-off nudge: the CUT turn carries the
-    larger request context (5,000 input + 1,000 cache read + 500 cache write
-    = 6,500), the clean re-drive the smaller (100 + 50 + 25 = 175). The peak
-    is the larger — and because the larger sits BEFORE the classification
-    watermark the nudge advanced, this also pins that the peak watermark
-    never advances: the measurement spans the WHOLE phase, re-drives
-    included."""
+    """Two turns, driven through a cap cut-off nudge: the CUT turn held the
+    larger context, counted as opencode counts it — prompt + output (5,000
+    input + 1,000 cache read + 500 cache write + 32,000 output = 38,500); the
+    clean re-drive the smaller (100 + 50 + 25 + 200 = 375). The peak is the
+    larger — and because the larger sits BEFORE the classification watermark
+    the nudge advanced, this also pins that the peak watermark never
+    advances: the measurement spans the WHOLE phase, re-drives included.
+    (It was the request side alone, 6,500; run 1790258326's card read
+    192,334 against a TUI showing 256,688.)"""
     runner = _make_runner(tmp_path)
     client = _FakeServeClient()
     client.assistant_terminal_script = [
-        # Turn 1: cut at the cap, big request context.
+        # Turn 1: cut at the cap, the big context.
         _length_at_cap(inp=5_000, cache_read=1_000, cache_write=500),
-        # Turn 2 (the nudge re-drive): clean, small request context.
+        # Turn 2 (the nudge re-drive): clean, a small context.
         {"tokens": _cut_tokens(inp=100, out=200, cache_read=50, cache_write=25)},
     ]
     client.metrics_script = [
@@ -73,8 +76,8 @@ def test_context_peak_is_the_largest_request_context_of_the_phase(
     # The drive really did span two turns via the cap nudge.
     assert stats.cap_cutoffs == 1
     assert stats.cap_cutoffs_nudged == 1
-    # THE PEAK: the largest request-side context, not the last, not the sum.
-    assert stats.context_peak_tokens == 6_500
+    # THE PEAK: the largest held context, not the last, not the sum.
+    assert stats.context_peak_tokens == 38_500
 
 
 # ── 2. no assistant messages -> absent, never 0 ─────────────────────────────

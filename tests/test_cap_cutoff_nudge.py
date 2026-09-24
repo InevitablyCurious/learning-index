@@ -366,6 +366,35 @@ def test_no_nudge_when_the_next_full_cap_response_cannot_fit(
     assert notice["detail"]["cap"] == _CAP
 
 
+def test_the_room_check_counts_the_cut_output_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cut output is in the context the nudge's answer must fit beside.
+    Request side 20,000 + a 32,000 cut = 52,000 held; one more full-cap answer
+    needs 84,000 — over an 80,000 window. The request-side-only check
+    (20,000 + 32,000 = 52,000) nudged straight into the wall. The phase's
+    context peak is the same held size, prompt + output."""
+    monkeypatch.setattr(
+        "harness.adapters.challenge.serve.model_limits",
+        lambda model: {"context": 80_000, "output": _CAP},
+    )
+    runner = _make_runner(tmp_path)
+    client = _FakeServeClient()
+    client.assistant_terminal_script = [_length_at_cap(inp=20_000)]
+    client.metrics_script = [
+        dict(_ZERO_METRICS),
+        _cum_read(turns=1, out=_CAP, cap_cutoffs=1, inp=20_000),
+    ]
+
+    stats, live_path = _drive(runner, client, tmp_path)
+
+    assert [text for _, text in client.sent_prompts] == [_PROMPT]
+    (notice,) = _cutoff_notices(live_path)
+    assert notice["detail"]["reason"] == "no_context_room"
+    assert stats.context_peak_tokens == 20_000 + _CAP
+    assert runner._cell_context_peak == 20_000 + _CAP, "maxed into the cell's peak for cell.end"
+
+
 # ── 5. BELOW-CAP does NOT fire ──────────────────────────────────────────────
 
 
