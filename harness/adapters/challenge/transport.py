@@ -27,6 +27,7 @@ from typing import Any
 
 from harness.serve_client import (
     LOOP_GUARD_SIGNATURES,
+    REASON_MODEL_SILENT,
     REASON_PROVIDER_UNAVAILABLE,
     RECOVERABLE_STREAM_DEATH_REASONS,
 )
@@ -80,8 +81,8 @@ def _is_unrecovered_anomaly(record: dict[str, Any]) -> bool:
 
     Mirrors the recoverability gate in the phase-drive loop: ``guard_abort``,
     ``turn_stalled``, and the recoverable ``transport_error`` reasons
-    (``provider_unavailable`` plus both relay stream deaths) are excluded
-    REGARDLESS of retry status.
+    (``provider_unavailable``, ``model_silent`` plus both relay stream deaths)
+    are excluded REGARDLESS of retry status.
     """
     terminal = record.get("terminal")
     if terminal == TURN_TERMINAL_GUARD_ABORT:
@@ -90,7 +91,7 @@ def _is_unrecovered_anomaly(record: dict[str, Any]) -> bool:
         return False
     if terminal == TURN_TERMINAL_TRANSPORT_ERROR and str(
         record.get("reason") or ""
-    ) in ({REASON_PROVIDER_UNAVAILABLE} | RECOVERABLE_STREAM_DEATH_REASONS):
+    ) in ({REASON_PROVIDER_UNAVAILABLE, REASON_MODEL_SILENT} | RECOVERABLE_STREAM_DEATH_REASONS):
         return False
     if terminal == TURN_TERMINAL_CAP_CUTOFF:
         return False

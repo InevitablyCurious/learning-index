@@ -896,3 +896,51 @@ def test_the_models_own_terminals_are_not_instrument_anomalies() -> None:
         assert _is_instrument_anomaly({"terminal": terminal, "reason": "stream-incomplete"}) is False
     for terminal in (TURN_TERMINAL_TRANSPORT_ERROR, TURN_TERMINAL_TRUNCATED):
         assert _is_instrument_anomaly({"terminal": terminal, "reason": "stream-incomplete"}) is True
+
+
+def test_serve_drive_model_silence_is_ours_and_gets_the_connection_line(
+    tmp_path: Path,
+) -> None:
+    """Run 1790258326 told a thinking model "That command ran ten minutes, so I
+    cancelled it" — no command was running. When the stall bound fires with no
+    command running, the wait says model_silent: the turn is ended the same way
+    as a stall, recorded as a transport error of OURS (reason model_silent,
+    recovered like a provider outage — Jerry, 2026-09-24) and re-driven with the
+    existing connection line, never the stall line."""
+    from harness.adapters.challenge import _PROVIDER_RECOVERY_NUDGE, _is_instrument_anomaly
+    from harness.serve_client import REASON_MODEL_SILENT
+
+    runner = _make_runner(tmp_path)
+    waits: list[float] = []
+    runner._provider_backoff = lambda seconds: waits.append(seconds)  # never sleep
+    client = _FakeServeClient()
+    client.wait_script = [(False, REASON_MODEL_SILENT), (True, "idle")]
+    client.metrics_script = [
+        dict(_ZERO_METRICS),  # phase baseline
+        _metrics(5, 100, 40),  # silent turn read
+        _metrics(8, 160, 70),  # post-nudge read (session-cumulative)
+    ]
+    cell = _FakeCell()
+
+    stats = runner._run_opencode_serve(
+        active_cell=cell,
+        serve_client=client,
+        session_id="ses_silent",
+        prompt="build the game",
+        run_label="cell-silent",
+        phase="initial",
+    )
+
+    sent = [text for _, text in client.sent_prompts]
+    assert _PROVIDER_RECOVERY_NUDGE in sent
+    assert _STALL_RECOVERY_NUDGE not in sent, "no command ran; the stall line would be false"
+    assert stats.recovery_nudges == 1
+    assert stats.killed_reason is None
+    assert stats.exit_code == 0
+    assert len(waits) == 1, "held off like any provider outage before asking again"
+    (anomaly,) = stats.turn_anomalies
+    assert anomaly["terminal"] == TURN_TERMINAL_TRANSPORT_ERROR
+    assert anomaly["reason"] == REASON_MODEL_SILENT
+    assert anomaly["retried"] is True
+    assert _is_instrument_anomaly(anomaly) is True, "the model server's silence is ours"
+    assert _is_unrecovered_anomaly(anomaly) is False, "recovered: never a void"

@@ -42,9 +42,11 @@ from harness.serve_client import (
     LOOP_KILL_WAIT_REASON,
     WORKER_DIED,
     REASON_LOOP_GUARD,
+    REASON_MODEL_SILENT,
     REASON_PROVIDER_UNAVAILABLE,
     RECOVERABLE_STREAM_DEATH_REASONS,
     TERMINAL_GUARD_ABORT,
+    TERMINAL_TRANSPORT_ERROR,
     ServeClient,
     ServeClientError,
     classify_transport_anomaly,
@@ -360,6 +362,7 @@ class ServeMixin:
             exit_code = 0
             loop_killed_this_turn = False
             stalled_this_turn = False
+            silent_this_turn = False
             if not went_busy:
                 self._progress(
                     f"PROGRESS run_label={run_label} step=serve-drive phase={phase} "
@@ -424,6 +427,9 @@ class ServeMixin:
                 # killed_reason/exit_code stay clean so the recovery gate passes.
                 loop_killed_this_turn = wait_reason == LOOP_KILL_WAIT_REASON
                 stalled_this_turn = wait_reason == "stalled"
+                # The bound fired with no command running: the model server
+                # sent nothing. Ended the same way as a stall, classified as ours.
+                silent_this_turn = wait_reason == REASON_MODEL_SILENT
                 context_hit = wait_reason == CONTEXT_EXHAUSTED
                 if wait_reason == WORKER_DIED:
                     # Nothing to abort or kill: the container is gone. Say so
@@ -461,7 +467,7 @@ class ServeMixin:
                     # Out of room mid-turn: stop generation (abort below) and
                     # end the phase. Not a harness limit and not an error.
                     killed_reason = CONTEXT_EXHAUSTED
-                elif not stalled_this_turn:
+                elif not (stalled_this_turn or silent_this_turn):
                     # Distinguish "the cell's whole budget ran out" from "this
                     # turn stopped progressing". Both end the drive; only the
                     # second says something went wrong with a single command.
@@ -478,7 +484,7 @@ class ServeMixin:
                 # but a stall has no sidecar, so without this the stall's own
                 # abort idle could fire the summarizer mid-stall. The recovery
                 # probe republishes `build` when the chunk has not compacted.
-                if stalled_this_turn:
+                if stalled_this_turn or silent_this_turn:
                     self._publish_compact_phase(
                         active_cell=active_cell, phase=phase, held=True
                     )
@@ -505,7 +511,7 @@ class ServeMixin:
                     )
                 self._progress(
                     f"PROGRESS run_label={run_label} step=serve-drive phase={phase} "
-                    f"status={'loop_killed' if loop_killed_this_turn else ('turn_stalled' if stalled_this_turn else killed_reason)} "
+                    f"status={'loop_killed' if loop_killed_this_turn else ('turn_stalled' if stalled_this_turn else (REASON_MODEL_SILENT if silent_this_turn else killed_reason))} "
                     f"wait_reason={wait_reason} "
                     f"timeout_s={timeout_s:.1f} "
                     f"stall_timeout_s={DEFAULT_TURN_STALL_TIMEOUT_S:.0f} "
@@ -680,6 +686,10 @@ class ServeMixin:
                 # signature, so force the stall terminal to ride the existing
                 # recoverable path (anomaly record, nudge, watermark, re-drive).
                 terminal, reason = TURN_TERMINAL_STALLED, REASON_TOOL_CALL_TIMEOUT
+            elif silent_this_turn:
+                # Ours, not the model's (Jerry, 2026-09-24): recovered like a
+                # provider outage, with its nudge — never "that command ran".
+                terminal, reason = TERMINAL_TRANSPORT_ERROR, REASON_MODEL_SILENT
             if terminal is not None:
                 if terminal == "truncated":
                     mapped_terminal = TURN_TERMINAL_TRUNCATED
@@ -837,9 +847,10 @@ class ServeMixin:
                             pass
                         continue
                     break
+                # The provider said it was unavailable, or sent nothing at all.
                 is_provider_outage = (
                     mapped_terminal == TURN_TERMINAL_TRANSPORT_ERROR
-                    and str(reason or "") == REASON_PROVIDER_UNAVAILABLE
+                    and str(reason or "") in (REASON_PROVIDER_UNAVAILABLE, REASON_MODEL_SILENT)
                 )
                 # RELAY STREAM DEATH — both of the relay's shapes, one class,
                 # one recovery (the resume nudge). The reason recorded on the
@@ -932,7 +943,7 @@ class ServeMixin:
                         self._progress(
                             f"PROGRESS run_label={run_label} step=transport-recovery "
                             f"phase={phase} terminal={mapped_terminal} "
-                            f"reason={REASON_PROVIDER_UNAVAILABLE} "
+                            f"reason={reason} "
                             f"outage={provider_outages} backoff_s={backoff_s:.0f} "
                             f"session_id={session_id}"
                         )

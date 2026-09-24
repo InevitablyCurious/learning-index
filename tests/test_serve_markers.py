@@ -290,6 +290,11 @@ def test_wait_idle_detailed_without_a_marker_keeps_stall_and_timeout(
         "harness.serve_client.ServeClient.open_delta_counter",
         lambda self, sid: _NoTokens(),
     )
+    # A command still running: the wedged turn the stall bound exists for.
+    monkeypatch.setattr(
+        "harness.serve_client.ServeClient.session_tool_running",
+        lambda self, sid: True,
+    )
     client = ServeClient("http://127.0.0.1:4096", poll_interval=0.0)
     reached, reason = client.wait_idle_detailed(
         "ses_1",

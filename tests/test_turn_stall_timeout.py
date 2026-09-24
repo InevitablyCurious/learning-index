@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from harness.serve_client import ServeClient, ServeClientError
+from harness.serve_client import REASON_MODEL_SILENT, ServeClient, ServeClientError, tool_call_running
 
 
 class _FakeDeltas:
@@ -39,7 +39,8 @@ class _FakeClient(ServeClient):
     """Drives wait_idle_detailed off scripted busy/progress, with no clock wait."""
 
     def __init__(
-        self, *, tokens=None, busy=True, raise_progress=False, advancing=False, streaming=False
+        self, *, tokens=None, busy=True, raise_progress=False, advancing=False, streaming=False,
+        tool_running=True,
     ):
         self.poll_interval = 0.0
         self._tokens = list(tokens or [])
@@ -47,6 +48,7 @@ class _FakeClient(ServeClient):
         self._raise_progress = raise_progress
         self._advancing = advancing
         self._streaming = streaming
+        self._tool_running = tool_running
         self.progress_calls = 0
         self.deltas: _FakeDeltas | None = None
 
@@ -68,6 +70,11 @@ class _FakeClient(ServeClient):
     def open_delta_counter(self, session_id: str):  # type: ignore[override]
         self.deltas = _FakeDeltas(streaming=self._streaming)
         return self.deltas
+
+    def session_tool_running(self, session_id: str) -> bool:  # type: ignore[override]
+        if self._tool_running is None:
+            raise ServeClientError("probe down")
+        return self._tool_running
 
 
 def _wait(client, **kw):
@@ -105,12 +112,27 @@ class TestStallDetection:
         assert reason == "timeout", "streamed tokens are progress; only the budget ends this turn"
         assert reached is False
 
-    def test_a_silent_model_is_still_stalled(self):
-        # No new parts and no streamed tokens: a wedged tool call, or a model
-        # that went quiet. The bound must still fire.
-        c = _FakeClient(tokens=[(5, 20)] * 50, streaming=False)
+    def test_a_wedged_command_is_stalled(self):
+        # No new parts, no streamed tokens, a command still running: the turn
+        # wedged inside a tool call — the stall bound's reason to exist.
+        c = _FakeClient(tokens=[(5, 20)] * 50, streaming=False, tool_running=True)
         reached, reason = _wait(c, stall_timeout_s=0.0)
         assert (reached, reason) == (False, "stalled")
+
+    def test_silence_with_no_command_running_is_the_model_servers(self):
+        # Nothing moved and no command is running: the model server sent
+        # nothing. Telling the model "that command ran ten minutes" was false
+        # (run 1790258326); this is ours, not a stall of the model's.
+        c = _FakeClient(tokens=[(5, 20)] * 50, streaming=False, tool_running=False)
+        reached, reason = _wait(c, stall_timeout_s=0.0)
+        assert (reached, reason) == (False, REASON_MODEL_SILENT)
+
+    def test_an_unreadable_session_at_the_bound_decides_nothing(self):
+        # Whether a command is running cannot be seen: neither verdict is
+        # evidence-backed, so the wait goes on (the budget ends it here).
+        c = _FakeClient(tokens=[(5, 20)] * 500, streaming=False, tool_running=None)
+        reached, reason = _wait(c, stall_timeout_s=0.0, timeout_s=0.2)
+        assert (reached, reason) == (False, "timeout")
 
     def test_the_delta_stream_is_closed_on_every_exit(self):
         for c in (
@@ -197,3 +219,27 @@ class TestStallIsNotAModelFailure:
         # a stalled turn is now a recoverable harness-raised terminal
         # (TURN_TERMINAL_STALLED), still never a model failure.
         assert "terminal, reason = TURN_TERMINAL_STALLED, REASON_TOOL_CALL_TIMEOUT" in src
+
+
+class TestToolCallRunning:
+    @staticmethod
+    def _assistant(*parts):
+        return {"info": {"role": "assistant"}, "parts": list(parts)}
+
+    def test_a_pending_or_running_tool_part_is_running(self):
+        for status in ("pending", "running"):
+            msgs = [self._assistant({"type": "step-start"}, {"type": "tool", "state": {"status": status}})]
+            assert tool_call_running(msgs) is True
+
+    def test_thinking_or_a_finished_tool_is_not(self):
+        # R7's stalled turns: a step-start and one reasoning part, no tool.
+        assert tool_call_running([self._assistant({"type": "step-start"}, {"type": "reasoning", "text": ""})]) is False
+        assert tool_call_running([self._assistant({"type": "tool", "state": {"status": "completed"}})]) is False
+        assert tool_call_running([self._assistant({"type": "tool", "state": {"status": "error"}})]) is False
+        assert tool_call_running([]) is False
+
+    def test_only_the_newest_assistant_message_counts(self):
+        older = self._assistant({"type": "tool", "state": {"status": "running"}})
+        newer = self._assistant({"type": "reasoning", "text": ""})
+        user = {"info": {"role": "user"}, "parts": [{"type": "text", "text": "hi"}]}
+        assert tool_call_running([older, newer, user]) is False

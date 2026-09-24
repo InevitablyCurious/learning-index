@@ -23,6 +23,10 @@ Empirically validated against opencode 1.18.10 (serve at host:port):
   "error" | ...; a step-finish part carries ``reason`` e.g. "stop" plus
   ``tokens`` and ``cost``).
 - ``GET {base}/session/{sid}`` -> the session object with tokens/cost/time.
+- ``GET {base}/event`` -> server-sent events; ``message.part.delta``
+  (``properties.sessionID``, ``partID``, ``field``, ``delta``) carries every
+  streamed token, including thinking the stored transcript does not show until
+  its block ends (observed on 1.18.10, 2026-09-24; :class:`DeltaCounter`).
 
 WO LI-13 SPLIT: the transport/classification primitives (HTTP helpers, the
 transient-read retry, transcript metrics, anomaly classification) live in
@@ -69,6 +73,7 @@ from harness.serve_transport import (
     LOOP_GUARD_SIGNATURES,
     REASON_ERROR_EVENT,
     REASON_LOOP_GUARD,
+    REASON_MODEL_SILENT,
     REASON_PROVIDER_UNAVAILABLE,
     REASON_RELAY_STREAM_INCOMPLETE,
     REASON_STREAM_FINALIZE_TIMEOUT,
@@ -100,6 +105,25 @@ def progress_token_of(messages: list) -> tuple[int, int]:
         if isinstance(msg, dict):
             parts += len(_as_list(msg.get("parts")))
     return (len(messages), parts)
+
+
+def tool_call_running(messages: list) -> bool:
+    """Is a tool call in flight in the newest assistant message?
+
+    A tool part's ``state.status`` is pending/running until it returns. This
+    is what tells a wedged command (the stall bound's reason to exist) apart
+    from a model server that sent nothing at all.
+    """
+    for msg in reversed(messages):
+        if not isinstance(msg, dict) or (msg.get("info") or {}).get("role") != "assistant":
+            continue
+        return any(
+            isinstance(part, dict)
+            and part.get("type") == "tool"
+            and ((part.get("state") or {}).get("status") in ("pending", "running"))
+            for part in _as_list(msg.get("parts"))
+        )
+    return False
 
 
 class DeltaCounter:
@@ -348,6 +372,10 @@ class ServeClient:
         """Start counting this session's streamed deltas (``GET /event``)."""
         return DeltaCounter(self._url("/event"), session_id)
 
+    def session_tool_running(self, session_id: str) -> bool:
+        """:func:`tool_call_running` over the session's stored messages."""
+        return tool_call_running(_as_list(self.get_messages(session_id)))
+
     def wait_idle(self, session_id: str, *, timeout_s: float = 600.0, **kwargs) -> bool:
         """Poll :meth:`session_busy` until idle or timeout.
 
@@ -373,7 +401,9 @@ class ServeClient:
         """Poll until idle, the budget runs out, or the turn stops progressing.
 
         Returns ``(reached_idle, reason)`` where reason is one of ``idle``,
-        ``timeout``, ``stalled``, ``loop_killed`` or ``context_exhausted``.
+        ``timeout``, ``stalled`` (a tool call never returned), ``model_silent``
+        (no tool call running and the model server sent nothing for the whole
+        stall bound), ``loop_killed``, ``context_exhausted`` or ``worker_died``.
 
         CONTEXT EXHAUSTED (harness/context_budget.py). A turn is one agent loop
         and can run for many model calls, so the size check rides the same
@@ -473,7 +503,18 @@ class ServeClient:
                         elif stall_deadline is None:
                             stall_deadline = now + stall_timeout_s
                         elif now >= stall_deadline:
-                            return False, "stalled"
+                            # A command that never returned is the model's turn
+                            # wedging; silence with no command running is the
+                            # model server's. An unreadable session decides
+                            # nothing — the next probe asks again.
+                            try:
+                                running = self.session_tool_running(session_id)
+                            except ServeClientError:
+                                running = None
+                            if running is True:
+                                return False, "stalled"
+                            if running is False:
+                                return False, REASON_MODEL_SILENT
 
                 time.sleep(self.poll_interval)
             return False, "timeout"

@@ -89,7 +89,10 @@ _HARNESS_LIMIT_REASONS = {
 # while one block of thinking streams, and at ~225k context a single block ran
 # past 10 minutes and was killed as a stall (run 1790258326, 2026-09-24).
 # A prefill (reading the prompt, no tokens yet) is still silent: measured
-# ~3-4 minutes at ~225k context.
+# ~3-4 minutes at ~225k context. When the bound fires with no command running
+# the wait returns model_silent — the model server's silence, ours — and the
+# turn is recovered like a provider outage, never told as a command that ran
+# too long (the stall nudge said exactly that to a thinking model in 1790258326).
 DEFAULT_TURN_STALL_TIMEOUT_S = float(
     os.environ.get("BENCH_TURN_STALL_TIMEOUT_S", "600")
 )

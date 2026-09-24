@@ -108,6 +108,11 @@ REASON_PROVIDER_UNAVAILABLE = "provider_unavailable"
 REASON_LOOP_GUARD = "loop_guard"
 REASON_STREAM_FINALIZE_TIMEOUT = "stream_finalize_timeout"
 REASON_RELAY_STREAM_INCOMPLETE = "relay_stream_incomplete"
+# The stall bound fired with NO tool call running: the model server sent
+# nothing — no token, no part — for the whole bound (a cold read of a huge
+# prompt, or a hung server). Ours, not the model's: recovered like a provider
+# outage (Jerry, 2026-09-24), never told as a command that ran too long.
+REASON_MODEL_SILENT = "model_silent"
 
 # The relay's two stream-death reasons. ONE recovery class (the resume nudge),
 # but the reason recorded on the anomaly stays the precise one that fired, so
