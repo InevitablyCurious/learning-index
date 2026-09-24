@@ -84,8 +84,12 @@ _HARNESS_LIMIT_REASONS = {
 # 10 minutes is deliberately generous. This task has ZERO external runtime
 # dependencies, so there is no `npm install` leg — a legitimate single tool
 # call here is a file write or a short node run, orders of magnitude under the
-# bound. Streaming generation advances the progress token continuously and is
-# never mistaken for a stall.
+# bound. Streaming generation counts as progress through the serve's delta
+# events (ServeClient.open_delta_counter): the stored transcript does not move
+# while one block of thinking streams, and at ~225k context a single block ran
+# past 10 minutes and was killed as a stall (run 1790258326, 2026-09-24).
+# A prefill (reading the prompt, no tokens yet) is still silent: measured
+# ~3-4 minutes at ~225k context.
 DEFAULT_TURN_STALL_TIMEOUT_S = float(
     os.environ.get("BENCH_TURN_STALL_TIMEOUT_S", "600")
 )

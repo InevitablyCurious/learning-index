@@ -18,18 +18,37 @@ import pytest
 from harness.serve_client import ServeClient, ServeClientError
 
 
+class _FakeDeltas:
+    """The serve's streamed-delta count: flat, or climbing on every read."""
+
+    def __init__(self, *, streaming: bool) -> None:
+        self._streaming = streaming
+        self._n = 0
+        self.closed = False
+
+    def count(self) -> int:
+        if self._streaming:
+            self._n += 1
+        return self._n
+
+    def close(self) -> None:
+        self.closed = True
+
+
 class _FakeClient(ServeClient):
     """Drives wait_idle_detailed off scripted busy/progress, with no clock wait."""
 
     def __init__(
-        self, *, tokens=None, busy=True, raise_progress=False, advancing=False
+        self, *, tokens=None, busy=True, raise_progress=False, advancing=False, streaming=False
     ):
         self.poll_interval = 0.0
         self._tokens = list(tokens or [])
         self._busy = busy
         self._raise_progress = raise_progress
         self._advancing = advancing
+        self._streaming = streaming
         self.progress_calls = 0
+        self.deltas: _FakeDeltas | None = None
 
     def session_busy(self, session_id: str) -> bool:  # type: ignore[override]
         return self._busy
@@ -39,12 +58,16 @@ class _FakeClient(ServeClient):
         if self._raise_progress:
             raise ServeClientError("probe down")
         if self._advancing:
-            # Never runs dry: parts keep climbing, as they do while a
-            # generation streams.
+            # Never runs dry: parts keep climbing, as they do while a turn
+            # takes new steps and tool calls.
             return (5, 20 + self.progress_calls)
         if self._tokens:
             return self._tokens.pop(0)
         return (1, 1)
+
+    def open_delta_counter(self, session_id: str):  # type: ignore[override]
+        self.deltas = _FakeDeltas(streaming=self._streaming)
+        return self.deltas
 
 
 def _wait(client, **kw):
@@ -65,13 +88,43 @@ class TestStallDetection:
         assert reason == "stalled"
 
     def test_a_progressing_turn_is_never_called_stalled(self):
-        # Parts keep growing, as they do while a generation streams.
+        # Parts keep growing, as they do while a turn takes new steps.
         c = _FakeClient(advancing=True)
         reached, reason = _wait(c, stall_timeout_s=0.0, timeout_s=0.25)
         assert reason == "timeout", (
             "a turn that keeps progressing must hit the budget, not the stall bound"
         )
         assert reached is False
+
+    def test_a_thinking_model_is_never_called_stalled(self):
+        # ONE block of thinking: the stored transcript sits still (its text is
+        # stored only when the block ends) while tokens stream. Run 1790258326
+        # killed exactly this, mid-sentence, as a 10-minute "stall".
+        c = _FakeClient(tokens=[(5, 20)] * 500, streaming=True)
+        reached, reason = _wait(c, stall_timeout_s=0.0, timeout_s=0.25)
+        assert reason == "timeout", "streamed tokens are progress; only the budget ends this turn"
+        assert reached is False
+
+    def test_a_silent_model_is_still_stalled(self):
+        # No new parts and no streamed tokens: a wedged tool call, or a model
+        # that went quiet. The bound must still fire.
+        c = _FakeClient(tokens=[(5, 20)] * 50, streaming=False)
+        reached, reason = _wait(c, stall_timeout_s=0.0)
+        assert (reached, reason) == (False, "stalled")
+
+    def test_the_delta_stream_is_closed_on_every_exit(self):
+        for c in (
+            _FakeClient(tokens=[(5, 20)] * 50),  # stalled
+            _FakeClient(tokens=[(5, 20)] * 50, busy=False),  # idle
+            _FakeClient(tokens=[(5, 20)] * 500, streaming=True),  # timeout
+        ):
+            _wait(c, stall_timeout_s=0.0, timeout_s=0.1)
+            assert c.deltas is not None and c.deltas.closed
+
+    def test_no_stall_bound_opens_no_delta_stream(self):
+        c = _FakeClient(tokens=[(5, 20)] * 50)
+        _wait(c, timeout_s=0.05)
+        assert c.deltas is None
 
     def test_idle_wins_over_everything(self):
         c = _FakeClient(tokens=[(5, 20)] * 50, busy=False)

@@ -278,6 +278,18 @@ def test_wait_idle_detailed_without_a_marker_keeps_stall_and_timeout(
         "harness.serve_client.ServeClient.session_progress_token",
         lambda self, sid: (1, 1),
     )
+
+    class _NoTokens:  # the serve's delta stream: nothing streaming
+        def count(self) -> int:
+            return 0
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(
+        "harness.serve_client.ServeClient.open_delta_counter",
+        lambda self, sid: _NoTokens(),
+    )
     client = ServeClient("http://127.0.0.1:4096", poll_interval=0.0)
     reached, reason = client.wait_idle_detailed(
         "ses_1",

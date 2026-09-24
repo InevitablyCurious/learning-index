@@ -36,6 +36,9 @@ docstring.
 
 from __future__ import annotations
 
+import http.client
+import json
+import threading
 import time
 import urllib.parse
 
@@ -97,6 +100,85 @@ def progress_token_of(messages: list) -> tuple[int, int]:
         if isinstance(msg, dict):
             parts += len(_as_list(msg.get("parts")))
     return (len(messages), parts)
+
+
+class DeltaCounter:
+    """Counts ONE session's streamed deltas on the serve's ``GET /event`` stream.
+
+    The stored transcript does not move while the model thinks: a reasoning
+    part is created with empty text and its text lands only when the block
+    completes. Measured 2026-09-24 (run 1790258326, ~225k context): the
+    part read back with 0 chars for minutes of live streaming, so
+    ``(messages, parts)`` sat still through 10 minutes of generation and the
+    stall bound killed a thinking model mid-sentence. The serve publishes every
+    streamed token as a ``message.part.delta`` event; counting this session's
+    makes generation progress, while a wedged tool call or a silent model
+    still counts nothing.
+
+    The stream is opened in the constructor and fails loud (ServeClientError):
+    without it every long thought would read as a stall again. After that a
+    daemon thread reads it, reconnecting after a read timeout (a quiet stream,
+    e.g. a long prefill) or a drop. ``close()`` only signals: the reader closes
+    its own response at its next line or read timeout, because closing it from
+    another thread races http.client's readline.
+    """
+
+    def __init__(self, url: str, session_id: str, *, read_timeout_s: float = 30.0) -> None:
+        self._url = url
+        self._session_id = session_id
+        self._read_timeout_s = read_timeout_s
+        self._count = 0
+        self._stop = threading.Event()
+        first = self._open()
+        self._thread = threading.Thread(
+            target=self._run, args=(first,), name="serve-delta-counter", daemon=True
+        )
+        self._thread.start()
+
+    def count(self) -> int:
+        return self._count
+
+    def close(self) -> None:
+        self._stop.set()
+
+    def _open(self) -> Any:
+        try:
+            return urllib.request.urlopen(self._url, timeout=self._read_timeout_s)
+        except (OSError, http.client.HTTPException) as exc:
+            raise ServeClientError(f"GET {self._url}: {exc}") from exc
+
+    def _run(self, first: Any) -> None:
+        resp = first
+        while not self._stop.is_set():
+            try:
+                if resp is None:
+                    resp = self._open()
+                with resp:
+                    for raw in resp:
+                        if self._stop.is_set():
+                            return
+                        self._take(raw)
+            except (ServeClientError, OSError, http.client.HTTPException, ValueError):
+                pass
+            resp = None
+            # Reconnect after a timeout or a drop; stop promptly when closed.
+            if self._stop.wait(1.0):
+                return
+
+    def _take(self, raw: bytes) -> None:
+        line = raw.decode("utf-8", "replace").strip()
+        if not line.startswith("data:"):
+            return
+        try:
+            event = json.loads(line[len("data:"):])
+        except ValueError:
+            return
+        if (
+            isinstance(event, dict)
+            and event.get("type") == "message.part.delta"
+            and (event.get("properties") or {}).get("sessionID") == self._session_id
+        ):
+            self._count += 1
 
 class ServeClient:
     """Thin stdlib-urllib client for a running ``opencode serve``.
@@ -253,13 +335,18 @@ class ServeClient:
         return _as_list(payload)
 
     def session_progress_token(self, session_id: str) -> tuple[int, int]:
-        """A cheap-to-compare marker of how far the transcript has got.
+        """A cheap-to-compare marker of how far the STORED transcript has got.
 
-        ``(messages, parts)``. Parts grow while a turn STREAMS, so a long
-        generation keeps advancing this token and is never mistaken for a
-        stall; a turn wedged inside a tool call advances neither.
+        ``(messages, parts)``: new messages, steps and tool calls. It does NOT
+        move while one block of thinking or text streams (the part's text is
+        stored only when the block ends) — :meth:`wait_idle_detailed` adds the
+        streamed-delta count from :meth:`open_delta_counter` for that.
         """
         return progress_token_of(_as_list(self.get_messages(session_id)))
+
+    def open_delta_counter(self, session_id: str) -> DeltaCounter:
+        """Start counting this session's streamed deltas (``GET /event``)."""
+        return DeltaCounter(self._url("/event"), session_id)
 
     def wait_idle(self, session_id: str, *, timeout_s: float = 600.0, **kwargs) -> bool:
         """Poll :meth:`session_busy` until idle or timeout.
@@ -334,58 +421,65 @@ class ServeClient:
         """
         deadline = time.monotonic() + timeout_s
         stall_deadline: float | None = None
-        last_token: tuple[int, int] | None = None
+        last_token: tuple[int, ...] | None = None
         next_progress_check = time.monotonic()
-
-        while time.monotonic() < deadline:
-            if loop_kill_marker_dir is not None and read_loop_kill_marker(
-                loop_kill_marker_dir,
-                turn_start_ts_ms,
-                session_id=session_id,
-                consume=True,
-            ):
-                return False, LOOP_KILL_WAIT_REASON
-            try:
-                busy = self.session_busy(session_id)
-            except ServeClientError:
-                busy = True
-                if worker_alive is not None and not worker_alive():
-                    return False, WORKER_DIED
-            if not busy:
-                return True, "idle"
-
-            now = time.monotonic()
-            if (
-                stall_timeout_s is not None or context_limit_tokens is not None
-            ) and now >= next_progress_check:
-                next_progress_check = now + progress_interval_s
-                if context_limit_tokens is not None:
-                    try:
-                        exhausted, _size = context_exhausted(
-                            _as_list(self.get_messages(session_id)), context_limit_tokens
-                        )
-                    except ServeClientError:
-                        exhausted = False  # a failed read is not evidence of anything
-                    if exhausted:
-                        return False, CONTEXT_EXHAUSTED
+        # Streamed tokens are progress the stored transcript cannot show.
+        deltas = self.open_delta_counter(session_id) if stall_timeout_s is not None else None
+        try:
+            while time.monotonic() < deadline:
+                if loop_kill_marker_dir is not None and read_loop_kill_marker(
+                    loop_kill_marker_dir,
+                    turn_start_ts_ms,
+                    session_id=session_id,
+                    consume=True,
+                ):
+                    return False, LOOP_KILL_WAIT_REASON
                 try:
-                    token = self.session_progress_token(session_id)
+                    busy = self.session_busy(session_id)
                 except ServeClientError:
-                    # A probe outage is not evidence of a stall. Leave the
-                    # existing deadline alone rather than start counting down
-                    # against a session we simply cannot see.
-                    token = None
-                if token is not None and stall_timeout_s is not None:
-                    if token != last_token:
-                        last_token = token
-                        stall_deadline = now + stall_timeout_s
-                    elif stall_deadline is None:
-                        stall_deadline = now + stall_timeout_s
-                    elif now >= stall_deadline:
-                        return False, "stalled"
+                    busy = True
+                    if worker_alive is not None and not worker_alive():
+                        return False, WORKER_DIED
+                if not busy:
+                    return True, "idle"
 
-            time.sleep(self.poll_interval)
-        return False, "timeout"
+                now = time.monotonic()
+                if (
+                    stall_timeout_s is not None or context_limit_tokens is not None
+                ) and now >= next_progress_check:
+                    next_progress_check = now + progress_interval_s
+                    if context_limit_tokens is not None:
+                        try:
+                            exhausted, _size = context_exhausted(
+                                _as_list(self.get_messages(session_id)), context_limit_tokens
+                            )
+                        except ServeClientError:
+                            exhausted = False  # a failed read is not evidence of anything
+                        if exhausted:
+                            return False, CONTEXT_EXHAUSTED
+                    try:
+                        token = self.session_progress_token(session_id)
+                    except ServeClientError:
+                        # A probe outage is not evidence of a stall. Leave the
+                        # existing deadline alone rather than start counting down
+                        # against a session we simply cannot see.
+                        token = None
+                    if token is not None and deltas is not None:
+                        token = (*token, deltas.count())
+                    if token is not None and stall_timeout_s is not None:
+                        if token != last_token:
+                            last_token = token
+                            stall_deadline = now + stall_timeout_s
+                        elif stall_deadline is None:
+                            stall_deadline = now + stall_timeout_s
+                        elif now >= stall_deadline:
+                            return False, "stalled"
+
+                time.sleep(self.poll_interval)
+            return False, "timeout"
+        finally:
+            if deltas is not None:
+                deltas.close()
 
     def wait_busy(self, session_id: str, *, timeout_s: float = 60.0) -> bool:
         """Poll :meth:`session_busy` until busy or timeout.
