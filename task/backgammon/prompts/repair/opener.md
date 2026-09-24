@@ -1,1 +1,1 @@
-Before the list: every time I check, I run your latest code from scratch and start a brand-new game.
+Before the list: every time I check, I run your latest code from scratch and start a brand-new game. I play white: my checkers travel anticlockwise, from point 24 around to point 1, and black's travel the opposite way round, from point 1 up to point 24.
