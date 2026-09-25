@@ -25,11 +25,14 @@ import {
 } from "../batch.mjs";
 
 const ROOT = "/Users/jerrysmith/Desktop/TOKProject/Learning-Index";
-// Frozen by the Python compute_task_template_hash over task/backgammon/scaffold.
+// Frozen by the Python compute_task_template_hash over task/backgammon/scaffold
+// and declared by the challenge (challenge.json scaffold_hash, which the Python
+// freeze guard pins) — read from there, the one place a re-freeze changes.
 // A byte-exact anchor on the hashDir algorithm — if this fails, hashDir does
 // NOT replicate the Python digest and every fingerprint built on it is wrong.
-const FROZEN_SCAFFOLD_HASH =
-  "d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee";
+const FROZEN_SCAFFOLD_HASH = JSON.parse(
+  await fs.readFile(path.join(ROOT, "task", "backgammon", "challenge.json"), "utf8"),
+).scaffold_hash;
 const GRADER_EXCLUDE = new Set(["node_modules", ".git", "test-results"]);
 
 /** A complete fingerprint values map; override any input. */

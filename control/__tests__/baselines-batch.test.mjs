@@ -13,9 +13,13 @@ import { FINGERPRINT_INPUTS, hashDir } from "../batch.mjs";
 import { BENCH, FIXTURE_FP, setFixtureCode } from "./_shared.mjs";
 
 // Frozen by the Python hash (harness/fingerprint.py dir_hash, and the older
-// compute_task_template_hash) over task/backgammon/{scaffold,golden}.
-const FROZEN_SCAFFOLD_HASH =
-  "d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee";
+// compute_task_template_hash) over task/backgammon/{scaffold,golden}. The
+// scaffold's is declared by the challenge (challenge.json scaffold_hash, pinned
+// by the Python freeze guard) and read from there, so a re-freeze changes one
+// place.
+const FROZEN_SCAFFOLD_HASH = JSON.parse(
+  await fs.readFile(path.join(BENCH, "task", "backgammon", "challenge.json"), "utf8"),
+).scaffold_hash;
 const FROZEN_GOLDEN_HASH =
   "312720b56bd5b10f79da3a58cc034fbe977ce1a1b7f0512c1afdfc20e8ddd9eb";
 
