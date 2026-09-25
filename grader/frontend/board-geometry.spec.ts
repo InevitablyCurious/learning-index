@@ -143,6 +143,23 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
   const points = await readPointBoxes(page);
   const under = points.filter((p) => overlaps(tray, p));
   expect(under.map((p) => p.num), "[aspect: overlap] the off tray is drawn over points").toEqual([]);
+  // White bears off past point 1 and black past point 24 (the direction of
+  // travel the build prompt gives), so the tray lies beyond the end of the
+  // board those two points share. Run 1790352559 cleared the points by moving
+  // a 10 px tray to the far end, past points 12 and 13, where no checker is
+  // ever borne off. Point 1 is found by its number: a board numbered out of
+  // order is the order check's complaint.
+  const one = points.find((p) => p.num === 1);
+  const twelve = points.find((p) => p.num === 12);
+  expect(one && twelve, "[needs: REQ-RENDER/point] expected points 1 and 12 to read").toBeTruthy();
+  const homeOnRight = one!.centerX > twelve!.centerX;
+  const pastPointOne = homeOnRight
+    ? tray.x >= Math.max(...points.map((p) => p.x + p.width)) - 3
+    : tray.x + tray.width <= Math.min(...points.map((p) => p.x)) + 3;
+  expect(
+    pastPointOne,
+    `[aspect: side] [needs: F28] the off tray (x ${tray.x.toFixed(0)}..${(tray.x + tray.width).toFixed(0)}) is not past points 1 and 24`,
+  ).toBeTruthy();
 });
 
 test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {

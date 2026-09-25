@@ -1,1 +1,1 @@
-Took several pieces off again and the tray at the side still stays empty.
+Took several pieces off again and they still don't show up in the off tray.

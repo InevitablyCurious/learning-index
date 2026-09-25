@@ -249,7 +249,7 @@
     },
     "F11": {
       "first": "When i take a piece off the board it doesn't show up in the off tray",
-      "repeat": "Took several pieces off again and the tray at the side still stays empty."
+      "repeat": "Took several pieces off again and they still don't show up in the off tray."
     },
     "F12": {
       "first": "When the game ends, it doesn't tell me I won — there's no win message or victory popup.",
@@ -541,7 +541,7 @@
     },
     "F16": {
       "first": "I refreshed the page in the middle of a game and it came back telling me it was my turn, even though I'd just finished my move and was waiting on the computer.",
-      "repeat": "It happened again — I reloaded while the computer was taking its turn and the board came back showing my dice ready to roll."
+      "repeat": "It happened again — I reloaded while the computer was taking its turn and it came back saying it was my turn."
     },
     "F17": {
       "first": "I refreshed the page between games and the score at the top went back to zero-zero even though we'd already played a couple of games.",
@@ -549,7 +549,7 @@
     },
     "F18": {
       "first": "I rolled, refreshed the page, and the dice didn't come back as what I'd rolled.",
-      "repeat": "Rolled a different pair, reloaded, and the dice still didn't come back as what I'd rolled."
+      "repeat": "Rolled again, reloaded, and the dice still didn't come back as what I'd rolled."
     },
     "F19": {
       "first": "I picked the hard computer, refreshed the page, and it wasn't set to hard any more.",
@@ -617,7 +617,7 @@
     },
     "F31": {
       "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place.",
-      "repeat": "Moved again and the checkers still don't line up with their points, still floating off to the side."
+      "repeat": "Fresh game again, and the checkers still don't line up with their points, still floating off to the side."
     },
     "F32": {
       "first": "The off tray isn't showing — there's no place on the board for pieces that have been taken off.",
@@ -626,6 +626,10 @@
     "F32.overlap": {
       "first": "The off tray is drawn over some of the points.",
       "repeat": "The off tray is still drawn over some of the points."
+    },
+    "F32.side": {
+      "first": "The off tray isn't at the end of the board where I bear off, past point 1.",
+      "repeat": "The off tray still isn't at the end of the board where I bear off, past point 1."
     },
     "F33": {
       "first": "I rolled a double and couldn't play all of it.",
