@@ -641,15 +641,15 @@ class FeedbackMixin:
         *,
         problems: list[dict[str, Any]] | None = None,
         checks: list[str] | None = None,
-        had_prior_feedback: bool = False,
         repeat_complaints: set[str] | None = None,
     ) -> str:
         """Compose the message the model receives after a failed attempt.
 
         THE VOICE (2026-09-02). One person who played the finished game and is
-        listing what they hit. Two openers, chosen by whether this gate list is
-        their first report or a re-report after the model said it had fixed
-        things:
+        listing what they hit. Two openers, chosen by whether EVERY complaint on
+        the list is one they reported before and have seen in every round since
+        (``repeat_complaints``); a list with anything new on it opens as a
+        report, and the repeated lines say "still" for themselves:
 
           first  "I've checked your work thoroughly, and I want to list the
                   issues that I've encountered while playing the game:"
@@ -697,8 +697,6 @@ class FeedbackMixin:
         sighting, so it carries no new information and only the opener and the
         per-gate lines carry the gradient.
         """
-        header = _FEEDBACK_HEADER_REPEAT if had_prior_feedback else _FEEDBACK_HEADER_FIRST
-
         # Accept either the rich problem records or a bare check list, so older
         # callers and tests keep working unchanged.
         records: list[dict[str, Any]]
@@ -727,6 +725,7 @@ class FeedbackMixin:
         # Both lists are numbered from 1: they are two people's accounts, not
         # one list with a divider.
         by_channel: dict[str, list[str]] = {"tester": [], "team": []}
+        tester_kinds: list[str] = []
         seen: set[str] = set()
 
         for record in records:
@@ -770,6 +769,17 @@ class FeedbackMixin:
                 continue
             seen.add(label)
             by_channel[channel].append(label)
+            if channel == "tester":
+                tester_kinds.append(pass_kind)
+
+        # "I'm still seeing these problems" only over problems they are still
+        # seeing: a stage that just unlocked lists new ones, and heading them
+        # "still" told the model it had heard them before (run 1790349319).
+        header = (
+            _FEEDBACK_HEADER_REPEAT
+            if tester_kinds and all(kind == "repeat" for kind in tester_kinds)
+            else _FEEDBACK_HEADER_FIRST
+        )
 
         lines: list[str] = [_EXCUSE_ELIMINATOR, "", header, ""]
         for n, label in enumerate(by_channel["tester"], start=1):

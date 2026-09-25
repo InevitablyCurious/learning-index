@@ -938,14 +938,16 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         # CONTEXT EXHAUSTED ends the cell where it happens: during the build
         # nothing is graded; during a repair round the last graded round stands.
         context_stop = False
-        # PLAYER ORDER (stages.py): the checks the model was told about — last
-        # round, and ever. "That fixed it" names only checks it was told about;
-        # the second-sighting line goes only to checks it has heard before.
+        # PLAYER ORDER (stages.py): the checks the model was told about last
+        # round, and the complaints it was told that have failed in every grade
+        # since. "That fixed it" names only checks it was told about; the
+        # second-sighting line goes only to a complaint it has heard and that
+        # never went away.
         told_last_round: set[str] = set()
         # check -> the line the model was first told for it, so "that fixed
         # it" quotes what was actually said (feedback.py _build_pass_verdict).
         told_first_label: dict[str, str] = {}
-        told_ever: set[str] = set()
+        told_open: set[str] = set()
         _worker_exit_annot: str | None = None
         first_run: _OpencodeRunStats | None = None
         # Monotonic clock start of the chunked build, for the attempt-1
@@ -1862,9 +1864,15 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     str(p.get("check", "")).strip() for p in stage_view.visible
                 }
                 # Per COMPLAINT, not per check: a check that now says something
-                # new gets its first-sighting line (_complaint_id).
+                # new gets its first-sighting line (_complaint_id). And only a
+                # complaint that has failed in every grade since it was told is
+                # "still" there: one that was fixed and came back is a new
+                # sighting. Keyed on everything told, run 1790357047 told "The
+                # off tray is still drawn over some of the points." two rounds
+                # after "That fixed it" — the model had undone its own fix.
+                told_open &= {self._complaint_id(p) for p in problems if isinstance(p, dict)}
                 visible_complaints = {self._complaint_id(p) for p in stage_view.visible}
-                repeat_complaints = {c for c in visible_complaints if c in told_ever}
+                repeat_complaints = visible_complaints & told_open
                 self._progress(
                     f"PROGRESS run_label={run_label} step=player-stage attempt={attempt} "
                     f"stage={stage_view.stage.number if stage_view.stage else 'none'} "
@@ -1873,22 +1881,15 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     f"failing_total={len(feedback_checks)}"
                 )
                 told_last_round = visible_checks
-                told_ever |= visible_complaints
+                told_open |= visible_complaints
                 for p in stage_view.visible:
                     check = str(p.get("check", "")).strip()
                     if check and check not in told_first_label:
                         told_first_label[check] = self._told_label(p, pass_kind="first")[0]
                 feedback = self._build_feedback_prompt(
                     problems=stage_view.visible,
-                    # WHICH OPENER. "I've checked your resolution for the
-                    # problems that were given before" is only true once the
-                    # model has actually been given a list before — which is
-                    # any attempt past the first. It used to key on whether
-                    # something newly PASSED, which is a different fact: a
-                    # second round where nothing improved would have re-opened
-                    # with "I've checked your work thoroughly", as though the
-                    # player had never reported anything.
-                    had_prior_feedback=len(attempt_reports) >= 2,
+                    # The repeats also choose the opener (feedback.py): "I'm
+                    # still seeing these problems" heads a list of repeats only.
                     repeat_complaints=repeat_complaints,
                 )
                 # WO-FEEDBACK-ONEPHASE: fold the pass verdict into the single

@@ -354,7 +354,6 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     # renders as that gate's second-sighting line — the gradient, per gate.
     failure_feedback = runner._build_feedback_prompt(
         checks=[REAL_CHECK],
-        had_prior_feedback=True,
         repeat_complaints={REAL_CHECK},
     )
     assert (
@@ -379,7 +378,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     # Feedback 1 — the player's FIRST report, so the first-pass opener. Nothing
     # newly passed after attempt 1, so no pass verdict rides along.
     assert prompt_texts[1] == runner._build_feedback_prompt(
-        checks=[REAL_PASS1, REAL_CHECK], had_prior_feedback=False
+        checks=[REAL_PASS1, REAL_CHECK]
     )
     assert runner._humanize_check(REAL_PASS2) not in prompt_texts[1], (
         "a stage-3 problem is withheld while stage 2 still fails"
@@ -490,6 +489,60 @@ def test_zero_progress_gap_has_no_pass_verdict_and_uses_false_header(
     # 3 rows: initial + feedback-1 + feedback-2
     assert len(sidecar_rows) == 3
     assert sidecar_rows[0]["text"] == "INITIAL PROMPT"
+
+
+def test_a_complaint_that_was_fixed_and_came_back_is_not_still_there(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    # Run 1790357047: the off tray was told, then "That fixed it", then the
+    # model undid its own fix — and was told the tray was "still" over the
+    # points. A complaint is a repeat only if it failed in every grade since it
+    # was told; one that came back is a new sighting, and a list with anything
+    # new on it opens as a report, not with "I'm still seeing these problems".
+    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=4)
+    _patch_fake_docker(monkeypatch)
+    monkeypatch.setattr(
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
+    )
+    # Both stage 2: CAME_BACK is told, fixed while STAYS is told, then returns.
+    came_back, stays = REAL_CHECK, REAL_PASS1
+    rounds = iter([[came_back], [stays], [came_back, stays]])
+
+    def _fake_gate(**kwargs: Any) -> dict[str, Any]:
+        checks = next(rounds, [])
+        return {
+            "verdict": "FAIL" if checks else "PASS",
+            "conformed": True,
+            "problems": [{"check": c} for c in checks],
+            "failed_gates": checks,
+        }
+
+    monkeypatch.setattr(runner, "_run_gate_report", _fake_gate)
+    calls: list[dict[str, Any]] = []
+
+    def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:
+        calls.append({"phase": kwargs.get("phase"), "prompt": kwargs.get("prompt")})
+        return _stats(session_id="sess-1", exit_code=0, cost_usd=0.0, terminal_zero_tool_turn=False)
+
+    monkeypatch.setattr(runner, "_run_opencode_serve", _fake_opencode)
+    hashes = iter(f"hash-{n}" for n in range(100))
+    monkeypatch.setattr(
+        "harness.adapters.challenge.runner._snapshot_state_hash", lambda _worktree: next(hashes)
+    )
+
+    runner._run_cell_impl(
+        run_label="complaint-came-back", run_dir=tmp_path / "complaint-came-back", task_id="backgammon"
+    )
+
+    third = calls[3]["prompt"]
+    first_line = runner._humanize_check(came_back)
+    still_line = runner._told_label({"check": came_back}, pass_kind="repeat")[0]
+    assert first_line in third and still_line not in third, "the returning complaint is a first sighting"
+    assert runner._told_label({"check": stays}, pass_kind="repeat")[0] in third, (
+        "the complaint that never went away keeps its second-sighting line"
+    )
+    assert "I'm still seeing these problems" not in third, "a list with a new sighting opens as a report"
 
 
 @pytest.mark.parametrize(

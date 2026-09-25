@@ -175,7 +175,6 @@ def test_repeat_failure_returns_new_information() -> None:
     )
     repeat = ChallengeRunner._build_feedback_prompt(
         problems=problems,
-        had_prior_feedback=True,
         repeat_complaints={p["check"] for p in problems},
     )
     assert first != repeat, "a repeated failure must not return identical text"
@@ -218,7 +217,7 @@ def test_the_graders_assertion_never_reaches_the_model() -> None:
     ]
     for repeats in (set(), {problems[0]["check"]}):
         text = ChallengeRunner._build_feedback_prompt(
-            problems=problems, had_prior_feedback=bool(repeats), repeat_complaints=repeats
+            problems=problems, repeat_complaints=repeats
         )
         assert "expected 4 to be 2" not in text, "the assertion reached the model"
         assert "AssertionError" not in text
@@ -362,7 +361,6 @@ def test_repeat_gradient_ignores_harness_infra_checks() -> None:
     ]
     text = ChallengeRunner._build_feedback_prompt(
         problems=problems,
-        had_prior_feedback=True,
         repeat_complaints={infra, gate},
     )
     assert "still doesn't show me a win message" in text, (
@@ -390,7 +388,6 @@ def test_every_failure_verdict_opens_with_how_the_player_checked() -> None:
     first = ChallengeRunner._build_feedback_prompt(problems=problems)
     repeat = ChallengeRunner._build_feedback_prompt(
         problems=problems,
-        had_prior_feedback=True,
         repeat_complaints={p["check"] for p in problems},
     )
     for verdict in (first, repeat):

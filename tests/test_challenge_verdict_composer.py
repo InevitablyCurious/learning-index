@@ -124,16 +124,26 @@ def test_build_feedback_prompt_openers_and_invariants() -> None:
     assert f"1) {g01}" in first
     assert "REQ-INIT" not in first and "[G01]" not in first
 
-    # THE OPENER IS KEYED ON PRIOR FEEDBACK, not on whether anything newly
-    # passed. A second round where nothing improved must still open by
-    # referring back to what was already reported. The eliminator is the only
-    # shared opening paragraph — the opener itself still distinguishes the two.
+    # THE OPENER IS KEYED ON THE COMPLAINTS: a list of problems the player
+    # already reported, and still sees, opens by referring back to them. The
+    # eliminator is the only shared opening paragraph — the opener itself still
+    # distinguishes the two.
     again = ChallengeRunner._build_feedback_prompt(
-        checks=["[G01] REQ-INIT — initial position"], had_prior_feedback=True
+        checks=["[G01] REQ-INIT — initial position"],
+        repeat_complaints={"[G01] REQ-INIT — initial position"},
     )
     assert again.startswith(_EXCUSE_ELIMINATOR)
     assert AGAIN in again
     assert FIRST not in again, "the repeat verdict must not use the first-report opener"
+
+    # Anything new on the list and it opens as a report: "I'm still seeing
+    # these problems" over a problem never reported was false (run 1790349319,
+    # a stage that had just unlocked). The repeated line says "still" itself.
+    mixed = ChallengeRunner._build_feedback_prompt(
+        checks=["[G01] REQ-INIT — initial position", "[G02] REQ-PIP — pip count"],
+        repeat_complaints={"[G01] REQ-INIT — initial position"},
+    )
+    assert FIRST in mixed and AGAIN not in mixed
 
     # Dedup: two checks sharing a token resolve to the same line and collapse to
     # one numbered item, and the numbering stays contiguous across the drop.
@@ -144,7 +154,6 @@ def test_build_feedback_prompt_openers_and_invariants() -> None:
             "[G02] REQ-PIP — pip count",
             "[G03] REQ-DICE — dice to moves",
         ],
-        had_prior_feedback=False,
     )
     lines = prompt.splitlines()
     assert lines[0] == _EXCUSE_ELIMINATOR

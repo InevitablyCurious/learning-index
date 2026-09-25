@@ -59,7 +59,6 @@ def test_a_missing_field_is_never_reported_as_a_boot_failure() -> None:
     """The exact regression, stated as the thing that must not happen again."""
     msg = R._build_feedback_prompt(
         problems=[_problem('conformance:REQ-STATE/state.winType — /api/state carries "winType"')],
-        had_prior_feedback=False,
     )
     assert "doesn't seem to start up" not in msg
     assert "come up at all" not in msg
@@ -73,7 +72,6 @@ def test_the_two_lists_are_separate_and_each_numbered_from_one() -> None:
             _problem('conformance:REQ-STATE/state.winType — /api/state carries "winType"'),
             _problem('conformance:REQ-STATE/state.turnOver — /api/state carries "turnOver"'),
         ],
-        had_prior_feedback=False,
     )
     tester_part, _, team_part = msg.partition("my software team")
     assert "1)" in tester_part and "2)" not in tester_part, "one tester complaint"
@@ -86,7 +84,6 @@ def test_the_team_section_is_absent_when_the_team_has_nothing_to_say() -> None:
     # content, and it still hands the model a party to argue with.
     msg = R._build_feedback_prompt(
         problems=[_problem("[G07] REQ-HIT — hitting → bar")],
-        had_prior_feedback=False,
     )
     assert "software team" not in msg
 
@@ -101,7 +98,6 @@ def test_the_team_carries_its_own_excuse_eliminator() -> None:
     """
     msg = R._build_feedback_prompt(
         problems=[_problem('conformance:REQ-STATE/state.winType — /api/state carries "winType"')],
-        had_prior_feedback=False,
     )
     assert "clean checkout" in msg and "isn't there to find" in msg
     # And the original one still opens the message.
@@ -114,7 +110,6 @@ def test_the_teams_opener_is_not_the_graders_vocabulary() -> None:
     # say it, and it tells the model it is being measured.
     msg = R._build_feedback_prompt(
         problems=[_problem('conformance:REQ-STATE/state.winType — /api/state carries "winType"')],
-        had_prior_feedback=False,
     )
     lowered = msg.lower()
     for word in ("conformance", "pre-gate", "gate", "harness", "benchmark", "grader"):
@@ -183,7 +178,6 @@ def test_no_line_is_truncated_in_delivery() -> None:
             _problem("[E04] REQ-DOUBLES — doubles"),
             _problem('conformance:REQ-STATE/state.points — /api/state carries "points"'),
         ],
-        had_prior_feedback=False,
     )
     assert "…" not in msg, "a delivered complaint was truncated"
 
@@ -202,7 +196,6 @@ def test_the_team_line_states_what_the_missing_thing_IS() -> None:
             _problem('conformance:REQ-STATE/state.winType — /api/state carries "winType"'),
             _problem('conformance:REQ-TESTID/testid.rollBtn — page exposes "rollBtn"'),
         ],
-        had_prior_feedback=False,
     )
     # The field is named AND said what it is.
     assert "winType" in msg
@@ -219,7 +212,6 @@ def test_the_teams_closing_claim_is_true_on_a_seeded_cell() -> None:
     """
     msg = R._build_feedback_prompt(
         problems=[_problem('conformance:REQ-STATE/state.winType — x')],
-        had_prior_feedback=False,
     )
     assert "spec you were given" not in msg
     assert "the written spec for this app" in msg
@@ -387,7 +379,6 @@ def test_one_hang_is_reported_once_not_once_per_unmeasured_gate() -> None:
         ],
         checks=None,
         repeat_complaints=set(),
-        had_prior_feedback=False,
     )
     assert msg.lower().count("locked up") == 1
     # And the unmeasured gates say nothing at all — they were not measured, so
@@ -424,7 +415,7 @@ def test_a_refused_setup_is_told_as_the_team_saw_it_never_as_the_gates_player_st
     team = msg.split("software team", 1)[1]
     assert "debug endpoint" in team, "a refused setup is the team's finding"
     again = ChallengeRunner._build_feedback_prompt(
-        problems=problems[:1], had_prior_feedback=True, repeat_complaints={problems[0]["check"]}
+        problems=problems[:1], repeat_complaints={problems[0]["check"]}
     )
     assert "still didn't take" in again
 
