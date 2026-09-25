@@ -34,6 +34,11 @@ import run_cumulative  # noqa: E402
 
 MODULE = run_cumulative
 
+# Re-frozen 2026-09-25 (Jerry): the header no longer names each side's home points
+# ("White home = 1..6", "Black home = 19..24") — knowledge, not convention; the
+# build prompt gives only the direction of travel. Same change in chunk-01/04.
+# Prior: 27d0f66f2a80ce43b9c7b5837dfc380073272e1fcc603e5a333f53ea337ee394
+#        (2026-09-24, scaffold comments = chunk-01 listing)
 # Re-frozen 2026-09-24 (Jerry): the scaffold's doc comments now say exactly what
 # chunk-01's function listing says — the rule text the spec stopped teaching in
 # 6eb5832 ("use as many dice as possible", a hit "sending it to the bar", "none
@@ -55,7 +60,7 @@ MODULE = run_cumulative
 #        (2026-09-10, WO-PORT-ASSIGNABLE)
 # Prior: e0a14bdba4294caa42cab090dfc0edfba79ad399e331e95a705df71b678b001c
 #        (2026-09-07, frontend origin seam / REQ-SAME-ORIGIN)
-FROZEN = "27d0f66f2a80ce43b9c7b5837dfc380073272e1fcc603e5a333f53ea337ee394"
+FROZEN = "7542fcc31acef904c8753efa74601f8983a9c4319624b9eebe9c6dc15756a0db"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LIVE_SCAFFOLD = REPO_ROOT / "task" / "backgammon" / "scaffold"
 

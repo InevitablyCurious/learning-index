@@ -31,8 +31,8 @@ Required `data-testid` hooks (EXACT — the UI automation selects on these; stat
 - Each move hint: `data-testid="hint"`.
 - Each die: `data-testid="die"`, nested inside the `dice` container.
 - After a roll, at least two dice are visible on the board.
-- The bar column: `data-testid="bar"`.
-- The off tray: `data-testid="off-tray"`, with halves `data-testid="off-ai"` and `data-testid="off-you"`.
+- The bar: `data-testid="bar"`.
+- The off tray: `data-testid="off-tray"`, containing `data-testid="off-ai"` and `data-testid="off-you"`.
 
 **Before you hand it over, look at it.** Load the page in a browser and play it — click a checker, take a move, roll again, watch the computer reply. What the server returns is not what a player sees, so a page that looks right in the API can still be broken on screen. The notes in this folder show how to drive a browser from a script.
 

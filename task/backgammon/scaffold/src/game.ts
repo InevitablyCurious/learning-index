@@ -1,8 +1,8 @@
 // Backgammon core engine — pure logic, no I/O.
 // Conventions:
 //   Points are numbered 1..24. Internally stored in `points[1..24]`.
-//   White (the human) moves from HIGH points to LOW points (24 -> 1). White home = 1..6.
-//   Black (the AI) moves from LOW points to HIGH points (1 -> 24).  Black home = 19..24.
+//   White (the human) moves from HIGH points to LOW points (24 -> 1).
+//   Black (the AI) moves from LOW points to HIGH points (1 -> 24).
 //   points[p] > 0  => that many WHITE checkers on point p.
 //   points[p] < 0  => that many BLACK checkers on point p (abs value).
 //   Bearing off: a checker leaving the board, either colour, moves to OFF.
