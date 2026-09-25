@@ -76,7 +76,7 @@
       "repeat": "Fresh game again, before I'd even rolled, and the pip counts still don't add up."
     },
     "G03": {
-      "first": "When I roll, the game doesn't give me the right number of moves — doubles don't give me four, and a plain roll doesn't give me two.",
+      "first": "When I roll, the number of moves I get doesn't match the dice.",
       "repeat": "Rolled several times and the number of moves I get still doesn't match the dice."
     },
     "G04": {
@@ -155,6 +155,10 @@
       "first": "I made a move, hit undo, and the board didn't go back to how it was — a checker stayed where it had moved to or went missing.",
       "repeat": "Tried undo again after another move and the board still didn't come back right — a checker was still missing or still in the wrong place."
     },
+    "G23.nomove": {
+      "first": "After I rolled, there was no checker I could pick up to move.",
+      "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
+    },
     "G24": {
       "first": "I accepted a double and the cube stayed at one, and it didn't mark me as the owner.",
       "repeat": "Accepted another double and the cube still didn't go up to two or show me as the owner."
@@ -162,6 +166,10 @@
     "G25": {
       "first": "The computer never takes its turn — after I move it just sits there and I never get to go again.",
       "repeat": "I moved again and the computer still just sits there, never taking its turn."
+    },
+    "G25.nomove": {
+      "first": "After I rolled, there was no checker I could pick up to move.",
+      "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
     },
     "E01": {
       "first": "When I roll doubles, I only get two moves.",
@@ -604,8 +612,24 @@
       "repeat": "Looked again and the off tray still isn't there, still no place for taken-off pieces."
     },
     "F33": {
+      "first": "I rolled a double and couldn't play all of it.",
+      "repeat": "Rolled another double and still couldn't play all of it."
+    },
+    "F33.nomove": {
+      "first": "I rolled a double and couldn't make a single move with it.",
+      "repeat": "Rolled another double and still couldn't make a single move with it."
+    },
+    "F33.one": {
+      "first": "I rolled a double and could only make one move.",
+      "repeat": "Rolled another double and could still only make one move."
+    },
+    "F33.two": {
       "first": "I rolled a double and could only make two moves.",
       "repeat": "Rolled another double and could still only make two moves."
+    },
+    "F33.three": {
+      "first": "I rolled a double and could only make three moves.",
+      "repeat": "Rolled another double and could still only make three moves."
     },
     "REQ-RESPONSIVE/startup": {
       "repeat": "Tried opening it again and it hung on me the same way. Nothing ever appears, it just sits — {seconds} of it before I gave up.",
@@ -663,6 +687,10 @@
       "first": "The move hints show up but they don't animate — they just pop in with no motion.",
       "repeat": "The hints still show up but still don't animate, still popping in with no motion."
     },
+    "F26.nopiece": {
+      "first": "After I rolled, there was no checker I could pick up to move.",
+      "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
+    },
     "F10.hints": {
       "first": "I clicked my checker on the bar and no hints appeared showing where it could come back in.",
       "repeat": "Clicked the bar checker again and still no re-entry hints showed up."
@@ -700,8 +728,8 @@
       "repeat": "Doubled again and after they took it the cube still didn't show them as the owner."
     },
     "E01.doubles": {
-      "first": "I rolled doubles and only got two moves.",
-      "repeat": "Rolled doubles again and still only got two moves."
+      "first": "I rolled doubles and got the wrong number of moves.",
+      "repeat": "Rolled doubles again and still got the wrong number of moves."
     },
     "E01.nondouble": {
       "first": "I rolled two different numbers and got the wrong number of moves.",
@@ -710,6 +738,18 @@
     "G03.doubles": {
       "first": "I rolled doubles and got only two dice, not four.",
       "repeat": "Rolled doubles again and still got only two dice, not four."
+    },
+    "G03.nomove": {
+      "first": "I rolled a double and couldn't make a single move with it.",
+      "repeat": "Rolled another double and still couldn't make a single move with it."
+    },
+    "G03.doublemoves": {
+      "first": "I rolled doubles and got the wrong number of moves.",
+      "repeat": "Rolled doubles again and still got the wrong number of moves."
+    },
+    "G03.plainmoves": {
+      "first": "I rolled two different numbers and got the wrong number of moves.",
+      "repeat": "Rolled two different numbers again and still got the wrong number of moves."
     },
     "G26": {
       "first": "On a new game the cube isn't showing one, or it already sits in a corner, not the middle.",

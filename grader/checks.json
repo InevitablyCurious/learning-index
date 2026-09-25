@@ -307,12 +307,12 @@
     "F25": {
       "name": "A move uses up a die",
       "what": "Playing a move by clicking really advances the turn.",
-      "how": "Fixes the next roll to 6-5, clicks Roll, clicks a movable checker, clicks one of its hints, and requires one fewer die left afterwards."
+      "how": "Fixes the next roll to 6-5, clicks Roll, clicks a movable checker, clicks one of its visible hints, and requires the move to be played and one fewer die left afterwards."
     },
     "F26": {
       "name": "Hint animation",
       "what": "Move hints are animated.",
-      "how": "Reads the page's styles: the hint shown for a bar checker must have an animation."
+      "how": "Sets white to move with 3-5, clicks a movable checker, and reads the page's styles: the hint it shows must have an animation."
     },
     "F27": {
       "name": "Page loads cleanly",
@@ -347,7 +347,7 @@
     "F33": {
       "name": "A double lets the player make four moves",
       "what": "A double gives the player four moves, not two.",
-      "how": "Sets a doubled dice state through the debug route, reloads, then clicks checker, hint, and move four times, asserting all four dice are consumed."
+      "how": "Sets a doubled dice state through the debug route, reloads, then clicks checker, hint, and move four times, asserting all four dice are consumed; a failure names how many moves the double gave."
     }
   },
   "setup": [

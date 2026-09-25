@@ -362,13 +362,20 @@ test("[F26] REQ-ANIM — hint animation", async ({ page }) => {
   const movableWhiteChecker = page
     .locator('[data-testid="checker"][data-color="white"].selectable')
     .first();
+  // No checker to pick up, or no hint for it, is not an animation finding:
+  // the gates that look for those after an ordinary roll report it when they
+  // fail too (a needs marker, harness/adapters/challenge/stages.py).
+  await expect(
+    movableWhiteChecker,
+    "[aspect: nopiece] [needs: REQ-HINT/selectable]",
+  ).toBeVisible();
   await playerClickUntilShown(
     movableWhiteChecker,
     page.locator('[data-testid="hint"]'),
   );
 
   const hint = page.locator('[data-testid="hint"]').first();
-  await expect(hint, "[aspect: present]").toBeVisible();
+  await expect(hint, "[aspect: present] [needs: REQ-HINT/hint F03 F25]").toBeVisible();
   const hintAnimation = await hint.evaluate((el) => {
     const css = getComputedStyle(el);
     return {

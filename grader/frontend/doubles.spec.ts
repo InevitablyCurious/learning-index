@@ -11,6 +11,30 @@ import { expect, playerClickUntilShown, setupState, test } from "./fixtures.ts";
 // own state must show all four dice consumed. An app that draws two dice
 // but plays four moves passes; an app that draws four dice but plays two
 // fails.
+//
+// What the player is told is how many moves the double actually gave them.
+// A FIRST move that cannot be made is not yet about doubles when the gates
+// that play an ordinary roll the same way (pick up a checker, see a hint,
+// click it) fail too: theirs is the complaint, and this gate is not told
+// (a needs marker, harness/adapters/challenge/stages.py). When they pass, the
+// double alone gave no move at all.
+
+// One move, bounded. A checker highlighted before the page redraws can vanish
+// mid-click, and the click helper then waits for it to come back until the
+// test's own time runs out — "Test timeout exceeded", which names no move
+// (FIX-3 re-grade, M10b). Bounding each move keeps the finding about the move.
+async function withinSeconds<T>(seconds: number, step: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`gave up after ${seconds}s`)), seconds * 1000);
+  });
+  try {
+    return await Promise.race([step(), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function remainingDiceCount(page: Page): Promise<number> {
   const response = await page.request.post("/api/state", { data: {} });
   expect(response.ok(), `POST /api/state failed (${response.status()})`).toBeTruthy();
@@ -19,6 +43,8 @@ async function remainingDiceCount(page: Page): Promise<number> {
 }
 
 test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ page }) => {
+  // Four bounded moves, each allowed its full bound, and room to set up.
+  test.setTimeout(90_000);
   await page.goto("/");
   await expect(page.locator('[data-testid="board"]')).toBeVisible();
 
@@ -43,7 +69,10 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
   });
 
   await page.reload();
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[aspect: nomove]").toBeVisible();
+
+  const firstMove = "[aspect: nomove] [needs: REQ-HINT/selectable REQ-HINT/hint F03 F25]";
+  const movesMade = ["", "[aspect: one]", "[aspect: two]", "[aspect: three]"];
 
   const selectable = page.locator(
     '[data-testid="checker"][data-color="white"].selectable',
@@ -59,14 +88,22 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
   // server to consume each die before the next click keeps the loop in step
   // with the page's own redraw.
   for (let played = 1; played <= 4; played++) {
-    await playerClickUntilShown(selectable.first(), hints);
-    await expect(hints.first(), `move ${played}: no hint appeared`).toBeVisible();
-    // Hints carry an infinite `pulse` animation, so Playwright never sees
-    // them as "stable" — force the click past the stability check.
-    await hints.first().click({ force: true });
-    await expect
-      .poll(() => remainingDiceCount(page), `move ${played}: die not consumed`)
-      .toBe(4 - played);
+    const told = played === 1 ? firstMove : movesMade[played - 1];
+    try {
+      await withinSeconds(20, async () => {
+        await expect(selectable.first(), "no checker to pick up").toBeVisible();
+        await playerClickUntilShown(selectable.first(), hints);
+        await expect(hints.first(), "no hint appeared").toBeVisible();
+        // Hints carry an infinite `pulse` animation, so Playwright never sees
+        // them as "stable" — force the click past the stability check.
+        await hints.first().click({ force: true });
+        await expect.poll(() => remainingDiceCount(page), "die not consumed").toBe(4 - played);
+      });
+    } catch (err) {
+      // Whichever step stopped this move, what the player saw is how many
+      // moves the double gave — so every failure inside the move says so.
+      throw new Error(`move ${played} ${told}: ${(err as Error).message}`);
+    }
   }
 
   // All four dice were played through the UI: the server holds nothing left.

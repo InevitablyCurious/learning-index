@@ -136,13 +136,17 @@ describe("Backgammon backend gates 13-16", () => {
       await debugRoll([4, 2]);
 
       let state = await api("/api/roll", {});
+      // No move after the roll is not the computer's finding: the
+      // movable-checker gate reports it when an ordinary roll gives none either
+      // (a needs marker, harness/adapters/challenge/stages.py).
+      const noMove = "[aspect: nomove] [needs: REQ-HINT/selectable F03 F25]";
       expect(state.turn).toBe("white");
-      expect(state.phase).toBe("move");
+      expect(state.phase, noMove).toBe("move");
 
       let moveSteps = 0;
       while (!state.turnOver && moveSteps < 16) {
         const legalMoves = (state.legalMoves ?? []) as Move[];
-        expect(legalMoves.length).toBeGreaterThan(0);
+        expect(legalMoves.length, moveSteps === 0 ? noMove : undefined).toBeGreaterThan(0);
         const m = legalMoves[0];
         state = await api("/api/move", { from: m.from, to: m.to, die: m.die });
         moveSteps++;

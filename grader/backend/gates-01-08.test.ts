@@ -84,9 +84,11 @@ describe("Backgammon backend gates 01-08", () => {
   it("[G03] REQ-DICE — dice → moves", () => {
     const start = bd([...game.startingPoints()], { white: 0, black: 0 }, { white: 0, black: 0 });
 
-    expect(game.maxPlies(start, "white", [3, 3, 3, 3])).toBe(4);
-    expect(game.maxPlies(start, "white", [3, 1])).toBe(2);
-    expect(game.maxPlies(start, "black", [6, 6, 6, 6])).toBe(4);
+    // One complaint per fault (Jerry, 2026-09-24): a broken double must not be
+    // told as a broken plain roll too, nor the other way round.
+    expect(game.maxPlies(start, "white", [3, 3, 3, 3]), "[aspect: doublemoves]").toBe(4);
+    expect(game.maxPlies(start, "white", [3, 1]), "[aspect: plainmoves]").toBe(2);
+    expect(game.maxPlies(start, "black", [6, 6, 6, 6]), "[aspect: doublemoves]").toBe(4);
   });
 
   it("[G04] REQ-MOVES — legal-move generation (blocked points)", () => {

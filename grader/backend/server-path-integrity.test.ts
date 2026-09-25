@@ -43,9 +43,17 @@ describe("Backgammon backend server-path integrity", () => {
     const state = doubleState!;
     expect(new Set(state.dice).size).toBe(1);
     expect(state.remainingDice.length, "[aspect: doubles]").toBe(4);
-    expect(state.legalMoves.length).toBeGreaterThan(0);
+    // No move at all is the movable-checker gate's complaint when an ordinary
+    // roll gives none either (a needs marker, harness/adapters/challenge/stages.py).
+    expect(
+      state.legalMoves.length,
+      "[aspect: nomove] [needs: REQ-HINT/selectable F03 F25]",
+    ).toBeGreaterThan(0);
     const board: Board = { points: state.points, bar: state.bar, off: state.off };
-    expect(game.maxPlies(board, "white", state.remainingDice)).toBeGreaterThanOrEqual(3);
+    expect(
+      game.maxPlies(board, "white", state.remainingDice),
+      "[aspect: doublemoves]",
+    ).toBeGreaterThanOrEqual(3);
   });
 
   // M21: a gammon win scores double points (pointsWon === 2), not single.
@@ -85,9 +93,13 @@ describe("Backgammon backend server-path integrity", () => {
     await api("/api/new", { difficulty: "medium" });
     await debugRoll([3, 1]);
     const before = await api("/api/roll", {});
-    expect(before.phase).toBe("move");
+    // No move to undo is not an undo finding: the movable-checker gate plays
+    // this same 3-1 opening roll and reports it when it fails too (a needs marker,
+    // harness/adapters/challenge/stages.py).
+    const noMove = "[aspect: nomove] [needs: REQ-HINT/selectable F03 F25]";
+    expect(before.phase, noMove).toBe("move");
     const move = (before.legalMoves as Move[])[0];
-    expect(move).toBeTruthy();
+    expect(move, noMove).toBeTruthy();
     const beforeBoard = {
       points: [...before.points],
       bar: { ...before.bar },

@@ -17,6 +17,9 @@ interface ApiState {
   score: { white: number; black: number };
   dice: number[];
   canDouble: boolean;
+  points: number[];
+  bar: { white: number; black: number };
+  off: { white: number; black: number };
 }
 
 const BAR = 0;
@@ -179,7 +182,9 @@ test("[F03] REQ-HINT — clicking a piece shows its moves", async ({ page }) => 
     .toBeGreaterThanOrEqual(2);
 
   const state = await readState(page);
-  expect(state.legalMoves.length).toBeGreaterThan(0);
+  // A roll that leaves no move is the movable-checker gate's complaint when it
+  // fails too (a needs marker, harness/adapters/challenge/stages.py).
+  expect(state.legalMoves.length, "[needs: REQ-HINT/selectable]").toBeGreaterThan(0);
   await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
 
   const hints = page.getByTestId("hint");
@@ -196,11 +201,15 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
 
   await page.getByTestId("rollBtn").click();
   await expect
-    .poll(async () => page.getByTestId("die").count())
+    .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die]")
     .toBeGreaterThanOrEqual(2);
 
+  // Steps a player must get through before any die can be used up: a move to
+  // make and a hint to click. When the gates that test those after an
+  // ordinary roll fail too, the complaint is theirs (a needs marker,
+  // harness/adapters/challenge/stages.py).
   const before = await readState(page);
-  expect(before.legalMoves.length).toBeGreaterThan(0);
+  expect(before.legalMoves.length, "[needs: REQ-HINT/selectable F03]").toBeGreaterThan(0);
 
   const move = before.legalMoves[0];
   try {
@@ -210,8 +219,13 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
     // not as the helper's uncaught throw.
   }
 
+  // A hint the player can see: one that is drawn but hidden cannot be clicked
+  // by a player, and clicking it anyway reported "the die didn't go away" for
+  // a move nobody could make (FIX-2 mutation M28).
+  const reveal = "[aspect: reveal] [needs: REQ-HINT/hint F03]";
   const hints = page.getByTestId("hint");
-  await expect.poll(async () => hints.count(), "[aspect: reveal]").toBeGreaterThan(0);
+  await expect.poll(async () => hints.count(), reveal).toBeGreaterThan(0);
+  await expect(hints.first(), reveal).toBeVisible();
 
   const hintCount = await hints.count();
   let clicked = false;
@@ -229,6 +243,13 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
   if (!clicked) {
     await hints.first().click({ force: true });
   }
+
+  // The click must play the move before a die can be used up. A click that
+  // changes nothing on the board is this gate's own finding, told as the
+  // move not registering — never as a die left over from a move that never
+  // happened (FIX-2 mutation M13: the hint's click did nothing).
+  const boardOf = (s: ApiState) => JSON.stringify([s.points, s.bar, s.off]);
+  await expect.poll(async () => boardOf(await readState(page))).not.toBe(boardOf(before));
 
   const expectedRemaining = before.remainingDice.length - 1;
   await expect
@@ -256,11 +277,20 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
     .toBeGreaterThanOrEqual(2);
 
   const state = await readState(page);
-  expect(state.legalMoves.length).toBeGreaterThan(0);
-  await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
+  // A roll that leaves no move, or a checker that shows no hints, is the
+  // complaint of the gates that test those steps when they fail too
+  // (a needs marker, harness/adapters/challenge/stages.py).
+  expect(state.legalMoves.length, "[needs: REQ-HINT/selectable]").toBeGreaterThan(0);
+  try {
+    await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
+  } catch {
+    // No hints must fail on the marked assertion below, not the helper's throw.
+  }
 
   const hints = page.getByTestId("hint");
-  await expect.poll(async () => hints.count()).toBeGreaterThan(0);
+  await expect
+    .poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]")
+    .toBeGreaterThan(0);
 
   const hintTexts = (await hints.allInnerTexts()).map(normalizeHint).filter(Boolean);
   expect(hintTexts.length).toBeGreaterThan(0);

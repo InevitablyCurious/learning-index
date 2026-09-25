@@ -46,8 +46,9 @@ class PlayerView:
     stage: Stage | None
     visible: list[dict[str, Any]] = field(default_factory=list)
     withheld: list[str] = field(default_factory=list)
-    # Checks the grader never reached this round. Scored as not passing; never
-    # told to the model, because nobody observed them fail.
+    # Checks the grader never reached this round, and checks that stopped at a
+    # step another failing check already reports (`[needs: …]`). Scored as not
+    # passing; never told to the model, because nobody observed them fail.
     unevaluated: list[str] = field(default_factory=list)
 
 
@@ -62,6 +63,26 @@ _UNEVALUATED = "never evaluated"
 
 def is_unevaluated(problem: dict[str, Any]) -> bool:
     return str(problem.get("observed", "")).strip().startswith(_UNEVALUATED)
+
+
+# A CHECK THAT CANNOT GET STARTED IS NOT TOLD (Jerry, 2026-09-24). A gate that
+# fails before it reaches its own subject — no checker to pick up, no hint to
+# click, no move to undo — names the checks that test that same step:
+# `[needs: F03 REQ-HINT/selectable]`. When one of them failed too, the player's
+# complaint is theirs, so this one is scored as not passing and told to no one;
+# the doubles gate used to tell "I could only make two moves" to a player who
+# could make none (FIX-2 mutations M13, M27, M28, M34). When none of them
+# failed, the step went wrong only in this gate's situation, and the gate's own
+# `[aspect: …]` line for it is told — hiding it would skip a stage a player
+# meets. The needed checks sit in the same or an earlier stage and never form a
+# cycle (tests/test_player_stages.py), so a withheld check always has a told
+# one at or before its stage.
+_NEEDS_RE = re.compile(r"\[needs: ([^\]]+)\]")
+
+
+def needs_of(problem: dict[str, Any]) -> tuple[str, ...]:
+    m = _NEEDS_RE.search(str(problem.get("observed", "")))
+    return tuple(m.group(1).split()) if m else ()
 
 
 def load_stages(checks_json: Path) -> list[Stage]:
@@ -109,16 +130,17 @@ def player_view(
     is_infra: Callable[[str], bool],
 ) -> PlayerView:
     """The problems of the earliest failing stage; the rest are withheld, and
-    checks the grader never reached are told to no one."""
+    checks the grader never reached, or that stopped at a step another failing
+    check reports, are told to no one."""
+    records = [p for p in problems if isinstance(p, dict)]
+    failed = {ident for p in records if (ident := check_id(str(p.get("check", "")).strip()))}
     staged: list[tuple[Stage, dict[str, Any]]] = []
     unevaluated: list[str] = []
-    for problem in problems:
-        if not isinstance(problem, dict):
-            continue
+    for problem in records:
         check = str(problem.get("check", "")).strip()
         if not check or is_infra(check):
             continue
-        if is_unevaluated(problem):
+        if is_unevaluated(problem) or any(n in failed for n in needs_of(problem)):
             unevaluated.append(check)
             continue
         staged.append((stage_of(check, stages), problem))

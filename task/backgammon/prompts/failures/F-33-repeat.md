@@ -1,1 +1,1 @@
-Rolled another double and could still only make two moves.
+Rolled another double and still couldn't play all of it.
