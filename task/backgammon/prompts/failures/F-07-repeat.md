@@ -1,1 +1,1 @@
-The cube on screen still shows the wrong number, or the wrong side of the table owning it.
+Doubled again and the cube on screen still doesn't show the new value, or still shows the wrong owner.

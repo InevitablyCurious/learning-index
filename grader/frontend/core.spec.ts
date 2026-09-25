@@ -387,7 +387,7 @@ test("[F06] REQ-PIPUI — pip display cross-checked vs engine", async ({ page })
   expect(customDomBlack, "[aspect: sync]").toBe(customState.pip.black);
 });
 
-test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
+test("[F34] REQ-CUBEUI — a new game shows the cube at one, centered", async ({ page }) => {
   await openApp(page);
 
   await postJson<ApiState>(page, "/api/new", {});
@@ -397,6 +397,14 @@ test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
   await expect(page.getByTestId("cubeVal")).toHaveText("1");
   const openingOwnerLabel = await page.getByTestId("cubeOwner").innerText();
   expect(openingOwnerLabel.toLowerCase()).toMatch(/center|centre|centr/);
+});
+
+test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
+  await openApp(page);
+
+  await postJson<ApiState>(page, "/api/new", {});
+  await page.reload();
+  await expect(page.getByTestId("board")).toBeVisible();
 
   await postJson<ApiState>(page, "/api/double", {});
   await page.reload();

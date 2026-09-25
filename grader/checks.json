@@ -60,9 +60,14 @@
       "how": "White has all 15 off in each case. Black with 2 already off → single. Black with none off, none on the bar and none in white's home → gammon. A black checker in white's home, or on the bar → backgammon. White with only 14 off → not won."
     },
     "G11": {
+      "name": "Doubling is allowed",
+      "what": "On a new game the player may offer a double.",
+      "how": "Through the running server: a new game must allow doubling (canDouble true)."
+    },
+    "G26": {
       "name": "The cube starts centered",
-      "what": "A new game starts with the cube in the middle, and doubling is allowed.",
-      "how": "Through the running server: a new game must have the cube at 1, unowned, with doubling allowed."
+      "what": "A new game starts with the cube at one, unowned (centered).",
+      "how": "Through the running server: a new game must have the cube at value 1 with owner null."
     },
     "G12": {
       "name": "The computer's cube decisions",
@@ -205,9 +210,14 @@
       "how": "The opening position must show 167 and 167, matching the server. A custom position is then set, and the displayed counts must match the server again."
     },
     "F07": {
-      "name": "The cube on screen",
-      "what": "The cube on screen shows its value and who owns it.",
-      "how": "New game: value \"1\" and an owner label reading as centred. After the player doubles and the computer accepts: value \"2\", and the owner label must name the side the server reports."
+      "name": "The cube after a double",
+      "what": "After the player doubles, the cube on screen shows the new value and who owns it.",
+      "how": "After the player doubles and the computer accepts: value 2, and the owner label names the side the server reports."
+    },
+    "F34": {
+      "name": "The cube on a new game",
+      "what": "A new game shows the cube at one, centered on screen.",
+      "how": "New game: the cube value reads 1 and the owner label reads centered."
     },
     "F08": {
       "name": "Difficulty selector",
@@ -335,9 +345,9 @@
       "how": "Measures the off-tray box and asserts it exists with non-zero width and height and is neither display:none nor visibility:hidden."
     },
     "F33": {
-      "name": "Doubles show four dice",
-      "what": "A doubles roll renders four dice, not two.",
-      "how": "Sets a doubled dice state through the debug route, reloads, and asserts four die elements render."
+      "name": "A double lets the player make four moves",
+      "what": "A double gives the player four moves, not two.",
+      "how": "Sets a doubled dice state through the debug route, reloads, then clicks checker, hint, and move four times, asserting all four dice are consumed."
     }
   },
   "setup": [
@@ -568,7 +578,9 @@
         "G02",
         "F06",
         "F17",
-        "F31"
+        "F31",
+        "G26",
+        "F34"
       ]
     },
     {

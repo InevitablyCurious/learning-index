@@ -112,11 +112,17 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     }
   });
 
-  it("[G11] REQ-CUBE-STATE — new game starts with centered cube and canDouble=true", async () => {
+  it("[G11] REQ-CUBE-STATE — doubling is allowed on a new game", async () => {
     await api("/api/new", { difficulty: "medium" });
     const state = await getState();
 
     expect(state.canDouble).toBe(true);
+  });
+
+  it("[G26] REQ-CUBE-STATE — a new game starts with a centered cube", async () => {
+    await api("/api/new", { difficulty: "medium" });
+    const state = await getState();
+
     expect(state.cube).toEqual({ value: 1, owner: null });
   });
 

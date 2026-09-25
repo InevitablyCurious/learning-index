@@ -108,8 +108,8 @@
       "repeat": "Played several more games to the end and the result it announces still doesn't match how the game actually finished."
     },
     "G11": {
-      "first": "On a fresh game the doubling cube doesn't start centered, or it tells me I can't double yet.",
-      "repeat": "Started over again and the cube still doesn't sit centered, or it still won't let me double."
+      "first": "The game won't let me offer a double.",
+      "repeat": "It still won't let me offer a double."
     },
     "G12": {
       "first": "The computer handles the doubling cube at the wrong times — it takes or turns down my doubles when it shouldn't, or it offers me the cube when it has no business doubling.",
@@ -224,8 +224,8 @@
       "repeat": "Those pip counters still don't agree with the board — wrong, or not readable as numbers."
     },
     "F07": {
-      "first": "The doubling cube on screen doesn't show the right number or whose it is",
-      "repeat": "The cube on screen still shows the wrong number, or the wrong side of the table owning it."
+      "first": "After I double, the cube on screen doesn't show the new value, or it doesn't show who owns it.",
+      "repeat": "Doubled again and the cube on screen still doesn't show the new value, or still shows the wrong owner."
     },
     "F08": {
       "first": "When i change the difficulty level nothing actually changes",
@@ -604,8 +604,8 @@
       "repeat": "Looked again and the off tray still isn't there, still no place for taken-off pieces."
     },
     "F33": {
-      "first": "I rolled a double and only two dice appeared on the board, not four.",
-      "repeat": "Rolled another double and only two dice showed up again, still not four."
+      "first": "I rolled a double and could only make two moves.",
+      "repeat": "Rolled another double and could still only make two moves."
     },
     "REQ-RESPONSIVE/startup": {
       "repeat": "Tried opening it again and it hung on me the same way. Nothing ever appears, it just sits — {seconds} of it before I gave up.",
@@ -710,6 +710,14 @@
     "G03.doubles": {
       "first": "I rolled doubles and got only two dice, not four.",
       "repeat": "Rolled doubles again and still got only two dice, not four."
+    },
+    "G26": {
+      "first": "On a new game the cube isn't showing one, or it already sits in a corner, not the middle.",
+      "repeat": "Started another game and the cube still isn't showing one, or it still sits in a corner."
+    },
+    "F34": {
+      "first": "On a new game the cube on the board reads a number other than one, or it already looks owned by one side.",
+      "repeat": "Started another game and the cube on the board still reads wrong, or still looks owned."
     }
   }
 }

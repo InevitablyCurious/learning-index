@@ -1,13 +1,24 @@
-import { expect, setupState, test } from "./fixtures.ts";
+import { type Page } from "@playwright/test";
+import { expect, playerClickUntilShown, setupState, test } from "./fixtures.ts";
 
-// [F33] REQ-DOUBLES — a doubles roll renders FOUR dice, not two.
+// [F33] REQ-DOUBLES — a double lets the player make FOUR MOVES.
 //
-// The engine holding four moves is not enough: a page can keep the full move
-// list while drawing only two dice. The gate therefore judges the rendered
-// count. The state is pushed whole through the debug API (dice length 4 is
-// what marks a double) and read back after a reload — the page renders the
-// server's state on load, so no roll click is involved.
-test("[F33] REQ-DOUBLES — a double shows four dice", async ({ page }) => {
+// The spec carries a double as four data entries, but it never asks the page
+// to DRAW four dice — what the player must feel is four moves, so that is
+// what the gate plays. An opening position is pushed through the debug API
+// with [6, 6, 6, 6], then the UI is driven the way a player drives it —
+// click a selectable checker, click a hint, four times — and the server's
+// own state must show all four dice consumed. An app that draws two dice
+// but plays four moves passes; an app that draws four dice but plays two
+// fails.
+async function remainingDiceCount(page: Page): Promise<number> {
+  const response = await page.request.post("/api/state", { data: {} });
+  expect(response.ok(), `POST /api/state failed (${response.status()})`).toBeTruthy();
+  const state = (await response.json()) as { remainingDice: number[] };
+  return state.remainingDice.length;
+}
+
+test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator('[data-testid="board"]')).toBeVisible();
 
@@ -33,5 +44,31 @@ test("[F33] REQ-DOUBLES — a double shows four dice", async ({ page }) => {
 
   await page.reload();
   await expect(page.locator('[data-testid="board"]')).toBeVisible();
-  await expect(page.locator('[data-testid="die"]')).toHaveCount(4);
+
+  const selectable = page.locator(
+    '[data-testid="checker"][data-color="white"].selectable',
+  );
+  const hints = page.locator('[data-testid="hint"]');
+
+  // Four moves, played as a player plays them. Which checker or hint gets
+  // picked does not matter: from this position the only legal moves are
+  // 24→18, 13→7 and 8→2, and none can stop being legal later — destinations
+  // only ever receive white checkers, the moved-to points cannot move on
+  // (18→12 and 7→1 are blocked by black stacks), and the sources hold ten
+  // checkers between them, enough for all four plies. Waiting for the
+  // server to consume each die before the next click keeps the loop in step
+  // with the page's own redraw.
+  for (let played = 1; played <= 4; played++) {
+    await playerClickUntilShown(selectable.first(), hints);
+    await expect(hints.first(), `move ${played}: no hint appeared`).toBeVisible();
+    // Hints carry an infinite `pulse` animation, so Playwright never sees
+    // them as "stable" — force the click past the stability check.
+    await hints.first().click({ force: true });
+    await expect
+      .poll(() => remainingDiceCount(page), `move ${played}: die not consumed`)
+      .toBe(4 - played);
+  }
+
+  // All four dice were played through the UI: the server holds nothing left.
+  expect(await remainingDiceCount(page), "four moves consumed the double").toBe(0);
 });

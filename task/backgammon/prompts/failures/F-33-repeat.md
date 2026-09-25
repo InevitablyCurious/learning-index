@@ -1,1 +1,1 @@
-Rolled another double and only two dice showed up again, still not four.
+Rolled another double and could still only make two moves.
