@@ -48,6 +48,7 @@ interface Layout {
   scrollH: number;
   boardOverflowsSideways: boolean;
   trayDrawn: boolean;
+  trayClearOfPoints: boolean;
   drawn: Box | null;
   controls: Record<string, Control | null>;
 }
@@ -108,6 +109,16 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
         scrollH: document.documentElement.scrollHeight,
         boardOverflowsSideways: board ? board.scrollWidth > board.clientWidth + 1 : false,
         trayDrawn: !!tray && tray.width > 0 && tray.height > 0,
+        trayClearOfPoints:
+          !!tray &&
+          ![...document.querySelectorAll<HTMLElement>('[data-testid="point"]')].some((el) => {
+            const p = el.getBoundingClientRect();
+            return (
+              Math.max(0, Math.min(tray.right, p.right) - Math.max(tray.left, p.left)) *
+                Math.max(0, Math.min(tray.bottom, p.bottom) - Math.max(tray.top, p.top)) >
+              2
+            );
+          }),
         drawn,
         controls,
       };
@@ -152,7 +163,10 @@ test("[F36] REQ-LAYOUT — the board takes about 80% of the width", async ({ pag
     // The board's width includes its off tray; a board drawn without one reads
     // narrower than the player sees it (FIX-3 M06: same frame, empty tray
     // column). The missing tray is the tray checks' complaint.
-    expect(layout.trayDrawn, "[needs: REQ-RENDER/off-tray F32]").toBeTruthy();
+    // A tray drawn over the points leaves its own column empty, and the board
+    // reads narrower than the frame the player sees (FIX-5 M54). Either is the
+    // tray checks' complaint.
+    expect(layout.trayDrawn && layout.trayClearOfPoints, "[needs: REQ-RENDER/off-tray F32]").toBeTruthy();
     const share = drawnBoard(layout).w / layout.vw;
     expect(share, `[aspect: wide] at ${layout.size} the board is ${pct(share)} of the width`).toBeLessThanOrEqual(
       BOARD_SHARE.max,

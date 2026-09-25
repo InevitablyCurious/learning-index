@@ -136,6 +136,17 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
     tray.visible,
     `expected the off tray to be visible, found width=${tray.width.toFixed(1)} height=${tray.height.toFixed(1)}`,
   ).toBeTruthy();
+  // A tray a player can see is drawn: a see-through, outline-less, empty box
+  // passed "visible" while nothing was on screen (run 1790341662).
+  expect(tray.painted, "expected the off tray to be drawn (a fill, an outline or a label), found an empty see-through box").toBeTruthy();
+  const points = await readPointBoxes(page);
+  const under = points.filter(
+    (p) =>
+      Math.max(0, Math.min(tray.x + tray.width, p.x + p.width) - Math.max(tray.x, p.x)) *
+        Math.max(0, Math.min(tray.y + tray.height, p.y + p.height) - Math.max(tray.y, p.y)) >
+      2,
+  );
+  expect(under.map((p) => p.num), "[aspect: overlap] the off tray is drawn over points").toEqual([]);
 });
 
 test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
@@ -160,16 +171,14 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   // not read here — the bar check tells that (FIX-3 M46: a bar over points 16
   // and 9 read as two "outward" triangles). Every other point is judged.
   const bar = await readBarBox(page);
+  const tray = await readOffTray(page);
+  const covers = (box: { x: number; y: number; width: number; height: number } | null, p: PointBox) =>
+    box !== null &&
+    Math.max(0, Math.min(box.x + box.width, p.x + p.width) - Math.max(box.x, p.x)) *
+      Math.max(0, Math.min(box.y + box.height, p.y + p.height) - Math.max(box.y, p.y)) >
+      2;
   const underBar = new Set(
-    points
-      .filter(
-        (p) =>
-          bar !== null &&
-          Math.max(0, Math.min(bar.x + bar.width, p.x + p.width) - Math.max(bar.x, p.x)) *
-            Math.max(0, Math.min(bar.y + bar.height, p.y + p.height) - Math.max(bar.y, p.y)) >
-            2,
-      )
-      .map((p) => p.num),
+    points.filter((p) => covers(bar, p) || (tray.exists && tray.painted && covers(tray, p))).map((p) => p.num),
   );
   const samples = await sampleTriangleOrientation(page, points);
 

@@ -596,8 +596,8 @@
       "repeat": "Looked again and the bar is still sitting out at the edge, not in the middle of the board."
     },
     "F29.overlap": {
-      "first": "The bar is drawn on top of some of the points.",
-      "repeat": "The bar is still drawn on top of some of the points."
+      "first": "The bar cuts across some of the points.",
+      "repeat": "The bar still cuts across some of the points."
     },
     "F29.place": {
       "first": "The bar splits the board in the wrong place.",
@@ -622,6 +622,10 @@
     "F32": {
       "first": "The off tray isn't showing — there's no place on the board for pieces that have been taken off.",
       "repeat": "Looked again and the off tray still isn't there, still no place for taken-off pieces."
+    },
+    "F32.overlap": {
+      "first": "The off tray is drawn over some of the points.",
+      "repeat": "The off tray is still drawn over some of the points."
     },
     "F33": {
       "first": "I rolled a double and couldn't play all of it.",

@@ -337,7 +337,7 @@
     "F32": {
       "name": "Off tray visible",
       "what": "The off tray is present and visible, not hidden or zero-sized.",
-      "how": "Measures the off-tray box and asserts it exists with non-zero width and height and is neither display:none nor visibility:hidden."
+      "how": "New game: the off tray exists, is visible, is actually drawn (a fill, an outline or a label — not an empty see-through box), and sits over no point."
     },
     "F33": {
       "name": "A double lets the player make four moves",

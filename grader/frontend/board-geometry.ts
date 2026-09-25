@@ -30,6 +30,11 @@ export interface CheckerBox {
 export interface OffTrayState {
   exists: boolean;
   visible: boolean;
+  // Drawn so a player can see it: the tray or something inside it has a fill,
+  // an outline, a shadow or a label. An empty see-through box is not a tray.
+  painted: boolean;
+  x: number;
+  y: number;
   width: number;
   height: number;
 }
@@ -106,18 +111,39 @@ export async function readBarBox(
 export async function readOffTray(page: Page): Promise<OffTrayState> {
   const tray = page.locator('[data-testid="off-tray"]');
   if ((await tray.count()) === 0) {
-    return { exists: false, visible: false, width: 0, height: 0 };
+    return { exists: false, visible: false, painted: false, x: 0, y: 0, width: 0, height: 0 };
   }
   return tray.first().evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const style = getComputedStyle(element);
+    const paints = (el: Element): boolean => {
+      const cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) <= 0.05) return false;
+      const alpha = (colour: string): number => {
+        const parts = colour.match(/[\d.]+/g)?.map(Number) ?? [];
+        return parts.length === 4 ? parts[3] : parts.length === 3 ? 1 : 0;
+      };
+      const outlined = ["Top", "Right", "Bottom", "Left"].some(
+        (side) =>
+          parseFloat(cs.getPropertyValue(`border-${side.toLowerCase()}-width`)) > 0 &&
+          !["none", "hidden"].includes(cs.getPropertyValue(`border-${side.toLowerCase()}-style`)) &&
+          alpha(cs.getPropertyValue(`border-${side.toLowerCase()}-color`)) > 0.05,
+      );
+      return alpha(cs.backgroundColor) > 0.05 || cs.backgroundImage !== "none" || cs.boxShadow !== "none" || outlined;
+    };
     return {
       exists: true,
       visible:
         rect.width > 0 &&
         rect.height > 0 &&
         style.display !== "none" &&
-        style.visibility !== "hidden",
+        style.visibility !== "hidden" &&
+        Number(style.opacity) > 0.05,
+      painted:
+        [element, ...element.querySelectorAll("*")].some(paints) ||
+        ((element as HTMLElement).innerText ?? "").trim().length > 0,
+      x: rect.x,
+      y: rect.y,
       width: rect.width,
       height: rect.height,
     };
