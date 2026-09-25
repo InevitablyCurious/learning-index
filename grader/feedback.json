@@ -628,8 +628,8 @@
       "repeat": "The off tray still cuts across some of the points."
     },
     "F32.offboard": {
-      "first": "The off tray isn't on the board.",
-      "repeat": "The off tray still isn't on the board."
+      "first": "The off tray is sitting outside the board, not on it.",
+      "repeat": "The off tray is still sitting outside the board, not on it."
     },
     "F32.side": {
       "first": "The off tray isn't at the end of the board where I bear off, past point 1.",
