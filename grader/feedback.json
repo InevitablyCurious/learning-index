@@ -255,10 +255,6 @@
       "first": "When the game ends, it doesn't tell me I won — there's no win message or victory popup.",
       "repeat": "Finished another game and it still doesn't show me a win message or popup."
     },
-    "F13": {
-      "first": "The board gets cut off or spills off the side of the screen",
-      "repeat": "The board still doesn't fit my screen — part of it runs off the side."
-    },
     "F14": {
       "first": "The pieces don't animate when they move.",
       "repeat": "Moved a piece again and it still doesn't animate when it moves."
@@ -603,6 +599,10 @@
       "first": "The triangles point outward, away from the middle of the board.",
       "repeat": "Looked at the triangles again and they still point outward, away from the middle."
     },
+    "F30.offscreen": {
+      "first": "Part of the board runs off the edge of the screen.",
+      "repeat": "Part of the board still runs off the edge of the screen."
+    },
     "F31": {
       "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place.",
       "repeat": "Moved again and the checkers still don't line up with their points, still floating off to the side."
@@ -758,6 +758,42 @@
     "F34": {
       "first": "On a new game the cube on the board reads a number other than one, or it already looks owned by one side.",
       "repeat": "Started another game and the cube on the board still reads wrong, or still looks owned."
+    },
+    "F35": {
+      "first": "The board isn't on the left with all the buttons and game info on the right, like I asked.",
+      "repeat": "Still not the layout I asked for — the board on the left, with all the buttons and game info on the right."
+    },
+    "F36": {
+      "first": "The board and the buttons on the right aren't sized the way I asked, can you give me something like a 20%/80% ratio",
+      "repeat": "The board and the buttons still aren't sized the way I asked, can you give me something like a 20%/80% ratio"
+    },
+    "F36.wide": {
+      "first": "The buttons on the right side look squished and the board looks too big, can you give me something like a 20%/80% ratio",
+      "repeat": "The buttons on the right still look squished and the board still looks too big, can you give me something like a 20%/80% ratio"
+    },
+    "F36.narrow": {
+      "first": "The board looks too small and the right side takes up too much room, can you give me something like a 20%/80% ratio",
+      "repeat": "The board still looks too small and the right side still takes up too much room, can you give me something like a 20%/80% ratio"
+    },
+    "F37": {
+      "first": "The game doesn't fit the screen properly.",
+      "repeat": "The game still doesn't fit the screen properly."
+    },
+    "F37.scroll": {
+      "first": "I have to scroll to see the whole game.",
+      "repeat": "I still have to scroll to see the whole game."
+    },
+    "F37.space": {
+      "first": "The board doesn't fill the screen — there's a lot of empty space around it.",
+      "repeat": "The board still doesn't fill the screen — there's still a lot of empty space around it."
+    },
+    "F38": {
+      "first": "Some of the buttons on the right are cut off, overlapping, or too small to use.",
+      "repeat": "Some of the buttons on the right are still cut off, overlapping, or too small to use."
+    },
+    "F38.hidden": {
+      "first": "Some of the buttons and game info I need aren't showing on the screen.",
+      "repeat": "Some of the buttons and game info I need still aren't showing on the screen."
     }
   }
 }

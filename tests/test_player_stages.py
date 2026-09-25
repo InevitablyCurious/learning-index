@@ -168,10 +168,14 @@ def test_moves_after_the_first_are_the_doubles_checks_own_finding() -> None:
 
 _TITLE = re.compile(r"\b(?:test|it)\(\s*[\"'`]\[([A-Z]+[0-9]*)\]")
 _MARKER = re.compile(r"\[(aspect|needs): ([^\]]+)\]")
-_CONF_KEY = re.compile(r"[\"'`](REQ-[A-Z0-9-]+/[A-Za-z0-9._-]+) —")
-# A marker in a shared helper sits in no test: each is listed with the gate
-# whose test calls the helper, so its line is checked like any other.
-_HELPER_MARKERS = {("frontend/core.spec.ts", "[aspect: format]"): "F06"}  # readInt
+# A marker in a shared helper sits in no test: each is listed with the gates
+# whose tests call the helper, so it is checked for each of them.
+_LAYOUT = ("F35", "F36", "F37", "F38")  # layout.spec.ts openAt / drawnBoard
+_HELPER_MARKERS = {
+    ("frontend/core.spec.ts", "[aspect: format]"): ("F06",),  # readInt
+    ("frontend/layout.spec.ts", "[needs: F01]"): _LAYOUT,
+    ("frontend/layout.spec.ts", "[needs: REQ-RENDER/point]"): _LAYOUT,
+}
 
 
 def _string_end(src: str, i: int) -> int:
@@ -228,9 +232,9 @@ def _suite_markers() -> list[tuple[str, str, str, str]]:
             rel = path.relative_to(_GRADER_DIR).as_posix()
             for mark in _MARKER.finditer(code):
                 owners = [token for token, start, end in spans if start <= mark.start() < end]
-                owner = owners[-1] if owners else _HELPER_MARKERS.get((rel, mark.group(0)))
-                assert owner, f"{rel}: {mark.group(0)} sits in no gate's test — list it in _HELPER_MARKERS"
-                found.append((rel, owner, mark.group(1), mark.group(2)))
+                gates = owners[-1:] or _HELPER_MARKERS.get((rel, mark.group(0)))
+                assert gates, f"{rel}: {mark.group(0)} sits in no gate's test — list it in _HELPER_MARKERS"
+                found.extend((rel, gate, mark.group(1), mark.group(2)) for gate in gates)
     return found
 
 
@@ -242,12 +246,9 @@ def test_every_aspect_marker_has_its_gates_first_and_repeat_lines() -> None:
 
 
 def test_a_needed_check_exists_in_the_same_or_an_earlier_stage_and_never_in_a_cycle() -> None:
-    conformance = {
-        m.group(1)
-        for path in (_GRADER_DIR / "conformance").rglob("*.ts")
-        for m in _CONF_KEY.finditer(path.read_text(encoding="utf-8"))
-    }
-    known = gate_tokens_in_suite(_GRADER_DIR) | conformance
+    # A needed check must be one the player can hear: withholding a stuck check
+    # is only honest when the check it names has a complaint line of its own.
+    known = set(load_feedback_overrides_from_failures(_PACK.dir))
     graph: dict[str, set[str]] = {}
     for rel, owner, kind, value in _suite_markers():
         if kind != "needs":
@@ -255,7 +256,7 @@ def test_a_needed_check_exists_in_the_same_or_an_earlier_stage_and_never_in_a_cy
         own_stage = stage_of(f"[{owner}] x", STAGES).number
         for ident in value.split():
             assert ident != owner, f"{rel}: {owner} needs itself"
-            assert ident in known, f"{rel}: {owner} needs {ident}, which no graded check reports"
+            assert ident in known, f"{rel}: {owner} needs {ident}, which has no complaint line"
             needed = stage_of(ident if ident.startswith("REQ-") else f"[{ident}] x", STAGES).number
             assert needed <= own_stage, f"{rel}: {owner} (stage {own_stage}) needs {ident} (stage {needed})"
             graph.setdefault(owner, set()).add(ident)

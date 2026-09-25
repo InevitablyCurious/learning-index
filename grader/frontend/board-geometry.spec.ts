@@ -130,6 +130,19 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   await openFreshBoard(page);
 
   const points = await readPointBoxes(page);
+  // The triangles are read from a screenshot of the window, so a board that
+  // runs past it cannot be read: a page that scrolls is the fit check's
+  // complaint (a needs marker, harness/adapters/challenge/stages.py), and a
+  // board cut off without scrolling is this check's own finding. A taller
+  // page once read below-the-fold points as "pointing outward" (FIX-3 M42).
+  const view = page.viewportSize();
+  const offscreen = points.filter(
+    (p) => !view || p.x < -1 || p.y < -1 || p.x + p.width > view.width + 1 || p.y + p.height > view.height + 1,
+  );
+  expect(
+    offscreen.map((p) => p.num),
+    `[aspect: offscreen] [needs: F37] points past the edge of the window: ${offscreen.map((p) => p.num).join(", ")}`,
+  ).toEqual([]);
   const samples = await sampleTriangleOrientation(page, points);
 
   expect(samples.length, `expected 24 triangle samples, found ${samples.length}`).toBe(24);

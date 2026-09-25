@@ -286,36 +286,6 @@ test("[F23] REQ-NEWGAME — new game without reload", async ({ page }) => {
     .toBe(1);
 });
 
-test("[F13] REQ-COMPACT — compact / no horizontal overflow", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
-
-  for (const viewport of [
-    { width: 1280, height: 800 },
-    { width: 1440, height: 900 },
-  ]) {
-    await page.setViewportSize(viewport);
-    const newGameResponse = await page.request.post("/api/new", {
-      data: { difficulty: "medium" },
-    });
-    expect(newGameResponse.ok()).toBe(true);
-
-    await page.reload();
-    const board = page.locator('[data-testid="board"]');
-    await expect(board).toBeVisible();
-
-    const boardNoOverflow = await board.evaluate(
-      (el) => el.scrollWidth <= el.clientWidth + 1,
-    );
-    expect(boardNoOverflow).toBe(true);
-
-    const docNoOverflow = await page.evaluate(
-      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
-    );
-    expect(docNoOverflow).toBe(true);
-  }
-});
-
 test("[F14] REQ-ANIM — checker motion is animated", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator('[data-testid="board"]')).toBeVisible();

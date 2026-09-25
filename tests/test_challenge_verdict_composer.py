@@ -79,7 +79,10 @@ def test_build_pass_verdict_bounds_a_mass_pass() -> None:
     wall of text."""
     from harness.adapters.challenge import _PASS_VERDICT_MAX_LISTED
 
-    gates = [f"[F{i:02d}] REQ-X — frontend gate {i}" for i in range(1, 15)]
+    # Fourteen real frontend gates — whichever exist, since gates come and go
+    # (F13 was folded into F37).
+    tokens = sorted(k for k in ChallengeRunner._feedback_overrides() if k[:1] == "F" and k[1:].isdigit())[:14]
+    gates = [f"[{t}] REQ-X — frontend gate {t}" for t in tokens]
     assert len(gates) > _PASS_VERDICT_MAX_LISTED
     verdict = ChallengeRunner._build_pass_verdict(newly_passing=gates, told=_told(gates))
 

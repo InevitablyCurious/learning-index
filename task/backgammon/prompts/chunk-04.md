@@ -13,7 +13,7 @@ What the game should feel like to play:
 - Hitting sends the opponent's checker to the bar, and you can see it land there; a checker re-entering from the bar travels back onto the board; a checker borne off appears in the off tray.
 - Pip counts, cube value, cube owner, score and whose turn it is are all on screen and match the API.
 - When you have no legal move, the page says so plainly.
-- The board fits the window with no sideways scrolling on ordinary laptop screens (1280×800 and 1440×900).
+- The board should be on the left and fill the screen, with all the roll, double and other buttons and game info on the right — about 80% of the width for the board and 20% for the buttons. That's on an ordinary laptop screen, 1280×800 or 1440×900, with nothing to scroll.
 - The page responds promptly — no action hangs or leaves a player waiting.
 - Winning ends the game with a banner, and you can start a new game without reloading the page.
 - Difficulty and New Game: the difficulty control is a native `<select>` element; clicking New Game starts a new game at the selected difficulty (POST `/api/new` with `{difficulty}`).

@@ -244,11 +244,6 @@
       "what": "A win ends the game with a banner or popup that says the player won.",
       "how": "Sets a won position with the message \"You win!\": the message must show it, and if a modal is open its title must say win (any capitals)."
     },
-    "F13": {
-      "name": "Fits the window",
-      "what": "The board fits the window with no sideways scrolling.",
-      "how": "At 1280×800 and at 1440×900, starts a new game and requires that neither the board nor the page scrolls horizontally."
-    },
     "F14": {
       "name": "Checker animation",
       "what": "Checkers move with animation.",
@@ -348,6 +343,26 @@
       "name": "A double lets the player make four moves",
       "what": "A double gives the player four moves, not two.",
       "how": "Sets a doubled dice state through the debug route, reloads, then clicks checker, hint, and move four times, asserting all four dice are consumed; a failure names how many moves the double gave."
+    },
+    "F35": {
+      "name": "Board left, controls right",
+      "what": "The board sits on the left and every button and piece of game info on the right, as the build prompt asks.",
+      "how": "At 1280×800 and 1440×900 on a new game: the drawn board (points, bar and off tray) starts in the left tenth of the window, and roll, double, undo, end turn, cube, pip counts, turn, message, difficulty and New Game all sit to its right."
+    },
+    "F36": {
+      "name": "Board about 80% of the width",
+      "what": "The board takes about 80% of the window's width, leaving about 20% for the buttons.",
+      "how": "At both sizes the drawn board must be 70–88% of the window's width (the reference measures 76% and 79%)."
+    },
+    "F37": {
+      "name": "The game fits the screen",
+      "what": "Everything fits without scrolling and the board fills the screen's height.",
+      "how": "At both sizes the page must not scroll either way, the board must not overflow sideways, and the drawn board must be at least 70% of the window's height (the reference: 88–89%)."
+    },
+    "F38": {
+      "name": "Buttons show properly",
+      "what": "Every button and piece of game info is showing, inside the window, clear of the board and of each other, and big enough to use.",
+      "how": "At both sizes each control is visible, inside the window and off the board; each button is at least 60×24 px with its label not cut off; no two buttons overlap."
     }
   },
   "setup": [
@@ -551,7 +566,10 @@
         "F27",
         "F02",
         "F08",
-        "F13",
+        "F35",
+        "F36",
+        "F37",
+        "F38",
         "F15",
         "F19",
         "F28",
