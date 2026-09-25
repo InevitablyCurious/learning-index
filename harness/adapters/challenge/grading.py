@@ -63,9 +63,13 @@ class GradingMixin:
 
         Streaming makes the log an append-only progress record whose MTIME is a
         true liveness signal — which is what the board's stall detection reads.
-        Both streams are merged (``stderr=STDOUT``) so phase markers and the
-        output they describe stay in causal order in one file, and a single
-        reader cannot deadlock on two pipes.
+        Both streams are merged (``stderr=STDOUT``) so a single reader cannot
+        deadlock on two pipes. The order in the file is causal only because the
+        grading run writes ONE stream (``report.mjs``, stderr): the docker CLI
+        copies stdout and stderr in separate chunks, so a line on the other
+        stream lands at an arbitrary byte — inside a multi-byte character it is
+        invalid UTF-8 and ends the cell (run 1790355908).
+        ``grader/meta/one-stream.test.ts`` holds that line.
 
         TIMEOUT (belt-and-suspenders). A gate that never returns must fail its
         attempt with evidence rather than hang the campaign forever. On timeout

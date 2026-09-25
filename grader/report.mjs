@@ -573,8 +573,14 @@ async function main() {
   };
 
   writeReport(OUT_FILE, report);
+  // ONE STREAM. A grading run writes only to stderr, and the report reaches
+  // every reader as the file above. It used to repeat itself on stdout, and the
+  // harness reads both streams through one pipe: the docker CLI copies each in
+  // its own chunks, so the stdout line landed at an arbitrary byte of the
+  // stderr log — mid-word in one attempt ("filBG_GATE_REPORT_JSON"), and inside
+  // an em dash in the next, which is invalid UTF-8 and killed the cell (run
+  // 1790355908, attempt 2).
   process.stderr.write(`[report] out=${OUT_FILE}\n`);
-  process.stdout.write(`BG_GATE_REPORT_JSON ${JSON.stringify(report)}\n`);
   process.exit(verdict === "PASS" ? 0 : 1);
 }
 
@@ -623,10 +629,10 @@ main().catch((error) => {
   try {
     writeReport(OUT_FILE, fallback);
     process.stderr.write(`[report] out=${OUT_FILE}\n`);
-  } catch {
-    // ignore secondary write failure; still emit JSON line
+  } catch (err) {
+    // No report file: the harness stops on the missing report and names it.
+    process.stderr.write(`[report] could not write ${OUT_FILE}: ${err?.message ?? err}\n`);
   }
 
-  process.stdout.write(`BG_GATE_REPORT_JSON ${JSON.stringify(fallback)}\n`);
   process.exit(1);
 });
