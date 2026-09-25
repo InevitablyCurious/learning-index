@@ -60,3 +60,18 @@ This is the same error class as the 2026-08-30 move described above: the
 denominator was answering "how many tests exist" instead of "how many gates grade
 the candidate". `checks.json` is the mirror/wiring surface for complaint text,
 not a gate census.
+
+## Roster freshness — regenerate before a mutation re-grade (2026-09-24)
+
+A gate-roster file's **mtime is not its capture time**: date it by the internal
+`captured_at` field, never by `ls`. During the WO-INTEGRITY-FIX re-acceptance the
+brief's literal `gate-roster.json` was stale at 134 gates while the live grader
+enumerated 145 — a stale roster silently folds the new gates into
+`unmatched_results` and degrades `gate_totals.total` without erroring. (Earned by
+the re-acceptance orchestrator; report `WO-INTEGRITY-FIX.md` HARD-WON "measure-first".)
+
+**Rule:** before any mutation re-grade, REGENERATE the roster against the current
+grader source (`node grader/roster.mjs --out <path> --force`) and assert
+`gate_roster.available == true` AND `gate_totals.total != null` on every graded
+report. Rank competing roster artifacts by their JSON `captured_at` (and `total`),
+never by file mtime.
