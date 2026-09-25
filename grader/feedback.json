@@ -624,8 +624,8 @@
       "repeat": "Looked again and the off tray still isn't there, still no place for taken-off pieces."
     },
     "F32.overlap": {
-      "first": "The off tray is drawn over some of the points.",
-      "repeat": "The off tray is still drawn over some of the points."
+      "first": "The off tray cuts across some of the points.",
+      "repeat": "The off tray still cuts across some of the points."
     },
     "F32.offboard": {
       "first": "The off tray isn't on the board.",
