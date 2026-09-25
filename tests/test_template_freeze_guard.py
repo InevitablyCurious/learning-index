@@ -34,6 +34,13 @@ import run_cumulative  # noqa: E402
 
 MODULE = run_cumulative
 
+# Re-frozen 2026-09-24 (Jerry): the scaffold's doc comments now say exactly what
+# chunk-01's function listing says — the rule text the spec stopped teaching in
+# 6eb5832 ("use as many dice as possible", a hit "sending it to the bar", "none
+# on the bar", bar checkers' pip distance) is gone, and the header's bear-off
+# line no longer says white bears off "to 0" (the spec: every bear-off is OFF).
+# Prior: d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee
+#        (2026-09-15, CONTRACT.md out of the scaffold)
 # Re-frozen 2026-09-15: CONTRACT.md moved out of the scaffold to
 # task/backgammon/reference/ — the model is given the six build prompts only.
 # Re-frozen 2026-09-10 (WO-CONTRACT-CHUNK-12: REQ-INIT's literal opening array,
@@ -48,7 +55,7 @@ MODULE = run_cumulative
 #        (2026-09-10, WO-PORT-ASSIGNABLE)
 # Prior: e0a14bdba4294caa42cab090dfc0edfba79ad399e331e95a705df71b678b001c
 #        (2026-09-07, frontend origin seam / REQ-SAME-ORIGIN)
-FROZEN = "d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee"
+FROZEN = "27d0f66f2a80ce43b9c7b5837dfc380073272e1fcc603e5a333f53ea337ee394"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LIVE_SCAFFOLD = REPO_ROOT / "task" / "backgammon" / "scaffold"
 

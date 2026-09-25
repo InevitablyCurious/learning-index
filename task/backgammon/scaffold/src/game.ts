@@ -5,7 +5,7 @@
 //   Black (the AI) moves from LOW points to HIGH points (1 -> 24).  Black home = 19..24.
 //   points[p] > 0  => that many WHITE checkers on point p.
 //   points[p] < 0  => that many BLACK checkers on point p (abs value).
-//   Bearing off: white bears off past point 1 (to 0); black bears off past point 24 (to 25).
+//   Bearing off: a checker leaving the board, either colour, moves to OFF.
 
 export type Player = "white" | "black";
 
@@ -50,17 +50,17 @@ export interface GameState {
   gamesPlayed: number;
 }
 
-/** The two-player identity: returns the other player. */
+/** The other player. */
 export function opponent(p: Player): Player {
   throw new Error("not implemented");
 }
 
-/** The standard opening arrangement as a fresh points[] array (length 26, index 1..24 used). */
+/** The standard opening arrangement as a fresh points[] array. */
 export function startingPoints(): number[] {
   throw new Error("not implemented");
 }
 
-/** A fresh GameState for a new game at the given difficulty (white to move, phase "roll"). */
+/** A fresh GameState for a new game at the given difficulty (white to move, phase "roll", cube `{value: 1, owner: null}`, empty bar and off, `winner: null`, and `points === startingPoints()`). */
 export function createGame(difficulty: GameState["difficulty"]): GameState {
   throw new Error("not implemented");
 }
@@ -70,38 +70,37 @@ export function cloneBoard(b: Board): Board {
   throw new Error("not implemented");
 }
 
-/** True when ALL of `player`'s checkers are in that player's home quadrant (none on the bar,
- *  none outside home). */
+/** True when ALL of `player`'s checkers are in that player's home quadrant. */
 export function allInHome(b: Board, player: Player): boolean {
   throw new Error("not implemented");
 }
 
 /** Every legal single-checker move `player` could make using ONE die of value `die` from board
- *  `b`, as {from,to,die}. `from` may be BAR; `to` may be OFF. (Considers entering from the bar,
- *  landing rules, and bearing off.) */
+ *  `b`, as {from,to,die}. `from` is BAR for a checker entering from the bar; `to` is OFF for a
+ *  checker being borne off. */
 export function singleMoves(b: Board, player: Player, die: number): Move[] {
   throw new Error("not implemented");
 }
 
 /** Apply one single move to board `b` IN PLACE for `player`. Returns whether the move hit an
- *  opponent blot (sending it to the bar). */
+ *  opponent blot. */
 export function applyMove(b: Board, player: Player, m: Move): boolean {
   throw new Error("not implemented");
 }
 
-/** The maximum number of dice from `dice` that `player` can legally consume from board `b`
- *  (searching all orderings). */
+/** The maximum number of dice from `dice` that `player` can legally consume from board `b`. */
 export function maxPlies(b: Board, player: Player, dice: number[]): number {
   throw new Error("not implemented");
 }
 
-/** The single moves `player` may legally choose RIGHT NOW given the remaining `dice`, honouring
- *  the rule that a player must use as many dice as possible. */
+/** The single moves `player` may legally choose RIGHT NOW given the remaining `dice`. */
 export function legalMovesNow(b: Board, player: Player, dice: number[]): Move[] {
   throw new Error("not implemented");
 }
 
-/** Returns all maximal full-turn move sequences and their resulting boards for the AI. */
+/** Every distinct position `player` can reach by playing a full turn from board `b` with `dice`,
+ *  consuming as many dice as the rules allow. Entries are distinct by RESULTING BOARD — one entry
+ *  per reachable position, each with one representative move-path. Used by the AI. */
 export function allSequences(
   b: Board,
   player: Player,
@@ -110,12 +109,12 @@ export function allSequences(
   throw new Error("not implemented");
 }
 
-/** The pip count for `player` on board `b` (checkers on the bar count as the maximum distance). */
+/** The pip count for `player` on board `b`. */
 export function pipCount(b: Board, player: Player): number {
   throw new Error("not implemented");
 }
 
-/** Whether `player` has borne off all 15 checkers, and if so the classification of the win. */
+/** Whether `player` has borne off all 15 checkers, and if so how the win is classified. */
 export function checkWin(b: Board, player: Player): { won: boolean; type: "single" | "gammon" | "backgammon" | null } {
   throw new Error("not implemented");
 }
