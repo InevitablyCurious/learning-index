@@ -76,7 +76,12 @@ describe("Backgammon backend gates 01-08", () => {
     // model kept being told the fresh board was wrong while the failure was on
     // the bar (run 1789655638). Bar counts live in [E06], stage 4. The nearly
     // finished case added nothing: the opening already tests both formulas.
-    const start = bd([...game.startingPoints()], { white: 0, black: 0 }, { white: 0, black: 0 });
+    // The STANDARD opening, not the build's own: a build that sets up the wrong
+    // position counts its own board right, and the player sees pip counts that
+    // add up for the pieces shown — the setup is G01's complaint, not a second
+    // one here (run 1790349319: 139/178 on a wrong opening, told as "doesn't
+    // add up").
+    const start = bd([...STARTING_POINTS_EXPECTED], { white: 0, black: 0 }, { white: 0, black: 0 });
     expect(game.pipCount(start, "white")).toBe(167);
     expect(game.pipCount(start, "black")).toBe(167);
   });

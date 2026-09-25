@@ -117,6 +117,19 @@ function emptyPoints(): number[] {
   return new Array(26).fill(0);
 }
 
+// The pip counts of the position a state holds, counted by the grader: white
+// travels 24 → 1, black 1 → 24, and a checker on the bar is 25 from home.
+function pipsOf(state: ApiState): { white: number; black: number } {
+  let white = 25 * state.bar.white;
+  let black = 25 * state.bar.black;
+  for (let p = 1; p <= 24; p++) {
+    const n = state.points[p];
+    if (n > 0) white += n * p;
+    else if (n < 0) black += -n * (25 - p);
+  }
+  return { white, black };
+}
+
 test("[F01] REQ-RENDER — page loads and the board appears", async ({ page }) => {
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
@@ -387,8 +400,13 @@ test("[F06] REQ-PIPUI — pip display cross-checked vs engine", async ({ page })
 
   expect(openingDomWhite, "[aspect: sync]").toBe(openingState.pip.white);
   expect(openingDomBlack, "[aspect: sync]").toBe(openingState.pip.black);
-  expect(openingDomWhite, "[aspect: value]").toBe(167);
-  expect(openingDomBlack, "[aspect: value]").toBe(167);
+  // What a player can check: the numbers on screen against the pieces on the
+  // board. A wrong opening counted right is G01's complaint, never this one
+  // (run 1790349319: 139/178 on a wrong setup was told "the wrong numbers for
+  // the position on the board"); a wrong counting formula is G02's.
+  const openingPips = pipsOf(openingState);
+  expect(openingDomWhite, "[aspect: value] [needs: G02]").toBe(openingPips.white);
+  expect(openingDomBlack, "[aspect: value] [needs: G02]").toBe(openingPips.black);
 
   const custom = emptyPoints();
   custom[6] = 5;

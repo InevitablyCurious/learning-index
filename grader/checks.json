@@ -17,7 +17,7 @@
     "G02": {
       "name": "Pip counts",
       "what": "Pip counts — how far each side still has to travel — are right on a new game.",
-      "how": "Counts pips on the opening position: 167 for each side."
+      "how": "Counts pips on the standard opening position with the game's own counting: 167 for each side. The standard opening, not the game's own, so a wrong setup is told once, as the setup."
     },
     "G03": {
       "name": "Dice give the right number of moves",
@@ -207,7 +207,7 @@
     "F06": {
       "name": "Pip counts on screen",
       "what": "The pip counts on screen match the game.",
-      "how": "The opening position must show 167 and 167, matching the server. A custom position is then set, and the displayed counts must match the server again."
+      "how": "On a new game the displayed counts must match the server and the pieces on the board, counted by the grader (a wrong opening is the setup check's complaint, a wrong formula the pip check's). A custom position is then set, and the displayed counts must match the server again."
     },
     "F07": {
       "name": "The cube after a double",
