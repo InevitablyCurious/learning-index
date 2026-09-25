@@ -78,6 +78,21 @@ export function boardMidY(points: PointBox[]): number {
   return points.reduce((sum, p) => sum + p.centerY, 0) / points.length;
 }
 
+/**
+ * Whether two drawn boxes overlap by more than a sliver: at least 4 px each way.
+ * A pixel or two where shapes meet is not one drawn over the other to a player
+ * (run 1790345941: a bar touching two points by 1–2 px was told "The bar cuts
+ * across some of the points").
+ */
+export function overlaps(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+): boolean {
+  const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  return w > 3 && h > 3;
+}
+
 /** The average drawn width of a point — the unit horizontal tolerances are stated in. */
 export function pointWidth(points: PointBox[]): number {
   return points.reduce((sum, p) => sum + p.width, 0) / points.length;

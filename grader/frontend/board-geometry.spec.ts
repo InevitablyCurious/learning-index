@@ -11,9 +11,11 @@
 import { type Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import {
+  boardMidY,
   pointWidth,
   readBarBox,
   readCheckerBoxes,
+  overlaps,
   readOffTray,
   readPointBoxes,
   sampleTriangleOrientation,
@@ -76,20 +78,19 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   // Where the bar is NOT is told as what the player sees there: out past the
   // points, drawn over some of them (run 1790329339: a strip down the middle,
   // told "at the edge"), or in a gap that is not the middle.
-  const between = bar.x >= leftHalfRightEdge - 1 && bar.x + bar.width <= rightHalfLeftEdge + 1;
+  const between = bar.x >= leftHalfRightEdge - 3 && bar.x + bar.width <= rightHalfLeftEdge + 3;
   const pointsLeft = Math.min(...points.map((p) => p.x));
   const pointsRight = Math.max(...points.map((p) => p.x + p.width));
   const outside = bar.x + bar.width <= pointsLeft + 1 || bar.x >= pointsRight - 1;
-  const overPoints = points.some(
-    (p) =>
-      Math.max(0, Math.min(bar.x + bar.width, p.x + p.width) - Math.max(bar.x, p.x)) *
-        Math.max(0, Math.min(bar.y + bar.height, p.y + p.height) - Math.max(bar.y, p.y)) >
-      2,
-  );
+  const overPoints = points.some((p) => overlaps(bar, p));
   const where = between ? "" : outside ? "" : overPoints ? "[aspect: overlap] " : "[aspect: place] ";
+  // Where the bar belongs is only defined once the rows form proper halves: on
+  // a board whose rows do not line up it is the rows check's complaint (run
+  // 1790345941: rows squeezed into opposite halves read as "the bar splits the
+  // board in the wrong place" while the bar sat in the middle).
   expect(
     between,
-    `${where}expected the bar between the board halves, found bar x=${bar.x.toFixed(1)}..${(bar.x + bar.width).toFixed(1)} with the left half ending at x=${leftHalfRightEdge.toFixed(1)} and the right half starting at x=${rightHalfLeftEdge.toFixed(1)}`,
+    `${where}[needs: F40] expected the bar between the board halves, found bar x=${bar.x.toFixed(1)}..${(bar.x + bar.width).toFixed(1)} with the left half ending at x=${leftHalfRightEdge.toFixed(1)} and the right half starting at x=${rightHalfLeftEdge.toFixed(1)}`,
   ).toBeTruthy();
   expect(
     bar.height >= 1.8 * avgPointHeight,
@@ -140,12 +141,7 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
   // passed "visible" while nothing was on screen (run 1790341662).
   expect(tray.painted, "expected the off tray to be drawn (a fill, an outline or a label), found an empty see-through box").toBeTruthy();
   const points = await readPointBoxes(page);
-  const under = points.filter(
-    (p) =>
-      Math.max(0, Math.min(tray.x + tray.width, p.x + p.width) - Math.max(tray.x, p.x)) *
-        Math.max(0, Math.min(tray.y + tray.height, p.y + p.height) - Math.max(tray.y, p.y)) >
-      2,
-  );
+  const under = points.filter((p) => overlaps(tray, p));
   expect(under.map((p) => p.num), "[aspect: overlap] the off tray is drawn over points").toEqual([]);
 });
 
@@ -173,10 +169,7 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   const bar = await readBarBox(page);
   const tray = await readOffTray(page);
   const covers = (box: { x: number; y: number; width: number; height: number } | null, p: PointBox) =>
-    box !== null &&
-    Math.max(0, Math.min(box.x + box.width, p.x + p.width) - Math.max(box.x, p.x)) *
-      Math.max(0, Math.min(box.y + box.height, p.y + p.height) - Math.max(box.y, p.y)) >
-      2;
+    box !== null && overlaps(box, p);
   const underBar = new Set(
     points.filter((p) => covers(bar, p) || (tray.exists && tray.painted && covers(tray, p))).map((p) => p.num),
   );
@@ -189,4 +182,26 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
     outward,
     `expected every point's triangle to point inward (painted across most of its width at the rim, little of it at the inner end), found outward-pointing point numbers: ${outward.join(", ")}`,
   ).toEqual([]);
+});
+
+// [F40] REQ-GEOMETRY — the two rows line up, as on every backgammon board: the
+// top row's points sit straight across from the bottom row's, column for
+// column. Judged on what is drawn — each row sorted left to right — never on
+// the numbers, which F28 judges. Run 1790345941 squeezed each row into half the
+// width, top row right and bottom row left, and every other stage-1 check passed.
+test("[F40] REQ-GEOMETRY — the two rows line up", async ({ page }) => {
+  await openFreshBoard(page);
+  const points = await readPointBoxes(page);
+  expect(points.length, "[needs: REQ-RENDER/point] expected 24 points to read").toBe(24);
+  const mid = boardMidY(points);
+  const top = points.filter((p) => p.centerY < mid).sort((a, b) => a.centerX - b.centerX);
+  const bottom = points.filter((p) => p.centerY >= mid).sort((a, b) => a.centerX - b.centerX);
+  const pw = pointWidth(points);
+  const apart = top.flatMap((p, i) =>
+    bottom[i] && Math.abs(p.centerX - bottom[i].centerX) <= 0.5 * pw ? [] : [`${i + 1}`],
+  );
+  expect(
+    top.length === bottom.length && apart.length === 0,
+    `expected ${top.length} top points each straight across from a bottom point, found ${bottom.length} below and columns apart: ${apart.join(", ")}`,
+  ).toBeTruthy();
 });

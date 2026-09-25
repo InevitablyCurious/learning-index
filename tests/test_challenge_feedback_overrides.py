@@ -412,7 +412,7 @@ def test_the_override_actually_reaches_the_delivered_message() -> None:
     repeat = ChallengeRunner._build_feedback_prompt(
         problems=[{"check": check, "observed": "AssertionError: expected 4 to be 2"}],
         had_prior_feedback=True,
-        repeat_checks={check},
+        repeat_complaints={check},
     )
     assert overrides[key]["repeat"] in repeat
     assert overrides[key]["first"] not in repeat

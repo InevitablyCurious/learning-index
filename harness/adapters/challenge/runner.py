@@ -1861,7 +1861,10 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 visible_checks = {
                     str(p.get("check", "")).strip() for p in stage_view.visible
                 }
-                repeat_checks = {c for c in visible_checks if c in told_ever}
+                # Per COMPLAINT, not per check: a check that now says something
+                # new gets its first-sighting line (_complaint_id).
+                visible_complaints = {self._complaint_id(p) for p in stage_view.visible}
+                repeat_complaints = {c for c in visible_complaints if c in told_ever}
                 self._progress(
                     f"PROGRESS run_label={run_label} step=player-stage attempt={attempt} "
                     f"stage={stage_view.stage.number if stage_view.stage else 'none'} "
@@ -1870,7 +1873,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     f"failing_total={len(feedback_checks)}"
                 )
                 told_last_round = visible_checks
-                told_ever |= visible_checks
+                told_ever |= visible_complaints
                 for p in stage_view.visible:
                     check = str(p.get("check", "")).strip()
                     if check and check not in told_first_label:
@@ -1886,7 +1889,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     # with "I've checked your work thoroughly", as though the
                     # player had never reported anything.
                     had_prior_feedback=len(attempt_reports) >= 2,
-                    repeat_checks=repeat_checks,
+                    repeat_complaints=repeat_complaints,
                 )
                 # WO-FEEDBACK-ONEPHASE: fold the pass verdict into the single
                 # round message — the player acknowledges what is fixed, then
@@ -1910,7 +1913,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     )
                 self._progress(
                     f"PROGRESS run_label={run_label} step=feedback-problems-only-built attempt={attempt} "
-                    f"checks={len(feedback_checks)} repeats={len(repeat_checks)}"
+                    f"checks={len(feedback_checks)} repeats={len(repeat_complaints)}"
                 )
                 self._progress(
                     f"PROGRESS run_label={run_label} step=feedback-injection attempt={attempt} "

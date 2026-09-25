@@ -113,10 +113,10 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
           !!tray &&
           ![...document.querySelectorAll<HTMLElement>('[data-testid="point"]')].some((el) => {
             const p = el.getBoundingClientRect();
+            // The same sliver rule as board-geometry.ts overlaps(): 4 px each way.
             return (
-              Math.max(0, Math.min(tray.right, p.right) - Math.max(tray.left, p.left)) *
-                Math.max(0, Math.min(tray.bottom, p.bottom) - Math.max(tray.top, p.top)) >
-              2
+              Math.min(tray.right, p.right) - Math.max(tray.left, p.left) > 3 &&
+              Math.min(tray.bottom, p.bottom) - Math.max(tray.top, p.top) > 3
             );
           }),
         drawn,

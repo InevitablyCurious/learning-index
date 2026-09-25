@@ -822,6 +822,10 @@
     "F39.moves": {
       "first": "I rolled two different numbers and got the wrong number of moves.",
       "repeat": "Rolled two different numbers again and still got the wrong number of moves."
+    },
+    "F40": {
+      "first": "The two rows of points don't line up with each other.",
+      "repeat": "The two rows of points still don't line up with each other."
     }
   }
 }

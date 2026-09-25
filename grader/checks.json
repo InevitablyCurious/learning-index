@@ -368,6 +368,11 @@
       "name": "Two dice, two moves",
       "what": "After any roll exactly two dice are on screen, and two different numbers give exactly two moves (a double's four are F33).",
       "how": "Fixes the roll to 5-6 and clicks Roll: two dice on screen, two moves playable by clicking, no third; then fixes a double and clicks Roll: still two dice on screen."
+    },
+    "F40": {
+      "name": "Rows line up",
+      "what": "The top row of points sits straight across from the bottom row, column for column.",
+      "how": "New game: each row's drawn points sorted left to right; each top point's centre must be within half a point's width of the bottom point in the same column."
     }
   },
   "setup": [
@@ -578,6 +583,7 @@
         "F15",
         "F19",
         "F28",
+        "F40",
         "F29",
         "F30",
         "F32",

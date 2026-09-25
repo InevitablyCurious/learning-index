@@ -386,7 +386,7 @@ def test_one_hang_is_reported_once_not_once_per_unmeasured_gate() -> None:
             {"check": "backend:runner backend/edge/edge-gates.test.ts"},
         ],
         checks=None,
-        repeat_checks=set(),
+        repeat_complaints=set(),
         had_prior_feedback=False,
     )
     assert msg.lower().count("locked up") == 1
@@ -424,7 +424,7 @@ def test_a_refused_setup_is_told_as_the_team_saw_it_never_as_the_gates_player_st
     team = msg.split("software team", 1)[1]
     assert "debug endpoint" in team, "a refused setup is the team's finding"
     again = ChallengeRunner._build_feedback_prompt(
-        problems=problems[:1], had_prior_feedback=True, repeat_checks={problems[0]["check"]}
+        problems=problems[:1], had_prior_feedback=True, repeat_complaints={problems[0]["check"]}
     )
     assert "still didn't take" in again
 

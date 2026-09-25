@@ -355,7 +355,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     failure_feedback = runner._build_feedback_prompt(
         checks=[REAL_CHECK],
         had_prior_feedback=True,
-        repeat_checks={REAL_CHECK},
+        repeat_complaints={REAL_CHECK},
     )
     assert (
         "I've checked your resolution for the problems that were given before, "

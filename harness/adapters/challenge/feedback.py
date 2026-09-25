@@ -528,6 +528,20 @@ class FeedbackMixin:
         return bool(cls._HARNESS_INFRA_CHECK_RE.match(str(check or "").strip()))
 
     @classmethod
+    def _complaint_id(cls, record: dict[str, Any]) -> str:
+        """Which complaint a problem is: its check, plus the aspect it names.
+
+        One check can say different things ("the off tray isn't showing", "the
+        off tray is drawn over some of the points"); only the SAME complaint made
+        again is a repeat. Keyed on the check alone, run 1790345941 told "The off
+        tray is still drawn over some of the points." the first time a player
+        could have said it.
+        """
+        raw = str(record.get("check", "")).strip()
+        aspect = m.group(1) if (m := _ASPECT_RE.search(str(record.get("observed", "") or ""))) else None
+        return f"{raw} [aspect: {aspect}]" if aspect else raw
+
+    @classmethod
     def _told_label(cls, record: dict[str, Any], *, pass_kind: str) -> tuple[str, str]:
         """The line the model is told for one problem, and whose voice says it.
 
@@ -628,7 +642,7 @@ class FeedbackMixin:
         problems: list[dict[str, Any]] | None = None,
         checks: list[str] | None = None,
         had_prior_feedback: bool = False,
-        repeat_checks: set[str] | None = None,
+        repeat_complaints: set[str] | None = None,
     ) -> str:
         """Compose the message the model receives after a failed attempt.
 
@@ -669,8 +683,8 @@ class FeedbackMixin:
         without carrying where to look. `observed` is no longer read here at
         all; it stays in the graded artifacts, unchanged, for the operator.
 
-        Repeats are keyed on the raw gate id (stable), never the rendered
-        sentence (lossy).
+        Repeats are keyed on the complaint — gate id plus the aspect it names
+        (stable) — never the rendered sentence (lossy).
 
         THE EXCUSE ELIMINATOR (2026-09-04). Every failure verdict — first or
         repeat — OPENS with `_EXCUSE_ELIMINATOR`: the harness-side fact that
@@ -693,7 +707,7 @@ class FeedbackMixin:
         else:
             records = [{"check": c} for c in (checks or [])]
 
-        repeats = repeat_checks or set()
+        repeats = repeat_complaints or set()
 
         # The excuse eliminator opens the message; then the opener; then the
         # numbered complaints. See the docstring for why it is first.
@@ -729,11 +743,11 @@ class FeedbackMixin:
             # artifacts; excluded from the repair prompt.
             if cls._is_harness_infra_check(raw_check):
                 continue
-            # THE GRADIENT, chosen per gate: a gate the model has already been
-            # told about and failed to fix gets that gate's second-sighting
-            # line. Keyed on the raw id because the rendered sentence differs
-            # between the two passes and could not key anything.
-            pass_kind = "repeat" if raw_check in repeats else "first"
+            # THE GRADIENT, chosen per complaint: a complaint the model has
+            # already been told and failed to fix gets its second-sighting line.
+            # Keyed on the gate id plus the aspect it names (_complaint_id),
+            # never on the rendered sentence, which differs between passes.
+            pass_kind = "repeat" if cls._complaint_id(record) in repeats else "first"
             label, channel = cls._told_label(record, pass_kind=pass_kind)
             # 320, not 200 (2026-09-05). The comment below has been right twice
             # over: at 200 it was ALREADY truncating two hand-written tester

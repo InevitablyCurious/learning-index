@@ -144,7 +144,7 @@ def test_first_failure_is_the_players_first_report() -> None:
     from harness.adapters.challenge import _EXCUSE_ELIMINATOR
 
     text = ChallengeRunner._build_feedback_prompt(
-        problems=_problems(), repeat_checks=set()
+        problems=_problems(), repeat_complaints=set()
     )
     assert text.startswith(_EXCUSE_ELIMINATOR)
     assert (
@@ -171,12 +171,12 @@ def test_repeat_failure_returns_new_information() -> None:
 
     problems = _problems()
     first = ChallengeRunner._build_feedback_prompt(
-        problems=problems, repeat_checks=set()
+        problems=problems, repeat_complaints=set()
     )
     repeat = ChallengeRunner._build_feedback_prompt(
         problems=problems,
         had_prior_feedback=True,
-        repeat_checks={p["check"] for p in problems},
+        repeat_complaints={p["check"] for p in problems},
     )
     assert first != repeat, "a repeated failure must not return identical text"
     # The excuse eliminator is identical on both — it is a constant fact about
@@ -218,7 +218,7 @@ def test_the_graders_assertion_never_reaches_the_model() -> None:
     ]
     for repeats in (set(), {problems[0]["check"]}):
         text = ChallengeRunner._build_feedback_prompt(
-            problems=problems, had_prior_feedback=bool(repeats), repeat_checks=repeats
+            problems=problems, had_prior_feedback=bool(repeats), repeat_complaints=repeats
         )
         assert "expected 4 to be 2" not in text, "the assertion reached the model"
         assert "AssertionError" not in text
@@ -234,7 +234,7 @@ def test_repeat_matching_is_keyed_on_the_raw_gate_id() -> None:
     problems = _problems()
     # The HUMANISED label, deliberately — this must NOT be treated as a repeat.
     text = ChallengeRunner._build_feedback_prompt(
-        problems=problems, repeat_checks={"use higher die"}
+        problems=problems, repeat_complaints={"use higher die"}
     )
     # A repeat that failed to match leaves every gate on its FIRST line.
     assert "let me move with the smaller number even though the bigger one had a move too" in text
@@ -242,7 +242,7 @@ def test_repeat_matching_is_keyed_on_the_raw_gate_id() -> None:
 
 
 def test_empty_checks_never_claims_a_clean_run() -> None:
-    text = ChallengeRunner._build_feedback_prompt(problems=[], repeat_checks=set())
+    text = ChallengeRunner._build_feedback_prompt(problems=[], repeat_complaints=set())
     assert "1) Something is still broken" in text, (
         "a FAIL verdict with no itemised checks is still a failure"
     )
@@ -292,7 +292,7 @@ def test_runner_death_check_does_not_abort_feedback_composition() -> None:
     ]
     # The exact crash input must now compose, dropping ONLY the infra line.
     text = ChallengeRunner._build_feedback_prompt(
-        problems=problems, repeat_checks=set()
+        problems=problems, repeat_complaints=set()
     )
     assert "doesn't tell me I won" in text, "the real gate keeps its voice"
     assert "gates-13-16" not in text, "the runner-death line never reaches the model"
@@ -363,7 +363,7 @@ def test_repeat_gradient_ignores_harness_infra_checks() -> None:
     text = ChallengeRunner._build_feedback_prompt(
         problems=problems,
         had_prior_feedback=True,
-        repeat_checks={infra, gate},
+        repeat_complaints={infra, gate},
     )
     assert "still doesn't show me a win message" in text, (
         "the real gate keeps its gradient and moves to its second sighting"
@@ -391,7 +391,7 @@ def test_every_failure_verdict_opens_with_how_the_player_checked() -> None:
     repeat = ChallengeRunner._build_feedback_prompt(
         problems=problems,
         had_prior_feedback=True,
-        repeat_checks={p["check"] for p in problems},
+        repeat_complaints={p["check"] for p in problems},
     )
     for verdict in (first, repeat):
         assert verdict.startswith(_EXCUSE_ELIMINATOR)

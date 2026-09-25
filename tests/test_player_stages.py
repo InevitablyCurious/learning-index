@@ -282,3 +282,20 @@ def test_a_needed_check_exists_in_the_same_or_an_earlier_stage_and_never_in_a_cy
 
     for start in graph:
         visit(start, ())
+
+
+def test_a_new_complaint_from_a_check_already_told_is_a_first_sighting() -> None:
+    # Run 1790345941: F32 told "The off tray isn't showing", then — the model
+    # drew the tray over the points — "The off tray is STILL drawn over some of
+    # the points.", a complaint the player had never made. Repeats are per
+    # complaint (check + aspect), not per check.
+    check = "[F32] REQ-GEOMETRY — off tray is visible"
+    told_before = {ChallengeRunner._complaint_id({"check": check, "observed": "expected the off tray to be drawn"})}
+    record = {"check": check, "observed": "[aspect: overlap] the off tray is drawn over points"}
+    message = ChallengeRunner._build_feedback_prompt(problems=[record], repeat_complaints=told_before)
+    lines = ChallengeRunner._feedback_overrides()["F32.overlap"]
+    assert lines["first"] in message and lines["repeat"] not in message
+    again = ChallengeRunner._build_feedback_prompt(
+        problems=[record], repeat_complaints=told_before | {ChallengeRunner._complaint_id(record)}
+    )
+    assert lines["repeat"] in again
