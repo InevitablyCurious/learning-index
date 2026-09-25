@@ -627,6 +627,10 @@
       "first": "The off tray is drawn over some of the points.",
       "repeat": "The off tray is still drawn over some of the points."
     },
+    "F32.offboard": {
+      "first": "The off tray isn't on the board.",
+      "repeat": "The off tray still isn't on the board."
+    },
     "F32.side": {
       "first": "The off tray isn't at the end of the board where I bear off, past point 1.",
       "repeat": "The off tray still isn't at the end of the board where I bear off, past point 1."

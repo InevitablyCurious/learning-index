@@ -143,6 +143,21 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
   const points = await readPointBoxes(page);
   const under = points.filter((p) => overlaps(tray, p));
   expect(under.map((p) => p.num), "[aspect: overlap] the off tray is drawn over points").toEqual([]);
+  // The tray is part of the board: checkers are borne off into the board's
+  // own tray, inside its frame. Run 1790359593 moved the tray out of the board
+  // into the button panel — clear of the points and past point 1, and so
+  // passing everything below.
+  const board = await page.locator('[data-testid="board"]').first().boundingBox();
+  expect(board, "[needs: F01] expected the board to read").not.toBeNull();
+  const onBoard =
+    tray.x >= board!.x - 2 &&
+    tray.y >= board!.y - 2 &&
+    tray.x + tray.width <= board!.x + board!.width + 2 &&
+    tray.y + tray.height <= board!.y + board!.height + 2;
+  expect(
+    onBoard,
+    `[aspect: offboard] the off tray (x ${tray.x.toFixed(0)}..${(tray.x + tray.width).toFixed(0)}, y ${tray.y.toFixed(0)}..${(tray.y + tray.height).toFixed(0)}) lies outside the board (x ${board!.x.toFixed(0)}..${(board!.x + board!.width).toFixed(0)})`,
+  ).toBeTruthy();
   // White bears off past point 1 and black past point 24 (the direction of
   // travel the build prompt gives), so the tray lies beyond the end of the
   // board those two points share. Run 1790352559 cleared the points by moving

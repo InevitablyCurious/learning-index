@@ -64,9 +64,22 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
   await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
   return page.evaluate(
     ({ ids, buttons }) => {
+      // The off tray is part of the drawn board only while it sits on the
+      // board: a tray standing outside the board's frame is the tray check's
+      // complaint (F32 offboard), and counting it stretched "the board" over
+      // the button panel — told as a board not on the left and buttons on top
+      // of it, neither of which the player saw (run 1790359593).
+      const frame = document.querySelector<HTMLElement>('[data-testid="board"]')?.getBoundingClientRect();
+      const onFrame = (r: DOMRect) =>
+        !!frame &&
+        r.left >= frame.left - 2 &&
+        r.top >= frame.top - 2 &&
+        r.right <= frame.right + 2 &&
+        r.bottom <= frame.bottom + 2;
       const drawnEls = [
-        ...document.querySelectorAll<HTMLElement>(
-          '[data-testid="point"],[data-testid="bar"],[data-testid="off-tray"]',
+        ...document.querySelectorAll<HTMLElement>('[data-testid="point"],[data-testid="bar"]'),
+        ...[...document.querySelectorAll<HTMLElement>('[data-testid="off-tray"]')].filter((el) =>
+          onFrame(el.getBoundingClientRect()),
         ),
       ]
         .map((el) => el.getBoundingClientRect())
