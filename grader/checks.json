@@ -363,6 +363,11 @@
       "name": "Buttons show properly",
       "what": "Every button and piece of game info is showing, inside the window, clear of the board and of each other, and big enough to use.",
       "how": "At both sizes each control is visible, inside the window and off the board; each button is at least 60×24 px with its label not cut off; no two buttons overlap."
+    },
+    "F39": {
+      "name": "Two dice, two moves",
+      "what": "After any roll exactly two dice are on screen, and two different numbers give exactly two moves (a double's four are F33).",
+      "how": "Fixes the roll to 5-6 and clicks Roll: two dice on screen, two moves playable by clicking, no third; then fixes a double and clicks Roll: still two dice on screen."
     }
   },
   "setup": [
@@ -622,6 +627,7 @@
         "F18",
         "F21",
         "F33",
+        "F39",
         "REQ-RENDER/die",
         "REQ-RENDER/die-reload",
         "REQ-TESTID/die",

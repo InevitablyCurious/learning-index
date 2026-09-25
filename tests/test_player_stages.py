@@ -171,8 +171,21 @@ _MARKER = re.compile(r"\[(aspect|needs): ([^\]]+)\]")
 # A marker in a shared helper sits in no test: each is listed with the gates
 # whose tests call the helper, so it is checked for each of them.
 _LAYOUT = ("F35", "F36", "F37", "F38")  # layout.spec.ts openAt / drawnBoard
+# fixtures.ts waits for the drawn game on every open and reload of every
+# frontend gate.
+_FRONTEND = tuple(
+    sorted(
+        {
+            m.group(1)
+            for path in (_GRADER_DIR / "frontend").glob("*.spec.ts")
+            for m in re.finditer(r"\b(?:test|it)\(\s*[\"'`]\[([A-Z]+[0-9]*)\]", path.read_text(encoding="utf-8"))
+        }
+    )
+)
 _HELPER_MARKERS = {
     ("frontend/core.spec.ts", "[aspect: format]"): ("F06",),  # readInt
+    ("frontend/doubles.spec.ts", "[needs: REQ-RENDER/die]"): ("F39",),  # rollThroughThePage
+    ("frontend/fixtures.ts", "[needs: REQ-RENDER/point REQ-RENDER/checker]"): _FRONTEND,
     ("frontend/layout.spec.ts", "[needs: F01]"): _LAYOUT,
     ("frontend/layout.spec.ts", "[needs: REQ-RENDER/point]"): _LAYOUT,
 }

@@ -1,5 +1,4 @@
 import { type Page } from "@playwright/test";
-import { waitForBoardSettled } from "./board-geometry.ts";
 import { expect, test } from "./fixtures.ts";
 
 // [F35]–[F38] REQ-LAYOUT — the page the build prompt asks for (chunk-04,
@@ -62,7 +61,6 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
   await page.request.post("/api/new", { data: {} });
   await page.reload();
   await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
-  await waitForBoardSettled(page);
   return page.evaluate(
     ({ ids, buttons }) => {
       const drawnEls = [

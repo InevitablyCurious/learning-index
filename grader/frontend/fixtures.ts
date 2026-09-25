@@ -37,6 +37,7 @@
 import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
 import { BASE_URL, PORT, SETUP_REFUSED, assertSetupTook, startServer, stopServer, type ServerHandle } from "../lib/harness.ts";
+import { waitForBoardSettled } from "./board-geometry.ts";
 
 export const test = base.extend<{ gameServer: ServerHandle }>({
   gameServer: [
@@ -59,7 +60,41 @@ export const test = base.extend<{ gameServer: ServerHandle }>({
     },
     { scope: "test" },
   ],
+
+  // THE GAME READY, BEFORE ANY GATE TOUCHES IT. The spec has the page load its
+  // game from the server when it opens, so a correct page draws its pieces —
+  // and wires its buttons — a moment after the frame appears. Gates that
+  // clicked or read in that moment judged page-load speed, not the game: the
+  // reference delayed by 400 ms (mutation M49, a legal page) failed 9 of 37
+  // frontend gates, and run 1790329339's first Roll click was ignored ("no dice
+  // after a roll") where a player's, a moment later, rolled. Every open and
+  // reload now waits, as a player does, for the drawn board to hold still.
+  page: async ({ page }, use) => {
+    const goto = page.goto.bind(page);
+    const reload = page.reload.bind(page);
+    page.goto = async (...args: Parameters<Page["goto"]>) => {
+      const response = await goto(...args);
+      await gameReady(page);
+      return response;
+    };
+    page.reload = async (...args: Parameters<Page["reload"]>) => {
+      const response = await reload(...args);
+      await gameReady(page);
+      return response;
+    };
+    await use(page);
+  },
 });
+
+/** A board that never draws or never settles is the render checks' complaint
+ *  (a needs marker, harness/adapters/challenge/stages.py). */
+async function gameReady(page: Page): Promise<void> {
+  try {
+    await waitForBoardSettled(page);
+  } catch (err) {
+    throw new Error(`[needs: REQ-RENDER/point REQ-RENDER/checker] ${(err as Error).message}`);
+  }
+}
 
 export { expect, PORT, BASE_URL };
 

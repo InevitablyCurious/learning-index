@@ -456,7 +456,8 @@ function renderDice(dice, remaining) {
   const isDouble = dice.length === 4;
   if (isDouble) {
     const total = 4, left = remaining.length;
-    for (let i = 0; i < 4; i++) box.appendChild(dieEl(dice[0], i >= left, false));
+    // Two dice on screen, four moves (Jerry, 2026-09-25: "only 2 dice should be visible on the front end").
+    for (let i = 0; i < 2; i++) box.appendChild(dieEl(dice[0], i >= left, false));
   } else {
     // two distinct dice; a die is "used" if its value not remaining
     const rem = remaining.slice();

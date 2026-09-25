@@ -595,6 +595,18 @@
       "first": "The bar sits out at the edge of the board, not between the two halves.",
       "repeat": "Looked again and the bar is still sitting out at the edge, not in the middle of the board."
     },
+    "F29.overlap": {
+      "first": "The bar is drawn on top of some of the points.",
+      "repeat": "The bar is still drawn on top of some of the points."
+    },
+    "F29.place": {
+      "first": "The bar splits the board in the wrong place.",
+      "repeat": "The bar still splits the board in the wrong place."
+    },
+    "F29.short": {
+      "first": "The bar doesn't run the full height of the board.",
+      "repeat": "The bar still doesn't run the full height of the board."
+    },
     "F30": {
       "first": "The triangles point outward, away from the middle of the board.",
       "repeat": "Looked at the triangles again and they still point outward, away from the middle."
@@ -736,8 +748,8 @@
       "repeat": "Rolled two different numbers again and still got the wrong number of moves."
     },
     "G03.doubles": {
-      "first": "I rolled doubles and got only two dice, not four.",
-      "repeat": "Rolled doubles again and still got only two dice, not four."
+      "first": "I rolled a double and couldn't play all of it.",
+      "repeat": "Rolled another double and still couldn't play all of it."
     },
     "G03.nomove": {
       "first": "I rolled a double and couldn't make a single move with it.",
@@ -794,6 +806,18 @@
     "F38.hidden": {
       "first": "Some of the buttons and game info I need aren't showing on the screen.",
       "repeat": "Some of the buttons and game info I need still aren't showing on the screen."
+    },
+    "F39": {
+      "first": "After I rolled, the dice on the screen didn't look right.",
+      "repeat": "Rolled again and the dice on the screen still didn't look right."
+    },
+    "F39.extra": {
+      "first": "After I rolled, there were more than two dice on the screen.",
+      "repeat": "Rolled again and there were still more than two dice on the screen."
+    },
+    "F39.moves": {
+      "first": "I rolled two different numbers and got the wrong number of moves.",
+      "repeat": "Rolled two different numbers again and still got the wrong number of moves."
     }
   }
 }

@@ -109,3 +109,108 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
   // All four dice were played through the UI: the server holds nothing left.
   expect(await remainingDiceCount(page), "four moves consumed the double").toBe(0);
 });
+
+// [F39] REQ-DICE — Jerry, 2026-09-25: "2 dice should always be visible, but
+// the player should be able to move 4 times on doubles ... if dice are
+// different == 2 moves and if dice are the same == 4 moves and only 2 dice
+// should be visible on the front end." Four moves on a double is F33; this
+// gate holds the rest. The dice are rolled with the page's own Roll button, as
+// a player rolls them: after any roll exactly two dice are on screen, and two
+// different numbers give exactly two moves, played by clicking.
+
+async function visibleDice(page: Page): Promise<number> {
+  return page.locator('[data-testid="die"]').evaluateAll(
+    (els) =>
+      els.filter((el) => {
+        const r = el.getBoundingClientRect();
+        const cs = getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none" && Number(cs.opacity) > 0.05;
+      }).length,
+  );
+}
+
+// The dice as they land: counted once the dice box has stopped changing for a
+// second. A roll animates — the reference tumbles two dice for about half a
+// second before drawing the result — and counting mid-tumble passed a page
+// that then drew four (FIX-4 mutations M50, M52).
+async function landedDice(page: Page): Promise<number> {
+  const deadline = Date.now() + 8_000;
+  let last: string | null = null;
+  let since = Date.now();
+  while (Date.now() < deadline) {
+    const snap = await page.evaluate(() => document.querySelector('[data-testid="dice"]')?.innerHTML ?? "");
+    if (snap !== last) {
+      last = snap;
+      since = Date.now();
+    } else if (Date.now() - since >= 1_000) {
+      break;
+    }
+    await page.waitForTimeout(100);
+  }
+  return visibleDice(page);
+}
+
+async function boardKey(page: Page): Promise<string> {
+  const response = await page.request.post("/api/state", { data: {} });
+  expect(response.ok(), `POST /api/state failed (${response.status()})`).toBeTruthy();
+  const s = await response.json();
+  return JSON.stringify([s.points, s.bar, s.off]);
+}
+
+async function rollThroughThePage(page: Page, dice: number[]): Promise<void> {
+  const fresh = await page.request.post("/api/new", { data: {} });
+  expect(fresh.ok(), `POST /api/new failed (${fresh.status()})`).toBeTruthy();
+  await page.reload();
+  const queued = await page.request.post("/api/debug/roll", { data: { dice } });
+  expect(queued.ok(), `POST /api/debug/roll failed (${queued.status()})`).toBeTruthy();
+  await page.getByTestId("rollBtn").click();
+  // Fewer than two dice after a roll is the dice render check's complaint.
+  await expect
+    .poll(() => visibleDice(page), { message: "[needs: REQ-RENDER/die] fewer than two dice after a roll", timeout: 5_000 })
+    .toBeGreaterThanOrEqual(2);
+}
+
+test("[F39] REQ-DICE — a roll shows two dice, and two different numbers give two moves", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto("/");
+
+  // Two different numbers: two dice on screen once they land, and two moves.
+  await rollThroughThePage(page, [5, 6]);
+  expect(await landedDice(page), "[aspect: extra] more than two dice on screen after rolling 5-6").toBeLessThanOrEqual(2);
+
+  const selectable = page.locator('[data-testid="checker"][data-color="white"].selectable');
+  const hints = page.locator('[data-testid="hint"]');
+  // One move as a player makes it: a checker to pick up, a hint, a click that
+  // changes the board. Nothing to pick up or no hint within a moment is no move.
+  const tryMove = async (): Promise<boolean> => {
+    if (!(await selectable.first().waitFor({ state: "visible", timeout: 3_000 }).then(() => true, () => false))) return false;
+    await playerClickUntilShown(selectable.first(), hints);
+    if (!(await hints.first().waitFor({ state: "visible", timeout: 3_000 }).then(() => true, () => false))) return false;
+    const before = await boardKey(page);
+    await hints.first().click({ force: true });
+    return expect
+      .poll(() => boardKey(page), { timeout: 3_000 })
+      .not.toBe(before)
+      .then(() => true, () => false);
+  };
+  const move = async (told: string): Promise<boolean> => {
+    try {
+      return await withinSeconds(25, tryMove);
+    } catch (err) {
+      throw new Error(`${told}: ${(err as Error).message}`);
+    }
+  };
+
+  // A first move that cannot be made is the ordinary-roll gates' complaint
+  // when they fail too (a needs marker, harness/adapters/challenge/stages.py).
+  const first = "[aspect: moves] [needs: REQ-HINT/selectable REQ-HINT/hint F03 F25]";
+  expect(await move(first), `${first} rolled 5-6 and could not make a first move`).toBe(true);
+  expect(await move("[aspect: moves]"), "[aspect: moves] rolled 5-6 and could make only one move").toBe(true);
+  // A third: a click that is not a move, or a checker gone mid-click, is no move.
+  const third = await withinSeconds(25, tryMove).catch(() => false);
+  expect(third, "[aspect: moves] rolled 5-6 and could make a third move").toBe(false);
+
+  // A double: still only two dice on screen (its four moves are F33's).
+  await rollThroughThePage(page, [4, 4, 4, 4]);
+  expect(await landedDice(page), "[aspect: extra] more than two dice on screen after rolling a double").toBeLessThanOrEqual(2);
+});

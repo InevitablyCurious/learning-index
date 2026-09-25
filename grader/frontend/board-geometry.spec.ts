@@ -17,7 +17,6 @@ import {
   readOffTray,
   readPointBoxes,
   sampleTriangleOrientation,
-  waitForBoardSettled,
   type PointBox,
 } from "./board-geometry.ts";
 
@@ -29,6 +28,9 @@ async function openFreshBoard(page: Page): Promise<void> {
   await page.request.post("/api/new", { data: {} });
   await page.reload();
   await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  // goto/reload wait for the drawn, settled board (fixtures.ts): run
+  // 1790329339's page drew its points ~100 ms after the frame, and these checks
+  // read an empty board ("found []", an average point height of NaN).
 }
 
 function leftToRight(row: PointBox[]): number[] {
@@ -57,7 +59,8 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   await openFreshBoard(page);
 
   const bar = await readBarBox(page);
-  expect(bar, 'expected a [data-testid="bar"] element on the board, found none').not.toBeNull();
+  // No bar at all is the bar render check's complaint.
+  expect(bar, '[needs: REQ-RENDER/bar] expected a [data-testid="bar"] element on the board, found none').not.toBeNull();
 
   const points = await readPointBoxes(page);
   const LEFT_HALF = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
@@ -70,23 +73,32 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   );
   const avgPointHeight = points.reduce((sum, p) => sum + p.height, 0) / points.length;
 
+  // Where the bar is NOT is told as what the player sees there: out past the
+  // points, drawn over some of them (run 1790329339: a strip down the middle,
+  // told "at the edge"), or in a gap that is not the middle.
+  const between = bar.x >= leftHalfRightEdge - 1 && bar.x + bar.width <= rightHalfLeftEdge + 1;
+  const pointsLeft = Math.min(...points.map((p) => p.x));
+  const pointsRight = Math.max(...points.map((p) => p.x + p.width));
+  const outside = bar.x + bar.width <= pointsLeft + 1 || bar.x >= pointsRight - 1;
+  const overPoints = points.some(
+    (p) =>
+      Math.max(0, Math.min(bar.x + bar.width, p.x + p.width) - Math.max(bar.x, p.x)) *
+        Math.max(0, Math.min(bar.y + bar.height, p.y + p.height) - Math.max(bar.y, p.y)) >
+      2,
+  );
+  const where = between ? "" : outside ? "" : overPoints ? "[aspect: overlap] " : "[aspect: place] ";
   expect(
-    bar.x >= leftHalfRightEdge,
-    `expected the bar between the board halves, found bar x=${bar.x.toFixed(1)} left of the left half's rightmost edge x=${leftHalfRightEdge.toFixed(1)}`,
-  ).toBeTruthy();
-  expect(
-    bar.x + bar.width <= rightHalfLeftEdge,
-    `expected the bar between the board halves, found bar right edge x=${(bar.x + bar.width).toFixed(1)} right of the right half's leftmost edge x=${rightHalfLeftEdge.toFixed(1)}`,
+    between,
+    `${where}expected the bar between the board halves, found bar x=${bar.x.toFixed(1)}..${(bar.x + bar.width).toFixed(1)} with the left half ending at x=${leftHalfRightEdge.toFixed(1)} and the right half starting at x=${rightHalfLeftEdge.toFixed(1)}`,
   ).toBeTruthy();
   expect(
     bar.height >= 1.8 * avgPointHeight,
-    `expected the bar to span both board rows, found bar height=${bar.height.toFixed(1)} vs average point height=${avgPointHeight.toFixed(1)}`,
+    `[aspect: short] expected the bar to span both board rows, found bar height=${bar.height.toFixed(1)} vs average point height=${avgPointHeight.toFixed(1)}`,
   ).toBeTruthy();
 });
 
 test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) => {
   await openFreshBoard(page);
-  await waitForBoardSettled(page);
 
   const points = await readPointBoxes(page);
   const checkers = await readCheckerBoxes(page);
@@ -130,6 +142,7 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   await openFreshBoard(page);
 
   const points = await readPointBoxes(page);
+  expect(points.length, "[needs: REQ-RENDER/point] expected 24 points to read").toBe(24);
   // The triangles are read from a screenshot of the window, so a board that
   // runs past it cannot be read: a page that scrolls is the fit check's
   // complaint (a needs marker, harness/adapters/challenge/stages.py), and a
@@ -143,11 +156,26 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
     offscreen.map((p) => p.num),
     `[aspect: offscreen] [needs: F37] points past the edge of the window: ${offscreen.map((p) => p.num).join(", ")}`,
   ).toEqual([]);
+  // A point the bar is drawn over shows the bar, not its triangle, so it is
+  // not read here — the bar check tells that (FIX-3 M46: a bar over points 16
+  // and 9 read as two "outward" triangles). Every other point is judged.
+  const bar = await readBarBox(page);
+  const underBar = new Set(
+    points
+      .filter(
+        (p) =>
+          bar !== null &&
+          Math.max(0, Math.min(bar.x + bar.width, p.x + p.width) - Math.max(bar.x, p.x)) *
+            Math.max(0, Math.min(bar.y + bar.height, p.y + p.height) - Math.max(bar.y, p.y)) >
+            2,
+      )
+      .map((p) => p.num),
+  );
   const samples = await sampleTriangleOrientation(page, points);
 
   expect(samples.length, `expected 24 triangle samples, found ${samples.length}`).toBe(24);
 
-  const outward = samples.filter((s) => !s.orientedInward).map((s) => s.num);
+  const outward = samples.filter((s) => !s.orientedInward && !underBar.has(s.num)).map((s) => s.num);
   expect(
     outward,
     `expected every point's triangle to point inward (painted across most of its width at the rim, little of it at the inner end), found outward-pointing point numbers: ${outward.join(", ")}`,

@@ -439,6 +439,18 @@ export async function runPreGate(): Promise<PreGateResult> {
       // renders the dice). The `.catch` keeps a missing button from throwing
       // the whole pre-gate — its absence is already reported by the testid
       // loop above.
+      // A player clicks Roll once the game is on screen, not the instant the
+      // frame appears: the spec has the page load its game from the server, and
+      // a correct page ignores a click made before it has (run 1790329339: the
+      // click landed ~100 ms early, no roll was sent, and "the dice are drawn
+      // after a roll" read 0 while a player's roll drew them). Bounded like
+      // every wait here; a page that never draws its checkers is the checker
+      // render check's finding.
+      await page
+        .waitForFunction(() => document.querySelectorAll('[data-testid="checker"]').length === 30, undefined, {
+          timeout: 5_000,
+        })
+        .catch(() => undefined);
       await debugRoll([3, 1]);
       // Bounded: a Roll button that is disabled (an app that opens a game with
       // the opening roll already made) was retried for Playwright's default

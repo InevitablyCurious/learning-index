@@ -20,8 +20,10 @@ import { BENCH, FIXTURE_FP, setFixtureCode } from "./_shared.mjs";
 const FROZEN_SCAFFOLD_HASH = JSON.parse(
   await fs.readFile(path.join(BENCH, "task", "backgammon", "challenge.json"), "utf8"),
 ).scaffold_hash;
+// Re-pinned 2026-09-25: the reference draws two dice on a double (Jerry: "only 2
+// dice should be visible on the front end"). Prior 312720b5….
 const FROZEN_GOLDEN_HASH =
-  "312720b56bd5b10f79da3a58cc034fbe977ce1a1b7f0512c1afdfc20e8ddd9eb";
+  "942369b106ab0f2e02dcfadb4c8554bf6c440b57db107cd07f62e4aa9f4d00f7";
 
 const INPUT_NAMES = FINGERPRINT_INPUTS.map((i) => i.name);
 
