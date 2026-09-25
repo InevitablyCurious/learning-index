@@ -570,6 +570,14 @@ export async function runPreGate(): Promise<PreGateResult> {
         );
         const selectableCount = await selectableWhites.count();
 
+        if (selectableCount === 0) {
+          add(
+            "REQ-HINT/selectable — a movable (selectable) white checker is present",
+            ">=1",
+            "0",
+          );
+        }
+
         if (selectableCount > 0) {
           // Fire the DOM click handler directly (dispatchEvent) so it works even
           // if the checker is scrolled outside this browser's default viewport.
@@ -605,7 +613,7 @@ export async function runPreGate(): Promise<PreGateResult> {
 
       if (hintCount < 1) {
         add(
-          "REQ-HINT/hint — selecting a movable checker shows one hint per playable die",
+          "REQ-HINT/hint — selecting a movable checker shows move hints",
           "hints appear after selecting a movable checker",
           "none",
         );
@@ -619,6 +627,7 @@ export async function runPreGate(): Promise<PreGateResult> {
           `REQ-TESTID/${label}`,
         ]),
         "REQ-RENDER/die-reload",
+        "REQ-HINT/selectable",
         "REQ-HINT/hint",
       );
     } catch (error) {

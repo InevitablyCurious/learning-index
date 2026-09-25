@@ -152,7 +152,7 @@ def test_first_failure_is_the_players_first_report() -> None:
         "I've encountered while playing the game:" in text
     )
     assert "let me move with the smaller number even though the bigger one had a move too" in text
-    assert "jump from spot to spot" in text
+    assert "pieces don't animate when they move" in text
     # Grader vocabulary a player would never use.
     assert "FAILING" not in text
     # And the old bullet glue, which only existed to chain bullets together.

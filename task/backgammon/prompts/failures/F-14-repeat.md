@@ -1,1 +1,1 @@
-The pieces still snap straight from one spot to the next with nothing in between.
+Moved a piece again and it still doesn't animate when it moves.

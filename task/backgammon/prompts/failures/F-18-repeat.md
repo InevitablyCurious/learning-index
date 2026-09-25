@@ -1,1 +1,1 @@
-Rolled a different pair this time, reloaded, and the dice that came back still weren't the ones showing before the refresh.
+Rolled a different pair, reloaded, and the dice still didn't come back as what I'd rolled.

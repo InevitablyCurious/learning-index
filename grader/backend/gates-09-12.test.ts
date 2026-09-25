@@ -121,6 +121,8 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
   });
 
   it("[G20] REQ-CUBE-STATE — accepted human double doubles cube and transfers ownership to the taker", async () => {
+    const VALUE = "[aspect: value]";
+    const OWNER = "[aspect: owner]";
     // Standard backgammon: when the doubled player TAKES, the taker (here the AI,
     // black) owns the cube — not the doubler. From the opening position the AI's
     // win prob is 0.5 >= its take point, so it accepts.
@@ -128,8 +130,10 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     const res = await api("/api/double");
     const state = await getState();
 
-    expect(res.cube).toEqual({ value: 2, owner: "black" });
-    expect(state.cube).toEqual({ value: 2, owner: "black" });
+    expect(res.cube.value, VALUE).toBe(2);
+    expect(res.cube.owner, OWNER).toBe("black");
+    expect(state.cube.value, VALUE).toBe(2);
+    expect(state.cube.owner, OWNER).toBe("black");
   });
 
   it("[G21] REQ-CUBE-STATE — illegal double in move phase must not mutate cube", async () => {

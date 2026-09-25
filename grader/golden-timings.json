@@ -1,10 +1,11 @@
 {
   "_comment": "Test-execution milliseconds for each gate file against the golden. report.mjs budgets a runner at STARTUP_ALLOWANCE + this * MULTIPLIER. Regenerate with `node measure-golden-timings.mjs`; a missing file falls back to the flat runner timeout.",
-  "measured_at": "2026-09-21T19:07:36.470Z",
+  "measured_at": "2026-09-25T00:58:28.135Z",
   "files": {
-    "backend/edge/edge-gates.test.ts": 1.28,
-    "backend/gates-01-08.test.ts": 3.16,
-    "backend/gates-09-12.test.ts": 146.24,
-    "backend/gates-13-16.test.ts": 731.54
+    "backend/edge/edge-gates.test.ts": 2.19,
+    "backend/gates-01-08.test.ts": 2.41,
+    "backend/gates-09-12.test.ts": 154.27,
+    "backend/gates-13-16.test.ts": 736.74,
+    "backend/server-path-integrity.test.ts": 38.5
   }
 }

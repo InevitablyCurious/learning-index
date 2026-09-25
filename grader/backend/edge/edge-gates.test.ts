@@ -65,9 +65,9 @@ describe("Backgammon edge gates", () => {
     const b = emptyBoard();
     b.points = game.startingPoints();
 
-    expect(game.maxPlies(b, "white", [3, 3, 3, 3])).toBe(4);
+    expect(game.maxPlies(b, "white", [3, 3, 3, 3]), "[aspect: doubles]").toBe(4);
     // And the same dice as a non-double pair consume only two.
-    expect(game.maxPlies(b, "white", [3, 5])).toBe(2);
+    expect(game.maxPlies(b, "white", [3, 5]), "[aspect: nondouble]").toBe(2);
   });
 
   // ── bear-off ──────────────────────────────────────────────────────────────

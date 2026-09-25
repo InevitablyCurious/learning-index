@@ -80,6 +80,7 @@ describe("the do-nothing control", () => {
     ...COUNTED_ELEMENT_LABELS.flatMap((l) => [`REQ-RENDER/${l}`, `REQ-TESTID/${l}`]),
     "REQ-RENDER/die-reload",
     "REQ-HINT/hint",
+    "REQ-HINT/selectable",
   ];
 
   it("greens nothing when the server never booted", () => {

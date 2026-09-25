@@ -119,10 +119,10 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
   await expect(whiteBarChecker).toHaveCount(1);
   const hints = page.locator('[data-testid="hint"]');
   await playerClickUntilShown(whiteBarChecker, hints);
-  await expect(hints).toHaveCount(2);
+  await expect(hints, "[aspect: hints]").toHaveCount(2);
   await hints.first().click({ force: true });
 
-  await expect(whiteBarChecker).toHaveCount(0);
+  await expect(whiteBarChecker, "[aspect: reentry]").toHaveCount(0);
   const state = await fetchState(page);
   expect(state.bar.white).toBe(0);
 
@@ -343,12 +343,12 @@ test("[F26] REQ-ANIM — hint animation", async ({ page }) => {
   await expect(page.locator('[data-testid="board"]')).toBeVisible();
 
   const points = emptyPts();
-  points[6] = 14;
+  points[6] = 15;
   points[13] = -15;
 
   await postDebugState(page, {
     points,
-    bar: { white: 1, black: 0 },
+    bar: { white: 0, black: 0 },
     off: { white: 0, black: 0 },
     turn: "white",
     phase: "move",
@@ -357,14 +357,18 @@ test("[F26] REQ-ANIM — hint animation", async ({ page }) => {
   });
 
   await page.reload();
-  const whiteBarChecker = page.locator(
-    '[data-testid="checker"][data-color="white"][data-loc="bar"]',
+  // Drive an ORDINARY movable checker: the page marks each legal source's
+  // topmost white checker selectable while it is white's turn to move.
+  const movableWhiteChecker = page
+    .locator('[data-testid="checker"][data-color="white"].selectable')
+    .first();
+  await playerClickUntilShown(
+    movableWhiteChecker,
+    page.locator('[data-testid="hint"]'),
   );
-  await expect(whiteBarChecker).toHaveCount(1);
-  await playerClickUntilShown(whiteBarChecker, page.locator('[data-testid="hint"]'));
 
   const hint = page.locator('[data-testid="hint"]').first();
-  await expect(hint).toBeVisible();
+  await expect(hint, "[aspect: present]").toBeVisible();
   const hintAnimation = await hint.evaluate((el) => {
     const css = getComputedStyle(el);
     return {
@@ -372,7 +376,7 @@ test("[F26] REQ-ANIM — hint animation", async ({ page }) => {
       animationDuration: css.animationDuration,
     };
   });
-  expect(hintAnimates(hintAnimation)).toBe(true);
+  expect(hintAnimates(hintAnimation), "[aspect: animates]").toBe(true);
 });
 
 // The page must work on whichever host name the user reached it by. `localhost`

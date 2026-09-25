@@ -203,10 +203,15 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
   expect(before.legalMoves.length).toBeGreaterThan(0);
 
   const move = before.legalMoves[0];
-  await revealHints(page, before.legalMoves, move.from);
+  try {
+    await revealHints(page, before.legalMoves, move.from);
+  } catch {
+    // A no-hints outcome must fail on the [aspect: reveal] assertion below,
+    // not as the helper's uncaught throw.
+  }
 
   const hints = page.getByTestId("hint");
-  await expect.poll(async () => hints.count()).toBeGreaterThan(0);
+  await expect.poll(async () => hints.count(), "[aspect: reveal]").toBeGreaterThan(0);
 
   const hintCount = await hints.count();
   let clicked = false;
@@ -230,11 +235,11 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
     .poll(async () => {
       const state = await readState(page);
       return state.remainingDice.length;
-    })
+    }, "[aspect: consume]")
     .toBe(expectedRemaining);
 
   const after = await readState(page);
-  expect(after.remainingDice.length).toBe(expectedRemaining);
+  expect(after.remainingDice.length, "[aspect: consume]").toBe(expectedRemaining);
 });
 
 test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page }) => {

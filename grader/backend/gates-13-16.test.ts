@@ -131,7 +131,7 @@ describe("Backgammon backend gates 13-16", () => {
       expect(sortedDice(secondAttempt.remainingDice)).toEqual([1]);
     });
 
-    it("[G13] REQ-TURN — alternate turns white -> black -> white", async () => {
+    it("[G25] REQ-TURN — the computer takes its turn", async () => {
       await api("/api/new", { difficulty: "easy" });
       await debugRoll([4, 2]);
 

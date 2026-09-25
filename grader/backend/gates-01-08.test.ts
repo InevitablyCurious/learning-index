@@ -109,19 +109,32 @@ describe("Backgammon backend gates 01-08", () => {
     expect(norm(hit)).toEqual(norm([{ from: 8, to: 6, die: 2 }]));
   });
 
-  it("[G18] REQ-MOVES — legal-move generation (opening die 6)", () => {
-    const start = bd([...game.startingPoints()], { white: 0, black: 0 }, { white: 0, black: 0 });
-    const dieSixMoves = game.singleMoves(start, "white", 6) as Move[];
+  it("[G18] REQ-MOVES — legal-move generation (die 6 from the outer points)", () => {
+    // Move-generation for the opening roll's die 6, isolated from the bear-off
+    // precondition: the home board is empty, so a 6 moves only the OUTER
+    // checkers (points 24, 13, 8). "Point 6 must not bear off before all
+    // checkers are home" is G09's rule (stage 5), not this check's — asserting
+    // it here made the bear-off-before-home mutation (M18) fire at stage 3
+    // with the "opening-6 blocked checkers" symptom instead of G09's true one.
+    const pts = emptyPoints();
+    pts[24] = 2;
+    pts[13] = 5;
+    pts[8] = 3;
+    const board = bd(pts);
+    const dieSixMoves = game.singleMoves(board, "white", 6) as Move[];
     const fromValues = [...new Set(dieSixMoves.map((m) => m.from))].sort((a, b) => a - b);
 
     expect(fromValues).toEqual([8, 13, 24]);
-    expect(dieSixMoves.every((m) => m.to >= 1 && m.to <= 24)).toBe(true);
   });
 
   it("[G05] REQ-HIGHER-DIE — use higher die", () => {
     const pts = emptyPoints();
     pts[13] = 1;
-    pts[6] = -2;
+    // A three-deep block (not two) forces maxPlies to 1 here. A two-deep
+    // block trips the "land on a 2-checker block" mutation (M12), which would
+    // make the second move 10→6 legal and fire this gate spuriously with the
+    // "smaller number" line instead of G04's true blocked-point line.
+    pts[6] = -3;
     const board = bd(pts);
 
     expect(game.maxPlies(board, "white", [3, 4])).toBe(1);
@@ -132,21 +145,23 @@ describe("Backgammon backend gates 01-08", () => {
   });
 
   it("[G06] REQ-BAR — bar re-entry + blocked pass", () => {
+    const REENTER = "[aspect: reenter]";
+    const BLOCKED = "[aspect: blocked]";
     const entryPts = emptyPoints();
     entryPts[10] = -1;
     entryPts[8] = 1;
     const entryBoard = bd(entryPts, { white: 1, black: 0 }, { white: 0, black: 0 });
 
     const entryMoves = game.singleMoves(entryBoard, "white", 2) as Move[];
-    expect(norm(entryMoves)).toEqual(norm([{ from: 0, to: 23, die: 2 }]));
-    expect(entryMoves.every((m) => m.from === 0)).toBe(true);
+    expect(norm(entryMoves), REENTER).toEqual(norm([{ from: 0, to: 23, die: 2 }]));
+    expect(entryMoves.every((m) => m.from === 0), REENTER).toBe(true);
 
     const blockedPts = emptyPoints();
     blockedPts[23] = -2;
     blockedPts[21] = -2;
     const blockedBoard = bd(blockedPts, { white: 1, black: 0 }, { white: 0, black: 0 });
 
-    expect(game.legalMovesNow(blockedBoard, "white", [2, 4])).toEqual([]);
+    expect(game.legalMovesNow(blockedBoard, "white", [2, 4]), BLOCKED).toEqual([]);
   });
 
   it("[G07] REQ-HIT — hitting → bar", () => {

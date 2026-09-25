@@ -114,6 +114,21 @@
       "what": "The computer's win chance never drops as it gets further ahead.",
       "how": "Four positions ordered by growing pip lead — far behind, near even, ahead, and far ahead: the win chance at each must be at least the one before."
     },
+    "G23": {
+      "name": "Undo restores the board",
+      "what": "Undo returns the board to exactly where it was before the move.",
+      "how": "Plays a move through the API, calls undo, and asserts points, bar, and off trays deep-equal the pre-move snapshot."
+    },
+    "G24": {
+      "name": "Accepting the computer's double",
+      "what": "Accepting the computer's double makes the cube 2 and owned by the player.",
+      "how": "Sets a double-offered state, accepts through the response endpoint, and asserts the cube is value 2 owner white in both the response and persisted state."
+    },
+    "G25": {
+      "name": "The computer takes its turn",
+      "what": "After the player ends a turn, the computer takes its turn and control returns to the player.",
+      "how": "Rolls, completes white's moves, ends the turn, drives the AI turn through the API, and asserts the turn comes back to white."
+    },
     "E01": {
       "name": "Doubles are four moves",
       "what": "Doubles really are four moves, not two.",
@@ -293,6 +308,36 @@
       "name": "Page loads cleanly",
       "what": "The game page loads without errors.",
       "how": "Opens the page in a browser and requires no console errors and no page errors."
+    },
+    "F28": {
+      "name": "Points in board order",
+      "what": "The 24 points are drawn in the standard board order — the top half runs 13 through 24 left to right, the bottom half 12 down to 1.",
+      "how": "Reads every point's rendered box, splits top and bottom rows by centre Y, sorts each row left to right, and asserts the data-point numbers match the standard order."
+    },
+    "F29": {
+      "name": "Bar between the halves",
+      "what": "The bar sits between the two board halves, not at the outer edge, and spans both rows.",
+      "how": "Measures the bar's box and asserts its left edge is right of the left half's right edge, its right edge is left of the right half's left edge, and its height spans both point rows."
+    },
+    "F30": {
+      "name": "Triangles point inward",
+      "what": "Each point's triangle points inward toward the board, not outward.",
+      "how": "Hides checkers, screenshots the board, samples each point's colour near the outer edge versus the inner end, and asserts the outer edge is triangle paint while the inner end is felt."
+    },
+    "F31": {
+      "name": "Checkers over their own points",
+      "what": "Every checker is drawn over the point it belongs to, not offset to a neighbour.",
+      "how": "Measures each checker's centre against its point's centre and vertical band, and asserts each sits within tolerance of its own point."
+    },
+    "F32": {
+      "name": "Off tray visible",
+      "what": "The off tray is present and visible, not hidden or zero-sized.",
+      "how": "Measures the off-tray box and asserts it exists with non-zero width and height and is neither display:none nor visibility:hidden."
+    },
+    "F33": {
+      "name": "Doubles show four dice",
+      "what": "A doubles roll renders four dice, not two.",
+      "how": "Sets a doubled dice state through the debug route, reloads, and asserts four die elements render."
     }
   },
   "setup": [
@@ -465,6 +510,13 @@
       "how": "Rolls fixed dice, clicks a movable checker, and requires at least one hint to appear."
     },
     {
+      "title": "a movable (selectable) white checker is present",
+      "key": "REQ-HINT/selectable",
+      "name": "A movable checker is present",
+      "what": "After a roll there is at least one checker the player can pick up to move.",
+      "how": "Rolls fixed dice and requires at least one selectable white checker."
+    },
+    {
       "title": "the page can be read by automation",
       "key": "REQ-TESTID/dom",
       "name": "Page is readable",
@@ -492,6 +544,10 @@
         "F13",
         "F15",
         "F19",
+        "F28",
+        "F29",
+        "F30",
+        "F32",
         "REQ-BIND/",
         "REQ-API/",
         "REQ-STATE/",
@@ -511,7 +567,8 @@
         "G01",
         "G02",
         "F06",
-        "F17"
+        "F17",
+        "F31"
       ]
     },
     {
@@ -527,11 +584,14 @@
         "G17",
         "G18",
         "G05",
+        "G23",
+        "G25",
         "E09",
         "F14",
         "F26",
         "F18",
         "F21",
+        "F33",
         "REQ-RENDER/die",
         "REQ-RENDER/die-reload",
         "REQ-TESTID/die",
@@ -592,6 +652,7 @@
         "F07",
         "G12",
         "G22",
+        "G24",
         "F20"
       ]
     },

@@ -151,6 +151,18 @@
       "first": "The computer's win chance doesn't go up as it gets further ahead.",
       "repeat": "Checked more positions and its win chance still doesn't rise as it pulls ahead."
     },
+    "G23": {
+      "first": "I made a move, hit undo, and the board didn't go back to how it was — a checker stayed where it had moved to or went missing.",
+      "repeat": "Tried undo again after another move and the board still didn't come back right — a checker was still missing or still in the wrong place."
+    },
+    "G24": {
+      "first": "I accepted a double and the cube stayed at one, and it didn't mark me as the owner.",
+      "repeat": "Accepted another double and the cube still didn't go up to two or show me as the owner."
+    },
+    "G25": {
+      "first": "The computer never takes its turn — after I move it just sits there and I never get to go again.",
+      "repeat": "I moved again and the computer still just sits there, never taking its turn."
+    },
     "E01": {
       "first": "When I roll doubles, I only get two moves.",
       "repeat": "Rolled doubles again and I still only get two moves."
@@ -240,8 +252,8 @@
       "repeat": "The board still doesn't fit my screen — part of it runs off the side."
     },
     "F14": {
-      "first": "The pieces don't move smoothly, they just jump from spot to spot",
-      "repeat": "The pieces still snap straight from one spot to the next with nothing in between."
+      "first": "The pieces don't animate when they move.",
+      "repeat": "Moved a piece again and it still doesn't animate when it moves."
     },
     "REQ-STATE/state.points": {
       "first": "They're reading the state your app reports and it doesn't include \"points\" — the 24 board points as a list of numbers, positive for white checkers and negative for black. Without it they can't wire that part of their side up.",
@@ -515,6 +527,10 @@
       "first": "When i pick up one of my pieces the game doesn't show me where it can go.",
       "repeat": "I picked a piece up again after your fix and still nothing shows me where it can go."
     },
+    "REQ-HINT/selectable": {
+      "first": "After I rolled, there was no checker I could pick up to move.",
+      "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
+    },
     "F15": {
       "first": "I opened the game from a different address than usual and got a dead board — it loads but nothing appears on it, or it throws errors behind the scenes.",
       "repeat": "Same thing again: reaching the game by its other address still gives me an empty board or errors."
@@ -528,8 +544,8 @@
       "repeat": "Played another game, reloaded, and the score got wiped to nothing again — the games we'd won were just gone."
     },
     "F18": {
-      "first": "I rolled a five and a two, refreshed the page, and the dice sitting on the board weren't the ones I'd just rolled.",
-      "repeat": "Rolled a different pair this time, reloaded, and the dice that came back still weren't the ones showing before the refresh."
+      "first": "I rolled, refreshed the page, and the dice didn't come back as what I'd rolled.",
+      "repeat": "Rolled a different pair, reloaded, and the dice still didn't come back as what I'd rolled."
     },
     "F19": {
       "first": "I picked the hard computer, refreshed the page, and it wasn't set to hard any more.",
@@ -566,6 +582,30 @@
     "F27": {
       "first": "When I open the game, it throws errors in the background.",
       "repeat": "Opened it fresh again and it still throws errors behind the scenes."
+    },
+    "F28": {
+      "first": "The points aren't laid out in the right order — the triangles run the wrong way across the board.",
+      "repeat": "Looked the board over again and the points are still in the wrong order, the triangles still running the wrong way."
+    },
+    "F29": {
+      "first": "The bar sits out at the edge of the board, not between the two halves.",
+      "repeat": "Looked again and the bar is still sitting out at the edge, not in the middle of the board."
+    },
+    "F30": {
+      "first": "The triangles point outward, away from the middle of the board.",
+      "repeat": "Looked at the triangles again and they still point outward, away from the middle."
+    },
+    "F31": {
+      "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place.",
+      "repeat": "Moved again and the checkers still don't line up with their points, still floating off to the side."
+    },
+    "F32": {
+      "first": "The off tray isn't showing — there's no place on the board for pieces that have been taken off.",
+      "repeat": "Looked again and the off tray still isn't there, still no place for taken-off pieces."
+    },
+    "F33": {
+      "first": "I rolled a double and only two dice appeared on the board, not four.",
+      "repeat": "Rolled another double and only two dice showed up again, still not four."
     },
     "REQ-RESPONSIVE/startup": {
       "repeat": "Tried opening it again and it hung on me the same way. Nothing ever appears, it just sits — {seconds} of it before I gave up.",
@@ -614,6 +654,62 @@
     "F06.format": {
       "first": "The pip counts on screen aren't readable as plain numbers.",
       "repeat": "The pip counts still aren't plain numbers."
+    },
+    "F26.present": {
+      "first": "I picked a piece and no hint appeared showing where it could move.",
+      "repeat": "Picked a piece again and still no hint appeared for where it could move."
+    },
+    "F26.animates": {
+      "first": "The move hints show up but they don't animate — they just pop in with no motion.",
+      "repeat": "The hints still show up but still don't animate, still popping in with no motion."
+    },
+    "F10.hints": {
+      "first": "I clicked my checker on the bar and no hints appeared showing where it could come back in.",
+      "repeat": "Clicked the bar checker again and still no re-entry hints showed up."
+    },
+    "F10.reentry": {
+      "first": "I clicked a re-entry move and the piece didn't come off the bar — it stayed up there.",
+      "repeat": "Tried to re-enter again and the piece still didn't come off the bar."
+    },
+    "F25.reveal": {
+      "first": "I clicked a piece and the game didn't show me any hints for where it could go.",
+      "repeat": "Clicked a piece again and still no hints appeared for where it could go."
+    },
+    "F25.consume": {
+      "first": "I made a move and the die I used didn't go away — the game still counted it as left to play.",
+      "repeat": "Made a move again and the die still didn't go away, still showing as left to play."
+    },
+    "G06.blocked": {
+      "first": "I was on the bar and the game let me come in on a point my opponent had covered.",
+      "repeat": "Went to the bar again and it still let me come in on a point my opponent had covered."
+    },
+    "G06.reenter": {
+      "first": "I was on the bar and the game let me play other pieces, not bring the one on the bar back in.",
+      "repeat": "Went to the bar again and it still let me play other pieces, not bring the bar piece back in."
+    },
+    "G10.points": {
+      "first": "I won a gammon and it only counted as one point.",
+      "repeat": "Won another gammon and it still only counted as one point."
+    },
+    "G20.value": {
+      "first": "I doubled and the cube didn't go up to two.",
+      "repeat": "Doubled again and the cube still didn't go up to two."
+    },
+    "G20.owner": {
+      "first": "I doubled and my opponent took it, but the cube didn't show them as the owner.",
+      "repeat": "Doubled again and after they took it the cube still didn't show them as the owner."
+    },
+    "E01.doubles": {
+      "first": "I rolled doubles and only got two moves.",
+      "repeat": "Rolled doubles again and still only got two moves."
+    },
+    "E01.nondouble": {
+      "first": "I rolled two different numbers and got the wrong number of moves.",
+      "repeat": "Rolled two different numbers again and still got the wrong number of moves."
+    },
+    "G03.doubles": {
+      "first": "I rolled doubles and got only two dice, not four.",
+      "repeat": "Rolled doubles again and still got only two dice, not four."
     }
   }
 }
