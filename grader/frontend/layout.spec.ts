@@ -46,7 +46,7 @@ interface Layout {
   vh: number;
   scrollW: number;
   scrollH: number;
-  boardOverflowsSideways: boolean;
+  boardScrollsSideways: boolean;
   trayDrawn: boolean;
   trayClearOfPoints: boolean;
   drawn: Box | null;
@@ -120,7 +120,14 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
         vh: innerHeight,
         scrollW: document.documentElement.scrollWidth,
         scrollH: document.documentElement.scrollHeight,
-        boardOverflowsSideways: board ? board.scrollWidth > board.clientWidth + 1 : false,
+        // A board wider than its box makes the player scroll only when it
+        // scrolls. Overflow that is shown or clipped is no scrollbar: checkers
+        // hanging 7 px over the frame were told as "I have to scroll to see the
+        // whole game" on a page that did not scroll (run 1790365975).
+        boardScrollsSideways: board
+          ? ["auto", "scroll"].includes(getComputedStyle(board).overflowX) &&
+            board.scrollWidth > board.clientWidth + 1
+          : false,
         trayDrawn: !!tray && tray.width > 0 && tray.height > 0,
         trayClearOfPoints:
           !!tray &&
@@ -194,9 +201,9 @@ test("[F37] REQ-LAYOUT — the game fits the screen", async ({ page }) => {
   for (const size of SIZES) {
     const layout = await openAt(page, size);
     expect(
-      layout.scrollW <= layout.vw + 2 && layout.scrollH <= layout.vh + 2 && !layout.boardOverflowsSideways,
+      layout.scrollW <= layout.vw + 2 && layout.scrollH <= layout.vh + 2 && !layout.boardScrollsSideways,
       `[aspect: scroll] at ${layout.size} the page is ${layout.scrollW}×${layout.scrollH}` +
-        (layout.boardOverflowsSideways ? " and the board overflows sideways" : ""),
+        (layout.boardScrollsSideways ? " and the board scrolls sideways" : ""),
     ).toBeTruthy();
     const tall = drawnBoard(layout).h / layout.vh;
     expect(tall, `[aspect: space] at ${layout.size} the board is ${pct(tall)} of the height`).toBeGreaterThanOrEqual(

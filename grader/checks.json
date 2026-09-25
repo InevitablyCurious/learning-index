@@ -332,7 +332,7 @@
     "F31": {
       "name": "Checkers over their own points",
       "what": "Every checker is drawn over the point it belongs to, not offset to a neighbour.",
-      "how": "Measures each checker's centre against its point's centre and vertical band, and asserts each sits within tolerance of its own point."
+      "how": "Measures each checker's centre against its point's centre and vertical band: each sits within a quarter of a point's width of its own point's centre, inside its band."
     },
     "F32": {
       "name": "Off tray visible",
@@ -357,7 +357,7 @@
     "F37": {
       "name": "The game fits the screen",
       "what": "Everything fits without scrolling and the board fills the screen's height.",
-      "how": "At both sizes the page must not scroll either way, the board must not overflow sideways, and the drawn board must be at least 70% of the window's height (the reference: 88–89%)."
+      "how": "At both sizes the page must not scroll either way, a scrollable board must not scroll sideways, and the drawn board must be at least 70% of the window's height (the reference: 88–89%)."
     },
     "F38": {
       "name": "Buttons show properly",

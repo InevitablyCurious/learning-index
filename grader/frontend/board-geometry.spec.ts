@@ -103,7 +103,10 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
 
   const points = await readPointBoxes(page);
   const checkers = await readCheckerBoxes(page);
-  const tolerance = 0.45 * pointWidth(points);
+  // A quarter of a point: a checker further off its point's centre than that
+  // is visibly misplaced. At 0.45, run 1790365975's checkers passed 33 px off
+  // centre (0.43 point) — half off their points, hanging over the frame.
+  const tolerance = 0.25 * pointWidth(points);
 
   for (const checker of checkers) {
     const point = points.find((p) => p.num === Number(checker.loc));
