@@ -218,37 +218,43 @@ export async function waitForBoardSettled(page: Page): Promise<void> {
 export interface TriangleSample {
   num: number;
   row: "top" | "bottom";
-  outerIsTriangle: boolean;
-  innerIsTriangle: boolean;
+  // Share of the point's width painted near its rim, and near its inner end.
+  baseCoverage: number;
+  tipCoverage: number;
   orientedInward: boolean;
 }
 
 /**
- * Measure what is actually DRAWN inside each point's triangle: hide the
- * checkers, screenshot the page, decode the PNG in-browser through a canvas,
- * and sample one pixel near each point's OUTER edge (the board rim) and one
- * near its INNER end (toward the board midline).
+ * Measure what is actually DRAWN inside each point's triangle, whatever its
+ * colours: hide the checkers and hints, screenshot the page, decode the PNG
+ * in-browser through a canvas, and learn the board's own felt — the commonest
+ * colour on the line between the two rows, where no triangle reaches. A pixel
+ * is triangle paint when it differs clearly from that felt. A triangle
+ * pointing inward covers most of its point's width near the rim and little of
+ * it near the inner end; pointing outward inverts both.
  *
- * A triangle pointing inward covers the outer sample and leaves the inner
- * sample on bare felt; pointing outward inverts both. Pixel classification is
- * colour-only — triangle paint is brown (r > g), felt is green (g > r) — so
- * the measurement does not depend on HOW the triangle is drawn (CSS borders,
- * clip-path, or SVG). Sample offsets stay clear of the `.plabel` number, which
- * sits 1px from the rim at the point's horizontal center.
+ * The row is where the point is drawn, not what it is numbered: the order
+ * check (F28) judges numbering, this one judges shape.
+ *
+ * The first version called a pixel triangle when it was brown (r > g) and
+ * felt when green (g > r) — the reference's own paint — so the reference
+ * repainted with tan felt and cream and red triangles, a standard board, read
+ * as 24 points "pointing outward" (FIX-3 mutation M37). Measured on the
+ * reference in both colourings (24/24 inward) and with its triangles flipped
+ * (0/24).
  */
 export async function sampleTriangleOrientation(
   page: Page,
   points: PointBox[],
 ): Promise<TriangleSample[]> {
   await page.addStyleTag({
-    content: '[data-testid="checker"] { visibility: hidden !important; }',
+    content: '[data-testid="checker"], [data-testid="hint"] { visibility: hidden !important; }',
   });
   const buf = await page.screenshot({ type: "png" });
   const dataUrl = "data:image/png;base64," + buf.toString("base64");
-  const dpr = await page.evaluate(() => window.devicePixelRatio || 1);
 
   return page.evaluate(
-    async ({ dataUrl, points, dpr }) => {
+    async ({ dataUrl, points }) => {
       const img = new Image();
       await new Promise<void>((resolve, reject) => {
         img.onload = () => resolve();
@@ -264,32 +270,55 @@ export async function sampleTriangleOrientation(
       ctx.drawImage(img, 0, 0);
 
       // Sampled coordinates are CSS/viewport px; the screenshot is device px.
-      const isTriangle = (cssX: number, cssY: number): boolean => {
-        const pixel = ctx.getImageData(
-          Math.round(cssX * dpr),
-          Math.round(cssY * dpr),
-          1,
-          1,
-        ).data;
-        return pixel[0] > pixel[1];
+      const dpr = img.naturalWidth / window.innerWidth;
+      const at = (x: number, y: number): number[] => {
+        const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+        return [d[0], d[1], d[2]];
+      };
+      const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+
+      // The felt: the commonest colour (in 12-level bins) across the line
+      // between the rows. The bar crosses it too, but only for its width.
+      const midY = points.reduce((sum, p) => sum + p.y + p.height / 2, 0) / points.length;
+      const minX = Math.min(...points.map((p) => p.x));
+      const maxX = Math.max(...points.map((p) => p.x + p.width));
+      const bin = (c: number[]) => c.map((v) => Math.round(v / 12)).join(",");
+      const seen = new Map<string, { n: number; colour: number[] }>();
+      for (let x = minX + 2; x < maxX - 2; x += 3) {
+        const colour = at(x, midY);
+        const entry = seen.get(bin(colour)) ?? { n: 0, colour };
+        entry.n += 1;
+        seen.set(bin(colour), entry);
+      }
+      const felt = [...seen.values()].sort((a, b) => b.n - a.n)[0].colour;
+      const painted = (x: number, y: number) => dist(at(x, y), felt) > 45;
+
+      // Share of a horizontal line across the point, `depth` of the way in
+      // from its rim, that is painted.
+      const coverage = (p: (typeof points)[number], top: boolean, depth: number): number => {
+        const y = top ? p.y + p.height * depth : p.y + p.height * (1 - depth);
+        let hit = 0;
+        let all = 0;
+        for (let x = p.x + 1; x < p.x + p.width - 1; x += 1) {
+          all += 1;
+          if (painted(x, y)) hit += 1;
+        }
+        return all ? hit / all : 0;
       };
 
-      return points.map((p): TriangleSample => {
-        const row: "top" | "bottom" = p.num >= 13 ? "top" : "bottom";
-        const x = p.x + p.width * 0.25;
-        const outerY = row === "top" ? p.y + p.height * 0.1 : p.y + p.height * 0.85;
-        const innerY = row === "top" ? p.y + p.height * 0.8 : p.y + p.height * 0.2;
-        const outerIsTriangle = isTriangle(x, outerY);
-        const innerIsTriangle = isTriangle(x, innerY);
+      return points.map((p) => {
+        const top = p.y + p.height / 2 < midY;
+        const baseCoverage = coverage(p, top, 0.1);
+        const tipCoverage = coverage(p, top, 0.85);
         return {
           num: p.num,
-          row,
-          outerIsTriangle,
-          innerIsTriangle,
-          orientedInward: outerIsTriangle && !innerIsTriangle,
+          row: top ? ("top" as const) : ("bottom" as const),
+          baseCoverage,
+          tipCoverage,
+          orientedInward: baseCoverage > 0.5 && tipCoverage < 0.35,
         };
       });
     },
-    { dataUrl, points, dpr },
+    { dataUrl, points },
   );
 }

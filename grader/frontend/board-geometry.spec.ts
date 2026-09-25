@@ -150,6 +150,6 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   const outward = samples.filter((s) => !s.orientedInward).map((s) => s.num);
   expect(
     outward,
-    `expected every point's triangle to point inward (outer-edge sample drawn as triangle, inner-end sample drawn as felt), found outward-pointing point numbers: ${outward.join(", ")}`,
+    `expected every point's triangle to point inward (painted across most of its width at the rim, little of it at the inner end), found outward-pointing point numbers: ${outward.join(", ")}`,
   ).toEqual([]);
 });
