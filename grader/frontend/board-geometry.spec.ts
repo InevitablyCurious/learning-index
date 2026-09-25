@@ -87,10 +87,13 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   // Where the bar belongs is only defined once the rows form proper halves: on
   // a board whose rows do not line up it is the rows check's complaint (run
   // 1790345941: rows squeezed into opposite halves read as "the bar splits the
-  // board in the wrong place" while the bar sat in the middle).
+  // board in the wrong place" while the bar sat in the middle). And the halves
+  // are found by number, so a board numbered out of order is the order check's
+  // complaint (run 1790370051: a bottom row numbered the wrong way round made
+  // the bar in the middle read as "in the wrong place").
   expect(
     between,
-    `${where}[needs: F40] expected the bar between the board halves, found bar x=${bar.x.toFixed(1)}..${(bar.x + bar.width).toFixed(1)} with the left half ending at x=${leftHalfRightEdge.toFixed(1)} and the right half starting at x=${rightHalfLeftEdge.toFixed(1)}`,
+    `${where}[needs: F40 F28] expected the bar between the board halves, found bar x=${bar.x.toFixed(1)}..${(bar.x + bar.width).toFixed(1)} with the left half ending at x=${leftHalfRightEdge.toFixed(1)} and the right half starting at x=${rightHalfLeftEdge.toFixed(1)}`,
   ).toBeTruthy();
   expect(
     bar.height >= 1.8 * avgPointHeight,
