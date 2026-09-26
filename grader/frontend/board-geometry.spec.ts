@@ -184,7 +184,10 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
   const tray = await readOffTray(page);
   expect(
     tray.exists,
-    'expected an [data-testid="off-tray"] element on the board, found none',
+    // No tray at all is the render check's complaint and an untagged one the
+    // tag check's: one fault, one line (run 1790448423 was told both "nowhere
+    // for my taken-off pieces" and "the off tray still isn't there").
+    '[needs: REQ-RENDER/off-tray REQ-TESTID/off-tray] expected an [data-testid="off-tray"] element on the board, found none',
   ).toBeTruthy();
   expect(
     tray.visible,
@@ -269,7 +272,9 @@ test("[F41] REQ-GEOMETRY — checkers drawn as circles sized to their points", a
     notCircles.map((s) => `${s.loc}:${s.width.toFixed(0)}x${s.height.toFixed(0)}${s.round ? "" : " square-cornered"}`),
     `expected every checker drawn as a circle, found ${notCircles.length} of ${shapes.length} that are not`,
   ).toEqual([]);
-  const share = typicalWidth(shapes) / pointWidth(points);
+  const pw = pointWidth(points);
+  expect(pw, "[needs: F30] no point is drawn with any width").toBeGreaterThan(0);
+  const share = typicalWidth(shapes) / pw;
   expect(share, `[aspect: big] checkers are ${Math.round(share * 100)}% of a point's width`).toBeLessThanOrEqual(0.9);
   expect(share, `[aspect: small] checkers are ${Math.round(share * 100)}% of a point's width`).toBeGreaterThanOrEqual(0.7);
 });

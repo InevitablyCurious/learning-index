@@ -245,9 +245,19 @@ export function overlaps(
   return w > 3 && h > 3;
 }
 
-/** The average drawn width of a point — the unit horizontal tolerances are stated in. */
+/**
+ * The drawn width of a point — the unit horizontal tolerances are stated in:
+ * the middle of the widths of the points that have any. A point collapsed to
+ * nothing is the triangle check's complaint, and averaging it in shrank "a
+ * point" — run 1790448423's right half was twelve points of width 0, and its
+ * pieces, 80% of the drawn points, were told "too big for their points".
+ */
 export function pointWidth(points: PointBox[]): number {
-  return points.reduce((sum, p) => sum + p.width, 0) / points.length;
+  const widths = points
+    .map((p) => p.width)
+    .filter((w) => w > 0)
+    .sort((a, b) => a - b);
+  return widths.length ? widths[Math.floor(widths.length / 2)] : 0;
 }
 
 /** The drawn box of `[data-testid="bar"]`, or null when the board has none. */
