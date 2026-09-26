@@ -16,6 +16,7 @@ import {
   readBarBox,
   readCheckerBoxes,
   readCheckerShapes,
+  readCheckerVisibility,
   typicalWidth,
   overlaps,
   readOffTray,
@@ -165,14 +166,20 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
   // The tray is part of the board: checkers are borne off into the board's
   // own tray, inside its frame. Run 1790359593 moved the tray out of the board
   // into the button panel — clear of the points and past point 1, and so
-  // passing everything below.
+  // passing everything below. Outside means most of it is: its centre lies
+  // past the board's edge. A tray hanging a little past the board's box, drawn
+  // over the board's own border so that it reads as the board's end, is on the
+  // board to a player (FIX-25: run 1790410498, 17 of 80 px past the box, told
+  // "The off tray is sitting outside the board").
   const board = await page.locator('[data-testid="board"]').first().boundingBox();
   expect(board, "[needs: F01] expected the board to read").not.toBeNull();
+  const trayMidX = tray.x + tray.width / 2;
+  const trayMidY = tray.y + tray.height / 2;
   const onBoard =
-    tray.x >= board!.x - 2 &&
-    tray.y >= board!.y - 2 &&
-    tray.x + tray.width <= board!.x + board!.width + 2 &&
-    tray.y + tray.height <= board!.y + board!.height + 2;
+    trayMidX >= board!.x &&
+    trayMidX <= board!.x + board!.width &&
+    trayMidY >= board!.y &&
+    trayMidY <= board!.y + board!.height;
   expect(
     onBoard,
     `[aspect: offboard] the off tray (x ${tray.x.toFixed(0)}..${(tray.x + tray.width).toFixed(0)}, y ${tray.y.toFixed(0)}..${(tray.y + tray.height).toFixed(0)}) lies outside the board (x ${board!.x.toFixed(0)}..${(board!.x + board!.width).toFixed(0)})`,
@@ -232,6 +239,42 @@ test("[F41] REQ-GEOMETRY — checkers drawn as circles sized to their points", a
   const share = typicalWidth(shapes) / pointWidth(points);
   expect(share, `[aspect: big] checkers are ${Math.round(share * 100)}% of a point's width`).toBeLessThanOrEqual(0.9);
   expect(share, `[aspect: small] checkers are ${Math.round(share * 100)}% of a point's width`).toBeGreaterThanOrEqual(0.7);
+});
+
+// [F43] REQ-GEOMETRY — every piece shows. A player counts the pieces on a
+// point by looking at them: a stack drawn on one spot shows as a single piece,
+// and a piece cut down by what it is drawn inside shows as a sliver. Run
+// 1790410498 drew every stack on one spot, inside its point's triangle clip;
+// the size and placement checks passed, because they read the pieces' boxes,
+// not what shows.
+test("[F43] REQ-GEOMETRY — every piece shows", async ({ page }) => {
+  await openFreshBoard(page);
+  const pieces = await readCheckerVisibility(page);
+  expect(pieces.length, "[needs: REQ-RENDER/checker] expected the checkers on the points to read").toBeGreaterThan(0);
+  // A piece mostly past the edge of the window is the fit check's complaint.
+  const shown = pieces.filter((c) => c.onScreen >= 0.5);
+  // On one spot: another piece on the same point with its centre closer than
+  // a third of a piece, so the stack shows as one piece.
+  const onOneSpot = [
+    ...new Set(
+      shown
+        .filter((c, i) =>
+          shown.some(
+            (d, j) =>
+              j !== i &&
+              d.loc === c.loc &&
+              Math.hypot(d.centerX - c.centerX, d.centerY - c.centerY) < Math.min(c.width, d.width) / 3,
+          ),
+        )
+        .map((c) => c.loc),
+    ),
+  ];
+  expect(onOneSpot, `[aspect: stacked] pieces drawn on one spot on points: ${onOneSpot.join(", ")}`).toEqual([]);
+  // Cut off: less than three quarters of a piece's on-screen circle shows, and
+  // not because another piece is drawn over it (a stack drawn overlapping
+  // still shows every piece). The reference shows every piece whole.
+  const cut = [...new Set(shown.filter((c) => c.seen + c.under < 0.75 * c.onScreen).map((c) => c.loc))];
+  expect(cut, `[aspect: clipped] pieces cut off on points: ${cut.join(", ")}`).toEqual([]);
 });
 
 test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {

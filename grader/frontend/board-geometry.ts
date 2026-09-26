@@ -122,6 +122,86 @@ export async function readCheckerShapes(page: Page): Promise<CheckerShape[]> {
   );
 }
 
+export interface CheckerVisibility {
+  loc: string;
+  centerX: number;
+  centerY: number;
+  width: number;
+  /** Share of the piece's circle a player can see. */
+  seen: number;
+  /** Share of it that another piece is drawn over. */
+  under: number;
+  /** Share of it inside the window. */
+  onScreen: number;
+}
+
+/**
+ * How much of each checker on a point shows: a grid of spots inside its
+ * circle, each hit-tested for what is drawn on top there. Clipping (clip-path,
+ * overflow) and stacking order decide a hit exactly as they decide what shows.
+ * Pages often let clicks pass through their pieces (the reference sets
+ * pointer-events: none on them), so the pieces are made hit-testable for the
+ * reading and put back after it.
+ */
+export async function readCheckerVisibility(page: Page): Promise<CheckerVisibility[]> {
+  return page.evaluate(() => {
+    const style = document.createElement("style");
+    style.textContent = '[data-testid="checker"], [data-testid="checker"] * { pointer-events: auto !important; }';
+    document.head.appendChild(style);
+    try {
+      return [...document.querySelectorAll('[data-testid="checker"]')].flatMap((element) => {
+        const loc = (element as HTMLElement).dataset.loc;
+        if (loc === undefined || !/^\d+$/.test(loc)) return [];
+        // The drawn disc: the element, or its largest descendant when the
+        // element itself has no size (a zero-size anchor around a disc).
+        let box = element.getBoundingClientRect();
+        if (box.width * box.height < 16) {
+          const inner = [...element.querySelectorAll("*")]
+            .map((el) => el.getBoundingClientRect())
+            .sort((a, b) => b.width * b.height - a.width * a.height)[0];
+          if (inner) box = inner;
+        }
+        const cx = box.x + box.width / 2;
+        const cy = box.y + box.height / 2;
+        const r = (0.9 * Math.min(box.width, box.height)) / 2;
+        let inside = 0;
+        let seen = 0;
+        let under = 0;
+        let onScreen = 0;
+        for (let i = 0; i < 9; i++) {
+          for (let j = 0; j < 9; j++) {
+            const dx = ((i + 0.5) / 9) * 2 - 1;
+            const dy = ((j + 0.5) / 9) * 2 - 1;
+            if (dx * dx + dy * dy > 1) continue;
+            inside += 1;
+            const x = cx + dx * r;
+            const y = cy + dy * r;
+            if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+            onScreen += 1;
+            const hit = document.elementFromPoint(x, y);
+            if (hit && (hit === element || element.contains(hit))) seen += 1;
+            else if (hit?.closest('[data-testid="checker"]')) under += 1;
+          }
+        }
+        if (inside === 0) return [];
+        return [
+          {
+            loc,
+            centerX: cx,
+            centerY: cy,
+            width: Math.min(box.width, box.height),
+            seen: seen / inside,
+            under: under / inside,
+            onScreen: onScreen / inside,
+          },
+        ];
+      });
+    } finally {
+      style.remove();
+    }
+  });
+}
+
 /** The middle checker width of a set of shapes (the one most checkers share). */
 export function typicalWidth(shapes: CheckerShape[]): number {
   const widths = shapes.map((s) => s.width).sort((a, b) => a - b);

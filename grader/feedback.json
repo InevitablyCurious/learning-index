@@ -878,6 +878,18 @@
     "F42.onecolour": {
       "first": "The points are all one colour — I expect them to alternate between two colours.",
       "repeat": "The points are still all one colour — I expect them to alternate between two colours."
+    },
+    "F43": {
+      "first": "I can't see all the pieces properly — some are hidden or cut off.",
+      "repeat": "I still can't see all the pieces properly — some are hidden or cut off."
+    },
+    "F43.stacked": {
+      "first": "The pieces in a stack are drawn on top of each other, so a point with several pieces looks like it holds just one — I expect to see every piece in the stack.",
+      "repeat": "The pieces in a stack are still drawn on top of each other, so a point with several pieces looks like it holds just one — I expect to see every piece in the stack."
+    },
+    "F43.clipped": {
+      "first": "Some of the pieces are cut off — I expect to see every piece as a whole circle.",
+      "repeat": "Some of the pieces are still cut off — I expect to see every piece as a whole circle."
     }
   }
 }

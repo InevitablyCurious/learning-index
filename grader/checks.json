@@ -337,7 +337,7 @@
     "F32": {
       "name": "Off tray visible",
       "what": "The off tray is present and visible, not hidden or zero-sized, on the board, at the end where checkers bear off.",
-      "how": "New game: the off tray exists, is visible, is actually drawn (a fill, an outline or a label — not an empty see-through box), sits over no point, lies inside the board's frame, lies past points 1 and 24 — the end white and black bear off from — runs at least 90% of the height of the rows of points, and is at least as wide as a checker (at most 90% of a point)."
+      "how": "New game: the off tray exists, is visible, is actually drawn (a fill, an outline or a label — not an empty see-through box), sits over no point, lies on the board (its centre inside the board's frame), lies past points 1 and 24 — the end white and black bear off from — runs at least 90% of the height of the rows of points, and is at least as wide as a checker (at most 90% of a point)."
     },
     "F33": {
       "name": "A double lets the player make four moves",
@@ -383,6 +383,11 @@
       "name": "Points alternate in colour",
       "what": "The points alternate between two colours, as on every backgammon board.",
       "how": "New game, checkers hidden: each triangle's own colour down its middle at its widest; within each quarter, side-by-side neighbours must differ. Colours are compared with each other only; neither across the bar nor straight across the board is judged, and a point the bar or tray is drawn over is skipped."
+    },
+    "F43": {
+      "name": "Every piece shows",
+      "what": "Every piece on the board can be seen whole: a stack shows each of its pieces, and no piece is cut off.",
+      "how": "New game: a grid of spots inside each checker on a point is hit-tested (the pieces made hit-testable for the reading). Two pieces on the same point with centres closer than a third of a piece are drawn on one spot; a piece showing less than three quarters of itself on screen, not because another piece is drawn over it, is cut off. Pieces mostly past the window are the fit check's."
     }
   },
   "setup": [
@@ -599,6 +604,7 @@
         "F42",
         "F32",
         "F41",
+        "F43",
         "F31",
         "G01",
         "G02",
