@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, playerClickUntilShown, setupState, test } from "./fixtures.ts";
+import { expect, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
 import { checkerAnimates, hintAnimates } from "../lib/acceptance.ts";
 import { BASE_URL } from "../lib/harness.ts";
 
@@ -120,7 +120,7 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
   const hints = page.locator('[data-testid="hint"]');
   await playerClickUntilShown(whiteBarChecker, hints);
   await expect(hints, "[aspect: hints]").toHaveCount(2);
-  await hints.first().click({ force: true });
+  await playerClick(hints.first());
 
   await expect(whiteBarChecker, "[aspect: reentry]").toHaveCount(0);
   const state = await fetchState(page);

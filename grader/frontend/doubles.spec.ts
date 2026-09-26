@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, playerClickUntilShown, setupState, test } from "./fixtures.ts";
+import { expect, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
 
 // [F33] REQ-DOUBLES — a double lets the player make FOUR MOVES.
 //
@@ -94,9 +94,8 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
         await expect(selectable.first(), "no checker to pick up").toBeVisible();
         await playerClickUntilShown(selectable.first(), hints);
         await expect(hints.first(), "no hint appeared").toBeVisible();
-        // Hints carry an infinite `pulse` animation, so Playwright never sees
-        // them as "stable" — force the click past the stability check.
-        await hints.first().click({ force: true });
+        // Clicked where it shows: a pulsing hint on top of a stack (fixtures.ts).
+        await playerClick(hints.first());
         await expect.poll(() => remainingDiceCount(page), "die not consumed").toBe(4 - played);
       });
     } catch (err) {
@@ -187,7 +186,7 @@ test("[F39] REQ-DICE — a roll shows two dice, and two different numbers give t
     await playerClickUntilShown(selectable.first(), hints);
     if (!(await hints.first().waitFor({ state: "visible", timeout: 3_000 }).then(() => true, () => false))) return false;
     const before = await boardKey(page);
-    await hints.first().click({ force: true });
+    await playerClick(hints.first());
     return expect
       .poll(() => boardKey(page), { timeout: 3_000 })
       .not.toBe(before)

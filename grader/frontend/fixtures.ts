@@ -129,41 +129,64 @@ export async function playerClick(target: Locator): Promise<void> {
   // place after a redraw; reading its position mid-slide clicks where it WAS.
   // That is the stability wait `locator.click()` does for itself, and leaving
   // it out made the reference solution fail F10 and F14 (grader image of
-  // 2026-09-16). The position must match on two consecutive animation frames.
+  // 2026-09-16). Its centre must match on two consecutive animation frames.
   //
   // Pages also redraw checkers by replacing their elements, so an element found
   // a moment ago can be gone: each try looks it up afresh, and a replaced
   // element (zero size, or never still) simply gets another try.
-  let box: { x: number; y: number; width: number; height: number } | null = null;
-  for (let tries = 0; tries < 20 && !box; tries++) {
+  //
+  // Held still means its CENTRE stayed put: a hint pulsing in place (the prompt
+  // asks for animated hints) never keeps one box, and a player clicks it anyway.
+  //
+  // And a player clicks the part of it that shows. A hint drawn on top of a
+  // stack can have the stack's last checker over its centre — the reference at
+  // 1280x800 with checkers a few px wider (FIX-17: M59, M63, M66) — and a click
+  // aimed at the centre went to the checker, told as "could make only one
+  // move". When no part of it shows, the click lands on whatever covers it, as
+  // a player's would.
+  let point: { x: number; y: number } | null = null;
+  for (let tries = 0; tries < 20 && !point; tries++) {
     try {
-      box = await target.evaluate(
+      point = await target.evaluate(
         async (el) => {
           el.scrollIntoView({ block: "center", inline: "center" });
           const frame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
           let prev = "";
-          for (let i = 0; i < 120; i++) {
+          let box: DOMRect | null = null;
+          for (let i = 0; i < 120 && !box; i++) {
             await frame();
             if (!el.isConnected) return null;
             const r = el.getBoundingClientRect();
-            const cur = [r.x, r.y, r.width, r.height].map((v) => v.toFixed(1)).join(",");
-            if (cur === prev && r.width > 0 && r.height > 0) {
-              return { x: r.x, y: r.y, width: r.width, height: r.height };
-            }
+            const cur = [r.x + r.width / 2, r.y + r.height / 2].map((v) => v.toFixed(1)).join(",");
+            if (cur === prev && r.width > 0 && r.height > 0) box = r;
             prev = cur;
           }
-          return null;
+          if (!box) return null;
+          const shows = (x: number, y: number) => {
+            const hit = document.elementFromPoint(x, y);
+            return !!hit && (hit === el || el.contains(hit));
+          };
+          const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+          if (shows(centre.x, centre.y)) return centre;
+          for (const fy of [0.5, 0.3, 0.7, 0.2, 0.8]) {
+            for (const fx of [0.5, 0.3, 0.7, 0.2, 0.8]) {
+              const x = box.x + box.width * fx;
+              const y = box.y + box.height * fy;
+              if (shows(x, y)) return { x, y };
+            }
+          }
+          return centre;
         },
         undefined,
         { timeout: 5000 },
       );
     } catch {
-      box = null;
+      point = null;
     }
-    if (!box) await target.page().waitForTimeout(100);
+    if (!point) await target.page().waitForTimeout(100);
   }
-  if (!box) throw new Error("the element never held still on screen long enough to click");
-  await target.page().mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  if (!point) throw new Error("the element never held still on screen long enough to click");
+  await target.page().mouse.click(point.x, point.y);
 }
 
 /**

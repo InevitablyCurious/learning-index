@@ -245,16 +245,15 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
   for (let i = 0; i < hintCount; i++) {
     const text = normalizeHint(await hints.nth(i).innerText());
     if ((move.to === OFF && text.includes("off")) || text.includes(String(move.die))) {
-      // Hints carry an infinite `pulse` animation, so Playwright never sees them
-      // as "stable" — force the click past the stability check.
-      await hints.nth(i).click({ force: true });
+      // Clicked where it shows: a pulsing hint on top of a stack (fixtures.ts).
+      await playerClick(hints.nth(i));
       clicked = true;
       break;
     }
   }
 
   if (!clicked) {
-    await hints.first().click({ force: true });
+    await playerClick(hints.first());
   }
 
   // The click must play the move before a die can be used up. A click that
