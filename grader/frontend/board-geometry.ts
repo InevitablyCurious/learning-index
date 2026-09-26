@@ -373,18 +373,24 @@ export async function sampleTriangleOrientation(
       };
       const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
-      // The felt: the commonest colour (in 12-level bins) across the line
-      // between the rows. The bar crosses it too, but only for its width.
+      // The felt: the commonest colour (in 12-level bins) down the left and right
+      // edges of every point's box, from a fifth to four fifths of the way in.
+      // A triangle narrows away from those edges whichever way it points, so
+      // they show the felt. The line between the rows does not: a board whose
+      // triangles point outward puts their bases there, and the felt learned as
+      // a triangle colour read half of them as blocks (FIX-19, M04b).
       const midY = points.reduce((sum, p) => sum + p.y + p.height / 2, 0) / points.length;
-      const minX = Math.min(...points.map((p) => p.x));
-      const maxX = Math.max(...points.map((p) => p.x + p.width));
       const bin = (c: number[]) => c.map((v) => Math.round(v / 12)).join(",");
       const seen = new Map<string, { n: number; colour: number[] }>();
-      for (let x = minX + 2; x < maxX - 2; x += 3) {
-        const colour = at(x, midY);
-        const entry = seen.get(bin(colour)) ?? { n: 0, colour };
-        entry.n += 1;
-        seen.set(bin(colour), entry);
+      for (const p of points) {
+        for (const fy of [0.2, 0.35, 0.5, 0.65, 0.8]) {
+          for (const fx of [0.03, 0.97]) {
+            const colour = at(p.x + p.width * fx, p.y + p.height * fy);
+            const entry = seen.get(bin(colour)) ?? { n: 0, colour };
+            entry.n += 1;
+            seen.set(bin(colour), entry);
+          }
+        }
       }
       const felt = [...seen.values()].sort((a, b) => b.n - a.n)[0].colour;
       const painted = (x: number, y: number) => dist(at(x, y), felt) > 45;

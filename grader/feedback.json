@@ -616,8 +616,8 @@
       "repeat": "Part of the board still runs off the edge of the screen."
     },
     "F30.undrawn": {
-      "first": "The points aren't drawn — I can't see any triangles on the board.",
-      "repeat": "The points still aren't drawn — I still can't see any triangles on the board."
+      "first": "I can't see any triangles on the board — the points aren't drawn as triangles.",
+      "repeat": "I still can't see any triangles on the board — the points still aren't drawn as triangles."
     },
     "F30.someundrawn": {
       "first": "Some of the points have no triangle drawn on them.",

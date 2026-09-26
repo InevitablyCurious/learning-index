@@ -255,18 +255,23 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
 
   expect(samples.length, `expected 24 triangle samples, found ${samples.length}`).toBe(24);
 
-  // A point with nothing painted at its rim or its inner end has no triangle
-  // at all: a player sees an empty stretch of board, not a triangle pointing
-  // the wrong way (run 1790381377: every point a transparent box, told "The
-  // triangles point outward"). Every point, or some of them, told as such.
+  // A point with no triangle: nothing painted at its rim or its inner end (run
+  // 1790381377: every point a transparent box, told "The triangles point
+  // outward"), or paint right across it at both ends — a block or a band, no
+  // more a triangle to a player (run 1790388597 painted the board area in a
+  // gradient). Every point, or some of them, told as such.
   const judged = samples.filter((s) => !underBar.has(s.num));
-  const undrawn = judged.filter((s) => s.baseCoverage < 0.1 && s.tipCoverage < 0.1).map((s) => s.num);
+  const noTriangle = judged
+    .filter((s) => (s.baseCoverage < 0.1 && s.tipCoverage < 0.1) || (s.baseCoverage >= 0.35 && s.tipCoverage >= 0.35))
+    .map((s) => s.num);
   expect(
-    undrawn,
-    `${undrawn.length === judged.length ? "[aspect: undrawn]" : "[aspect: someundrawn]"} no triangle drawn on points: ${undrawn.join(", ")}`,
+    noTriangle,
+    `${noTriangle.length === judged.length ? "[aspect: undrawn]" : "[aspect: someundrawn]"} no triangle drawn on points: ${noTriangle.join(", ")}`,
   ).toEqual([]);
 
-  const outward = samples.filter((s) => !s.orientedInward && !underBar.has(s.num)).map((s) => s.num);
+  // Pointing outward: wider at its inner end than at its rim. A triangle wider
+  // at the rim points inward however narrow it is drawn.
+  const outward = judged.filter((s) => !s.orientedInward && s.tipCoverage >= s.baseCoverage).map((s) => s.num);
   expect(
     outward,
     `expected every point's triangle to point inward (painted across most of its width at the rim, little of it at the inner end), found outward-pointing point numbers: ${outward.join(", ")}`,
