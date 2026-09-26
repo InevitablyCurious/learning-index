@@ -188,10 +188,13 @@ test("[F36] REQ-LAYOUT — the board takes about 80% of the width", async ({ pag
     // tray checks' complaint.
     expect(layout.trayDrawn && layout.trayClearOfPoints, "[needs: REQ-RENDER/off-tray F32]").toBeTruthy();
     const share = drawnBoard(layout).w / layout.vw;
+    // A board too big is itself why the buttons don't fit on the right; a board
+    // too small can be the buttons' doing — run 1790381377's controls down the
+    // left edge narrowed it — and is then the placement check's complaint (F35).
     expect(share, `[aspect: wide] at ${layout.size} the board is ${pct(share)} of the width`).toBeLessThanOrEqual(
       BOARD_SHARE.max,
     );
-    expect(share, `[aspect: narrow] at ${layout.size} the board is ${pct(share)} of the width`).toBeGreaterThanOrEqual(
+    expect(share, `[aspect: narrow] [needs: F35] at ${layout.size} the board is ${pct(share)} of the width`).toBeGreaterThanOrEqual(
       BOARD_SHARE.min,
     );
   }

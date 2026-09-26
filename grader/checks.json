@@ -327,7 +327,7 @@
     "F30": {
       "name": "Triangles point inward",
       "what": "Each point's triangle points inward toward the board, not outward.",
-      "how": "Hides checkers, screenshots the board, samples each point's colour near the outer edge versus the inner end, and asserts the outer edge is triangle paint while the inner end is felt."
+      "how": "Hides checkers, screenshots the board, samples each point's colour near the outer edge versus the inner end, and asserts the outer edge is triangle paint while the inner end is felt. A point with nothing painted at its rim or its inner end has no triangle drawn, and is told as such, never as pointing outward."
     },
     "F31": {
       "name": "Checkers over their own points",

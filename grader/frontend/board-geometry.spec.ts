@@ -255,6 +255,17 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
 
   expect(samples.length, `expected 24 triangle samples, found ${samples.length}`).toBe(24);
 
+  // A point with nothing painted at its rim or its inner end has no triangle
+  // at all: a player sees an empty stretch of board, not a triangle pointing
+  // the wrong way (run 1790381377: every point a transparent box, told "The
+  // triangles point outward"). Every point, or some of them, told as such.
+  const judged = samples.filter((s) => !underBar.has(s.num));
+  const undrawn = judged.filter((s) => s.baseCoverage < 0.1 && s.tipCoverage < 0.1).map((s) => s.num);
+  expect(
+    undrawn,
+    `${undrawn.length === judged.length ? "[aspect: undrawn]" : "[aspect: someundrawn]"} no triangle drawn on points: ${undrawn.join(", ")}`,
+  ).toEqual([]);
+
   const outward = samples.filter((s) => !s.orientedInward && !underBar.has(s.num)).map((s) => s.num);
   expect(
     outward,
