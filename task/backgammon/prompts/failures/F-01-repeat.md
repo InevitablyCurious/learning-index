@@ -1,1 +1,1 @@
-I closed it and opened it fresh, and it's still the same — the screen never fills in.
+I opened the game again and the board still doesn't show up — I expect to see the board with the pieces set out, ready to play.

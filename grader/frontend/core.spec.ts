@@ -37,7 +37,7 @@ async function readState(page: Page): Promise<ApiState> {
 
 async function openApp(page: Page): Promise<void> {
   await page.goto("/");
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 }
 
 function locAttr(from: number): string {
@@ -173,7 +173,7 @@ test("[F02] REQ-RENDER — start game renders full board", async ({ page }) => {
 
   await postJson<ApiState>(page, "/api/new", {});
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   await expect(page.getByTestId("point")).toHaveCount(24);
   await expect(page.getByTestId("checker")).toHaveCount(30);
@@ -187,7 +187,7 @@ test("[F03] REQ-HINT — clicking a piece shows its moves", async ({ page }) => 
   await postJson<ApiState>(page, "/api/new", {});
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   await page.getByTestId("rollBtn").click();
   await expect
@@ -210,7 +210,7 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
   await postJson<ApiState>(page, "/api/new", {});
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   await page.getByTestId("rollBtn").click();
   await expect
@@ -281,7 +281,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   await postJson<ApiState>(page, "/api/new", {});
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [3, 5] });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   await page.getByTestId("rollBtn").click();
   await expect
@@ -360,7 +360,7 @@ test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {
     message: "",
   });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 4] });
   await page.getByTestId("rollBtn").click();
@@ -391,7 +391,7 @@ test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
     message: "",
   });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 4] });
   await page.getByTestId("rollBtn").click();
@@ -415,7 +415,7 @@ test("[F06] REQ-PIPUI — pip display cross-checked vs engine", async ({ page })
 
   await postJson<ApiState>(page, "/api/new", {});
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   const openingDomWhite = await readInt(page.getByTestId("pipWhite"));
   const openingDomBlack = await readInt(page.getByTestId("pipBlack"));
@@ -448,7 +448,7 @@ test("[F06] REQ-PIPUI — pip display cross-checked vs engine", async ({ page })
     message: "",
   });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   const customDomWhite = await readInt(page.getByTestId("pipWhite"));
   const customDomBlack = await readInt(page.getByTestId("pipBlack"));
@@ -463,7 +463,7 @@ test("[F34] REQ-CUBEUI — a new game shows the cube at one, centered", async ({
 
   await postJson<ApiState>(page, "/api/new", {});
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   await expect(page.getByTestId("cubeVal")).toHaveText("1");
   const openingOwnerLabel = await page.getByTestId("cubeOwner").innerText();
@@ -475,11 +475,11 @@ test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
 
   await postJson<ApiState>(page, "/api/new", {});
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   await postJson<ApiState>(page, "/api/double", {});
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(page.getByTestId("cubeVal")).toHaveText("2");
 
   const state = await readState(page);
@@ -537,7 +537,7 @@ test("[F16] REQ-RELOAD — whose turn survives a reload", async ({ page }) => {
   await postJson<ApiState>(page, "/api/new", {});
   await setupState(page, { turn: "black" });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(page.getByTestId("checker")).toHaveCount(30);
   const state = await readState(page);
   expect(state.turn).toBe("black");
@@ -548,7 +548,7 @@ test("[F17] REQ-RELOAD — match score survives a reload", async ({ page }) => {
   await postJson<ApiState>(page, "/api/new", {});
   await setupState(page, { score: { white: 3, black: 5 } });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(page.getByTestId("checker")).toHaveCount(30);
   const state = await readState(page);
   expect(state.score.white).toBe(3);
@@ -565,7 +565,7 @@ test("[F18] REQ-RELOAD — dice values survive a reload", async ({ page }) => {
     remainingDice: [5, 2],
   });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(page.getByTestId("checker")).toHaveCount(30);
   const state = await readState(page);
   expect([...state.dice].sort((a, b) => a - b)).toEqual([2, 5]);
@@ -576,7 +576,7 @@ test("[F19] REQ-RELOAD — difficulty survives a reload", async ({ page }) => {
   await postJson<ApiState>(page, "/api/new", {});
   await setupState(page, { difficulty: "hard" });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(page.getByTestId("checker")).toHaveCount(30);
   const state = await readState(page);
   expect(state.difficulty).toBe("hard");
@@ -587,7 +587,7 @@ test("[F20] REQ-RELOAD — the doubling cube survives a reload", async ({ page }
   await postJson<ApiState>(page, "/api/new", {});
   await setupState(page, { cube: { value: 2, owner: "black" } });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(page.getByTestId("checker")).toHaveCount(30);
   const state = await readState(page);
   expect(state.canDouble).toBe(false);
@@ -603,7 +603,7 @@ test("[F21] REQ-RELOAD — remaining dice survive a reload", async ({ page }) =>
     remainingDice: [2],
   });
   await page.reload();
-  await expect(page.getByTestId("board")).toBeVisible();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(page.getByTestId("checker")).toHaveCount(30);
   const state = await readState(page);
   expect([...state.remainingDice].sort((a, b) => a - b)).toEqual([2]);

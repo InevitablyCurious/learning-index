@@ -188,6 +188,20 @@ _HELPER_MARKERS = {
     ("frontend/fixtures.ts", "[needs: REQ-RENDER/point REQ-RENDER/checker]"): _FRONTEND,
     ("frontend/layout.spec.ts", "[needs: F01]"): _LAYOUT,
     ("frontend/layout.spec.ts", "[needs: REQ-RENDER/point]"): _LAYOUT,
+    # Every spec's shared open-the-page helper waits on the board check: with no
+    # board, the checks that read it defer to F01 (run 1790452916).
+    **{
+        (f"frontend/{spec}", "[needs: F01]"): tuple(
+            sorted(
+                {
+                    m.group(1)
+                    for m in _TITLE.finditer((_GRADER_DIR / "frontend" / spec).read_text(encoding="utf-8"))
+                }
+                - {"F01"}
+            )
+        )
+        for spec in ("core.spec.ts", "board-geometry.spec.ts", "edges.spec.ts", "doubles.spec.ts")
+    },
     # layout.spec.ts ASPECT_OF: F38 names the item on the right that isn't showing.
     **{("frontend/layout.spec.ts", f"[aspect: {a}]"): ("F38",) for a in (
         "roll", "double", "undo", "endturn", "newgame", "difficulty",

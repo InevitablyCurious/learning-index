@@ -60,7 +60,7 @@ async function fetchState(page: Page) {
 
 test("[F09] REQ-HIT — hit -> bar visual", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
 
   const points = emptyPts();
   points[24] = 2;
@@ -91,7 +91,7 @@ test("[F09] REQ-HIT — hit -> bar visual", async ({ page }) => {
 
 test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
 
   const points = emptyPts();
   points[6] = 14;
@@ -141,7 +141,7 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
 
 test("[F11] REQ-BEAROFF — bear-off visual", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
 
   const points = emptyPts();
   points[1] = 2;
@@ -169,7 +169,7 @@ test("[F11] REQ-BEAROFF — bear-off visual", async ({ page }) => {
 
 test("[F12] REQ-NEWGAME — the win is announced", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
 
   const points = emptyPts();
   points[13] = -13;
@@ -200,7 +200,7 @@ test("[F12] REQ-NEWGAME — the win is announced", async ({ page }) => {
 
 test("[F22] REQ-NEWGAME — board resets for the next game", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
 
   const points = emptyPts();
   points[13] = -13;
@@ -250,7 +250,7 @@ test("[F22] REQ-NEWGAME — board resets for the next game", async ({ page }) =>
 
 test("[F23] REQ-NEWGAME — new game without reload", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
 
   const points = emptyPts();
   points[13] = -13;
@@ -288,7 +288,7 @@ test("[F23] REQ-NEWGAME — new game without reload", async ({ page }) => {
 
 test("[F14] REQ-ANIM — checker motion is animated", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
 
   const checkerMotion = await page
     .locator('[data-testid="checker"]')
@@ -310,7 +310,7 @@ test("[F14] REQ-ANIM — checker motion is animated", async ({ page }) => {
 
 test("[F26] REQ-ANIM — hint animation", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
 
   const points = emptyPts();
   points[6] = 15;
@@ -373,7 +373,7 @@ test("[F15] REQ-SAME-ORIGIN — the app works on either host name", async ({
     await page.goto(`${origin}/`);
     await expect(
       page.getByTestId("board"),
-      `board never appeared at ${origin}`,
+      `[needs: F01] board never appeared at ${origin}`,
     ).toBeVisible();
 
     // State actually arrived and rendered — not just an empty shell.

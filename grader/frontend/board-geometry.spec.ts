@@ -30,10 +30,10 @@ import {
 // so the board renders from that state.
 async function openFreshBoard(page: Page): Promise<void> {
   await page.goto("/");
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
   await page.request.post("/api/new", { data: {} });
   await page.reload();
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
   // goto/reload wait for the drawn, settled board (fixtures.ts): run
   // 1790329339's page drew its points ~100 ms after the frame, and these checks
   // read an empty board ("found []", an average point height of NaN).

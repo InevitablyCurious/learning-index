@@ -46,7 +46,7 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
   // Four bounded moves, each allowed its full bound, and room to set up.
   test.setTimeout(90_000);
   await page.goto("/");
-  await expect(page.locator('[data-testid="board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
 
   const points = new Array(26).fill(0);
   points[24] = 2;
@@ -69,7 +69,7 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
   });
 
   await page.reload();
-  await expect(page.locator('[data-testid="board"]'), "[aspect: nomove]").toBeVisible();
+  await expect(page.locator('[data-testid="board"]'), "[aspect: nomove] [needs: F01]").toBeVisible();
 
   const firstMove = "[aspect: nomove] [needs: REQ-HINT/hint F03 F25]";
   const movesMade = ["", "[aspect: one]", "[aspect: two]", "[aspect: three]"];

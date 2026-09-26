@@ -208,8 +208,8 @@
       "repeat": "Kept my eyes on the board while it was thinking this time — my pieces still shuffled around on their own."
     },
     "F01": {
-      "first": "When I open the game, nothing shows up — the screen just stays empty.",
-      "repeat": "I closed it and opened it fresh, and it's still the same — the screen never fills in."
+      "first": "When I open the game, the board doesn't show up — I expect to see the board with the pieces set out, ready to play.",
+      "repeat": "I opened the game again and the board still doesn't show up — I expect to see the board with the pieces set out, ready to play."
     },
     "F02": {
       "first": "The board doesn't show all the points and pieces it should when a game starts",
