@@ -588,8 +588,8 @@
       "repeat": "Opened it fresh again and it still throws errors behind the scenes."
     },
     "F28": {
-      "first": "The points aren't laid out in the right order across the board.",
-      "repeat": "Looked the board over again and the points are still in the wrong order across the board."
+      "first": "The points aren't laid out in the right order — I expect 13 to 24 running left to right along the top, and 12 down to 1 running left to right along the bottom.",
+      "repeat": "Looked the board over again and the points are still in the wrong order — I expect 13 to 24 running left to right along the top, and 12 down to 1 running left to right along the bottom."
     },
     "F29": {
       "first": "The bar sits out at the edge of the board, not between the two halves.",
