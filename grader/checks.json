@@ -327,7 +327,7 @@
     "F30": {
       "name": "Triangles point inward",
       "what": "Each point's triangle points inward toward the board, not outward.",
-      "how": "Hides checkers, screenshots the board, samples each point's colour near the outer edge versus the inner end, and asserts the outer edge is triangle paint while the inner end is felt. A point with nothing painted at either end, or painted right across at both ends (a block), has no triangle and is told as such; pointing outward means wider at the inner end than at the rim."
+      "how": "Hides checkers, screenshots the board, samples each point's colour near the outer edge versus the inner end, and asserts the outer edge is triangle paint while the inner end is felt. A point with nothing painted at either end, or painted right across at both ends (a block), has no triangle and is told as such; pointing outward means wider at the inner end than at the rim. Each point is read every 5% of the way in: the painted stretch must narrow away from the rim and reach at least half way in."
     },
     "F31": {
       "name": "Checkers over their own points",

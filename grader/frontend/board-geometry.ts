@@ -314,10 +314,15 @@ export async function waitForBoardSettled(page: Page): Promise<void> {
 export interface TriangleSample {
   num: number;
   row: "top" | "bottom";
-  // Share of the point's width painted near its rim, and near its inner end.
-  baseCoverage: number;
-  tipCoverage: number;
-  orientedInward: boolean;
+  // Share of the point's width painted at 5%, 10%, ... 95% of the way in from
+  // its rim.
+  profile: number[];
+  // How far in from the rim the paint reaches (0 when nothing is painted).
+  reach: number;
+  // What the paint is: nothing; a block or band (about as wide at both ends of
+  // the painted stretch — no triangle to a player); a triangle wider at the rim
+  // (pointing inward) or wider further in (pointing outward).
+  shape: "none" | "block" | "inward" | "outward";
 }
 
 /**
@@ -408,17 +413,29 @@ export async function sampleTriangleOrientation(
         return all ? hit / all : 0;
       };
 
+      // The whole depth, every 5%: two fixed depths straddled a triangle drawn a
+      // fifth of the way in and pointing outward, and passed it (run
+      // 1790396722). Its shape is read over the stretch that is painted: which
+      // end of it is wider.
+      const depths = Array.from({ length: 19 }, (_, i) => 0.05 * (i + 1));
+      const mean = (xs: number[]) => xs.reduce((sum, x) => sum + x, 0) / xs.length;
       return points.map((p) => {
         const top = p.y + p.height / 2 < midY;
-        const baseCoverage = coverage(p, top, 0.1);
-        const tipCoverage = coverage(p, top, 0.85);
-        return {
-          num: p.num,
-          row: top ? ("top" as const) : ("bottom" as const),
-          baseCoverage,
-          tipCoverage,
-          orientedInward: baseCoverage > 0.5 && tipCoverage < 0.35,
-        };
+        const profile = depths.map((d) => coverage(p, top, d));
+        const first = profile.findIndex((c) => c > 0.1);
+        const last = profile.length - 1 - [...profile].reverse().findIndex((c) => c > 0.1);
+        let shape: "none" | "block" | "inward" | "outward" = "none";
+        let reach = 0;
+        if (first >= 0) {
+          reach = depths[last];
+          const span = profile.slice(first, last + 1);
+          const third = Math.max(1, Math.round(span.length / 3));
+          const rim = mean(span.slice(0, third));
+          const inner = mean(span.slice(-third));
+          const flat = Math.min(...span) >= 0.35 && Math.max(...span) - Math.min(...span) < 0.3;
+          shape = flat ? "block" : rim > inner + 0.15 ? "inward" : inner > rim + 0.15 ? "outward" : "block";
+        }
+        return { num: p.num, row: top ? ("top" as const) : ("bottom" as const), profile, reach, shape };
       });
     },
     { dataUrl, points },

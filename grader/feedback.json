@@ -623,6 +623,10 @@
       "first": "Some of the points have no triangle drawn on them.",
       "repeat": "Some of the points still have no triangle drawn on them."
     },
+    "F30.short": {
+      "first": "The triangles are too short — they barely reach into the board.",
+      "repeat": "The triangles are still too short — they still barely reach into the board."
+    },
     "F31": {
       "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place.",
       "repeat": "Fresh game again, and the checkers still don't line up with their points, still floating off to the side."

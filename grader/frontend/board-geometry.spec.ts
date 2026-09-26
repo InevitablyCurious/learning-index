@@ -261,20 +261,25 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   // more a triangle to a player (run 1790388597 painted the board area in a
   // gradient). Every point, or some of them, told as such.
   const judged = samples.filter((s) => !underBar.has(s.num));
-  const noTriangle = judged
-    .filter((s) => (s.baseCoverage < 0.1 && s.tipCoverage < 0.1) || (s.baseCoverage >= 0.35 && s.tipCoverage >= 0.35))
-    .map((s) => s.num);
+  const noTriangle = judged.filter((s) => s.shape === "none" || s.shape === "block").map((s) => s.num);
   expect(
     noTriangle,
     `${noTriangle.length === judged.length ? "[aspect: undrawn]" : "[aspect: someundrawn]"} no triangle drawn on points: ${noTriangle.join(", ")}`,
   ).toEqual([]);
 
-  // Pointing outward: wider at its inner end than at its rim. A triangle wider
-  // at the rim points inward however narrow it is drawn.
-  const outward = judged.filter((s) => !s.orientedInward && s.tipCoverage >= s.baseCoverage).map((s) => s.num);
+  // Pointing outward: wider further in than at the rim, however short it is.
+  const outward = judged.filter((s) => s.shape === "outward").map((s) => s.num);
   expect(
     outward,
-    `expected every point's triangle to point inward (painted across most of its width at the rim, little of it at the inner end), found outward-pointing point numbers: ${outward.join(", ")}`,
+    `expected every point's triangle to point inward (wider at the rim than further in), found outward-pointing point numbers: ${outward.join(", ")}`,
+  ).toEqual([]);
+
+  // And it reaches into the board: at least half way in from the rim (the
+  // reference's run 88%). Run 1790396722's triangles reached a fifth of the way.
+  const short = judged.filter((s) => s.reach < 0.5).map((s) => s.num);
+  expect(
+    short,
+    `[aspect: short] triangles reaching less than half way in from the rim on points: ${short.join(", ")}`,
   ).toEqual([]);
 });
 
