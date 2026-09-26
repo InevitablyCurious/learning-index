@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { expect, playerClick, setupState, test } from "./fixtures.ts";
+import { expect, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
 
 type Player = "white" | "black";
 type Difficulty = "easy" | "medium" | "hard";
@@ -293,10 +293,21 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   // complaint of the gates that test those steps when they fail too
   // (a needs marker, harness/adapters/challenge/stages.py).
   expect(state.legalMoves.length, "[needs: REQ-HINT/hint]").toBeGreaterThan(0);
-  try {
-    await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
-  } catch {
-    // No hints must fail on the marked assertion below, not the helper's throw.
+  // The back piece on 13 first: at the opening a 3 and a 5 both move it, to
+  // 10 and to 8, open on every board. Any other piece when it shows nothing.
+  // Clicked again when a click lands while the dice still roll, as a player
+  // does (fixtures.ts playerClickUntilShown): one click left 13 unjudged on
+  // every build that takes clicks only once the dice land (FIX-27b: M88).
+  const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
+  const backCount = await back.count();
+  if (backCount > 0) await playerClickUntilShown(back.nth(backCount - 1), page.getByTestId("hint"));
+  const on13 = (await page.getByTestId("hint").count()) > 0;
+  if (!on13) {
+    try {
+      await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
+    } catch {
+      // No hints must fail on the marked assertion below, not the helper's throw.
+    }
   }
 
   const hints = page.getByTestId("hint");
@@ -313,6 +324,19 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
     for (const part of parts) {
       expect(["3", "5"]).toContain(part);
     }
+  }
+
+  // A hint for each die the piece can use (the build prompt, chunk-04: "A hint
+  // appears for each playable die when a movable checker is selected"). Run
+  // 1790414346's game offered its first die only: the piece on 13 showed a 3,
+  // and its 5 came up only once the 3 was played. Judged on the piece on 13
+  // only, whose two moves are open on every board.
+  if (on13) {
+    const dice = new Set(hintTexts.flatMap((text) => text.split("/")));
+    expect(
+      dice.has("3") && dice.has("5"),
+      `[aspect: perdie] after rolling 3-5 the back piece on 13 shows hints for: ${[...dice].join(", ")}`,
+    ).toBe(true);
   }
 });
 

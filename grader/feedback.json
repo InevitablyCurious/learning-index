@@ -223,6 +223,10 @@
       "first": "When I click a piece, the suggested moves don't tell me which die they use — or nothing shows up at all.",
       "repeat": "The suggestions still don't say which of my numbers each one uses, or they still don't appear."
     },
+    "F04.perdie": {
+      "first": "When I pick up a piece that can move with either number, only one of its moves shows — I expect a hint for each number it can use.",
+      "repeat": "When I pick up a piece that can move with either number, still only one of its moves shows — I expect a hint for each number it can use."
+    },
     "F05": {
       "first": "When i have no moves the game doesn't tell me i have to pass",
       "repeat": "Got stuck with nothing I could play again, and the game still says nothing about it."
@@ -632,8 +636,8 @@
       "repeat": "Fresh game again, and the checkers still don't line up with their points, still floating off to the side."
     },
     "F31.rim": {
-      "first": "The stacks start out in the middle of the board — I expect each stack to start at the edge of the board, at the wide end of its point.",
-      "repeat": "The stacks still start out in the middle of the board — I expect each stack to start at the edge of the board, at the wide end of its point."
+      "first": "The stacks don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point.",
+      "repeat": "The stacks still don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point."
     },
     "F32": {
       "first": "The off tray isn't showing — there's no place on the board for pieces that have been taken off.",
@@ -884,8 +888,8 @@
       "repeat": "I still can't see all the pieces properly — some are hidden or cut off."
     },
     "F43.stacked": {
-      "first": "The pieces in a stack are drawn on top of each other, so a point with several pieces looks like it holds just one — I expect to see every piece in the stack.",
-      "repeat": "The pieces in a stack are still drawn on top of each other, so a point with several pieces looks like it holds just one — I expect to see every piece in the stack."
+      "first": "Pieces in a stack are drawn on top of each other, so I can't see them all — I expect to see every piece in the stack.",
+      "repeat": "Pieces in a stack are still drawn on top of each other, so I can't see them all — I expect to see every piece in the stack."
     },
     "F43.clipped": {
       "first": "Some of the pieces are cut off — I expect to see every piece as a whole circle.",

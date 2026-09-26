@@ -197,7 +197,7 @@
     "F04": {
       "name": "Hints show which die",
       "what": "Move hints show which die each move uses.",
-      "how": "Fixes the roll to 3-5, clicks Roll and a movable checker: every hint's text must be 3 or 5 (or \"off\")."
+      "how": "Fixes the roll to 3-5, clicks Roll and the back checker on 13 (another movable checker if it shows nothing): every hint's text must be 3 or 5 (or \"off\"), and the checker on 13 must show a hint for each die, 3 and 5, both open from it on every board."
     },
     "F05": {
       "name": "No-move notice",
