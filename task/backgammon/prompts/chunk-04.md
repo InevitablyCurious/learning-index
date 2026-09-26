@@ -14,6 +14,8 @@ What the game should feel like to play:
 - Pip counts, cube value, cube owner, score and whose turn it is are all on screen and match the API.
 - When you have no legal move, the page says so plainly.
 - The board should be on the left and fill the screen, with all the roll, double and other buttons and game info on the right — about 80% of the width for the board and 20% for the buttons. That's on an ordinary laptop screen, 1280×800 or 1440×900, with nothing to scroll.
+- Each checker is a perfect circle, sized to about 80% of the width of the point it sits on (not counting the bar).
+- The off tray runs the full height of the board and is at least as wide as a piece, so a borne-off piece fits in it lying on its side, its long edge parallel to the top and bottom of the board.
 - The page responds promptly — no action hangs or leaves a player waiting.
 - Winning ends the game with a banner, and you can start a new game without reloading the page.
 - Difficulty and New Game: the difficulty control is a native `<select>` element; clicking New Game starts a new game at the selected difficulty (POST `/api/new` with `{difficulty}`).
@@ -30,7 +32,7 @@ Required `data-testid` hooks (EXACT — the UI automation selects on these; stat
 - Each checker: `data-testid="checker"`, `data-color="white|black"`, `data-loc="<1..24>|bar|off"` — exactly 30 checkers (15 per colour), positioned at their board/bar/off location.
 - Each move hint: `data-testid="hint"`.
 - Each die: `data-testid="die"`, nested inside the `dice` container.
-- After a roll, at least two dice are visible on the board.
+- After a roll, exactly two dice are visible, a double too — a double still gives four moves.
 - The bar: `data-testid="bar"`.
 - The off tray: `data-testid="off-tray"`, containing `data-testid="off-ai"` and `data-testid="off-you"`.
 

@@ -17,7 +17,7 @@ TASK: Implement the complete backgammon engine in `src/game.ts` — pure logic, 
 
 You know how backgammon is played. What you cannot know is how THIS codebase lays the board out in memory, and the rest of the product is written against that layout. So the game is yours; the representation below is ours, and everything else imports it exactly as written.
 
-**How the board is laid out.** Picture the board from the human player's seat. The human is **white** and the computer is **black**. White's checkers travel anticlockwise — from our point 24 around to our point 1 — and bear off past point 1. Black's travel the opposite way round, from point 1 up to point 24, bearing off past 24.
+**How the board is laid out.** Picture the board from the human player's seat. The human is **white** and the computer is **black**. White's checkers travel anticlockwise — from our point 24 around to our point 1 — and bear off past point 1. Black's travel the opposite way round, from point 1 up to point 24, bearing off past 24. A new game starts with 2 of white's checkers on point 24, 5 on 13, 3 on 8 and 5 on 6, and black's the mirror: 2 on point 1, 5 on 12, 3 on 17 and 5 on 19.
 
 **How that is stored.** `points` is an array of 26 slots. Only 1..24 are real points; slots 0 and 25 are always 0 and exist so the point numbers line up with the indexes. One slot holds one point's whole stack as a single signed number: **positive means that many white checkers, negative means that many black checkers.** So `points[3] === 2` is two white checkers on point 3, and `points[20] === -4` is four black ones on point 20. Checkers that are off the board live in `bar` and `off`, each with a `white` and a `black` count.
 

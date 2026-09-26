@@ -73,6 +73,61 @@ export async function readCheckerBoxes(page: Page): Promise<CheckerBox[]> {
   );
 }
 
+export interface CheckerShape {
+  loc: string;
+  width: number;
+  height: number;
+  round: boolean;
+}
+
+/**
+ * Each checker on a point as it is drawn: the box of the element, or of the
+ * painted descendant that fills it (a disc inside a wrapper, a circle inside an
+ * svg), and whether that shape is drawn round — a border radius of at least 45%
+ * of its size on every corner, a circle or ellipse clip, or an SVG circle or
+ * ellipse. Colours are never read: a black checker on a dark point looks the
+ * same to a pixel test whatever its shape (the F30 colour trap).
+ */
+export async function readCheckerShapes(page: Page): Promise<CheckerShape[]> {
+  return page.locator('[data-testid="checker"]').evaluateAll((elements) =>
+    elements.flatMap((element) => {
+      const loc = (element as HTMLElement).dataset.loc;
+      if (loc === undefined || !/^\d+$/.test(loc)) return [];
+      const isRound = (el: Element): boolean => {
+        const tag = el.tagName.toLowerCase();
+        if (tag === "circle" || tag === "ellipse") return true;
+        const cs = getComputedStyle(el);
+        if (/^(circle|ellipse)\(/.test(cs.clipPath)) return true;
+        const box = el.getBoundingClientRect();
+        const size = Math.min(box.width, box.height);
+        if (size <= 0) return false;
+        const radius = (value: string) => {
+          const first = value.split(" ")[0];
+          return first.endsWith("%") ? (parseFloat(first) / 100) * size : parseFloat(first);
+        };
+        return [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomLeftRadius, cs.borderBottomRightRadius].every(
+          (value) => radius(value) >= 0.45 * size,
+        );
+      };
+      const own = element.getBoundingClientRect();
+      const shape = isRound(element)
+        ? element
+        : ([...element.querySelectorAll("*")].find((inner) => {
+            const box = inner.getBoundingClientRect();
+            return box.width * box.height >= 0.6 * own.width * own.height && isRound(inner);
+          }) ?? element);
+      const box = shape.getBoundingClientRect();
+      return [{ loc, width: box.width, height: box.height, round: isRound(shape) }];
+    }),
+  );
+}
+
+/** The middle checker width of a set of shapes (the one most checkers share). */
+export function typicalWidth(shapes: CheckerShape[]): number {
+  const widths = shapes.map((s) => s.width).sort((a, b) => a - b);
+  return widths[Math.floor(widths.length / 2)];
+}
+
 /** The horizontal midline of the board, from the points themselves. */
 export function boardMidY(points: PointBox[]): number {
   return points.reduce((sum, p) => sum + p.centerY, 0) / points.length;

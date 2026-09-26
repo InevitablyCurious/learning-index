@@ -15,6 +15,8 @@ import {
   pointWidth,
   readBarBox,
   readCheckerBoxes,
+  readCheckerShapes,
+  typicalWidth,
   overlaps,
   readOffTray,
   readPointBoxes,
@@ -181,6 +183,44 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
     pastPointOne,
     `[aspect: side] [needs: F28] the off tray (x ${tray.x.toFixed(0)}..${(tray.x + tray.width).toFixed(0)}) is not past points 1 and 24`,
   ).toBeTruthy();
+  // It runs the full height of the board and holds a piece lying on its side
+  // (the build prompt, chunk-04; Jerry 2026-09-25). Run 1790365975's tray was a
+  // 19x106 px slot that passed everything above.
+  const rowsTop = Math.min(...points.map((p) => p.y));
+  const rowsSpan = Math.max(...points.map((p) => p.y + p.height)) - rowsTop;
+  expect(
+    tray.height,
+    `[aspect: short] the off tray is ${tray.height.toFixed(0)} px tall; the rows of points span ${rowsSpan.toFixed(0)} px`,
+  ).toBeGreaterThanOrEqual(0.9 * rowsSpan);
+  const shapes = await readCheckerShapes(page);
+  expect(shapes.length, "[needs: REQ-RENDER/checker] expected the checkers on the points to read").toBeGreaterThan(0);
+  // The piece it must hold is the one on the board, at most the largest size a
+  // piece may be: checkers drawn too big are the size check's complaint (F41),
+  // not the tray's.
+  const piece = Math.min(typicalWidth(shapes), 0.9 * pointWidth(points));
+  expect(
+    tray.width,
+    `[aspect: narrow] the off tray is ${tray.width.toFixed(0)} px wide; a checker lying on its side needs ${piece.toFixed(0)} px`,
+  ).toBeGreaterThanOrEqual(piece - 2);
+});
+
+test("[F41] REQ-GEOMETRY — checkers drawn as circles sized to their points", async ({ page }) => {
+  await openFreshBoard(page);
+
+  const points = await readPointBoxes(page);
+  expect(points.length, "[needs: REQ-RENDER/point] expected 24 points to read").toBe(24);
+  const shapes = await readCheckerShapes(page);
+  expect(shapes.length, "[needs: REQ-RENDER/checker] expected the checkers on the points to read").toBeGreaterThan(0);
+  // Each checker is a perfect circle, sized to about 80% of the width of the
+  // point it sits on (the build prompt, chunk-04; Jerry 2026-09-25).
+  const notCircles = shapes.filter((s) => !s.round || Math.abs(s.width - s.height) > Math.max(2, 0.04 * s.width));
+  expect(
+    notCircles.map((s) => `${s.loc}:${s.width.toFixed(0)}x${s.height.toFixed(0)}${s.round ? "" : " square-cornered"}`),
+    `expected every checker drawn as a circle, found ${notCircles.length} of ${shapes.length} that are not`,
+  ).toEqual([]);
+  const share = typicalWidth(shapes) / pointWidth(points);
+  expect(share, `[aspect: big] checkers are ${Math.round(share * 100)}% of a point's width`).toBeLessThanOrEqual(0.9);
+  expect(share, `[aspect: small] checkers are ${Math.round(share * 100)}% of a point's width`).toBeGreaterThanOrEqual(0.7);
 });
 
 test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {

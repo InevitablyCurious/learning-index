@@ -337,7 +337,7 @@
     "F32": {
       "name": "Off tray visible",
       "what": "The off tray is present and visible, not hidden or zero-sized, on the board, at the end where checkers bear off.",
-      "how": "New game: the off tray exists, is visible, is actually drawn (a fill, an outline or a label — not an empty see-through box), sits over no point, lies inside the board's frame, and lies past points 1 and 24 — the end white and black bear off from."
+      "how": "New game: the off tray exists, is visible, is actually drawn (a fill, an outline or a label — not an empty see-through box), sits over no point, lies inside the board's frame, lies past points 1 and 24 — the end white and black bear off from — runs at least 90% of the height of the rows of points, and is at least as wide as a checker (at most 90% of a point)."
     },
     "F33": {
       "name": "A double lets the player make four moves",
@@ -373,6 +373,11 @@
       "name": "Rows line up",
       "what": "The top row of points sits straight across from the bottom row, column for column.",
       "how": "New game: each row's drawn points sorted left to right; each top point's centre must be within half a point's width of the bottom point in the same column."
+    },
+    "F41": {
+      "name": "Checkers are circles sized to their points",
+      "what": "Every checker is a perfect circle, about 80% as wide as the point it sits on.",
+      "how": "New game: every checker on a point is drawn round (a circular border radius, clip or SVG circle) with a square box, and the typical checker is 70–90% of a point's width."
     }
   },
   "setup": [
@@ -608,6 +613,7 @@
         "F06",
         "F17",
         "F31",
+        "F41",
         "G26",
         "F34"
       ]

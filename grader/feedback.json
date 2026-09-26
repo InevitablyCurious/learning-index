@@ -631,6 +631,14 @@
       "first": "The off tray is sitting outside the board, not on it.",
       "repeat": "The off tray is still sitting outside the board, not on it."
     },
+    "F32.short": {
+      "first": "The off tray doesn't run the full height of the board.",
+      "repeat": "The off tray still doesn't run the full height of the board."
+    },
+    "F32.narrow": {
+      "first": "The off tray is too narrow to hold a piece lying on its side.",
+      "repeat": "The off tray is still too narrow to hold a piece lying on its side."
+    },
     "F32.side": {
       "first": "The off tray isn't at the end of the board where I bear off, past point 1.",
       "repeat": "The off tray still isn't at the end of the board where I bear off, past point 1."
@@ -680,8 +688,8 @@
       "first": "It locked up on me while I was playing — the whole page stopped responding and nothing I clicked did anything after that. I gave it {seconds}."
     },
     "G01.pieces": {
-      "first": "Fresh game again, The pieces are not in their correct starting positions, check the spacing and the quantity and orientate them correctly.",
-      "repeat": "Fresh game again, You still didn't place the pieces in the correct orientation and quantity, they are currently wrong — space and count them properly. Think about how normal backgammon works."
+      "first": "Fresh game again, The pieces are not in their correct starting positions. A game starts with 2 of mine on point 24, 5 on 13, 3 on 8 and 5 on 6, and black's the mirror: 2 on point 1, 5 on 12, 3 on 17 and 5 on 19.",
+      "repeat": "Fresh game again, You still didn't place the pieces in the correct orientation and quantity, they are currently wrong. A game starts with 2 of mine on point 24, 5 on 13, 3 on 8 and 5 on 6, and black's the mirror: 2 on point 1, 5 on 12, 3 on 17 and 5 on 19."
     },
     "G01.setup": {
       "first": "When I start a new game the rest of the setup is off — the cube, whose turn it is, or what the game is waiting for isn't how a real game begins.",
@@ -834,6 +842,18 @@
     "F40": {
       "first": "The two rows of points don't line up with each other.",
       "repeat": "The two rows of points still don't line up with each other."
+    },
+    "F41": {
+      "first": "The pieces aren't perfect circles.",
+      "repeat": "The pieces still aren't perfect circles."
+    },
+    "F41.big": {
+      "first": "The pieces are too big for their points — I expect each one about 80% as wide as the point it sits on.",
+      "repeat": "The pieces are still too big for their points — I expect each one about 80% as wide as the point it sits on."
+    },
+    "F41.small": {
+      "first": "The pieces are too small for their points — I expect each one about 80% as wide as the point it sits on.",
+      "repeat": "The pieces are still too small for their points — I expect each one about 80% as wide as the point it sits on."
     }
   }
 }
