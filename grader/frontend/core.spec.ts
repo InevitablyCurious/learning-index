@@ -197,7 +197,7 @@ test("[F03] REQ-HINT — clicking a piece shows its moves", async ({ page }) => 
   const state = await readState(page);
   // A roll that leaves no move is the movable-checker gate's complaint when it
   // fails too (a needs marker, harness/adapters/challenge/stages.py).
-  expect(state.legalMoves.length, "[needs: REQ-HINT/selectable]").toBeGreaterThan(0);
+  expect(state.legalMoves.length, "[needs: REQ-HINT/hint]").toBeGreaterThan(0);
   await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
 
   const hints = page.getByTestId("hint");
@@ -222,7 +222,7 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
   // ordinary roll fail too, the complaint is theirs (a needs marker,
   // harness/adapters/challenge/stages.py).
   const before = await readState(page);
-  expect(before.legalMoves.length, "[needs: REQ-HINT/selectable F03]").toBeGreaterThan(0);
+  expect(before.legalMoves.length, "[needs: REQ-HINT/hint F03]").toBeGreaterThan(0);
 
   const move = before.legalMoves[0];
   try {
@@ -292,7 +292,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   // A roll that leaves no move, or a checker that shows no hints, is the
   // complaint of the gates that test those steps when they fail too
   // (a needs marker, harness/adapters/challenge/stages.py).
-  expect(state.legalMoves.length, "[needs: REQ-HINT/selectable]").toBeGreaterThan(0);
+  expect(state.legalMoves.length, "[needs: REQ-HINT/hint]").toBeGreaterThan(0);
   try {
     await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
   } catch {

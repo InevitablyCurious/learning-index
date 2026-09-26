@@ -68,7 +68,7 @@ def is_unevaluated(problem: dict[str, Any]) -> bool:
 # A CHECK THAT CANNOT GET STARTED IS NOT TOLD (Jerry, 2026-09-24). A gate that
 # fails before it reaches its own subject — no checker to pick up, no hint to
 # click, no move to undo — names the checks that test that same step:
-# `[needs: F03 REQ-HINT/selectable]`. When one of them failed too, the player's
+# `[needs: F03 REQ-HINT/hint]`. When one of them failed too, the player's
 # complaint is theirs, so this one is scored as not passing and told to no one;
 # the doubles gate used to tell "I could only make two moves" to a player who
 # could make none (FIX-2 mutations M13, M27, M28, M34). When none of them

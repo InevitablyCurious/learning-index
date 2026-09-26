@@ -189,6 +189,40 @@ export async function playerClick(target: Locator): Promise<void> {
   await target.page().mouse.click(point.x, point.y);
 }
 
+// ── PICK UP A PIECE THE WAY A PLAYER DOES ───────────────────────────────────
+//
+// A movable piece is one that answers a click with its move hints. The build
+// prompt names no class for it, so the page's own markings are never read:
+// run 1790414346's pieces picked up fine with none, and the model was told
+// "After I rolled, there was no checker I could pick up to move" (FIX-26).
+// The top white piece of each point the game has a legal move from (its own
+// /api/state list) is tried first, then every other white stack: a player
+// tries the pieces they see. True once a click brought hints up.
+export async function pickUpAPiece(page: Page, hints: Locator): Promise<boolean> {
+  const response = await page.request.post("/api/state", { data: {} });
+  const state = response.ok()
+    ? ((await response.json().catch(() => ({}))) as { legalMoves?: { from: number }[] })
+    : {};
+  const legal = [...new Set((state.legalMoves ?? []).map((m) => (m.from === 0 ? "bar" : String(m.from))))];
+  const occupied = await page
+    .locator('[data-testid="checker"][data-color="white"]')
+    .evaluateAll((els) => [...new Set(els.map((el) => (el as HTMLElement).dataset.loc ?? ""))]);
+  const others = occupied.filter((loc) => loc !== "" && loc !== "off" && !legal.includes(loc));
+  for (const [locs, tries] of [
+    [legal, 3],
+    [others, 1],
+  ] as const) {
+    for (const loc of locs) {
+      const pieces = page.locator(`[data-testid="checker"][data-color="white"][data-loc="${loc}"]`);
+      const count = await pieces.count();
+      if (count === 0) continue;
+      await playerClickUntilShown(pieces.nth(count - 1), hints, tries);
+      if ((await hints.count()) > 0) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Click a checker the way a player does when the game is not ready yet: click,
  * look for the move hints, and click again if none came up. The reference

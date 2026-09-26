@@ -47,7 +47,7 @@ describe("Backgammon backend server-path integrity", () => {
     // roll gives none either (a needs marker, harness/adapters/challenge/stages.py).
     expect(
       state.legalMoves.length,
-      "[aspect: nomove] [needs: REQ-HINT/selectable F03 F25]",
+      "[aspect: nomove] [needs: REQ-HINT/hint F03 F25]",
     ).toBeGreaterThan(0);
     const board: Board = { points: state.points, bar: state.bar, off: state.off };
     expect(
@@ -96,7 +96,7 @@ describe("Backgammon backend server-path integrity", () => {
     // No move to undo is not an undo finding: the movable-checker gate plays
     // this same 3-1 opening roll and reports it when it fails too (a needs marker,
     // harness/adapters/challenge/stages.py).
-    const noMove = "[aspect: nomove] [needs: REQ-HINT/selectable F03 F25]";
+    const noMove = "[aspect: nomove] [needs: REQ-HINT/hint F03 F25]";
     expect(before.phase, noMove).toBe("move");
     const move = (before.legalMoves as Move[])[0];
     expect(move, noMove).toBeTruthy();

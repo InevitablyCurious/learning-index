@@ -139,7 +139,7 @@ describe("Backgammon backend gates 13-16", () => {
       // No move after the roll is not the computer's finding: the
       // movable-checker gate reports it when an ordinary roll gives none either
       // (a needs marker, harness/adapters/challenge/stages.py).
-      const noMove = "[aspect: nomove] [needs: REQ-HINT/selectable F03 F25]";
+      const noMove = "[aspect: nomove] [needs: REQ-HINT/hint F03 F25]";
       expect(state.turn).toBe("white");
       expect(state.phase, noMove).toBe("move");
 

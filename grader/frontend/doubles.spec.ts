@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, setupState, test } from "./fixtures.ts";
 
 // [F33] REQ-DOUBLES — a double lets the player make FOUR MOVES.
 //
@@ -7,7 +7,7 @@ import { expect, playerClick, playerClickUntilShown, setupState, test } from "./
 // to DRAW four dice — what the player must feel is four moves, so that is
 // what the gate plays. An opening position is pushed through the debug API
 // with [6, 6, 6, 6], then the UI is driven the way a player drives it —
-// click a selectable checker, click a hint, four times — and the server's
+// pick up a movable checker, click a hint, four times — and the server's
 // own state must show all four dice consumed. An app that draws two dice
 // but plays four moves passes; an app that draws four dice but plays two
 // fails.
@@ -71,15 +71,12 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
   await page.reload();
   await expect(page.locator('[data-testid="board"]'), "[aspect: nomove]").toBeVisible();
 
-  const firstMove = "[aspect: nomove] [needs: REQ-HINT/selectable REQ-HINT/hint F03 F25]";
+  const firstMove = "[aspect: nomove] [needs: REQ-HINT/hint F03 F25]";
   const movesMade = ["", "[aspect: one]", "[aspect: two]", "[aspect: three]"];
 
-  const selectable = page.locator(
-    '[data-testid="checker"][data-color="white"].selectable',
-  );
   const hints = page.locator('[data-testid="hint"]');
 
-  // Four moves, played as a player plays them. Which checker or hint gets
+  // Four moves, played as a player plays them (fixtures.ts pickUpAPiece). Which checker or hint gets
   // picked does not matter: from this position the only legal moves are
   // 24→18, 13→7 and 8→2, and none can stop being legal later — destinations
   // only ever receive white checkers, the moved-to points cannot move on
@@ -91,8 +88,7 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
     const told = played === 1 ? firstMove : movesMade[played - 1];
     try {
       await withinSeconds(20, async () => {
-        await expect(selectable.first(), "no checker to pick up").toBeVisible();
-        await playerClickUntilShown(selectable.first(), hints);
+        if (!(await pickUpAPiece(page, hints))) throw new Error("no checker to pick up");
         await expect(hints.first(), "no hint appeared").toBeVisible();
         // Clicked where it shows: a pulsing hint on top of a stack (fixtures.ts).
         await playerClick(hints.first());
@@ -177,13 +173,11 @@ test("[F39] REQ-DICE — a roll shows two dice, and two different numbers give t
   await rollThroughThePage(page, [5, 6]);
   expect(await landedDice(page), "[aspect: extra] more than two dice on screen after rolling 5-6").toBeLessThanOrEqual(2);
 
-  const selectable = page.locator('[data-testid="checker"][data-color="white"].selectable');
   const hints = page.locator('[data-testid="hint"]');
   // One move as a player makes it: a checker to pick up, a hint, a click that
   // changes the board. Nothing to pick up or no hint within a moment is no move.
   const tryMove = async (): Promise<boolean> => {
-    if (!(await selectable.first().waitFor({ state: "visible", timeout: 3_000 }).then(() => true, () => false))) return false;
-    await playerClickUntilShown(selectable.first(), hints);
+    if (!(await pickUpAPiece(page, hints))) return false;
     if (!(await hints.first().waitFor({ state: "visible", timeout: 3_000 }).then(() => true, () => false))) return false;
     const before = await boardKey(page);
     await playerClick(hints.first());
@@ -202,12 +196,18 @@ test("[F39] REQ-DICE — a roll shows two dice, and two different numbers give t
 
   // A first move that cannot be made is the ordinary-roll gates' complaint
   // when they fail too (a needs marker, harness/adapters/challenge/stages.py).
-  const first = "[aspect: moves] [needs: REQ-HINT/selectable REQ-HINT/hint F03 F25]";
+  const first = "[aspect: moves] [needs: REQ-HINT/hint F03 F25]";
   expect(await move(first), `${first} rolled 5-6 and could not make a first move`).toBe(true);
-  expect(await move("[aspect: moves]"), "[aspect: moves] rolled 5-6 and could make only one move").toBe(true);
+  // The moves played are the game's own legal ones (fixtures.ts pickUpAPiece):
+  // when its move generation is wrong, the first can be one the rules forbid,
+  // and what follows says nothing about the dice — the legal-move check tells
+  // that (FIX-26: M12's engine offered 6->1 onto black's point, and the second
+  // move then failed).
+  const later = "[aspect: moves] [needs: G04]";
+  expect(await move(later), `${later} rolled 5-6 and could make only one move`).toBe(true);
   // A third: a click that is not a move, or a checker gone mid-click, is no move.
   const third = await withinSeconds(25, tryMove).catch(() => false);
-  expect(third, "[aspect: moves] rolled 5-6 and could make a third move").toBe(false);
+  expect(third, `${later} rolled 5-6 and could make a third move`).toBe(false);
 
   // A double: still only two dice on screen (its four moves are F33's).
   await rollThroughThePage(page, [4, 4, 4, 4]);

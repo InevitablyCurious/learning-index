@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
 import { checkerAnimates, hintAnimates } from "../lib/acceptance.ts";
 import { BASE_URL } from "../lib/harness.ts";
 
@@ -327,22 +327,12 @@ test("[F26] REQ-ANIM — hint animation", async ({ page }) => {
   });
 
   await page.reload();
-  // Drive an ORDINARY movable checker: the page marks each legal source's
-  // topmost white checker selectable while it is white's turn to move.
-  const movableWhiteChecker = page
-    .locator('[data-testid="checker"][data-color="white"].selectable')
-    .first();
-  // No checker to pick up, or no hint for it, is not an animation finding:
-  // the gates that look for those after an ordinary roll report it when they
-  // fail too (a needs marker, harness/adapters/challenge/stages.py).
-  await expect(
-    movableWhiteChecker,
-    "[aspect: nopiece] [needs: REQ-HINT/selectable]",
-  ).toBeVisible();
-  await playerClickUntilShown(
-    movableWhiteChecker,
-    page.locator('[data-testid="hint"]'),
-  );
+  // Pick up an ordinary movable piece, as a player does (fixtures.ts
+  // pickUpAPiece). No piece to pick up, or no hint for it, is not an animation
+  // finding: the gates that look for those after an ordinary roll report it
+  // when they fail too (a needs marker, harness/adapters/challenge/stages.py).
+  const pickedUp = await pickUpAPiece(page, page.locator('[data-testid="hint"]'));
+  expect(pickedUp, "[aspect: nopiece] [needs: REQ-HINT/hint F03]").toBeTruthy();
 
   const hint = page.locator('[data-testid="hint"]').first();
   await expect(hint, "[aspect: present] [needs: REQ-HINT/hint F03 F25]").toBeVisible();

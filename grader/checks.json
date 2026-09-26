@@ -332,7 +332,7 @@
     "F31": {
       "name": "Checkers over their own points",
       "what": "Every checker is drawn over the point it belongs to, not offset to a neighbour.",
-      "how": "Measures each checker's centre against its point's centre and vertical band: each sits within a quarter of a point's width of its own point's centre, inside its band. Judged only once the points are numbered in order (F28): with the numbers wrong, a checker drawn where a player expects it can sit over the wrong number."
+      "how": "Measures each checker's centre against its point's centre and vertical band: each sits within a quarter of a point's width of its own point's centre, inside its band. Then each stack must start at the edge of the board: the piece nearest its point's rim within half a piece of it. Judged only once the points are numbered in order (F28): with the numbers wrong, a checker drawn where a player expects it can sit over the wrong number."
     },
     "F32": {
       "name": "Off tray visible",
@@ -558,13 +558,6 @@
       "name": "Selecting shows hints",
       "what": "Clicking a checker that can move shows where it can go.",
       "how": "Rolls fixed dice, clicks a movable checker, and requires at least one hint to appear."
-    },
-    {
-      "title": "a movable (selectable) white checker is present",
-      "key": "REQ-HINT/selectable",
-      "name": "A movable checker is present",
-      "what": "After a roll there is at least one checker the player can pick up to move.",
-      "how": "Rolls fixed dice and requires at least one selectable white checker."
     },
     {
       "title": "the page can be read by automation",

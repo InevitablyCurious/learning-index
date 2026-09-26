@@ -120,7 +120,7 @@ def test_a_stuck_check_is_not_told_when_the_check_for_that_step_failed_too() -> 
     # FIX-2 mutation M27, no hints anywhere: the doubles gate told "I rolled a
     # double and could only make two moves" to a player who could make none.
     problems = [
-        _doubles("Error: move 1: no hint appeared [aspect: nomove] [needs: REQ-HINT/selectable REQ-HINT/hint F03 F25]"),
+        _doubles("Error: move 1: no hint appeared [aspect: nomove] [needs: REQ-HINT/hint F03 F25]"),
         {"check": "[F03] REQ-HINT — clicking a piece shows its moves", "observed": "Error: Could not reveal hints"},
     ]
     view = player_view(problems, STAGES, is_infra=_infra)
@@ -141,11 +141,11 @@ def test_a_stuck_check_is_told_when_the_step_failed_only_in_its_own_situation() 
 def test_a_chain_of_stuck_checks_is_told_as_the_one_step_that_failed() -> None:
     problems = [
         _doubles("move 1: no checker to pick up [aspect: nomove] [needs: F25]"),
-        {"check": "[F25] REQ-HINT — a played move consumes a die", "observed": "[needs: REQ-HINT/selectable F03]"},
-        {"check": "conformance:REQ-HINT/selectable — a movable (selectable) white checker is present", "observed": "0"},
+        {"check": "[F25] REQ-HINT — a played move consumes a die", "observed": "[needs: REQ-HINT/hint F03]"},
+        {"check": "conformance:REQ-HINT/hint — selecting a movable checker shows move hints", "observed": "none"},
     ]
     view = player_view(problems, STAGES, is_infra=_infra)
-    assert [p["check"].split(" ")[0] for p in view.visible] == ["conformance:REQ-HINT/selectable"]
+    assert [p["check"].split(" ")[0] for p in view.visible] == ["conformance:REQ-HINT/hint"]
     assert sorted(c[:5] for c in view.unevaluated) == ["[F25]", "[F33]"]
 
 

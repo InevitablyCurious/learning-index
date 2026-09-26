@@ -531,10 +531,6 @@
       "first": "When i pick up one of my pieces the game doesn't show me where it can go.",
       "repeat": "I picked a piece up again after your fix and still nothing shows me where it can go."
     },
-    "REQ-HINT/selectable": {
-      "first": "After I rolled, there was no checker I could pick up to move.",
-      "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
-    },
     "F15": {
       "first": "I opened the game from a different address than usual and got a dead board — it loads but nothing appears on it, or it throws errors behind the scenes.",
       "repeat": "Same thing again: reaching the game by its other address still gives me an empty board or errors."
@@ -634,6 +630,10 @@
     "F31": {
       "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place.",
       "repeat": "Fresh game again, and the checkers still don't line up with their points, still floating off to the side."
+    },
+    "F31.rim": {
+      "first": "The stacks start out in the middle of the board — I expect each stack to start at the edge of the board, at the wide end of its point.",
+      "repeat": "The stacks still start out in the middle of the board — I expect each stack to start at the edge of the board, at the wide end of its point."
     },
     "F32": {
       "first": "The off tray isn't showing — there's no place on the board for pieces that have been taken off.",

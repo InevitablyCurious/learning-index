@@ -155,7 +155,6 @@ for (const label of COUNTED_ELEMENT_LABELS) {
 checkGate("REQ-RENDER/die-reload", "the dice survive a reload");
 
 // ── behaviour ───────────────────────────────────────────────────────────────
-checkGate("REQ-HINT/selectable", "a movable checker is present to select");
 checkGate("REQ-HINT/hint", "selecting a movable checker shows move hints");
 
 // ── the pre-gate's own failures ─────────────────────────────────────────────

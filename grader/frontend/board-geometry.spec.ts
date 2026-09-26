@@ -143,6 +143,33 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
       `[needs: F28] expected checker loc=${checker.loc} drawn within point ${point.num}'s vertical band, found checker centerY=${checker.centerY.toFixed(1)} vs band ${point.y.toFixed(1)}..${(point.y + point.height).toFixed(1)}`,
     ).toBeTruthy();
   }
+
+  // Each stack starts at the edge of the board, at the wide end of its point,
+  // as on every backgammon board: the piece nearest the rim lies within half a
+  // piece of it (the reference: 2 px). Run 1790414346 hung every stack from
+  // its triangle's tip, in the middle of the board, and passed the checks above.
+  const pieces = await page.locator('[data-testid="checker"]').evaluateAll((els) =>
+    els.flatMap((el) => {
+      const loc = (el as HTMLElement).dataset.loc;
+      if (loc === undefined || !/^\d+$/.test(loc)) return [];
+      const r = el.getBoundingClientRect();
+      return [{ num: Number(loc), top: r.y, bottom: r.y + r.height, size: Math.min(r.width, r.height) }];
+    }),
+  );
+  const offRim = points.flatMap((p) => {
+    const own = pieces.filter((c) => c.num === p.num);
+    if (own.length === 0) return [];
+    const size = Math.max(...own.map((c) => c.size));
+    const gap =
+      p.num >= 13
+        ? Math.min(...own.map((c) => c.top)) - p.y
+        : p.y + p.height - Math.max(...own.map((c) => c.bottom));
+    return gap > 0.5 * size ? [p.num] : [];
+  });
+  expect(
+    offRim,
+    `[aspect: rim] [needs: F28] stacks that do not start at the edge of the board on points: ${offRim.join(", ")}`,
+  ).toEqual([]);
 });
 
 test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {

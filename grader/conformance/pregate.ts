@@ -575,52 +575,36 @@ export async function runPreGate(): Promise<PreGateResult> {
         }
       }
 
+      // A movable piece is one that answers a click with hints: every white
+      // checker is tried until one does. The build prompt names no class for
+      // a movable piece, so none is looked for (FIX-26: run 1790414346 was
+      // told "no checker I could pick up" by a page whose pieces picked up).
+      // dispatchEvent fires the click handler even for a checker scrolled
+      // outside this browser's default viewport.
       let hintCount = await page.locator('[data-testid="hint"]').count();
       if (hintCount < 1) {
-        const selectableWhites = page.locator(
-          '[data-testid="checker"][data-color="white"].selectable',
+        const whiteCheckers = page.locator(
+          '[data-testid="checker"][data-color="white"]',
         );
-        const selectableCount = await selectableWhites.count();
-
-        if (selectableCount === 0) {
-          add(
-            "REQ-HINT/selectable — a movable (selectable) white checker is present",
-            ">=1",
-            "0",
-          );
-        }
-
-        if (selectableCount > 0) {
-          // Fire the DOM click handler directly (dispatchEvent) so it works even
-          // if the checker is scrolled outside this browser's default viewport.
-          await selectableWhites.first().dispatchEvent("click");
-          await page.waitForTimeout(200);
-        } else {
-          const whiteCheckers = page.locator(
-            '[data-testid="checker"][data-color="white"]',
-          );
-          const whiteCount = await whiteCheckers.count();
-          for (let i = 0; i < whiteCount; i++) {
-            try {
-              await whiteCheckers.nth(i).dispatchEvent("click");
-            } catch {
-              // Keep probing other white checkers.
-            }
-            await page
-              .waitForFunction(
-                () => document.querySelectorAll('[data-testid="hint"]').length > 0,
-                undefined,
-                { timeout: 250 },
-              )
-              .catch(() => undefined);
-            hintCount = await page.locator('[data-testid="hint"]').count();
-            if (hintCount > 0) {
-              break;
-            }
+        const whiteCount = await whiteCheckers.count();
+        for (let i = 0; i < whiteCount; i++) {
+          try {
+            await whiteCheckers.nth(i).dispatchEvent("click");
+          } catch {
+            // Keep probing other white checkers.
+          }
+          await page
+            .waitForFunction(
+              () => document.querySelectorAll('[data-testid="hint"]').length > 0,
+              undefined,
+              { timeout: 250 },
+            )
+            .catch(() => undefined);
+          hintCount = await page.locator('[data-testid="hint"]').count();
+          if (hintCount > 0) {
+            break;
           }
         }
-
-        hintCount = await page.locator('[data-testid="hint"]').count();
       }
 
       if (hintCount < 1) {
@@ -639,7 +623,6 @@ export async function runPreGate(): Promise<PreGateResult> {
           `REQ-TESTID/${label}`,
         ]),
         "REQ-RENDER/die-reload",
-        "REQ-HINT/selectable",
         "REQ-HINT/hint",
       );
     } catch (error) {
