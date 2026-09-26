@@ -323,6 +323,9 @@ export interface TriangleSample {
   // the painted stretch — no triangle to a player); a triangle wider at the rim
   // (pointing inward) or wider further in (pointing outward).
   shape: "none" | "block" | "inward" | "outward";
+  // The triangle's own colour: down its middle at its widest painted depth
+  // (null when nothing is painted). Compared only with other points' colours.
+  colour: number[] | null;
 }
 
 /**
@@ -435,7 +438,13 @@ export async function sampleTriangleOrientation(
           const flat = Math.min(...span) >= 0.35 && Math.max(...span) - Math.min(...span) < 0.3;
           shape = flat ? "block" : rim > inner + 0.15 ? "inward" : inner > rim + 0.15 ? "outward" : "block";
         }
-        return { num: p.num, row: top ? ("top" as const) : ("bottom" as const), profile, reach, shape };
+        let colour: number[] | null = null;
+        if (first >= 0) {
+          const widest = profile.indexOf(Math.max(...profile));
+          const y = top ? p.y + p.height * depths[widest] : p.y + p.height * (1 - depths[widest]);
+          colour = at(p.x + p.width / 2, y);
+        }
+        return { num: p.num, row: top ? ("top" as const) : ("bottom" as const), profile, reach, shape, colour };
       });
     },
     { dataUrl, points },

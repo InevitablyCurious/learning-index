@@ -866,6 +866,14 @@
     "F41.small": {
       "first": "The pieces are too small for their points — I expect each one about 80% as wide as the point it sits on.",
       "repeat": "The pieces are still too small for their points — I expect each one about 80% as wide as the point it sits on."
+    },
+    "F42": {
+      "first": "Some neighbouring points are the same colour — I expect the points to alternate between two colours.",
+      "repeat": "Some neighbouring points are still the same colour — I expect the points to alternate between two colours."
+    },
+    "F42.onecolour": {
+      "first": "The points are all one colour — I expect them to alternate between two colours.",
+      "repeat": "The points are still all one colour — I expect them to alternate between two colours."
     }
   }
 }

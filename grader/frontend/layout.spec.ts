@@ -40,6 +40,11 @@ interface Control extends Box {
   shown: boolean;
   clipped: boolean;
   tag: string;
+  // Nothing in it to show: no text and nothing drawn inside. An empty message
+  // box on a fresh game is not information hidden from the player (run
+  // 1790401782: an empty `message`, 0 px wide, told as "game info I need
+  // aren't showing").
+  empty: boolean;
 }
 interface Layout {
   size: string;
@@ -111,7 +116,8 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
           buttons.includes(id) && el.tagName === "BUTTON"
             ? el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1
             : false;
-        controls[id] = { x: r.left, y: r.top, w: r.width, h: r.height, shown, clipped, tag: el.tagName };
+        const empty = !(el.textContent ?? "").trim() && !el.querySelector("img,svg,canvas,button,select,input,option");
+        controls[id] = { x: r.left, y: r.top, w: r.width, h: r.height, shown, clipped, tag: el.tagName, empty };
       }
       const board = document.querySelector<HTMLElement>('[data-testid="board"]');
       const tray = document.querySelector<HTMLElement>('[data-testid="off-tray"]')?.getBoundingClientRect();
@@ -168,8 +174,9 @@ test("[F35] REQ-LAYOUT — board and controls placement", async ({ page }) => {
       `at ${layout.size} the board starts at x=${Math.round(board.x)}, not at the left`,
     ).toBeTruthy();
     for (const [id, c] of Object.entries(layout.controls)) {
-      // Missing is the testid check's finding; not showing is F38's.
-      if (!c || !c.shown) continue;
+      // Missing is the testid check's finding; not showing is F38's; an empty
+      // box has nothing to place.
+      if (!c || !c.shown || c.empty) continue;
       expect(
         c.x >= board.x + board.w - 2,
         `at ${layout.size} ${id} (x=${Math.round(c.x)}) is not right of the board (it ends at x=${Math.round(board.x + board.w)})`,
@@ -220,7 +227,7 @@ test("[F38] REQ-LAYOUT — the buttons and game info show properly", async ({ pa
   for (const size of SIZES) {
     const layout = await openAt(page, size);
     const board = drawnBoard(layout);
-    const present = Object.entries(layout.controls).filter((e): e is [string, Control] => e[1] !== null);
+    const present = Object.entries(layout.controls).filter((e): e is [string, Control] => e[1] !== null && !e[1].empty);
     for (const [id, c] of present) {
       expect(c.shown, `[aspect: hidden] at ${layout.size} ${id} is not showing`).toBeTruthy();
     }

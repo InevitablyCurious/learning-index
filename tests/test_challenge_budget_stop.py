@@ -271,8 +271,8 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     def _fake_gate(**kwargs: Any) -> dict[str, Any]:
         gate_calls["count"] += 1
         if gate_calls["count"] == 1:
-            # PLAYER ORDER: G01 and G02 are stage 2 (a new game looks right),
-            # G03 is stage 3 (rolling and moving) — so round 1 tells the model
+            # PLAYER ORDER: G01 and G02 are stage 1 (the first look), G03 is
+            # stage 2 (rolling and moving) — so round 1 tells the model
             # about G01 and G02 only, and G03 is withheld.
             return {
                 "verdict": "FAIL",
@@ -347,7 +347,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     # WO-FEEDBACK-VOICE-3: grader tokens are stripped from delivered text. The
     # pass verdict names the human symptom sentences of the newly-passing gates.
     # PLAYER ORDER: only a check the model was TOLD about can be reported fixed.
-    # REAL_PASS2 (G03, stage 3) was withheld in round 1, so its passing is not
+    # REAL_PASS2 (G03, stage 2) was withheld in round 1, so its passing is not
     # news to the model and is not named.
     pass_verdict = runner._build_pass_verdict(newly_passing=[REAL_PASS1], told=_told([REAL_PASS1]))
     # REAL_CHECK failed in BOTH of the last two attempts, so it is a repeat and
@@ -381,7 +381,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
         checks=[REAL_PASS1, REAL_CHECK]
     )
     assert runner._humanize_check(REAL_PASS2) not in prompt_texts[1], (
-        "a stage-3 problem is withheld while stage 2 still fails"
+        "a stage-2 problem is withheld while stage 1 still fails"
     )
     # Feedback 2 — the FOLDED message (WO-FEEDBACK-ONEPHASE): REAL_PASS1 and
     # REAL_PASS2 newly passed after attempt 2, so the pass verdict opens the
@@ -505,7 +505,7 @@ def test_a_complaint_that_was_fixed_and_came_back_is_not_still_there(
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
     )
-    # Both stage 2: CAME_BACK is told, fixed while STAYS is told, then returns.
+    # Both stage 1: CAME_BACK is told, fixed while STAYS is told, then returns.
     came_back, stays = REAL_CHECK, REAL_PASS1
     rounds = iter([[came_back], [stays], [came_back, stays]])
 

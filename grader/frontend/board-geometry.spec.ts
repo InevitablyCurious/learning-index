@@ -108,8 +108,11 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
 
   const points = await readPointBoxes(page);
   const checkers = await readCheckerBoxes(page);
-  // A quarter of a point: a checker further off its point's centre than that
-  // is visibly misplaced. At 0.45, run 1790365975's checkers passed 33 px off
+  // Each checker is found by its point's NUMBER, so this waits on the order
+  // check: with the numbers wrong, a checker drawn where a player expects it
+  // sits over the wrong number (a needs marker; stage 1 since Jerry's "first
+  // look", 2026-09-26). A quarter of a point: a checker further off its
+  // point's centre than that is visibly misplaced. At 0.45, run 1790365975's checkers passed 33 px off
   // centre (0.43 point) — half off their points, hanging over the frame.
   const tolerance = 0.25 * pointWidth(points);
 
@@ -117,18 +120,18 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
     const point = points.find((p) => p.num === Number(checker.loc));
     expect(
       point,
-      `expected a [data-testid="point"] matching checker loc=${checker.loc}, found none`,
+      `[needs: F28] expected a [data-testid="point"] matching checker loc=${checker.loc}, found none`,
     ).not.toBeUndefined();
 
     const dx = Math.abs(checker.centerX - point.centerX);
     expect(
       dx < tolerance,
-      `expected checker loc=${checker.loc} drawn centered over point ${point.num}, found checker centerX=${checker.centerX.toFixed(1)} vs point centerX=${point.centerX.toFixed(1)} (off by ${dx.toFixed(1)}, tolerance ${tolerance.toFixed(1)})`,
+      `[needs: F28] expected checker loc=${checker.loc} drawn centered over point ${point.num}, found checker centerX=${checker.centerX.toFixed(1)} vs point centerX=${point.centerX.toFixed(1)} (off by ${dx.toFixed(1)}, tolerance ${tolerance.toFixed(1)})`,
     ).toBeTruthy();
 
     expect(
       checker.centerY >= point.y - 1 && checker.centerY <= point.y + point.height + 1,
-      `expected checker loc=${checker.loc} drawn within point ${point.num}'s vertical band, found checker centerY=${checker.centerY.toFixed(1)} vs band ${point.y.toFixed(1)}..${(point.y + point.height).toFixed(1)}`,
+      `[needs: F28] expected checker loc=${checker.loc} drawn within point ${point.num}'s vertical band, found checker centerY=${checker.centerY.toFixed(1)} vs band ${point.y.toFixed(1)}..${(point.y + point.height).toFixed(1)}`,
     ).toBeTruthy();
   }
 });
@@ -303,4 +306,71 @@ test("[F40] REQ-GEOMETRY — the two rows line up", async ({ page }) => {
     top.length === bottom.length && apart.length === 0,
     `expected ${top.length} top points each straight across from a bottom point, found ${bottom.length} below and columns apart: ${apart.join(", ")}`,
   ).toBeTruthy();
+});
+
+// [F42] REQ-GEOMETRY — the points alternate in colour, as on every backgammon
+// board: side-by-side neighbours within each quarter differ. Judged on the
+// triangles' own colours against each other, never on which colours they are
+// (the F30 colour trap). Across the bar is not judged (the reference repeats
+// its colour there), wherever the bar is drawn; nor is the point straight
+// across the board: the build prompt
+// says nothing about point colours, and a board whose facing triangles match
+// looks right to a player (FIX-22 M61). Run 1790400113 drew every triangle
+// one colour and every other check passed.
+test("[F42] REQ-GEOMETRY — the points alternate in colour", async ({ page }) => {
+  await openFreshBoard(page);
+  const points = await readPointBoxes(page);
+  expect(points.length, "[needs: REQ-RENDER/point] expected 24 points to read").toBe(24);
+  // A point the bar or the tray is drawn over shows their colour, not its
+  // own: it is not judged (FIX-22: M47's bar drawn over points made 21/22 and
+  // 4/3 read as one colour, M54's tray made 24/1). Where they sit is the bar
+  // and tray checks'.
+  const bar = await readBarBox(page);
+  const tray = await readOffTray(page);
+  const covered = new Set(
+    points
+      .filter((p) => (bar !== null && overlaps(bar, p)) || (tray.exists && tray.painted && overlaps(tray, p)))
+      .map((p) => p.num),
+  );
+  const samples = await sampleTriangleOrientation(page, points);
+  const colourOf = new Map(samples.map((s) => [s.num, s.colour]));
+  const same = (a: number, b: number) => {
+    const ca = colourOf.get(a);
+    const cb = colourOf.get(b);
+    return !!ca && !!cb && Math.hypot(ca[0] - cb[0], ca[1] - cb[1], ca[2] - cb[2]) < 40;
+  };
+  const quarters = [
+    [13, 14, 15, 16, 17, 18],
+    [19, 20, 21, 22, 23, 24],
+    [12, 11, 10, 9, 8, 7],
+    [6, 5, 4, 3, 2, 1],
+  ];
+  const neighbours = quarters.flatMap((q) => q.slice(1).map((n, i) => [q[i], n] as const));
+  // Two points with the bar drawn between them are not neighbours on screen,
+  // wherever the bar is: the reference repeats its colour across it, and a bar
+  // in the wrong place is the bar check's complaint (FIX-22b: M47's bar between
+  // 21 and 22 made them "neighbours of one colour").
+  const boxOf = new Map(points.map((p) => [p.num, p]));
+  const splitByBar = (a: number, b: number) => {
+    const pa = boxOf.get(a);
+    const pb = boxOf.get(b);
+    if (bar === null || !pa || !pb) return false;
+    const mid = bar.x + bar.width / 2;
+    return (
+      mid > Math.min(pa.centerX, pb.centerX) &&
+      mid < Math.max(pa.centerX, pb.centerX) &&
+      bar.y < pa.y + pa.height &&
+      bar.y + bar.height > pa.y
+    );
+  };
+  const judgedPairs = neighbours.filter(([a, b]) => !covered.has(a) && !covered.has(b) && !splitByBar(a, b));
+  const matching = judgedPairs.filter(([a, b]) => same(a, b));
+  // The quarters are found by number, and the colours are read off the
+  // triangles: an out-of-order board is F28's complaint, a missing or
+  // wrong-way triangle F30's.
+  const oneColour = judgedPairs.length > 0 && matching.length === judgedPairs.length;
+  expect(
+    matching.map(([a, b]) => `${a}/${b}`),
+    `${oneColour ? "[aspect: onecolour] " : ""}[needs: F28 F30] points that should differ in colour and match: ${matching.map(([a, b]) => `${a}/${b}`).join(", ")}`,
+  ).toEqual([]);
 });

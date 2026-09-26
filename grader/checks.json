@@ -332,7 +332,7 @@
     "F31": {
       "name": "Checkers over their own points",
       "what": "Every checker is drawn over the point it belongs to, not offset to a neighbour.",
-      "how": "Measures each checker's centre against its point's centre and vertical band: each sits within a quarter of a point's width of its own point's centre, inside its band."
+      "how": "Measures each checker's centre against its point's centre and vertical band: each sits within a quarter of a point's width of its own point's centre, inside its band. Judged only once the points are numbered in order (F28): with the numbers wrong, a checker drawn where a player expects it can sit over the wrong number."
     },
     "F32": {
       "name": "Off tray visible",
@@ -378,6 +378,11 @@
       "name": "Checkers are circles sized to their points",
       "what": "Every checker is a perfect circle, about 80% as wide as the point it sits on.",
       "how": "New game: every checker on a point is drawn round (a circular border radius, clip or SVG circle) with a square box, and the typical checker is 70–90% of a point's width."
+    },
+    "F42": {
+      "name": "Points alternate in colour",
+      "what": "The points alternate between two colours, as on every backgammon board.",
+      "how": "New game, checkers hidden: each triangle's own colour down its middle at its widest; within each quarter, side-by-side neighbours must differ. Colours are compared with each other only; neither across the bar nor straight across the board is judged, and a point the bar or tray is drawn over is skipped."
     }
   },
   "setup": [
@@ -591,7 +596,15 @@
         "F40",
         "F29",
         "F30",
+        "F42",
         "F32",
+        "F41",
+        "F31",
+        "G01",
+        "G02",
+        "F06",
+        "G26",
+        "F34",
         "REQ-BIND/",
         "REQ-API/",
         "REQ-STATE/",
@@ -606,20 +619,6 @@
     },
     {
       "stage": 2,
-      "name": "A new game looks right",
-      "checks": [
-        "G01",
-        "G02",
-        "F06",
-        "F17",
-        "F31",
-        "F41",
-        "G26",
-        "F34"
-      ]
-    },
-    {
-      "stage": 3,
       "name": "Rolling and moving",
       "checks": [
         "G03",
@@ -649,7 +648,7 @@
       ]
     },
     {
-      "stage": 4,
+      "stage": 3,
       "name": "Hitting and the bar",
       "checks": [
         "G07",
@@ -668,7 +667,7 @@
       ]
     },
     {
-      "stage": 5,
+      "stage": 4,
       "name": "Bearing off",
       "checks": [
         "G09",
@@ -681,17 +680,18 @@
       ]
     },
     {
-      "stage": 6,
+      "stage": 5,
       "name": "Winning",
       "checks": [
         "G10",
         "F12",
         "F22",
-        "F23"
+        "F23",
+        "F17"
       ]
     },
     {
-      "stage": 7,
+      "stage": 6,
       "name": "The doubling cube",
       "checks": [
         "G11",
@@ -705,7 +705,7 @@
       ]
     },
     {
-      "stage": 8,
+      "stage": 7,
       "name": "Playing the computer",
       "checks": [
         "G14",
