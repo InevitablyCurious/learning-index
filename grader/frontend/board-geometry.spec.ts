@@ -21,6 +21,7 @@ import {
   readOffTray,
   readPointBoxes,
   sampleTriangleOrientation,
+  splitRows,
   type PointBox,
 } from "./board-geometry.ts";
 
@@ -45,9 +46,16 @@ test("[F28] REQ-GEOMETRY — points in board order", async ({ page }) => {
   await openFreshBoard(page);
 
   const points = await readPointBoxes(page);
-  const byHeight = [...points].sort((a, b) => a.centerY - b.centerY);
-  const topRow = leftToRight(byHeight.slice(0, 12));
-  const bottomRow = leftToRight(byHeight.slice(12));
+  expect(points.length, "[needs: REQ-RENDER/point] expected 24 points to read").toBe(24);
+  // Two rows, one above the other, before any order within them (FIX-24: run
+  // 1790407044's rows sat side by side and passed on page order alone).
+  const rows = splitRows(points);
+  expect(
+    rows.separated,
+    `[aspect: rows] expected the points in two rows, one above the other; the 12 highest and the 12 lowest point centres are ${rows.gap.toFixed(0)} px apart`,
+  ).toBeTruthy();
+  const topRow = leftToRight(rows.top);
+  const bottomRow = leftToRight(rows.bottom);
 
   expect(
     topRow,
@@ -257,6 +265,10 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   const samples = await sampleTriangleOrientation(page, points);
 
   expect(samples.length, `expected 24 triangle samples, found ${samples.length}`).toBe(24);
+  // Which edge is a point's rim depends on its row: with no two rows there is
+  // no rim to read from, and the order check tells that (FIX-24: a top row
+  // drawn beside the bottom one was told "The triangles point outward").
+  const needsRows = splitRows(points).separated ? "" : "[needs: F28] ";
 
   // A point with no triangle: nothing painted at its rim or its inner end (run
   // 1790381377: every point a transparent box, told "The triangles point
@@ -274,7 +286,7 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   const outward = judged.filter((s) => s.shape === "outward").map((s) => s.num);
   expect(
     outward,
-    `expected every point's triangle to point inward (wider at the rim than further in), found outward-pointing point numbers: ${outward.join(", ")}`,
+    `${needsRows}expected every point's triangle to point inward (wider at the rim than further in), found outward-pointing point numbers: ${outward.join(", ")}`,
   ).toEqual([]);
 
   // And it reaches into the board: at least half way in from the rim (the
@@ -282,7 +294,7 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   const short = judged.filter((s) => s.reach < 0.5).map((s) => s.num);
   expect(
     short,
-    `[aspect: short] triangles reaching less than half way in from the rim on points: ${short.join(", ")}`,
+    `${needsRows}[aspect: short] triangles reaching less than half way in from the rim on points: ${short.join(", ")}`,
   ).toEqual([]);
 });
 
@@ -299,12 +311,14 @@ test("[F40] REQ-GEOMETRY — the two rows line up", async ({ page }) => {
   const top = points.filter((p) => p.centerY < mid).sort((a, b) => a.centerX - b.centerX);
   const bottom = points.filter((p) => p.centerY >= mid).sort((a, b) => a.centerX - b.centerX);
   const pw = pointWidth(points);
+  // Rows that are not one above the other are the order check's complaint.
+  const needsRows = splitRows(points).separated ? "" : "[needs: F28] ";
   const apart = top.flatMap((p, i) =>
     bottom[i] && Math.abs(p.centerX - bottom[i].centerX) <= 0.5 * pw ? [] : [`${i + 1}`],
   );
   expect(
     top.length === bottom.length && apart.length === 0,
-    `expected ${top.length} top points each straight across from a bottom point, found ${bottom.length} below and columns apart: ${apart.join(", ")}`,
+    `${needsRows}expected ${top.length} top points each straight across from a bottom point, found ${bottom.length} below and columns apart: ${apart.join(", ")}`,
   ).toBeTruthy();
 });
 
@@ -313,10 +327,9 @@ test("[F40] REQ-GEOMETRY — the two rows line up", async ({ page }) => {
 // triangles' own colours against each other, never on which colours they are
 // (the F30 colour trap). Across the bar is not judged (the reference repeats
 // its colour there), wherever the bar is drawn; nor is the point straight
-// across the board: the build prompt
-// says nothing about point colours, and a board whose facing triangles match
-// looks right to a player (FIX-22 M61). Run 1790400113 drew every triangle
-// one colour and every other check passed.
+// across the board: the build prompt says nothing about point colours, and a
+// board whose facing triangles match looks right to a player (FIX-22 M61).
+// Run 1790400113 drew every triangle one colour and every other check passed.
 test("[F42] REQ-GEOMETRY — the points alternate in colour", async ({ page }) => {
   await openFreshBoard(page);
   const points = await readPointBoxes(page);

@@ -129,6 +129,23 @@ export function typicalWidth(shapes: CheckerShape[]): number {
 }
 
 /** The horizontal midline of the board, from the points themselves. */
+/**
+ * The points split into the two rows a player sees: the 12 drawn highest and
+ * the 12 drawn lowest. `separated` says whether they really are two rows, one
+ * above the other: the lowest top-row centre at least half a point's height
+ * above the highest bottom-row centre. Run 1790407044 put the top row beside
+ * the bottom row, every point the full height of the board; sorting by height
+ * then split them by page order, and the order check passed.
+ */
+export function splitRows(points: PointBox[]): { top: PointBox[]; bottom: PointBox[]; gap: number; separated: boolean } {
+  const byHeight = [...points].sort((a, b) => a.centerY - b.centerY);
+  const top = byHeight.slice(0, 12);
+  const bottom = byHeight.slice(12);
+  const height = points.reduce((sum, p) => sum + p.height, 0) / points.length;
+  const gap = Math.min(...bottom.map((p) => p.centerY)) - Math.max(...top.map((p) => p.centerY));
+  return { top, bottom, gap, separated: bottom.length === 12 && gap >= 0.5 * height };
+}
+
 export function boardMidY(points: PointBox[]): number {
   return points.reduce((sum, p) => sum + p.centerY, 0) / points.length;
 }

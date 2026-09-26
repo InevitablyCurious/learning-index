@@ -317,7 +317,7 @@
     "F28": {
       "name": "Points in board order",
       "what": "The 24 points are drawn in the standard board order — the top half runs 13 through 24 left to right, the bottom half 12 down to 1.",
-      "how": "Reads every point's rendered box, splits top and bottom rows by centre Y, sorts each row left to right, and asserts the data-point numbers match the standard order."
+      "how": "Reads every point's rendered box and splits it into the 12 drawn highest and the 12 drawn lowest; first they must be two rows, one above the other (the lowest top-row centre at least half a point's height above the highest bottom-row one), then each row sorted left to right must carry the standard numbers."
     },
     "F29": {
       "name": "Bar between the halves",
