@@ -495,6 +495,23 @@ test("[F08] REQ-TESTID — difficulty selector", async ({ page }) => {
 
   const difficulty = page.getByTestId("difficulty");
   const newGameBtn = page.getByTestId("newGameBtn");
+  // A player changes the difficulty only through controls they can see and
+  // click: one the board is drawn over is the layout check's complaint (F38),
+  // not a difficulty that doesn't change (run 1790439223 timed out clicking a
+  // covered New Game and told "nothing actually changes").
+  const reachable = (id: string) =>
+    page.evaluate((testid) => {
+      const el = document.querySelector(`[data-testid="${testid}"]`);
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return false;
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!hit && (hit === el || el.contains(hit));
+    }, id);
+  expect(
+    (await reachable("difficulty")) && (await reachable("newGameBtn")),
+    "[needs: F38] the difficulty control or New Game is covered or off screen",
+  ).toBe(true);
 
   await difficulty.selectOption("hard");
   await newGameBtn.click();

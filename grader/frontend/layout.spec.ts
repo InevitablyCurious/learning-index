@@ -125,6 +125,29 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
           })()
         : null;
       const controls: Record<string, unknown> = {};
+      // What is drawn on top at a control decides whether a player sees it: a
+      // control the board is drawn over is not showing, however its own style
+      // reads (run 1790439223's difficulty and New Game sat under the board's
+      // points; its difficulty check was told "nothing actually changes"). The
+      // controls are made hit-testable for the reading — a page may let clicks
+      // pass through its info boxes — and put back after it.
+      const probe = document.createElement("style");
+      probe.textContent = ids
+        .map((id) => `[data-testid="${id}"], [data-testid="${id}"] * { pointer-events: auto !important; }`)
+        .join("\n");
+      document.head.appendChild(probe);
+      const onTop = (el: HTMLElement, r: DOMRect) => {
+        for (const fy of [0.5, 0.25, 0.75]) {
+          for (const fx of [0.5, 0.25, 0.75]) {
+            const x = r.left + r.width * fx;
+            const y = r.top + r.height * fy;
+            if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+            const hit = document.elementFromPoint(x, y);
+            if (hit && (hit === el || el.contains(hit))) return true;
+          }
+        }
+        return false;
+      };
       for (const id of ids) {
         const el = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
         if (!el) {
@@ -134,7 +157,12 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
         const r = el.getBoundingClientRect();
         const cs = getComputedStyle(el);
         const shown =
-          r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none" && Number(cs.opacity) > 0.05;
+          r.width > 0 &&
+          r.height > 0 &&
+          cs.visibility !== "hidden" &&
+          cs.display !== "none" &&
+          Number(cs.opacity) > 0.05 &&
+          (onTop(el, r) || !(r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight));
         // A squished button cuts its own label off; a <select> reports its
         // option list, not its face, so only buttons are read for this.
         const clipped =
@@ -144,6 +172,7 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
         const empty = !(el.textContent ?? "").trim() && !el.querySelector("img,svg,canvas,button,select,input,option");
         controls[id] = { x: r.left, y: r.top, w: r.width, h: r.height, shown, clipped, tag: el.tagName, empty };
       }
+      probe.remove();
       const board = document.querySelector<HTMLElement>('[data-testid="board"]');
       const tray = document.querySelector<HTMLElement>('[data-testid="off-tray"]')?.getBoundingClientRect();
       return {
@@ -297,7 +326,16 @@ test("[F44] REQ-LAYOUT — the buttons carry their names", async ({ page }) => {
     const out: Record<string, string | null> = {};
     for (const id of ids) {
       const el = document.querySelector(`[data-testid="${id}"]`);
-      out[id] = el ? (el.textContent ?? "").replace(/\s+/g, " ").trim().toLowerCase() : null;
+      // A label drawn with CSS (`content: "Roll"`) is a label a player reads.
+      const drawn = (pseudo: string) => {
+        const c = el ? getComputedStyle(el, pseudo).content : "none";
+        if (!c || c === "none" || c === "normal") return "";
+        // A string content value reads back wrapped in its quotes.
+        return c.length >= 2 && c[0] === c[c.length - 1] ? c.slice(1, -1) : c;
+      };
+      out[id] = el
+        ? [drawn("::before"), el.textContent ?? "", drawn("::after")].join(" ").replace(/\s+/g, " ").trim().toLowerCase()
+        : null;
     }
     return out;
   }, Object.keys(BUTTON_NAMES));
