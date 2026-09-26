@@ -362,7 +362,7 @@
     "F38": {
       "name": "Buttons show properly",
       "what": "Every button and piece of game info is showing, inside the window, clear of the board and of each other, and big enough to use.",
-      "how": "At both sizes each control is visible, inside the window and off the board; each button is at least 60×24 px with its label not cut off; no two buttons overlap."
+      "how": "At both sizes each control is visible, inside the window and off the board; each button is at least 60×24 px with its label not cut off; no two buttons overlap. A control that isn't showing is named in the line (the Roll button, my pip count, whose turn it is …)."
     },
     "F39": {
       "name": "Two dice, two moves",
@@ -388,6 +388,11 @@
       "name": "Every piece shows",
       "what": "Every piece on the board can be seen whole: a stack shows each of its pieces, and no piece is cut off.",
       "how": "New game: a grid of spots inside each checker on a point is hit-tested (the pieces made hit-testable for the reading). Two pieces on the same point with centres closer than a third of a piece are drawn on one spot; a piece showing less than three quarters of itself on screen, not because another piece is drawn over it, is cut off. Pieces mostly past the window are the fit check's."
+    },
+    "F44": {
+      "name": "Buttons carry their names",
+      "what": "Each button's label carries its name: Roll, Double, Undo, End Turn and New Game.",
+      "how": "New game: each button's own text, whether or not it shows, must contain its name (case aside; \"Roll Dice\" carries Roll). A button that isn't there is the tag check's; one that doesn't show is F38's."
     }
   },
   "setup": [
@@ -588,6 +593,7 @@
         "F36",
         "F37",
         "F38",
+        "F44",
         "F15",
         "F19",
         "F28",

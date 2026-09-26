@@ -188,6 +188,11 @@ _HELPER_MARKERS = {
     ("frontend/fixtures.ts", "[needs: REQ-RENDER/point REQ-RENDER/checker]"): _FRONTEND,
     ("frontend/layout.spec.ts", "[needs: F01]"): _LAYOUT,
     ("frontend/layout.spec.ts", "[needs: REQ-RENDER/point]"): _LAYOUT,
+    # layout.spec.ts ASPECT_OF: F38 names the item on the right that isn't showing.
+    **{("frontend/layout.spec.ts", f"[aspect: {a}]"): ("F38",) for a in (
+        "roll", "double", "undo", "endturn", "newgame", "difficulty",
+        "cube", "pipwhite", "pipblack", "turn", "message",
+    )},
 }
 
 

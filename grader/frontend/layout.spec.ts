@@ -26,6 +26,31 @@ const RIGHT_SIDE = [
   "turnIndicator", "message", "difficulty", "newGameBtn",
 ];
 const BUTTONS = ["rollBtn", "doubleBtn", "undoBtn", "endTurnBtn", "newGameBtn", "difficulty"];
+// The marker naming each item on the right, whose line names it when it isn't
+// showing (Jerry, 2026-09-26: "name buttons"). Written out in full so the
+// source scan finds each one's lines (tests/test_player_stages.py).
+const ASPECT_OF: Record<string, string> = {
+  rollBtn: "[aspect: roll]",
+  doubleBtn: "[aspect: double]",
+  undoBtn: "[aspect: undo]",
+  endTurnBtn: "[aspect: endturn]",
+  newGameBtn: "[aspect: newgame]",
+  difficulty: "[aspect: difficulty]",
+  cube: "[aspect: cube]",
+  pipWhite: "[aspect: pipwhite]",
+  pipBlack: "[aspect: pipblack]",
+  turnIndicator: "[aspect: turn]",
+  message: "[aspect: message]",
+};
+// The name each button's label carries (the build prompt, chunk-04: "the
+// buttons read Roll, Double, Undo, End Turn and New Game").
+const BUTTON_NAMES: Record<string, string> = {
+  rollBtn: "roll",
+  doubleBtn: "double",
+  undoBtn: "undo",
+  endTurnBtn: "end turn",
+  newGameBtn: "new game",
+};
 const BOARD_SHARE = { min: 0.7, max: 0.88 };
 const BOARD_HEIGHT_MIN = 0.7;
 const BUTTON_MIN = { w: 60, h: 24 };
@@ -229,7 +254,7 @@ test("[F38] REQ-LAYOUT — the buttons and game info show properly", async ({ pa
     const board = drawnBoard(layout);
     const present = Object.entries(layout.controls).filter((e): e is [string, Control] => e[1] !== null && !e[1].empty);
     for (const [id, c] of present) {
-      expect(c.shown, `[aspect: hidden] at ${layout.size} ${id} is not showing`).toBeTruthy();
+      expect(c.shown, `${ASPECT_OF[id]} at ${layout.size} ${id} is not showing`).toBeTruthy();
     }
     for (const [id, c] of present) {
       expect(
@@ -258,4 +283,26 @@ test("[F38] REQ-LAYOUT — the buttons and game info show properly", async ({ pa
       }
     }
   }
+});
+
+// [F44] REQ-LAYOUT — the buttons carry their names. The build prompt names
+// them (chunk-04: "the buttons read Roll, Double, Undo, End Turn and New Game"),
+// since button names are the page's own and no backgammon convention; a longer
+// label is fine as long as it contains the name ("Roll Dice"). Read from the
+// button's own text whether or not it shows: a button that doesn't show is
+// F38's complaint, and one that isn't there the tag check's.
+test("[F44] REQ-LAYOUT — the buttons carry their names", async ({ page }) => {
+  await page.goto("/");
+  const labels = await page.evaluate((ids) => {
+    const out: Record<string, string | null> = {};
+    for (const id of ids) {
+      const el = document.querySelector(`[data-testid="${id}"]`);
+      out[id] = el ? (el.textContent ?? "").replace(/\s+/g, " ").trim().toLowerCase() : null;
+    }
+    return out;
+  }, Object.keys(BUTTON_NAMES));
+  const unnamed = Object.entries(BUTTON_NAMES)
+    .filter(([id, name]) => labels[id] !== null && !(labels[id] as string).includes(name))
+    .map(([id]) => `${id} reads "${labels[id]}"`);
+  expect(unnamed, `buttons whose label lacks their name: ${unnamed.join("; ")}`).toEqual([]);
 });

@@ -14,13 +14,15 @@ What the game should feel like to play:
 - Pip counts, cube value, cube owner, score and whose turn it is are all on screen and match the API.
 - When you have no legal move, the page says so plainly.
 - The board should be on the left and fill the screen, with all the roll, double and other buttons and game info on the right — about 80% of the width for the board and 20% for the buttons. That's on an ordinary laptop screen, 1280×800 or 1440×900, with nothing to scroll.
-- Each checker is a perfect circle, sized to about 80% of the width of the point it sits on (not counting the bar).
-- The off tray runs the full height of the board and is at least as wide as a piece, so a borne-off piece fits in it lying on its side, its long edge parallel to the top and bottom of the board.
+- The board is drawn as you'd see it sitting at a real board as white: point 24 at the top right, the top row running 13 to 24 left to right and the bottom row 12 down to 1 left to right, each row split into two halves of six by the bar, which runs down the middle the full height of the board.
+- Each point is a long triangle that stands out from the board, its wide end on the board's edge and its tip reaching most of the way to the middle; side by side, the points alternate between two colours.
+- Each checker is a perfect circle, sized to about 80% of the width of the point it sits on (not counting the bar). A point's checkers stack from the board's edge toward the middle, and every one of them shows whole.
+- The off tray sits at the right-hand end of the board, beside points 1 and 24, where the checkers are borne off. It runs the full height of the board and is at least as wide as a piece, so a borne-off piece fits in it lying on its side, its long edge parallel to the top and bottom of the board.
 - The page responds promptly — no action hangs or leaves a player waiting.
 - Winning ends the game with a banner, and you can start a new game without reloading the page.
 - Difficulty and New Game: the difficulty control is a native `<select>` element; clicking New Game starts a new game at the selected difficulty (POST `/api/new` with `{difficulty}`).
 
-Wording the page uses: `pipWhite` and `pipBlack` contain just the number (e.g. `167`), with any label outside those elements; a hint's visible text is the die value it would use, or "off" for bearing off. The cube owner reads as the human ("you", "your" or "white"), the AI ("ai", "opponent" or "black"), or centered ("center", "centered" or "centre") when nobody owns it. The win banner says "You win" when the human wins; the game has an end-of-game modal (`modalOverlay`), shown by toggling the `hidden` class off `modalOverlay`, and its title contains the word "win" (any capitals).
+Wording the page uses: the buttons read Roll, Double, Undo, End Turn and New Game — a longer label such as "Roll Dice" is fine as long as it contains the name — and all five are on screen from the start, greyed out while they can't be used, each at least 60 px wide and 24 px tall. `pipWhite` and `pipBlack` contain just the number (e.g. `167`), with any label outside those elements; a hint's visible text is the die value it would use, or "off" for bearing off. The cube owner reads as the human ("you", "your" or "white"), the AI ("ai", "opponent" or "black"), or centered ("center", "centered" or "centre") when nobody owns it. The win banner says "You win" when the human wins; the game has an end-of-game modal (`modalOverlay`), shown by toggling the `hidden` class off `modalOverlay`, and its title contains the word "win" (any capitals).
 
 Required `data-testid` hooks (EXACT — the UI automation selects on these; static elements keep their existing `id` and ALSO carry a `data-testid` with the same string):
 

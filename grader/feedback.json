@@ -612,8 +612,8 @@
       "repeat": "The bar still doesn't run the full height of the board."
     },
     "F30": {
-      "first": "The triangles point outward, away from the middle of the board.",
-      "repeat": "Looked at the triangles again and they still point outward, away from the middle."
+      "first": "The triangles point outward, away from the middle of the board — I expect each triangle's wide end at the edge and its tip pointing toward the middle.",
+      "repeat": "Looked at the triangles again and they still point outward, away from the middle — I expect each triangle's wide end at the edge and its tip pointing toward the middle."
     },
     "F30.offscreen": {
       "first": "Part of the board runs off the edge of the screen.",
@@ -843,10 +843,6 @@
       "first": "Some of the buttons on the right are cut off, overlapping, or too small to use.",
       "repeat": "Some of the buttons on the right are still cut off, overlapping, or too small to use."
     },
-    "F38.hidden": {
-      "first": "Some of the buttons and game info I need aren't showing on the screen.",
-      "repeat": "Some of the buttons and game info I need still aren't showing on the screen."
-    },
     "F39": {
       "first": "After I rolled, the dice on the screen didn't look right.",
       "repeat": "Rolled again and the dice on the screen still didn't look right."
@@ -894,6 +890,54 @@
     "F43.clipped": {
       "first": "Some of the pieces are cut off — I expect to see every piece as a whole circle.",
       "repeat": "Some of the pieces are still cut off — I expect to see every piece as a whole circle."
+    },
+    "F38.roll": {
+      "first": "I can't find the Roll button — I expect it on screen all the time, greyed out while it can't be used.",
+      "repeat": "I still can't find the Roll button — I expect it on screen all the time, greyed out while it can't be used."
+    },
+    "F38.double": {
+      "first": "I can't find the Double button — I expect it on screen all the time, greyed out while it can't be used.",
+      "repeat": "I still can't find the Double button — I expect it on screen all the time, greyed out while it can't be used."
+    },
+    "F38.undo": {
+      "first": "I can't find the Undo button — I expect it on screen all the time, greyed out while it can't be used.",
+      "repeat": "I still can't find the Undo button — I expect it on screen all the time, greyed out while it can't be used."
+    },
+    "F38.endturn": {
+      "first": "I can't find the End Turn button — I expect it on screen all the time, greyed out while it can't be used.",
+      "repeat": "I still can't find the End Turn button — I expect it on screen all the time, greyed out while it can't be used."
+    },
+    "F38.newgame": {
+      "first": "I can't find the New Game button — I expect it on screen all the time.",
+      "repeat": "I still can't find the New Game button — I expect it on screen all the time."
+    },
+    "F38.difficulty": {
+      "first": "I can't find where to choose the difficulty — I expect it on screen all the time.",
+      "repeat": "I still can't find where to choose the difficulty — I expect it on screen all the time."
+    },
+    "F38.cube": {
+      "first": "I can't see the doubling cube — I expect it on screen all the time.",
+      "repeat": "I still can't see the doubling cube — I expect it on screen all the time."
+    },
+    "F38.pipwhite": {
+      "first": "I can't see my pip count — I expect it on screen all the time.",
+      "repeat": "I still can't see my pip count — I expect it on screen all the time."
+    },
+    "F38.pipblack": {
+      "first": "I can't see the computer's pip count — I expect it on screen all the time.",
+      "repeat": "I still can't see the computer's pip count — I expect it on screen all the time."
+    },
+    "F38.turn": {
+      "first": "I can't see whose turn it is — I expect it on screen all the time.",
+      "repeat": "I still can't see whose turn it is — I expect it on screen all the time."
+    },
+    "F38.message": {
+      "first": "I can't see the game's messages — I expect them on screen all the time.",
+      "repeat": "I still can't see the game's messages — I expect them on screen all the time."
+    },
+    "F44": {
+      "first": "Some of the buttons aren't labelled with their names — I expect them to read Roll, Double, Undo, End Turn and New Game.",
+      "repeat": "Some of the buttons still aren't labelled with their names — I expect them to read Roll, Double, Undo, End Turn and New Game."
     }
   }
 }
