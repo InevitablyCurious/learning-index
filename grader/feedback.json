@@ -620,24 +620,24 @@
       "repeat": "Part of the board still runs off the edge of the screen."
     },
     "F30.undrawn": {
-      "first": "I can't see any triangles on the board — the points aren't drawn as triangles.",
-      "repeat": "I still can't see any triangles on the board — the points still aren't drawn as triangles."
+      "first": "I can't make out a triangle on any of the points — I expect each point drawn as a triangle that stands out from the board.",
+      "repeat": "I still can't make out a triangle on any of the points — I expect each point drawn as a triangle that stands out from the board."
     },
     "F30.someundrawn": {
-      "first": "Some of the points have no triangle drawn on them.",
-      "repeat": "Some of the points still have no triangle drawn on them."
+      "first": "Some of the points don't show a clear triangle — I expect each point drawn as a triangle that stands out from the board.",
+      "repeat": "Some of the points still don't show a clear triangle — I expect each point drawn as a triangle that stands out from the board."
     },
     "F30.short": {
-      "first": "The triangles are too short — they barely reach into the board.",
-      "repeat": "The triangles are still too short — they still barely reach into the board."
+      "first": "The triangles are too short — I expect each one to reach most of the way to the middle of the board.",
+      "repeat": "The triangles are still too short — I expect each one to reach most of the way to the middle of the board."
     },
     "F31": {
       "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place.",
       "repeat": "Fresh game again, and the checkers still don't sit on their points — still drawn off to the side or floating in the wrong place."
     },
     "F31.rim": {
-      "first": "The stacks don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point.",
-      "repeat": "The stacks still don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point."
+      "first": "Some of the stacks don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point.",
+      "repeat": "Some of the stacks still don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point."
     },
     "F32": {
       "first": "The off tray isn't showing — there's no place on the board for pieces that have been taken off.",
