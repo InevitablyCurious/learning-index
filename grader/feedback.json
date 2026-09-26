@@ -633,7 +633,7 @@
     },
     "F31": {
       "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place.",
-      "repeat": "Fresh game again, and the checkers still don't line up with their points, still floating off to the side."
+      "repeat": "Fresh game again, and the checkers still don't sit on their points — still drawn off to the side or floating in the wrong place."
     },
     "F31.rim": {
       "first": "The stacks don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point.",

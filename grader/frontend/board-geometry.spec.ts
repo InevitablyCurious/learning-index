@@ -121,8 +121,14 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
   // check: with the numbers wrong, a checker drawn where a player expects it
   // sits over the wrong number (a needs marker; stage 1 since Jerry's "first
   // look", 2026-09-26). A quarter of a point: a checker further off its
-  // point's centre than that is visibly misplaced. At 0.45, run 1790365975's checkers passed 33 px off
-  // centre (0.43 point) — half off their points, hanging over the frame.
+  // point's centre than that is visibly misplaced — when the whole piece shows.
+  // Its box is what is measured, and a piece its point's triangle cuts down
+  // shows only where the triangle is: run 1790425763's boxes sat 20 px off
+  // centre while the slivers that showed sat on the tips, and "still floating
+  // off to the side" was told. A piece that doesn't show whole is the
+  // every-piece-shows check's complaint (F43). At 0.45, run 1790365975's
+  // checkers passed 33 px off centre (0.43 point) — half off their points,
+  // hanging over the frame.
   const tolerance = 0.25 * pointWidth(points);
 
   for (const checker of checkers) {
@@ -135,7 +141,7 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
     const dx = Math.abs(checker.centerX - point.centerX);
     expect(
       dx < tolerance,
-      `[needs: F28] expected checker loc=${checker.loc} drawn centered over point ${point.num}, found checker centerX=${checker.centerX.toFixed(1)} vs point centerX=${point.centerX.toFixed(1)} (off by ${dx.toFixed(1)}, tolerance ${tolerance.toFixed(1)})`,
+      `[needs: F28 F43] expected checker loc=${checker.loc} drawn centered over point ${point.num}, found checker centerX=${checker.centerX.toFixed(1)} vs point centerX=${point.centerX.toFixed(1)} (off by ${dx.toFixed(1)}, tolerance ${tolerance.toFixed(1)})`,
     ).toBeTruthy();
 
     expect(
