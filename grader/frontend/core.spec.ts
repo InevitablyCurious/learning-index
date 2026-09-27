@@ -493,7 +493,13 @@ test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
 test("[F08] REQ-TESTID — difficulty selector", async ({ page }) => {
   await openApp(page);
 
-  const difficulty = page.getByTestId("difficulty");
+  // The dropdown a player uses: the tagged element when it is one, else the
+  // <select> inside it (run 1790473524 tagged a box around its dropdown; the
+  // page worked, and was told "When i change the difficulty level nothing
+  // actually changes").
+  const tagged = page.getByTestId("difficulty");
+  const isSelect = await tagged.evaluate((el) => el.tagName === "SELECT").catch(() => false);
+  const difficulty = isSelect ? tagged : tagged.locator("select").first();
   const newGameBtn = page.getByTestId("newGameBtn");
   // A player changes the difficulty only through controls they can see and
   // click: one the board is drawn over is the layout check's complaint (F38),
