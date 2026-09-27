@@ -230,11 +230,30 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
   const twelve = points.find((p) => p.num === 12);
   expect(one && twelve, "[needs: REQ-RENDER/point] expected points 1 and 12 to read").toBeTruthy();
   const homeOnRight = one!.centerX > twelve!.centerX;
-  const pastPointOne = homeOnRight
-    ? tray.x >= Math.max(...points.map((p) => p.x + p.width)) - 3
-    : tray.x + tray.width <= Math.min(...points.map((p) => p.x)) + 3;
+  const rowsRight = Math.max(...points.map((p) => p.x + p.width));
+  const rowsLeft = Math.min(...points.map((p) => p.x));
+  const pastPointOne = homeOnRight ? tray.x >= rowsRight - 3 : tray.x + tray.width <= rowsLeft + 3;
+  // A tagged tray at the wrong end is told only when nothing else there reads
+  // as a tray. Run 1790459992 kept a tray at each end — the tagged one, on the
+  // left, took the computer's pieces; another, past point 1, the player's — and
+  // four runs were told "The off tray isn't at the end of the board where I
+  // bear off": a player sees a strip at each end and can't tell which is the
+  // tray. Where each side's taken-off pieces go is bearing off's question
+  // (F11), not the first look's.
+  const otherTrayPastPointOne = await page.evaluate(
+    ({ right, left, onRight }) =>
+      [...document.querySelectorAll<HTMLElement>("[id], [class], [data-testid]")].some((el) => {
+        if (el.getAttribute("data-testid") === "off-tray") return false;
+        const name = `${el.id} ${el.getAttribute("class") ?? ""} ${el.getAttribute("data-testid") ?? ""}`.toLowerCase();
+        if (!/off|tray/.test(name)) return false;
+        const r = el.getBoundingClientRect();
+        if (r.width < 8 || r.height < 0.5 * innerHeight) return false;
+        return onRight ? r.left >= right - 3 : r.right <= left + 3;
+      }),
+    { right: rowsRight, left: rowsLeft, onRight: homeOnRight },
+  );
   expect(
-    pastPointOne,
+    pastPointOne || otherTrayPastPointOne,
     `[aspect: side] [needs: F28] the off tray (x ${tray.x.toFixed(0)}..${(tray.x + tray.width).toFixed(0)}) is not past points 1 and 24`,
   ).toBeTruthy();
   // It runs the full height of the board and holds a piece lying on its side

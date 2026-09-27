@@ -337,7 +337,7 @@
     "F32": {
       "name": "Off tray visible",
       "what": "The off tray is present and visible, not hidden or zero-sized, on the board, at the end where checkers bear off.",
-      "how": "New game: the off tray exists, is visible, is actually drawn (a fill, an outline or a label — not an empty see-through box), sits over no point, lies on the board (its centre inside the board's frame), lies past points 1 and 24 — the end white and black bear off from — runs at least 90% of the height of the rows of points, and is at least as wide as a checker (at most 90% of a point)."
+      "how": "New game: the off tray exists, is visible, is actually drawn (a fill, an outline or a label — not an empty see-through box), sits over no point, lies on the board (its centre inside the board's frame), lies past points 1 and 24 — the end white and black bear off from (not told while another tray-like element stands at that end: a player can't tell which strip is the tray) — runs at least 90% of the height of the rows of points, and is at least as wide as a checker (at most 90% of a point)."
     },
     "F33": {
       "name": "A double lets the player make four moves",
