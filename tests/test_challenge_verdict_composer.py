@@ -10,6 +10,7 @@ from harness.adapters.challenge import (
     MissingFeedbackOverrideError,
     load_feedback_overrides_from_failures,
 )
+from harness.adapters.challenge.constants import _CONSTRAINTS
 
 
 def _told(checks):
@@ -160,7 +161,13 @@ def test_build_feedback_prompt_openers_and_invariants() -> None:
     assert lines[1] == ""
     assert lines[2] == FIRST
     assert lines[3] == ""
-    assert lines[4:] == [f"1) {g01}", f"2) {g02}", f"3) {g03}"]
+    assert lines[4:] == [
+        f"1) {g01}",
+        f"2) {g02}",
+        f"3) {g03}",
+        "",
+        *_CONSTRAINTS.splitlines(),
+    ]
 
     empty = ChallengeRunner._build_feedback_prompt(checks=[])
     assert empty == (
@@ -168,5 +175,7 @@ def test_build_feedback_prompt_openers_and_invariants() -> None:
         "\n"
         f"{FIRST}\n"
         "\n"
-        "1) Something is still broken but I couldn't pin down what it was."
+        "1) Something is still broken but I couldn't pin down what it was.\n"
+        "\n"
+        f"{_CONSTRAINTS}"
     )

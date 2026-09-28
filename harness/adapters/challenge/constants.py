@@ -435,6 +435,12 @@ _EXCUSE_ELIMINATOR = _PACK.text("repair/opener.md")
 # lever, not the routing.
 _TEAM_EXCUSE_ELIMINATOR = _PACK.text("repair/team-note.md")
 
+# The integration surface the model must not rename or remove: data-testid
+# tags, API routes, response/state fields. Appended as the LAST paragraph of
+# EVERY repair message, unconditionally — it is a fact about what the checking
+# depends on, so it carries no gradient and is identical on every pass.
+_CONSTRAINTS = _PACK.text("repair/constraints.md")
+
 # The team's opener. DELIBERATELY NOT "conformance checks" — that is the
 # grader's word for the gate, a team integrating an app would never say it, and
 # it tells the model it is being measured. Same class of tell as the `FAILING`

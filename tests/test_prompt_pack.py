@@ -30,6 +30,7 @@ def test_the_example_challenge_provides_every_prompt_the_run_uses() -> None:
         "repair/team-header.md",
         "repair/team-header-alone.md",
         "repair/team-note.md",
+        "repair/constraints.md",
         "nudges/write-limit.md",
     ):
         assert pack.text(name).strip()
@@ -77,6 +78,7 @@ def test_the_template_skeleton_still_loads() -> None:
         "repair/team-header.md",
         "repair/team-header-alone.md",
         "repair/team-note.md",
+        "repair/constraints.md",
         "nudges/write-limit.md",
     ):
         assert pack.text(name).strip()

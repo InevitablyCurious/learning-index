@@ -35,6 +35,7 @@ from typing import Any
 
 from .constants import (
     _CHUNK_STUB_FILE,
+    _CONSTRAINTS,
     _EXCUSE_ELIMINATOR,
     _FEEDBACK_HEADER_FIRST,
     _FEEDBACK_HEADER_REPEAT,
@@ -837,6 +838,11 @@ class FeedbackMixin:
             for n, label in enumerate(by_channel["team"], start=1):
                 lines.append(f"{n}) {label}")
             lines += ["", _TEAM_EXCUSE_ELIMINATOR]
+
+        # The integration surface closes EVERY repair message, team or no
+        # team: it names what the checking depends on, so the model stops
+        # renaming or removing it while fixing the complaints above.
+        lines += ["", _CONSTRAINTS]
 
         return "\n".join(lines)
 

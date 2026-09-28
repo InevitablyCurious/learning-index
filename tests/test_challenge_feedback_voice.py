@@ -142,6 +142,7 @@ def test_first_failure_is_the_players_first_report() -> None:
     verdict now also opens with the excuse eliminator (the clean-browser fact),
     which precedes the opener."""
     from harness.adapters.challenge import _EXCUSE_ELIMINATOR
+    from harness.adapters.challenge.constants import _CONSTRAINTS
 
     text = ChallengeRunner._build_feedback_prompt(
         problems=_problems(), repeat_complaints=set()
@@ -156,7 +157,12 @@ def test_first_failure_is_the_players_first_report() -> None:
     # Grader vocabulary a player would never use.
     assert "FAILING" not in text
     # And the old bullet glue, which only existed to chain bullets together.
-    assert "\n- " not in text and "also the" not in text
+    # The constraints block is pack text that appends its own `- ` keep-list at
+    # the very end of every message; that is not player voice, so scope the
+    # glue check to the body before it.
+    body = text[: -len(_CONSTRAINTS)]
+    assert "\n- " not in body and "also the" not in body
+    assert text.endswith(_CONSTRAINTS)
 
 
 def test_repeat_failure_returns_new_information() -> None:
