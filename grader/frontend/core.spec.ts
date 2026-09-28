@@ -145,7 +145,11 @@ test("[F01] REQ-RENDER — page loads and the board appears", async ({ page }) =
   });
 
   await page.goto("/");
-  await expect(page.getByTestId("board")).toBeVisible();
+  // Found by its tag. A board drawn without the tag is the team's complaint
+  // (the tag check names it), never "the board doesn't show up": run
+  // 1790604214's third round drew its board and every piece, missing only the
+  // board's tag, and was told exactly that.
+  await expect(page.getByTestId("board"), "[needs: REQ-TESTID/testid.board]").toBeVisible();
 });
 
 test("[F27] REQ-RENDER — no console or page errors on load", async ({ page }) => {

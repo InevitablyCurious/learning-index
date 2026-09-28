@@ -87,12 +87,17 @@ export const test = base.extend<{ gameServer: ServerHandle }>({
 });
 
 /** A board that never draws or never settles is the render checks' complaint
- *  (a needs marker, harness/adapters/challenge/stages.py). */
+ *  (a needs marker, harness/adapters/challenge/stages.py) — and a board whose
+ *  points or pieces are drawn but untagged is the tag checks' complaint: the
+ *  settle wait finds them by tag, and run 1790597957's untagged page read as a
+ *  board that never settled, told in the player's voice through every check. */
 async function gameReady(page: Page): Promise<void> {
   try {
     await waitForBoardSettled(page);
   } catch (err) {
-    throw new Error(`[needs: REQ-RENDER/point REQ-RENDER/checker] ${(err as Error).message}`);
+    throw new Error(
+      `[needs: REQ-RENDER/point REQ-RENDER/checker REQ-TESTID/point REQ-TESTID/checker] ${(err as Error).message}`,
+    );
   }
 }
 
