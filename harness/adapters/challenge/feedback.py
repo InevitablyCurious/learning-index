@@ -47,6 +47,7 @@ from .constants import (
     _STUB_SENTINEL,
     _TEAM_EXCUSE_ELIMINATOR,
     _TEAM_HEADER,
+    _TEAM_HEADER_ALONE,
 )
 from .exceptions import MissingFeedbackOverrideError
 
@@ -642,6 +643,8 @@ class FeedbackMixin:
         problems: list[dict[str, Any]] | None = None,
         checks: list[str] | None = None,
         repeat_complaints: set[str] | None = None,
+        withheld: list[str] | None = None,
+        unevaluated: list[str] | None = None,
     ) -> str:
         """Compose the message the model receives after a failed attempt.
 
@@ -727,6 +730,10 @@ class FeedbackMixin:
         by_channel: dict[str, list[str]] = {"tester": [], "team": []}
         tester_kinds: list[str] = []
         seen: set[str] = set()
+        # A tester-channel check whose line went to the team (the app refused its
+        # setup, or an API call failed) is a tester who could not say what they
+        # saw. Set in the loop below; extended with withheld/unevaluated after.
+        tester_fell_silent = False
 
         for record in records:
             raw_check = str(record.get("check", "")).strip()
@@ -748,6 +755,8 @@ class FeedbackMixin:
             # never on the rendered sentence, which differs between passes.
             pass_kind = "repeat" if cls._complaint_id(record) in repeats else "first"
             label, channel = cls._told_label(record, pass_kind=pass_kind)
+            if channel == "team" and cls.feedback_channel(raw_check) == "tester":
+                tester_fell_silent = True
             # 320, not 200 (2026-09-05). The comment below has been right twice
             # over: at 200 it was ALREADY truncating two hand-written tester
             # lines (E04 at 267 characters, E02 at 244), and the software team's
@@ -781,26 +790,50 @@ class FeedbackMixin:
             else _FEEDBACK_HEADER_FIRST
         )
 
-        lines: list[str] = [_EXCUSE_ELIMINATOR, "", header, ""]
-        for n, label in enumerate(by_channel["tester"], start=1):
-            lines.append(f"{n}) {label}")
+        # A TESTER WHO COULD NOT SAY WHAT THEY SAW stays out of it. Run 1790597957
+        # round 2 dropped every tag the team reads, every check of the board
+        # stopped behind the team's finding, and the tester said "Nothing jumped
+        # out at me" of a board of four coloured blocks. What a player sees there
+        # is unknown, so the team speaks alone.
+        #
+        # The round's failing checks NOT told as a tester line: the later-stage
+        # checks the runner withheld, the checks it never evaluated (never
+        # reached, or stopped at a `[needs:]` the player did report), and a
+        # visible tester-channel check whose line went to the team (flagged in
+        # the loop above). Classified on the CHECK via feedback_channel, never
+        # by _told_label's voice: a refused setup is still a tester-channel check.
+        tester_fell_silent = tester_fell_silent or any(
+            cls.feedback_channel(check) == "tester"
+            for check in ((withheld or []) + (unevaluated or []))
+        )
+        tester_speaks = bool(by_channel["tester"]) or not by_channel["team"] or not tester_fell_silent
 
-        # The tester always speaks, even with nothing to report: the opener has
-        # already promised a list, and an opener with no list under it reads as
-        # a truncated message rather than a clean run.
-        if not by_channel["tester"]:
-            lines.append(
-                "1) Something is still broken but I couldn't pin down what it was."
-                if not by_channel["team"]
-                else "1) Nothing jumped out at me this time while I was playing."
-            )
+        lines: list[str] = [_EXCUSE_ELIMINATOR, ""]
+        if tester_speaks:
+            lines += [header, ""]
+            for n, label in enumerate(by_channel["tester"], start=1):
+                lines.append(f"{n}) {label}")
+
+            # The tester always speaks when they have anything to stand on, even
+            # with nothing to report: the opener has already promised a list,
+            # and an opener with no list under it reads as a truncated message
+            # rather than a clean run.
+            if not by_channel["tester"]:
+                lines.append(
+                    "1) Something is still broken but I couldn't pin down what it was."
+                    if not by_channel["team"]
+                    else "1) Nothing jumped out at me this time while I was playing."
+                )
 
         # The team section appears ONLY when the team has something to say.
         # Announcing an integration attempt and then listing nothing would be a
         # sentence with no content, and it would still hand the model a party to
         # argue with.
         if by_channel["team"]:
-            lines += ["", _TEAM_HEADER, ""]
+            if tester_speaks:
+                lines += ["", _TEAM_HEADER, ""]
+            else:
+                lines += [_TEAM_HEADER_ALONE, ""]
             for n, label in enumerate(by_channel["team"], start=1):
                 lines.append(f"{n}) {label}")
             lines += ["", _TEAM_EXCUSE_ELIMINATOR]

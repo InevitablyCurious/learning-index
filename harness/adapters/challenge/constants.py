@@ -440,6 +440,8 @@ _TEAM_EXCUSE_ELIMINATOR = _PACK.text("repair/team-note.md")
 # it tells the model it is being measured. Same class of tell as the `FAILING`
 # label that was removed from the old bullet list.
 _TEAM_HEADER = _PACK.text("repair/team-header.md")
+# The team's opener when the tester has nothing they could say (feedback.py).
+_TEAM_HEADER_ALONE = _PACK.text("repair/team-header-alone.md")
 
 # The two list headers and the fixed-problems opener. Singular and plural are
 # separate files rather than a formatted string: a challenge author writes the

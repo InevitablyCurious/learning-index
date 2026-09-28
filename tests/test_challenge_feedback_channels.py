@@ -29,12 +29,33 @@ from harness.adapters.challenge import (
     ChallengeRunner as R,
     load_feedback_overrides_from_failures,
 )
+from harness.adapters.challenge.constants import _GRADER_DIR
+from harness.adapters.challenge.stages import load_stages, player_view
 
 GATES = Path(__file__).resolve().parents[1] / "grader"
+STAGES = load_stages(_GRADER_DIR / "checks.json")
 
 
 def _problem(check: str) -> dict[str, str]:
     return {"check": check, "expected": "present", "observed": "missing"}
+
+
+def _infra(check: str) -> bool:
+    return R._is_harness_infra_check(check)
+
+
+def _feedback(problems: list[dict[str, str]]):
+    """The real path, exactly as the runner drives it (runner.py): stage the
+    problems with player_view, then hand the builder the visible problems plus
+    the withheld and unevaluated checks."""
+    view = player_view(problems, STAGES, is_infra=_infra)
+    msg = R._build_feedback_prompt(
+        problems=view.visible,
+        repeat_complaints=set(),
+        withheld=view.withheld,
+        unevaluated=view.unevaluated,
+    )
+    return view, msg
 
 
 def test_the_channel_is_decided_in_one_place() -> None:
@@ -86,6 +107,103 @@ def test_the_team_section_is_absent_when_the_team_has_nothing_to_say() -> None:
         problems=[_problem("[G07] REQ-HIT — hitting → bar")],
     )
     assert "software team" not in msg
+
+
+def test_a_tester_whose_checks_went_unevaluated_does_not_claim_a_clean_look() -> None:
+    """Run 1790597957, round 2: the page dropped every tag the team reads, every
+    player check of the board stopped behind that finding, and the tester said
+    "Nothing jumped out at me this time while I was playing" of a board drawn as
+    four coloured blocks. What a player sees there is unknown: the team speaks
+    alone, and its opener no longer begins "Also"."""
+    skipped = "never evaluated — an earlier step failed and skipped it"
+    view, msg = _feedback(
+        [
+            {"check": "conformance:REQ-TESTID/testid.board", "observed": skipped},
+            {"check": "conformance:REQ-RENDER/checker", "observed": skipped},
+            {"check": "conformance:REQ-TESTID/dom — page DOM exposes the required testids", "observed": "missing"},
+        ]
+    )
+    assert [p["check"].split(" ")[0] for p in view.visible] == ["conformance:REQ-TESTID/dom"]
+    assert "conformance:REQ-RENDER/checker" in view.unevaluated
+    assert "Nothing jumped out" not in msg
+    assert "while playing the game" not in msg, "no tester opener promising a list"
+    assert "Also, my software team" not in msg, "the team opens alone, without 'Also'"
+    assert "My software team" in msg
+    assert "isn't there to find" in msg, "the team line (and its note) is present"
+
+
+@pytest.mark.parametrize(
+    "observed",
+    [
+        "Error: SETUP REFUSED: /api/debug/state did not take difficulty (sent difficulty)",
+        "Error: POST /api/new failed (500)",
+    ],
+)
+def test_a_tester_check_told_in_the_teams_voice_still_silences_the_tester(observed: str) -> None:
+    """D1: a player-visible check whose finding is a refused setup or a failed
+    API call is TOLD in the team's voice, but it is still a player check — the
+    tester had something they could not say, so they say nothing."""
+    view, msg = _feedback([{"check": "[F02] REQ-RENDER — start game renders full board", "observed": observed}])
+    assert view.visible and view.visible[0]["check"].startswith("[F02]")
+    assert "Nothing jumped out" not in msg
+    assert "while playing the game" not in msg
+    assert "Also, my software team" not in msg
+    assert "My software team" in msg
+
+
+def test_a_later_stage_tester_failure_silences_the_tester() -> None:
+    """D5: the tester's complaint is a later stage the player never reached —
+    they cannot have seen it, so they cannot honestly say the board was fine."""
+    view, msg = _feedback(
+        [
+            {"check": "conformance:REQ-TESTID/testid.board", "observed": "missing"},
+            {"check": "[G07] REQ-HIT — hitting → bar", "observed": "x"},
+        ]
+    )
+    assert [p["check"].split(" ")[0] for p in view.visible] == ["conformance:REQ-TESTID/testid.board"]
+    assert view.withheld == ["[G07] REQ-HIT — hitting → bar"]
+    assert "Nothing jumped out" not in msg
+    assert "while playing the game" not in msg
+    assert "Also, my software team" not in msg
+    assert "My software team" in msg
+
+
+def test_no_failing_tester_check_keeps_the_tester_claiming_a_clean_look() -> None:
+    """Every player-visible check this round is team-owned: the tester genuinely
+    saw nothing, so the honest line is the clean-look one."""
+    view, msg = _feedback(
+        [{"check": 'conformance:REQ-STATE/state.winType — /api/state carries "winType"', "observed": "missing"}]
+    )
+    assert [p["check"].split(" ")[0] for p in view.visible] == ["conformance:REQ-STATE/state.winType"]
+    assert view.withheld == [] and view.unevaluated == []
+    assert "1) Nothing jumped out at me this time while I was playing." in msg
+    assert "Also, my software team" in msg
+
+
+def test_nothing_at_all_still_says_something_is_broken() -> None:
+    """A FAIL with no itemised checks is still a failure, never a clean run."""
+    view, msg = _feedback([])
+    assert view.stage is None and view.visible == [] and view.withheld == [] and view.unevaluated == []
+    assert "1) Something is still broken but I couldn't pin down what it was." in msg
+    assert "Nothing jumped out" not in msg
+
+
+def test_the_team_alone_is_not_the_graders_vocabulary() -> None:
+    """The team speaking ALONE (the tester silenced) must clear the same
+    vocabulary bar — _TEAM_HEADER_ALONE is model-facing text too."""
+    skipped = "never evaluated — an earlier step failed and skipped it"
+    _, msg = _feedback(
+        [
+            {"check": "conformance:REQ-TESTID/testid.board", "observed": skipped},
+            {"check": "conformance:REQ-RENDER/checker", "observed": skipped},
+            {"check": "conformance:REQ-TESTID/dom — page DOM exposes the required testids", "observed": "missing"},
+        ]
+    )
+    lowered = msg.lower()
+    for word in ("conformance", "pre-gate", "gate", "harness", "benchmark", "grader"):
+        assert word not in lowered, f"the message says {word!r} — that is grader vocabulary"
+    assert "Also, my software team" not in msg
+    assert "My software team" in msg
 
 
 def test_the_team_carries_its_own_excuse_eliminator() -> None:

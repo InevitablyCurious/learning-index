@@ -28,6 +28,7 @@ def test_the_example_challenge_provides_every_prompt_the_run_uses() -> None:
         "repair/fixed-one.md",
         "repair/fixed-many.md",
         "repair/team-header.md",
+        "repair/team-header-alone.md",
         "repair/team-note.md",
         "nudges/write-limit.md",
     ):
@@ -73,6 +74,9 @@ def test_the_template_skeleton_still_loads() -> None:
         "repair/no-change.md",
         "repair/fixed-one.md",
         "repair/fixed-many.md",
+        "repair/team-header.md",
+        "repair/team-header-alone.md",
+        "repair/team-note.md",
         "nudges/write-limit.md",
     ):
         assert pack.text(name).strip()

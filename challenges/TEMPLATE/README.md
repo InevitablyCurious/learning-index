@@ -27,7 +27,7 @@ this; everything below exists there in finished form.
 | `repair/repeat-round.md` | Heading when problems are still there after a fix attempt. |
 | `repair/no-change.md` | Put first when the model's last round changed no code at all. |
 | `repair/fixed-one.md` / `fixed-many.md` | Opens the list of problems that are now gone. |
-| `repair/team-header.md` / `team-note.md` | Optional second voice, for checks a different kind of user would hit. |
+| `repair/team-header.md` / `team-header-alone.md` / `team-note.md` | Optional second voice, for checks a different kind of user would hit. `team-header-alone.md` opens their list when the tester has nothing they could say. |
 | `nudges/write-limit.md` | The write-size limit, written once and reused. |
 | `nudges/cut-off.md`, `loop.md`, `stall.md`, `connection.md` | What the user says when the benchmark has to interrupt: a reply that got cut off, going in circles, a command that ran too long, a dropped connection. Use `{write_limit}` to include the limit above. |
 

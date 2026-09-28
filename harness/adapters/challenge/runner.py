@@ -1891,6 +1891,8 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     # The repeats also choose the opener (feedback.py): "I'm
                     # still seeing these problems" heads a list of repeats only.
                     repeat_complaints=repeat_complaints,
+                    withheld=stage_view.withheld,
+                    unevaluated=stage_view.unevaluated,
                 )
                 # WO-FEEDBACK-ONEPHASE: fold the pass verdict into the single
                 # round message — the player acknowledges what is fixed, then
