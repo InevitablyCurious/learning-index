@@ -29,6 +29,7 @@ this; everything below exists there in finished form.
 | `repair/fixed-one.md` / `fixed-many.md` | Opens the list of problems that are now gone. |
 | `repair/team-header.md` / `team-header-alone.md` / `team-note.md` | Optional second voice, for checks a different kind of user would hit. `team-header-alone.md` opens their list when the tester has nothing they could say. |
 | `repair/constraints.md` | Ends every repair message: the outside surface to keep exactly as it is — element tags, routes, and response fields, named. |
+| `repair/regression-round.md` / `team-regression.md` | Opens the list of problems that were working last round and broke now, in the tester's and the team's voices. |
 | `nudges/write-limit.md` | The write-size limit, written once and reused. |
 | `nudges/cut-off.md`, `loop.md`, `stall.md`, `connection.md` | What the user says when the benchmark has to interrupt: a reply that got cut off, going in circles, a command that ran too long, a dropped connection. Use `{write_limit}` to include the limit above. |
 

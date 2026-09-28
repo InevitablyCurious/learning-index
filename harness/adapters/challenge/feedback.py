@@ -45,10 +45,12 @@ from .constants import (
     _PACK,
     _SPEC,
     _PASS_VERDICT_MAX_LISTED,
+    _REGRESSION_HEADER,
     _STUB_SENTINEL,
     _TEAM_EXCUSE_ELIMINATOR,
     _TEAM_HEADER,
     _TEAM_HEADER_ALONE,
+    _TEAM_REGRESSION_HEADER,
 )
 from .exceptions import MissingFeedbackOverrideError
 
@@ -646,6 +648,7 @@ class FeedbackMixin:
         repeat_complaints: set[str] | None = None,
         withheld: list[str] | None = None,
         unevaluated: list[str] | None = None,
+        regressions: set[str] | None = None,
     ) -> str:
         """Compose the message the model receives after a failed attempt.
 
@@ -700,6 +703,16 @@ class FeedbackMixin:
         gradient on purpose: it is a fact about how grading happens, not a
         sighting, so it carries no new information and only the opener and the
         per-gate lines carry the gradient.
+
+        REGRESSIONS (2026-09-28). A check that PASSED the immediately-previous
+        graded round and fails now is the model's own fix undoing code that
+        worked — a different event from an ordinary complaint. ``regressions``
+        carries those raw check strings (aspect-free, runner-side
+        ``_regressed_checks``); each channel heads its regressed labels with
+        its own opener (_REGRESSION_HEADER / _TEAM_REGRESSION_HEADER) BEFORE
+        the ordinary complaint list, and the ordinary tester header reflects
+        only the ordinary labels. With ``regressions`` empty the message is
+        byte-identical to the shape without it.
         """
         # Accept either the rich problem records or a bare check list, so older
         # callers and tests keep working unchanged.
@@ -710,6 +723,7 @@ class FeedbackMixin:
             records = [{"check": c} for c in (checks or [])]
 
         repeats = repeat_complaints or set()
+        regressions = regressions or set()
 
         # The excuse eliminator opens the message; then the opener; then the
         # numbered complaints. See the docstring for why it is first.
@@ -729,7 +743,16 @@ class FeedbackMixin:
         # Both lists are numbered from 1: they are two people's accounts, not
         # one list with a divider.
         by_channel: dict[str, list[str]] = {"tester": [], "team": []}
-        tester_kinds: list[str] = []
+        # The REGRESSED labels per channel, in record order: checks told this
+        # round that passed the immediately-previous graded round on changed
+        # code, keyed on the raw check string (runner._regressed_checks).
+        # by_channel still holds EVERY label — tester_speaks, the filler and
+        # the team gate all read it — this dict only splits the emission.
+        regressed: dict[str, list[str]] = {"tester": [], "team": []}
+        # Pass-kinds of the NON-regressed tester labels only: a regression is
+        # always a first sighting, and the ordinary header ("still seeing")
+        # must describe only the ordinary list it heads.
+        tester_ordinary_kinds: list[str] = []
         seen: set[str] = set()
         # A tester-channel check whose line went to the team (the app refused its
         # setup, or an API call failed) is a tester who could not say what they
@@ -779,15 +802,19 @@ class FeedbackMixin:
                 continue
             seen.add(label)
             by_channel[channel].append(label)
-            if channel == "tester":
-                tester_kinds.append(pass_kind)
+            is_regression = raw_check in regressions
+            if is_regression:
+                regressed[channel].append(label)
+            if channel == "tester" and not is_regression:
+                tester_ordinary_kinds.append(pass_kind)
 
         # "I'm still seeing these problems" only over problems they are still
         # seeing: a stage that just unlocked lists new ones, and heading them
         # "still" told the model it had heard them before (run 1790349319).
         header = (
             _FEEDBACK_HEADER_REPEAT
-            if tester_kinds and all(kind == "repeat" for kind in tester_kinds)
+            if tester_ordinary_kinds
+            and all(kind == "repeat" for kind in tester_ordinary_kinds)
             else _FEEDBACK_HEADER_FIRST
         )
 
@@ -811,9 +838,28 @@ class FeedbackMixin:
 
         lines: list[str] = [_EXCUSE_ELIMINATOR, ""]
         if tester_speaks:
-            lines += [header, ""]
-            for n, label in enumerate(by_channel["tester"], start=1):
-                lines.append(f"{n}) {label}")
+            # A REGRESSION GETS ITS OWN OPENER, FIRST: a check that passed the
+            # immediately-previous graded round and fails now is the model's own
+            # fix undoing working code, and that news heads the tester's list
+            # before the ordinary complaints. Numbered from 1 like every list:
+            # two sightings by the same person, not one list with a divider.
+            if regressed["tester"]:
+                lines += [_REGRESSION_HEADER, ""]
+                for n, label in enumerate(regressed["tester"], start=1):
+                    lines.append(f"{n}) {label}")
+            regressed_tester = set(regressed["tester"])
+            ordinary_tester = [
+                label for label in by_channel["tester"] if label not in regressed_tester
+            ]
+            # The ordinary header heads the ordinary list — and the filler line
+            # below, which IS the tester's list when they have nothing to name.
+            # With `regressions` empty this is byte-identical to the old shape.
+            if ordinary_tester or not by_channel["tester"]:
+                if regressed["tester"]:
+                    lines.append("")
+                lines += [header, ""]
+                for n, label in enumerate(ordinary_tester, start=1):
+                    lines.append(f"{n}) {label}")
 
             # The tester always speaks when they have anything to stand on, even
             # with nothing to report: the opener has already promised a list,
@@ -831,12 +877,30 @@ class FeedbackMixin:
         # sentence with no content, and it would still hand the model a party to
         # argue with.
         if by_channel["team"]:
-            if tester_speaks:
-                lines += ["", _TEAM_HEADER, ""]
-            else:
-                lines += [_TEAM_HEADER_ALONE, ""]
-            for n, label in enumerate(by_channel["team"], start=1):
-                lines.append(f"{n}) {label}")
+            # The team's regressions head its section, under the team's own
+            # regression opener. The leading blank separates from the tester
+            # block; when the tester is silent the excuse-eliminator's trailing
+            # "" is already exactly that blank — never double it.
+            if regressed["team"]:
+                if tester_speaks:
+                    lines.append("")
+                lines += [_TEAM_REGRESSION_HEADER, ""]
+                for n, label in enumerate(regressed["team"], start=1):
+                    lines.append(f"{n}) {label}")
+            regressed_team = set(regressed["team"])
+            ordinary_team = [
+                label for label in by_channel["team"] if label not in regressed_team
+            ]
+            if ordinary_team:
+                # _TEAM_HEADER_ALONE only when the ordinary list is the team's
+                # FIRST sub-list AND the tester is silent; a regression list or
+                # a tester list ahead of it makes the "Also," variant correct.
+                team_alone = not tester_speaks and not regressed["team"]
+                if not team_alone:
+                    lines.append("")
+                lines += [_TEAM_HEADER_ALONE if team_alone else _TEAM_HEADER, ""]
+                for n, label in enumerate(ordinary_team, start=1):
+                    lines.append(f"{n}) {label}")
             lines += ["", _TEAM_EXCUSE_ELIMINATOR]
 
         # The integration surface closes EVERY repair message, team or no

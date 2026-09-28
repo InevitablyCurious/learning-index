@@ -165,6 +165,35 @@ def _code_unchanged_since_last_round(attempt_reports: list[dict[str, Any]]) -> b
     after = attempt_reports[-1].get("state_hash")
     return before is not None and before == after
 
+
+def _regressed_checks(
+    attempt_reports: list[dict[str, Any]], visible: list[dict[str, Any]]
+) -> set[str]:
+    """The checks told THIS round that PASSED the immediately-previous graded round.
+
+    A regression is the model's own fix undoing code that worked: the check is
+    told this round (it is in ``visible``) and the previous round — which
+    actually graded, on changed code — did not carry it in ``failed_gates``.
+    ``failed_gates`` holds every non-passing check of a normal round — failing,
+    withheld, unevaluated, ``[needs:]``-blocked — so absence from it means the
+    check genuinely passed last round. A degraded previous round (gate timeout,
+    instrument fault) graded nothing, so nothing is known to have "worked";
+    unchanged code cannot regress anything. Both return the empty set.
+    """
+    if len(attempt_reports) < 2:
+        return set()
+    prev = attempt_reports[-2]
+    if prev.get("gate_timeout") or prev.get("instrument_fault"):
+        return set()
+    if _code_unchanged_since_last_round(attempt_reports):
+        return set()
+    prev_failed = {str(g).strip() for g in (prev.get("failed_gates") or [])}
+    return {
+        str(p.get("check", "")).strip()
+        for p in visible
+        if isinstance(p, dict) and str(p.get("check", "")).strip() not in prev_failed
+    }
+
 class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, TransportMixin, BootstrapMixin, GradingMixin, ServeMixin, AgentRunner):
     def __init__(
         self,
@@ -1886,6 +1915,10 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     check = str(p.get("check", "")).strip()
                     if check and check not in told_first_label:
                         told_first_label[check] = self._told_label(p, pass_kind="first")[0]
+                # A check told this round that PASSED the immediately-previous
+                # graded round is a REGRESSION — the model's own fix undid code
+                # that worked — and is told under its own opener (feedback.py).
+                regressions = _regressed_checks(attempt_reports, stage_view.visible)
                 feedback = self._build_feedback_prompt(
                     problems=stage_view.visible,
                     # The repeats also choose the opener (feedback.py): "I'm
@@ -1893,6 +1926,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     repeat_complaints=repeat_complaints,
                     withheld=stage_view.withheld,
                     unevaluated=stage_view.unevaluated,
+                    regressions=regressions,
                 )
                 # WO-FEEDBACK-ONEPHASE: fold the pass verdict into the single
                 # round message — the player acknowledges what is fixed, then

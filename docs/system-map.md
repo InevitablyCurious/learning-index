@@ -182,6 +182,15 @@ grader, model, challenge, compaction, scaffold, golden, worker image); the opera
 picks the artifact run and the record stores its signed deviation from the median.
 `control/baselines.mjs` no longer picks `scorable[length-1]`.
 
+**`chunk_plan_hash` hashes the WHOLE prompts tree, not the build steps.** The
+"build prompts" fingerprint input is `chunk_plan_hash` = `dir_hash(task_dir / "prompts")`
+(`harness/fingerprint.py:75`); `dir_hash` walks every regular file recursively
+(`harness/fingerprint.py:41-60`, no `chunk-*.md` filter). So adding or editing ANY
+prompt file — a repair opener, a nudge, a `failures/` line — silently moves
+`chunk_plan_hash` for the whole tree, and a pinned batch/campaign is voided as
+superseded naming `chunk_plan_hash` (`control/baselines.mjs:550-555`). Before
+touching a prompt file, check whether a live campaign or OFF baseline is pinned to it.
+
 **Contention covariates.** The 7 covariates (`http_429_count`, `http_402_count`,
 `retry_count`, `upstream_error_count`, `wall_near_timeout`, `max_request_ms`,
 `median_request_ms`) are surfaced on scored + batch records; the missing-telemetry

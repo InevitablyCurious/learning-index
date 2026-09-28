@@ -18,6 +18,7 @@ from harness.adapters.challenge import (
     _OpencodeRunStats,
 )
 from harness.adapters.docker_worker import ImageFingerprint
+from harness.adapters.challenge.constants import _REGRESSION_HEADER
 
 
 def _told(checks):
@@ -498,8 +499,9 @@ def test_a_complaint_that_was_fixed_and_came_back_is_not_still_there(
     # Run 1790357047: the off tray was told, then "That fixed it", then the
     # model undid its own fix — and was told the tray was "still" over the
     # points. A complaint is a repeat only if it failed in every grade since it
-    # was told; one that came back is a new sighting, and a list with anything
-    # new on it opens as a report, not with "I'm still seeing these problems".
+    # was told; one that came back is a REGRESSION — told under its own opener,
+    # never "still". The complaint that never went away keeps its
+    # second-sighting line under "I'm still seeing these problems".
     runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=4)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
@@ -542,7 +544,10 @@ def test_a_complaint_that_was_fixed_and_came_back_is_not_still_there(
     assert runner._told_label({"check": stays}, pass_kind="repeat")[0] in third, (
         "the complaint that never went away keeps its second-sighting line"
     )
-    assert "I'm still seeing these problems" not in third, "a list with a new sighting opens as a report"
+    assert _REGRESSION_HEADER in third, "the returning complaint is told as a regression"
+    assert "I'm still seeing these problems" in third, (
+        "the complaint that never went away is still headed 'still'"
+    )
 
 
 @pytest.mark.parametrize(

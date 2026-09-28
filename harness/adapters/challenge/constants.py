@@ -458,6 +458,14 @@ _FEEDBACK_HEADER_REPEAT = _PACK.text("repair/repeat-round.md")
 _FIXED_OPENER_ONE = _PACK.text("repair/fixed-one.md")
 _FIXED_OPENER_MANY = _PACK.text("repair/fixed-many.md")
 
+# The two regression openers, one per channel. A check that PASSED the
+# immediately-previous graded round and fails now is the model's own fix
+# undoing code that worked — a different event from an ordinary complaint, so
+# each channel heads its regressed checks with its own opener, before the
+# ordinary list (feedback.py `_build_feedback_prompt`).
+_REGRESSION_HEADER = _PACK.text("repair/regression-round.md")
+_TEAM_REGRESSION_HEADER = _PACK.text("repair/team-regression.md")
+
 # ── A ROUND THAT CHANGED NOTHING ────────────────────────────────────────────
 #
 # Runs 1789536879 and 1789564423 each had repair rounds whose code was
