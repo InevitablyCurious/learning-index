@@ -628,8 +628,12 @@
       "repeat": "Some of the points still don't show a clear triangle — I expect each point drawn as a triangle that stands out from the board."
     },
     "F30.short": {
-      "first": "The triangles are too short — I expect each one to reach most of the way to the middle of the board.",
-      "repeat": "The triangles are still too short — I expect each one to reach most of the way to the middle of the board."
+      "first": "The triangles only stand out from the board in the half nearest the edge — I expect each one to stand out most of the way to the middle of the board.",
+      "repeat": "The triangles still only stand out from the board in the half nearest the edge — I expect each one to stand out most of the way to the middle of the board."
+    },
+    "F30.someshort": {
+      "first": "Some of the triangles only stand out from the board in the half nearest the edge — I expect each one to stand out most of the way to the middle of the board.",
+      "repeat": "Some of the triangles still only stand out from the board in the half nearest the edge — I expect each one to stand out most of the way to the middle of the board."
     },
     "F31": {
       "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place.",

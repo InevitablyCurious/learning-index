@@ -389,12 +389,15 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
     `${needsRows}expected every point's triangle to point inward (wider at the rim than further in), found outward-pointing point numbers: ${outward.join(", ")}`,
   ).toEqual([]);
 
-  // And it reaches into the board: at least half way in from the rim (the
-  // reference's run 88%). Run 1790396722's triangles reached a fifth of the way.
+  // And it stands out at least half way in from the rim (the reference's run
+  // 88%). Run 1790396722's triangles reached a fifth of the way; run
+  // 1790474431's reached the middle but faded into the felt, so the blue half
+  // of them stopped standing out before half way — told as some, not all, and
+  // never as "too short" (the paint, not the shape, ends there).
   const short = judged.filter((s) => s.reach < 0.5).map((s) => s.num);
   expect(
     short,
-    `${needsRows}[aspect: short] triangles reaching less than half way in from the rim on points: ${short.join(", ")}`,
+    `${needsRows}${short.length === judged.length ? "[aspect: short]" : "[aspect: someshort]"} triangles standing out less than half way in from the rim on points: ${short.join(", ")}`,
   ).toEqual([]);
 });
 
