@@ -344,6 +344,61 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   }
 });
 
+test("[G05] REQ-HIGHER-DIE — use higher die", async ({ page }) => {
+  // Judged on screen, as a player meets it. Run 1790627099's server listed the
+  // smaller number's move in this spot while its page showed only the 4, and
+  // the player was told the game "showed me a move with the smaller number":
+  // the gate had read the server's list. One white piece on 13 and a
+  // three-deep black block on 6: with a 3 and a 4 only one number plays, and it
+  // must be the 4. (Three deep, not two: a two-deep block trips the
+  // land-on-a-block mutation M12, whose own line is G04's.)
+  await openApp(page);
+  const points = emptyPoints();
+  points[13] = 1;
+  points[6] = -3;
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 14, black: 12 },
+    turn: "white",
+    phase: "move",
+    dice: [3, 4],
+    remainingDice: [3, 4],
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  // The player picks the piece up and reads the hints it shows. A piece that
+  // shows none offers the smaller number nothing: not this gate's finding.
+  const hints = page.getByTestId("hint");
+  const piece = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
+  if ((await piece.count()) > 0) await playerClickUntilShown(piece.last(), hints, 3);
+  const shown = await hints.evaluateAll((els) =>
+    els
+      .map((el, i) => ({ i, text: (el as HTMLElement).innerText, on: (el as HTMLElement).checkVisibility() }))
+      .filter((hint) => hint.on),
+  );
+  const smaller = shown.find((hint) => normalizeHint(hint.text).split("/").includes("3"));
+  if (smaller) {
+    const board = async () => {
+      const s = await readState(page);
+      return JSON.stringify([s.points, s.bar, s.off]);
+    };
+    const before = await board();
+    await playerClick(hints.nth(smaller.i));
+    const played = await expect
+      .poll(board, { timeout: 2_000 })
+      .not.toBe(before)
+      .then(
+        () => true,
+        () => false,
+      );
+    expect(played, "the game played the smaller number").toBe(false);
+  }
+  expect(smaller === undefined, "[aspect: offered] the game showed a hint for the smaller number").toBe(true);
+});
+
 test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {
   await openApp(page);
 

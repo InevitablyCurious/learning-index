@@ -190,35 +190,6 @@ describe("Backgammon backend gates 13-16", () => {
       expect(blackOf(state), "[aspect: skipped] the roll came back to white and black never moved").not.toBe(blackBefore);
     });
 
-    it("[G05] REQ-HIGHER-DIE — use higher die", async () => {
-      // Played through the game, as a player meets it: run 1790615587's engine
-      // still listed the smaller die, its server refused the move, and the
-      // player — offered a move they could not make — was told the game "let me
-      // move with the smaller number". One white checker on 13 and a
-      // three-deep black block on 6: with a 3 and a 4 only one number plays,
-      // and it must be the 4. (Three deep, not two: a two-deep block trips the
-      // land-on-a-block mutation M12, whose own line is G04's.)
-      const points = emptyPoints();
-      points[13] = 1;
-      points[6] = -3;
-      await debugSetState(
-        makeState({
-          points,
-          off: { white: 14, black: 12 },
-          turn: "white",
-          phase: "move",
-          dice: [3, 4],
-          remainingDice: [3, 4],
-        }),
-      );
-      const state = await getState();
-      const dice = (s: any) => JSON.stringify([...((s.remainingDice ?? []) as number[])].sort());
-      const listed = ((state.legalMoves ?? []) as Move[]).some((m) => m.from === 13 && m.to === 10 && m.die === 3);
-      const tried = await api("/api/move", { from: 13, to: 10, die: 3 });
-      expect(dice(tried), "the game played the smaller number").toBe(dice(state));
-      expect(listed, "[aspect: offered] the game listed the smaller number's move").toBe(false);
-    });
-
     it("[G13] REQ-TURN — auto-pass when stuck on bar", async () => {
       // A REAL position, 15 a side, as the spec promises every seed is
       // (chunk-03.md: "exactly 15 checkers per side"). It was 1 white and 4
