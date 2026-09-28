@@ -528,6 +528,13 @@ test("[F08] REQ-TESTID — difficulty selector", async ({ page }) => {
     })
     .toBe("hard");
 
+  // A player picks again once the new game shows. The page draws the server's
+  // reply a moment after the server has it, and a choice made inside that
+  // moment is set back when the reply is drawn: run 1790474431's second round
+  // set its dropdown from each reply, changed difficulty every time at a
+  // player's pace, and was told "nothing actually changes" when the grader
+  // chose again a few milliseconds after the server had the first game.
+  await page.waitForTimeout(1000);
   await difficulty.selectOption("easy");
   await newGameBtn.click();
   await expect
