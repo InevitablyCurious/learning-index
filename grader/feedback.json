@@ -167,6 +167,10 @@
       "first": "The computer never takes its turn — after I move it just sits there and I never get to go again.",
       "repeat": "I moved again and the computer still just sits there, never taking its turn."
     },
+    "G25.skipped": {
+      "first": "When I end my turn the computer doesn't move — it's straight back to my roll.",
+      "repeat": "I ended my turn again and the computer still didn't move — straight back to my roll."
+    },
     "G25.nomove": {
       "first": "After I rolled, there was no checker I could pick up to move.",
       "repeat": "Rolled again and there still wasn't a checker I could pick up to move."

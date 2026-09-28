@@ -154,22 +154,24 @@ describe("Backgammon backend gates 13-16", () => {
 
       expect(state.turnOver).toBe(true);
 
+      // The computer's turn, however the app runs it: step by step through
+      // /api/ai, or whole inside /api/endturn. Run 1790608868's server played
+      // it inside end turn — black moved and the roll came back to the player,
+      // who watched the computer take its turn — and was told the computer
+      // "just sits there". Its pieces moving is the computer taking its turn.
+      const blackOf = (s: any) =>
+        JSON.stringify([(s.points as number[]).map((n) => Math.min(n, 0)), s.bar.black, s.off.black]);
+      const blackBefore = blackOf(state);
       state = await api("/api/endturn", {});
-      let sawBlack = state.turn === "black";
 
       let guard = 0;
       while (state.turn !== "white" && guard < 12) {
-        if (state.turn === "black") {
-          sawBlack = true;
-          state = await api("/api/ai", {});
-        } else {
-          state = await getState();
-        }
+        state = state.turn === "black" ? await api("/api/ai", {}) : await getState();
         guard++;
       }
 
-      expect(sawBlack).toBe(true);
       expect(state.turn).toBe("white");
+      expect(blackOf(state), "[aspect: skipped] the roll came back to white and black never moved").not.toBe(blackBefore);
     });
 
     it("[G13] REQ-TURN — auto-pass when stuck on bar", async () => {

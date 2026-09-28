@@ -219,9 +219,22 @@ export async function pickUpAPiece(page: Page, hints: Locator): Promise<boolean>
   ] as const) {
     for (const loc of locs) {
       const pieces = page.locator(`[data-testid="checker"][data-color="white"][data-loc="${loc}"]`);
-      const count = await pieces.count();
-      if (count === 0) continue;
-      await playerClickUntilShown(pieces.nth(count - 1), hints, tries);
+      // The highest piece a player can see: a tall stack can run past the
+      // window's edge (run 1790608868 drew fifteen pieces on one point up past
+      // the top of the screen, the top piece's click landed nowhere, and the
+      // model was told "no checker I could pick up" of a stack that picked up
+      // at a click on any piece in view).
+      const onScreen = await pieces.evaluateAll((els) =>
+        els.map((el) => {
+          const r = el.getBoundingClientRect();
+          const x = r.left + r.width / 2;
+          const y = r.top + r.height / 2;
+          return r.width > 0 && r.height > 0 && x >= 0 && y >= 0 && x <= innerWidth && y <= innerHeight;
+        }),
+      );
+      const top = onScreen.lastIndexOf(true);
+      if (top < 0) continue;
+      await playerClickUntilShown(pieces.nth(top), hints, tries);
       if ((await hints.count()) > 0) return true;
     }
   }
