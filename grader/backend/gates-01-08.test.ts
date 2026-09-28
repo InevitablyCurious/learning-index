@@ -134,23 +134,6 @@ describe("Backgammon backend gates 01-08", () => {
     expect(fromValues).toEqual([8, 13, 24]);
   });
 
-  it("[G05] REQ-HIGHER-DIE — use higher die", () => {
-    const pts = emptyPoints();
-    pts[13] = 1;
-    // A three-deep block (not two) forces maxPlies to 1 here. A two-deep
-    // block trips the "land on a 2-checker block" mutation (M12), which would
-    // make the second move 10→6 legal and fire this gate spuriously with the
-    // "smaller number" line instead of G04's true blocked-point line.
-    pts[6] = -3;
-    const board = bd(pts);
-
-    expect(game.maxPlies(board, "white", [3, 4])).toBe(1);
-
-    const legal = game.legalMovesNow(board, "white", [3, 4]) as Move[];
-    expect(norm(legal)).toEqual(norm([{ from: 13, to: 9, die: 4 }]));
-    expect(norm(legal)).not.toContain("13-10-3");
-  });
-
   it("[G06] REQ-BAR — bar re-entry + blocked pass", () => {
     const REENTER = "[aspect: reenter]";
     const BLOCKED = "[aspect: blocked]";

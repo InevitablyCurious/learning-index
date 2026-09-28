@@ -32,7 +32,7 @@
     "G05": {
       "name": "Play the higher die",
       "what": "When only one of the two dice can be played, the player must play the higher one.",
-      "how": "White on 13 with black holding 6: with a 3 and a 4 only one die can be used, and the only legal move must be 13→9 using the 4."
+      "how": "Played through the game: white on 13 with black holding 6 three deep, a 3 and a 4 to play, only one usable. The game must refuse 13→10 with the 3 (told as letting the smaller number play) and must not list it (told as showing it)."
     },
     "G06": {
       "name": "Entering from the bar",

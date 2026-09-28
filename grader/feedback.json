@@ -87,6 +87,10 @@
       "first": "I rolled two numbers where I could play one or the other but not both, and the game let me move with the smaller number even though the bigger one had a move too.",
       "repeat": "Got another roll where only one of my two numbers could be used — it still let me play the smaller number while the bigger one also had a move."
     },
+    "G05.offered": {
+      "first": "I rolled two numbers where I could play one or the other but not both, and the game showed me a move with the smaller number even though the bigger one had a move too.",
+      "repeat": "Got another roll where only one of my two numbers could be used — it still showed me a move with the smaller number while the bigger one also had a move."
+    },
     "G06": {
       "first": "When my piece is on the bar the game doesn't force me to bring it back in before i do anything else",
       "repeat": "I got sent to the bar again and the game still let me carry on elsewhere as if nothing had happened."

@@ -143,12 +143,28 @@ describe("Backgammon backend gates 13-16", () => {
       expect(state.turn).toBe("white");
       expect(state.phase, noMove).toBe("move");
 
+      // A player plays a move the game shows, and tries the next one when a
+      // move is refused. Run 1790615587's server listed moves with the smaller
+      // die and refused them while the larger had a move; always sending the
+      // first listed move ran the turn out and told "the computer never takes
+      // its turn". A game that takes none of the moves it lists is the
+      // played-move gate's finding.
+      const refused = "[needs: F25] the game refused every move it listed";
       let moveSteps = 0;
       while (!state.turnOver && moveSteps < 16) {
         const legalMoves = (state.legalMoves ?? []) as Move[];
         expect(legalMoves.length, moveSteps === 0 ? noMove : undefined).toBeGreaterThan(0);
-        const m = legalMoves[0];
-        state = await api("/api/move", { from: m.from, to: m.to, die: m.die });
+        const before = JSON.stringify(state.remainingDice);
+        let taken = false;
+        for (const m of legalMoves) {
+          const next = await api("/api/move", { from: m.from, to: m.to, die: m.die });
+          if (next.turnOver || JSON.stringify(next.remainingDice) !== before) {
+            state = next;
+            taken = true;
+            break;
+          }
+        }
+        expect(taken, refused).toBe(true);
         moveSteps++;
       }
 
@@ -172,6 +188,35 @@ describe("Backgammon backend gates 13-16", () => {
 
       expect(state.turn).toBe("white");
       expect(blackOf(state), "[aspect: skipped] the roll came back to white and black never moved").not.toBe(blackBefore);
+    });
+
+    it("[G05] REQ-HIGHER-DIE — use higher die", async () => {
+      // Played through the game, as a player meets it: run 1790615587's engine
+      // still listed the smaller die, its server refused the move, and the
+      // player — offered a move they could not make — was told the game "let me
+      // move with the smaller number". One white checker on 13 and a
+      // three-deep black block on 6: with a 3 and a 4 only one number plays,
+      // and it must be the 4. (Three deep, not two: a two-deep block trips the
+      // land-on-a-block mutation M12, whose own line is G04's.)
+      const points = emptyPoints();
+      points[13] = 1;
+      points[6] = -3;
+      await debugSetState(
+        makeState({
+          points,
+          off: { white: 14, black: 12 },
+          turn: "white",
+          phase: "move",
+          dice: [3, 4],
+          remainingDice: [3, 4],
+        }),
+      );
+      const state = await getState();
+      const dice = (s: any) => JSON.stringify([...((s.remainingDice ?? []) as number[])].sort());
+      const listed = ((state.legalMoves ?? []) as Move[]).some((m) => m.from === 13 && m.to === 10 && m.die === 3);
+      const tried = await api("/api/move", { from: 13, to: 10, die: 3 });
+      expect(dice(tried), "the game played the smaller number").toBe(dice(state));
+      expect(listed, "[aspect: offered] the game listed the smaller number's move").toBe(false);
     });
 
     it("[G13] REQ-TURN — auto-pass when stuck on bar", async () => {
