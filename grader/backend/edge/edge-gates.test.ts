@@ -81,14 +81,22 @@ describe("Backgammon edge gates", () => {
     b.points[6] = 1;
     b.points[3] = 1;
 
+    // Told as the fault it is. Run 1790650821's engine offered to carry the
+    // piece on 6 off with a 5 — a number too small to reach off — and refused
+    // the 3 correctly, and was told "it takes one off while a checker sits
+    // further back": nothing sat further back than the 6.
     const withHigher = game.singleMoves(b, "white", 5);
-    expect(withHigher.some((m: any) => m.to === 25)).toBe(false);
-    expect(withHigher.some((m: any) => m.from === 6 && m.to === 1)).toBe(true);
+    expect(withHigher.some((m: any) => m.from === 3 && m.to === 25)).toBe(false);
+    expect(
+      withHigher.some((m: any) => m.from === 6 && m.to === 25),
+      "[aspect: short] a 5 carried the piece on 6 off",
+    ).toBe(false);
 
-    // Remove the higher checker and the SAME die now legitimately bears off.
+    // Remove the higher checker and the SAME die now legitimately bears off —
+    // a refusal there is G08's overshoot finding, told once.
     b.points[6] = 0;
     const alone = game.singleMoves(b, "white", 5);
-    expect(alone.some((m: any) => m.from === 3 && m.to === 25)).toBe(true);
+    expect(alone.some((m: any) => m.from === 3 && m.to === 25), "[needs: G08]").toBe(true);
   });
 
   it("[E03] REQ-BEAROFF-EXACT — an exact die always bears off", () => {

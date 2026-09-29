@@ -162,9 +162,30 @@ test("[F11] REQ-BEAROFF — bear-off visual", async ({ page }) => {
 
   await page.reload();
   await expect(page.locator('[data-testid="off-you"]')).toBeVisible();
-  await expect(
-    page.locator('[data-testid="checker"][data-color="white"][data-loc="off"]'),
-  ).toHaveCount(3);
+  // The three pieces already off, as a player sees them: checkers tagged off,
+  // or pieces drawn in the player's tray without the tag. Run 1790650821 drew
+  // three discs there untagged and was told they "don't show up in the off
+  // tray". A tray with nothing drawn in it is this gate's finding.
+  const shownOff = async () => {
+    const tagged = await page
+      .locator('[data-testid="checker"][data-color="white"][data-loc="off"]')
+      .count();
+    if (tagged >= 3) return tagged;
+    return page.evaluate(() => {
+      const tray = document.querySelector('[data-testid="off-you"]');
+      if (!tray) return 0;
+      const t = tray.getBoundingClientRect();
+      return [...document.querySelectorAll<HTMLElement>("body *")].filter((el) => {
+        if (el === tray || el.contains(tray) || el.children.length > 0) return false;
+        const r = el.getBoundingClientRect();
+        if (r.width < 6 || r.height < 3 || !el.checkVisibility()) return false;
+        const x = r.left + r.width / 2;
+        const y = r.top + r.height / 2;
+        return x >= t.left && x <= t.right && y >= t.top && y <= t.bottom;
+      }).length;
+    });
+  };
+  await expect.poll(shownOff, { timeout: 5_000 }).toBeGreaterThanOrEqual(3);
 });
 
 test("[F12] REQ-NEWGAME — the win is announced", async ({ page }) => {

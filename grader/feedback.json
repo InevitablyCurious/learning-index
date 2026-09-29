@@ -103,6 +103,10 @@
       "first": "When I have a checker further back, the game still lets me bear off from a point closer to the edge.",
       "repeat": "It happened again finishing up — I had a checker back, and it still took one off from up front."
     },
+    "G08.overshoot": {
+      "first": "When my last pieces are closer to the edge than the number I roll, the game won't let me take them off — I expect the roll to carry my furthest-back piece off.",
+      "repeat": "Rolled bigger than my last pieces needed again, and it still won't let me take them off."
+    },
     "G09": {
       "first": "The game let me take a piece off the board even though one of my pieces was still out on the other side of the board",
       "repeat": "Did it again with a straggler stranded nowhere near my home side, and it still started letting me take pieces off."
@@ -186,6 +190,10 @@
     "E02": {
       "first": "At the end of the game the game bears a checker off from the wrong point — it takes one off while a checker sits further back.",
       "repeat": "Back at the end of the game again and it still bears off from the wrong point."
+    },
+    "E02.short": {
+      "first": "At the end of the game the game lets me take a piece off with a number too small to carry it off the board.",
+      "repeat": "Finishing up again and it still lets a number too small carry a piece off the board."
     },
     "E03": {
       "first": "There is a problem when i roll and i'm trying to take my piece off and it won't let me, it only lets me move the piece forward but it doesn't let me take it off the board",

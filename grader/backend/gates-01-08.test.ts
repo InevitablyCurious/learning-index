@@ -180,8 +180,13 @@ describe("Backgammon backend gates 01-08", () => {
     overshootAllowedPts[3] = 2;
     const overshootAllowedBoard = bd(overshootAllowedPts, { white: 0, black: 0 }, { white: 13, black: 0 });
 
-    expect(game.allInHome(overshootAllowedBoard, "white")).toBe(true);
-    expect(norm(game.singleMoves(overshootAllowedBoard, "white", 5) as Move[])).toEqual(
+    // Two faults, each told as itself. Refusing a number bigger than the
+    // furthest-back piece needs (run 1790650821: pieces only on 3, a 5, no move
+    // at all) was told "the game still lets me bear off from a point closer to
+    // the edge" — the opposite.
+    const OVERSHOOT = "[aspect: overshoot]";
+    expect(game.allInHome(overshootAllowedBoard, "white"), OVERSHOOT).toBe(true);
+    expect(norm(game.singleMoves(overshootAllowedBoard, "white", 5) as Move[]), OVERSHOOT).toEqual(
       norm([{ from: 3, to: 25, die: 5 }]),
     );
 
@@ -191,7 +196,8 @@ describe("Backgammon backend gates 01-08", () => {
     const overshootRejectedBoard = bd(overshootRejectedPts, { white: 0, black: 0 }, { white: 13, black: 0 });
 
     const dieFiveMoves = game.singleMoves(overshootRejectedBoard, "white", 5) as Move[];
-    expect(norm(dieFiveMoves)).toEqual(norm([{ from: 5, to: 25, die: 5 }]));
     expect(norm(dieFiveMoves)).not.toContain("3-25-5");
+    // The exact 5 not bearing off is the exact-die gate's finding (E03).
+    expect(norm(dieFiveMoves), "[needs: E03]").toEqual(norm([{ from: 5, to: 25, die: 5 }]));
   });
 });
