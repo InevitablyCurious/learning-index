@@ -88,6 +88,16 @@ function normalizeHint(raw: string): string {
   return raw.replace(/\s+/g, "").toLowerCase();
 }
 
+// The words a hint's label is made of: "3", "off", or, in a longer label that
+// still names its die, "3" and "10" from "3→10". The build prompt asks for the
+// die's value; a label that also says where the piece lands still names it, as
+// a button reading "Roll Dice" names Roll (F44, Jerry 2026-09-26). Run
+// 1790641632 labelled its hints "3→10" and would have been told the hints
+// "don't tell me which die they use".
+function hintWords(raw: string): string[] {
+  return normalizeHint(raw).split(/[^0-9a-z]+/).filter(Boolean);
+}
+
 function expectOwnerLabelToMatchState(ownerText: string, owner: Player | null): void {
   const normalized = ownerText.trim().toLowerCase();
   if (owner === null) {
@@ -247,8 +257,8 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
   const hintCount = await hints.count();
   let clicked = false;
   for (let i = 0; i < hintCount; i++) {
-    const text = normalizeHint(await hints.nth(i).innerText());
-    if ((move.to === OFF && text.includes("off")) || text.includes(String(move.die))) {
+    const words = hintWords(await hints.nth(i).innerText());
+    if ((move.to === OFF && words.includes("off")) || words.includes(String(move.die))) {
       // Clicked where it shows: a pulsing hint on top of a stack (fixtures.ts).
       await playerClick(hints.nth(i));
       clicked = true;
@@ -322,12 +332,14 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   const hintTexts = (await hints.allInnerTexts()).map(normalizeHint).filter(Boolean);
   expect(hintTexts.length).toBeGreaterThan(0);
 
+  // Each hint names a die it uses: a label with no 3 or 5 in it (run
+  // 1790641632's "10" and "8", the landing points) tells the player nothing.
   for (const text of hintTexts) {
     if (text === "off") continue;
-    const parts = text.split("/");
-    for (const part of parts) {
-      expect(["3", "5"]).toContain(part);
-    }
+    expect(
+      hintWords(text).some((word) => word === "3" || word === "5"),
+      `hint "${text}" names no die it uses`,
+    ).toBe(true);
   }
 
   // A hint for each die the piece can use (the build prompt, chunk-04: "A hint
@@ -336,7 +348,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   // and its 5 came up only once the 3 was played. Judged on the piece on 13
   // only, whose two moves are open on every board.
   if (on13) {
-    const dice = new Set(hintTexts.flatMap((text) => text.split("/")));
+    const dice = new Set(hintTexts.flatMap((text) => hintWords(text)));
     expect(
       dice.has("3") && dice.has("5"),
       `[aspect: perdie] after rolling 3-5 the back piece on 13 shows hints for: ${[...dice].join(", ")}`,
@@ -379,7 +391,7 @@ test("[G05] REQ-HIGHER-DIE — use higher die", async ({ page }) => {
       .map((el, i) => ({ i, text: (el as HTMLElement).innerText, on: (el as HTMLElement).checkVisibility() }))
       .filter((hint) => hint.on),
   );
-  const smaller = shown.find((hint) => normalizeHint(hint.text).split("/").includes("3"));
+  const smaller = shown.find((hint) => hintWords(hint.text).includes("3"));
   if (smaller) {
     const board = async () => {
       const s = await readState(page);
