@@ -2,6 +2,7 @@ import { type Page } from "@playwright/test";
 import { expect, pickUpAPiece, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
 import { checkerAnimates, hintAnimates } from "../lib/acceptance.ts";
 import { BASE_URL } from "../lib/harness.ts";
+import { isPainted } from "./board-geometry.ts";
 
 function emptyPts() {
   return new Array(26).fill(0);
@@ -82,11 +83,11 @@ test("[F09] REQ-HIT — hit -> bar visual", async ({ page }) => {
 
   await page.reload();
   await expect(page.locator('[data-testid="bar"]')).toBeVisible();
-  await expect(
-    page.locator(
-      '[data-testid="checker"][data-color="black"][data-loc="bar"]',
-    ),
-  ).toHaveCount(1);
+  const onBar = page.locator('[data-testid="checker"][data-color="black"][data-loc="bar"]');
+  await expect(onBar).toHaveCount(1);
+  // Drawn so a player sees it: run 1790661859's page styled its pieces only on
+  // the points, and its bar piece, found here by its tag, showed nothing.
+  expect(await isPainted(onBar), "the piece on the bar is drawn with nothing a player can see").toBe(true);
 });
 
 test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {

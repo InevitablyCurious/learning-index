@@ -393,6 +393,11 @@
       "name": "Buttons carry their names",
       "what": "Each button's label carries its name: Roll, Double, Undo, End Turn and New Game.",
       "how": "New game: each button's own text, whether or not it shows, must contain its name (case aside; \"Roll Dice\" carries Roll). A button that isn't there is the tag check's; one that doesn't show is F38's."
+    },
+    "F45": {
+      "name": "Clicking a destination moves there",
+      "what": "Clicking the point a picked-up checker can move to plays that move.",
+      "how": "Fixes the roll to 2-1, clicks Roll and the top checker on 13 (its one move is to the empty 11), then clicks point 11 where the moved checker will sit — as far in from the board's edge as the first checker of the other bottom-row stacks — and requires a checker on 11. A game whose hints play no move is F25's."
     }
   },
   "setup": [
@@ -631,6 +636,7 @@
         "F03",
         "F25",
         "F04",
+        "F45",
         "G04",
         "G17",
         "G18",

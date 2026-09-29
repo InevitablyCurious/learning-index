@@ -9,7 +9,7 @@
 // screen. Pure measurement — every assertion lives in the spec.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { type Page } from "@playwright/test";
+import { type Locator, type Page } from "@playwright/test";
 
 export interface PointBox {
   num: number;
@@ -290,24 +290,9 @@ export async function readOffTray(page: Page): Promise<OffTrayState> {
   if ((await tray.count()) === 0) {
     return { exists: false, visible: false, painted: false, x: 0, y: 0, width: 0, height: 0 };
   }
-  return tray.first().evaluate((element) => {
+  const box = await tray.first().evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const style = getComputedStyle(element);
-    const paints = (el: Element): boolean => {
-      const cs = getComputedStyle(el);
-      if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) <= 0.05) return false;
-      const alpha = (colour: string): number => {
-        const parts = colour.match(/[\d.]+/g)?.map(Number) ?? [];
-        return parts.length === 4 ? parts[3] : parts.length === 3 ? 1 : 0;
-      };
-      const outlined = ["Top", "Right", "Bottom", "Left"].some(
-        (side) =>
-          parseFloat(cs.getPropertyValue(`border-${side.toLowerCase()}-width`)) > 0 &&
-          !["none", "hidden"].includes(cs.getPropertyValue(`border-${side.toLowerCase()}-style`)) &&
-          alpha(cs.getPropertyValue(`border-${side.toLowerCase()}-color`)) > 0.05,
-      );
-      return alpha(cs.backgroundColor) > 0.05 || cs.backgroundImage !== "none" || cs.boxShadow !== "none" || outlined;
-    };
     return {
       exists: true,
       visible:
@@ -316,14 +301,47 @@ export async function readOffTray(page: Page): Promise<OffTrayState> {
         style.display !== "none" &&
         style.visibility !== "hidden" &&
         Number(style.opacity) > 0.05,
-      painted:
-        [element, ...element.querySelectorAll("*")].some(paints) ||
-        ((element as HTMLElement).innerText ?? "").trim().length > 0,
       x: rect.x,
       y: rect.y,
       width: rect.width,
       height: rect.height,
     };
+  });
+  return { ...box, painted: await isPainted(tray.first()) };
+}
+
+/**
+ * Whether an element shows a player anything: it or something inside it has a
+ * fill, an image or gradient, an outline or a shadow, is an SVG shape filled or
+ * stroked or an image, or it carries text — and is not hidden or faded out.
+ * One with none of these is an empty see-through box, however big: run
+ * 1790661859's bar piece was 30 px, tagged, and drawn with nothing.
+ */
+export async function isPainted(target: Locator): Promise<boolean> {
+  return target.evaluate((element) => {
+    const alpha = (colour: string): number => {
+      const parts = colour.match(/[\d.]+/g)?.map(Number) ?? [];
+      return parts.length === 4 ? parts[3] : parts.length === 3 ? 1 : 0;
+    };
+    const paints = (el: Element): boolean => {
+      const cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden" || Number(cs.opacity) <= 0.05) return false;
+      if (el instanceof SVGGeometryElement) {
+        return (cs.fill !== "none" && alpha(cs.fill) > 0.05) || (cs.stroke !== "none" && alpha(cs.stroke) > 0.05);
+      }
+      if (el instanceof HTMLImageElement) return true;
+      const outlined = ["Top", "Right", "Bottom", "Left"].some(
+        (side) =>
+          parseFloat(cs.getPropertyValue(`border-${side.toLowerCase()}-width`)) > 0 &&
+          !["none", "hidden"].includes(cs.getPropertyValue(`border-${side.toLowerCase()}-style`)) &&
+          alpha(cs.getPropertyValue(`border-${side.toLowerCase()}-color`)) > 0.05,
+      );
+      return alpha(cs.backgroundColor) > 0.05 || cs.backgroundImage !== "none" || cs.boxShadow !== "none" || outlined;
+    };
+    return (
+      [element, ...element.querySelectorAll("*")].some(paints) ||
+      ((element as HTMLElement).innerText ?? "").trim().length > 0
+    );
   });
 }
 

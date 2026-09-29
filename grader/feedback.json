@@ -243,6 +243,10 @@
       "first": "When I pick up a piece that can move with either number, only one of its moves shows — I expect a hint for each number it can use.",
       "repeat": "When I pick up a piece that can move with either number, still only one of its moves shows — I expect a hint for each number it can use."
     },
+    "F04.extra": {
+      "first": "When I pick up a piece, its move hints show more than the number on the die — I expect each one to show just the die it uses.",
+      "repeat": "The move hints still show more than the number on the die — I expect each one to show just the die it uses."
+    },
     "F05": {
       "first": "When i have no moves the game doesn't tell me i have to pass",
       "repeat": "Got stuck with nothing I could play again, and the game still says nothing about it."
@@ -966,6 +970,10 @@
     "F44": {
       "first": "Some of the buttons aren't labelled with their names — I expect them to read Roll, Double, Undo, End Turn and New Game.",
       "repeat": "Some of the buttons still aren't labelled with their names — I expect them to read Roll, Double, Undo, End Turn and New Game."
+    },
+    "F45": {
+      "first": "When I pick up a piece and click the point it can move to, it doesn't move there.",
+      "repeat": "Clicking the point a piece can move to still doesn't move it there."
     }
   }
 }

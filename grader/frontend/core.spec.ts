@@ -88,12 +88,10 @@ function normalizeHint(raw: string): string {
   return raw.replace(/\s+/g, "").toLowerCase();
 }
 
-// The words a hint's label is made of: "3", "off", or, in a longer label that
-// still names its die, "3" and "10" from "3→10". The build prompt asks for the
-// die's value; a label that also says where the piece lands still names it, as
-// a button reading "Roll Dice" names Roll (F44, Jerry 2026-09-26). Run
-// 1790641632 labelled its hints "3→10" and would have been told the hints
-// "don't tell me which die they use".
+// The words a hint's label is made of: "3", "off", or "3" and "10" from
+// "3→10". The checks that look for the hint of one die read its words, so a
+// "1" is never found inside a "10" and a "3→10" hint is still the 3's. Whether
+// a label says more than its die is F04's finding alone.
 function hintWords(raw: string): string[] {
   return normalizeHint(raw).split(/[^0-9a-z]+/).filter(Boolean);
 }
@@ -332,14 +330,19 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   const hintTexts = (await hints.allInnerTexts()).map(normalizeHint).filter(Boolean);
   expect(hintTexts.length).toBeGreaterThan(0);
 
-  // Each hint names a die it uses: a label with no 3 or 5 in it (run
-  // 1790641632's "10" and "8", the landing points) tells the player nothing.
+  // Each hint's text is the die it uses (the build prompt: "a hint's visible
+  // text is the die value it would use, or "off" for bearing off"). A label
+  // with no 3 or 5 in it (run 1790641632's "10" and "8", the landing points)
+  // tells the player nothing. One that says more than its die is its own
+  // complaint: Jerry, playing run 1790661859's build, found its "2→11" very
+  // confusing.
   for (const text of hintTexts) {
     if (text === "off") continue;
     expect(
       hintWords(text).some((word) => word === "3" || word === "5"),
       `hint "${text}" names no die it uses`,
     ).toBe(true);
+    expect(text === "3" || text === "5", `[aspect: extra] hint "${text}" says more than its die`).toBe(true);
   }
 
   // A hint for each die the piece can use (the build prompt, chunk-04: "A hint
@@ -354,6 +357,70 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
       `[aspect: perdie] after rolling 3-5 the back piece on 13 shows hints for: ${[...dice].join(", ")}`,
     ).toBe(true);
   }
+});
+
+test("[F45] REQ-HINT — clicking where a piece can go plays the move", async ({ page }) => {
+  // The build prompt: "Clicking one of your checkers shows you where it can
+  // go, and clicking one of those destinations plays that move." The other
+  // move checks click the hint itself. Jerry, playing run 1790661859's build,
+  // clicked the point the piece could go to: the game put the piece back down,
+  // and only a small circle drawn half off the bottom of the screen played the
+  // move. A player clicks where the piece will sit — on the destination point,
+  // as far in from the board's edge as the first piece of each stack in that
+  // row (a point's checkers stack from the edge). A game that draws its hint
+  // there, as the reference does, or that plays the move from a click on the
+  // point, passes.
+  await openApp(page);
+
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 1] });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  await page.getByTestId("rollBtn").click();
+  await expect
+    .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die]")
+    .toBeGreaterThanOrEqual(2);
+
+  // With 2-1 at the opening the back piece on 13 has one move, to the empty 11
+  // (black holds 12). A game that doesn't offer it is the dice checks' finding.
+  const before = await readState(page);
+  expect(before.legalMoves.some((m) => m.from === 13 && m.to === 11), "[needs: G03]").toBe(true);
+
+  const hints = page.getByTestId("hint");
+  const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
+  const backCount = await back.count();
+  if (backCount > 0) await playerClickUntilShown(back.nth(backCount - 1), hints);
+  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]").toBeGreaterThan(0);
+
+  // Point 11 sits in the bottom row, whose stacks start at the bottom edge:
+  // the first piece of a stack is its lowest.
+  const spot = await page.evaluate(() => {
+    const point = document.querySelector('[data-testid="point"][data-point="11"]');
+    if (!point) return null;
+    const firsts: number[] = [];
+    for (let p = 1; p <= 12; p++) {
+      const stack = [...document.querySelectorAll(`[data-testid="checker"][data-loc="${p}"]`)].map((el) => {
+        const r = el.getBoundingClientRect();
+        return r.y + r.height / 2;
+      });
+      if (stack.length > 0) firsts.push(Math.max(...stack));
+    }
+    if (firsts.length === 0) return null;
+    firsts.sort((a, b) => a - b);
+    const box = point.getBoundingClientRect();
+    return { x: box.x + box.width / 2, y: firsts[Math.floor(firsts.length / 2)] };
+  });
+  expect(spot, "[needs: REQ-TESTID/point REQ-TESTID/checker]").not.toBeNull();
+  await page.mouse.click(spot!.x, spot!.y);
+
+  // A game whose hints play no move either is told that first (F25).
+  await expect
+    .poll(async () => (await readState(page)).points[11], {
+      message: "[needs: F25] the piece did not go to 11",
+      timeout: 3_000,
+    })
+    .toBeGreaterThan(0);
 });
 
 test("[G05] REQ-HIGHER-DIE — use higher die", async ({ page }) => {
