@@ -424,10 +424,12 @@ test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 4] });
   await page.getByTestId("rollBtn").click();
 
+  // A player with no move exists only once pieces come in off the bar where
+  // they should (G06): run 1790633807's entered at the wrong end.
   const message = page.getByTestId("message");
   await expect(message).toBeVisible();
-  await expect(message).not.toHaveText(/^\s*$/);
-  await expect(message).toContainText(/no legal move|pass/i);
+  await expect(message, "[needs: G06]").not.toHaveText(/^\s*$/);
+  await expect(message, "[needs: G06]").toContainText(/no legal move|pass/i);
 });
 
 test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
@@ -462,11 +464,13 @@ test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
   // The bar column div overlays the checker (and it isn't selectable in a stuck
   // state anyway) — force past the pointer-interception to prove no hints appear.
   await whiteBarChecker.first().click({ force: true });
-  await expect(page.getByTestId("hint")).toHaveCount(0);
+  // Stuck only once pieces come in off the bar where they should (G06): run
+  // 1790633807's entered at the wrong end and showed hints there.
+  await expect(page.getByTestId("hint"), "[needs: G06]").toHaveCount(0);
 
   const state = await readState(page);
-  expect(state.turnOver).toBe(true);
-  expect(state.legalMoves).toHaveLength(0);
+  expect(state.turnOver, "[needs: G06]").toBe(true);
+  expect(state.legalMoves, "[needs: G06]").toHaveLength(0);
 });
 
 test("[F06] REQ-PIPUI — pip display cross-checked vs engine", async ({ page }) => {

@@ -218,12 +218,17 @@ describe("Backgammon backend gates 13-16", () => {
       await debugRoll([2, 4]);
       const state = await api("/api/roll", {});
 
-      expect(state.turnOver).toBe(true);
-      expect(Array.isArray(state.legalMoves)).toBe(true);
-      expect(state.legalMoves.length).toBe(0);
-      expect(typeof state.message).toBe("string");
-      expect(state.message.trim().length).toBeGreaterThan(0);
-      expect(state.message).toMatch(/no legal move|pass/i);
+      // A stuck player exists only once pieces come in off the bar where they
+      // should (G06: run 1790633807's entered at the wrong end and were never
+      // stuck); a turn that ends with no word of it is the notice gate's (F05).
+      const entry = "[needs: G06]";
+      const notice = "[needs: F05]";
+      expect(state.turnOver, entry).toBe(true);
+      expect(Array.isArray(state.legalMoves), entry).toBe(true);
+      expect(state.legalMoves.length, entry).toBe(0);
+      expect(typeof state.message, notice).toBe("string");
+      expect(state.message.trim().length, notice).toBeGreaterThan(0);
+      expect(state.message, notice).toMatch(/no legal move|pass/i);
     });
   });
 

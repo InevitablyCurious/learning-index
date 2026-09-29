@@ -142,9 +142,17 @@ describe("Backgammon backend gates 01-08", () => {
     entryPts[8] = 1;
     const entryBoard = bd(entryPts, { white: 1, black: 0 }, { white: 0, black: 0 });
 
+    // Which fault, told as the player meets it: another piece moving while one
+    // waits on the bar; no way back in at all; or a way back in on the wrong
+    // point. Run 1790633807's bar piece came in at the wrong end (a 2 entered
+    // on point 2, not 23, its hint drawn there) and was told "the game let me
+    // play other pieces".
     const entryMoves = game.singleMoves(entryBoard, "white", 2) as Move[];
-    expect(norm(entryMoves), REENTER).toEqual(norm([{ from: 0, to: 23, die: 2 }]));
     expect(entryMoves.every((m) => m.from === 0), REENTER).toBe(true);
+    expect(entryMoves.length, "[aspect: noentry] no way in off the bar onto an open point").toBeGreaterThan(0);
+    expect(norm(entryMoves), "[aspect: wrongpoint] the bar piece is offered the wrong point").toEqual(
+      norm([{ from: 0, to: 23, die: 2 }]),
+    );
 
     const blockedPts = emptyPoints();
     blockedPts[23] = -2;

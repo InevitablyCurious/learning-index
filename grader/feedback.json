@@ -192,7 +192,7 @@
       "repeat": "Same trouble getting my pieces off — the roll just shuffles me further along and the piece stays on the board."
     },
     "E04": {
-      "first": "I rolled the dice while my piece was on the bar, and the opponent had filled up his home section with all 5 spaces being taken with 2x pieces and the dice i rolled were blocked but i was able to move my pieces anyways that weren't on the bar or the game just crashed.",
+      "first": "I rolled the dice while my piece was on the bar, and the opponent had filled up his home section with all 6 spaces being taken with 2x pieces and the dice i rolled were blocked but i was able to move my pieces anyways that weren't on the bar or the game just crashed.",
       "repeat": "Again with a piece on the bar and their home side completely shut: I could still move my other pieces, or the whole thing fell over."
     },
     "E05": {
@@ -200,8 +200,8 @@
       "repeat": "With a piece stuck on the bar it still let me pick up a different one first."
     },
     "E06": {
-      "first": "The pip numbers next to each player look wrong once someone gets hit — mine barely moves even while I have a checker sitting on the bar",
-      "repeat": "Got hit again and watched the counter — mine still barely reacted while my piece sat there on the bar."
+      "first": "My pip count is wrong while one of my pieces is on the bar — I expect a piece on the bar to count the full 25.",
+      "repeat": "Had a piece on the bar again and my pip count is still wrong for it."
     },
     "E07": {
       "first": "When my piece is on the bar i'm able to take pieces off the board",
@@ -774,6 +774,14 @@
     "G06.blocked": {
       "first": "I was on the bar and the game let me come in on a point my opponent had covered.",
       "repeat": "Went to the bar again and it still let me come in on a point my opponent had covered."
+    },
+    "G06.noentry": {
+      "first": "I was on the bar with an open point to come in on, and the game gave me no way to bring the piece back in.",
+      "repeat": "On the bar again with an open point, and still no way to bring the piece back in."
+    },
+    "G06.wrongpoint": {
+      "first": "When I bring a piece in off the bar, the game offers me the wrong point to come in on — I expect it on the point in my opponent's home that matches the number I use.",
+      "repeat": "Brought a piece in off the bar again and it's still offered the wrong point to come in on."
     },
     "G06.reenter": {
       "first": "I was on the bar and the game let me play other pieces, not bring the one on the bar back in.",

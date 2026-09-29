@@ -135,7 +135,7 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
         .locator('[data-testid="checker"][data-color="white"][data-loc="22"]')
         .count();
       return on20 + on22;
-    })
+    }, "[needs: G06] the piece came in on neither 20 nor 22")
     .toBeGreaterThan(0);
 });
 

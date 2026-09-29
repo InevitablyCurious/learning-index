@@ -1,1 +1,1 @@
-Got hit again and watched the counter — mine still barely reacted while my piece sat there on the bar.
+Had a piece on the bar again and my pip count is still wrong for it.

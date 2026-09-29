@@ -113,8 +113,12 @@ describe("Backgammon edge gates", () => {
     // the bar is occupied.
     b.points[13] = 2;
 
-    expect(game.maxPlies(b, "white", [3, 5])).toBe(0);
-    expect(game.legalMovesNow(b, "white", [3, 5])).toEqual([]);
+    // Told only once pieces come in off the bar where they should (G06): run
+    // 1790633807's came in at the wrong end, so a "shut" home was no shut-out
+    // and the moves on offer were the bar piece's, not other pieces'.
+    const needs = "[needs: G06]";
+    expect(game.maxPlies(b, "white", [3, 5]), needs).toBe(0);
+    expect(game.legalMovesNow(b, "white", [3, 5]), needs).toEqual([]);
   });
 
   it("[E05] REQ-BAR-PRIORITY — a checker on the bar freezes every other checker", () => {
