@@ -775,6 +775,10 @@
       "first": "I clicked a re-entry move and the piece didn't come off the bar — it stayed up there.",
       "repeat": "Tried to re-enter again and the piece still didn't come off the bar."
     },
+    "F10.auto": {
+      "first": "I rolled while I had a piece on the bar, and the hints for bringing it in didn't show up on their own.",
+      "repeat": "I rolled again with a piece on the bar, and the hints for bringing it in still didn't show up on their own."
+    },
     "F25.reveal": {
       "first": "I clicked a piece and the game didn't show me any hints for where it could go.",
       "repeat": "Clicked a piece again and still no hints appeared for where it could go."
@@ -912,16 +916,16 @@
       "repeat": "The points are still all one colour — I expect them to alternate between two colours."
     },
     "F43": {
-      "first": "I can't see all the pieces properly — some are hidden or cut off.",
-      "repeat": "I still can't see all the pieces properly — some are hidden or cut off."
+      "first": "I can't see the pieces properly — some are hidden or cut off.",
+      "repeat": "I still can't see the pieces properly — some are hidden or cut off."
     },
     "F43.stacked": {
-      "first": "Pieces in a stack are drawn on top of each other, so I can't see them all — I expect to see every piece in the stack.",
-      "repeat": "Pieces in a stack are still drawn on top of each other, so I can't see them all — I expect to see every piece in the stack."
+      "first": "Pieces in a stack are drawn on the same spot, so I can't tell them apart — I expect each drawn piece on its own spot.",
+      "repeat": "Pieces in a stack are still drawn on the same spot, so I can't tell them apart — I still expect each drawn piece on its own spot."
     },
     "F43.clipped": {
-      "first": "Some of the pieces are cut off — I expect to see every piece as a whole circle.",
-      "repeat": "Some of the pieces are still cut off — I expect to see every piece as a whole circle."
+      "first": "Some of the pieces are cut off — I expect to see each drawn piece as a whole circle.",
+      "repeat": "Some of the pieces are still cut off — I still expect to see each drawn piece as a whole circle."
     },
     "F38.roll": {
       "first": "I can't find the Roll button — I expect it on screen all the time, greyed out while it can't be used.",
@@ -1034,6 +1038,30 @@
     "F56": {
       "first": "I reload while the computer's double offer is up, and I can no longer accept or decline it.",
       "repeat": "I reloaded again while the computer's double offer was up, and I still couldn't accept or decline it."
+    },
+    "F57": {
+      "first": "When a lot of pieces pile up on one point, they aren't drawn so I can see how many are there.",
+      "repeat": "A point piled high with pieces still isn't drawn so I can see how many are there."
+    },
+    "F57.cap": {
+      "first": "A point holding seven of my pieces shows more than six of them — I expected six, with the total on the top one.",
+      "repeat": "A point with seven of my pieces still shows more than six — I expected six, with the total on the top one."
+    },
+    "F57.count": {
+      "first": "A point holding seven of my pieces shows no number telling me there are seven.",
+      "repeat": "A point with seven of my pieces still shows no number telling me how many there are."
+    },
+    "F58": {
+      "first": "When I move a piece off a stack, it isn't the top piece that slides away — I expected the top one to leave and the rest to stay put.",
+      "repeat": "Moving a piece off a stack still slides away one that isn't on top."
+    },
+    "F59": {
+      "first": "When I move a piece onto a point that already has one of mine, it lands at the edge and pushes the other one along — I expected it to join at the far end.",
+      "repeat": "A piece I move onto one of my stacks still lands at the edge and pushes the others along."
+    },
+    "F60": {
+      "first": "I clicked the space around one of my pieces and no hints came up — I expected it to pick that piece up and show me where it could move.",
+      "repeat": "I clicked the space around another of my pieces and still no hints came up."
     },
     "F47.undo": {
       "first": "While my finished turn waits for End Turn, Undo doesn't take my last move back.",

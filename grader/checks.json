@@ -252,7 +252,7 @@
     "F10": {
       "name": "Re-entering shown on the board",
       "what": "Coming back in from the bar is shown on the board.",
-      "how": "White on the bar with the roll fixed to 3-5. After Roll, clicking the bar checker must show two hints; clicking one must take the checker off the bar, the server must agree, and a white checker must appear on point 20 or 22."
+      "how": "White on the bar with the roll fixed to 3-5. After Roll, the entry hints must show on their own, with no click on the bar piece; clicking the bar checker still leaves the two hints showing; clicking one must take the checker off the bar, the server must agree, and a white checker must appear on point 20 or 22."
     },
     "F11": {
       "name": "Borne-off checkers in the tray",
@@ -405,9 +405,9 @@
       "how": "New game, checkers hidden: each triangle's own colour down its middle at its widest; within each quarter, side-by-side neighbours must differ. Colours are compared with each other only; neither across the bar nor straight across the board is judged, and a point the bar or tray is drawn over is skipped."
     },
     "F43": {
-      "name": "Every piece shows",
-      "what": "Every piece on the board can be seen whole: a stack shows each of its pieces, and no piece is cut off.",
-      "how": "New game: a grid of spots inside each checker on a point is hit-tested (the pieces made hit-testable for the reading). Two pieces on the same point with centres closer than a third of a piece are drawn on one spot; a piece showing less than three quarters of itself on screen, not because another piece is drawn over it, is cut off. Pieces mostly past the window are the fit check's."
+      "name": "Every drawn piece shows",
+      "what": "Every drawn piece on the board can be seen whole: a stack of up to six shows each of its pieces, and no drawn piece is cut off.",
+      "how": "New game: a grid of spots inside each drawn checker on a point is hit-tested (the pieces made hit-testable for the reading). Two pieces on the same point with centres closer than a third of a piece are drawn on one spot; a piece showing less than three quarters of itself on screen, not because another piece is drawn over it, is cut off. Pieces mostly past the window are the fit check's."
     },
     "F44": {
       "name": "Buttons carry their names",
@@ -417,7 +417,7 @@
     "F45": {
       "name": "Clicking a destination moves there",
       "what": "Clicking the point a picked-up checker can move to plays that move.",
-      "how": "Fixes the roll to 2-1, clicks Roll and the top checker on 13 (its one move is to the empty 11), then clicks point 11 where the moved checker will sit — as far in from the board's edge as the first checker of the other bottom-row stacks — and requires a checker on 11. A game whose hints play no move is F25's."
+      "how": "Fixes the roll to 2-1, clicks Roll and the top checker on 13 (its one move is to the empty 11), then clicks three spots up the column of point 11 — near its middle-ward end, its centre, and its edge-ward end, away from the hint token — and requires a checker on 11 each time. A game whose hints play no move is F25's."
     },
     "F46": {
       "name": "The decline pop-up says you won",
@@ -473,6 +473,26 @@
       "name": "The pending double offer shows again after a reload",
       "what": "If the player reloads while the computer's double offer is on screen, the offer shows again so the player can accept or decline.",
       "how": "Seeds the computer's pending double offer and reloads: visible buttons to take and to pass the double must be on screen again, wherever the page puts them."
+    },
+    "F57": {
+      "name": "A tall stack caps at six with a count",
+      "what": "A point holds at most six drawn checkers; from seven up it draws six and the top piece shows the total.",
+      "how": "Seven white on 13, drawn at rest: at most six shown on screen ([aspect: cap]), and the total 7 readable on the stack — a checkerCount badge or a number shown on point 13's column ([aspect: count])."
+    },
+    "F58": {
+      "name": "The top piece slides away",
+      "what": "When a checker leaves a stack, the piece farthest from the board's edge is the one that slides away, and the rest stay put.",
+      "how": "Opening position, 2-1: the pieces on 13 are held in the page, the top one is picked up and played to 11. When a held piece is the one now on 11 it must be the top one; a page that draws every piece afresh leaves none to follow and is not judged."
+    },
+    "F59": {
+      "name": "A piece lands at the far end",
+      "what": "When a checker lands on a point that already holds checkers, it joins at the far end of the stack, farthest from the edge.",
+      "how": "White to move with a 2 left, one piece on 13 and one on 11: both are held in the page, and the piece on 13 is played onto 11. When both held pieces are the ones on 11, the arrival must be farther from the edge; a page that draws them afresh is not judged."
+    },
+    "F60": {
+      "name": "Clicking a piece's column picks it up",
+      "what": "Clicking anywhere in the column of a point holding one of the player's movable pieces picks up its top piece and shows its hints.",
+      "how": "Fixes the roll to 2-1, clicks Roll, then clicks a spot in the column of point 13 away from the checker — near the column's middle-ward end — and requires a hint to appear."
     }
   },
   "setup": [
@@ -685,6 +705,7 @@
         "F32",
         "F41",
         "F43",
+        "F57",
         "F31",
         "G01",
         "G02",
@@ -717,6 +738,9 @@
         "F25",
         "F04",
         "F45",
+        "F58",
+        "F59",
+        "F60",
         "G04",
         "G17",
         "G18",

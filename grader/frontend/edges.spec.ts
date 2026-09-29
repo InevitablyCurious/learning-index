@@ -119,6 +119,9 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
   );
   await expect(whiteBarChecker).toHaveCount(1);
   const hints = page.locator('[data-testid="hint"]');
+  await expect
+    .poll(async () => hints.count(), { message: "[aspect: auto]", timeout: 3_000 })
+    .toBeGreaterThan(0);
   await playerClickUntilShown(whiteBarChecker, hints);
   await expect(hints, "[aspect: hints]").toHaveCount(2);
   await playerClick(hints.first());

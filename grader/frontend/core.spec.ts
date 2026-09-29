@@ -1,5 +1,6 @@
 import { type Locator, type Page } from "@playwright/test";
 import { expect, pickUpAPiece, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
+import { readColumnBox } from "./board-geometry.ts";
 
 type Player = "white" | "black";
 type Difficulty = "easy" | "medium" | "hard";
@@ -371,6 +372,64 @@ test("[F45] REQ-HINT — clicking where a piece can go plays the move", async ({
   // row (a point's checkers stack from the edge). A game that draws its hint
   // there, as the reference does, or that plays the move from a click on the
   // point, passes.
+  //
+  // One spot proves too little: a build that only makes the hint token itself
+  // playable passes it while a click elsewhere on the destination's column
+  // does nothing. So the click lands on three distinct spots up point 11's
+  // column — near its middle-ward end, its centre, and its edge-ward end —
+  // all away from the hint token, which sits at the very edge (~0.9+ of the
+  // way down). A successful click CONSUMES the move (the piece arrives, the
+  // selection clears, the dice advance), so each spot gets its own fresh
+  // setup.
+  for (const f of [0.25, 0.5, 0.75]) {
+    await openApp(page);
+
+    await postJson<ApiState>(page, "/api/new", {});
+    await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 1] });
+    await page.reload();
+    await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+    await page.getByTestId("rollBtn").click();
+    await expect
+      .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die]")
+      .toBeGreaterThanOrEqual(2);
+
+    // With 2-1 at the opening the back piece on 13 has one move, to the empty 11
+    // (black holds 12). A game that doesn't offer it is the dice checks' finding.
+    const before = await readState(page);
+    expect(before.legalMoves.some((m) => m.from === 13 && m.to === 11), "[needs: G03]").toBe(true);
+
+    const hints = page.getByTestId("hint");
+    const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
+    const backCount = await back.count();
+    if (backCount > 0) await playerClickUntilShown(back.nth(backCount - 1), hints);
+    await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]").toBeGreaterThan(0);
+
+    // Point 11 sits in the bottom row: its column runs from the board's middle
+    // (box.y, the triangle's tip) down to the board's edge (box.y + box.height,
+    // where the stack and the hint token sit).
+    const box = await readColumnBox(page, 11);
+    expect(box, "[needs: REQ-TESTID/point REQ-TESTID/checker]").not.toBeNull();
+    await page.mouse.click(box!.centerX, box!.y + box!.height * f);
+
+    // A game whose hints play no move either is told that first (F25).
+    await expect
+      .poll(async () => (await readState(page)).points[11], {
+        message: "[needs: F25] the piece did not go to 11",
+        timeout: 3_000,
+      })
+      .toBeGreaterThan(0);
+  }
+});
+
+test("[F60] REQ-HINT — picking a piece up from its column", async ({ page }) => {
+  // The build prompt: "Clicking one of your checkers shows you where it can
+  // go." A player aims at the piece, but a piece is a small disc standing in a
+  // tall column, and a click that lands on the column away from the disc is
+  // still a click on that piece's point: it must pick the piece up, not
+  // silently do nothing. With nothing selected, click point 13's column near
+  // its middle-ward end — its checkers stack from the top edge down, so the
+  // spot is away from every one of them — and require the hints.
   await openApp(page);
 
   await postJson<ApiState>(page, "/api/new", {});
@@ -383,44 +442,51 @@ test("[F45] REQ-HINT — clicking where a piece can go plays the move", async ({
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die]")
     .toBeGreaterThanOrEqual(2);
 
-  // With 2-1 at the opening the back piece on 13 has one move, to the empty 11
-  // (black holds 12). A game that doesn't offer it is the dice checks' finding.
-  const before = await readState(page);
-  expect(before.legalMoves.some((m) => m.from === 13 && m.to === 11), "[needs: G03]").toBe(true);
+  // At the 2-1 opening the back piece on 13 is a movable source.
+  const state = await readState(page);
+  expect(state.legalMoves.some((m) => m.from === 13), "[needs: G03]").toBe(true);
 
-  const hints = page.getByTestId("hint");
-  const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
-  const backCount = await back.count();
-  if (backCount > 0) await playerClickUntilShown(back.nth(backCount - 1), hints);
-  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]").toBeGreaterThan(0);
-
-  // Point 11 sits in the bottom row, whose stacks start at the bottom edge:
-  // the first piece of a stack is its lowest.
+  // Point 13 is a top-row point: its checkers stack from the top edge (box.y)
+  // downward. The opening 5-checker stack fills most of the column, so a fixed
+  // fraction lands on a checker. Click just below the deepest checker's bottom
+  // edge instead — a bare stretch of the point's own column (the triangle tip
+  // end, toward the board's middle) — so only the column can pick the piece up.
+  const box = await readColumnBox(page, 13);
+  expect(box, "[needs: REQ-TESTID/point REQ-TESTID/checker]").not.toBeNull();
   const spot = await page.evaluate(() => {
-    const point = document.querySelector('[data-testid="point"][data-point="11"]');
+    const point = document.querySelector('[data-testid="point"][data-point="13"]');
     if (!point) return null;
-    const firsts: number[] = [];
-    for (let p = 1; p <= 12; p++) {
-      const stack = [...document.querySelectorAll(`[data-testid="checker"][data-loc="${p}"]`)].map((el) => {
-        const r = el.getBoundingClientRect();
-        return r.y + r.height / 2;
-      });
-      if (stack.length > 0) firsts.push(Math.max(...stack));
+    const pb = point.getBoundingClientRect();
+    let deepest = pb.y;
+    for (const el of document.querySelectorAll('[data-testid="checker"][data-loc="13"]')) {
+      const r = el.getBoundingClientRect();
+      deepest = Math.max(deepest, r.y + r.height);
     }
-    if (firsts.length === 0) return null;
-    firsts.sort((a, b) => a - b);
-    const box = point.getBoundingClientRect();
-    return { x: box.x + box.width / 2, y: firsts[Math.floor(firsts.length / 2)] };
+    // A few pixels below the deepest checker's bottom, clamped inside the column.
+    return { x: pb.x + pb.width / 2, y: Math.min(deepest + 6, pb.y + pb.height - 4) };
   });
-  expect(spot, "[needs: REQ-TESTID/point REQ-TESTID/checker]").not.toBeNull();
-  await page.mouse.click(spot!.x, spot!.y);
+  expect(spot).not.toBeNull();
+  const x = spot!.x;
+  const y = spot!.y;
 
-  // A game whose hints play no move either is told that first (F25).
+  // Click the spot the way a player does when the game is not ready yet:
+  // click, look for the hints, click again if none came up — the dice are
+  // still rolling for a moment after they are on screen, and a game that
+  // ignores a click in that moment is right (playerClickUntilShown's rule,
+  // at a bare column spot).
+  const hints = page.getByTestId("hint");
+  for (let i = 0; i < 8; i++) {
+    await page.mouse.click(x, y);
+    try {
+      await expect(hints.first()).toBeAttached({ timeout: 1500 });
+      break;
+    } catch {
+      // not ready yet — a player would click again
+    }
+  }
+
   await expect
-    .poll(async () => (await readState(page)).points[11], {
-      message: "[needs: F25] the piece did not go to 11",
-      timeout: 3_000,
-    })
+    .poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]")
     .toBeGreaterThan(0);
 });
 

@@ -142,18 +142,42 @@ function render() {
     for (const loc in byLoc) {
       const idxs = byLoc[loc];
       const count = idxs.length;
+      // J8: a numbered point draws at most 6 pieces; bar/off are never capped.
+      const drawn = (loc === "bar" || loc === "off") ? count : Math.min(count, 6);
       idxs.forEach((ci, stackPos) => {
         const el = checkerEls[color][ci];
+        if (stackPos >= drawn) {
+          // surplus beyond the cap: unplaced — untagged, no data-loc,
+          // parked off-board at buildBoard's transform, no zIndex. It goes
+          // there without sliding: a player never sees a piece leave the board.
+          delete el.dataset.testid;
+          delete el.dataset.loc;
+          el.style.transition = "none";
+          el.style.transform = "translate(-100px,-100px)";
+          el.style.zIndex = "";
+          return;
+        }
+        // re-tag every render: a former 7th piece that becomes 6th must
+        // regain data-testid="checker" — and appears in its slot without
+        // sliding in from its off-board parking spot.
+        const wasParked = !el.dataset.loc;
+        el.dataset.testid = "checker";
         el.dataset.loc = String(loc);
-        const { x, y } = xyFor(color, loc === "bar" || loc === "off" ? loc : Number(loc), stackPos, count);
+        const { x, y } = xyFor(color, loc === "bar" || loc === "off" ? loc : Number(loc), stackPos, drawn);
         el.style.width = csize + "px";
         el.style.height = csize + "px";
+        if (wasParked) el.style.transition = "none";
         el.style.transform = `translate(${x}px, ${y}px)`;
+        if (wasParked) {
+          void el.offsetWidth;
+          el.style.transition = "";
+        }
         el.style.zIndex = String(10 + stackPos);
-        // count badge on the topmost checker when a stack is tall
-        if (count > 5 && stackPos === Math.min(count - 1, 4)) {
+        // J8: count badge rides the 6th (top) drawn piece when 7+ on the point
+        if (count > 6 && stackPos === drawn - 1) {
           const badge = document.createElement("div");
           badge.className = "countbadge";
+          badge.dataset.testid = "checkerCount";
           badge.textContent = count;
           el.appendChild(badge);
         }
@@ -206,8 +230,38 @@ function applyLocalMove(color, from, to, hit) {
     const oi = model[opp].findIndex((l) => l === to);
     if (oi >= 0) model[opp][oi] = "bar";
   }
-  const i = model[color].findIndex((l) => l === fromLoc);
-  if (i >= 0) model[color][i] = toLoc;
+  // J1: the piece that leaves a point is the TOP of its stack as drawn — on a
+  // 7+ point the 6th entry at fromLoc (the surplus is parked, never seen);
+  // otherwise the LAST entry (greatest index = farthest from the board edge).
+  const fromIdxs = [];
+  model[color].forEach((l, k) => { if (l === fromLoc) fromIdxs.push(k); });
+  const fromDrawn = (fromLoc === "bar" || fromLoc === "off") ? fromIdxs.length : Math.min(fromIdxs.length, 6);
+  const i = fromIdxs.length ? fromIdxs[fromDrawn - 1] : -1;
+  if (i >= 0) {
+    model[color][i] = toLoc;
+    // J2: an arrival joins at the TOP (far end) — re-pack so the moved entry
+    // becomes the LAST index among all entries equal to toLoc. No-op when it
+    // is already last. "off"/"bar" are ordinary group values here.
+    // The re-pack rotates model AND checkerEls together: the moved ENTRY
+    // (element + value) travels to index `last`, the entries in between shift
+    // one index toward the front. Every other element keeps drawing the very
+    // same location and slot; only the mover's slot changes — render draws it
+    // at the highest stackPos of the group (the far end, farthest from the
+    // board edge). DOM order is untouched; element identity survives.
+    // On a point already drawing six, the arrival takes the top drawn slot
+    // and the piece it displaces joins the parked surplus behind the count.
+    const arr = model[color];
+    const els = checkerEls[color];
+    arr.splice(i, 1);
+    const [moverEl] = els.splice(i, 1);
+    const members = [];
+    arr.forEach((l, k) => { if (l === toLoc) members.push(k); });
+    const size = members.length + 1;
+    const rank = (toLoc === "bar" || toLoc === "off") ? size - 1 : Math.min(size, 6) - 1;
+    const at = rank < members.length ? members[rank] : members.length ? members[members.length - 1] + 1 : i;
+    arr.splice(at, 0, toLoc);
+    els.splice(at, 0, moverEl);
+  }
 }
 
 // ---------- selectable checkers + hints ----------
@@ -216,23 +270,36 @@ function clearHints() {
   checkerEls.white.forEach((e) => e.classList.remove("selected"));
   checkerEls.black.forEach((e) => e.classList.remove("selected"));
 }
+// J5/J6: column click handlers live on the point divs (1..24); clear them
+// wherever checker click handlers are cleared so stale handlers never fire.
+function clearPointClicks() {
+  for (let n = 1; n <= 24; n++) if (pointDivs[n]) pointDivs[n].onclick = null;
+}
 function applySelectable() {
   checkerEls.white.forEach((e) => { e.classList.remove("selectable"); e.onclick = null; });
   checkerEls.black.forEach((e) => { e.classList.remove("selectable"); e.onclick = null; });
+  clearPointClicks();
   if (busy || !state || state.turn !== "white" || state.phase !== "move") return;
   const froms = new Set(state.legalMoves.map((m) => m.from));
   // mark topmost white checker of each legal source
   froms.forEach((from) => {
     const loc = from === BAR ? "bar" : from;
-    // topmost checker at loc
+    // topmost checker at loc — the topmost DRAWN one. With the J8 cap a 7+
+    // stack parks its surplus entries off-board as UNPLACED; an unplaced
+    // element is not a click target. For stacks of six or fewer this picks
+    // exactly the last index, as before.
+    const cap = (loc === "bar" || loc === "off") ? 15 : 6;
     let topIdx = -1, topPos = -1;
     model.white.forEach((l, i) => {
-      if (l === loc) { topPos++; if (topPos >= 0) topIdx = i; }
+      if (l === loc) { topPos++; if (topPos < cap) topIdx = i; }
     });
     if (topIdx >= 0) {
       const el = checkerEls.white[topIdx];
       el.classList.add("selectable");
       el.onclick = () => selectSource(from);
+      // J6: the point's whole COLUMN also picks up its top piece. BAR has no
+      // column — it stays checker-click (+ J7 auto-show).
+      if (from !== BAR) pointDivs[from].onclick = () => selectSource(from);
     }
   });
 }
@@ -241,11 +308,20 @@ function selectSource(from) {
   if (busy) return;
   selected = from;
   clearHints();
-  // highlight selected source's topmost checker
+  // J5 precedence: with a piece selected, point columns become DESTINATION
+  // handlers only — the J6 pick-up handlers bound by applySelectable go first.
+  clearPointClicks();
+  // J6 with a piece picked up: another movable piece's column picks that
+  // piece up instead — unless it is a destination of this one (bound below).
+  new Set(state.legalMoves.map((m) => m.from)).forEach((f) => {
+    if (f !== BAR && f !== from) pointDivs[f].onclick = () => selectSource(f);
+  });
+  // highlight selected source's topmost DRAWN checker
   const loc = from === BAR ? "bar" : from;
   const idxs = [];
   model.white.forEach((l, i) => { if (l === loc) idxs.push(i); });
-  if (idxs.length) checkerEls.white[idxs[idxs.length - 1]].classList.add("selected");
+  const shown = (loc === "bar" || loc === "off") ? idxs.length : Math.min(idxs.length, 6);
+  if (idxs.length) checkerEls.white[idxs[shown - 1]].classList.add("selected");
 
   const dests = state.legalMoves.filter((m) => m.from === from);
   const hintLayer = $("pointHints");
@@ -270,6 +346,9 @@ function selectSource(from) {
     h.title = to === OFF ? "Bear off (die " + dice.join(" or ") + ")" : "Move here using die " + dice.join(" or ");
     h.onclick = () => doMove(from, to, dice[0]);
     hintLayer.appendChild(h);
+    // J5: the destination point's whole COLUMN plays the same move (same die
+    // as the hint). OFF has no column — bear-off stays hint-only.
+    if (to !== OFF) pointDivs[to].onclick = () => doMove(from, to, dice[0]);
   }
 }
 
@@ -296,7 +375,15 @@ async function doRoll() {
   busy = false;
   updateUI();
   clearHints();
-  if (state.turnOver && state.history === undefined) {}
+  // J7: when the roll leaves a bar entry to make, show the entry hints right
+  // away — no click on the bar piece needed. MUST run after clearHints() above
+  // (updateUI->applySelectable also clears point clicks) or the hints are wiped.
+  // The bar checker's own click still works: it re-runs selectSource(BAR),
+  // which re-shows the same hints rather than hiding them.
+  if (!busy && state && state.turn === "white" && state.phase === "move" &&
+      state.legalMoves.some((m) => m.from === BAR)) {
+    selectSource(BAR);
+  }
   maybeAutoEnd();
 }
 

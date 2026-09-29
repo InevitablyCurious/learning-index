@@ -7,8 +7,8 @@ Render everything from the serialized state: checkers on points, bar and off, di
 
 What the game should feel like to play:
 
-- Clicking one of your checkers shows you where it can go, and clicking one of those destinations plays that move.
-- A hint appears for each playable die when a movable checker is selected; selecting a bar checker with two playable entry dice shows two hints, one per die; clicking a hint executes that move for the selected checker, consuming the hint's die.
+- Clicks work anywhere in a point's column — the upright rectangle the point's triangle stands in, from the board's edge to the middle. Clicking anywhere in the column of a point holding one of your movable pieces picks up that point's top piece and shows its hints; with a piece picked up, clicking anywhere in the column of a point it can move to plays that move.
+- A hint appears for each playable die; when you must enter from the bar, the bar entry hints appear as soon as the dice have rolled, with no click on the bar piece, one hint per playable entry die. Clicking a hint executes that move, consuming the hint's die.
 - Checkers slide between points rather than jumping; dice visibly roll; hints catch the eye. Animate with CSS transitions and CSS animations — each checker animates position changes through a `transition` covering `transform` (or `all`) with a non-zero duration, or through a CSS `animation`; each hint uses a CSS `animation`.
 - Hitting sends the opponent's checker to the bar, and you can see it land there; a checker re-entering from the bar travels back onto the board; a checker borne off appears in the off tray.
 - Pip counts, cube value, cube owner, score and whose turn it is are all on screen and match the API.
@@ -17,7 +17,7 @@ What the game should feel like to play:
 - The board should be on the left and fill the screen, with all the roll, double and other buttons and game info on the right — about 80% of the width for the board and 20% for the buttons. That's on an ordinary laptop screen, 1280×800 or 1440×900, with nothing to scroll.
 - The board is drawn as you'd see it sitting at a real board as white: point 24 at the top right, the top row running 13 to 24 left to right and the bottom row 12 down to 1 left to right, each row split into two halves of six by the bar, which runs down the middle the full height of the board.
 - Each point is a long triangle that stands out from the board, its wide end on the board's edge and its tip reaching most of the way to the middle; side by side, the points alternate between two colours.
-- Each checker is a perfect circle, sized to about 80% of the width of the point it sits on (not counting the bar). A point's checkers stack from the board's edge toward the middle, and every one of them shows whole.
+- Each checker is a perfect circle, sized to about 80% of the width of the point it sits on (not counting the bar). A point's checkers stack from the board's edge toward the middle, and a point draws at most six checkers — from seven up it draws six, and the piece at the top of the stack (the sixth, farthest from the edge) shows the total number on the point.
 - The off tray sits at the right-hand end of the board, beside points 1 and 24, where the checkers are borne off. It runs the full height of the board and is at least as wide as a piece, so a borne-off piece fits in it lying on its side, its long edge parallel to the top and bottom of the board.
 - The page responds promptly — no action hangs or leaves a player waiting.
 - Winning ends the game with a banner, and you can start a new game without reloading the page.
@@ -33,7 +33,8 @@ Required `data-testid` hooks (EXACT — the UI automation selects on these; stat
 **Dynamic:**
 
 - Each board point: `data-testid="point"` and `data-point="<1..24>"` — exactly 24 points.
-- Each checker: `data-testid="checker"`, `data-color="white|black"`, `data-loc="<1..24>|bar|off"` — exactly 30 checkers (15 per colour), positioned at their board/bar/off location.
+- Each checker: `data-testid="checker"`, `data-color="white|black"`, `data-loc="<1..24>|bar|off"` — the tag appears only on drawn pieces (at most six per point, plus bar and off), positioned at their board/bar/off location. At the opening position (max five per point) there are exactly 30 checkers (15 per colour); fewer tags exist only when a point is capped. From seven up, the top (6th) drawn piece carries a `data-testid="checkerCount"` element whose text is the integer total for that point.
+- The checker count: `data-testid="checkerCount"` — the count element shown on the top piece of a point holding seven or more checkers.
 - Each move hint: `data-testid="hint"`.
 - Each die: `data-testid="die"`, nested inside the `dice` container.
 - After a roll, exactly two dice are visible, a double too — a double still gives four moves.
