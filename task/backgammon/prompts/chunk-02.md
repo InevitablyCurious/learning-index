@@ -37,7 +37,7 @@ Requirements:
 - **Doubling-cube policy — these are our house numbers, use them exactly.**
   - *Accepting.* `shouldAiAccept` takes the cube (returns `"double"`) when `winProbability` is at or above the take point, and passes (`"no-double"`) below it. Take points: **easy 0.32, medium 0.27, hard 0.24**.
   - *Offering.* `shouldAiDouble` offers (returns `"double"`) when `winProbability` is inside the offer window, else holds. Window: **medium 0.72 to 0.90, hard 0.68 to 0.90**. Above 0.90 it is too good to double — hold and play on. **Easy never offers.**
-  - Both cube functions return a human-readable `reasoning` string explaining the decision.
+  - Both cube functions return a short, plain `reasoning` string in the words a player would read — like "AI offers a double.", "AI accepts the double.", or "AI declines the double." — with no win percentages, no pip counts, and no internal thresholds.
 
 **Before you hand it over, run it.** Import the engine and the AI together and let them play — have the AI choose moves from real positions at each difficulty, and check every move it returns is one the engine considers legal. Ask it for a cube decision in a winning position and a losing one. You are checking that it runs and answers promptly, not that any single choice is the best one.
 

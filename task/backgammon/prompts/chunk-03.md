@@ -36,15 +36,16 @@ pip, legalMoves, canDouble
 - `history` is NOT serialized.
 - The server MUST hold a complete, initialized game state from startup, so `/api/state` and `/api/debug/state` return a valid serialized game even before any `/api/new` is called.
 
-Turn flow the server drives: `/api/ai` advances the computer's turn using `chooseMoves`. When the human has no move available, the response carries `turnOver === true`, `legalMoves === []`, and a `message` whose wording contains **"no legal move"** or **"pass"** — automation reads that wording, so those words have to appear. A finished game reports `winner`, `winType`, `pointsWon` and a clear `message`. `/api/new` starts a fresh game without any page reload and carries `score` and `gamesPlayed` forward.
+Turn flow the server drives: `/api/ai` advances the computer's turn using `chooseMoves`. When the human has no move available, the response carries `turnOver === true`, `legalMoves === []`, and a `message` whose text is exactly **"No moves available"** — automation reads that wording, so those words have to appear. A finished game reports `winner`, `winType`, `pointsWon` and a clear `message`. `/api/new` starts a fresh game without any page reload and carries `score` and `gamesPlayed` forward.
 
 - Doubling cube state: the cube is `{value, owner}`, and **`owner: null` is how we represent a centered cube** — a new game starts `{value: 1, owner: null}`. `canDouble` reports whether the human may offer a double at this exact moment.
+- The computer's double messages are plain words: when it offers a double the message says it is offering; when it answers a double the message says it accepts or declines — never a win percentage, a pip count, or its reasoning.
 
 Debug seam — gated by env `DEBUG_API=1`; when `DEBUG_API` is not `1` these routes behave as unknown endpoints (404). It exists so a game can be driven into a known position with known dice:
 
 | Method | Path | Body | Effect |
 |---|---|---|---|
-| POST | `/api/debug/state` | a full/partial state object (field names as above) | Overwrite the in-memory game with the supplied fields. The response is the resulting serialized state, and it echoes the supplied fields back — a position set this way reads back the same through `/api/state`. |
+| POST | `/api/debug/state` | a full/partial state object — any of these fields: `points`, `bar`, `off`, `turn`, `phase`, `dice`, `remainingDice`, `cube`, `difficulty`, `score`, `winner`, `winType`, `pointsWon`, `doubleOfferedBy`, `message`, `turnOver`, `gamesPlayed` | Overwrite the in-memory game with the supplied fields. The response is the resulting serialized state, and it echoes the supplied fields back — a position set this way reads back the same through `/api/state`. |
 | POST | `/api/debug/roll` | `{dice:number[]}` | Enqueue `dice` as the next roll; the next dice-roll consumes this queue instead of `Math.random`. Doubles are a 4-length array (e.g. `[3,3,3,3]`); a normal roll is 2-length. A subsequent `/api/roll` yields those dice, sorted ascending in `dice`. Returns serialized state. |
 
 A position supplied to `/api/debug/state` is a real backgammon position — exactly 15 checkers per side across points, bar and off.

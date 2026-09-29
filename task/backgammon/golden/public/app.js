@@ -314,7 +314,10 @@ async function doMove(from, to, die) {
   reconcile(s);
   render();
   updateUI();
-  maybeAutoEnd();
+
+  if (s.winner) {
+    showGameOver(s);
+  }
 }
 
 async function doUndo() {
@@ -331,7 +334,7 @@ async function doUndo() {
 
 function maybeAutoEnd() {
   if (state && state.turn === "white" && state.phase === "move" && state.turnOver) {
-    endTimer = setTimeout(() => doEndTurn(), 1100);
+    endTimer = setTimeout(() => doEndTurn(), 1500);
   }
 }
 function cancelAutoEnd() { if (endTimer) { clearTimeout(endTimer); endTimer = null; } }
@@ -353,16 +356,28 @@ async function doDouble() {
   // s.accepted / s.cubeReasoning
   if (s.winner) {
     state = s; reconcile(s); render(); updateUI();
-    showModal("Double Declined", `<p>The AI declined your double.</p><p><b>${escapeHtml(s.cubeReasoning || "")}</b></p><p>${escapeHtml(s.message)}</p>`, gameOverButtons());
+    showModal("You Win — Double Declined", `<p>The AI declined your double.</p><p>${escapeHtml(s.message)}</p>`, gameOverButtons());
     return;
   }
   state = s; updateUI();
-  showModal("Double Accepted", `<p>The AI accepted your double. The cube is now <b>${s.cube.value}</b>.</p><p>${escapeHtml(s.cubeReasoning || "")}</p>`, [
+  showModal("Double Accepted", `<p>The AI accepted your double. The cube is now <b>${s.cube.value}</b>.</p>`, [
     { label: "Roll the dice", primary: true, onClick: () => { hideModal(); } },
   ]);
 }
 
 // ---------- AI turn ----------
+function showAiDoubleOffer(s) {
+  showModal(
+    `AI offers a double`,
+    `<p>The AI wants to raise the stake to <b>${s.cube.value * 2}</b>.</p>` +
+    `<p>If you decline, the AI wins <b>${s.cube.value}</b> point${s.cube.value === 1 ? "" : "s"}.</p>`,
+    [
+      { label: `Accept (play for ${s.cube.value * 2})`, primary: true, onClick: async () => { hideModal(); await respondDouble(true); } },
+      { label: "Decline", onClick: async () => { hideModal(); await respondDouble(false); } },
+    ],
+  );
+}
+
 async function runAi() {
   busy = true;
   updateUI();
@@ -373,16 +388,7 @@ async function runAi() {
     // AI offers a double; player decides
     busy = false;
     state = s; updateUI();
-    showModal(
-      `AI offers a double`,
-      `<p>The AI wants to raise the stake to <b>${s.cube.value * 2}</b>.</p>` +
-      `<p>${escapeHtml(s.cubeReasoning || "")}</p>` +
-      `<p>If you decline, the AI wins <b>${s.cube.value}</b> point${s.cube.value === 1 ? "" : "s"}.</p>`,
-      [
-        { label: `Accept (play for ${s.cube.value * 2})`, primary: true, onClick: async () => { hideModal(); await respondDouble(true); } },
-        { label: "Decline", onClick: async () => { hideModal(); await respondDouble(false); } },
-      ],
-    );
+    showAiDoubleOffer(s);
     return;
   }
 
@@ -551,8 +557,7 @@ function gameOverButtons() {
 function showGameOver(s) {
   const won = s.winner === "white";
   const title = won ? "🎉 You Win!" : "AI Wins";
-  const body = `<p><b>${escapeHtml(s.message)}</b></p>` +
-    `<p>Match score — You <b>${s.score.white}</b> · AI <b>${s.score.black}</b></p>`;
+  const body = `<p><b>${escapeHtml(s.message)}</b></p>`;
   showModal(title, body, gameOverButtons());
 }
 
@@ -577,6 +582,14 @@ async function init() {
   reconcile(s);
   render();
   updateUI();
+
+  if (s.difficulty) $("difficulty").value = s.difficulty;
+
+  if (s.phase === "doubleOffered" && s.doubleOfferedBy === "black") {
+    showAiDoubleOffer(s);
+  } else if (s.turn === "black" && s.phase !== "gameover") {
+    runAi();
+  }
 
   let rt;
   window.addEventListener("resize", () => {

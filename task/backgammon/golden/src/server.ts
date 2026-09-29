@@ -167,6 +167,8 @@ const DEBUG_STATE_KEYS = [
   "pointsWon",
   "doubleOfferedBy",
   "message",
+  "turnOver",
+  "gamesPlayed",
 ] as const;
 
 function actionDebugState(body: any) {
@@ -186,8 +188,10 @@ function actionDebugRoll(body: any) {
 function actionNew(body: any) {
   const diff = ["easy", "medium", "hard"].includes(body?.difficulty) ? body.difficulty : game.difficulty;
   const score = game.score; // keep running match score across games
+  const gamesPlayed = game.gamesPlayed; // keep games-played count across games
   game = init(diff);
   game.score = score;
+  game.gamesPlayed = gamesPlayed;
   game.message = "New game. Your turn — roll the dice (or offer a double).";
 }
 
@@ -203,7 +207,7 @@ function actionRoll() {
   const dl = game.dice.length === 4 ? `double ${game.dice[0]}s` : `${game.dice[0]} and ${game.dice[1]}`;
   if (legal.length === 0) {
     game.turnOver = true;
-    game.message = `You rolled ${dl}, but have no legal move — your turn passes.`;
+    game.message = "No moves available";
   } else {
     game.message = `You rolled ${dl}. Select a checker to move.`;
   }
@@ -276,11 +280,11 @@ function actionDouble() {
     game.cube.owner = AI;
     game.phase = "roll";
     game.doubleOfferedBy = null;
-    game.message = `You doubled. ${decision.reasoning} Cube is now ${game.cube.value}. Roll the dice.`;
+    game.message = `AI accepts the double. Cube is now ${game.cube.value}. Roll the dice.`;
   } else {
     // AI declines
     finishGame(game, HUMAN, null, true);
-    game.message = `You doubled. ${decision.reasoning} ${game.message}`;
+    game.message = `AI declines the double. ${game.message}`;
   }
   return { cubeReasoning: decision.reasoning, accepted: decision.action === "double" };
 }
@@ -315,7 +319,7 @@ function actionAi() {
     if (dec.action === "double") {
       game.phase = "doubleOffered";
       game.doubleOfferedBy = AI;
-      game.message = `AI offers a double to ${game.cube.value * 2}. ${dec.reasoning}`;
+      game.message = `AI offers a double to ${game.cube.value * 2}.`;
       return { cubeReasoning: dec.reasoning, aiDoubled: true };
     }
     // else fall through and roll
@@ -398,7 +402,10 @@ async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse, 
     res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
     res.end(data);
   } catch {
-    res.writeHead(404, { "Content-Type": "text/plain" }).end("Not found");
+    // SPA fallback: every non-/api path serves the page
+    const data = await readFile(path.join(PUBLIC_DIR, "index.html"));
+    res.writeHead(200, { "Content-Type": MIME[".html"] });
+    res.end(data);
   }
 }
 

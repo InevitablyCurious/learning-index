@@ -323,6 +323,23 @@ function legalMovesNowForSequence(b: Board, player: Player, dice: number[], need
       if (1 + maxPlies(nb, player, rest) >= needed) result.push(m);
     }
   }
+
+  // "Higher die" rule (mirrors legalMovesNow): non-doubles, only one die can be
+  // played (needed === 1 — at depth 0 this means mp === 1; deeper plies of a
+  // non-double turn always have a single remaining die, so this fires only at
+  // the turn's first decision point), and both dice are individually playable
+  // -> only the higher die is legal.
+  const isDouble = dice.length >= 2 && dice.every((x) => x === dice[0]);
+  if (needed === 1 && !isDouble && dice.length === 2) {
+    const uniq = Array.from(new Set(dice));
+    if (uniq.length === 2) {
+      const playable = uniq.filter((d) => singleMoves(b, player, d).length > 0);
+      if (playable.length === 2) {
+        const higher = Math.max(uniq[0], uniq[1]);
+        return result.filter((m) => m.die === higher);
+      }
+    }
+  }
   return result;
 }
 

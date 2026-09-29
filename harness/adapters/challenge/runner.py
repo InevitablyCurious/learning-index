@@ -2406,7 +2406,11 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
     # failure. E08 asks for each resulting position once; its old player line
     # ("the computer takes a noticeably long time") described latency the test
     # never measures.
-    _TEAM_GATE_TOKENS = ("E08",)
+    # Checks a player never meets — the integration contract (a new game keeps
+    # gamesPlayed, the debug route takes every state field, any non-/api path
+    # serves the page) — are told by the integrating team, in their voice.
+    # Every other gate token is the tester's.
+    _TEAM_GATE_TOKENS = ("E08", "G27", "G28", "G29")
 
     # HARNESS-INFRA CHECK NAMES (WO-FEEDBACK-VOICE-3 follow-up, 2026-08-30).
     # These are born only when a RUNNER DIES mid-run —

@@ -1,1 +1,1 @@
-Got stuck with nothing I could play again, and the game still says nothing about it.
+Stuck again with no move to play, and it still doesn't say 'No moves available'.

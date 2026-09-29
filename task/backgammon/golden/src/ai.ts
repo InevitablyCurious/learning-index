@@ -210,26 +210,24 @@ export function shouldAiDouble(
     return { action: "no-double", reasoning: "Easy AI plays a straightforward game and keeps the cube centered." };
   }
   const wp = winProbability(b, player);
-  const myPip = pipCount(b, player);
-  const oppPip = pipCount(b, opponent(player));
   // Double window: strong but not certain (to avoid opponent's easy pass being pointless).
   const lower = difficulty === "hard" ? 0.68 : 0.72;
   const upper = 0.9; // too-good positions: play on for gammon rather than double out
   if (wp >= lower && wp <= upper) {
     return {
       action: "double",
-      reasoning: `AI estimates a ${(wp * 100).toFixed(0)}% winning chance (pips ${myPip} vs ${oppPip}). It is in the doubling window, so it offers the cube.`,
+      reasoning: "AI offers a double.",
     };
   }
   if (wp > upper) {
     return {
       action: "no-double",
-      reasoning: `AI is winning strongly (${(wp * 100).toFixed(0)}%) and plays on for a gammon rather than doubling you out.`,
+      reasoning: "AI holds off doubling to play for a gammon.",
     };
   }
   return {
     action: "no-double",
-    reasoning: `AI's winning chances (${(wp * 100).toFixed(0)}%) are not yet high enough to double.`,
+    reasoning: "AI holds off doubling.",
   };
 }
 
@@ -240,18 +238,16 @@ export function shouldAiAccept(
   difficulty: "easy" | "medium" | "hard",
 ): CubeDecision {
   const wp = winProbability(b, player); // AI's own win probability
-  const myPip = pipCount(b, player);
-  const oppPip = pipCount(b, opponent(player));
   // Take point ~ 25% (drop if below). Easy AI is timid and drops earlier.
   const takePoint = difficulty === "easy" ? 0.32 : difficulty === "medium" ? 0.27 : 0.24;
   if (wp >= takePoint) {
     return {
       action: "double", // reuse field: "double" == accept
-      reasoning: `AI takes: it still wins about ${(wp * 100).toFixed(0)}% of the time (pips ${myPip} vs ${oppPip}), above its take point.`,
+      reasoning: "AI accepts the double.",
     };
   }
   return {
     action: "no-double", // == decline/pass
-    reasoning: `AI passes: only about ${(wp * 100).toFixed(0)}% winning chance (pips ${myPip} vs ${oppPip}), below its take point, so it declines and concedes the current stake.`,
+    reasoning: "AI declines the double.",
   };
 }

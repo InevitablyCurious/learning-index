@@ -55,11 +55,11 @@ select, .btn {
   border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer;
   transition: background .15s, transform .05s, opacity .15s;
 }
-select:hover, .btn:hover { background: #2c4763; }
+select:hover, .btn:not(:disabled):hover { background: #2c4763; }
 .btn:active { transform: translateY(1px); }
-.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn:disabled { opacity: .3; cursor: not-allowed; filter: grayscale(1); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #05233f; font-weight: 700; }
-.btn.primary:hover { background: #6cb6ff; }
+.btn.primary:not(:disabled):hover { background: #6cb6ff; }
 
 /* ---------- table layout ---------- */
 #tablewrap { flex: 1; display: flex; gap: 14px; min-height: 0; align-items: stretch; }

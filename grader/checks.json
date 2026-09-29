@@ -77,7 +77,7 @@
     "G13": {
       "name": "Turn flow",
       "what": "A die can't be used twice, turns go white → black → white, and a player with no move passes with a clear message.",
-      "how": "Through the running server with the roll fixed to 1 and 3: after playing the 3, playing it again must leave the remaining dice unchanged. Playing out white's turn, ending it and advancing the computer must hand the turn back to white. With white on the bar and both entry points blocked, rolling 2 and 4 must end the turn with no legal moves and a message saying there's no legal move or a pass."
+      "how": "Through the running server with the roll fixed to 1 and 3: after playing the 3, playing it again must leave the remaining dice unchanged. Playing out white's turn, ending it and advancing the computer must hand the turn back to white. With white on the bar and both entry points blocked, rolling 2 and 4 must end the turn with no legal moves and a message reading exactly 'No moves available'."
     },
     "G14": {
       "name": "Legal computer moves, and hard beats easy",
@@ -133,6 +133,26 @@
       "name": "The computer takes its turn",
       "what": "After the player ends a turn, the computer takes its turn and control returns to the player.",
       "how": "Rolls, completes white's moves, ends the turn, drives the AI turn through the API, and asserts the turn comes back to white."
+    },
+    "G27": {
+      "name": "A new game keeps gamesPlayed",
+      "what": "Starting a new game carries the gamesPlayed count forward instead of resetting it.",
+      "how": "Through the running server: finish a game, start a new one, and require the gamesPlayed count to be preserved rather than reset to zero."
+    },
+    "G28": {
+      "name": "The debug route honours turnOver and gamesPlayed",
+      "what": "The debug state route accepts the turnOver flag and the gamesPlayed count like the other state fields.",
+      "how": "Through the running server: post turnOver and gamesPlayed to the debug state route and require both to be reflected in the resulting state."
+    },
+    "G29": {
+      "name": "Any non-API path serves the game page",
+      "what": "A path outside /api serves the game page instead of 404ing.",
+      "how": "Through the running server: fetch a non-/api path and require the HTML page (status 200 with a text/html content type)."
+    },
+    "G30": {
+      "name": "The computer plays the higher die when only one is playable",
+      "what": "When only one of the computer's two dice can actually be played, it plays the higher one.",
+      "how": "Through the engine: on fixed one-move boards, drive the AI's move chooser at every difficulty several times and require every chosen move to be legal (never the lower die)."
     },
     "E01": {
       "name": "Doubles are four moves",
@@ -202,7 +222,7 @@
     "F05": {
       "name": "No-move notice",
       "what": "When the player can't move, the page says so.",
-      "how": "Puts white on the bar with both entry points blocked and fixes the roll to 2-4. After Roll the message must say there's no legal move or a pass."
+      "how": "Puts white on the bar with both entry points blocked and fixes the roll to 2-4. After Roll the message must read exactly 'No moves available'."
     },
     "F06": {
       "name": "Pip counts on screen",
@@ -255,9 +275,9 @@
       "how": "Loads the page at both addresses: each must show the board with 24 points and 30 checkers and no errors."
     },
     "F16": {
-      "name": "Whose turn survives a reload",
-      "what": "Whose turn it is stays the same after the page is reloaded.",
-      "how": "Sets the server's turn to black, reloads the page, and requires the reported turn to still be black."
+      "name": "The player's turn survives a reload",
+      "what": "Reloading during the player's turn leaves it the player's turn.",
+      "how": "Reloads a fresh game at the player's turn and requires the reported turn to still be the player's."
     },
     "F17": {
       "name": "Match score survives a reload",
@@ -398,6 +418,61 @@
       "name": "Clicking a destination moves there",
       "what": "Clicking the point a picked-up checker can move to plays that move.",
       "how": "Fixes the roll to 2-1, clicks Roll and the top checker on 13 (its one move is to the empty 11), then clicks point 11 where the moved checker will sit — as far in from the board's edge as the first checker of the other bottom-row stacks — and requires a checker on 11. A game whose hints play no move is F25's."
+    },
+    "F46": {
+      "name": "The decline pop-up says you won",
+      "what": "When the computer turns down the player's double, the pop-up title contains the word win.",
+      "how": "Sets a position where the player is far ahead, clicks the double button, and requires the pop-up title to contain win."
+    },
+    "F47": {
+      "name": "The turn waits for End Turn",
+      "what": "The player's turn never ends by itself; it waits for the End Turn click, and Undo keeps working until then.",
+      "how": "Sets a position white can move in, forces 6-5, plays every die by clicking until the turn is over, then waits 1.6 s: the turn must still be white's in the move phase. Undo must be available and give a die back ([aspect: undo]); after replaying, End Turn must hand the turn to the computer ([aspect: endturn])."
+    },
+    "F48": {
+      "name": "A no-move roll passes by itself",
+      "what": "A roll with no possible move shows the dice and 'No moves available' for about a second, then passes to the computer on its own.",
+      "how": "Blocks both of white's numbers with nothing on the bar, forces 6-5 and clicks Roll: the dice and a notice saying \"No moves available\" must be up for a second with the turn still white's ([aspect: notice]), and then the turn must pass to the computer without End Turn."
+    },
+    "F49": {
+      "name": "Plain double offer",
+      "what": "When the computer offers a double the message says so in plain words, not its win percentage, pip counts, or reasoning.",
+      "how": "A race the hard computer doubles in: after End Turn, something on screen — the message area or any pop-up — must say it is doubling ([aspect: shown]), and that text must not show win chances, pip counts or reasoning."
+    },
+    "F50": {
+      "name": "Plain double answer",
+      "what": "When the computer answers the player's double it says accept or decline in plain words, not its win percentage or pip counts.",
+      "how": "The player doubles from an even position (the medium computer takes) and from a hopeless one (it passes): each time something on screen must say what it did ([aspect: shown]), without win chances, pip counts or reasoning."
+    },
+    "F51": {
+      "name": "End pop-up names the winner and points",
+      "what": "The end-of-game pop-up says who won and the points the game was worth, with no 'Match score' line.",
+      "how": "Ends the game with the player's own last bear-off (F53's move). The end-of-game pop-up must say what the game was worth ([aspect: points]) and must not show a match score."
+    },
+    "F52": {
+      "name": "Greyed-out buttons look different",
+      "what": "Buttons the player can't use look clearly different from usable ones — dimmed and greyed out.",
+      "how": "New game: Undo and End Turn cannot be used yet, New Game and Roll can. From each button's screenshot, the spread between its brightest and darkest marks; the unusable pair must be at most 60% of the least clear usable button."
+    },
+    "F53": {
+      "name": "Bearing off the last piece opens the win pop-up",
+      "what": "When the player bears off their last piece, the end-of-game pop-up opens at once with a title that says they won.",
+      "how": "On screen: seed a one-checker bear-off position, play the last checker off, and require the win pop-up to appear immediately."
+    },
+    "F54": {
+      "name": "The difficulty control shows the level you're playing",
+      "what": "After the page reloads, the difficulty control shows the difficulty the game is actually running at, not a fixed default.",
+      "how": "On screen: start a game at Hard difficulty, reload the page, and require the difficulty control to still show Hard."
+    },
+    "F55": {
+      "name": "The computer finishes its turn after a reload",
+      "what": "If the player reloads during the computer's turn, the computer finishes that turn and control returns to the player.",
+      "how": "On screen: seed a position where it is the computer's turn, reload the page, and require the turn to become the player's as the computer completes its turn."
+    },
+    "F56": {
+      "name": "The pending double offer shows again after a reload",
+      "what": "If the player reloads while the computer's double offer is on screen, the offer shows again so the player can accept or decline.",
+      "how": "Seeds the computer's pending double offer and reloads: visible buttons to take and to pass the double must be on screen again, wherever the page puts them."
     }
   },
   "setup": [
@@ -598,6 +673,7 @@
         "F36",
         "F37",
         "F38",
+        "F52",
         "F44",
         "F15",
         "F19",
@@ -615,6 +691,9 @@
         "F06",
         "G26",
         "F34",
+        "G27",
+        "G28",
+        "G29",
         "REQ-BIND/",
         "REQ-API/",
         "REQ-STATE/",
@@ -624,7 +703,8 @@
         "REQ-RENDER/checker",
         "REQ-RENDER/bar",
         "REQ-RENDER/off-tray",
-        "REQ-RESPONSIVE/startup"
+        "REQ-RESPONSIVE/startup",
+        "F54"
       ]
     },
     {
@@ -650,6 +730,8 @@
         "F21",
         "F33",
         "F39",
+        "F47",
+        "F48",
         "REQ-RENDER/die",
         "REQ-RENDER/die-reload",
         "REQ-TESTID/die",
@@ -696,9 +778,11 @@
       "checks": [
         "G10",
         "F12",
+        "F51",
         "F22",
         "F23",
-        "F17"
+        "F17",
+        "F53"
       ]
     },
     {
@@ -712,7 +796,11 @@
         "G12",
         "G22",
         "G24",
-        "F20"
+        "F20",
+        "F46",
+        "F49",
+        "F50",
+        "F56"
       ]
     },
     {
@@ -721,7 +809,9 @@
       "checks": [
         "G14",
         "E08",
-        "REQ-RESPONSIVE/aiturn"
+        "REQ-RESPONSIVE/aiturn",
+        "G30",
+        "F55"
       ]
     }
   ],

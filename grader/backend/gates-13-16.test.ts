@@ -228,7 +228,7 @@ describe("Backgammon backend gates 13-16", () => {
       expect(state.legalMoves.length, entry).toBe(0);
       expect(typeof state.message, notice).toBe("string");
       expect(state.message.trim().length, notice).toBeGreaterThan(0);
-      expect(state.message, notice).toMatch(/no legal move|pass/i);
+      expect(state.message, notice).toMatch(/no moves available/i);
     });
   });
 
@@ -376,6 +376,86 @@ describe("Backgammon backend gates 13-16", () => {
   // [G15] REQ-COMPLETE lived here and is QUARANTINED — it flipped on
   // byte-identical code. See quarantine/G15-req-complete.test.ts for the
   // evidence and what it would take to re-admit it.
+
+  describe("[G30] REQ-HIGHER-DIE — the computer obeys the higher-die rule (seeded mp===1 trials)", () => {
+    let game: any;
+    let ai: any;
+
+    beforeAll(async () => {
+      ({ game, ai } = await loadEngine());
+    });
+
+    it("[G30] REQ-HIGHER-DIE — the computer obeys the higher-die rule", () => {
+      const originalRandom = Math.random;
+      Math.random = mulberry32(0x9e3779b9);
+
+      try {
+        const player: Player = "white";
+
+        // Two deterministic positions with exactly one die playable (mp === 1),
+        // non-doubles, both dice individually playable — the exact shape where
+        // the rule says only the HIGHER die is legal. G14's fuzz never lands on
+        // it, so the computer's published move-chooser is driven on them
+        // directly, at every difficulty, several times.
+        // A: white on 20, black pair on 14. A 2 (20→18) and a 4 (20→16) both
+        // move, but either leaves the other die facing the pair. Only the 4 is
+        // legal (20→16).
+        const boardA: Board = {
+          points: emptyPoints(),
+          bar: { white: 0, black: 0 },
+          off: { white: 0, black: 0 },
+        };
+        boardA.points[20] = 1;
+        boardA.points[14] = -2;
+        const diceA = [2, 4];
+
+        // B: white on 19, black pair on 12, black blot on 17. A 5 (19→14) and
+        // a 2 (19→17, hitting the blot) both move, but either leaves the other
+        // die facing the pair. Only the 5 is legal (19→14). On a build without
+        // the rule, evaluation prefers the hit, so hard/medium play the lower
+        // die deterministically.
+        const boardB: Board = {
+          points: emptyPoints(),
+          bar: { white: 0, black: 0 },
+          off: { white: 0, black: 0 },
+        };
+        boardB.points[19] = 1;
+        boardB.points[12] = -2;
+        boardB.points[17] = -1;
+        const diceB = [5, 2];
+
+        for (const { board, dice } of [
+          { board: boardA, dice: diceA },
+          { board: boardB, dice: diceB },
+        ]) {
+          // Setup sanity, not a gate finding: a genuine higher-required case —
+          // exactly one distinct die is playable, and it is the higher one.
+          const legal = game.legalMovesNow(board, player, [...dice]) as Move[];
+          const distinctDice = Array.from(new Set(legal.map((m) => m.die)));
+          // The position only tests the computer when the game's own move list
+          // already keeps the higher die; when it does not, the player's
+          // higher-die check (G05) reports it.
+          expect(distinctDice.length, "[needs: G05]").toBe(1);
+          expect(distinctDice[0], "[needs: G05]").toBe(Math.max(...dice));
+
+          for (const difficulty of DIFFICULTIES) {
+            for (let trial = 0; trial < 40; trial++) {
+              const result = ai.chooseMoves(game.cloneBoard(board), player, [...dice], difficulty) as {
+                moves: Move[];
+                board: Board;
+              };
+              for (const move of result.moves) {
+                const ok = legal.some((candidate) => sameMove(candidate, move));
+                expect(ok, "[needs: G14]").toBe(true);
+              }
+            }
+          }
+        }
+      } finally {
+        Math.random = originalRandom;
+      }
+    });
+  });
 
   describe("[G16] REQ-BIND — port 8002 bind + clear failure when taken", () => {
     it("[G16] REQ-BIND — second server exits non-zero with clear 8002 in-use message", async () => {

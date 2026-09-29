@@ -124,7 +124,7 @@
       "repeat": "Played more games with the cube in play and the computer still takes, refuses, or offers doubles at the wrong moments."
     },
     "G13": {
-      "first": "Turns don't flow right — sometimes a die gets used twice, the turn doesn't come back to me, or i'm stuck with nothing to play and the game won't move on",
+      "first": "Turns don't flow right — sometimes a die gets used twice, the turn doesn't come back to me, or i'm stuck with nothing to play and the message doesn't say 'No moves available'.",
       "repeat": "I watched several turns closely: between spending the dice, handing the turn over and being stuck with no move, something still goes wrong."
     },
     "G14": {
@@ -248,8 +248,8 @@
       "repeat": "The move hints still show more than the number on the die — I expect each one to show just the die it uses."
     },
     "F05": {
-      "first": "When i have no moves the game doesn't tell me i have to pass",
-      "repeat": "Got stuck with nothing I could play again, and the game still says nothing about it."
+      "first": "When I have no moves, the game doesn't tell me 'No moves available'.",
+      "repeat": "Stuck again with no move to play, and it still doesn't say 'No moves available'."
     },
     "F06": {
       "first": "The pip numbers on screen don't match the game — they're wrong at the start, drift after a change, or aren't readable as numbers.",
@@ -560,8 +560,8 @@
       "repeat": "Same thing again: reaching the game by its other address still gives me an empty board or errors."
     },
     "F16": {
-      "first": "I refreshed the page in the middle of a game and it came back telling me it was my turn, even though I'd just finished my move and was waiting on the computer.",
-      "repeat": "It happened again — I reloaded while the computer was taking its turn and it came back saying it was my turn."
+      "first": "I reload in the middle of my turn and the game comes back saying it isn't my turn anymore.",
+      "repeat": "I reloaded in the middle of my turn again and it still came back saying it wasn't my turn."
     },
     "F17": {
       "first": "I refreshed the page between games and the score at the top went back to zero-zero even though we'd already played a couple of games.",
@@ -974,6 +974,90 @@
     "F45": {
       "first": "When I pick up a piece and click the point it can move to, it doesn't move there.",
       "repeat": "Clicking the point a piece can move to still doesn't move it there."
+    },
+    "G27": {
+      "first": "They finish a game and start another, and gamesPlayed drops back to zero.",
+      "repeat": "They played another game to the end and started a new one, and gamesPlayed is still reset to zero."
+    },
+    "G28": {
+      "first": "They seed two extra fields through your app's debug setup — that the turn is over, and how many games were played — and both are ignored.",
+      "repeat": "They sent the turn-over flag and a games count to your app's debug setup again, and it still ignores both."
+    },
+    "G29": {
+      "first": "They load your app at the /game address and it comes back 'Not found' — no page at all.",
+      "repeat": "They tried the /game address again and it still comes back 'Not found' — no page."
+    },
+    "G30": {
+      "first": "The computer plays the smaller die when only one of the two dice can be used.",
+      "repeat": "It still plays the smaller die when only one of the two dice can be used."
+    },
+    "F46": {
+      "first": "When the computer turns down my double, the pop-up's title doesn't say I won.",
+      "repeat": "The computer turned down my double again and the pop-up's title still doesn't say I won."
+    },
+    "F47": {
+      "first": "After I play my moves, my turn ends by itself before I click End Turn.",
+      "repeat": "My turn still ends by itself after my moves, before I click End Turn."
+    },
+    "F48": {
+      "first": "When I roll and can't move, the turn doesn't pass to the computer on its own.",
+      "repeat": "Rolled with no move again, and the turn still doesn't pass to the computer on its own."
+    },
+    "F49": {
+      "first": "When the computer offers a double, the message goes into its working — odds, pip counts, its reasoning. I just want to be told it's doubling.",
+      "repeat": "The computer doubled again and its message still goes into its working — odds, pip counts, its reasoning."
+    },
+    "F50": {
+      "first": "When the computer answers my double, the message goes into its working — odds, pip counts, its reasoning. I just want to know whether it took the double.",
+      "repeat": "I doubled again and the computer's answer still goes into its working — odds, pip counts, its reasoning."
+    },
+    "F51": {
+      "first": "The pop-up at the end shows a 'Match score' line — I just want who won and the points.",
+      "repeat": "The game ended again and the pop-up still shows a 'Match score' line — I still just want who won and the points."
+    },
+    "F52": {
+      "first": "At the start of a game, the buttons I can't use yet aren't clearly fainter than the ones I can — I can't tell what's clickable.",
+      "repeat": "The buttons I can't use still aren't clearly fainter than the ones I can — I still can't tell what's clickable."
+    },
+    "F53": {
+      "first": "I bear off my last piece and the win pop-up never appears.",
+      "repeat": "I bore off my last piece again and the win pop-up still never appears."
+    },
+    "F54": {
+      "first": "I set the difficulty to Hard, and after a reload the difficulty box no longer shows Hard.",
+      "repeat": "I set it to Hard again, and after reloading the difficulty box still doesn't show Hard."
+    },
+    "F55": {
+      "first": "I reload while it's the computer's turn, and the game stalls — the turn never comes back to me.",
+      "repeat": "I reloaded again during the computer's turn, and the turn still never came back to me."
+    },
+    "F56": {
+      "first": "I reload while the computer's double offer is up, and I can no longer accept or decline it.",
+      "repeat": "I reloaded again while the computer's double offer was up, and I still couldn't accept or decline it."
+    },
+    "F47.undo": {
+      "first": "While my finished turn waits for End Turn, Undo doesn't take my last move back.",
+      "repeat": "Undo still doesn't take my last move back while my turn waits for End Turn."
+    },
+    "F47.endturn": {
+      "first": "When I've finished my moves, End Turn doesn't hand the turn to the computer.",
+      "repeat": "End Turn still doesn't hand the turn to the computer after I finish my moves."
+    },
+    "F48.notice": {
+      "first": "When I roll and can't move, 'No moves available' doesn't stay on screen with my dice for a second.",
+      "repeat": "Rolled with no move again, and 'No moves available' still doesn't stay up with my dice for a second."
+    },
+    "F49.shown": {
+      "first": "The computer's double offer never shows up on screen — nothing tells me it wants to double.",
+      "repeat": "Still nothing on screen tells me when the computer wants to double."
+    },
+    "F50.shown": {
+      "first": "When I double, nothing on screen tells me whether the computer took it.",
+      "repeat": "I doubled again and still nothing on screen told me whether the computer took it."
+    },
+    "F51.points": {
+      "first": "The pop-up at the end doesn't say how many points the game was worth.",
+      "repeat": "The game ended again and the pop-up still doesn't say how many points it was worth."
     }
   }
 }

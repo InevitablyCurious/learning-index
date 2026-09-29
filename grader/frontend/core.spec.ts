@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { expect, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
 
 type Player = "white" | "black";
 type Difficulty = "easy" | "medium" | "hard";
@@ -9,6 +9,7 @@ interface ApiState {
   remainingDice: number[];
   legalMoves: Move[];
   turnOver: boolean;
+  phase: "roll" | "move" | "gameover" | "doubleOffered";
   difficulty: Difficulty;
   message: string;
   pip: { white: number; black: number };
@@ -508,7 +509,7 @@ test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {
   const message = page.getByTestId("message");
   await expect(message).toBeVisible();
   await expect(message, "[needs: G06]").not.toHaveText(/^\s*$/);
-  await expect(message, "[needs: G06]").toContainText(/no legal move|pass/i);
+  await expect(message, "[needs: G06]").toContainText(/no moves available/i);
 });
 
 test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
@@ -550,6 +551,176 @@ test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
   const state = await readState(page);
   expect(state.turnOver, "[needs: G06]").toBe(true);
   expect(state.legalMoves, "[needs: G06]").toHaveLength(0);
+});
+
+test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
+  // The turn no longer ends by itself after a move: it stays white's until End
+  // Turn is clicked, and Undo keeps working the whole time. A position white
+  // can move in — the opening shape, mirrored — so a forced [6,5] gives two
+  // plies and "done moving" is a real choice, never a stuck turn.
+  test.setTimeout(90_000);
+  await openApp(page);
+
+  const points = emptyPoints();
+  points[1] = 2;
+  points[12] = 5;
+  points[17] = 3;
+  points[19] = 5;
+  points[24] = -2;
+  points[13] = -5;
+  points[8] = -3;
+  points[6] = -5;
+
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "roll",
+    dice: [],
+    remainingDice: [],
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
+  await page.getByTestId("rollBtn").click();
+  // The roll lands and white has a move to play.
+  await expect
+    .poll(
+      async () => (await readState(page)).legalMoves.length,
+      "[needs: F03] [needs: F25] the forced [6,5] roll gave white no move",
+    )
+    .toBeGreaterThan(0);
+
+  // Play the plies the way a player does — pick up a movable checker, click a
+  // hint — until the server says the turn is over.
+  const hints = page.getByTestId("hint");
+  const playUntilTurnOver = async (told: string): Promise<void> => {
+    for (let i = 0; i < 4; i++) {
+      const s = await readState(page);
+      if (s.turnOver) return;
+      const picked = await pickUpAPiece(page, hints);
+      expect(picked, `[needs: F03] [needs: F25] ${told}: no checker could be picked up`).toBe(true);
+      await expect(hints.first(), "[needs: F03]").toBeVisible();
+      await playerClick(hints.first());
+      await expect
+        .poll(
+          async () => (await readState(page)).remainingDice.length,
+          `[needs: F25] ${told}: a move did not consume a die`,
+        )
+        .toBeLessThan(s.remainingDice.length);
+    }
+    await expect
+      .poll(async () => (await readState(page)).turnOver, `[needs: F25] ${told}: white could not finish the roll's moves`)
+      .toBe(true);
+  };
+  await playUntilTurnOver("playing the roll");
+
+  // The heart of the gate: wait well past the old auto-end window and the turn
+  // must still be white's, still in the move phase — it ends only at End Turn.
+  await page.waitForTimeout(1600);
+  const held = await readState(page);
+  expect(held.turn, "the turn ended by itself before End Turn was clicked").toBe("white");
+  expect(held.phase, "the turn left the move phase by itself").toBe("move");
+
+  // Undo still works while the turn waits: the button is live and clicking it
+  // gives a die back.
+  const undoBtn = page.getByTestId("undoBtn");
+  await expect(undoBtn, "[aspect: undo] [needs: G23] Undo was not available while the turn waited").toBeEnabled();
+  const beforeUndo = (await readState(page)).remainingDice.length;
+  await undoBtn.click();
+  await expect
+    .poll(async () => (await readState(page)).remainingDice.length, "[aspect: undo] [needs: G23] Undo did not give a die back")
+    .toBeGreaterThan(beforeUndo);
+
+  // Undo cleared turnOver, so play the die back to finish the turn again — then
+  // End Turn, and only End Turn, hands over to the computer.
+  await playUntilTurnOver("after Undo");
+
+  const endTurnBtn = page.getByTestId("endTurnBtn");
+  await expect(endTurnBtn, "[aspect: endturn] End Turn was not available once the moves were done").toBeEnabled();
+  await endTurnBtn.click();
+
+  // The turn hands over: the server shows black (the computer) at some point
+  // after End Turn. Sticky, so a quick computer turn cannot slip between polls.
+  let sawBlack = false;
+  await expect
+    .poll(
+      async () => {
+        const s = await readState(page);
+        if (s.turn === "black") sawBlack = true;
+        return sawBlack;
+      },
+      { message: "[aspect: endturn] the turn did not hand over to the computer after End Turn", timeout: 6000 },
+    )
+    .toBe(true);
+});
+
+test("[F48] REQ-TURN — a no-move roll passes by itself", async ({ page }) => {
+  // A roll with no legal move shows the dice and "No moves available" for about
+  // a second, then hands the turn to the computer on its own — no End Turn
+  // click. White's whole stack on 12 with black holding 6 and 7 blocks both a
+  // 6 (12->6) and a 5 (12->7), so a forced [6,5] leaves white nothing, off the bar.
+  await openApp(page);
+
+  const points = emptyPoints();
+  points[12] = 15;
+  points[6] = -2;
+  points[7] = -2;
+  points[24] = -11;
+
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "roll",
+    dice: [],
+    remainingDice: [],
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
+  await page.getByTestId("rollBtn").click();
+
+  // The dice stay up…
+  await expect
+    .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die]")
+    .toBeGreaterThan(0);
+
+  // …and the notice says "No moves available".
+  const message = page.getByTestId("message");
+  await expect(message, "[aspect: notice] the no-move notice did not say 'No moves available'").toContainText(
+    /no moves available/i,
+  );
+
+  // It holds for about a second: wait, then the same words are still up and the
+  // turn is still white's (it has not passed yet).
+  await page.waitForTimeout(1000);
+  await expect(message, "[aspect: notice] the no-move notice did not stay up for a second").toContainText(
+    /no moves available/i,
+  );
+  expect((await readState(page)).turn, "[aspect: notice] the turn passed before the notice had been up for a second").toBe(
+    "white",
+  );
+
+  // Then it passes by itself: without touching End Turn, the computer's turn
+  // begins. Sticky, so a quick computer turn cannot slip between polls.
+  let sawBlack = false;
+  await expect
+    .poll(
+      async () => {
+        const s = await readState(page);
+        if (s.turn === "black") sawBlack = true;
+        return sawBlack;
+      },
+      { message: "the no-move turn never passed to the computer by itself", timeout: 6000 },
+    )
+    .toBe(true);
 });
 
 test("[F06] REQ-PIPUI — pip display cross-checked vs engine", async ({ page }) => {
@@ -632,6 +803,270 @@ test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
   expectOwnerLabelToMatchState(ownerLabel, state.cube.owner);
 });
 
+test("[F46] REQ-DOUBLE-DECLINE — the decline pop-up says you won", async ({ page }) => {
+  // Judged on screen, as a player meets it: the double goes through the button
+  // so the page's own handler shows the pop-up — posting /api/double directly
+  // would bypass the modal this gate reads. One white checker a roll from home
+  // and all fifteen black on the bar put the AI's win probability far below
+  // every difficulty's take point, so the decline (and its announcement) is
+  // deterministic.
+  await openApp(page);
+  const points = emptyPoints();
+  points[1] = 1;
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 15 },
+    off: { white: 14, black: 0 },
+    turn: "white",
+    phase: "roll", // the client may only double in the roll phase
+    cube: { value: 1, owner: null },
+    difficulty: "medium",
+    winner: null,
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  await page.getByTestId("doubleBtn").click();
+  await expect(page.getByTestId("modalTitle"), "[needs: F01] [needs: F07]").toContainText(/win/i);
+});
+
+// The internal math a double or take message must never show the player: a win
+// chance, pip counts, a take point, a doubling window, an estimate, a
+// percentage. The AI works all of it out; the person at the screen gets a plain
+// sentence. Shared by F49 (the offer) and F50 (the answer).
+const REASONING_ARTIFACTS = /(winning chance|win probability|pips?|take point|doubling window|estimates?|%)/i;
+
+// Where a double is put to the player and answered. The build prompt names a
+// pop-up only for the end of the game; a double offer, and the computer's answer
+// to the player's double, may show in the message area the prompt names or in
+// any pop-up, and the player answers with whatever buttons the page gives them.
+// Run 1790661859's reference showed both in its end-of-game pop-up, and the
+// first cut of these checks demanded that pop-up and its wording.
+const TAKE = /\baccept|\btake\b(?!\s*back)/i;
+const PASS = /\bdecline|\bpass\b|\bdrop\b|\brefuse|\breject/i;
+
+async function shownDoubleText(page: Page): Promise<string> {
+  const message = await page.getByTestId("message").innerText().catch(() => "");
+  const overlay = page.getByTestId("modalOverlay");
+  const popup = (await overlay.isVisible().catch(() => false)) ? await overlay.innerText().catch(() => "") : "";
+  return `${message} ${popup}`.replace(/\s+/g, " ").trim();
+}
+
+function answerButton(page: Page, name: RegExp): Locator {
+  return page.getByRole("button", { name }).filter({ visible: true }).first();
+}
+
+test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", async ({ page }) => {
+  // A race black leads by 31 pips without dominating, so the hard AI's offer is
+  // deterministic. It reaches the screen through the page's own handler when End
+  // Turn hands the turn over — posting /api/ai directly would bypass the pop-up
+  // this gate reads. The off trays pad both sides to fifteen checkers, the
+  // count the golden client draws (F05's comment); borne-off checkers add no
+  // pips, so the AI's decision is the same as the bare points give.
+  await openApp(page);
+  const points = emptyPoints();
+  points[1] = 1;
+  points[6] = 10;
+  points[19] = -5;
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 4, black: 10 },
+    turn: "white",
+    phase: "move",
+    dice: [6, 5],
+    remainingDice: [],
+    turnOver: true,
+    cube: { value: 1, owner: null },
+    difficulty: "hard",
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await page.getByTestId("endTurnBtn").click();
+
+  await expect
+    .poll(async () => /double|offer/i.test(await shownDoubleText(page)), {
+      message: "[aspect: shown] [needs: F01] [needs: G12] nothing on screen said the computer was doubling",
+      timeout: 10_000,
+    })
+    .toBe(true);
+  const offered = await shownDoubleText(page);
+  expect(
+    offered,
+    `[needs: F01] [needs: G12] the double offer showed internal math: "${offered}"`,
+  ).not.toMatch(REASONING_ARTIFACTS);
+});
+
+test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", async ({ page }) => {
+  // Two answers, both deterministic and both read on screen — the pop-up and
+  // the message bar, where the player meets them. From an even position the
+  // medium AI takes; from F46's far-ahead position it passes.
+  await openApp(page);
+  await postJson(page, "/api/new", { difficulty: "medium" });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await page.getByTestId("doubleBtn").click();
+  await expect
+    .poll(async () => TAKE.test(await shownDoubleText(page)), {
+      message: "[aspect: shown] [needs: F01] [needs: F07] nothing on screen said the computer took the double",
+      timeout: 10_000,
+    })
+    .toBe(true);
+  const accepted = await shownDoubleText(page);
+  expect(
+    accepted,
+    `[needs: F01] [needs: F07] the accept showed internal math: "${accepted}"`,
+  ).not.toMatch(REASONING_ARTIFACTS);
+
+  const points = emptyPoints();
+  points[1] = 1;
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 15 },
+    off: { white: 14, black: 0 },
+    turn: "white",
+    phase: "roll",
+    cube: { value: 1, owner: null },
+    difficulty: "medium",
+    winner: null,
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await page.getByTestId("doubleBtn").click();
+  await expect
+    .poll(async () => PASS.test(await shownDoubleText(page)), {
+      message: "[aspect: shown] [needs: F01] [needs: F07] nothing on screen said the computer passed the double",
+      timeout: 10_000,
+    })
+    .toBe(true);
+  const declined = await shownDoubleText(page);
+  expect(
+    declined,
+    `[needs: F01] [needs: F07] the decline showed internal math: "${declined}"`,
+  ).not.toMatch(REASONING_ARTIFACTS);
+});
+
+test("[F51] REQ-ENDSCREEN — the finishing pop-up names the winner and the stake", async ({ page }) => {
+  // Who won and what the game was worth is the whole of the end-of-game pop-up
+  // — the running match totals have no line here. The game is ended by the
+  // player's own last bear-off (F53's move): a stage-5 check reached through a
+  // double would tell a doubling fault as an end-screen one.
+  await bearOffTheLastPiece(page);
+  await expect(page.getByTestId("modalTitle"), "[needs: F53]").toContainText(/win/i, { timeout: 10_000 });
+  const title = await page.getByTestId("modalTitle").innerText();
+  const body = await page.getByTestId("modalBody").innerText();
+  const message = await page.getByTestId("message").innerText();
+  expect(
+    `${title} ${body} ${message}`,
+    `[aspect: points] the end pop-up never said what the game was worth: "${title}" / "${body}" / "${message}"`,
+  ).toMatch(/point/i);
+  expect(
+    `${title} ${body} ${message}`.toLowerCase(),
+    `the end pop-up showed the running match totals: "${title}" / "${body}" / "${message}"`,
+  ).not.toContain("match score");
+});
+
+// The last move of a game, played the way a player plays it: pick up the one
+// white checker left, click the "off" hint. Both sides hold exactly fifteen
+// checkers (white: fourteen off + one on point 1; black: fifteen on point 24),
+// the count the golden client draws — any other total leaves the page stuck on
+// "Loading…". The die is a 1 and the checker sits on point 1, so the bear-off is
+// the exact final move. Shared by F53 (the pop-up opens) and F51 (what it says).
+async function bearOffTheLastPiece(page: Page): Promise<void> {
+  await openApp(page);
+  const points = emptyPoints();
+  points[1] = 1;
+  points[24] = -15;
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 14, black: 0 },
+    turn: "white",
+    phase: "move",
+    dice: [1],
+    remainingDice: [1],
+    turnOver: false,
+    cube: { value: 1, owner: null },
+    difficulty: "hard",
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  const hints = page.getByTestId("hint");
+  const picked = await pickUpAPiece(page, hints);
+  expect(picked, "[needs: F03] the last white checker on point 1 could not be picked up").toBe(true);
+
+  // The bear-off hint's visible text is exactly "off" (hintWords reads it as
+  // ["off"]) — find it by what the player reads, then click where it shows.
+  const hintCount = await hints.count();
+  let offHint: Locator | null = null;
+  for (let i = 0; i < hintCount; i++) {
+    if (hintWords(await hints.nth(i).innerText()).includes("off")) {
+      offHint = hints.nth(i);
+      break;
+    }
+  }
+  expect(offHint, '[needs: F03] [needs: F04] no hint said "off" for the bear-off').not.toBeNull();
+  await playerClick(offHint!);
+}
+
+test("[F53] REQ-ENDGAME — bearing off the last piece opens the win pop-up", async ({ page }) => {
+  // The server answers the last bear-off with a winner, and the page's own move
+  // handler must open the end-of-game pop-up on the spot — a build that shows
+  // it only after End Turn, or never, fails here.
+  await bearOffTheLastPiece(page);
+  await expect(page.getByTestId("modalTitle"), "[needs: F01] [needs: F12] [needs: G10]").toContainText(/win/i, {
+    timeout: 10_000,
+  });
+});
+
+test("[F52] REQ-BUTTONS — greyed-out buttons look clearly different", async ({ page }) => {
+  // A player tells which buttons they may press by how they look. At a new
+  // game Undo and End Turn cannot be used yet, while New Game and Roll can.
+  // Judged on what is drawn, whatever styling produced it: each button's
+  // screenshot, and how far its brightest marks stand from its darkest (the
+  // lettering against its face). The buttons that cannot be used must be
+  // clearly fainter than the least clear usable one. Run 1790661859's reference
+  // drew its unusable buttons at 80 against a Roll button at 120 and the player
+  // could not tell them apart; its fix draws them at 60.
+  await openApp(page);
+  await postJson(page, "/api/new", {});
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  const clarity = async (id: string): Promise<number> => {
+    const button = page.getByTestId(id);
+    await expect(button, `[needs: F38] the ${id} button is not on screen`).toBeVisible();
+    const png = await button.screenshot();
+    return page.evaluate(async (b64) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const lum: number[] = [];
+      for (let i = 0; i < data.length; i += 4) lum.push(0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]);
+      lum.sort((a, b) => a - b);
+      return lum[Math.floor(lum.length * 0.99)] - lum[Math.floor(lum.length * 0.01)];
+    }, png.toString("base64"));
+  };
+
+  const usable = Math.min(await clarity("newGameBtn"), await clarity("rollBtn"));
+  const unusable = Math.max(await clarity("undoBtn"), await clarity("endTurnBtn"));
+  expect(
+    unusable,
+    `buttons that cannot be used yet are drawn at ${unusable.toFixed(0)} against ${usable.toFixed(0)} for the least clear usable one`,
+  ).toBeLessThanOrEqual(0.6 * usable);
+});
+
 test("[F08] REQ-TESTID — difficulty selector", async ({ page }) => {
   await openApp(page);
 
@@ -687,15 +1122,106 @@ test("[F08] REQ-TESTID — difficulty selector", async ({ page }) => {
     .toBe("easy");
 });
 
+test("[F54] REQ-RELOAD — the difficulty control shows the level you're playing", async ({ page }) => {
+  // A player who chose a level reads it back on the control after a reload —
+  // a page that loads the game but leaves the dropdown on its default tells
+  // the player the wrong game is running.
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", { difficulty: "hard" });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  // The dropdown a player reads: the tagged element when it is one, else the
+  // <select> inside it — resolved the way F08 resolves it.
+  const tagged = page.getByTestId("difficulty");
+  const isSelect = await tagged.evaluate((el) => el.tagName === "SELECT").catch(() => false);
+  const select = isSelect ? tagged : tagged.locator("select").first();
+  await expect(select, "[needs: F01]").toHaveValue("hard");
+});
+
+test("[F55] REQ-RELOAD — the computer finishes its turn after a reload", async ({ page }) => {
+  // A player who reloads mid-computer-turn comes back to the same game and
+  // the computer plays on — a page that waits forever for a human who is not
+  // there leaves the game stuck. The standard opening position with the
+  // computer to roll; "easy" never offers a double, so its turn completes.
+  await openApp(page);
+  const points = emptyPoints();
+  points[24] = 2;
+  points[13] = 5;
+  points[8] = 3;
+  points[6] = 5;
+  points[1] = -2;
+  points[12] = -5;
+  points[17] = -3;
+  points[19] = -5;
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "black",
+    phase: "roll",
+    dice: [],
+    remainingDice: [],
+    turnOver: false,
+    cube: { value: 1, owner: null },
+    difficulty: "easy",
+    winner: null,
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  await expect.poll(async () => (await readState(page)).turn, {
+    message: "[needs: F01] [needs: G25] the computer never finished its turn after a reload",
+    timeout: 20_000,
+  }).toBe("white");
+});
+
+test("[F56] REQ-RELOAD — the pending double offer shows again after a reload", async ({ page }) => {
+  // A player faced with the computer's double offer who reloads comes back to
+  // the same question — a page that drops the offer leaves the game waiting
+  // for an answer nobody can give. Both choices must be on offer again.
+  await openApp(page);
+  const points = emptyPoints();
+  points[1] = 1;
+  points[6] = 10;
+  points[19] = -5;
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 4, black: 10 },
+    turn: "black",
+    phase: "doubleOffered",
+    doubleOfferedBy: "black",
+    dice: [],
+    remainingDice: [],
+    turnOver: false,
+    cube: { value: 1, owner: null },
+    difficulty: "hard",
+    winner: null,
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  // The offer is answered with whatever buttons the page gives — the build prompt
+  // names no pop-up for a double, only that the offer shows again so the player
+  // can accept or decline it.
+  await expect(answerButton(page, TAKE), "[needs: F01] [needs: G12] no way to take the double after the reload").toBeVisible({
+    timeout: 10_000,
+  });
+  await expect(answerButton(page, PASS), "[needs: F01] [needs: G12] no way to pass the double after the reload").toBeVisible();
+});
+
 test("[F16] REQ-RELOAD — whose turn survives a reload", async ({ page }) => {
   await openApp(page);
   await postJson<ApiState>(page, "/api/new", {});
-  await setupState(page, { turn: "black" });
+  await setupState(page, { turn: "white" });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(page.getByTestId("checker")).toHaveCount(30);
   const state = await readState(page);
-  expect(state.turn).toBe("black");
+  expect(state.turn).toBe("white");
 });
 
 test("[F17] REQ-RELOAD — match score survives a reload", async ({ page }) => {
