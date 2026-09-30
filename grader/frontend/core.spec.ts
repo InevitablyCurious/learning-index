@@ -43,6 +43,19 @@ async function openApp(page: Page): Promise<void> {
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 }
 
+// The first Roll of a new game. A Roll button that cannot be clicked at the
+// start of a game is F61's finding (its [aspect: roll]); the checks that only
+// ride on the opening roll defer to it rather than tell their own line — run
+// 1790769627's page kept Roll shut through the opening.
+async function clickOpeningRoll(page: Page): Promise<void> {
+  const canRoll = await page
+    .getByTestId("rollBtn")
+    .click({ trial: true, timeout: 5_000 })
+    .then(() => true, () => false);
+  expect(canRoll, "[needs: F61] the Roll button could not be clicked at the start of a game").toBe(true);
+  await page.getByTestId("rollBtn").click();
+}
+
 function locAttr(from: number): string {
   return from === BAR ? "bar" : String(from);
 }
@@ -204,7 +217,7 @@ test("[F03] REQ-HINT — clicking a piece shows its moves", async ({ page }) => 
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-  await page.getByTestId("rollBtn").click();
+  await clickOpeningRoll(page);
   await expect
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
     .toBeGreaterThanOrEqual(2);
@@ -227,7 +240,7 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-  await page.getByTestId("rollBtn").click();
+  await clickOpeningRoll(page);
   await expect
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
     .toBeGreaterThanOrEqual(2);
@@ -301,7 +314,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-  await page.getByTestId("rollBtn").click();
+  await clickOpeningRoll(page);
   await expect
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
     .toBeGreaterThanOrEqual(2);
@@ -393,7 +406,7 @@ test("[F45] REQ-HINT — clicking where a piece can go plays the move", async ({
     await page.reload();
     await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-    await page.getByTestId("rollBtn").click();
+    await clickOpeningRoll(page);
     await expect
       .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
       .toBeGreaterThanOrEqual(2);
@@ -441,7 +454,7 @@ test("[F60] REQ-HINT — picking a piece up from its column", async ({ page }) =
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-  await page.getByTestId("rollBtn").click();
+  await clickOpeningRoll(page);
   await expect
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
     .toBeGreaterThanOrEqual(2);
@@ -557,8 +570,14 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
     return readState(page);
   };
 
-  // ── Both dice: 6 against 5. ──
+  // ── Both dice: 6 against 5. First, the Roll button can be used at all at
+  // the start of a game. ──
   await openWith([6, 5]);
+  const canRoll = await page
+    .getByTestId("rollBtn")
+    .click({ trial: true, timeout: 5_000 })
+    .then(() => true, () => false);
+  expect(canRoll, "[aspect: roll] [needs: F38] the Roll button could not be clicked at the start of a game").toBe(true);
   await page.getByTestId("rollBtn").click();
   expect(
     await restingDice(),
@@ -611,7 +630,7 @@ test("[F63] REQ-OPENING — the opening dice carry whose they are", async ({ pag
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await page.getByTestId("rollBtn").click();
+  await clickOpeningRoll(page);
 
   await expect
     .poll(async () => JSON.stringify((await readState(page)).dice), {
@@ -1543,7 +1562,14 @@ test("[F52] REQ-BUTTONS — greyed-out buttons look clearly different", async ({
     }, png.toString("base64"));
   };
 
-  const usable = Math.min(await clarity("newGameBtn"), await clarity("rollBtn"));
+  // Roll counts as usable only when it can be clicked: a page that keeps Roll
+  // shut at the start of a game has a different fault, F61's, and comparing
+  // against it told run 1790769627 its greyed buttons were not greyed.
+  const rollClickable = await page
+    .getByTestId("rollBtn")
+    .click({ trial: true, timeout: 1_500 })
+    .then(() => true, () => false);
+  const usable = Math.min(await clarity("newGameBtn"), ...(rollClickable ? [await clarity("rollBtn")] : []));
   const unusable = Math.max(await clarity("undoBtn"), await clarity("endTurnBtn"));
   expect(
     unusable,

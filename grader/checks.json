@@ -462,7 +462,7 @@
     "F52": {
       "name": "Greyed-out buttons look different",
       "what": "Buttons the player can't use look clearly different from usable ones — dimmed and greyed out.",
-      "how": "New game: Undo and End Turn cannot be used yet, New Game and Roll can. From each button's screenshot, the spread between its brightest and darkest marks; the unusable pair must be at most 60% of the least clear usable button."
+      "how": "New game: Undo and End Turn cannot be used yet, New Game and Roll can. From each button's screenshot, the spread between its brightest and darkest marks; the unusable pair must be at most 60% of the least clear usable button; Roll counts as usable only when it can be clicked (a Roll shut at the start is F61's fault)."
     },
     "F53": {
       "name": "Bearing off the last piece opens the win pop-up",
@@ -507,7 +507,7 @@
     "F61": {
       "name": "The opening roll on screen",
       "what": "On the opening roll the page shows both dice; equal dice tie and say to roll again; and when the computer's die is higher it makes the first move and hands the turn back.",
-      "how": "In a browser: fixes the opening roll to 6-5, clicks Roll, and requires at least two dice on screen once they rest ([aspect: dice]); fixes 4-4 and requires the words \"Tie — roll again\" (any dash) somewhere on the page, again with two dice resting on screen ([aspect: tie], [aspect: dice]); fixes 3-5 and requires the state to show the computer's pieces moved and the turn back with the player ([aspect: computer]). The player's own first move with both numbers is F03's and F04's, which open with a roll the player wins."
+      "how": "In a browser: first requires the Roll button to be clickable at the start of a new game ([aspect: roll]); then fixes the opening roll to 6-5, clicks Roll, and requires at least two dice on screen once they rest ([aspect: dice]); fixes 4-4 and requires the words \"Tie — roll again\" (any dash) somewhere on the page, again with two dice resting on screen ([aspect: tie], [aspect: dice]); fixes 3-5 and requires the state to show the computer's pieces moved and the turn back with the player ([aspect: computer]). The player's own first move with both numbers is F03's and F04's, which open with a roll the player wins."
     },
     "F62": {
       "name": "The computer's turn pacing on screen",

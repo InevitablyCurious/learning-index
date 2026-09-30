@@ -470,7 +470,14 @@ export async function runPreGate(): Promise<PreGateResult> {
       // 30s — the whole pre-gate budget — so a candidate that passed every
       // conformance check overran it and the pass was published ungradable
       // (run 1790200233: 30.46s against the reference's 0.61s).
-      await page.locator('[data-testid="rollBtn"]').click({ timeout: 2_000 }).catch(() => undefined);
+      // Whether the roll happened at all: a Roll button that cannot be clicked
+      // at the start of a game is F61's finding, and the checks after it never
+      // reached their subject — they are not told (run 1790769627's page kept
+      // Roll disabled through the opening roll).
+      const rolled = await page
+        .locator('[data-testid="rollBtn"]')
+        .click({ timeout: 2_000 })
+        .then(() => true, () => false);
       await page
         .waitForFunction(
           () => document.querySelectorAll('[data-testid="die"]').length >= 2,
@@ -484,7 +491,7 @@ export async function runPreGate(): Promise<PreGateResult> {
       // board reset wiped the roll away" are different failures.
       const drawnBefore = await page.locator('[data-testid="dice"] *, .die').count();
       if (drawnBefore < 2) {
-        add("REQ-RENDER/die — the dice are drawn after a roll", ">=2", String(drawnBefore));
+        add("REQ-RENDER/die — the dice are drawn after a roll", ">=2", rolled ? String(drawnBefore) : "never evaluated — the Roll button could not be clicked at the start of a game");
       }
 
       await page.reload({ waitUntil: "domcontentloaded" });
@@ -581,9 +588,9 @@ export async function runPreGate(): Promise<PreGateResult> {
         const taggedAfter = await page.locator('[data-testid="die"]').count();
         if (taggedAfter < 2) {
           if (drawnAfter >= 2) {
-            add("REQ-TESTID/die — at least two data-testid \"die\" elements are present", ">=2", `${taggedAfter} (${drawnAfter} drawn without the attribute)`);
+            add("REQ-TESTID/die — at least two data-testid \"die\" elements are present", ">=2", rolled ? `${taggedAfter} (${drawnAfter} drawn without the attribute)` : "never evaluated — the Roll button could not be clicked at the start of a game");
           } else {
-            add("REQ-RENDER/die-reload — the dice survive a page reload", ">=2", String(drawnAfter));
+            add("REQ-RENDER/die-reload — the dice survive a page reload", ">=2", rolled ? String(drawnAfter) : "never evaluated — the Roll button could not be clicked at the start of a game");
           }
         }
       }
@@ -624,7 +631,7 @@ export async function runPreGate(): Promise<PreGateResult> {
         add(
           "REQ-HINT/hint — selecting a movable checker shows move hints",
           "hints appear after selecting a movable checker",
-          "none",
+          rolled ? "none" : "never evaluated — the Roll button could not be clicked at the start of a game",
         );
       }
 

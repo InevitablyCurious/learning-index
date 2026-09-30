@@ -1223,6 +1223,10 @@
       "first": "I started a new game and the throw to see who goes first didn't go right on screen.",
       "repeat": "Another new game, and the throw to see who goes first still didn't go right on screen."
     },
+    "F61.roll": {
+      "first": "At the start of a new game the Roll button won't let me click it, so I can't roll.",
+      "repeat": "I started another new game and the Roll button still won't let me click it."
+    },
     "F61.dice": {
       "first": "I clicked Roll to see who goes first, and fewer than two dice stayed on screen.",
       "repeat": "I rolled to see who goes first again, and still fewer than two dice stayed on screen."

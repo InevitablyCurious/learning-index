@@ -158,6 +158,9 @@ async function rollThroughThePage(page: Page, dice: number[]): Promise<void> {
   await page.reload();
   const queued = await page.request.post("/api/debug/roll", { data: { dice } });
   expect(queued.ok(), `POST /api/debug/roll failed (${queued.status()})`).toBeTruthy();
+  // A Roll shut at the start of a game is F61's finding, not this check's.
+  const canRoll = await page.getByTestId("rollBtn").click({ trial: true, timeout: 5_000 }).then(() => true, () => false);
+  expect(canRoll, "[needs: F61] the Roll button could not be clicked at the start of a game").toBe(true);
   await page.getByTestId("rollBtn").click();
   // Fewer than two dice after a roll is the dice render check's complaint.
   await expect
