@@ -707,6 +707,10 @@
       "first": "The points aren't laid out in the right order — I expect 13 to 24 running left to right along the top, and 12 down to 1 running left to right along the bottom.",
       "repeat": "Looked the board over again and the points are still in the wrong order — I expect 13 to 24 running left to right along the top, and 12 down to 1 running left to right along the bottom."
     },
+    "F28.cross": {
+      "first": "Each triangle runs right across the board into the other row, so the top and bottom triangles cross each other in the middle.",
+      "repeat": "The triangles still run right across the board and cross the ones in the other row."
+    },
     "F28.rows": {
       "first": "The points aren't in two rows, one above the other — I expect 13 to 24 running left to right along the top, and 12 down to 1 running left to right along the bottom.",
       "repeat": "The points still aren't in two rows, one above the other — I expect 13 to 24 running left to right along the top, and 12 down to 1 running left to right along the bottom."

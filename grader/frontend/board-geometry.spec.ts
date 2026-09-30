@@ -51,6 +51,28 @@ test("[F28] REQ-GEOMETRY — points in board order", async ({ page }) => {
   // Two rows, one above the other, before any order within them (FIX-24: run
   // 1790407044's rows sat side by side and passed on page order alone).
   const rows = splitRows(points);
+  // Unless each top-row point is drawn over the bottom-row point opposite it,
+  // column for column. Then what a player sees depends on the paint: triangles
+  // that run across the middle into the other row cross each other (run
+  // 1790788338's hourglass columns — told "not in two rows" for five runs of a
+  // board that looked like two rows); triangles kept to their own half look
+  // right, and their boxes say nothing about rows, so there is nothing to judge.
+  if (!rows.separated) {
+    const byNum = new Map(points.map((p) => [p.num, p]));
+    const stacked = Array.from({ length: 12 }, (_, i) => [byNum.get(13 + i), byNum.get(12 - i)]).filter(
+      ([top, bottom]) => top && bottom && overlaps(top, bottom),
+    ).length;
+    if (stacked >= 10) {
+      const samples = await sampleTriangleOrientation(page, points);
+      // Painted at the middle of its box — for these boxes, the board's middle.
+      const across = samples.filter((s) => s.profile[9] > 0.1).map((s) => s.num);
+      expect(
+        across,
+        `[aspect: cross] triangles painted across the middle of the board, into the row opposite, on points: ${across.join(", ")}`,
+      ).toEqual([]);
+      return;
+    }
+  }
   expect(
     rows.separated,
     `[aspect: rows] expected the points in two rows, one above the other; the 12 highest and the 12 lowest point centres are ${rows.gap.toFixed(0)} px apart`,
@@ -377,9 +399,12 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   // gradient). Every point, or some of them, told as such.
   const judged = samples.filter((s) => !underBar.has(s.num));
   const noTriangle = judged.filter((s) => s.shape === "none" || s.shape === "block").map((s) => s.num);
+  // With no two rows a point's box has no rim to read from either: paint at
+  // both ends of a box the whole height of the board is two triangles crossed,
+  // not "no triangle" — the order check tells that.
   expect(
     noTriangle,
-    `${noTriangle.length === judged.length ? "[aspect: undrawn]" : "[aspect: someundrawn]"} no triangle drawn on points: ${noTriangle.join(", ")}`,
+    `${needsRows}${noTriangle.length === judged.length ? "[aspect: undrawn]" : "[aspect: someundrawn]"} no triangle drawn on points: ${noTriangle.join(", ")}`,
   ).toEqual([]);
 
   // Pointing outward: wider further in than at the rim, however short it is.
