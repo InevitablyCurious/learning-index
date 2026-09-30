@@ -135,6 +135,12 @@ for (const testId of REQUIRED_STATIC_TESTIDS) {
   checkGate(`REQ-TESTID/testid.${testId}`, `the page tags "${testId}"`);
 }
 
+// ── the same static elements keep their ids (the prompt: "keep their existing
+// `id` and ALSO carry a `data-testid`"), one gate per declared name ─────────
+for (const id of REQUIRED_STATIC_TESTIDS) {
+  checkGate(`REQ-TESTID/id.${id}`, `the page keeps the id "${id}"`);
+}
+
 // ── counted elements: DRAWN and TAGGED are separate gates ───────────────────
 // Split because the two failures have different audiences — a board with 20
 // points is visible to anyone playing, 24 points that are untagged are visible

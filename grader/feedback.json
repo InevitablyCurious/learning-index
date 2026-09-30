@@ -459,6 +459,102 @@
       "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"modalBtns\" — the overlay's buttons.",
       "repeat": "They looked again after your fix and still can't find an element tagged \"modalBtns\" — the overlay's buttons."
     },
+    "REQ-TESTID/id.scoreWhite": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"scoreWhite\" — the human player's score.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"scoreWhite\" — the human player's score."
+    },
+    "REQ-TESTID/id.scoreBlack": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"scoreBlack\" — the AI's score.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"scoreBlack\" — the AI's score."
+    },
+    "REQ-TESTID/id.difficulty": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"difficulty\" — the difficulty selector.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"difficulty\" — the difficulty selector."
+    },
+    "REQ-TESTID/id.newGameBtn": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"newGameBtn\" — the new-game button.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"newGameBtn\" — the new-game button."
+    },
+    "REQ-TESTID/id.board": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"board\" — the board itself.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"board\" — the board itself."
+    },
+    "REQ-TESTID/id.playfield": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"playfield\" — the playing area.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"playfield\" — the playing area."
+    },
+    "REQ-TESTID/id.checkerLayer": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"checkerLayer\" — the layer the checkers sit in.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"checkerLayer\" — the layer the checkers sit in."
+    },
+    "REQ-TESTID/id.pointHints": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"pointHints\" — the area move hints appear in.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"pointHints\" — the area move hints appear in."
+    },
+    "REQ-TESTID/id.turnIndicator": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"turnIndicator\" — whatever shows whose turn it is.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"turnIndicator\" — whatever shows whose turn it is."
+    },
+    "REQ-TESTID/id.pipWhite": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"pipWhite\" — the human's pip count.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"pipWhite\" — the human's pip count."
+    },
+    "REQ-TESTID/id.pipBlack": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"pipBlack\" — the AI's pip count.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"pipBlack\" — the AI's pip count."
+    },
+    "REQ-TESTID/id.cube": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"cube\" — the doubling cube.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"cube\" — the doubling cube."
+    },
+    "REQ-TESTID/id.cubeVal": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"cubeVal\" — the number on the cube.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"cubeVal\" — the number on the cube."
+    },
+    "REQ-TESTID/id.cubeOwner": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"cubeOwner\" — whose side the cube is on.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"cubeOwner\" — whose side the cube is on."
+    },
+    "REQ-TESTID/id.dice": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"dice\" — the dice area.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"dice\" — the dice area."
+    },
+    "REQ-TESTID/id.rollBtn": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"rollBtn\" — the roll button.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"rollBtn\" — the roll button."
+    },
+    "REQ-TESTID/id.doubleBtn": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"doubleBtn\" — the double button.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"doubleBtn\" — the double button."
+    },
+    "REQ-TESTID/id.undoBtn": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"undoBtn\" — the undo button.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"undoBtn\" — the undo button."
+    },
+    "REQ-TESTID/id.endTurnBtn": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"endTurnBtn\" — the end-turn button.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"endTurnBtn\" — the end-turn button."
+    },
+    "REQ-TESTID/id.message": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"message\" — the message line.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"message\" — the message line."
+    },
+    "REQ-TESTID/id.modalOverlay": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"modalOverlay\" — the end-of-game overlay.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"modalOverlay\" — the end-of-game overlay."
+    },
+    "REQ-TESTID/id.modalTitle": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"modalTitle\" — the overlay's title.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"modalTitle\" — the overlay's title."
+    },
+    "REQ-TESTID/id.modalBody": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"modalBody\" — the overlay's body.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"modalBody\" — the overlay's body."
+    },
+    "REQ-TESTID/id.modalBtns": {
+      "first": "They also look up your page's elements by id, and nothing on it has the id \"modalBtns\" — the overlay's buttons.",
+      "repeat": "They looked again after your fix and still find nothing with the id \"modalBtns\" — the overlay's buttons."
+    },
     "REQ-BIND/health": {
       "first": "They can't reach your app's health check at all — they call it to know whether the app is up before they do anything else.",
       "repeat": "Their health check against your app still doesn't come back."

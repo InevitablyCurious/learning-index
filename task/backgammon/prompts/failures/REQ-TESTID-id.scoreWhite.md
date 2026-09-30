@@ -1,0 +1,1 @@
+They also look up your page's elements by id, and nothing on it has the id "scoreWhite" — the human player's score.

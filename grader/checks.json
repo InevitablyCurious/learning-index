@@ -626,6 +626,13 @@
       "how": "Loads the page and looks for an element tagged data-testid=\"{x}\"."
     },
     {
+      "title": "the page keeps the id \"{x}\"",
+      "key": "REQ-TESTID/id.{x}",
+      "name": "Page id \"{x}\"",
+      "what": "The page's \"{x}\" element keeps its id \"{x}\" as well as its tag, as the build prompt requires of every static element.",
+      "how": "Loads the page and looks for an element with id=\"{x}\"."
+    },
+    {
       "title": "24 board points are drawn",
       "key": "REQ-RENDER/point",
       "name": "24 points drawn",

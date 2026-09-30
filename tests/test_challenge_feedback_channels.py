@@ -253,6 +253,7 @@ def test_every_conformance_check_the_pregate_can_emit_has_a_line() -> None:
 
     expected = [f"REQ-STATE/state.{k}" for k in block("REQUIRED_STATE_KEYS")]
     expected += [f"REQ-TESTID/testid.{t}" for t in block("REQUIRED_STATIC_TESTIDS")]
+    expected += [f"REQ-TESTID/id.{t}" for t in block("REQUIRED_STATIC_TESTIDS")]
     for label in ("point", "checker", "bar", "off-tray", "die"):
         expected.append(f"REQ-TESTID/{label}")
         expected.append(f"REQ-RENDER/{label}")

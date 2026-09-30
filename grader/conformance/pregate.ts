@@ -434,6 +434,19 @@ export async function runPreGate(): Promise<PreGateResult> {
         }
       }
 
+      // The static elements keep their ids too: the build prompt's contract is
+      // "static elements keep their existing `id` and ALSO carry a `data-testid`
+      // with the same string". Run 9a946250's page kept every tag but renamed the
+      // ids (end-turn-btn for endTurnBtn); its own lookup of #endTurnBtn came back
+      // empty, the script died on load and the board was blank, and nothing here
+      // said a name had changed — the player only saw an empty board.
+      for (const id of REQUIRED_STATIC_TESTIDS) {
+        const count = await page.locator(`[id="${id}"]`).count();
+        if (count < 1) {
+          add(`REQ-TESTID/id.${id} — page keeps the id "${id}"`, "present", "missing");
+        }
+      }
+
       // ── ROLL VIA THE FRONTEND, THEN CHECK RENDER *BEFORE* ANY RELOAD ──────
       // The click drives the app's own roll button (it POSTs /api/roll and
       // renders the dice). The `.catch` keeps a missing button from throwing
@@ -618,6 +631,7 @@ export async function runPreGate(): Promise<PreGateResult> {
       await page.close();
       resolve(
         ...REQUIRED_STATIC_TESTIDS.map((testId) => `REQ-TESTID/testid.${testId}`),
+        ...REQUIRED_STATIC_TESTIDS.map((id) => `REQ-TESTID/id.${id}`),
         ...COUNTED_ELEMENT_LABELS.flatMap((label) => [
           `REQ-RENDER/${label}`,
           `REQ-TESTID/${label}`,
