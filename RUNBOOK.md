@@ -588,11 +588,18 @@ vector; token accounting with **injected-memory-block tokens counted separately 
 the injection observability values; extraction-attempt observability; and the terminal outcome with
 its reason.
 
-**RC-5a · Task-template freeze (scaffold hash).** Re-frozen 2026-09-15 to
-`d7088d77051f58ad71e8b8201058a6733a35c964f0e2b5da6d2ff0f8491481ee`: CONTRACT.md left the scaffold
-for `task/backgammon/reference/`, so the model is given the six build prompts and nothing else, and
-the prompts were rewritten to carry the graded contact points without the rules and design hints
-a candidate should supply itself. **Retired 2026-09-19:** `reference/CONTRACT.md` was DELETED and its
+**RC-5a · Task-template freeze (scaffold hash).** Re-frozen 2026-09-29 to
+`55743d5e9e0826b2ead2d92e291c6ddb33117dfd15fa36a7d97e0e654f767a34` (WO-GOLDEN-V2-B3): the scaffold's
+`src/game.ts` gained `"openingRoll"` in the phase union and `createGame` now says the new game starts
+in phase "openingRoll" (white to move). The frozen value is now DERIVED — `FROZEN_TASK_TEMPLATE_HASH
+= default_spec().scaffold_hash`, read from `task/backgammon/challenge.json` — so re-freezing updates
+`challenge.json` (via `scripts/freeze_challenge.py --write`) plus the test `FROZEN` literal, never a
+literal in `run_cumulative` (see the procedure below). Two intervening re-freezes (2026-09-24 scaffold
+comments = chunk-01 listing; 2026-09-25 header no longer names each side's home points) were recorded
+only in `tests/test_template_freeze_guard.py`. The 2026-09-15 freeze (`d7088d77…`) this section
+formerly declared is now historical: CONTRACT.md left the scaffold for `task/backgammon/reference/`,
+so the model is given the six build prompts and nothing else, and the prompts were rewritten to carry
+the graded contact points without the rules and design hints a candidate should supply itself. **Retired 2026-09-19:** `reference/CONTRACT.md` was DELETED and its
 29 `REQ-*` rules relocated into the six chunk prompts (engine rules + G05 higher-die → chunk-02; cube
 state → chunk-04; difficulty wiring → chunk-05; REQ-COMPLETE → chunk-06), reversing the 2026-09-15
 rule-thinning — the six prompts are now the complete specification and `reference/` holds only a
@@ -616,10 +623,12 @@ reasoning template referenced in §12/§17.
 
 **Re-freeze procedure (all four, in one change).** Any scaffold edit that changes the file set or
 its bytes must: (1) recompute `compute_task_template_hash` (SHA-256 over sorted relative path + raw
-bytes of every file under `task/backgammon/scaffold/`); (2) update **both** `FROZEN_TASK_TEMPLATE_HASH`
-in `scripts/run_cumulative.py` AND `FROZEN` in `tests/test_template_freeze_guard.py` **together** —
-the freeze-guard test pins `MODULE.FROZEN_TASK_TEMPLATE_HASH == FROZEN`
-(`test_template_freeze_guard.py:58-61`), so a one-sided update fails the suite; (3) refresh the
+bytes of every file under `task/backgammon/scaffold/`); (2) update `task/backgammon/challenge.json`'s
+`scaffold_hash` via `scripts/freeze_challenge.py --write` — `FROZEN_TASK_TEMPLATE_HASH` in
+`scripts/run_cumulative/template.py` is DERIVED (`default_spec().scaffold_hash`) and follows it
+automatically — AND `FROZEN` in `tests/test_template_freeze_guard.py` **together**; the freeze-guard
+test pins `MODULE.FROZEN_TASK_TEMPLATE_HASH == FROZEN` (`test_template_freeze_guard.py:84-85`), so a
+one-sided update fails the suite; (3) refresh the
 RC-5a hash line above; (4) declare it a **re-baseline** — a re-freeze invalidates comparability of
 every previously scored cell, never silent bookkeeping.
 

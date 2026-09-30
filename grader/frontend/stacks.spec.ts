@@ -135,11 +135,11 @@ test("[F58] REQ-GEOMETRY — the top piece slides away", async ({ page }) => {
 
   await page.getByTestId("rollBtn").click();
   await expect
-    .poll(async () => page.getByTestId("die").count(), "no dice showed after the roll")
+    .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61] no dice showed after the roll")
     .toBeGreaterThanOrEqual(2);
 
   const before = await readState(page);
-  expect(before.legalMoves.some((m) => m.from === 13 && m.to === 11), "[needs: G03]").toBe(true);
+  expect(before.legalMoves.some((m) => m.from === 13 && m.to === 11), "[needs: G03 G31]").toBe(true);
 
   // The pieces on 13 before the move, held in the page. Point 13 is a
   // top-row point: the stack grows down from the top edge, so the top piece —

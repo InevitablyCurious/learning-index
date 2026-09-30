@@ -22,7 +22,7 @@
     "G03": {
       "name": "Dice give the right number of moves",
       "what": "Doubles give four moves and an ordinary roll gives two.",
-      "how": "From the opening position, asks how many dice can be used: 3-3-3-3 must allow four, 3-1 two, and black's 6-6-6-6 four."
+      "how": "From the opening position, asks how many dice can be used: 3-3-3-3 must allow four, 3-1 two, and black's 6-6-6-6 four. Through the running server: seeds a later turn on the standard board — the opening roll itself is one die per side and can never be four (G31) — rolls until doubles come up, and requires four equal dice with all four still to play, at least one legal move, and at least three of the four dice playable."
     },
     "G04": {
       "name": "Blocked points",
@@ -60,9 +60,9 @@
       "how": "White has all 15 off in each case. Black with 2 already off → single. Black with none off, none on the bar and none in white's home → gammon. A black checker in white's home, or on the bar → backgammon. White with only 14 off → not won."
     },
     "G11": {
-      "name": "Doubling is allowed",
-      "what": "On a new game the player may offer a double.",
-      "how": "Through the running server: a new game must allow doubling (canDouble true)."
+      "name": "Doubling on the player's turn",
+      "what": "On the player's turn, with the cube centered, the player may offer a double.",
+      "how": "Through the running server: seeds a later turn — the player to act in the roll phase, cube centered, standard opening board — and requires doubling to be allowed (canDouble true). A fresh game sits in the opening roll, where nobody may double yet (G31)."
     },
     "G26": {
       "name": "The cube starts centered",
@@ -154,6 +154,16 @@
       "what": "When only one of the computer's two dice can actually be played, it plays the higher one.",
       "how": "Through the engine: on fixed one-move boards, drive the AI's move chooser at every difficulty several times and require every chosen move to be legal (never the lower die)."
     },
+    "G31": {
+      "name": "The opening roll decides who goes first",
+      "what": "A game opens with one die per side: the higher side moves first and plays both numbers, equal dice tie and roll again, and nobody may double before the opening move is played.",
+      "how": "Through the running server at easy: fixes the opening roll on the debug route, then rolls — 6-5 must give the player the turn ([aspect: won]) in the move phase with a 6 and a 5 to play ([aspect: dice]); 3-5 must give the computer the turn ([aspect: first]), and its AI move must move black exactly 8 pips ([aspect: numbers]) and hand the turn back ([aspect: handback]); 4-4 must stay in phase openingRoll ([aspect: tie]); a fresh game must report canDouble false ([aspect: cube]), and a double asked for anyway (refused or ignored) must leave the cube at 1, no offer pending and no winner ([aspect: cubemoved])."
+    },
+    "G32": {
+      "name": "When the computer is stuck, the game says so and the turn returns",
+      "what": "When the computer is on the bar with every entry point held and rolls numbers it cannot use, its turn ends with the turn handed back to the player and a message containing the words \"No moves available\".",
+      "how": "Through the running server: fixes a position where the computer is on the bar and all six entry points are held by two or more opposing pieces, then drives the computer's turn with a 6-5 it cannot use and checks the turn is the player's again ([aspect: pass]) and the message contains the words \"No moves available\" ([aspect: wording])."
+    },
     "E01": {
       "name": "Doubles are four moves",
       "what": "Doubles really are four moves, not two.",
@@ -217,7 +227,7 @@
     "F04": {
       "name": "Hints show which die",
       "what": "Move hints show which die each move uses.",
-      "how": "Fixes the roll to 3-5, clicks Roll and the back checker on 13 (another movable checker if it shows nothing): every hint's text must be 3 or 5 (or \"off\"), and the checker on 13 must show a hint for each die, 3 and 5, both open from it on every board."
+      "how": "Fixes the roll to 5-3 — the player's die first, so the player wins the opening roll and plays both numbers (a forced 3-5 would hand the turn to the computer) — clicks Roll and the back checker on 13 (another movable checker if it shows nothing): every hint's text must be 3 or 5 (or \"off\"), and the checker on 13 must show a hint for each die, 3 and 5, both open from it on every board."
     },
     "F05": {
       "name": "No-move notice",
@@ -387,7 +397,7 @@
     "F39": {
       "name": "Two dice, two moves",
       "what": "After any roll exactly two dice are on screen, and two different numbers give exactly two moves (a double's four are F33).",
-      "how": "Fixes the roll to 5-6 and clicks Roll: two dice on screen, two moves playable by clicking, no third; then fixes a double and clicks Roll: still two dice on screen."
+      "how": "Fixes the roll to 6-5 — the player's die first, so the player wins the opening roll and plays both numbers (a forced 5-6 would hand the turn to the computer) — and clicks Roll: two dice on screen, two moves playable by clicking, no third; then seeds a later turn in the move phase with a double already rolled, since an opening roll is one die per side and can no longer be a double (G31): still two dice on screen."
     },
     "F40": {
       "name": "Rows line up",
@@ -493,6 +503,21 @@
       "name": "Clicking a piece's column picks it up",
       "what": "Clicking anywhere in the column of a point holding one of the player's movable pieces picks up its top piece and shows its hints.",
       "how": "Fixes the roll to 2-1, clicks Roll, then clicks a spot in the column of point 13 away from the checker — near the column's middle-ward end — and requires a hint to appear."
+    },
+    "F61": {
+      "name": "The opening roll on screen",
+      "what": "On the opening roll the page shows both dice; equal dice tie and say to roll again; and when the computer's die is higher it makes the first move and hands the turn back.",
+      "how": "In a browser: fixes the opening roll to 6-5, clicks Roll, and requires at least two dice on screen once they rest ([aspect: dice]); fixes 4-4 and requires the words \"Tie — roll again\" (any dash) somewhere on the page, again with two dice resting on screen ([aspect: tie], [aspect: dice]); fixes 3-5 and requires the state to show the computer's pieces moved and the turn back with the player ([aspect: computer]). The player's own first move with both numbers is F03's and F04's, which open with a roll the player wins."
+    },
+    "F62": {
+      "name": "The computer's turn pacing on screen",
+      "what": "When the computer takes its turn, its dice stay readable for about a second before its first piece moves, then each further move follows about half a second after the last.",
+      "how": "In a browser: sets the opening position with the player's roll used up, easy difficulty and the computer's roll fixed to 6-5, records every frame (the visible dice drawn, the black pieces' centres relative to the board, and their data-loc tags), and clicks End Turn. Requires End Turn available and the state to show the computer moved and the turn back ([aspect: turn]); the black pieces to move on screen ([aspect: drawn]); a new dice drawing before the first move ([aspect: dice]) that stayed unchanged at least 0.8 s ([aspect: first]); and at least two move starts, each at least 0.35 s after the last ([aspect: between]); moves are timed from the pieces' tags, or from their drawing when the tags show fewer than two moves."
+    },
+    "F63": {
+      "name": "The opening dice carry whose they are",
+      "what": "After the opening roll the state carries the dice as [playerDie, computerDie], and each die on screen is marked data-owner \"you\" or \"ai\".",
+      "how": "In a browser: fixes the opening roll to 6-5, clicks Roll, and requires the state's dice to read [6,5] ([aspect: order]) and the visible dice to include one marked data-owner \"you\" and one marked \"ai\" ([aspect: owner])."
     }
   },
   "setup": [
@@ -741,6 +766,10 @@
         "F58",
         "F59",
         "F60",
+        "F61",
+        "F62",
+        "F63",
+        "G31",
         "G04",
         "G17",
         "G18",
@@ -835,7 +864,8 @@
         "E08",
         "REQ-RESPONSIVE/aiturn",
         "G30",
-        "F55"
+        "F55",
+        "G32"
       ]
     }
   ],

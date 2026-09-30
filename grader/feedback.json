@@ -995,6 +995,54 @@
       "first": "The computer plays the smaller die when only one of the two dice can be used.",
       "repeat": "It still plays the smaller die when only one of the two dice can be used."
     },
+    "G31": {
+      "first": "When I start a new game, the roll to see who begins didn't work right.",
+      "repeat": "I started another new game and the roll to see who begins still didn't work right."
+    },
+    "G31.won": {
+      "first": "I threw a 6 against the computer's 5 to see who begins, and the first move wasn't mine.",
+      "repeat": "I threw higher than the computer again to see who begins, and the first move still wasn't mine."
+    },
+    "G31.dice": {
+      "first": "I won the throw to see who begins, but I didn't get both numbers to move with.",
+      "repeat": "I won the throw to see who begins again, and still didn't get both numbers to move with."
+    },
+    "G31.first": {
+      "first": "I threw a 3 against the computer's 5 to see who begins, and the first move wasn't the computer's.",
+      "repeat": "The computer threw higher to see who begins again, and it still didn't get the first move."
+    },
+    "G31.numbers": {
+      "first": "The computer won the throw to see who begins, but its first move didn't use the two numbers we threw.",
+      "repeat": "The computer won the throw to see who begins again, and its first move still didn't use the two numbers we threw."
+    },
+    "G31.handback": {
+      "first": "The computer made its first move after winning the throw to see who begins, and the play never came back to me.",
+      "repeat": "Again the computer made its first move and the play never came back to me."
+    },
+    "G31.tie": {
+      "first": "We both threw a 4 to see who begins, and the game carried on as if one of us had won.",
+      "repeat": "We threw the same number again to see who begins, and the game still carried on as if one of us had won."
+    },
+    "G31.cube": {
+      "first": "Before the first move of the game, I was allowed to double.",
+      "repeat": "Again I was allowed to double before the first move of the game."
+    },
+    "G31.cubemoved": {
+      "first": "I doubled before the first move of the game, and the game took my double.",
+      "repeat": "Again I doubled before the first move of the game, and the game took my double."
+    },
+    "G32": {
+      "first": "When the computer couldn't move, the game just stopped and never explained what happened.",
+      "repeat": "It happened again — the computer couldn't move and the game just stopped with no explanation."
+    },
+    "G32.pass": {
+      "first": "The computer couldn't move, and the play never came back to me — it just sat there.",
+      "repeat": "Again the computer couldn't move and the play never came back to me."
+    },
+    "G32.wording": {
+      "first": "The computer couldn't move, and the play never told me there were no moves available.",
+      "repeat": "Again the computer couldn't move and the play still never told me there were no moves available."
+    },
     "F46": {
       "first": "When the computer turns down my double, the pop-up's title doesn't say I won.",
       "repeat": "The computer turned down my double again and the pop-up's title still doesn't say I won."
@@ -1062,6 +1110,58 @@
     "F60": {
       "first": "I clicked the space around one of my pieces and no hints came up — I expected it to pick that piece up and show me where it could move.",
       "repeat": "I clicked the space around another of my pieces and still no hints came up."
+    },
+    "F61": {
+      "first": "I started a new game and the throw to see who goes first didn't go right on screen.",
+      "repeat": "Another new game, and the throw to see who goes first still didn't go right on screen."
+    },
+    "F61.dice": {
+      "first": "I clicked Roll to see who goes first, and fewer than two dice stayed on screen.",
+      "repeat": "I rolled to see who goes first again, and still fewer than two dice stayed on screen."
+    },
+    "F61.tie": {
+      "first": "We threw the same number to see who goes first, and nothing on screen said \"Tie — roll again\".",
+      "repeat": "We threw the same number again to see who goes first, and still nothing on screen said \"Tie — roll again\"."
+    },
+    "F61.computer": {
+      "first": "The computer's number was higher at the start, and its first turn never finished.",
+      "repeat": "The computer's number was higher at the start again, and its first turn still never finished."
+    },
+    "F62": {
+      "first": "I couldn't keep up with what the computer did.",
+      "repeat": "Again I couldn't keep up with what the computer did."
+    },
+    "F62.turn": {
+      "first": "After my last move, the computer's turn never went through.",
+      "repeat": "After my last move again, the computer's turn still never went through."
+    },
+    "F62.drawn": {
+      "first": "The computer took its turn, but I never saw its pieces move on the board.",
+      "repeat": "The computer took another turn and again I never saw its pieces move on the board."
+    },
+    "F62.dice": {
+      "first": "The computer moved without showing me its dice first.",
+      "repeat": "Again the computer moved without showing me its dice first."
+    },
+    "F62.first": {
+      "first": "The computer's first move came less than a second after its dice showed, too soon for me to read them.",
+      "repeat": "Again the computer's first move came less than a second after its dice showed."
+    },
+    "F62.between": {
+      "first": "The computer's moves came less than half a second apart, too quick to watch one at a time.",
+      "repeat": "The computer's moves again came less than half a second apart."
+    },
+    "F63": {
+      "first": "They roll to see who goes first and can't read the result from your app.",
+      "repeat": "They rolled to see who goes first again and still can't read the result from your app."
+    },
+    "F63.order": {
+      "first": "They fix the first roll of a game at 6 for the player and 5 for the computer, and the state's dice don't read [6, 5] — the player's die first.",
+      "repeat": "They fixed the first roll at 6 against 5 again, and the state's dice still don't read [6, 5]."
+    },
+    "F63.owner": {
+      "first": "They roll to see who goes first and can't tell which die on screen is the player's and which is the computer's: the two dice don't carry data-owner \"you\" and \"ai\".",
+      "repeat": "They rolled to see who goes first again, and the two dice still don't carry data-owner \"you\" and \"ai\"."
     },
     "F47.undo": {
       "first": "While my finished turn waits for End Turn, Undo doesn't take my last move back.",

@@ -7,6 +7,7 @@ import {
   getState,
   loadEngine,
   makeState,
+  openingPoints,
   startServer,
   stopServer,
 } from "../lib/harness.ts";
@@ -33,9 +34,22 @@ describe("Backgammon backend server-path integrity", () => {
 
   // M09: a real doubles roll through /api/roll yields four dice, not two.
   it("[G03] REQ-DICE — a real doubles roll through /api/roll yields four dice", async () => {
+    // The OPENING roll is one die per side and can never be four (G31), so
+    // seed a LATER "roll" phase — the standard opening board, human to act —
+    // and hunt the doubles there.
     let doubleState: any = null;
     for (let attempt = 0; attempt < 200 && !doubleState; attempt++) {
-      await api("/api/new", { difficulty: "medium" });
+      await debugSetState(
+        makeState({
+          turn: "white",
+          phase: "roll",
+          dice: [],
+          remainingDice: [],
+          points: game.startingPoints(),
+          bar: { white: 0, black: 0 },
+          off: { white: 0, black: 0 },
+        }),
+      );
       const state = await api("/api/roll", {});
       if (state.dice.length === 4) doubleState = state;
     }
@@ -90,11 +104,13 @@ describe("Backgammon backend server-path integrity", () => {
 
   // M25: undo restores the board exactly — no checker lost.
   it("[G23] REQ-UNDO — undo restores the board exactly", async () => {
-    await api("/api/new", { difficulty: "medium" });
+    // An ordinary turn from the opening position: a new game starts with the
+    // opening roll (G31), which is not this check's subject.
+    await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll" }));
     await debugRoll([3, 1]);
     const before = await api("/api/roll", {});
-    // No move to undo is not an undo finding: the movable-checker gate plays
-    // this same 3-1 opening roll and reports it when it fails too (a needs marker,
+    // No move to undo is not an undo finding: the movable-checker gates report
+    // a roll that leaves no move when they fail too (a needs marker,
     // harness/adapters/challenge/stages.py).
     const noMove = "[aspect: nomove] [needs: REQ-HINT/hint F03 F25]";
     expect(before.phase, noMove).toBe("move");
@@ -181,5 +197,88 @@ describe("Backgammon backend server-path integrity", () => {
     expect(res.headers.get("content-type") || "").toContain("text/html");
     const body = await res.text();
     expect(body.length).toBeGreaterThan(0);
+  });
+
+  // The opening roll: ONE die per side; the higher side makes the first move
+  // with both numbers; equal dice tie and roll again; nobody doubles before
+  // the opening move is played. The order of the pair in the state is the
+  // team's contract (F63), so the dice are compared here in any order.
+  it("[G31] REQ-OPENING — the opening roll decides who goes first", async () => {
+    // Black's pip count, counted here: black travels 1 → 24, so a checker on
+    // point p is 25 - p from home, and one on the bar is 25.
+    const blackPips = (s: any): number => {
+      let pips = 25 * s.bar.black;
+      for (let p = 1; p <= 24; p++) if (s.points[p] < 0) pips += -s.points[p] * (25 - p);
+      return pips;
+    };
+
+    // The player's die is higher: the first move is the player's, with both
+    // numbers still to play.
+    await api("/api/new", { difficulty: "easy" });
+    await debugRoll([6, 5]);
+    let state = await api("/api/roll", {});
+    expect(state.turn, "[aspect: won]").toBe("white");
+    expect(state.phase, "[aspect: dice]").toBe("move");
+    expect(state.remainingDice, "[aspect: dice]").toContain(6);
+    expect(state.remainingDice, "[aspect: dice]").toContain(5);
+
+    // The computer's die is higher: the first move is the computer's, made
+    // with those same two numbers — 3 + 5 = 8 pips, and nothing can be hit at
+    // the opening — and then the turn is the player's. Easy never doubles, so
+    // the computer's turn is only its move.
+    await api("/api/new", { difficulty: "easy" });
+    await debugRoll([3, 5]);
+    state = await api("/api/roll", {});
+    expect(state.turn, "[aspect: first]").toBe("black");
+    const pipsBefore = blackPips(state);
+    await api("/api/ai", {});
+    state = await getState();
+    expect(pipsBefore - blackPips(state), "[aspect: numbers]").toBe(8);
+    expect(state.turn, "[aspect: handback]").toBe("white");
+
+    // Equal dice: still the opening roll.
+    await api("/api/new", { difficulty: "easy" });
+    await debugRoll([4, 4]);
+    state = await api("/api/roll", {});
+    expect(state.phase, "[aspect: tie] [needs: G01]").toBe("openingRoll");
+
+    // Nobody doubles before the opening move is played: not offered, and a
+    // double asked for anyway changes nothing — refused with an error status
+    // or answered with the state unchanged, either way.
+    await api("/api/new", { difficulty: "easy" });
+    state = await getState();
+    expect(state.canDouble, "[aspect: cube]").toBe(false);
+    await api("/api/double", {}).catch(() => undefined);
+    state = await getState();
+    expect(state.cube.value, "[aspect: cubemoved]").toBe(1);
+    expect(state.phase, "[aspect: cubemoved]").not.toBe("doubleOffered");
+    expect(state.winner, "[aspect: cubemoved]").toBeNull();
+  });
+
+  // The computer stuck is a turn returned, not a turn hung: black on the bar
+  // with every entry point held and a roll it cannot use must pass the turn
+  // back AND say why.
+  it("[G32] REQ-TURN — when the computer is stuck, the game says so and the turn returns", async () => {
+    const points = emptyPoints();
+    for (let p = 1; p <= 6; p++) points[p] = 2; // white wall on 1..6 (12 white)
+    points[13] = 3; // +3 white = 15 white
+    points[12] = -5;
+    points[17] = -5;
+    points[19] = -4; // black = 14 on board, +1 on bar = 15
+    // phase "move" makes /api/ai play these dice directly — no cube decision.
+    await debugSetState(
+      makeState({
+        points,
+        bar: { white: 0, black: 1 },
+        off: { white: 0, black: 0 },
+        turn: "black",
+        phase: "move",
+        dice: [6, 5],
+        message: "",
+      }),
+    );
+    const state = await api("/api/ai", {});
+    expect(state.turn, "[aspect: pass] [needs: G25]").toBe("white");
+    expect(state.message, "[aspect: wording] [needs: F05]").toMatch(/no moves available/i);
   });
 });

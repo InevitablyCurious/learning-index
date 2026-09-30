@@ -211,6 +211,10 @@ select:hover, .btn:not(:disabled):hover { background: #2c4763; }
 }
 .die .dot { width: 7px; height: 7px; background: #1a1f26; border-radius: 50%; align-self: center; justify-self: center; }
 .die .dot.hidden { visibility: hidden; }
+/* The opening roll shows one die per side: the computer's is dark like its
+   checkers, so the player can tell whose is whose. */
+.die[data-owner="ai"] { background: linear-gradient(145deg, #3a4350, #05070a); }
+.die[data-owner="ai"] .dot { background: #f2f4f7; }
 
 .actionbox { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .actionbox .btn { width: 100%; }

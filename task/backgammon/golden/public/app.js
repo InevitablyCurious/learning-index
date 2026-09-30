@@ -19,6 +19,7 @@ let pointDivs = {};             // point number -> div
 let barDiv = null, trayDiv = null;
 let selected = null;            // { from } currently selected source
 let busy = false;               // AI animating / transitions in flight
+let openingDiceActive = false;  // current dice are the opening roll's [playerDie, computerDie]
 let endTimer = null;
 let csize = 30;
 
@@ -364,17 +365,30 @@ async function api(path, body) {
 
 // ---------- actions ----------
 async function doRoll() {
-  if (busy || !state || state.turn !== "white" || state.phase !== "roll") return;
+  if (busy || !state || state.turn !== "white" ||
+      (state.phase !== "roll" && state.phase !== "openingRoll")) return;
+  const wasOpening = state.phase === "openingRoll";
   busy = true;
   animateDiceRolling();
   const s = await api("/api/roll");
   await sleep(480);
   state = s;
+  // The opening roll's dice are [playerDie, computerDie] and keep their
+  // data-owner marks through the move that follows — but only while the
+  // player acts on them (computer win → turn "black" → runAi renders its own
+  // dice). A normal roll (entered from phase "roll") clears the marks.
+  openingDiceActive = wasOpening && s.turn === "white";
   reconcile(s);
   render();
   busy = false;
   updateUI();
   clearHints();
+  // Opening roll: if the computer won, it plays its opening move right away
+  // (the backend already set turn "black" / phase "move" with the opening dice).
+  if (state.turn === "black") {
+    await runAi();
+    return;
+  }
   // J7: when the roll leaves a bar entry to make, show the entry hints right
   // away — no click on the bar piece needed. MUST run after clearHints() above
   // (updateUI->applySelectable also clears point clicks) or the hints are wiped.
@@ -430,6 +444,7 @@ async function doEndTurn() {
   cancelAutoEnd();
   if (busy) return;
   if (!state || state.turn !== "white" || !state.turnOver) return;
+  openingDiceActive = false; // the opening move is over; the next white roll is a normal roll
   const s = await api("/api/endturn");
   state = s;
   updateUI();
@@ -483,11 +498,12 @@ async function runAi() {
   if (s.aiDice) animateDiceRolling();
   await sleep(520);
   if (s.aiDice) renderDice(s.aiDice, []);
+  await sleep(1000);
   const moves = s.aiMoves || [];
   for (const m of moves) {
     applyLocalMove("black", m.from, m.to, m.hit);
     render();
-    await sleep(430);
+    await sleep(500);
   }
   state = s;
   reconcile(s);
@@ -515,6 +531,7 @@ async function respondDouble(accept) {
 
 async function doNewGame() {
   cancelAutoEnd();
+  openingDiceActive = false;
   const diff = $("difficulty").value;
   const s = await api("/api/new", { difficulty: diff });
   state = s;
@@ -562,6 +579,31 @@ function renderDice(dice, remaining) {
     });
   }
 }
+// Opening roll renders ONE die per side: dice = [playerDie, computerDie] (the
+// ONE unsorted place). Mark each with data-owner so the player can tell whose
+// is whose — "you" for dice[0], "ai" for dice[1]. Never identify by DOM position.
+// The marks survive the opening resolving to phase "move" (player win) via the
+// openingDiceActive flag. `remaining` — pass it only in the move phase — drives
+// the same "used" dimming as renderDice; null/omitted → no dimming (tie re-roll).
+function renderOpeningDice(dice, remaining) {
+  const box = $("dice");
+  box.innerHTML = "";
+  if (!dice || dice.length < 2) return;
+  const rem = Array.isArray(remaining) ? remaining.slice() : null;
+  const isUsed = (v) => {
+    if (!rem) return false;
+    const idx = rem.indexOf(v);
+    if (idx < 0) return true;
+    rem.splice(idx, 1);
+    return false;
+  };
+  const you = dieEl(dice[0], isUsed(dice[0]), false);
+  you.dataset.owner = "you";
+  box.appendChild(you);
+  const ai = dieEl(dice[1], isUsed(dice[1]), false);
+  ai.dataset.owner = "ai";
+  box.appendChild(ai);
+}
 function animateDiceRolling() {
   const box = $("dice");
   box.innerHTML = "";
@@ -601,13 +643,18 @@ function updateUI() {
   if (state.winner === "white") msg.className = "good";
   else if (state.winner === "black") msg.className = "bad";
 
-  // dice
-  if (state.phase === "move" && state.turn === "white") renderDice(state.dice, state.remainingDice);
+  // dice — the opening roll's dice carry data-owner marks in EVERY opening
+  // outcome: tie (phase still "openingRoll") and player win (phase already
+  // "move", held by openingDiceActive from doRoll). Used-dimming applies only
+  // in the move phase; on a tie remainingDice is empty and must not dim.
+  if (state.turn === "white" && (openingDiceActive || state.phase === "openingRoll")) {
+    renderOpeningDice(state.dice, state.phase === "move" ? state.remainingDice : null);
+  } else if (state.phase === "move" && state.turn === "white") renderDice(state.dice, state.remainingDice);
   else if (state.phase !== "move" && state.turn === "white" && (!state.dice || state.dice.length === 0)) $("dice").innerHTML = "";
 
   // buttons
   const over = state.phase === "gameover";
-  $("rollBtn").disabled = busy || over || !(state.turn === "white" && state.phase === "roll");
+  $("rollBtn").disabled = busy || over || !(state.turn === "white" && (state.phase === "roll" || state.phase === "openingRoll"));
   $("doubleBtn").disabled = busy || over || !state.canDouble;
   $("undoBtn").disabled = busy || over || !(state.turn === "white" && state.phase === "move" && hasHistory());
   $("endTurnBtn").disabled = busy || over || !(state.turn === "white" && state.turnOver);

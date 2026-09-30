@@ -33,7 +33,7 @@ export interface GameState {
   bar: { white: number; black: number };
   off: { white: number; black: number };
   turn: Player;
-  phase: "roll" | "move" | "gameover" | "doubleOffered";
+  phase: "openingRoll" | "roll" | "move" | "gameover" | "doubleOffered";
   dice: number[];
   remainingDice: number[];
   cube: { value: number; owner: Player | null };
@@ -60,7 +60,9 @@ export function startingPoints(): number[] {
   throw new Error("not implemented");
 }
 
-/** A fresh GameState for a new game at the given difficulty (white to move, phase "roll", cube `{value: 1, owner: null}`, empty bar and off, `winner: null`, and `points === startingPoints()`). */
+/** A fresh GameState for a new game at the given difficulty — the new game starts in phase
+ *  "openingRoll" (white to move), cube `{value: 1, owner: null}`, empty bar and off, `winner: null`,
+ *  and `points === startingPoints()`. */
 export function createGame(difficulty: GameState["difficulty"]): GameState {
   throw new Error("not implemented");
 }

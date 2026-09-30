@@ -60,7 +60,10 @@ MODULE = run_cumulative
 #        (2026-09-10, WO-PORT-ASSIGNABLE)
 # Prior: e0a14bdba4294caa42cab090dfc0edfba79ad399e331e95a705df71b678b001c
 #        (2026-09-07, frontend origin seam / REQ-SAME-ORIGIN)
-FROZEN = "7542fcc31acef904c8753efa74601f8983a9c4319624b9eebe9c6dc15756a0db"
+# Re-frozen 2026-09-29 (WO-GOLDEN-V2-B3): the opening-roll chunk —
+# scaffold/src/game.ts gained "openingRoll" in the phase union and the createGame
+# docstring now says the new game starts in phase "openingRoll" (white to move).
+FROZEN = "55743d5e9e0826b2ead2d92e291c6ddb33117dfd15fa36a7d97e0e654f767a34"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LIVE_SCAFFOLD = REPO_ROOT / "task" / "backgammon" / "scaffold"
 

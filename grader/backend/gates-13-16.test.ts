@@ -12,6 +12,7 @@ import {
   getState,
   loadEngine,
   makeState,
+  openingPoints,
   resolveStartCommand,
   startServer,
   stopServer,
@@ -105,7 +106,9 @@ describe("Backgammon backend gates 13-16", () => {
     });
 
     it("[G13] REQ-TURN — no die reuse after consumption", async () => {
-      await api("/api/new", { difficulty: "easy" });
+      // An ordinary turn from the opening position: a new game starts with the
+      // opening roll (G31), which is not this check's subject.
+      await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll", difficulty: "easy" }));
       await debugRoll([3, 1]);
 
       let state = await api("/api/roll", {});
@@ -132,7 +135,9 @@ describe("Backgammon backend gates 13-16", () => {
     });
 
     it("[G25] REQ-TURN — the computer takes its turn", async () => {
-      await api("/api/new", { difficulty: "easy" });
+      // An ordinary turn from the opening position: a new game starts with the
+      // opening roll (G31), which is not this check's subject.
+      await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll", difficulty: "easy" }));
       await debugRoll([4, 2]);
 
       let state = await api("/api/roll", {});

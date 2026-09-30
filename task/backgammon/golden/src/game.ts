@@ -28,7 +28,7 @@ export interface GameState {
   bar: { white: number; black: number };
   off: { white: number; black: number };
   turn: Player;
-  phase: "roll" | "move" | "gameover" | "doubleOffered";
+  phase: "openingRoll" | "roll" | "move" | "gameover" | "doubleOffered";
   dice: number[]; // the dice as rolled this turn (2, or 4 for doubles)
   remainingDice: number[]; // dice not yet consumed
   cube: { value: number; owner: Player | null }; // null = centered
@@ -70,7 +70,7 @@ export function createGame(difficulty: GameState["difficulty"]): GameState {
     bar: { white: 0, black: 0 },
     off: { white: 0, black: 0 },
     turn: "white",
-    phase: "roll",
+    phase: "openingRoll",
     dice: [],
     remainingDice: [],
     cube: { value: 1, owner: null },

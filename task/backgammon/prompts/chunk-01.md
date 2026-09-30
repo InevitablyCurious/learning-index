@@ -23,7 +23,7 @@ You know how backgammon is played. What you cannot know is how THIS codebase lay
 
 **Two sentinel values, because a move off the bar or off the board has no point number.** A checker entering from the bar has `from: BAR` (0). A checker bearing off has `to: OFF` (25). They are only ever used in those two positions.
 
-**Dice.** A roll is the dice for that turn; doubles are carried as **four** entries, not two.
+**Dice.** A roll is the dice for that turn; doubles are carried as **four** entries, not two. Before anyone has moved, the first `/api/roll` rolls ONE die per side and `dice` is `[playerDie, computerDie]` — the player's die first, the computer's die second — and the higher side goes first; a tie rolls again.
 
 A few of the functions below are ours rather than the game's, and their descriptions say exactly what they must return.
 
@@ -36,7 +36,7 @@ export function opponent(p: Player): Player;
 /** The standard opening arrangement as a fresh points[] array. */
 export function startingPoints(): number[];
 
-/** A fresh GameState for a new game at the given difficulty (white to move, phase "roll", cube `{value: 1, owner: null}`, empty bar and off, `winner: null`, and `points === startingPoints()`). */
+/** A fresh GameState for a new game at the given difficulty — the new game starts in phase "openingRoll" (white to move), cube `{value: 1, owner: null}`, empty bar and off, `winner: null`, and `points === startingPoints()`. */
 export function createGame(difficulty: GameState["difficulty"]): GameState;
 
 /** True when ALL of `player`'s checkers are in that player's home quadrant. */

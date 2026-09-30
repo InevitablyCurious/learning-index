@@ -161,7 +161,7 @@ async function rollThroughThePage(page: Page, dice: number[]): Promise<void> {
   await page.getByTestId("rollBtn").click();
   // Fewer than two dice after a roll is the dice render check's complaint.
   await expect
-    .poll(() => visibleDice(page), { message: "[needs: REQ-RENDER/die] fewer than two dice after a roll", timeout: 5_000 })
+    .poll(() => visibleDice(page), { message: "[needs: REQ-RENDER/die F61] fewer than two dice after a roll", timeout: 5_000 })
     .toBeGreaterThanOrEqual(2);
 }
 
@@ -170,7 +170,10 @@ test("[F39] REQ-DICE — a roll shows two dice, and two different numbers give t
   await page.goto("/");
 
   // Two different numbers: two dice on screen once they land, and two moves.
-  await rollThroughThePage(page, [5, 6]);
+  // The opening roll is [playerDie, computerDie], unsorted: the player's 6
+  // must come FIRST to win the opening and play both numbers (a forced [5,6]
+  // hands the turn — and the 5 and 6 — to the computer).
+  await rollThroughThePage(page, [6, 5]);
   expect(await landedDice(page), "[aspect: extra] more than two dice on screen after rolling 5-6").toBeLessThanOrEqual(2);
 
   const hints = page.locator('[data-testid="hint"]');
@@ -209,7 +212,29 @@ test("[F39] REQ-DICE — a roll shows two dice, and two different numbers give t
   const third = await withinSeconds(25, tryMove).catch(() => false);
   expect(third, `${later} rolled 5-6 and could make a third move`).toBe(false);
 
-  // A double: still only two dice on screen (its four moves are F33's).
-  await rollThroughThePage(page, [4, 4, 4, 4]);
+  // A double: still only two dice on screen (its four moves are F33's). An
+  // opening roll can no longer BE a double — the opening rolls ONE die per
+  // side — so the double is a LATER turn, set up the way F33 sets it up: a
+  // real 15-per-side board in the move phase with the double already rolled.
+  const points = new Array(26).fill(0);
+  points[24] = 2;
+  points[13] = 5;
+  points[8] = 3;
+  points[6] = 5;
+  points[1] = -2;
+  points[12] = -5;
+  points[17] = -3;
+  points[19] = -5;
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "move",
+    dice: [6, 6, 6, 6],
+    remainingDice: [6, 6, 6, 6],
+  });
+  await page.reload();
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
   expect(await landedDice(page), "[aspect: extra] more than two dice on screen after rolling a double").toBeLessThanOrEqual(2);
 });

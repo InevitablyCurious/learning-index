@@ -418,6 +418,23 @@ export function emptyPoints(): number[] {
   return new Array(26).fill(0);
 }
 
+// The standard opening arrangement, written out here rather than read from the
+// candidate's engine: a check that needs an ordinary turn from the opening
+// position sets it up through the debug seam, because a new game now starts
+// with the opening roll (G31), which is not what those checks are about.
+export function openingPoints(): number[] {
+  const points = emptyPoints();
+  points[24] = 2;
+  points[13] = 5;
+  points[8] = 3;
+  points[6] = 5;
+  points[1] = -2;
+  points[12] = -5;
+  points[17] = -3;
+  points[19] = -5;
+  return points;
+}
+
 export function makeState(partial: Record<string, any>): Record<string, any> {
   const base = {
     points: emptyPoints(),

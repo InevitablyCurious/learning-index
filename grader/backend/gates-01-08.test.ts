@@ -56,7 +56,7 @@ describe("Backgammon backend gates 01-08", () => {
 
     const state = game.createGame("medium");
     expect(state.turn, SETUP).toBe("white");
-    expect(state.phase, SETUP).toBe("roll");
+    expect(state.phase, SETUP).toBe("openingRoll");
     expect(state.cube, SETUP).toEqual({ value: 1, owner: null });
     expect(state.bar, PIECES).toEqual({ white: 0, black: 0 });
     expect(state.off, PIECES).toEqual({ white: 0, black: 0 });

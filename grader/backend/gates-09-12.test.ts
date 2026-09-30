@@ -9,6 +9,7 @@ import {
   api,
   emptyPoints,
   makeState,
+  openingPoints,
 } from "../lib/harness.ts";
 import {
   DOUBLE_WINDOW,
@@ -112,8 +113,19 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     }
   });
 
-  it("[G11] REQ-CUBE-STATE — doubling is allowed on a new game", async () => {
-    await api("/api/new", { difficulty: "medium" });
+  it("[G11] REQ-CUBE-STATE — the player may double on their turn with a centered cube", async () => {
+    // A fresh game sits in the opening roll, where nobody may double yet
+    // (G31). Seed a LATER turn instead: the human to act, phase "roll", cube
+    // centered, on the standard opening board.
+    await debugSetState(
+      makeState({
+        turn: "white",
+        phase: "roll",
+        cube: { value: 1, owner: null },
+        winner: null,
+        points: game.startingPoints(),
+      }),
+    );
     const state = await getState();
 
     expect(state.canDouble).toBe(true);
@@ -130,9 +142,21 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     const VALUE = "[aspect: value]";
     const OWNER = "[aspect: owner]";
     // Standard backgammon: when the doubled player TAKES, the taker (here the AI,
-    // black) owns the cube — not the doubler. From the opening position the AI's
-    // win prob is 0.5 >= its take point, so it accepts.
-    await api("/api/new", { difficulty: "medium" });
+    // black) owns the cube — not the doubler. A fresh game sits in the opening
+    // roll, where a double is refused (G31), so seed a LATER turn: the even
+    // opening board, where the AI's win prob is 0.5 >= its take point, so it
+    // accepts.
+    await debugSetState(
+      makeState({
+        turn: "white",
+        phase: "roll",
+        cube: { value: 1, owner: null },
+        winner: null,
+        points: game.startingPoints(),
+        bar: { white: 0, black: 0 },
+        off: { white: 0, black: 0 },
+      }),
+    );
     const res = await api("/api/double");
     const state = await getState();
 
@@ -143,7 +167,9 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
   });
 
   it("[G21] REQ-CUBE-STATE — illegal double in move phase must not mutate cube", async () => {
-    await api("/api/new", {});
+    // An ordinary turn from the opening position: a new game starts with the
+    // opening roll (G31), which is not this check's subject.
+    await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll" }));
     await debugRoll([3, 1]);
     await api("/api/roll");
 
@@ -151,7 +177,8 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     expect(before.phase).toBe("move");
     expect(before.canDouble).toBe(false);
 
-    await api("/api/double");
+    // Refused with an error status or ignored — either way the cube stays.
+    await api("/api/double").catch(() => undefined);
     const after = await getState();
 
     expect(after.cube).toEqual(before.cube);

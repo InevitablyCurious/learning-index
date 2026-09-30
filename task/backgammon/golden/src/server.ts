@@ -41,11 +41,13 @@ const forcedDiceQueue: number[][] = [];
 // ---- single in-memory game with a couple of transient turn flags ----
 interface FullState extends GameState {
   aiCubeDone: boolean;
+  aiOpening: boolean; // the computer won the opening roll and has yet to play those dice
 }
 let game: FullState = init("medium");
 function init(difficulty: GameState["difficulty"]): FullState {
   const g = createGame(difficulty) as FullState;
   g.aiCubeDone = false;
+  g.aiOpening = false;
   return g;
 }
 
@@ -151,6 +153,15 @@ function rollDice(): number[] {
   return d1 === d2 ? [d1, d1, d1, d1] : [d1, d2];
 }
 
+// Opening roll: ONE die per side — [playerDie, computerDie]. Equal values are a
+// tie (still length 2); this must NEVER produce a 4-length doubles array.
+function rollOpeningDice(): number[] {
+  if (forcedDiceQueue.length > 0) return forcedDiceQueue.shift()!;
+  const d1 = 1 + Math.floor(Math.random() * 6);
+  const d2 = 1 + Math.floor(Math.random() * 6);
+  return [d1, d2];
+}
+
 const DEBUG_STATE_KEYS = [
   "points",
   "bar",
@@ -177,10 +188,17 @@ function actionDebugState(body: any) {
       (game as any)[key] = body[key];
     }
   }
+  game.aiOpening = false; // a position set by hand is never the opening's pending move
 }
 
 function actionDebugRoll(body: any) {
-  forcedDiceQueue.push(body.dice);
+  if (game.phase === "openingRoll") {
+    // Opening roll: dice are [playerDie, computerDie] — order is meaningful, never sort.
+    forcedDiceQueue.push(body.dice);
+  } else {
+    // Normal turns honor the "sorted ascending" contract.
+    forcedDiceQueue.push([...body.dice].sort((a, b) => a - b));
+  }
 }
 
 // ---------------- action handlers ----------------
@@ -192,11 +210,36 @@ function actionNew(body: any) {
   game = init(diff);
   game.score = score;
   game.gamesPlayed = gamesPlayed;
-  game.message = "New game. Your turn — roll the dice (or offer a double).";
+  game.message = "New game. Roll to see who goes first.";
 }
 
 function actionRoll() {
-  if (game.turn !== HUMAN || game.phase !== "roll" || game.winner) return;
+  if (game.turn !== HUMAN || game.winner) return;
+  if (game.phase === "openingRoll") {
+    // Both sides roll ONE die; the higher side plays first with both numbers.
+    // This is the ONE place dice are NOT sorted: [playerDie, computerDie].
+    const dice = rollOpeningDice();
+    const [playerDie, computerDie] = dice;
+    game.dice = dice;
+    if (playerDie === computerDie) {
+      // Tie — phase stays "openingRoll", turn stays HUMAN, roll again.
+      game.remainingDice = [];
+      game.message = `You both rolled ${playerDie}. Tie — roll again.`;
+      return;
+    }
+    game.turn = playerDie > computerDie ? HUMAN : AI;
+    game.aiOpening = game.turn === AI;
+    game.phase = "move";
+    game.remainingDice = [playerDie, computerDie];
+    game.history = [];
+    game.turnOver = false;
+    game.message =
+      game.turn === HUMAN
+        ? `You rolled ${playerDie}, the computer rolled ${computerDie} — you go first.`
+        : `You rolled ${playerDie}, the computer rolled ${computerDie} — the computer goes first.`;
+    return;
+  }
+  if (game.phase !== "roll") return;
   game.dice = rollDice();
   game.remainingDice = game.dice.slice();
   game.phase = "move";
@@ -312,6 +355,14 @@ function actionAi() {
   if (game.turn !== AI || game.winner) return {};
   const b = boardView(game);
 
+  // 0) the computer's dice are already on the table — it WON the opening roll
+  //    (dice = [playerDie, computerDie]), or a position was set up that way:
+  //    play those dice WITHOUT a fresh roll and WITHOUT a cube decision
+  //    (nobody doubles before the opening move is played).
+  if (game.phase === "move") {
+    return aiPlayDice(b, game.dice.slice(), game.aiOpening);
+  }
+
   // 1) cube decision at the start of the AI's turn
   if (game.phase === "roll" && !game.aiCubeDone) {
     const dec = shouldAiDouble(b, AI, game.cube, game.difficulty);
@@ -330,6 +381,12 @@ function actionAi() {
   // 2) roll and move
   const dice = rollDice();
   game.dice = dice;
+  return aiPlayDice(b, dice);
+}
+
+// Play the AI's turn with the given dice, then hand back to the human. The
+// opening's dice are one per side, so that turn's message says "opened with".
+function aiPlayDice(b: Board, dice: number[], opening = false) {
   const result = chooseMoves(b, AI, dice, game.difficulty);
   const applied: AppliedMove[] = [];
   for (const m of result.moves) {
@@ -337,8 +394,10 @@ function actionAi() {
     applied.push({ ...m, hit });
   }
   game.remainingDice = [];
+  game.aiOpening = false;
 
   const dl = dice.length === 4 ? `double ${dice[0]}s` : `${dice[0]} and ${dice[1]}`;
+  const lead = opening ? "AI opened with" : "AI rolled";
   const win = checkWin(b, AI);
   if (win.won) {
     finishGame(game, AI, win.type, false);
@@ -346,10 +405,10 @@ function actionAi() {
   }
 
   if (applied.length === 0) {
-    game.message = `AI rolled ${dl} but has no legal move — it passes.`;
+    game.message = `${lead} ${dl} — No moves available.`;
   } else {
     const hits = applied.filter((a) => a.hit).length;
-    game.message = `AI rolled ${dl} and played ${applied.length} move${applied.length === 1 ? "" : "s"}${hits ? `, hitting ${hits} of your checkers` : ""}. Your turn.`;
+    game.message = `${lead} ${dl} and played ${applied.length} move${applied.length === 1 ? "" : "s"}${hits ? `, hitting ${hits} of your checkers` : ""}. Your turn.`;
   }
   // hand back to human
   game.turn = HUMAN;
