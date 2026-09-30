@@ -2031,6 +2031,22 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         f"PROGRESS run_label={run_label} step=context-exhausted-stop "
                         f"phase=feedback-{attempt} graded={len(attempt_reports)}"
                     )
+                    # A seeded cell out of room is stuck the same way as one out
+                    # of attempts: promote the round it was graded on, so the
+                    # next run chains from where this one got to (dev-mode only,
+                    # as at the ceiling). Run 1790785038 stopped here with no
+                    # snapshot to continue from.
+                    if self._seed_snapshot_tree is not None:
+                        self._capture_end_of_run_snapshot(
+                            worktree=(
+                                run_dir / "checkpoints" / f"cp-{attempt:02d}" / "tree"
+                            ),
+                            state_hash=attempt_state_hash,
+                            run_label=run_label,
+                            run_identity=run_identity,
+                            session_id=session_id,
+                            attempt=attempt,
+                        )
                     break
                 if feedback_run.budget_stop_detected:
                     verdict = "BUDGET_STOP"

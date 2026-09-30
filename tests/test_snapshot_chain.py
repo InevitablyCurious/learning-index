@@ -291,3 +291,49 @@ def test_seeded_cell_harness_error_produces_no_snapshot(
     assert result.termination_reason == "harness_error"
     assert _snapshot_dirs(tmp_path) == []
     assert result.produced_snapshot_id is None
+
+
+# ── OUT OF ROOM: the graded round is promoted too ───────────────────────────
+
+
+def test_seeded_cell_out_of_room_promotes_its_last_graded_round(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Run 1790785038 ran out of context in its third repair round and left no
+    # snapshot, so the next run could not chain from where it got to.
+    seed_tree, seeded_src = _seed_tree(tmp_path)
+    monkeypatch.delenv("BENCH_PROXY_CHECKPOINT", raising=False)
+    _patch_fake_real_arm(monkeypatch)
+
+    runner = _make_runner(
+        tmp_path,
+        mock=None,
+        max_attempts=3,
+        seed_snapshot_tree=seed_tree,
+        seed_snapshot_depth=1,
+    )
+    monkeypatch.setattr(runner, "_load_chunk_prompts", lambda *args, **kwargs: ["BUILD PROMPT"])
+
+    def _out_of_room(**kwargs: Any) -> _OpencodeRunStats:
+        return _OpencodeRunStats(
+            input_tokens=1,
+            output_tokens=1,
+            reasoning_tokens=0,
+            turns=1,
+            session_id="ses_seeded_cell",
+            killed_reason=None,
+            exit_code=0,
+            cost_usd=0.0,
+            context_exhausted=True,
+        )
+
+    monkeypatch.setattr(runner, "_run_cell_attempt", _out_of_room)
+
+    result = _drive(runner, tmp_path, monkeypatch, _fail_gate)
+
+    assert result.termination_reason == "context_exhausted"
+    dirs = _snapshot_dirs(tmp_path)
+    assert len(dirs) == 1, f"expected exactly one promoted snapshot, got {dirs}"
+    assert _read_snapshot(tmp_path)["snapshot_depth"] == 2
+    assert result.produced_snapshot_id == dirs[0].name
+    assert (dirs[0] / "tree" / "src" / "game.ts").read_text(encoding="utf-8") == seeded_src
