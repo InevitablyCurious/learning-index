@@ -1558,7 +1558,10 @@ test("[F52] REQ-BUTTONS — greyed-out buttons look clearly different", async ({
       const lum: number[] = [];
       for (let i = 0; i < data.length; i += 4) lum.push(0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]);
       lum.sort((a, b) => a - b);
-      return lum[Math.floor(lum.length * 0.99)] - lum[Math.floor(lum.length * 0.01)];
+      // The brightest and darkest 0.2%: lettering is a sliver of a big button
+      // (run 1790778770 drew New Game as a full-height strip, and at 1% its
+      // clear white text never reached the measure).
+      return lum[Math.floor(lum.length * 0.998)] - lum[Math.floor(lum.length * 0.002)];
     }, png.toString("base64"));
   };
 
@@ -1633,20 +1636,43 @@ test("[F08] REQ-TESTID — difficulty selector", async ({ page }) => {
 });
 
 test("[F54] REQ-RELOAD — the difficulty control shows the level you're playing", async ({ page }) => {
-  // A player who chose a level reads it back on the control after a reload —
-  // a page that loads the game but leaves the dropdown on its default tells
-  // the player the wrong game is running.
+  // A player who chose a level reads it back on the control after a reload.
+  // Chosen the way a player chooses it — the difficulty control, then New
+  // Game — because that is what this check's line says happened. The same
+  // control read after a game started at Hard through the API is F68's (the
+  // team's): run 1790778770's page kept the player's choice in the browser,
+  // passed this path, and was told "I set the difficulty to Hard" of a
+  // setting it never made.
+  await openApp(page);
+  const control = async () => {
+    const tagged = page.getByTestId("difficulty");
+    const isSelect = await tagged.evaluate((el) => el.tagName === "SELECT").catch(() => false);
+    return isSelect ? tagged : tagged.locator("select").first();
+  };
+  await (await control()).selectOption("hard");
+  await page.getByTestId("newGameBtn").click();
+  await expect
+    .poll(async () => (await readState(page)).difficulty, { message: "[needs: F08] New Game did not start a Hard game", timeout: 5_000 })
+    .toBe("hard");
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await expect(await control(), "after choosing Hard and reloading, the control no longer read hard").toHaveValue("hard");
+});
+
+test("[F68] REQ-RELOAD — on load the difficulty control reads the game's difficulty", async ({ page }) => {
+  // The build prompt (chunk-05): "On load, the difficulty control shows the
+  // difficulty the game is actually running at." A game started at Hard
+  // through the API, then the page opened: the control reads what the server
+  // is playing, not a choice the page kept for itself. The team's finding —
+  // a player who chose the level in the page is F54's.
   await openApp(page);
   await postJson<ApiState>(page, "/api/new", { difficulty: "hard" });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-
-  // The dropdown a player reads: the tagged element when it is one, else the
-  // <select> inside it — resolved the way F08 resolves it.
   const tagged = page.getByTestId("difficulty");
   const isSelect = await tagged.evaluate((el) => el.tagName === "SELECT").catch(() => false);
   const select = isSelect ? tagged : tagged.locator("select").first();
-  await expect(select, "[needs: F01]").toHaveValue("hard");
+  await expect(select, "[needs: F54] a game started at Hard through the API loaded with the control on another level").toHaveValue("hard");
 });
 
 test("[F55] REQ-RELOAD — the computer finishes its turn after a reload", async ({ page }) => {

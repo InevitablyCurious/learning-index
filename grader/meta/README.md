@@ -45,8 +45,8 @@ and from the roster, so `report.mjs` never sees them.
 ## The gate census — never counted from `checks.json`
 
 The graded-check denominator is whatever `grader/roster.mjs` `enumerateGates()`
-returns: **208 gates** on 2026-09-30 — conformance **92** · backend **49** ·
-frontend **67** (it was 125 on 2026-09-19). Read the number from a fresh roster,
+returns: **209 gates** on 2026-09-30 — conformance **92** · backend **49** ·
+frontend **68** (it was 125 on 2026-09-19). Read the number from a fresh roster,
 never from this line.
 
 Never count the gate inventory from `grader/checks.json` `checks` keys, nor from

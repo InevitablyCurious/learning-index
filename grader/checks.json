@@ -472,7 +472,7 @@
     "F54": {
       "name": "The difficulty control shows the level you're playing",
       "what": "After the page reloads, the difficulty control shows the difficulty the game is actually running at, not a fixed default.",
-      "how": "On screen: start a game at Hard difficulty, reload the page, and require the difficulty control to still show Hard."
+      "how": "In a browser: chooses Hard on the difficulty control and clicks New Game (the game really is Hard: F08's), reloads, and requires the control to read hard."
     },
     "F55": {
       "name": "The computer finishes its turn after a reload",
@@ -538,6 +538,11 @@
       "name": "A computer double stops Fast Forward until you answer",
       "what": "If the computer offers a double while Fast Forward is running, the play-out stops and stays stopped; after you answer the double it still stays stopped until you click Fast Forward again.",
       "how": "In a browser: sets F49's position (hard, the player's moves done, a race the computer doubles in by the published thresholds) and clicks Fast Forward. Requires the offer on screen wherever the page shows it ([aspect: offer]), the button not reading Pause 1.5 s later ([aspect: stopped]), a button to take the double ([aspect: answer]); after taking it, the turn back with the player ([aspect: back]), the position unchanged from 2 s to 5 s after ([aspect: stays]), and the button showing and reading Fast Forward ([aspect: back])."
+    },
+    "F68": {
+      "name": "On load the difficulty control reads the game's level",
+      "what": "When the page opens, the difficulty control shows the difficulty the game is actually running at, whatever set it.",
+      "how": "In a browser: starts a new game at Hard through /api/new, reloads, and requires the difficulty control to read hard (the player's own choice is F54's)."
     }
   },
   "setup": [
@@ -776,7 +781,8 @@
         "REQ-RENDER/bar",
         "REQ-RENDER/off-tray",
         "REQ-RESPONSIVE/startup",
-        "F54"
+        "F54",
+        "F68"
       ]
     },
     {

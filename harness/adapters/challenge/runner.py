@@ -2409,9 +2409,10 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
     # Checks a player never meets — the integration contract (a new game keeps
     # gamesPlayed, the debug route takes every state field, any non-/api path
     # serves the page, the opening dice's order in the state and their
-    # data-owner marks) — are told by the integrating team, in their voice.
+    # data-owner marks, the page loading the difficulty the game runs at) — are
+    # told by the integrating team, in their voice.
     # Every other gate token is the tester's.
-    _TEAM_GATE_TOKENS = ("E08", "G27", "G28", "G29", "F63")
+    _TEAM_GATE_TOKENS = ("E08", "G27", "G28", "G29", "F63", "F68")
 
     # HARNESS-INFRA CHECK NAMES (WO-FEEDBACK-VOICE-3 follow-up, 2026-08-30).
     # These are born only when a RUNNER DIES mid-run —

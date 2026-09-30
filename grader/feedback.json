@@ -1382,6 +1382,10 @@
     "F51.points": {
       "first": "The pop-up at the end doesn't show the game's points — no number with the word \"points\".",
       "repeat": "The game ended again and the pop-up still doesn't show the points — no number with the word \"points\"."
+    },
+    "F68": {
+      "first": "They start a game at Hard through your API and open it, and your difficulty box reads a different level.",
+      "repeat": "They started another game at Hard through your API, and opened it, and your difficulty box still shows a different level."
     }
   }
 }
