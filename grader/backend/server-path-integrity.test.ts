@@ -170,14 +170,19 @@ describe("Backgammon backend server-path integrity", () => {
     );
     await debugRoll([1, 2]);
     const rolled = await api("/api/roll", {});
+    // Finishing the game is the bear-off and win checks' ground (a needs marker).
     const winMove = (rolled.legalMoves as Move[]).find((m) => m.from === 1 && m.to === 25);
-    expect(winMove).toBeTruthy();
+    expect(winMove, "[needs: G08]").toBeTruthy();
     await api("/api/move", { from: winMove!.from, to: winMove!.to, die: winMove!.die });
     const finished = await getState();
-    expect(finished.gamesPlayed).toBe(before + 1);
+    expect(finished.winner, "[needs: G10]").toBe("white");
+    // The prompt: gamesPlayed counts finished games — it goes up by one when a
+    // game ends — and /api/new carries it forward. Each fault its own line.
+    expect(finished.gamesPlayed, "[aspect: counted] the finished game was not counted").toBeGreaterThan(before);
     await api("/api/new", {});
     const fresh = await getState();
-    expect(fresh.gamesPlayed).toBe(before + 1);
+    expect(fresh.gamesPlayed, "[aspect: carried] a new game lowered the count").toBeGreaterThanOrEqual(finished.gamesPlayed);
+    expect(fresh.gamesPlayed, "[aspect: extra] a new game raised the count").toBeLessThanOrEqual(finished.gamesPlayed);
   });
 
   // The debug route takes turnOver and gamesPlayed like any other state field.

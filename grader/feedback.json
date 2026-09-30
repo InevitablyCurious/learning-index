@@ -948,16 +948,16 @@
       "repeat": "Still not the layout I asked for — the board on the left, with all the buttons and game info on the right."
     },
     "F36": {
-      "first": "The board and the buttons on the right aren't sized the way I asked, can you give me something like a 20%/80% ratio",
-      "repeat": "The board and the buttons still aren't sized the way I asked, can you give me something like a 20%/80% ratio"
+      "first": "The board and the buttons on the right aren't sized the way I asked, can you give me something like an 80%/20% ratio, board/buttons",
+      "repeat": "The board and the buttons still aren't sized the way I asked, can you give me something like an 80%/20% ratio, board/buttons"
     },
     "F36.wide": {
-      "first": "The buttons on the right side look squished and the board looks too big, can you give me something like a 20%/80% ratio",
-      "repeat": "The buttons on the right still look squished and the board still looks too big, can you give me something like a 20%/80% ratio"
+      "first": "The buttons on the right side look squished and the board looks too big, can you give me something like an 80%/20% ratio, board/buttons",
+      "repeat": "The buttons on the right still look squished and the board still looks too big, can you give me something like an 80%/20% ratio, board/buttons"
     },
     "F36.narrow": {
-      "first": "The board looks too small, can you give me something like a 20%/80% ratio",
-      "repeat": "The board still looks too small, can you give me something like a 20%/80% ratio"
+      "first": "The board looks too small, can you give me something like an 80%/20% ratio, board/buttons",
+      "repeat": "The board still looks too small, can you give me something like an 80%/20% ratio, board/buttons"
     },
     "F37": {
       "first": "The game doesn't fit the screen properly.",
@@ -1076,8 +1076,20 @@
       "repeat": "Clicking the point a piece can move to still doesn't move it there."
     },
     "G27": {
+      "first": "They play a game to the end and start another, and the gamesPlayed count comes out wrong.",
+      "repeat": "They played another game to the end and started a new one, and the gamesPlayed count still comes out wrong."
+    },
+    "G27.counted": {
+      "first": "They play a game to the end, and gamesPlayed doesn't go up.",
+      "repeat": "They played another game to the end, and gamesPlayed still doesn't go up."
+    },
+    "G27.carried": {
       "first": "They finish a game and start another, and gamesPlayed drops back to zero.",
       "repeat": "They played another game to the end and started a new one, and gamesPlayed is still reset to zero."
+    },
+    "G27.extra": {
+      "first": "They finish a game and start another, and gamesPlayed goes up again as if the new game had already been played.",
+      "repeat": "They started another new game, and gamesPlayed again went up before it was played."
     },
     "G28": {
       "first": "They seed two extra fields through your app's debug setup — that the turn is over, and how many games were played — and both are ignored.",
@@ -1355,13 +1367,17 @@
       "first": "The computer's double offer never shows up on screen — nothing tells me it wants to double.",
       "repeat": "Still nothing on screen tells me when the computer wants to double."
     },
+    "F49.answer": {
+      "first": "When the computer offers a double, the buttons to answer it don't read Accept (or Take) and Decline (or Pass).",
+      "repeat": "The computer offered a double again, and the buttons to answer it still don't read Accept (or Take) and Decline (or Pass)."
+    },
     "F50.shown": {
       "first": "When I double, nothing on screen tells me whether the computer took it.",
       "repeat": "I doubled again and still nothing on screen told me whether the computer took it."
     },
     "F51.points": {
-      "first": "The pop-up at the end doesn't say how many points the game was worth.",
-      "repeat": "The game ended again and the pop-up still doesn't say how many points it was worth."
+      "first": "The pop-up at the end doesn't show the game's points — no number with the word \"points\".",
+      "repeat": "The game ended again and the pop-up still doesn't show the points — no number with the word \"points\"."
     }
   }
 }

@@ -321,3 +321,12 @@ def test_a_new_complaint_from_a_check_already_told_is_a_first_sighting() -> None
         problems=[record], repeat_complaints=told_before | {ChallengeRunner._complaint_id(record)}
     )
     assert lines["repeat"] in again
+
+
+def test_every_needs_marker_in_one_message_counts() -> None:
+    # Fourteen assertions write two markers; the runtime once read only the first.
+    from harness.adapters.challenge.stages import needs_of
+
+    assert needs_of({"observed": "[needs: F01] [needs: G12] no way to take the double"}) == ("F01", "G12")
+    assert needs_of({"observed": "[aspect: shown] [needs: F01 G25] x"}) == ("F01", "G25")
+    assert needs_of({"observed": "nothing needed"}) == ()

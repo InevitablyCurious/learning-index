@@ -152,7 +152,7 @@ STATIC_TESTIDS = (
     "doubleBtn", "undoBtn", "endTurnBtn", "message", "modalOverlay",
     "modalTitle", "modalBody", "modalBtns",
 )
-DYNAMIC_TESTIDS = ("point", "checker", "hint", "die", "bar", "off-tray", "off-ai", "off-you")
+DYNAMIC_TESTIDS = ("point", "checker", "hint", "die", "bar", "off-tray", "off-you", "checkerCount", "fastForwardBtn")
 POST_ROUTES = (
     "/api/state", "/api/new", "/api/roll", "/api/move", "/api/undo",
     "/api/endturn", "/api/double", "/api/double/respond", "/api/ai",

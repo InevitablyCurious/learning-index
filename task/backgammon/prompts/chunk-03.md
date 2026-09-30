@@ -27,17 +27,16 @@ Serialized state — every game-route response carries exactly these top-level k
 ```
 points, bar, off, turn, phase, dice, remainingDice, cube, difficulty, score,
 winner, winType, pointsWon, doubleOfferedBy, message, turnOver, gamesPlayed,
-pip, legalMoves, canDouble, isRace
+pip, legalMoves, canDouble
 ```
 
 - `pip`: `{ white: number, black: number }` — both players' pip counts from the engine.
 - `legalMoves`: `Move[]` — the human's legal moves right now (`[]` unless it is the human's move phase).
 - `canDouble`: boolean — whether the human may offer a double at this moment; false until the opening move has been played.
-- `isRace`: boolean — whether the game is a pure race right now: nobody has a checker on the bar and every one of your (white) checkers has passed every one of the computer's (black) checkers, so neither side can hit the other anymore.
 - `history` is NOT serialized.
 - The server MUST hold a complete, initialized game state from startup, so `/api/state` and `/api/debug/state` return a valid serialized game even before any `/api/new` is called.
 
-Turn flow the server drives: `/api/ai` advances the computer's turn using `chooseMoves`. When the human has no move available, the response carries `turnOver === true` and `legalMoves === []`. When either side has no legal move, the `message` contains the words **"No moves available"** (the computer's, for example, is "AI rolled 6 and 5 — No moves available."). A finished game reports `winner`, `winType`, `pointsWon` and a clear `message`. `/api/new` starts a fresh game without any page reload and carries `score` and `gamesPlayed` forward.
+Turn flow the server drives: `/api/ai` advances the computer's turn using `chooseMoves`. When the human has no move available, the response carries `turnOver === true` and `legalMoves === []`. When either side has no legal move, the `message` contains the words **"No moves available"** (the computer's, for example, is "AI rolled 6 and 5 — No moves available."). A finished game reports `winner`, `winType`, `pointsWon` and a clear `message`. `/api/new` starts a fresh game without any page reload and carries `score` and `gamesPlayed` forward; `gamesPlayed` counts finished games — it goes up by one when a game ends.
 
 - Doubling cube state: the cube is `{value, owner}`, and **`owner: null` is how we represent a centered cube** — a new game starts `{value: 1, owner: null}`. `canDouble` reports whether the human may offer a double at this exact moment.
 - The computer's double messages are plain words: when it offers a double the message says it is offering; when it answers a double the message says it accepts or declines — never a win percentage, a pip count, or its reasoning.

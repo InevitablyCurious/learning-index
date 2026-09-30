@@ -1354,6 +1354,12 @@ test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", asyn
     offered,
     `[needs: F01] [needs: G12] the double offer showed internal math: "${offered}"`,
   ).not.toMatch(REASONING_ARTIFACTS);
+
+  // The two buttons that answer it, by the words the build prompt gives them:
+  // Accept (or Take) and Decline (or Pass). The reload and Fast Forward checks
+  // answer with the same buttons and wait on this one for their names.
+  await expect(answerButton(page, TAKE), "[aspect: answer] no button reading Accept or Take answered the offer").toBeVisible();
+  await expect(answerButton(page, PASS), "[aspect: answer] no button reading Decline or Pass answered the offer").toBeVisible();
 });
 
 test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", async ({ page }) => {
@@ -1685,10 +1691,10 @@ test("[F56] REQ-RELOAD — the pending double offer shows again after a reload",
   // The offer is answered with whatever buttons the page gives — the build prompt
   // names no pop-up for a double, only that the offer shows again so the player
   // can accept or decline it.
-  await expect(answerButton(page, TAKE), "[needs: F01] [needs: G12] no way to take the double after the reload").toBeVisible({
+  await expect(answerButton(page, TAKE), "[needs: F01] [needs: G12] [needs: F49] no way to take the double after the reload").toBeVisible({
     timeout: 10_000,
   });
-  await expect(answerButton(page, PASS), "[needs: F01] [needs: G12] no way to pass the double after the reload").toBeVisible();
+  await expect(answerButton(page, PASS), "[needs: F01] [needs: G12] [needs: F49] no way to pass the double after the reload").toBeVisible();
 });
 
 test("[F16] REQ-RELOAD — whose turn survives a reload", async ({ page }) => {
@@ -1938,7 +1944,7 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
 
   // The player takes the double; the computer finishes its turn.
   const take = answerButton(page, TAKE);
-  await expect(take, "[aspect: answer] [needs: F56] no button to take the computer's double showed").toBeVisible();
+  await expect(take, "[aspect: answer] [needs: F49 F56] no button to take the computer's double showed").toBeVisible();
   await playerClick(take);
   await expect
     .poll(async () => (await readState(page)).turn, {

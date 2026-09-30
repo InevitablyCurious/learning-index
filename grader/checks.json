@@ -135,9 +135,9 @@
       "how": "Rolls, completes white's moves, ends the turn, drives the AI turn through the API, and asserts the turn comes back to white."
     },
     "G27": {
-      "name": "A new game keeps gamesPlayed",
-      "what": "Starting a new game carries the gamesPlayed count forward instead of resetting it.",
-      "how": "Through the running server: finish a game, start a new one, and require the gamesPlayed count to be preserved rather than reset to zero."
+      "name": "Finished games are counted and carried",
+      "what": "gamesPlayed counts finished games: it goes up by one when a game ends, and a new game carries it forward.",
+      "how": "Through the running server: sets one white piece left to bear off, rolls 2-1 and bears it off (the win itself is G08's and G10's), then requires gamesPlayed to have gone up ([aspect: counted]), and after /api/new neither lower ([aspect: carried]) nor higher ([aspect: extra])."
     },
     "G28": {
       "name": "The debug route honours turnOver and gamesPlayed",
@@ -447,7 +447,7 @@
     "F49": {
       "name": "Plain double offer",
       "what": "When the computer offers a double the message says so in plain words, not its win percentage, pip counts, or reasoning.",
-      "how": "A race the hard computer doubles in: after End Turn, something on screen — the message area or any pop-up — must say it is doubling ([aspect: shown]), and that text must not show win chances, pip counts or reasoning."
+      "how": "A race the hard computer doubles in: after End Turn, something on screen — the message area or any pop-up — must say it is doubling ([aspect: shown]), and that text must not show win chances, pip counts or reasoning; then requires buttons reading Accept (or Take) and Decline (or Pass) to answer it ([aspect: answer])."
     },
     "F50": {
       "name": "Plain double answer",
@@ -764,7 +764,6 @@
         "F06",
         "G26",
         "F34",
-        "G27",
         "G28",
         "G29",
         "REQ-BIND/",
@@ -865,7 +864,8 @@
         "F23",
         "F17",
         "F53",
-        "F65"
+        "F65",
+        "G27"
       ]
     },
     {

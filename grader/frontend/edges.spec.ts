@@ -404,14 +404,16 @@ test("[F15] REQ-SAME-ORIGIN — the app works on either host name", async ({
     // State actually arrived and rendered — not just an empty shell.
     await expect(
       page.getByTestId("point"),
-      `points never rendered at ${origin}`,
+      `[needs: REQ-RENDER/point] points never rendered at ${origin}`,
     ).toHaveCount(24);
     await expect(
       page.getByTestId("checker"),
-      `checkers never rendered at ${origin}`,
+      `[needs: REQ-RENDER/checker] checkers never rendered at ${origin}`,
     ).toHaveCount(30);
 
-    expect(consoleErrors, `page errors at ${origin}`).toEqual([]);
+    // Errors on the usual address are F27's finding; this check tells only
+    // the ones another address brings.
+    expect(consoleErrors, `[needs: F27] page errors at ${origin}`).toEqual([]);
 
     page.off("console", onConsole);
     page.off("pageerror", onPageError);

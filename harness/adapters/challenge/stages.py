@@ -81,8 +81,11 @@ _NEEDS_RE = re.compile(r"\[needs: ([^\]]+)\]")
 
 
 def needs_of(problem: dict[str, Any]) -> tuple[str, ...]:
-    m = _NEEDS_RE.search(str(problem.get("observed", "")))
-    return tuple(m.group(1).split()) if m else ()
+    # EVERY marker, not the first: fourteen assertions write two, such as
+    # `[needs: F01] [needs: G12]`, and reading only the first dropped the second
+    # (2026-09-30) — the line was told even when G12 had already failed.
+    observed = str(problem.get("observed", ""))
+    return tuple(n for m in _NEEDS_RE.finditer(observed) for n in m.group(1).split())
 
 
 def load_stages(checks_json: Path) -> list[Stage]:
