@@ -543,6 +543,11 @@
       "name": "On load the difficulty control reads the game's level",
       "what": "When the page opens, the difficulty control shows the difficulty the game is actually running at, whatever set it.",
       "how": "In a browser: starts a new game at Hard through /api/new, reloads, and requires the difficulty control to read hard (the player's own choice is F54's)."
+    },
+    "F69": {
+      "name": "The pip elements hold just the number",
+      "what": "pipWhite and pipBlack contain only the pip count, with any label outside those elements.",
+      "how": "In a browser: opens a new game and requires the text of pipWhite and pipBlack to be a bare number (F06 judges the numbers themselves)."
     }
   },
   "setup": [
@@ -767,6 +772,7 @@
         "G01",
         "G02",
         "F06",
+        "F69",
         "G26",
         "F34",
         "G28",

@@ -253,6 +253,11 @@ test("[F36] REQ-LAYOUT — the board takes about 80% of the width", async ({ pag
     // A board too big is itself why the buttons don't fit on the right; a board
     // too small can be the buttons' doing — run 1790381377's controls down the
     // left edge narrowed it — and is then the placement check's complaint (F35).
+    // A board wider than the window runs off the screen — F30's and F37's
+    // finding; the buttons are not squished then, only covered or pushed out
+    // (run 1790781911's board spilled off the left edge and was told the
+    // buttons looked squished).
+    expect(share, `[needs: F30 F37] at ${layout.size} the board is ${pct(share)} of the width — wider than the window`).toBeLessThanOrEqual(1);
     expect(share, `[aspect: wide] at ${layout.size} the board is ${pct(share)} of the width`).toBeLessThanOrEqual(
       BOARD_SHARE.max,
     );

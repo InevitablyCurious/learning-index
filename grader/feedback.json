@@ -1386,6 +1386,10 @@
     "F68": {
       "first": "They start a game at Hard through your API and open it, and your difficulty box reads a different level.",
       "repeat": "They started another game at Hard through your API, and opened it, and your difficulty box still shows a different level."
+    },
+    "F69": {
+      "first": "They read your pip counts from the pipWhite and pipBlack elements, and what they find there isn't a bare number.",
+      "repeat": "They read your pip counts again, and pipWhite and pipBlack still don't hold a bare number."
     }
   }
 }

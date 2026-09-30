@@ -184,6 +184,7 @@ _FRONTEND = tuple(
 )
 _HELPER_MARKERS = {
     ("frontend/core.spec.ts", "[aspect: format]"): ("F06",),  # readInt
+    ("frontend/core.spec.ts", "[needs: F69]"): ("F06",),  # readInt
     # bearOffTheLastPiece: the player's own last bear-off, shared by the end-of-game checks.
     ("frontend/core.spec.ts", "[needs: F03]"): ("F51", "F53"),
     ("frontend/core.spec.ts", "[needs: F04]"): ("F51", "F53"),

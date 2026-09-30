@@ -132,7 +132,9 @@ async function readInt(locator: Locator): Promise<number> {
   // the game state arrives from the server show an empty box for a moment, and
   // reading it at that instant failed F06 for three rounds in two runs
   // (1789664067, 1789712833) while the page showed the right number.
-  await expect(locator, "[aspect: format]").toHaveText(/^\s*-?\d+\s*$/);
+  // A number inside a label ("Pips: 167") breaks the prompt's contract, not the
+  // player's reading: that is F69's, the team's, finding.
+  await expect(locator, "[aspect: format] [needs: F69]").toHaveText(/^\s*-?\d+\s*$/);
   const text = (await locator.innerText()).trim();
   return Number.parseInt(text, 10);
 }
@@ -1574,9 +1576,12 @@ test("[F52] REQ-BUTTONS — greyed-out buttons look clearly different", async ({
     .then(() => true, () => false);
   const usable = Math.min(await clarity("newGameBtn"), ...(rollClickable ? [await clarity("rollBtn")] : []));
   const unusable = Math.max(await clarity("undoBtn"), await clarity("endTurnBtn"));
+  // A button cut off or overlapped photographs whatever lies across it — F38's
+  // finding, and no reading of how greyed it is (a squeezed panel measured its
+  // greyed buttons at 230 against 140 for the usable ones).
   expect(
     unusable,
-    `buttons that cannot be used yet are drawn at ${unusable.toFixed(0)} against ${usable.toFixed(0)} for the least clear usable one`,
+    `[needs: F38] buttons that cannot be used yet are drawn at ${unusable.toFixed(0)} against ${usable.toFixed(0)} for the least clear usable one`,
   ).toBeLessThanOrEqual(0.6 * usable);
 });
 
@@ -1657,6 +1662,20 @@ test("[F54] REQ-RELOAD — the difficulty control shows the level you're playing
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(await control(), "after choosing Hard and reloading, the control no longer read hard").toHaveValue("hard");
+});
+
+test("[F69] REQ-PIPUI — the pip elements hold just the number", async ({ page }) => {
+  // The build prompt (chunk-04): "`pipWhite` and `pipBlack` contain just the
+  // number (e.g. `167`), with any label outside those elements". A label
+  // inside reads fine to a player — run 1790781911's "Pips: 167" did — so it is
+  // the integrating team's finding, not the tester's.
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  for (const id of ["pipWhite", "pipBlack"]) {
+    await expect(page.getByTestId(id), `[needs: REQ-TESTID/testid.pipWhite REQ-TESTID/testid.pipBlack] ${id} did not hold a bare number`).toHaveText(/^\s*-?\d+\s*$/);
+  }
 });
 
 test("[F68] REQ-RELOAD — on load the difficulty control reads the game's difficulty", async ({ page }) => {
