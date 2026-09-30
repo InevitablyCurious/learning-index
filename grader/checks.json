@@ -518,6 +518,26 @@
       "name": "The opening dice carry whose they are",
       "what": "After the opening roll the state carries the dice as [playerDie, computerDie], and each die on screen is marked data-owner \"you\" or \"ai\".",
       "how": "In a browser: fixes the opening roll to 6-5, clicks Roll, and requires the state's dice to read [6,5] ([aspect: order]) and the visible dice to include one marked data-owner \"you\" and one marked \"ai\" ([aspect: owner])."
+    },
+    "F64": {
+      "name": "The Fast Forward button appears only in a race",
+      "what": "On your turn in a pure race — nothing on the bar and every one of your checkers past every one of the computer's — a button appears to play the rest out for you; anywhere else, like the opening position, it stays hidden.",
+      "how": "In a browser: on a new game requires the fastForwardBtn button hidden ([aspect: outside]); then sets a race on the player's turn (every piece home on both sides) and requires the button visible with a label containing \"Fast Forward\" ([aspect: shown])."
+    },
+    "F65": {
+      "name": "Fast Forward plays a race out to the end",
+      "what": "Clicking Fast Forward plays the rest of the game out for both sides without any further clicks, and when it ends the end-of-game pop-up shows who won.",
+      "how": "In a browser: sets a short race (white one piece on each of 1-3, black one on each of 22-24, the rest borne off), fixes the rolls to 2-1, 2-1, 6-5 so the play-out takes three turns including the computer's, records every frame (the dice drawn and the white pieces), and clicks Fast Forward once. Requires the game to reach gameover within a minute ([aspect: played]) and the end-of-game pop-up ([aspect: popup]); and, for the player's first turn, a new dice drawing before the first move ([aspect: dice]) up at least 0.8 s ([aspect: first]) and the moves at least 0.35 s apart ([aspect: between]), timed as F62 times the computer."
+    },
+    "F66": {
+      "name": "Fast Forward can be paused and carried on",
+      "what": "While Fast Forward is running the button reads \"Pause\"; clicking Pause stops the play-out and the button reads \"Fast Forward\" again; clicking it then carries on.",
+      "how": "In a browser: sets a long race (fifteen a side, all home), clicks Fast Forward and requires the button to read Pause ([aspect: running]); clicks it 250 ms later and requires it to read Fast Forward again ([aspect: label]) and the position unchanged from 2 s to 5 s after ([aspect: paused]); clicks it again and requires Pause ([aspect: running]) and a changed position within 15 s ([aspect: resume])."
+    },
+    "F67": {
+      "name": "A computer double stops Fast Forward until you answer",
+      "what": "If the computer offers a double while Fast Forward is running, the play-out stops and stays stopped; after you answer the double it still stays stopped until you click Fast Forward again.",
+      "how": "In a browser: sets F49's position (hard, the player's moves done, a race the computer doubles in by the published thresholds) and clicks Fast Forward. Requires the offer on screen wherever the page shows it ([aspect: offer]), the button not reading Pause 1.5 s later ([aspect: stopped]), a button to take the double ([aspect: answer]); after taking it, the turn back with the player ([aspect: back]), the position unchanged from 2 s to 5 s after ([aspect: stays]), and the button showing and reading Fast Forward ([aspect: back])."
     }
   },
   "setup": [
@@ -822,7 +842,9 @@
         "E02",
         "E03",
         "F11",
-        "REQ-RESPONSIVE/bearingoff"
+        "REQ-RESPONSIVE/bearingoff",
+        "F64",
+        "F66"
       ]
     },
     {
@@ -835,7 +857,8 @@
         "F22",
         "F23",
         "F17",
-        "F53"
+        "F53",
+        "F65"
       ]
     },
     {
@@ -853,7 +876,8 @@
         "F46",
         "F49",
         "F50",
-        "F56"
+        "F56",
+        "F67"
       ]
     },
     {

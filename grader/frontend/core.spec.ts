@@ -16,6 +16,7 @@ interface ApiState {
   pip: { white: number; black: number };
   cube: { value: number; owner: Player | null };
   turn: Player;
+  winner: Player | null;
   score: { white: number; black: number };
   dice: number[];
   canDouble: boolean;
@@ -635,6 +636,145 @@ test("[F63] REQ-OPENING — the opening dice carry whose they are", async ({ pag
     .toBe(true);
 });
 
+// ── WATCHING A TURN FRAME BY FRAME (F62, F65) ─────────────────────────────
+// A turn the page plays — the computer's, or the player's under Fast Forward —
+// is judged on what is drawn, frame by frame, through the tags the build
+// prompt names only: the dice and one colour's pieces. Whatever the page's
+// structure: pieces in a layer or inside their points, moved or redrawn, dice
+// as numbers or as pips. Positions are read against the board, so a page that
+// shifts as a whole is not a move. The server hands a turn back before the
+// page has finished showing it (grader/meta/README.md "gate on the screen"),
+// so the state only ever says that a turn happened; the frames say how it
+// looked.
+type PaceFrame = { t: number; dice: string; pieces: string; locs: string };
+
+async function recordFrames(page: Page, color: Player): Promise<void> {
+  await page.evaluate((color) => {
+    type Frame = { t: number; dice: string; pieces: string; locs: string };
+    const frames: Frame[] = [];
+    const w = window as unknown as { __pace: { frames: Frame[]; on: boolean } };
+    w.__pace = { frames, on: true };
+    const tick = () => {
+      if (!w.__pace.on) return;
+      const board = document.querySelector('[data-testid="board"]')?.getBoundingClientRect();
+      const ox = board?.x ?? 0;
+      const oy = board?.y ?? 0;
+      const dice = [...document.querySelectorAll('[data-testid="die"]')]
+        .filter((el) => (el as HTMLElement).checkVisibility())
+        .map((el) => el.outerHTML)
+        .join("|");
+      const drawn = [...document.querySelectorAll(`[data-testid="checker"][data-color="${color}"]`)].filter((el) =>
+        (el as HTMLElement).checkVisibility(),
+      );
+      const pieces = drawn
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return `${Math.round((r.x + r.width / 2 - ox) / 4)}:${Math.round((r.y + r.height / 2 - oy) / 4)}`;
+        })
+        .sort()
+        .join("|");
+      const locs = drawn
+        .map((el) => (el as HTMLElement).dataset.loc ?? "")
+        .sort()
+        .join("|");
+      frames.push({ t: performance.now(), dice, pieces, locs });
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, color);
+}
+
+// The page's clock and the dice drawn at this very moment: what was up when a
+// turn began is read at the click itself, never from the last frame recorded
+// before it, which can predate the page drawing it.
+async function diceNow(page: Page): Promise<{ at: number; dice: string }> {
+  return page.evaluate(() => ({
+    at: performance.now(),
+    dice: [...document.querySelectorAll('[data-testid="die"]')]
+      .filter((el) => (el as HTMLElement).checkVisibility())
+      .map((el) => el.outerHTML)
+      .join("|"),
+  }));
+}
+
+// "still" until the recorded pieces have moved on screen after `since`, then
+// "moving" until drawing and tags have held still for 1.5 s: "settled".
+async function piecesSettled(page: Page, since: number): Promise<string> {
+  return page.evaluate((since) => {
+    const frames = (window as unknown as { __pace: { frames: { t: number; pieces: string; locs: string }[] } }).__pace
+      .frames;
+    let moved = false;
+    let last = -1;
+    for (let i = 1; i < frames.length; i++) {
+      if (frames[i].t <= since) continue;
+      if (frames[i].pieces !== frames[i - 1].pieces) moved = true;
+      if (frames[i].pieces !== frames[i - 1].pieces || frames[i].locs !== frames[i - 1].locs) last = frames[i].t;
+    }
+    if (!moved) return "still";
+    return performance.now() - last >= 1500 ? "settled" : "moving";
+  }, since);
+}
+
+async function stopFrames(page: Page): Promise<PaceFrame[]> {
+  return page.evaluate(() => {
+    const w = window as unknown as { __pace: { frames: PaceFrame[]; on: boolean } };
+    w.__pace.on = false;
+    return w.__pace.frames;
+  });
+}
+
+// Where each move starts after `since`, read two ways. The tags: each move
+// changes where the pieces are tagged (data-loc) once, and changes within
+// 100 ms are one update. The drawing: the pieces' layout changes after a still
+// spell of 120 ms — the frames of one slide are one move, but two slides with
+// little rest between them read as one, and a slide whose reported position
+// stalls for a few frames can read as two. So the tags time the moves whenever
+// they show two or more; the drawing only when they do not (tags that lag the
+// drawing). The first move is the earliest sign of either.
+function moveStarts(frames: PaceFrame[], since: number): { starts: number[]; first: number } {
+  const startsOf = (key: "pieces" | "locs", quiet: number): number[] => {
+    const found: number[] = [];
+    let last = -Infinity;
+    for (let i = 1; i < frames.length; i++) {
+      if (frames[i].t <= since || frames[i][key] === frames[i - 1][key]) continue;
+      if (frames[i].t - last > quiet) found.push(frames[i].t);
+      last = frames[i].t;
+    }
+    return found;
+  };
+  const drawn = startsOf("pieces", 120);
+  const tagged = startsOf("locs", 100);
+  return { starts: tagged.length >= 2 ? tagged : drawn, first: Math.min(drawn[0] ?? Infinity, tagged[0] ?? Infinity) };
+}
+
+// The roll as the player saw it before `firstMove`: the longest spell after
+// `since` in which the dice drawn stayed the same — something drawn, and not
+// `before`, the dice already up when the turn began. A rolling animation
+// changes faces far faster; a die dimmed as it is used does not shorten the
+// spell before it.
+function readableDice(
+  frames: PaceFrame[],
+  since: number,
+  firstMove: number,
+  before: string,
+): { shown: boolean; readable: number } {
+  let readable = 0;
+  let shown = false;
+  for (let i = 0; i < frames.length; ) {
+    const f = frames[i];
+    let j = i;
+    while (j + 1 < frames.length && frames[j + 1].dice === f.dice) j++;
+    const from = Math.max(f.t, since);
+    const to = Math.min(j + 1 < frames.length ? frames[j + 1].t : frames[j].t, firstMove);
+    if (f.dice !== "" && f.dice !== before && to > from && f.t < firstMove) {
+      shown = true;
+      readable = Math.max(readable, to - from);
+    }
+    i = j + 1;
+  }
+  return { shown, readable };
+}
+
 test("[F62] REQ-PACING — the computer's turn is paced so its dice and moves can be followed", async ({ page }) => {
   test.setTimeout(120_000);
   // A computer that plays instantly is a computer the player cannot follow:
@@ -678,52 +818,10 @@ test("[F62] REQ-PACING — the computer's turn is paced so its dice and moves ca
   await expect(endTurn, "[aspect: turn] [needs: F47 G25] End Turn was not available with nothing left to play").toBeEnabled();
   await waitForBoardSettled(page);
 
-  // Record every frame: the dice drawn and where the black pieces sit on the board.
-  await page.evaluate(() => {
-    type Frame = { t: number; dice: string; black: string; locs: string };
-    const frames: Frame[] = [];
-    const w = window as unknown as { __pace: { frames: Frame[]; on: boolean } };
-    w.__pace = { frames, on: true };
-    const tick = () => {
-      if (!w.__pace.on) return;
-      const board = document.querySelector('[data-testid="board"]')?.getBoundingClientRect();
-      const ox = board?.x ?? 0;
-      const oy = board?.y ?? 0;
-      const dice = [...document.querySelectorAll('[data-testid="die"]')]
-        .filter((el) => (el as HTMLElement).checkVisibility())
-        .map((el) => el.outerHTML)
-        .join("|");
-      const pieces = [...document.querySelectorAll('[data-testid="checker"][data-color="black"]')].filter((el) =>
-        (el as HTMLElement).checkVisibility(),
-      );
-      const black = pieces
-        .map((el) => {
-          const r = el.getBoundingClientRect();
-          return `${Math.round((r.x + r.width / 2 - ox) / 4)}:${Math.round((r.y + r.height / 2 - oy) / 4)}`;
-        })
-        .sort()
-        .join("|");
-      const locs = pieces
-        .map((el) => (el as HTMLElement).dataset.loc ?? "")
-        .sort()
-        .join("|");
-      frames.push({ t: performance.now(), dice, black, locs });
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  });
-
-  // The dice drawn at the click, read at that moment rather than from the
-  // last frame recorded before it: the player's own dice, never the
-  // computer's roll.
+  // Record every frame: the dice drawn and where the black pieces sit.
+  await recordFrames(page, "black");
   await page.waitForTimeout(200);
-  const { clickAt, atClick } = await page.evaluate(() => ({
-    clickAt: performance.now(),
-    atClick: [...document.querySelectorAll('[data-testid="die"]')]
-      .filter((el) => (el as HTMLElement).checkVisibility())
-      .map((el) => el.outerHTML)
-      .join("|"),
-  }));
+  const { at: clickAt, dice: atClick } = await diceNow(page);
   await endTurn.click();
 
   // The turn happened, as the state records it: the computer's pieces moved
@@ -739,78 +837,17 @@ test("[F62] REQ-PACING — the computer's turn is paced so its dice and moves ca
     .toBe(true);
 
   // The same turn as the player watches it: wait until the black pieces on
-  // screen have moved and then held still — drawing and tags — for 1.5 s.
-  const screen = async (): Promise<string> =>
-    page.evaluate((since) => {
-      const frames = (window as unknown as { __pace: { frames: { t: number; black: string; locs: string }[] } }).__pace
-        .frames;
-      let moved = false;
-      let last = -1;
-      for (let i = 1; i < frames.length; i++) {
-        if (frames[i].t <= since) continue;
-        if (frames[i].black !== frames[i - 1].black) moved = true;
-        if (frames[i].black !== frames[i - 1].black || frames[i].locs !== frames[i - 1].locs) last = frames[i].t;
-      }
-      if (!moved) return "still";
-      return performance.now() - last >= 1500 ? "settled" : "moving";
-    }, clickAt);
-  let seen = await screen();
+  // screen have moved and then held still.
+  let seen = await piecesSettled(page, clickAt);
   for (const deadline = Date.now() + 15_000; seen !== "settled" && Date.now() < deadline; ) {
     await page.waitForTimeout(250);
-    seen = await screen();
+    seen = await piecesSettled(page, clickAt);
   }
-  const frames = await page.evaluate(() => {
-    const w = window as unknown as {
-      __pace: { frames: { t: number; dice: string; black: string; locs: string }[]; on: boolean };
-    };
-    w.__pace.on = false;
-    return w.__pace.frames;
-  });
+  const frames = await stopFrames(page);
   expect(seen, "[aspect: drawn] [needs: REQ-RENDER/checker F02] the computer's pieces never moved on screen").not.toBe("still");
 
-  // Where each move starts, read two ways. The tags: each move changes where
-  // the black pieces are tagged (data-loc) once, and changes within 100 ms are
-  // one update. The drawing: the black pieces' layout changes after a still
-  // spell of 120 ms — the frames of one slide are one move, but two slides
-  // with little rest between them read as one, and a slide whose reported
-  // position stalls for a few frames can read as two. So the tags time the
-  // moves whenever they show two or more; the drawing only when they do not
-  // (tags that lag the drawing). The first move is the earliest sign of
-  // either.
-  const startsOf = (key: "black" | "locs", quiet: number): number[] => {
-    const found: number[] = [];
-    let last = -Infinity;
-    for (let i = 1; i < frames.length; i++) {
-      if (frames[i].t <= clickAt || frames[i][key] === frames[i - 1][key]) continue;
-      if (frames[i].t - last > quiet) found.push(frames[i].t);
-      last = frames[i].t;
-    }
-    return found;
-  };
-  const drawnStarts = startsOf("black", 120);
-  const taggedStarts = startsOf("locs", 100);
-  const starts = taggedStarts.length >= 2 ? taggedStarts : drawnStarts;
-
-  // The computer's roll as the player saw it before the first move: the
-  // longest spell, after End Turn, in which the dice drawn stayed the same —
-  // something drawn, and not the player's own dice from before the click. A
-  // rolling animation changes faces far faster; a die dimmed as it is used
-  // does not shorten the spell before it.
-  const firstMove = Math.min(drawnStarts[0], taggedStarts[0] ?? Infinity);
-  let readable = 0;
-  let shown = false;
-  for (let i = 0; i < frames.length; ) {
-    const f = frames[i];
-    let j = i;
-    while (j + 1 < frames.length && frames[j + 1].dice === f.dice) j++;
-    const from = Math.max(f.t, clickAt);
-    const to = Math.min(j + 1 < frames.length ? frames[j + 1].t : frames[j].t, firstMove);
-    if (f.dice !== "" && f.dice !== atClick && to > from && f.t < firstMove) {
-      shown = true;
-      readable = Math.max(readable, to - from);
-    }
-    i = j + 1;
-  }
+  const { starts, first: firstMove } = moveStarts(frames, clickAt);
+  const { shown, readable } = readableDice(frames, clickAt, firstMove, atClick);
   expect(shown, "[aspect: dice] [needs: REQ-RENDER/die REQ-TESTID/die] the computer's dice never showed before its first move").toBe(true);
   expect(readable, `[aspect: first] the computer's roll was up ${readable.toFixed(0)} ms before its first move`).toBeGreaterThanOrEqual(800);
 
@@ -1729,4 +1766,192 @@ test("[F21] REQ-RELOAD — remaining dice survive a reload", async ({ page }) =>
   await expect(page.getByTestId("checker")).toHaveCount(30);
   const state = await readState(page);
   expect([...state.remainingDice].sort((a, b) => a - b)).toEqual([2]);
+});
+
+// ── FAST FORWARD (F64-F67) ────────────────────────────────────────────────
+// In a pure race — nothing on the bar, every white piece past every black one
+// — a Fast Forward button plays the rest of the game out at the computer's
+// own pace; while running it reads Pause. A label that contains the word is
+// fine, as for every button. Where the pieces stand is read from the state.
+const FAST_FORWARD = /fast\s*-?\s*forward/i;
+const PAUSE = /pause/i;
+
+function positionOf(state: ApiState): string {
+  return JSON.stringify([state.points, state.bar, state.off]);
+}
+
+test("[F64] REQ-FASTFORWARD-SHOW — the Fast Forward button appears only in a race", async ({ page }) => {
+  test.setTimeout(60_000);
+  // A new game is no race: the button is not on screen.
+  await openApp(page);
+  await expect(
+    page.getByTestId("fastForwardBtn"),
+    "[aspect: outside] a Fast Forward button showed at the start of a new game",
+  ).toBeHidden();
+
+  // A race on the player's turn, every piece home on both sides.
+  const points = emptyPoints();
+  points[1] = 2; points[2] = 3; points[3] = 5; points[4] = 3; points[5] = 2;
+  points[19] = -3; points[20] = -5; points[21] = -4; points[22] = -3;
+  await setupState(page, {
+    points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 },
+    turn: "white", phase: "roll", dice: [], remainingDice: [],
+    cube: { value: 1, owner: null }, difficulty: "easy", winner: null, message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  const button = page.getByTestId("fastForwardBtn");
+  await expect(button, "[aspect: shown] no Fast Forward button showed in a race").toBeVisible();
+  await expect(button, "[aspect: shown] the button showed in a race did not read Fast Forward").toHaveText(FAST_FORWARD);
+});
+
+test("[F65] REQ-FASTFORWARD-PLAYOUT — Fast Forward plays the race out to a win", async ({ page }) => {
+  test.setTimeout(120_000);
+  // A short race both sides play: white one piece on each of 1, 2 and 3,
+  // black one on each of 22, 23 and 24, the rest borne off. The rolls are
+  // fixed — the player 2-1, the computer 2-1, the player 6-5 — so the
+  // play-out takes three turns, the computer's among them, and the player wins
+  // on their second. One click, then only watching. Who wins is not the
+  // point: a page whose rolls come out otherwise still has to finish.
+  await openApp(page);
+  const points = emptyPoints();
+  points[1] = 1; points[2] = 1; points[3] = 1;
+  points[22] = -1; points[23] = -1; points[24] = -1;
+  await setupState(page, {
+    points, bar: { white: 0, black: 0 }, off: { white: 12, black: 12 },
+    turn: "white", phase: "roll", dice: [], remainingDice: [],
+    cube: { value: 1, owner: null }, difficulty: "easy", winner: null, message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  for (const dice of [[2, 1], [2, 1], [6, 5]]) await postJson(page, "/api/debug/roll", { dice });
+  const button = page.getByTestId("fastForwardBtn");
+  await expect(button, "[needs: F64]").toBeVisible();
+  await waitForBoardSettled(page);
+
+  // Record every frame of the play-out: the dice drawn and the player's pieces.
+  await recordFrames(page, "white");
+  await page.waitForTimeout(200);
+  const { at: clickAt, dice: atClick } = await diceNow(page);
+  await button.click();
+
+  await expect
+    .poll(async () => (await readState(page)).phase, {
+      message: "[aspect: played] [needs: F64] a minute after one click the race had not finished",
+      timeout: 60_000,
+    })
+    .toBe("gameover");
+  await expect(
+    page.getByTestId("modalOverlay"),
+    "[aspect: popup] [needs: F51 F53] the race played out and no end-of-game pop-up showed",
+  ).toBeVisible();
+  const frames = await stopFrames(page);
+
+  // The player's own first turn, as they watched it: the computer's pace (F62's
+  // windows) — the roll up about a second before the first move, the moves
+  // about half a second apart. A page that never drew the player's pieces
+  // moving is not judged here.
+  const { starts, first } = moveStarts(frames, clickAt);
+  if (!Number.isFinite(first)) return;
+  const { shown, readable } = readableDice(frames, clickAt, first, atClick);
+  expect(shown, "[aspect: dice] the player's dice never showed before Fast Forward's first move").toBe(true);
+  expect(readable, `[aspect: first] the player's roll was up ${readable.toFixed(0)} ms before Fast Forward's first move`).toBeGreaterThanOrEqual(800);
+  const gaps = starts.slice(1).map((t, i) => t - starts[i]);
+  expect(
+    starts.length >= 2 && gaps.every((gap) => gap >= 350),
+    `[aspect: between] Fast Forward's moves for the player started ${starts.length < 2 ? "together" : gaps.map((g) => `${g.toFixed(0)} ms`).join(", ") + " apart"}`,
+  ).toBe(true);
+});
+
+test("[F66] REQ-FASTFORWARD-PAUSE — Pause stops Fast Forward and it carries on", async ({ page }) => {
+  test.setTimeout(120_000);
+  // A long race — fifteen a side, all home — so there is always more to play.
+  await openApp(page);
+  const points = emptyPoints();
+  points[5] = 7; points[6] = 8;
+  points[19] = -8; points[20] = -7;
+  await setupState(page, {
+    points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 },
+    turn: "white", phase: "roll", dice: [], remainingDice: [],
+    cube: { value: 1, owner: null }, difficulty: "easy", winner: null, message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  const button = page.getByTestId("fastForwardBtn");
+  await expect(button, "[needs: F64]").toBeVisible();
+  await button.click();
+  await expect(button, "[aspect: running] the running Fast Forward button never read Pause").toHaveText(PAUSE);
+
+  // Paused during the player's first roll, the turn stays theirs and the
+  // button stays on screen.
+  await page.waitForTimeout(250);
+  await button.click();
+  await expect(button, "[aspect: label] [needs: F64] after Pause the button never read Fast Forward again").toHaveText(FAST_FORWARD);
+
+  // Nothing moves once paused: whatever was in flight has had 2 s to land.
+  await page.waitForTimeout(2_000);
+  const held = positionOf(await readState(page));
+  await page.waitForTimeout(3_000);
+  expect(positionOf(await readState(page)), "[aspect: paused] pieces still moved 2-5 s after Pause").toBe(held);
+
+  // Clicked again, it carries on.
+  await button.click();
+  await expect(button, "[aspect: running] Fast Forward clicked again never read Pause").toHaveText(PAUSE);
+  await expect
+    .poll(async () => positionOf(await readState(page)), {
+      message: "[aspect: resume] after Fast Forward was clicked again no piece moved",
+      timeout: 15_000,
+    })
+    .not.toBe(held);
+});
+
+test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward until you answer", async ({ page }) => {
+  test.setTimeout(120_000);
+  // F49's position: a race black leads by 31 pips without dominating, so a
+  // hard computer that doubles by the prompt's thresholds offers here (G12).
+  // The player's moves are done: Fast Forward ends the turn and the
+  // computer's turn opens with its offer. The offer is read wherever the page
+  // shows it and answered with the page's own button (F49's and F56's reading).
+  await openApp(page);
+  const points = emptyPoints();
+  points[1] = 1; points[6] = 10; points[19] = -5;
+  await setupState(page, {
+    points, bar: { white: 0, black: 0 }, off: { white: 4, black: 10 },
+    turn: "white", phase: "move", dice: [6, 5], remainingDice: [], turnOver: true,
+    cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  const button = page.getByTestId("fastForwardBtn");
+  await expect(button, "[needs: F64]").toBeVisible();
+  await button.click();
+
+  await expect
+    .poll(async () => /double|offer/i.test(await shownDoubleText(page)), {
+      message: "[aspect: offer] [needs: F49 G12] nothing on screen said the computer was doubling",
+      timeout: 15_000,
+    })
+    .toBe(true);
+  // Stopped: while the offer waits, nothing plays on — the button does not read Pause.
+  await page.waitForTimeout(1_500);
+  await expect(button, "[aspect: stopped] the button still read Pause while the computer's double waited").not.toHaveText(PAUSE);
+
+  // The player takes the double; the computer finishes its turn.
+  const take = answerButton(page, TAKE);
+  await expect(take, "[aspect: answer] [needs: F56] no button to take the computer's double showed").toBeVisible();
+  await playerClick(take);
+  await expect
+    .poll(async () => (await readState(page)).turn, {
+      message: "[aspect: back] [needs: G20] after the double was taken the turn never came back to the player",
+      timeout: 20_000,
+    })
+    .toBe("white");
+
+  // Stays stopped: nothing plays by itself, and the button is back, reading Fast Forward.
+  await page.waitForTimeout(2_000);
+  const held = positionOf(await readState(page));
+  await page.waitForTimeout(3_000);
+  expect(positionOf(await readState(page)), "[aspect: stays] pieces moved by themselves after the double was taken").toBe(held);
+  await expect(button, "[aspect: back] after the double was taken no Fast Forward button showed").toBeVisible();
+  await expect(button, "[aspect: back] [needs: F64] after the double was taken the button did not read Fast Forward").toHaveText(FAST_FORWARD);
 });

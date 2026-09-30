@@ -45,8 +45,8 @@ and from the roster, so `report.mjs` never sees them.
 ## The gate census — never counted from `checks.json`
 
 The graded-check denominator is whatever `grader/roster.mjs` `enumerateGates()`
-returns: **180 gates** on 2026-09-29 — conformance **68** · backend **49** ·
-frontend **63** (it was 125 on 2026-09-19). Read the number from a fresh roster,
+returns: **184 gates** on 2026-09-29 — conformance **68** · backend **49** ·
+frontend **67** (it was 125 on 2026-09-19). Read the number from a fresh roster,
 never from this line.
 
 Never count the gate inventory from `grader/checks.json` `checks` keys, nor from
@@ -110,7 +110,7 @@ server turn-state poll alone. (Earned by WO-GOLDEN-V2-B3 chunk 2; HARD-WON
 "server/client turn desync".)
 
 **The desync.** On a computer turn the golden server flips `game.turn = HUMAN`
-inside `aiPlayDice` (`task/backgammon/golden/src/server.ts:407`) ~2 s BEFORE the
+inside `aiPlayDice` (`task/backgammon/golden/src/server.ts:416`) ~2 s BEFORE the
 page finishes animating the computer's dice and moves — the server turn poll and
 the on-screen records are out of phase by ~2 s.
 
@@ -119,8 +119,8 @@ probe" would have read `moves=[]` and failed the golden's own must-pass
 criterion. Trace: `runAi` (`task/backgammon/golden/public/app.js:487-507`) calls
 `/api/ai` first, then `sleep(520)` + `renderDice` + `sleep(1000)` + a
 `sleep(500)`-per-move loop, so the dice and moves land ~1.5-2 s after the
-`/api/ai` response — while `actionAi` (`server.ts:358-359`) → `aiPlayDice` had
-already set `game.turn = HUMAN` (`server.ts:407`) before that response returned.
+`/api/ai` response — while `actionAi` (`server.ts:356`) → `aiPlayDice` had
+already set `game.turn = HUMAN` (`server.ts:416`) before that response returned.
 F62 therefore records every frame the page draws — the visible dice, the
 black pieces' centres against the board, and where those pieces are tagged
 (`data-loc`) — and judges the pacing from those frames, waiting until the pieces
@@ -132,3 +132,11 @@ the page has settled, with the dice at the click read at the click itself — a
 baseline taken from the last recorded frame could predate the page drawing the
 player's dice, which let a page that never showed the computer's roll pass. (Its first cut watched the reference's own
 class names and one container, which a page drawn another way would fail.)
+
+## Authoring a failure/complaint line — single-spaced (2026-09-29)
+
+A `failures/*.md` complaint is one line, and it must be **single-spaced**. The mirror test compares a whitespace-normalized JSON (`harness/adapters/challenge/feedback.py` `load_feedback_overrides` — `" ".join(str(...).split())`) against the raw `.md` bytes (`load_feedback_overrides_from_failures` — `read_text().rstrip("\n")`), so an internal double space (or a tab/newline) in a `.md` line desyncs the two copies and fails `test_the_json_mirror_matches_the_md_runtime_source`. Write the complaint sentence with single spaces only.
+
+## Mutation-proof grading — `;` between mutations, never `&&` (2026-09-29)
+
+`report.mjs` exits 1 on any FAIL verdict (`report.mjs:541` sets the verdict, `:584` `process.exit(1)`), so `&&`-chaining several mutation grades kills the chain at the first intentionally-broken mutation and the later grades silently never run. Chain each per-mutation `roster && report` pair with `;` BETWEEN mutations — never `&&` — whenever any target is expected to FAIL.

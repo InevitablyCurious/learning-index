@@ -27,12 +27,13 @@ Serialized state — every game-route response carries exactly these top-level k
 ```
 points, bar, off, turn, phase, dice, remainingDice, cube, difficulty, score,
 winner, winType, pointsWon, doubleOfferedBy, message, turnOver, gamesPlayed,
-pip, legalMoves, canDouble
+pip, legalMoves, canDouble, isRace
 ```
 
 - `pip`: `{ white: number, black: number }` — both players' pip counts from the engine.
 - `legalMoves`: `Move[]` — the human's legal moves right now (`[]` unless it is the human's move phase).
 - `canDouble`: boolean — whether the human may offer a double at this moment.
+- `isRace`: boolean — whether the game is a pure race right now: nobody has a checker on the bar and every one of your (white) checkers has passed every one of the computer's (black) checkers, so neither side can hit the other anymore.
 - `history` is NOT serialized.
 - The server MUST hold a complete, initialized game state from startup, so `/api/state` and `/api/debug/state` return a valid serialized game even before any `/api/new` is called.
 

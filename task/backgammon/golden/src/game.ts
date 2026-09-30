@@ -80,7 +80,7 @@ export function createGame(difficulty: GameState["difficulty"]): GameState {
     winType: null,
     pointsWon: 0,
     doubleOfferedBy: null,
-    message: "Your turn. Roll the dice (or offer a double).",
+    message: "Roll to see who goes first.",
     history: [],
     canDouble: true,
     turnOver: false,
@@ -371,4 +371,18 @@ export function checkWin(b: Board, player: Player): { won: boolean; type: "singl
   }
   if (loserBar > 0 || inWinnerHome) return { won: true, type: "backgammon" };
   return { won: true, type: "gammon" };
+}
+
+// A "pure race": neither side has a checker on the bar, and every white
+// checker sits on a lower-numbered point than every black checker — the two
+// sides have passed each other and can no longer hit one another.
+export function isRace(b: Board): boolean {
+  if (b.bar.white > 0 || b.bar.black > 0) return false;
+  let maxWhite = 0;   // highest white point (white travels 24 → 1; 0 = none left)
+  let minBlack = 25;  // lowest black point (black travels 1 → 24; 25 = none left)
+  for (let p = 1; p <= 24; p++) {
+    if (b.points[p] > 0 && p > maxWhite) maxWhite = p;
+    if (b.points[p] < 0 && p < minBlack) minBlack = p;
+  }
+  return maxWhite < minBlack;
 }

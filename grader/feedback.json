@@ -1163,6 +1163,86 @@
       "first": "They roll to see who goes first and can't tell which die on screen is the player's and which is the computer's: the two dice don't carry data-owner \"you\" and \"ai\".",
       "repeat": "They rolled to see who goes first again, and the two dice still don't carry data-owner \"you\" and \"ai\"."
     },
+    "F64": {
+      "first": "I couldn't find the Fast Forward button when I wanted it.",
+      "repeat": "Again I couldn't find the Fast Forward button when I wanted it."
+    },
+    "F64.outside": {
+      "first": "A Fast Forward button was already showing at the start of a new game.",
+      "repeat": "Again a Fast Forward button was showing at the start of a new game."
+    },
+    "F64.shown": {
+      "first": "When all my pieces were past the computer's and nothing could be hit any more, no Fast Forward button showed.",
+      "repeat": "Again, with all my pieces past the computer's, no Fast Forward button showed."
+    },
+    "F65": {
+      "first": "Fast Forward didn't carry the game through to the end for me.",
+      "repeat": "Again Fast Forward didn't carry the game through to the end."
+    },
+    "F65.played": {
+      "first": "I clicked Fast Forward once and sat back, and a minute later the game still wasn't over.",
+      "repeat": "I clicked Fast Forward once again, and a minute later the game still wasn't over."
+    },
+    "F65.popup": {
+      "first": "Fast Forward played the game to the end, but no end-of-game pop-up appeared.",
+      "repeat": "Again the game played out to the end with no end-of-game pop-up."
+    },
+    "F65.dice": {
+      "first": "When Fast Forward played my turn, my pieces moved before my dice ever showed.",
+      "repeat": "Again, under Fast Forward my pieces moved before my dice showed."
+    },
+    "F65.first": {
+      "first": "When Fast Forward played my turn, my first move came less than a second after my dice showed.",
+      "repeat": "Again, under Fast Forward my first move came less than a second after my dice showed."
+    },
+    "F65.between": {
+      "first": "When Fast Forward played my turn, my moves came less than half a second apart.",
+      "repeat": "Again, under Fast Forward my moves came less than half a second apart."
+    },
+    "F66": {
+      "first": "I couldn't pause Fast Forward the way I wanted.",
+      "repeat": "Again I couldn't pause Fast Forward the way I wanted."
+    },
+    "F66.running": {
+      "first": "While Fast Forward was running, its button never read Pause.",
+      "repeat": "Again, while Fast Forward ran, its button never read Pause."
+    },
+    "F66.label": {
+      "first": "After I clicked Pause, the button never went back to Fast Forward.",
+      "repeat": "Again, after Pause, the button never went back to Fast Forward."
+    },
+    "F66.paused": {
+      "first": "I clicked Pause, and pieces were still moving a few seconds later.",
+      "repeat": "Again pieces kept moving a few seconds after I clicked Pause."
+    },
+    "F66.resume": {
+      "first": "After pausing, I clicked Fast Forward again and no piece moved.",
+      "repeat": "Again, clicking Fast Forward after a pause moved nothing."
+    },
+    "F67": {
+      "first": "Something went wrong with Fast Forward around the doubling cube.",
+      "repeat": "Again something went wrong with Fast Forward around the doubling cube."
+    },
+    "F67.offer": {
+      "first": "When I started Fast Forward at the end of my turn, nothing on screen showed the computer doubling.",
+      "repeat": "Again, with Fast Forward started at the end of my turn, nothing showed the computer doubling."
+    },
+    "F67.stopped": {
+      "first": "When the computer offered a double, the Fast Forward button still read Pause.",
+      "repeat": "Again, when the computer offered a double, the button still read Pause."
+    },
+    "F67.answer": {
+      "first": "When the computer offered a double during Fast Forward, I couldn't find a way to take it.",
+      "repeat": "Again, during Fast Forward I couldn't find a way to take the computer's double."
+    },
+    "F67.back": {
+      "first": "After I took the double, the Fast Forward button didn't come back.",
+      "repeat": "Again, after I took the double, the Fast Forward button didn't come back."
+    },
+    "F67.stays": {
+      "first": "After I took the double, pieces moved again without my clicking anything.",
+      "repeat": "Again, after I took the double, pieces moved without my clicking anything."
+    },
     "F47.undo": {
       "first": "While my finished turn waits for End Turn, Undo doesn't take my last move back.",
       "repeat": "Undo still doesn't take my last move back while my turn waits for End Turn."

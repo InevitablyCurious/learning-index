@@ -14,6 +14,7 @@ import {
   OFF,
   createGame,
   cloneBoard,
+  isRace,
   legalMovesNow,
   applyMove,
   pipCount,
@@ -94,6 +95,7 @@ function serialize(g: FullState, extra: Record<string, unknown> = {}) {
     pip: { white: pipCount(b, "white"), black: pipCount(b, "black") },
     legalMoves: legal,
     canDouble: humanCanDouble(g),
+    isRace: isRace(b),
     ...extra,
   };
 }

@@ -19,6 +19,7 @@ let pointDivs = {};             // point number -> div
 let barDiv = null, trayDiv = null;
 let selected = null;            // { from } currently selected source
 let busy = false;               // AI animating / transitions in flight
+let ffRunning = false;          // Fast Forward auto-play loop active
 let openingDiceActive = false;  // current dice are the opening roll's [playerDie, computerDie]
 let endTimer = null;
 let csize = 30;
@@ -516,6 +517,96 @@ async function runAi() {
   }
 }
 
+// ---- Fast Forward: auto-play a pure race to the end ----
+
+function pickFastForwardMove(moves) {
+  // Bear off whenever a move can; otherwise move the piece farthest from home
+  // (the highest-numbered point — white travels 24 -> 1).
+  const off = moves.filter((m) => m.to === OFF);
+  const pool = off.length > 0 ? off : moves;
+  let best = pool[0];
+  for (const m of pool) if (m.from > best.from) best = m;
+  return best;
+}
+
+function toggleFastForward() {
+  if (ffRunning) {
+    ffRunning = false; // Pause: the loop stops at the next move boundary
+    updateUI();
+    return;
+  }
+  ffRunning = true;
+  updateUI();
+  runFastForward();
+}
+
+async function runFastForward() {
+  busy = true;
+  updateUI();
+  while (ffRunning && state && !state.winner) {
+    if (state.phase === "doubleOffered") break; // AI offered a double — stop, stay stopped
+    if (state.turn === "black") {
+      await runAi();
+      busy = true; // runAi clears busy; re-lock while FF continues
+      updateUI();
+      continue;
+    }
+    if (state.phase === "roll") {
+      await ffRoll();
+    } else if (state.phase === "move") {
+      await ffPlayMoves();
+    } else {
+      break; // openingRoll / gameover / anything unexpected — not a race, stop
+    }
+  }
+  ffRunning = false;
+  busy = false;
+  updateUI();
+}
+
+async function ffRoll() {
+  animateDiceRolling();
+  const s = await api("/api/roll");
+  await sleep(480);
+  state = s;
+  reconcile(s);
+  render();
+  updateUI();
+  clearHints();
+  renderDice(s.dice, s.remainingDice);
+  await sleep(1000); // dice readable ~1s, like the computer's turn
+  if (ffRunning && s.turnOver) await ffEndTurn();
+}
+
+async function ffPlayMoves() {
+  while (ffRunning && state && state.turn === "white" && state.phase === "move") {
+    if (state.turnOver) break;
+    const moves = state.legalMoves || [];
+    if (moves.length === 0) break;
+    const m = pickFastForwardMove(moves);
+    const hit = m.to !== OFF && model.black.filter((l) => l === m.to).length === 1;
+    applyLocalMove("white", m.from, m.to, hit);
+    render();
+    const s = await api("/api/move", { from: m.from, to: m.to, die: m.die });
+    state = s;
+    reconcile(s);
+    render();
+    updateUI();
+    if (s.winner) { showGameOver(s); return; }
+    await sleep(500); // each move ~0.5s after the last, like the computer's
+  }
+  if (ffRunning && state && state.turn === "white" && state.turnOver) {
+    await ffEndTurn();
+  }
+}
+
+async function ffEndTurn() {
+  const s = await api("/api/endturn");
+  state = s;
+  updateUI();
+  clearHints();
+}
+
 async function respondDouble(accept) {
   const s = await api("/api/double/respond", { accept });
   state = s; reconcile(s); render(); updateUI();
@@ -654,12 +745,17 @@ function updateUI() {
 
   // buttons
   const over = state.phase === "gameover";
-  $("rollBtn").disabled = busy || over || !(state.turn === "white" && (state.phase === "roll" || state.phase === "openingRoll"));
-  $("doubleBtn").disabled = busy || over || !state.canDouble;
-  $("undoBtn").disabled = busy || over || !(state.turn === "white" && state.phase === "move" && hasHistory());
-  $("endTurnBtn").disabled = busy || over || !(state.turn === "white" && state.turnOver);
+  $("rollBtn").disabled    = ffRunning || busy || over || !(state.turn === "white" && (state.phase === "roll" || state.phase === "openingRoll"));
+  $("doubleBtn").disabled  = ffRunning || busy || over || !state.canDouble;
+  $("undoBtn").disabled    = ffRunning || busy || over || !(state.turn === "white" && state.phase === "move" && hasHistory());
+  $("endTurnBtn").disabled = ffRunning || busy || over || !(state.turn === "white" && state.turnOver);
   $("endTurnBtn").classList.toggle("primary", !$("endTurnBtn").disabled);
   $("rollBtn").classList.toggle("primary", !$("rollBtn").disabled);
+
+  // Fast Forward: shown on the player's turn in a race (or while running, as "Pause").
+  const showFF = ffRunning || (!over && state.turn === "white" && state.isRace);
+  $("fastForwardBtn").hidden = !showFF;
+  $("fastForwardBtn").textContent = ffRunning ? "Pause" : "Fast Forward";
 
   applySelectable();
 }
@@ -707,6 +803,7 @@ async function init() {
   $("rollBtn").onclick = doRoll;
   $("undoBtn").onclick = doUndo;
   $("endTurnBtn").onclick = doEndTurn;
+  $("fastForwardBtn").onclick = toggleFastForward;
   $("doubleBtn").onclick = doDouble;
   $("newGameBtn").onclick = doNewGame;
   $("difficulty").onchange = () => doNewGame();
