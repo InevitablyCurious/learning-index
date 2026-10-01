@@ -603,6 +603,10 @@
       "first": "The points show up on screen, but their automation can't select them — it looks for exactly 24 of them, each tagged \"point\".",
       "repeat": "The points are still on screen without the tagging their automation looks for — exactly 24 of them, each tagged \"point\"."
     },
+    "REQ-TESTID/point-column": {
+      "first": "Their automation finds each point by the element tagged \"point\" and takes that element to be the point's column, but some of those elements overlap one another — the same spot on the board falls inside two points.",
+      "repeat": "They looked again after your fix and the elements tagged \"point\" still overlap one another — some spots on the board still fall inside two points."
+    },
     "REQ-TESTID/checker": {
       "first": "The checkers show up on screen, but their automation can't select them — it looks for exactly 30 of them, 15 a side, each tagged \"checker\".",
       "repeat": "The checkers are still on screen without the tagging their automation looks for — exactly 30 of them, 15 a side, each tagged \"checker\"."
@@ -706,10 +710,6 @@
     "F28": {
       "first": "The points aren't laid out in the right order — I expect 13 to 24 running left to right along the top, and 12 down to 1 running left to right along the bottom.",
       "repeat": "Looked the board over again and the points are still in the wrong order — I expect 13 to 24 running left to right along the top, and 12 down to 1 running left to right along the bottom."
-    },
-    "F28.cross": {
-      "first": "Each triangle runs right across the board into the other row, so the top and bottom triangles cross each other in the middle.",
-      "repeat": "The triangles still run right across the board and cross the ones in the other row."
     },
     "F28.rows": {
       "first": "The points aren't in two rows, one above the other — I expect 13 to 24 running left to right along the top, and 12 down to 1 running left to right along the bottom.",

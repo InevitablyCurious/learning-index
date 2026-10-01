@@ -10,6 +10,7 @@ import {
   startServer,
   stopServer,
 } from "../lib/harness.ts";
+import { overlaps } from "../frontend/board-geometry.ts";
 
 export interface Problem {
   check: string;
@@ -577,6 +578,37 @@ export async function runPreGate(): Promise<PreGateResult> {
         testIdText: 'a data-testid "off-tray" element is present',
       });
 
+      // ── EACH POINT'S TAG IS ON ITS OWN COLUMN ──────────────────────────────
+      // The prompt puts `data-testid="point"` on the element that is the
+      // point's column — the upright rectangle its triangle stands in, from
+      // the board's edge to the middle — and every check that finds a spot on
+      // the board (a click in a column, a hint, where a piece stands, which
+      // way a triangle points) reads that element's box. Two tagged points
+      // drawn over one another leave a spot that belongs to both. Run
+      // 1790775221 made every point the full height of the board, over the
+      // point opposite; with nothing here the tester spoke instead ("not in
+      // two rows", "no triangle") for five runs of a board that looked like
+      // two rows. Overlap is counted as the geometry checks count it: more
+      // than a sliver each way.
+      {
+        const columns = await page.locator('[data-testid="point"]').evaluateAll((elements) =>
+          elements.map((element) => {
+            const rect = element.getBoundingClientRect();
+            const num = (element as HTMLElement).dataset.point ?? "?";
+            return { num, x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+          }),
+        );
+        const shared = columns.flatMap((a, i) =>
+          columns.slice(i + 1).filter((b) => overlaps(a, b)).map((b) => `${a.num}/${b.num}`),
+        );
+        const check = "REQ-TESTID/point-column — each point's tag is on its own column";
+        if (columns.length === 0) {
+          add(check, "no two tagged points overlap", "never evaluated — no element is tagged point");
+        } else if (shared.length > 0) {
+          add(check, "no two tagged points overlap", `${shared.length} pairs overlap: ${shared.slice(0, 8).join(", ")}`);
+        }
+      }
+
       // ── RELOAD SURVIVAL, MANUALLY SPLIT ────────────────────────────────────
       // Same either/or semantics as `countedElement`, but the render complaint
       // is its own gate (`die-reload`): after a reload, "not drawn" means the
@@ -643,6 +675,7 @@ export async function runPreGate(): Promise<PreGateResult> {
           `REQ-RENDER/${label}`,
           `REQ-TESTID/${label}`,
         ]),
+        "REQ-TESTID/point-column",
         "REQ-RENDER/die-reload",
         "REQ-HINT/hint",
       );

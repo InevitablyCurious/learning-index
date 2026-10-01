@@ -1,0 +1,1 @@
+Their automation finds each point by the element tagged "point" and takes that element to be the point's column, but some of those elements overlap one another — the same spot on the board falls inside two points.

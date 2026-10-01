@@ -59,8 +59,9 @@ export async function readPointBoxes(page: Page): Promise<PointBox[]> {
 
 /**
  * The column of a point: the full edge-to-middle rectangle the point's triangle
- * stands in (the `[data-testid="point"]` box itself — the triangle is drawn
- * inside it via CSS `::before`). Null when no point carries that number.
+ * stands in (the `[data-testid="point"]` box itself — the prompt puts the tag
+ * on the column, and the pre-gate's point-column check holds it to that). Null
+ * when no point carries that number.
  */
 export async function readColumnBox(page: Page, num: number): Promise<PointBox | null> {
   const boxes = await readPointBoxes(page);

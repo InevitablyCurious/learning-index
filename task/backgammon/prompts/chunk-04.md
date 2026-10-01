@@ -34,7 +34,7 @@ Required `data-testid` hooks (EXACT — the UI automation selects on these; stat
 
 **Dynamic:**
 
-- Each board point: `data-testid="point"` and `data-point="<1..24>"` — exactly 24 points.
+- Each board point: `data-testid="point"` and `data-point="<1..24>"` on the element that is the point's column — exactly 24 points, no two overlapping.
 - Each checker: `data-testid="checker"`, `data-color="white|black"`, `data-loc="<1..24>|bar|off"` — the tag appears only on drawn pieces (at most six per point, plus bar and off), positioned at their board/bar/off location. At the opening position (max five per point) there are exactly 30 checkers (15 per colour); fewer tags exist only when a point is capped. From seven up, the top (6th) drawn piece carries a `data-testid="checkerCount"` element whose text is the integer total for that point.
 - The checker count: `data-testid="checkerCount"` — the count element shown on the top piece of a point holding seven or more checkers.
 - Each move hint: `data-testid="hint"`.

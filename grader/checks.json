@@ -347,7 +347,7 @@
     "F28": {
       "name": "Points in board order",
       "what": "The 24 points are drawn in the standard board order — the top half runs 13 through 24 left to right, the bottom half 12 down to 1.",
-      "how": "In a browser: reads the 24 point boxes. When each top-row point is drawn over the bottom-row point opposite it, requires no triangle painted across the board's middle into the other row ([aspect: cross]) and judges nothing else; otherwise requires two rows, one above the other ([aspect: rows]), then 13 to 24 along the top and 12 down to 1 along the bottom."
+      "how": "In a browser: reads the 24 point boxes and requires two rows, one above the other ([aspect: rows] — held back while the tagged points overlap, which is the point-column check's finding), then 13 to 24 along the top and 12 down to 1 along the bottom."
     },
     "F29": {
       "name": "Bar between the halves",
@@ -655,6 +655,13 @@
       "name": "24 points tagged",
       "what": "All 24 points carry the tag automation uses.",
       "how": "Counts elements tagged as points: exactly 24."
+    },
+    {
+      "title": "each point's tag is on its own column",
+      "key": "REQ-TESTID/point-column",
+      "name": "Each point its own column",
+      "what": "Each point's tag sits on that point's column — the upright rectangle its triangle stands in, from the board's edge to the middle — so no two tagged points overlap, as the build prompt requires.",
+      "how": "Loads the page, reads the box of every element tagged as a point, and requires no two to overlap by more than a sliver (4 px each way)."
     },
     {
       "title": "30 checkers are drawn",

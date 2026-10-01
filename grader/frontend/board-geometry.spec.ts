@@ -51,31 +51,14 @@ test("[F28] REQ-GEOMETRY — points in board order", async ({ page }) => {
   // Two rows, one above the other, before any order within them (FIX-24: run
   // 1790407044's rows sat side by side and passed on page order alone).
   const rows = splitRows(points);
-  // Unless each top-row point is drawn over the bottom-row point opposite it,
-  // column for column. Then what a player sees depends on the paint: triangles
-  // that run across the middle into the other row cross each other (run
-  // 1790788338's hourglass columns — told "not in two rows" for five runs of a
-  // board that looked like two rows); triangles kept to their own half look
-  // right, and their boxes say nothing about rows, so there is nothing to judge.
-  if (!rows.separated) {
-    const byNum = new Map(points.map((p) => [p.num, p]));
-    const stacked = Array.from({ length: 12 }, (_, i) => [byNum.get(13 + i), byNum.get(12 - i)]).filter(
-      ([top, bottom]) => top && bottom && overlaps(top, bottom),
-    ).length;
-    if (stacked >= 10) {
-      const samples = await sampleTriangleOrientation(page, points);
-      // Painted at the middle of its box — for these boxes, the board's middle.
-      const across = samples.filter((s) => s.profile[9] > 0.1).map((s) => s.num);
-      expect(
-        across,
-        `[aspect: cross] triangles painted across the middle of the board, into the row opposite, on points: ${across.join(", ")}`,
-      ).toEqual([]);
-      return;
-    }
-  }
+  // Rows are read from the points' boxes, which the prompt makes each point's
+  // column. Boxes drawn over one another are the tag's own finding: run
+  // 1790788338 made every point the full height of the board, over the point
+  // opposite, and was told "not in two rows" for five runs of a board that
+  // looked like two rows.
   expect(
     rows.separated,
-    `[aspect: rows] expected the points in two rows, one above the other; the 12 highest and the 12 lowest point centres are ${rows.gap.toFixed(0)} px apart`,
+    `[aspect: rows] [needs: REQ-TESTID/point-column] expected the points in two rows, one above the other; the 12 highest and the 12 lowest point centres are ${rows.gap.toFixed(0)} px apart`,
   ).toBeTruthy();
   const topRow = leftToRight(rows.top);
   const bottomRow = leftToRight(rows.bottom);
@@ -128,9 +111,12 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
     between,
     `${where}[needs: F40 F28] expected the bar between the board halves, found bar x=${bar.x.toFixed(1)}..${(bar.x + bar.width).toFixed(1)} with the left half ending at x=${leftHalfRightEdge.toFixed(1)} and the right half starting at x=${rightHalfLeftEdge.toFixed(1)}`,
   ).toBeTruthy();
+  // A row's height is a point's column, so points drawn the full height of the
+  // board make a full-height bar read as one row tall (M263: the reference's
+  // bar, told "doesn't run the full height of the board").
   expect(
     bar.height >= 1.8 * avgPointHeight,
-    `[aspect: short] expected the bar to span both board rows, found bar height=${bar.height.toFixed(1)} vs average point height=${avgPointHeight.toFixed(1)}`,
+    `[aspect: short] [needs: REQ-TESTID/point-column] expected the bar to span both board rows, found bar height=${bar.height.toFixed(1)} vs average point height=${avgPointHeight.toFixed(1)}`,
   ).toBeTruthy();
 });
 
@@ -399,9 +385,10 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   // gradient). Every point, or some of them, told as such.
   const judged = samples.filter((s) => !underBar.has(s.num));
   const noTriangle = judged.filter((s) => s.shape === "none" || s.shape === "block").map((s) => s.num);
-  // With no two rows a point's box has no rim to read from either: paint at
-  // both ends of a box the whole height of the board is two triangles crossed,
-  // not "no triangle" — the order check tells that.
+  // With no two rows a point's box has no rim to read from either: a box the
+  // whole height of the board holds its own triangle and the one opposite, not
+  // "no triangle" — the order check, and the point-column check it waits on,
+  // tell that.
   expect(
     noTriangle,
     `${needsRows}${noTriangle.length === judged.length ? "[aspect: undrawn]" : "[aspect: someundrawn]"} no triangle drawn on points: ${noTriangle.join(", ")}`,

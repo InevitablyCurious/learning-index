@@ -158,6 +158,8 @@ for (const label of COUNTED_ELEMENT_LABELS) {
   checkGate(`REQ-RENDER/${label}`, `${COUNTED_PROSE[label]} drawn`);
   checkGate(`REQ-TESTID/${label}`, `${COUNTED_PROSE[label]} tagged for automation`);
 }
+// The prompt puts each point's tag on its column; no two may overlap.
+checkGate("REQ-TESTID/point-column", "each point's tag is on its own column");
 checkGate("REQ-RENDER/die-reload", "the dice survive a reload");
 
 // ── behaviour ───────────────────────────────────────────────────────────────

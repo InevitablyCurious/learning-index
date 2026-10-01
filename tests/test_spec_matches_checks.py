@@ -164,6 +164,20 @@ def test_the_static_id_check_and_the_prompts_id_rule_go_together() -> None:
     )
 
 
+def test_the_point_column_check_and_the_prompts_column_rule_go_together() -> None:
+    # Every check that finds a spot on the board reads it from the element tagged
+    # "point", and the prompts never said that element is the point's column: run
+    # 1790775221 made every point the full height of the board, over the point
+    # opposite, and the tester was left to describe the wreckage.
+    checks_columns = "REQ-TESTID/point-column" in (GRADER / "conformance" / "pregate.ts").read_text(encoding="utf-8")
+    states_columns = "on the element that is the point's column" in _prompts()
+    assert checks_columns == states_columns, (
+        "the pre-gate checks each point's column but the prompts never put the tag on the column"
+        if checks_columns
+        else "the prompts put each point's tag on its column but no check looks"
+    )
+
+
 # NOT COVERED HERE: requirements that are behaviour rather than a name or a word —
 # G27's "gamesPlayed goes up when a game ends" was one. Those stay a review item:
 # every new or changed check is read against the prompt sentence it grades.
