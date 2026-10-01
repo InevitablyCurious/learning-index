@@ -975,6 +975,10 @@
       "first": "The board doesn't fill the screen — there's a lot of empty space around it.",
       "repeat": "The board still doesn't fill the screen — there's still a lot of empty space around it."
     },
+    "F37.cutoff": {
+      "first": "Some of the pieces are drawn past the edge of the screen — I expect every piece to be fully on the screen.",
+      "repeat": "Some of the pieces are still drawn past the edge of the screen — I still expect every piece to be fully on the screen."
+    },
     "F38": {
       "first": "Some of the buttons on the right are cut off, overlapping, or too small to use.",
       "repeat": "Some of the buttons on the right are still cut off, overlapping, or too small to use."
