@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // STACK DRAWING — how a tall stack looks, and which piece moves through it.
 //
-// Three faults no other check can see:
+// Four faults no other check can see:
 //
 // F57 — a point holds more checkers than it can draw. The contract: a
 // numbered point draws at most six pieces, and from seven up the top
@@ -23,6 +23,15 @@
 // mover is followed the same way; on a bottom-row point the far end is the
 // smallest y.
 //
+// F71 — HOW a point's pieces are spaced along it. The contract: a stack a
+// player reads keeps an EVEN pitch — the reference steps every piece one
+// checker-size from the last from two to five pieces, and at six compresses
+// the step just enough (~6%) that the sixth still fits the point. F57 counts
+// the pieces a stack draws, and F43 asks only that they are not collapsed
+// onto one spot; neither sees the spacing. Both halves are judged as
+// proportions of the candidate's own drawn pitches, never in px: a
+// differently-sized but correct board still passes.
+//
 // Rows: the top row (points 13-24) stacks DOWN from the top edge, so the
 // farthest-from-edge piece has the LARGEST y; the bottom row (1-12) stacks UP
 // from the bottom edge, so the farthest-from-edge piece has the SMALLEST y.
@@ -30,7 +39,7 @@
 
 import { type Page } from "@playwright/test";
 import { expect, playerClickUntilShown, setupState, test } from "./fixtures.ts";
-import { waitForBoardSettled } from "./board-geometry.ts";
+import { readCheckerBoxes, waitForBoardSettled } from "./board-geometry.ts";
 
 interface ApiState {
   legalMoves: { from: number; to: number; die: number }[];
@@ -306,4 +315,95 @@ test("[F59] REQ-GEOMETRY — a piece lands at the far end", async ({ page }) => 
     return mover.getBoundingClientRect().y < resident.getBoundingClientRect().y ? "far end" : "at the edge";
   });
   expect(landed, "the piece that arrived on 11 lands at the edge, below the piece already there").not.toBe("at the edge");
+});
+
+test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  // Stacks of every height the spacing rule distinguishes — 2, 3, 4, 5 and
+  // one of 6 — across both rows and both colours, fifteen per side as the
+  // client requires. No roll: the drawn board alone.
+  const points = emptyPoints();
+  points[24] = 2;
+  points[13] = 6;
+  points[8] = 4;
+  points[6] = 3;
+  points[1] = -2;
+  points[12] = -5;
+  points[17] = -3;
+  points[19] = -5;
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "roll",
+    dice: [],
+    remainingDice: [],
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+
+  // Every stack's centre-Ys, read from the candidate's own drawn pieces.
+  const boxes = await readCheckerBoxes(page);
+  const centresAt = (loc: number): number[] =>
+    boxes
+      .filter((b) => b.loc === String(loc))
+      .map((b) => b.centerY)
+      .sort((a, b) => a - b);
+  const pitchesOf = (ys: number[]): number[] => ys.slice(1).map((y, i) => y - ys[i]);
+
+  // EVEN — a stack of two to five keeps one pitch: the spread between its
+  // widest and narrowest step stays a small share of the step itself. The
+  // 0.2 share sits far above sub-pixel rounding (the reference's steps are
+  // equal to within ~1e-13 px) and far below a stack drawn ~50% uneven.
+  const shortStacks = [
+    { loc: 24, held: 2 },
+    { loc: 1, held: 2 },
+    { loc: 6, held: 3 },
+    { loc: 17, held: 3 },
+    { loc: 8, held: 4 },
+    { loc: 12, held: 5 },
+    { loc: 19, held: 5 },
+  ];
+  const evenPitches: number[] = [];
+  for (const { loc, held } of shortStacks) {
+    const ys = centresAt(loc);
+    expect(
+      ys.length,
+      `[needs: F02] the game holds ${held} checkers on point ${loc}, and the board drew ${ys.length} of them — no pitch to read`,
+    ).toBeGreaterThanOrEqual(2);
+    const pitches = pitchesOf(ys);
+    const avg = pitches.reduce((sum, p) => sum + p, 0) / pitches.length;
+    const spread = Math.max(...pitches) - Math.min(...pitches);
+    // A collapsed stack (avg 0) reads as fully uneven: F43 tells the collapse
+    // itself, this tells a spacing no player can read.
+    const unevenness = avg > 0 ? spread / avg : 1;
+    expect(
+      unevenness,
+      `[aspect: uneven] [needs: F02] point ${loc} holds ${held} checkers, drawn at steps of ${pitches.map((p) => p.toFixed(1)).join(", ")} px — widest against narrowest differs by ${Math.round(unevenness * 100)}% of their ${avg.toFixed(1)} px average, where a player needs one even pitch`,
+    ).toBeLessThanOrEqual(0.2);
+    evenPitches.push(avg);
+  }
+
+  // TIGHTER AT SIX — six pieces do not fit the point at the full pitch, so
+  // the reference compresses the step (~5.8% at 1280x800). Asked as a ratio
+  // of the candidate's own two pitches — at least 3% tighter, a threshold
+  // between the reference's tightening and no change at all — never as a px
+  // value: a differently-sized but correct board still passes.
+  const sixYs = centresAt(13);
+  expect(
+    sixYs.length,
+    `[needs: F02] the game holds six black checkers on point 13, and the board drew ${sixYs.length} of them — no pitch to read`,
+  ).toBeGreaterThanOrEqual(2);
+  const sixPitches = pitchesOf(sixYs);
+  const sixPitch = sixPitches.reduce((sum, p) => sum + p, 0) / sixPitches.length;
+  const evenPitch = evenPitches.reduce((sum, p) => sum + p, 0) / evenPitches.length;
+  const tighter = sixPitch / evenPitch;
+  expect(
+    tighter,
+    `[aspect: six] [needs: F02] point 13 holds six checkers, drawn at an average step of ${sixPitch.toFixed(1)} px against the ${evenPitch.toFixed(1)} px the two-to-five stacks keep — ${Math.round(tighter * 100)}% of it, where six pieces need a tighter pitch to fit the point`,
+  ).toBeLessThanOrEqual(0.97);
 });

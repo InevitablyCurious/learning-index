@@ -548,6 +548,16 @@
       "name": "The pip elements hold just the number",
       "what": "pipWhite and pipBlack contain only the pip count, with any label outside those elements.",
       "how": "In a browser: opens a new game and requires the text of pipWhite and pipBlack to be a bare number (F06 judges the numbers themselves)."
+    },
+    "F70": {
+      "name": "Triangles leave a gap across the middle",
+      "what": "The tip of each top-half triangle and the tip of the bottom-half triangle directly across the middle leave a clear gap — about 24% of the board's half-height — neither touching nor crossing, and not so short that the gap is wider than that.",
+      "how": "Measures each point's painted tip from a screenshot, pairs top and bottom points by column, and checks the gap as a fraction of the point's height against the 19%–29% band (≤0 touching, <19% too close, >29% too wide)."
+    },
+    "F71": {
+      "name": "Checkers on a point stack evenly, tighter at six",
+      "what": "The checkers on a point stack evenly apart (two to five pieces), and a full stack of six sits a little tighter.",
+      "how": "Reads checker boxes by data-loc, sorts by centre y, and compares consecutive pitch: even within a stack for two to five pieces, and a six-piece stack's pitch at least ~3% tighter than the even pitch."
     }
   },
   "setup": [
@@ -795,7 +805,9 @@
         "REQ-RENDER/off-tray",
         "REQ-RESPONSIVE/startup",
         "F54",
-        "F68"
+        "F68",
+        "F70",
+        "F71"
       ]
     },
     {

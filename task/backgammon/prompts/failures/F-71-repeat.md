@@ -1,0 +1,1 @@
+The checkers on a point still aren't spaced evenly — I expect a point's checkers evenly apart, and a stack of six a little tighter than the rest.

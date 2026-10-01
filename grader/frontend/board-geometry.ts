@@ -462,6 +462,14 @@ export interface TriangleSample {
   // The triangle's own colour: down its middle at its widest painted depth
   // (null when nothing is painted). Compared only with other points' colours.
   colour: number[] | null;
+  // The triangle TIP's viewport-px Y: the innermost row (closest to the board
+  // middle) along the point's vertical centreline where triangle paint is
+  // still present, read from a 3-px strip around the apex pixel and a
+  // local-noise-anchored threshold, accurate to ~1–2 px (null when nothing is
+  // painted). `reach` is 5%-quantized at a 0.1 coverage threshold — far too
+  // coarse to measure the tip-to-tip gap across the middle (F70), which lives
+  // in a band a few percent wide.
+  tipY: number | null;
 }
 
 /**
@@ -580,7 +588,67 @@ export async function sampleTriangleOrientation(
           const y = top ? p.y + p.height * depths[widest] : p.y + p.height * (1 - depths[widest]);
           colour = at(p.x + p.width / 2, y);
         }
-        return { num: p.num, row: top ? ("top" as const) : ("bottom" as const), profile, reach, shape, colour };
+        // The TIP: the innermost row along the point's vertical centreline
+        // where triangle paint is still present. A single-pixel walk at the
+        // fixed dist>45 threshold misreads it by up to ~14 px: the apex
+        // converges to a point, so where the sampled pixel crosses any fixed
+        // threshold depends on the apex's sub-pixel position (a pixel that
+        // merely borders the apex catches paint on half its width only) and
+        // on the triangle's contrast against the felt — the golden's dark
+        // left-column triangle, apex on a pixel border, read 14 px short and
+        // inflated F70's gap to 0.31 of a point against the true 0.24. So:
+        // take the max dist over a 3-device-px strip centred on the pixel
+        // CONTAINING the apex (that pixel always carries the strongest
+        // coverage), find the innermost strongly-painted row (> 45, F30's
+        // threshold), then refine inward against a threshold anchored just
+        // above the local felt noise: floor + 18% of (body − floor), both
+        // measured beside the tip. Coverage rises linearly from zero at the
+        // apex, so the 18% crossing lands within ~1–2 px of the true tip for
+        // any colour or alignment. Bounded to the point's own box: paint
+        // crossing the middle is read at the box edge, which makes the
+        // across-the-middle gap come out ≤ 0 — the touching case F70 tells.
+        let tipY: number | null = null;
+        if (first >= 0) {
+          const rowTop = Math.max(0, Math.round(p.y * dpr));
+          const rowBot = Math.min(canvas.height - 1, Math.round((p.y + p.height) * dpr));
+          const stripX = Math.max(0, Math.min(Math.floor((p.x + p.width / 2) * dpr) - 1, canvas.width - 3));
+          if (rowBot > rowTop) {
+            const strip = ctx.getImageData(stripX, rowTop, 3, rowBot - rowTop + 1);
+            const rowDist = (row: number): number => {
+              let best = 0;
+              for (let c = 0; c < 3; c++) {
+                const o = ((row - rowTop) * 3 + c) * 4;
+                const d = dist([strip.data[o], strip.data[o + 1], strip.data[o + 2]], felt);
+                if (d > best) best = d;
+              }
+              return best;
+            };
+            const dir = top ? 1 : -1; // rim → inner edge, in device rows
+            const step = Math.max(1, Math.round(dpr)); // ~1 CSS px per step
+            let strong = -1;
+            for (let row = rowTop; row <= rowBot; row++) {
+              if (rowDist(row) > 45) strong = dir > 0 ? row : strong === -1 ? row : Math.min(strong, row);
+            }
+            if (strong >= 0) {
+              const clamp = (r: number) => Math.max(rowTop, Math.min(rowBot, r));
+              // The felt floor beside the tip (past it, toward the middle) and
+              // the saturated body just inside it (rim side).
+              const win: number[] = [];
+              for (let o = 12 * step; o <= 20 * step; o += step) win.push(rowDist(clamp(strong + dir * o)));
+              const floorD = [...win].sort((a, b) => a - b)[win.length >> 1];
+              let sat = 0;
+              for (let o = 0; o <= 20 * step; o += step) sat = Math.max(sat, rowDist(clamp(strong - dir * o)));
+              const thresh = sat - floorD >= 10 ? floorD + 0.18 * (sat - floorD) : 45;
+              let tipRow = strong;
+              for (let o = -2 * step; o <= 10 * step; o++) {
+                const row = clamp(strong + dir * o);
+                if (rowDist(row) > thresh) tipRow = dir > 0 ? Math.max(tipRow, row) : Math.min(tipRow, row);
+              }
+              tipY = tipRow / dpr;
+            }
+          }
+        }
+        return { num: p.num, row: top ? ("top" as const) : ("bottom" as const), profile, reach, shape, colour, tipY };
       });
     },
     { dataUrl, points },

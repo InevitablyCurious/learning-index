@@ -502,3 +502,81 @@ test("[F42] REQ-GEOMETRY — the points alternate in colour", async ({ page }) =
     `${oneColour ? "[aspect: onecolour] " : ""}[needs: F28 F30] points that should differ in colour and match: ${matching.map(([a, b]) => `${a}/${b}`).join(", ")}`,
   ).toEqual([]);
 });
+
+// [F70] REQ-GEOMETRY — the points' tips stand clear of the middle. F30 reads
+// the triangles' extent only as a FLOOR (reach at least half way in from the
+// rim): triangles that touch or cross the middle — or stop well short of it —
+// still pass it. On a board a player reads, each top triangle's tip and the
+// tip straight across the middle leave a clear gap between them (the
+// reference draws its tips 88% of the way in from the rim, leaving a gap of
+// about a quarter of a point's height). Measured on the drawn tips
+// (board-geometry.ts tipY, ~1–2 px accurate), never on the 5%-quantized
+// reach, which cannot resolve a band a few percent wide.
+test("[F70] REQ-GEOMETRY — the points' tips stand clear of the middle", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
+
+  const points = await readPointBoxes(page);
+  expect(points.length, "[needs: REQ-RENDER/point] expected 24 points to read").toBe(24);
+
+  // The board middle and the two rows drawn across it: each TOP point pairs
+  // with the BOTTOM point whose x-centre matches — the column straight across.
+  const mid = boardMidY(points);
+  const top = points.filter((p) => p.centerY < mid).sort((a, b) => a.centerX - b.centerX);
+  const bottom = points.filter((p) => p.centerY >= mid).sort((a, b) => a.centerX - b.centerX);
+  const pw = pointWidth(points);
+  // Rows that are not one above the other, or columns that do not line up,
+  // leave no "straight across" to measure a gap between — the rows checks tell
+  // that, not this one.
+  const paired =
+    top.length === 12 &&
+    bottom.length === 12 &&
+    top.every((p, i) => Math.abs(p.centerX - bottom[i].centerX) <= 0.5 * pw);
+  expect(
+    paired,
+    `[needs: F28 F40] expected 12 top points each straight across from a bottom point, found ${top.length} above and ${bottom.length} below the middle`,
+  ).toBeTruthy();
+
+  // Checkers and hints hidden, screenshot decoded, felt learned — the F30
+  // pipeline — now read at each point's drawn TIP: the innermost painted row
+  // along its vertical centreline.
+  const samples = await sampleTriangleOrientation(page, points);
+  const tipOf = new Map(samples.map((s) => [s.num, s.tipY]));
+  const columns = top.map((t, i) => ({ t, b: bottom[i] }));
+  // A point whose tip cannot be read has no triangle to measure: F30's
+  // finding (undrawn, or paint the felt cannot be told from), not a gap.
+  const unreadable = columns.flatMap(({ t, b }) =>
+    [t, b].filter((p) => tipOf.get(p.num) == null).map((p) => p.num),
+  );
+  expect(
+    unreadable,
+    `[needs: F30] expected a drawn triangle tip to read on every point, found no tip on points: ${unreadable.join(", ")}`,
+  ).toEqual([]);
+
+  // Per column: the gap from the top tip down to the bottom tip across the
+  // middle, as a share of the point box's height (one board half).
+  const gaps = columns.map(({ t, b }) => {
+    const gap = tipOf.get(b.num)! - tipOf.get(t.num)!;
+    const pointHeight = (t.height + b.height) / 2;
+    return { col: `${t.num}/${b.num}`, gap, fraction: gap / pointHeight };
+  });
+
+  // One fault, one line: the first band that fails is the one told. Tips that
+  // meet or cross leave no gap at all; tips that stop short of the middle (or
+  // stand too far from it) are a gap a player cannot read as the reference's.
+  const touching = gaps.filter((g) => g.fraction <= 0);
+  expect(
+    touching.length === 0,
+    `[needs: F30] [aspect: touching] expected the triangles' tips to stand clear of the middle, found tips meeting or crossing it on columns: ${touching.map((g) => `${g.col} (gap ${g.gap.toFixed(1)} px)`).join(", ")}`,
+  ).toBe(true);
+  const tooclose = gaps.filter((g) => g.fraction < 0.19);
+  expect(
+    tooclose.length === 0,
+    `[needs: F30] [aspect: tooclose] expected a clear gap between the tips across the middle, found them too close on columns: ${tooclose.map((g) => `${g.col} (gap ${g.gap.toFixed(1)} px, ${Math.round(g.fraction * 100)}% of a point's height)`).join(", ")}`,
+  ).toBe(true);
+  const toowide = gaps.filter((g) => g.fraction > 0.29);
+  expect(
+    toowide.length === 0,
+    `[needs: F30] [aspect: toowide] expected the tips to stand off the middle by a readable gap, found the gap too wide on columns: ${toowide.map((g) => `${g.col} (gap ${g.gap.toFixed(1)} px, ${Math.round(g.fraction * 100)}% of a point's height)`).join(", ")}`,
+  ).toBe(true);
+});
