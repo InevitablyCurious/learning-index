@@ -296,6 +296,7 @@ import {
 } from "./panels/restore.js";
 import { renderCurve, setCurveMetric, setCurveTab, curveTab } from "./panels/curve.js";
 import { clearGatePin, fitGateCard, refitGateCard, renderWall, setGateHover, toggleGatePin } from "./panels/wall.js";
+import { renderBuild, paintBuild } from "./panels/build.js";
 import { renderLedger, toggleBaselineRow, toggleSuperseded } from "./panels/ledger.js";
 import {
   renderLive,
@@ -399,8 +400,9 @@ function render() {
       ${renderCells(view)}
       <div class="axes-row">
         ${renderCurve(view)}
-        ${renderWall(view)}
+        ${renderBuild(view)}
       </div>
+      ${renderWall(view)}
       ${renderLedger(view)}
       ${renderLive(view)}
       ${renderRecall(view)}
@@ -425,6 +427,7 @@ function render() {
   try { paintTui(view); } catch (err) { console.error("tui paint failed:", err); }
   // Counters animate to the value already in the markup; a throw costs motion only.
   try { paintTicks(root); } catch (err) { console.error("tick paint failed:", err); }
+  try { paintBuild(view); } catch (err) { console.error("build paint failed:", err); }
 }
 
 /**

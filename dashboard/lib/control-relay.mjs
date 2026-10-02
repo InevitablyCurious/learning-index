@@ -115,6 +115,18 @@ export function createControlRelay({
         return;
       }
 
+      // Binary passthrough: the screenshot route replies with PNG bytes (or a
+      // JSON error body on an absent attempt). upstream.text() is a UTF-8
+      // round-trip that corrupts binary (PNG signature 0x89 → U+FFFD), so this
+      // path re-sends the exact bytes — unconditional on status, so the JSON
+      // error reply passes through byte-exact too.
+      if (url.pathname === "/api/screenshot") {
+        const bytes = Buffer.from(await upstream.arrayBuffer());
+        res.writeHead(upstream.status, { "content-type": type, "cache-control": "no-store" });
+        res.end(bytes);
+        return;
+      }
+
       const text = await upstream.text();
       res.writeHead(upstream.status, { "content-type": type, "cache-control": "no-store" }).end(text);
     } catch (err) {

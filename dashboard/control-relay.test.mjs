@@ -5,7 +5,9 @@
 // fetch ever happening), the origin/CSRF gate on writes (a foreign or opaque
 // Origin is refused BEFORE the body is read; absent Origin — curl on a
 // trusted peer — passes), and honest forwarding (query string verbatim,
-// upstream status verbatim, unreachable control plane → 502). The credential
+// upstream status verbatim, unreachable control plane → 502). The binary
+// passthrough cases pin byte-exact /api/screenshot re-sends (PNG success and
+// JSON 404 alike). The credential
 // cases pin the hygiene contract: a secret body reaches the control plane
 // intact but is never echoed back in ANY relay-composed or forwarded reply.
 
@@ -54,7 +56,7 @@ function makeReq({ method = "GET", path = "/", search = "", origin, host = HOST,
 
 // Harness: stub fetchImpl records every call and returns a canned upstream
 // reply; stub readBody returns a fixed JSON string. opts: { status, text,
-// fetchThrows, readBody, controlUrl }.
+// bytes, contentType, fetchThrows, readBody, controlUrl }.
 function makeRelay(opts = {}) {
   const fetched = [];
   const responses = [];
@@ -63,8 +65,9 @@ function makeRelay(opts = {}) {
     if (opts.fetchThrows) throw new Error(opts.fetchThrows);
     return {
       status: opts.status ?? 200,
-      headers: { get: (k) => (k === "content-type" ? "application/json" : null) },
+      headers: { get: (k) => (k === "content-type" ? opts.contentType ?? "application/json" : null) },
       text: async () => opts.text ?? '{"ok":true}',
+      arrayBuffer: async () => opts.bytes ?? Buffer.from(opts.text ?? '{"ok":true}', "utf8"),
     };
   };
   const relay = createControlRelay({
@@ -129,6 +132,32 @@ test("a live stream is piped through as it arrives", async () => {
   assert.equal(res.headers["content-type"], "text/event-stream");
   assert.deepEqual(chunks, ["event: board\n\n"]);
   assert.ok(res.ended);
+});
+
+// ── binary passthrough (/api/screenshot) ────────────────────────────────────
+
+test("screenshot PNG bytes are re-sent unaltered", async () => {
+  // High bytes (0x89 signature, 0xff/0xfe/0x80) are exactly what a UTF-8
+  // text() round-trip would replace with U+FFFD.
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xfe, 0x80, 0x00]);
+  const h = makeRelay({ contentType: "image/png", bytes: png });
+  const res = await h.call({ method: "GET", path: "/api/screenshot", search: "?attempt=1" });
+  assert.equal(h.fetched[0].url, `${CONTROL_URL}/api/screenshot?attempt=1`);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.headers["content-type"], "image/png");
+  assert.equal(res.headers["cache-control"], "no-store");
+  assert.ok(Buffer.isBuffer(res.body));
+  assert.equal(Buffer.compare(res.body, png), 0);
+});
+
+test("screenshot 404 JSON passes through byte-exact too (branch is not gated on ok)", async () => {
+  const body = '{"ok":false,"code":"no_screenshot","reason":"attempt 3 absent"}';
+  const h = makeRelay({ status: 404, text: body });
+  const res = await h.call({ method: "GET", path: "/api/screenshot", search: "?attempt=3" });
+  assert.equal(res.statusCode, 404);
+  assert.equal(res.headers["content-type"], "application/json");
+  assert.equal(res.headers["cache-control"], "no-store");
+  assert.equal(Buffer.compare(res.body, Buffer.from(body, "utf8")), 0);
 });
 
 // ── origin / CSRF on writes ─────────────────────────────────────────────────
