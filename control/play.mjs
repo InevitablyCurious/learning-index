@@ -11,7 +11,8 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import net from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { resolveStartCommand } from "../grader/lib/entrypoint.mjs";
 import { resolveCellDir } from "./history.mjs";
@@ -24,6 +25,13 @@ import {
 
 /** This module's registry kind (grading uses "gate"). */
 export const PLAY_KIND = "play";
+
+/**
+ * The loopback-bind shim, preloaded into the child with `--import`. Absolute:
+ * the child's cwd is the worktree, and a relative specifier would resolve
+ * against it, not against this module.
+ */
+const LOOPBACK_SHIM = join(dirname(fileURLToPath(import.meta.url)), "lib", "loopback-shim.mjs");
 
 function refuse(code, reason, status = 400) {
   return { ok: false, code, reason, status };
@@ -110,11 +118,12 @@ async function probePage(url) {
 
 /**
  * Boot one built result and return the URL to open. Named refusals:
- *   invalid_run    the identifiers did not resolve inside the runs root
- *   no_build       no worktree, or no src/ in it
- *   no_entrypoint  nothing says how to start it
- *   port_ignored   it bound a port other than the one given
- *   boot_failed    it started and never answered
+ *   invalid_run      the identifiers did not resolve inside the runs root
+ *   no_build         no worktree, or no src/ in it
+ *   no_entrypoint    nothing says how to start it
+ *   port_ignored     it bound a port other than the one given
+ *   boot_failed      it started and never answered
+ *   registry_failed  it could not be recorded, so it was killed, not played
  */
 export async function startPlay({ runsRoot, benchRoot, run, cell }) {
   const cellDir = resolveCellDir(runsRoot, run, cell);
@@ -144,8 +153,9 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
   await stopPlay(benchRoot);
 
   const port = await freePort();
-  // The artifact's own start command, the same one the grader uses.
-  const child = spawn("node", [...flags, entrypoint], {
+  // The artifact's own start command, the same one the grader uses, with the
+  // loopback shim preloaded so a host-less listen(PORT) binds 127.0.0.1 only.
+  const child = spawn("node", ["--import", LOOPBACK_SHIM, ...flags, entrypoint], {
     cwd: worktree,
     env: {
       ...process.env,
@@ -165,7 +175,7 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
   child.stdout?.resume();
 
   if (child.pid) {
-    registerServer(
+    const record = registerServer(
       {
         pid: child.pid,
         port,
@@ -176,6 +186,18 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
       },
       benchRoot,
     );
+    if (record === null) {
+      // A live child with no record is unreapable — nothing can find it to
+      // stop it later. Kill it now: there is never a play server running
+      // without a registry record.
+      child.kill("SIGKILL");
+      return refuse(
+        "registry_failed",
+        `the server registry could not record pid ${child.pid}, so it was ` +
+          "killed rather than left running unreapable.",
+        500,
+      );
+    }
   }
 
   const url = `http://localhost:${port}/`;

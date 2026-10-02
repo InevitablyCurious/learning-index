@@ -33,9 +33,9 @@ const ARCHIVED_RUN = `backups/${STAMP}/${OLD_TREE}/local/local-llm-proxy/omlx/mo
 
 /** The card contract: EXACTLY these keys, in this order, on every card. */
 const CARD_KEYS = [
-  "run_dir", "sequence_index", "archived", "model", "arm", "status",
-  "problems_before", "problems_after", "context_peak", "context_window",
-  "turns", "loop_errors", "stalled_limit_errors",
+  "run_dir", "sequence_index", "benchmark_id", "cell", "archived", "model",
+  "arm", "status", "problems_before", "problems_after", "context_peak",
+  "context_window", "turns", "loop_errors", "stalled_limit_errors",
 ];
 
 const notice = (event, terminal) =>
@@ -194,6 +194,8 @@ test("runs source: each card carries EXACTLY the contract keys, with the stated 
     assert.deepEqual(current, {
       run_dir: CURRENT_RUN,
       sequence_index: 0,
+      benchmark_id: CURRENT_TREE,
+      cell: "local/local-llm-proxy/omlx/model-a/memoryOFF/cell-0000",
       archived: false,
       model: "m-current",
       arm: "off",
@@ -213,6 +215,8 @@ test("runs source: each card carries EXACTLY the contract keys, with the stated 
     assert.deepEqual(archived, {
       run_dir: ARCHIVED_RUN,
       sequence_index: 0,
+      benchmark_id: "backups", // the resolvable half for every archived row
+      cell: `${STAMP}/${OLD_TREE}/local/local-llm-proxy/omlx/model-old/memoryOFF/cell-0000`,
       archived: true,
       model: null,
       arm: "off", // stated by the harness's own memoryOFF dir name

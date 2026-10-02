@@ -126,27 +126,39 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * SIGTERM, then SIGKILL, then confirmation. Returns true only when the
+ * process table no longer lists the pid: an unconfirmed kill must not
+ * deregister, because the record is the only handle a later reap has.
+ */
 async function killPid(pid) {
   try {
     process.kill(pid, "SIGTERM");
   } catch {
-    return;
+    // Unsignalable (already gone, or not ours to signal): believe the table.
+    return (await processCommand(pid)) == null;
   }
   for (let i = 0; i < 15; i++) {
     await sleep(100);
-    if ((await processCommand(pid)) == null) return;
+    if ((await processCommand(pid)) == null) return true;
   }
   try {
     process.kill(pid, "SIGKILL");
   } catch {
     // Already gone between the check and the signal.
   }
+  for (let i = 0; i < 10; i++) {
+    await sleep(100);
+    if ((await processCommand(pid)) == null) return true;
+  }
+  return false;
 }
 
 /**
  * Kill every server this bench started and left behind, and prune the
  * records. `kind` narrows it ("gate", "play"). Returns a report: reaped and
- * pruned are different facts.
+ * pruned are different facts. A record is dropped only once its process is
+ * confirmed gone; one that survives the kill is left for a later reap.
  */
 export async function reapServers(opts = {}, benchRoot = BENCH_ROOT) {
   const wanted = opts.kind == null ? null : String(opts.kind);
@@ -159,9 +171,14 @@ export async function reapServers(opts = {}, benchRoot = BENCH_ROOT) {
     }
     const { state } = await classifyServer(rec);
     if (state === "ours") {
-      await killPid(rec.pid);
-      deregisterServer(rec.pid, benchRoot);
-      report.killed.push(rec);
+      if (await killPid(rec.pid)) {
+        deregisterServer(rec.pid, benchRoot);
+        report.killed.push(rec);
+      } else {
+        // It survived SIGKILL: the record is the only handle on it, so it
+        // stays on disk and a later stop can re-reap it.
+        report.left.push(rec);
+      }
     } else {
       // Dead or recycled: the record is worthless and any live process isn't ours.
       deregisterServer(rec.pid, benchRoot);

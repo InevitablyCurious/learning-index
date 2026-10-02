@@ -43,7 +43,7 @@
 // sequence_index ASCENDING — so the current tree leads and archived runs
 // follow, newest first.
 
-import { join, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import { readdir, readFile } from "node:fs/promises";
 
 import { int, str } from "../contract.mjs";
@@ -222,6 +222,21 @@ async function memo(cache, key, make) {
   return cache.get(key);
 }
 
+/**
+ * The play-able pair for a LIVE cell — the same {benchmark_id, cell} shape
+ * history.listRunCells emits, derived from the cell's on-disk stream path (no
+ * second scan): the first segment relative to runsRoot is the resolvable
+ * benchmark_id, the rest is the cell. Both null when the cell has no stream.
+ */
+function livePlayPair(runsRoot, livePath) {
+  if (!livePath) return { benchmark_id: null, cell: null };
+  const segs = relative(runsRoot, livePath).split(sep).slice(0, -1);
+  return {
+    benchmark_id: segs[0] ?? null,
+    cell: segs.length > 1 ? segs.slice(1).join(sep) : null,
+  };
+}
+
 export async function read(ctx) {
   const bases = [];
 
@@ -263,44 +278,56 @@ export async function read(ctx) {
   for (const r of live) {
     const idx = r.sequence_index;
     if (idx !== null && idx !== undefined) seen.add(idx);
+    const livePath = await cellLiveStreamPath(ctx.runsRoot, { run_dir: r.run_dir ?? null, sequence_index: idx ?? null });
+    const play = livePlayPair(ctx.runsRoot, livePath);
     bases.push({
       sequence_index: idx ?? null,
       run_dir: r.run_dir ?? null,
+      benchmark_id: play.benchmark_id,
+      cell: play.cell,
       model: r.model ?? null,
       arm: r.arm ?? null,
       running: true,
       archived: false,
       sort_key: null, // filled below, once the active tree id is known
-      live_path: await cellLiveStreamPath(ctx.runsRoot, { run_dir: r.run_dir ?? null, sequence_index: idx ?? null }),
+      live_path: livePath,
     });
   }
   for (const [idx] of batchByIndex) {
     if (seen.has(idx)) continue;
     const e = endedByIndex.get(idx);
+    const livePath = await cellLiveStreamPath(ctx.runsRoot, { run_dir: e?.run_dir ?? runDir, sequence_index: idx });
+    const play = livePlayPair(ctx.runsRoot, livePath);
     bases.push({
       sequence_index: idx,
       run_dir: e?.run_dir ?? runDir,
+      benchmark_id: play.benchmark_id,
+      cell: play.cell,
       model: e?.model ?? null,
       arm: e?.arm ?? "off",
       running: false,
       archived: false,
       sort_key: null,
-      live_path: await cellLiveStreamPath(ctx.runsRoot, { run_dir: e?.run_dir ?? runDir, sequence_index: idx }),
+      live_path: livePath,
     });
   }
   for (const e of ended) {
     const idx = e?.sequence_index;
     if (!Number.isFinite(idx)) continue;
     if (seen.has(idx) || batchByIndex.has(idx)) continue;
+    const livePath = await cellLiveStreamPath(ctx.runsRoot, { run_dir: e.run_dir ?? runDir, sequence_index: idx });
+    const play = livePlayPair(ctx.runsRoot, livePath);
     bases.push({
       sequence_index: idx,
       run_dir: e.run_dir ?? runDir,
+      benchmark_id: play.benchmark_id,
+      cell: play.cell,
       model: e.model ?? null,
       arm: e.arm ?? "off",
       running: false,
       archived: false,
       sort_key: null,
-      live_path: await cellLiveStreamPath(ctx.runsRoot, { run_dir: e.run_dir ?? runDir, sequence_index: idx }),
+      live_path: livePath,
     });
     seen.add(idx);
   }
@@ -317,6 +344,8 @@ export async function read(ctx) {
     bases.push({
       sequence_index: seqMatch ? Number(seqMatch[1]) : null,
       run_dir: [BACKUPS_DIR, ...parts.slice(0, -2)].join("/"),
+      benchmark_id: row.benchmark_id ?? null,
+      cell: row.cell ?? null,
       model: null,
       arm: armMatch ? armMatch[1].toLowerCase() : null,
       running: false,
@@ -423,6 +452,8 @@ export async function read(ctx) {
       card: {
         run_dir: b.run_dir ?? null,
         sequence_index: b.sequence_index ?? null,
+        benchmark_id: b.benchmark_id ?? null,
+        cell: b.cell ?? null,
         archived: b.archived,
         model: b.model ?? man?.model ?? (b.archived ? str(ledger?.model) : null) ?? null,
         arm: b.arm ?? man?.arm ?? (b.archived ? str(ledger?.arm) : null) ?? null,
