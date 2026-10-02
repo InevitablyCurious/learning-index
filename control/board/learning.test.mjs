@@ -32,9 +32,15 @@ import {
   CAPTURE_STATES,
   PHASES_PER_CELL,
 } from "./sources/learning.mjs";
+import { MAX_ATTEMPTS, emptyBoard } from "./contract.mjs";
 
 test("the attempt axis is five: 1 build + 4 repair", () => {
   assert.equal(PHASES_PER_CELL, 5);
+});
+
+test("the board frame carries max_attempts for the screenshot tabs", () => {
+  assert.equal(MAX_ATTEMPTS, 5);
+  assert.equal(emptyBoard().max_attempts, 5);
 });
 
 test("the four capture states are the design's four", () => {

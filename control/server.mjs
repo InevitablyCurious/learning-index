@@ -35,6 +35,7 @@ import { routes as challengeRoutes } from "./routes/challenges.mjs";
 import { routes as eventRoutes } from "./routes/events.mjs";
 import { routes as wallRoutes } from "./routes/wall.mjs";
 import { routes as boardRoutes, startBoardLoops } from "./routes/board.mjs";
+import { routes as screenshotRoutes } from "./routes/screenshot.mjs";
 
 // Import-time side effects (event subscription, persist timer, shutdown
 // handlers), in their original order.
@@ -52,6 +53,7 @@ for (const r of [
 ...challengeRoutes,
   ...eventRoutes,
   ...wallRoutes,
+  ...screenshotRoutes,
   ...boardRoutes,
 ]) {
   routes[`${r.method} ${r.path}`] = r.handle;

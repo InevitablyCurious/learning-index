@@ -23,6 +23,16 @@ export const MIN_CELLS_PER_ARM = 3;
  */
 export const PHASES_PER_CELL = 5;
 
+/**
+ * Solve-attempt count — distinct from PHASES_PER_CELL (1 build + 4 grades),
+ * though the values coincide today. Source of truth: harness/config.py
+ * `max_attempts: int = 5` (default; env-overridable BENCH_MAX_ATTEMPTS; hard
+ * ceiling harness/adapters/challenge/constants.py
+ * DEFAULT_ATTEMPT_HARD_CEILING = 10). A constant here because no per-run
+ * on-disk artifact carries the value.
+ */
+export const MAX_ATTEMPTS = 5;
+
 /** Permanent provenance label. Never a badge. Never a tier. */
 export const ATTESTATION = "bench-mock/self-declared";
 
@@ -31,6 +41,9 @@ export function emptyBoard() {
   return {
     contract_version: CONTRACT_VERSION,
     generated_at: Date.now(),
+    // Feeds the LIVE BUILD screenshot tab count (1..max + live). Top-level by
+    // design: the frontend reads board-root keys.
+    max_attempts: MAX_ATTEMPTS,
 
     run: {
       org_id: null,
