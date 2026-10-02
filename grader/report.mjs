@@ -516,6 +516,60 @@ async function runPhase(phase, fn) {
   return result;
 }
 
+// ── BOARD CAPTURE — best-effort artifact, never a gate ──────────────────────
+//
+// Runs AFTER writeReport and after the verdict is decided, so there is nothing
+// left for it to change: exit code, stdout and problems are all discarded, and
+// nothing here reaches results, problems, failed_gates, gate_results or
+// gate_totals. It saves attempt-N-board.png beside the report it illustrates
+// (capture/board-capture.spec.ts under playwright.capture.config.ts — a config
+// deliberately NOT among roster.mjs's three --list commands, so the gate
+// roster is untouched).
+//
+// The deadline is the same mechanism every runner uses (spawnWithDeadline,
+// lib/runner.mjs: detached spawn, SIGKILL of the whole process group), so a
+// wedged browser cannot hang the grade. 120s is generous for npx boot + one
+// server boot + a single test under Playwright's 30s default + a screenshot,
+// and it still fits inside the margin to the harness's 3600s watchdog even
+// when the 3300s suite budget was fully spent. The try/catch is the last wall:
+// a capture bug must never throw out of main() and replace a written
+// PASS/FAIL report with the fallback FAIL.
+const CAPTURE_TIMEOUT_MS = 120_000;
+
+async function captureBoard() {
+  const attempt = String(ATTEMPT ?? 1);
+  const pngPath = path.join(OUT_DIR, `attempt-${attempt}-board.png`);
+  try {
+    process.stderr.write(`[report] capture=board attempt=${attempt} dir=${OUT_DIR}\n`);
+    const run = await spawnWithDeadline({
+      cmd: "npx",
+      args: [
+        "playwright",
+        "test",
+        "--config",
+        "playwright.capture.config.ts",
+        "--project=chromium",
+        "--reporter=json",
+      ],
+      cwd: GATES_DIR,
+      env: {
+        ...env,
+        BENCH_ATTEMPT: attempt,
+        BENCH_CAPTURE_DIR: OUT_DIR,
+      },
+      deadlineMs: CAPTURE_TIMEOUT_MS,
+      logPath: path.join(OUT_DIR, "capture.log"),
+    });
+    // Observability only — the run's ok/status/problems are ignored by design.
+    process.stderr.write(
+      `[report] capture=board finished elapsed_ms=${run.elapsedMs} `
+        + `png_exists=${fs.existsSync(pngPath)}\n`,
+    );
+  } catch {
+    // Best-effort: a capture failure is invisible to the grade.
+  }
+}
+
 async function main() {
   const conformance = await runPhase("conformance", runConformancePhase);
   const backend = await runPhase("backend", runBackendPhase);
@@ -581,6 +635,11 @@ async function main() {
   // an em dash in the next, which is invalid UTF-8 and killed the cell (run
   // 1790355908, attempt 2).
   process.stderr.write(`[report] out=${OUT_FILE}\n`);
+
+  // The report is on disk and the verdict is decided; the capture below is a
+  // side effect that can neither change them nor throw (see captureBoard).
+  await captureBoard();
+
   process.exit(verdict === "PASS" ? 0 : 1);
 }
 
