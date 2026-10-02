@@ -182,6 +182,12 @@ _FRONTEND = tuple(
         }
     )
 )
+_STATIC_TESTIDS = (
+    "scoreWhite", "scoreBlack", "difficulty", "newGameBtn", "board", "playfield",
+    "checkerLayer", "pointHints", "turnIndicator", "pipWhite", "pipBlack", "cube",
+    "cubeVal", "cubeOwner", "dice", "rollBtn", "doubleBtn", "undoBtn", "endTurnBtn",
+    "message", "modalOverlay", "modalTitle", "modalBody", "modalBtns",
+)
 _HELPER_MARKERS = {
     ("frontend/core.spec.ts", "[aspect: format]"): ("F06",),  # readInt
     ("frontend/core.spec.ts", "[needs: F69]"): ("F06",),  # readInt
@@ -213,6 +219,9 @@ _HELPER_MARKERS = {
         "roll", "double", "undo", "endturn", "newgame", "difficulty",
         "cube", "pipwhite", "pipblack", "turn", "message",
     )},
+    # pregate.ts flags a duplicated data-testid with an [aspect: dup] marker on
+    # the same REQ-TESTID/testid.<tag> id; each tag owns the dup line.
+    ("conformance/pregate.ts", "[aspect: dup]"): tuple(f"REQ-TESTID/testid.{t}" for t in _STATIC_TESTIDS),
 }
 
 

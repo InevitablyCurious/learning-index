@@ -432,6 +432,8 @@ export async function runPreGate(): Promise<PreGateResult> {
           .count();
         if (count < 1) {
           add(`REQ-TESTID/testid.${testId} — page exposes data-testid "${testId}"`, "present", "missing");
+        } else if (count > 1) {
+          add(`REQ-TESTID/testid.${testId} — page exposes data-testid "${testId}"`, "exactly one", `duplicate (${count}) [aspect: dup]`);
         }
       }
 

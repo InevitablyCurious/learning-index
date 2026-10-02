@@ -459,6 +459,102 @@
       "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it can't find one tagged \"modalBtns\" — the overlay's buttons.",
       "repeat": "They looked again after your fix and still can't find an element tagged \"modalBtns\" — the overlay's buttons."
     },
+    "REQ-TESTID/testid.scoreWhite.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"scoreWhite\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"scoreWhite\"."
+    },
+    "REQ-TESTID/testid.scoreBlack.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"scoreBlack\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"scoreBlack\"."
+    },
+    "REQ-TESTID/testid.difficulty.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"difficulty\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"difficulty\"."
+    },
+    "REQ-TESTID/testid.newGameBtn.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"newGameBtn\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"newGameBtn\"."
+    },
+    "REQ-TESTID/testid.board.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"board\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"board\"."
+    },
+    "REQ-TESTID/testid.playfield.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"playfield\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"playfield\"."
+    },
+    "REQ-TESTID/testid.checkerLayer.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"checkerLayer\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"checkerLayer\"."
+    },
+    "REQ-TESTID/testid.pointHints.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"pointHints\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"pointHints\"."
+    },
+    "REQ-TESTID/testid.turnIndicator.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"turnIndicator\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"turnIndicator\"."
+    },
+    "REQ-TESTID/testid.pipWhite.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"pipWhite\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"pipWhite\"."
+    },
+    "REQ-TESTID/testid.pipBlack.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"pipBlack\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"pipBlack\"."
+    },
+    "REQ-TESTID/testid.cube.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"cube\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"cube\"."
+    },
+    "REQ-TESTID/testid.cubeVal.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"cubeVal\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"cubeVal\"."
+    },
+    "REQ-TESTID/testid.cubeOwner.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"cubeOwner\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"cubeOwner\"."
+    },
+    "REQ-TESTID/testid.dice.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"dice\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"dice\"."
+    },
+    "REQ-TESTID/testid.rollBtn.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"rollBtn\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"rollBtn\"."
+    },
+    "REQ-TESTID/testid.doubleBtn.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"doubleBtn\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"doubleBtn\"."
+    },
+    "REQ-TESTID/testid.undoBtn.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"undoBtn\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"undoBtn\"."
+    },
+    "REQ-TESTID/testid.endTurnBtn.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"endTurnBtn\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"endTurnBtn\"."
+    },
+    "REQ-TESTID/testid.message.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"message\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"message\"."
+    },
+    "REQ-TESTID/testid.modalOverlay.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"modalOverlay\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"modalOverlay\"."
+    },
+    "REQ-TESTID/testid.modalTitle.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"modalTitle\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"modalTitle\"."
+    },
+    "REQ-TESTID/testid.modalBody.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"modalBody\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"modalBody\"."
+    },
+    "REQ-TESTID/testid.modalBtns.dup": {
+      "first": "Their automation drives your app by looking for elements tagged with a set of exact names, and it finds more than one tagged \"modalBtns\".",
+      "repeat": "They looked again after your fix and still find more than one element tagged \"modalBtns\"."
+    },
     "REQ-TESTID/id.scoreWhite": {
       "first": "They also look up your page's elements by id, and nothing on it has the id \"scoreWhite\" — the human player's score.",
       "repeat": "They looked again after your fix and still find nothing with the id \"scoreWhite\" — the human player's score."

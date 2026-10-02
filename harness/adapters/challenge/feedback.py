@@ -494,7 +494,7 @@ class FeedbackMixin:
         # never looked at the black layout, the only thing wrong (run
         # 1790196821). Absent the marker, the gate's own line.
         aspect = m.group(1) if (m := _ASPECT_RE.search(str(observed or ""))) else None
-        aspect_key = f"{token_key}.{aspect}" if token_key and aspect else None
+        aspect_key = f"{token_key or conf_key}.{aspect}" if (token_key or conf_key) and aspect else None
         for key in (aspect_key, raw, token_key, conf_key, "CONF"):
             if key and key in overrides:
                 # "CONF" must only resolve conformance checks, never a stray use
