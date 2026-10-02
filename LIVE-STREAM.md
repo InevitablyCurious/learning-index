@@ -61,10 +61,10 @@ a breaking change; readers must tolerate both.
 | `kind` | Emitted when | Carries |
 |---|---|---|
 | `run.start` | campaign opens | `task`, `roster` |
-| `cell.start` | before any work in a cell | `session_id`, `arm`, `model` |
+| `cell.start` | before any work in a cell | `cell_seq`, `session_id`, `arm`, `model`, `serve_host_port`, `serve_url` |
 | `phase.start` | a build chunk or feedback round opens | `phase` |
 | `gate.result` | **one gate produces a verdict, at the moment it does** | `id`, `status`, `attempt`, `duration_ms` |
-| `attempt.end` | a feedback round closes | `attempt`, `verdict`, `conformed`, `failed` |
+| `attempt.end` | a feedback round closes | `attempt`, `verdict`, `conformed`, `failed`, `told`, `withheld`, `unevaluated`, `stage`, `stage_name` |
 | `cell.end` | cell reaches a terminal state | `verdict`, `terminal_reason` |
 | `backend` | a backend announces itself | `ns`, `name`, `version` |
 | `heartbeat` | **every 15s while a cell is live** | `phase`, `attempt`, `since_ms` |
@@ -72,6 +72,14 @@ a breaking change; readers must tolerate both.
 `gate.result` is per gate, per attempt, **as it happens** — that is what lets a
 gate wall fill in during a run rather than snapping to a finished state at cell
 end.
+
+> **`serve_url`/`serve_host_port` is the agent attach, not the built app.** On
+> `cell.start` those fields name the cell's opencode AGENT live-view (the
+> `opencode attach` endpoint) — not the graded backgammon app. The built app's
+> live address is persisted only in the play registry (`runs/servers/<pid>.json`
+> → `GET /api/play`) after an operator clicks Play. Do not wire "view the built
+> app" to `cell.serve_url`. (And `attempt.end`'s `told`/`withheld`/`unevaluated`
+> are the three repair counts; the board surfaces only `withheld`.)
 
 ## Liveness comes from `heartbeat`, and from nothing else
 

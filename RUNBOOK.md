@@ -1376,11 +1376,13 @@ from snapshot `1790178944418-0c648b67a802`; report
   one. Name the actual defect's facet first, or report a single accurately-located symptom. (G02's
   "moves are left" — `feedback.json:75` — mislabels the pip count and sent the model hunting a
   nonexistent counter; a second wording hazard.)
-- **`live.jsonl` `attempt.end` carries NO `told` field** — `failed` is the total failing-check count,
-  not the told count (`harness/adapters/challenge/runner.py:1584-1595` emits `failed`, `withheld`,
-  `unevaluated`, `stage`, `stage_name` only). Derive `told = failed − withheld` (=
-  `n_problems − withheld − unevaluated`); in this cell `failed`=28/35 while `told`=3. (Code-owner: an
-  `attempt.end` `told` field would remove the derivation — flagged, not edited.)
+- **`live.jsonl` `attempt.end` carries `told`/`withheld`/`unevaluated` directly** — `failed` is the total
+  failing-check count and `told` is the count of checks actually shown to the model, emitted side-by-side
+  since `aab637a` (2026-09-23); `harness/adapters/challenge/runner.py:1647-1664` emits `verdict`, `conformed`,
+  `failed`, `stage`, `stage_name`, `told`, `withheld`, `unevaluated`, `context_peak`, `context_window`. Do
+  NOT derive `told = failed − withheld` — that is wrong for current code. The BOARD's live-stream source
+  (`control/board/sources/live-stream.mjs:141-155`) maps only `verdict`/`failed`/`stage`/`stage_name`/`withheld`;
+  `told`/`unevaluated` exist only in raw `live.jsonl` / `manifest.status.jsonl`.
 
 ---
 
@@ -1638,6 +1640,14 @@ without understanding why it was slow.
 
 **The gates oracle is not pytest.** It is a separate JS suite run through its own runner. The test
 target does not exercise it.
+
+**CI runs pytest only.** `.github/workflows/ci.yml` runs `ruff format --check` + `python -m pytest`;
+the dashboard (`cd dashboard && node --test`) and control-plane (`cd control && node --test`) suites
+are manual-only — a green CI does NOT cover `board.js`/`server.mjs`/panel changes. Run them yourself.
+
+**`grader/gate-results.mjs` has an embedded NUL byte** — `file` reports `data`, `rg` skips it as binary,
+and the Read tool refuses it. Read/search it with `rg -a` or `tr -d '\000'` (the gate-verdict vocabulary
+`GATE_STATUSES` is at `gate-results.mjs:28`).
 
 **Gates must resolve the entrypoint from the artifact**, never assume a fixed server filename — the
 build pipeline may change it. A hardcoded filename here is what produced a whole dead campaign cell.

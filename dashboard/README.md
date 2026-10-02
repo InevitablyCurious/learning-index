@@ -26,6 +26,10 @@ The tests run on the stdlib runner for the same reason:
 cd dashboard && node --test
 ```
 
+Note: CI (`.github/workflows/ci.yml`) runs pytest only — the dashboard and
+control-plane `node --test` suites are manual-only, so a green CI does NOT cover
+`board.js`/`server.mjs`/panel changes. Run the node suite yourself.
+
 **Panel tests import modules bare under Node.** `board.js` boots
 (`bindInteraction(); render(); connect();`) only when BOTH `document` AND
 `EventSource` are defined (`board.js:712`), so a panel test that imports
@@ -157,12 +161,23 @@ server.mjs            peer check → static files → relay /api/* → 404
 lib/
   net-policy.mjs      peer classifier + same-origin check
   control-relay.mjs   relay to the control plane (same-origin POSTs, 64KB
-                      body cap, pipes the live stream, never logs bodies)
+                      body cap, pipes the live stream, never logs bodies;
+                      binary passthrough for /api/screenshot)
 check/board-check.mjs uses the real board in a browser (run by redeploy.sh)
 index.html + board.js + panels/   the board
 Dockerfile            single stage — there is nothing to build
 docker-compose.yml    loopback publish; docker-compose.lan.yml adds the LAN
 ```
+
+The top of the board is the **reconciliation view**: TRANSFER CURVE (left) and a
+**LIVE BUILD** panel (`panels/build.js`, right) in `.axes-row` (`1fr 1.25fr`),
+with the GATE WALL moved to a full-width block below. LIVE BUILD frames the
+played game in a `data-preserve` sandboxed iframe (`POST /api/play/start`,
+lazy-boot on an explicit click) beside the numbered "user prose"
+(`GET /api/feedback`) and attempt-snapshot tabs `1..max_attempts` + `live`
+(`GET /api/screenshot`, relayed byte-exact by the control-relay binary branch).
+Each `board.runs` card now carries `benchmark_id` + `cell` so the panel can
+`POST /api/play/start` from the selected card for live AND archived runs.
 
 ### Configuration
 
@@ -210,9 +225,10 @@ the board renders without it.
 ### Preserved subtrees — who owns each panel
 
 Some panels own their subtree and the DOM-morpher must not touch it. The
-`#sc-events` and `#sc-backend` feed boxes (and the xterm TUI terminal) carry a
-`data-preserve` attribute; `dom.js::patchElement` (`dom.js:160-169`) syncs the
-container's own attributes, then returns at `dom.js:165` **before** recursing
+`#sc-events` and `#sc-backend` feed boxes, the xterm TUI terminal, and the LIVE
+BUILD iframe host all carry a `data-preserve` attribute;
+`dom.js::patchElement` (`dom.js:112`) syncs the
+container's own attributes, then returns at `dom.js:116` **before** recursing
 into the children of a preserved node.
 
 Consequence for anyone adding an expand/collapse inside the feed: the app's
@@ -260,8 +276,11 @@ but anyone who can reach that address is trusted, and in a container the
 source the board sees is Docker's own gateway, so the publish address is the
 real boundary. Writes must also be same-origin (no cross-site posts).
 
-A **play preview** runs the built game on a separate port bound to every
-interface with no checks, for as long as it runs.
+A **play preview** runs the built game on a separate port; since 2026-10-02
+(`91ceeb1`) the play server is forced to bind loopback via
+`control/lib/loopback-shim.mjs` (it previously bound every interface). It runs
+for as long as it is left running — there is no reaper — so the LIVE BUILD panel
+stops it (`POST /api/play/stop`) on teardown.
 
 ---
 

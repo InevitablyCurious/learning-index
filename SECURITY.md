@@ -54,4 +54,7 @@ Out of scope:
 - Findings that depend on the documented development defaults (the local
   `docker compose` stack ships deliberately weak credentials and is bound to
   loopback by default; LAN exposure is opt-in, per the dashboard README's
-  "Remote viewing" section)
+  "Remote viewing" section). The dashboard's play preview — which boots an
+  untrusted model build — is likewise loopback-bound by default since 2026-10-02
+  (`control/lib/loopback-shim.mjs` patches the app's host-less `listen` to
+  `127.0.0.1`).

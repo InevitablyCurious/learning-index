@@ -24,8 +24,8 @@ system.
 | Harness | `harness/` | The Python measuring instrument: campaign sequencer + manifest, task adapters, scoring/scorecard, cell isolation, egress, image identity, blinding. |
 | Task | `task/backgammon/` | The instrument's task: `scaffold/` (stubs the model builds from), `golden/` (reference solution, never shown), `prompts/` (chunked build prompts). |
 | Grader | `grader/` | `report.mjs` + the gate suite (conformance / backend / frontend, plus `meta/` and `quarantine/`). The only component that sees the golden. |
-| Control plane | `control/` | Node stdlib-only `server.mjs`, loopback :8718 — the only process that reads run files (`control/board/sources/`) or changes anything; assembles and pushes the board, spawns the harness, N concurrent cells at a time, each tracked in a durable launch record (`cell-registry.mjs`, §9). |
-| Dashboard | `dashboard/` | Container at :8717: serves the board page and relays `/api/*` to the control plane (`lib/control-relay.mjs`); holds no run data. Optional LAN publish (`docker-compose.lan.yml`) with a peer check (`lib/net-policy.mjs`). |
+| Control plane | `control/` | Node stdlib-only `server.mjs`, loopback :8718 — the only process that reads run files (`control/board/sources/`) or changes anything; assembles and pushes the board, spawns the harness, N concurrent cells at a time, each tracked in a durable launch record (`cell-registry.mjs`, §9). Plays a selected cell's game (loopback-bound, §10) and serves per-attempt screenshots (`routes/screenshot.mjs`, §10). |
+| Dashboard | `dashboard/` | Container at :8717: serves the board page and relays `/api/*` to the control plane (`lib/control-relay.mjs`, incl. a binary passthrough for `/api/screenshot`); holds no run data. Renders the LIVE BUILD reconciliation panel (`panels/build.js`, §10). Optional LAN publish (`docker-compose.lan.yml`) with a peer check (`lib/net-policy.mjs`). |
 | Images | `images/` | `worker/Dockerfile`, `grader/Dockerfile`, `sidecar/` (egress + loop-kill scanner + supervised shell). |
 | Scripts | `scripts/` | Entrypoints: `run_cumulative.py` (canonical), `rebuild_worker_image.py`, `rebuild_grader_image.py`, `bench_preflight.py`. |
 | Config | `config/` | `bench.env`; the bench-owned env surface is documented in `ENV-VARS.md`. |
@@ -318,3 +318,72 @@ containers/volumes) with both recorded ended-not-dropped.
   `log_path`; NOT inside `run_dir`.
 - **Module rename** — the design report cited `control/launches.mjs`; the committed module
   is `control/cell-registry.mjs` (same module, renamed).
+
+## 10. Dashboard reconciliation view + play/screenshot serving (2026-10-02)
+
+Landed as three commits (`91ceeb1`/`7304e7a`/`7d765fe`, pushed to `origin/main`).
+
+**Reconciliation view.** The dashboard top is now TRANSFER CURVE (left) + LIVE
+BUILD panel (right) in `.axes-row` (`minmax(0,1fr) minmax(0,1.25fr)`), with the
+GATE WALL moved to a full-width block below them. LIVE BUILD
+(`dashboard/panels/build.js`) shows a `data-preserve` sandboxed iframe of the
+played game (lazy-boot via `POST /api/play/start`) plus the numbered "user prose"
+feedback (`GET /api/feedback?run_dir=<arm-level>`), with attempt-snapshot tabs
+`1..max_attempts` + `live` that swap the viewport to `GET /api/screenshot`.
+
+**Play-able pair.** Every `board.runs` card now carries `benchmark_id` + `cell`
+(cell-level path) alongside `run_dir`/`sequence_index` (15 keys), so the
+dashboard can `POST /api/play/start {run, cell}` straight from a card. Archived
+rows carry `benchmark_id:"backups"` (a literal — never the inner `tree_id`).
+
+**Play-server hardening.** The untrusted app hardcodes `server.listen(PORT)` (no
+host, reads only `PORT`), so there is no env/arg lever; the control plane
+preloads `control/lib/loopback-shim.mjs` via `node --import`, which patches
+`net.Server.prototype.listen` to splice `"127.0.0.1"` into host-less
+`listen(port[, cb])` calls. The play server is now loopback-bound — supersedes
+the prior "binds all interfaces" posture (see SECURITY.md).
+
+**Per-attempt screenshots.** The grader captures a non-gating viewport PNG once
+per graded attempt (`attempt-<N>-board.png`, 1280×800, best-effort — absent is
+normal) into the cell dir. New `GET
+/api/screenshot?run_dir=&sequence_index=&attempt=<N>` streams it as `image/png`
+(`no-store`), 404 JSON on absence (no fallback), attempt bound 1..10.
+`board.max_attempts` is exposed as a top-level constant (5).
+
+**Three "serve/view" things — do not conflate.** `serve_url`/`serve_host_port` =
+the cell's opencode AGENT attach endpoint (`opencode attach`); `POST
+/api/play/start`'s `url` = the built backgammon app on a fresh free OS port;
+`GET /api/run-view` = the per-cell DATA view (JSON, not an app). Only the play
+registry (`runs/servers/<pid>.json` → `GET /api/play`) holds a real app URL.
+None is an iframe embed; the LIVE BUILD panel's iframe is the one embed, and it
+points at the play `url`.
+
+### Hard-won (charted from the reconciliation workstream)
+
+- **Live data is per-cell only.** `board.by_cell["<run_dir>::<seq>"].live` is the
+  only populated live source; top-level `board.live` (`contract.mjs`) is an
+  always-empty default no board-wide source populates. Panels must read
+  `view.live` (client overlay) or `board.by_cell[key].live` — never `board.live`.
+- **`attempt.end` carries `told`/`withheld`/`unevaluated`** (plus `failed`,
+  `stage`, `stage_name`, `verdict`, `conformed`, `context_peak`,
+  `context_window`; `runner.py:1647-1664`) but the board's live-stream source
+  maps only `verdict`/`failed`/`stage`/`stage_name`/`withheld`
+  (`live-stream.mjs:141-155`) — `told` and `unevaluated` exist only in raw
+  `live.jsonl` / `manifest.status.jsonl`. (`told` is emitted directly, NOT
+  derived: `failed` counts failing checks, `told` counts checks shown to the
+  model.)
+- **`max_attempts` is not persisted per-run.** Env-only (`BENCH_MAX_ATTEMPTS`,
+  default 5, hard ceiling 10, `harness/config.py:213` / `constants.py:311`); no
+  writer puts `RunConfig.to_dict()` in the run tree, so the board exposes a
+  constant 5. A per-run value needs a harness write.
+- **`cellDirForRun` does no containment** (`runstate.mjs:285` joins `runsRoot` +
+  `runDir` directly). Pair it with `resolveRunDir` (`wall.mjs:41-56`) first —
+  never call `cellDirForRun` on raw wire input (path-traversal).
+- **Two parallel control planes.** Learning-Index `:8718` (live) vs the stale
+  `bench/` fork on `:7718` (dashboard `:7717`). Resolve endpoints by port;
+  `bench/` is not the live line.
+- **`GET /api/wall` / `GET /api/feedback` with no `?run_dir=`** fall back to
+  `DEFAULT_RUN_DIR="cumulative"` (`wall.mjs:34`) when no cell is live — a dir
+  that does not exist — so they report the enumerated suite with zero outcomes /
+  `unwired:["user-events"]`. Always pass the arm-level `run_dir` +
+  `sequence_index`.
