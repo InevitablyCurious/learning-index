@@ -52,6 +52,12 @@ test("state-empty and no-positions carry their own plain labels", () => {
   );
 });
 
+test("geometry-not-drawn carries its own plain label", () => {
+  assert.ok(
+    renderBuild(blocked("geometry-not-drawn")).includes("render blocked — the board geometry didn't draw"),
+  );
+});
+
 test("a healthy attempt paints no flag", () => {
   const html = renderBuild({ live: { attempts: [{ attempt: 1 }] }, max_attempts: 5 });
   assert.ok(!html.includes("render blocked"));

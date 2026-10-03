@@ -209,11 +209,12 @@ attachListeners();
 // state — a pure read of board, no fetch, and independent of activeTab: it
 // always speaks for the LATEST attempt, whichever tab the viewport shows.
 
-/** The three render_blocked reasons the grader emits, in operator-facing words. */
+/** The four render_blocked reasons the grader emits, in operator-facing words. */
 const RENDER_BLOCKED_LABEL = {
   "server-not-answering": "the game isn't answering",
   "state-empty": "the game starts but returns empty",
   "no-positions": "pieces show but none sits on a numbered space",
+  "geometry-not-drawn": "the board geometry didn't draw",
 };
 
 /** Flag text for the latest attempt's render_blocked fact; "" when healthy.
