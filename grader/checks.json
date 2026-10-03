@@ -805,6 +805,7 @@
         "REQ-RENDER/off-tray",
         "REQ-RENDER/blank-board",
         "REQ-RENDER/no-positions",
+        "REQ-RENDER/geometry-not-drawn",
         "REQ-RESPONSIVE/startup",
         "F54",
         "F68",

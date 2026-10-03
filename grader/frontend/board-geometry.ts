@@ -495,162 +495,185 @@ export async function sampleTriangleOrientation(
   page: Page,
   points: PointBox[],
 ): Promise<TriangleSample[]> {
-  await page.addStyleTag({
+  // The hide must not outlive the measurement: an injected style tag left
+  // behind keeps every checker on the page invisible for the rest of the run.
+  // Capture the handle and remove it in a finally — the pattern
+  // readCheckerVisibility uses for its own injected style.
+  const hideStyle = await page.addStyleTag({
     content: '[data-testid="checker"], [data-testid="hint"] { visibility: hidden !important; }',
   });
-  const buf = await page.screenshot({ type: "png" });
-  const dataUrl = "data:image/png;base64," + buf.toString("base64");
+  try {
+    const buf = await page.screenshot({ type: "png" });
+    const dataUrl = "data:image/png;base64," + buf.toString("base64");
 
-  return page.evaluate(
-    async ({ dataUrl, points }) => {
-      const img = new Image();
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
-        img.src = dataUrl;
-      });
+    return await page.evaluate(
+      async ({ dataUrl, points }) => {
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
+          img.src = dataUrl;
+        });
 
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("canvas 2d context unavailable");
-      ctx.drawImage(img, 0, 0);
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas 2d context unavailable");
+        ctx.drawImage(img, 0, 0);
 
-      // Sampled coordinates are CSS/viewport px; the screenshot is device px.
-      const dpr = img.naturalWidth / window.innerWidth;
-      const at = (x: number, y: number): number[] => {
-        const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
-        return [d[0], d[1], d[2]];
-      };
-      const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+        // Sampled coordinates are CSS/viewport px; the screenshot is device px.
+        const dpr = img.naturalWidth / window.innerWidth;
+        const at = (x: number, y: number): number[] => {
+          const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+          return [d[0], d[1], d[2]];
+        };
+        const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
-      // The felt: the commonest colour (in 12-level bins) down the left and right
-      // edges of every point's box, from a fifth to four fifths of the way in.
-      // A triangle narrows away from those edges whichever way it points, so
-      // they show the felt. The line between the rows does not: a board whose
-      // triangles point outward puts their bases there, and the felt learned as
-      // a triangle colour read half of them as blocks (FIX-19, M04b).
-      const midY = points.reduce((sum, p) => sum + p.y + p.height / 2, 0) / points.length;
-      const bin = (c: number[]) => c.map((v) => Math.round(v / 12)).join(",");
-      const seen = new Map<string, { n: number; colour: number[] }>();
-      for (const p of points) {
-        for (const fy of [0.2, 0.35, 0.5, 0.65, 0.8]) {
-          for (const fx of [0.03, 0.97]) {
-            const colour = at(p.x + p.width * fx, p.y + p.height * fy);
-            const entry = seen.get(bin(colour)) ?? { n: 0, colour };
-            entry.n += 1;
-            seen.set(bin(colour), entry);
-          }
-        }
-      }
-      const felt = [...seen.values()].sort((a, b) => b.n - a.n)[0].colour;
-      const painted = (x: number, y: number) => dist(at(x, y), felt) > 45;
-
-      // Share of a horizontal line across the point, `depth` of the way in
-      // from its rim, that is painted.
-      const coverage = (p: (typeof points)[number], top: boolean, depth: number): number => {
-        const y = top ? p.y + p.height * depth : p.y + p.height * (1 - depth);
-        let hit = 0;
-        let all = 0;
-        for (let x = p.x + 1; x < p.x + p.width - 1; x += 1) {
-          all += 1;
-          if (painted(x, y)) hit += 1;
-        }
-        return all ? hit / all : 0;
-      };
-
-      // The whole depth, every 5%: two fixed depths straddled a triangle drawn a
-      // fifth of the way in and pointing outward, and passed it (run
-      // 1790396722). Its shape is read over the stretch that is painted: which
-      // end of it is wider.
-      const depths = Array.from({ length: 19 }, (_, i) => 0.05 * (i + 1));
-      const mean = (xs: number[]) => xs.reduce((sum, x) => sum + x, 0) / xs.length;
-      return points.map((p) => {
-        const top = p.y + p.height / 2 < midY;
-        const profile = depths.map((d) => coverage(p, top, d));
-        const first = profile.findIndex((c) => c > 0.1);
-        const last = profile.length - 1 - [...profile].reverse().findIndex((c) => c > 0.1);
-        let shape: "none" | "block" | "inward" | "outward" = "none";
-        let reach = 0;
-        if (first >= 0) {
-          reach = depths[last];
-          const span = profile.slice(first, last + 1);
-          const third = Math.max(1, Math.round(span.length / 3));
-          const rim = mean(span.slice(0, third));
-          const inner = mean(span.slice(-third));
-          const flat = Math.min(...span) >= 0.35 && Math.max(...span) - Math.min(...span) < 0.3;
-          shape = flat ? "block" : rim > inner + 0.15 ? "inward" : inner > rim + 0.15 ? "outward" : "block";
-        }
-        let colour: number[] | null = null;
-        if (first >= 0) {
-          const widest = profile.indexOf(Math.max(...profile));
-          const y = top ? p.y + p.height * depths[widest] : p.y + p.height * (1 - depths[widest]);
-          colour = at(p.x + p.width / 2, y);
-        }
-        // The TIP: the innermost row along the point's vertical centreline
-        // where triangle paint is still present. A single-pixel walk at the
-        // fixed dist>45 threshold misreads it by up to ~14 px: the apex
-        // converges to a point, so where the sampled pixel crosses any fixed
-        // threshold depends on the apex's sub-pixel position (a pixel that
-        // merely borders the apex catches paint on half its width only) and
-        // on the triangle's contrast against the felt — the golden's dark
-        // left-column triangle, apex on a pixel border, read 14 px short and
-        // inflated F70's gap to 0.31 of a point against the true 0.24. So:
-        // take the max dist over a 3-device-px strip centred on the pixel
-        // CONTAINING the apex (that pixel always carries the strongest
-        // coverage), find the innermost strongly-painted row (> 45, F30's
-        // threshold), then refine inward against a threshold anchored just
-        // above the local felt noise: floor + 18% of (body − floor), both
-        // measured beside the tip. Coverage rises linearly from zero at the
-        // apex, so the 18% crossing lands within ~1–2 px of the true tip for
-        // any colour or alignment. Bounded to the point's own box: paint
-        // crossing the middle is read at the box edge, which makes the
-        // across-the-middle gap come out ≤ 0 — the touching case F70 tells.
-        let tipY: number | null = null;
-        if (first >= 0) {
-          const rowTop = Math.max(0, Math.round(p.y * dpr));
-          const rowBot = Math.min(canvas.height - 1, Math.round((p.y + p.height) * dpr));
-          const stripX = Math.max(0, Math.min(Math.floor((p.x + p.width / 2) * dpr) - 1, canvas.width - 3));
-          if (rowBot > rowTop) {
-            const strip = ctx.getImageData(stripX, rowTop, 3, rowBot - rowTop + 1);
-            const rowDist = (row: number): number => {
-              let best = 0;
-              for (let c = 0; c < 3; c++) {
-                const o = ((row - rowTop) * 3 + c) * 4;
-                const d = dist([strip.data[o], strip.data[o + 1], strip.data[o + 2]], felt);
-                if (d > best) best = d;
-              }
-              return best;
-            };
-            const dir = top ? 1 : -1; // rim → inner edge, in device rows
-            const step = Math.max(1, Math.round(dpr)); // ~1 CSS px per step
-            let strong = -1;
-            for (let row = rowTop; row <= rowBot; row++) {
-              if (rowDist(row) > 45) strong = dir > 0 ? row : strong === -1 ? row : Math.min(strong, row);
-            }
-            if (strong >= 0) {
-              const clamp = (r: number) => Math.max(rowTop, Math.min(rowBot, r));
-              // The felt floor beside the tip (past it, toward the middle) and
-              // the saturated body just inside it (rim side).
-              const win: number[] = [];
-              for (let o = 12 * step; o <= 20 * step; o += step) win.push(rowDist(clamp(strong + dir * o)));
-              const floorD = [...win].sort((a, b) => a - b)[win.length >> 1];
-              let sat = 0;
-              for (let o = 0; o <= 20 * step; o += step) sat = Math.max(sat, rowDist(clamp(strong - dir * o)));
-              const thresh = sat - floorD >= 10 ? floorD + 0.18 * (sat - floorD) : 45;
-              let tipRow = strong;
-              for (let o = -2 * step; o <= 10 * step; o++) {
-                const row = clamp(strong + dir * o);
-                if (rowDist(row) > thresh) tipRow = dir > 0 ? Math.max(tipRow, row) : Math.min(tipRow, row);
-              }
-              tipY = tipRow / dpr;
+        // The felt: the commonest colour (in 12-level bins) down the left and right
+        // edges of every point's box, from a fifth to four fifths of the way in.
+        // A triangle narrows away from those edges whichever way it points, so
+        // they show the felt. The line between the rows does not: a board whose
+        // triangles point outward puts their bases there, and the felt learned as
+        // a triangle colour read half of them as blocks (FIX-19, M04b).
+        const midY = points.reduce((sum, p) => sum + p.y + p.height / 2, 0) / points.length;
+        const bin = (c: number[]) => c.map((v) => Math.round(v / 12)).join(",");
+        const seen = new Map<string, { n: number; colour: number[] }>();
+        for (const p of points) {
+          for (const fy of [0.2, 0.35, 0.5, 0.65, 0.8]) {
+            for (const fx of [0.03, 0.97]) {
+              const colour = at(p.x + p.width * fx, p.y + p.height * fy);
+              const entry = seen.get(bin(colour)) ?? { n: 0, colour };
+              entry.n += 1;
+              seen.set(bin(colour), entry);
             }
           }
         }
-        return { num: p.num, row: top ? ("top" as const) : ("bottom" as const), profile, reach, shape, colour, tipY };
-      });
-    },
-    { dataUrl, points },
-  );
+        const felt = [...seen.values()].sort((a, b) => b.n - a.n)[0].colour;
+        const painted = (x: number, y: number) => dist(at(x, y), felt) > 45;
+
+        // Share of a horizontal line across the point, `depth` of the way in
+        // from its rim, that is painted.
+        const coverage = (p: (typeof points)[number], top: boolean, depth: number): number => {
+          const y = top ? p.y + p.height * depth : p.y + p.height * (1 - depth);
+          let hit = 0;
+          let all = 0;
+          for (let x = p.x + 1; x < p.x + p.width - 1; x += 1) {
+            all += 1;
+            if (painted(x, y)) hit += 1;
+          }
+          return all ? hit / all : 0;
+        };
+
+        // The whole depth, every 5%: two fixed depths straddled a triangle drawn a
+        // fifth of the way in and pointing outward, and passed it (run
+        // 1790396722). Its shape is read over the stretch that is painted: which
+        // end of it is wider.
+        const depths = Array.from({ length: 19 }, (_, i) => 0.05 * (i + 1));
+        const mean = (xs: number[]) => xs.reduce((sum, x) => sum + x, 0) / xs.length;
+        return points.map((p) => {
+          const top = p.y + p.height / 2 < midY;
+          const profile = depths.map((d) => coverage(p, top, d));
+          const first = profile.findIndex((c) => c > 0.1);
+          const last = profile.length - 1 - [...profile].reverse().findIndex((c) => c > 0.1);
+          let shape: "none" | "block" | "inward" | "outward" = "none";
+          let reach = 0;
+          if (first >= 0) {
+            reach = depths[last];
+            const span = profile.slice(first, last + 1);
+            const third = Math.max(1, Math.round(span.length / 3));
+            const rim = mean(span.slice(0, third));
+            const inner = mean(span.slice(-third));
+            const flat = Math.min(...span) >= 0.35 && Math.max(...span) - Math.min(...span) < 0.3;
+            shape = flat ? "block" : rim > inner + 0.15 ? "inward" : inner > rim + 0.15 ? "outward" : "block";
+          }
+          let colour: number[] | null = null;
+          if (first >= 0) {
+            const widest = profile.indexOf(Math.max(...profile));
+            const y = top ? p.y + p.height * depths[widest] : p.y + p.height * (1 - depths[widest]);
+            colour = at(p.x + p.width / 2, y);
+          }
+          // The TIP: the innermost row along the point's vertical centreline
+          // where triangle paint is still present. A single-pixel walk at the
+          // fixed dist>45 threshold misreads it by up to ~14 px: the apex
+          // converges to a point, so where the sampled pixel crosses any fixed
+          // threshold depends on the apex's sub-pixel position (a pixel that
+          // merely borders the apex catches paint on half its width only) and
+          // on the triangle's contrast against the felt — the golden's dark
+          // left-column triangle, apex on a pixel border, read 14 px short and
+          // inflated F70's gap to 0.31 of a point against the true 0.24. So:
+          // take the max dist over a 3-device-px strip centred on the pixel
+          // CONTAINING the apex (that pixel always carries the strongest
+          // coverage), find the innermost strongly-painted row (> 45, F30's
+          // threshold), then refine inward against a threshold anchored just
+          // above the local felt noise: floor + 18% of (body − floor), both
+          // measured beside the tip. Coverage rises linearly from zero at the
+          // apex, so the 18% crossing lands within ~1–2 px of the true tip for
+          // any colour or alignment. Bounded to the point's own box: paint
+          // crossing the middle is read at the box edge, which makes the
+          // across-the-middle gap come out ≤ 0 — the touching case F70 tells.
+          let tipY: number | null = null;
+          if (first >= 0) {
+            const rowTop = Math.max(0, Math.round(p.y * dpr));
+            const rowBot = Math.min(canvas.height - 1, Math.round((p.y + p.height) * dpr));
+            const stripX = Math.max(0, Math.min(Math.floor((p.x + p.width / 2) * dpr) - 1, canvas.width - 3));
+            if (rowBot > rowTop) {
+              const strip = ctx.getImageData(stripX, rowTop, 3, rowBot - rowTop + 1);
+              const rowDist = (row: number): number => {
+                let best = 0;
+                for (let c = 0; c < 3; c++) {
+                  const o = ((row - rowTop) * 3 + c) * 4;
+                  const d = dist([strip.data[o], strip.data[o + 1], strip.data[o + 2]], felt);
+                  if (d > best) best = d;
+                }
+                return best;
+              };
+              const dir = top ? 1 : -1; // rim → inner edge, in device rows
+              const step = Math.max(1, Math.round(dpr)); // ~1 CSS px per step
+              let strong = -1;
+              for (let row = rowTop; row <= rowBot; row++) {
+                if (rowDist(row) > 45) strong = dir > 0 ? row : strong === -1 ? row : Math.min(strong, row);
+              }
+              if (strong >= 0) {
+                const clamp = (r: number) => Math.max(rowTop, Math.min(rowBot, r));
+                // The felt floor beside the tip (past it, toward the middle) and
+                // the saturated body just inside it (rim side).
+                const win: number[] = [];
+                for (let o = 12 * step; o <= 20 * step; o += step) win.push(rowDist(clamp(strong + dir * o)));
+                const floorD = [...win].sort((a, b) => a - b)[win.length >> 1];
+                let sat = 0;
+                for (let o = 0; o <= 20 * step; o += step) sat = Math.max(sat, rowDist(clamp(strong - dir * o)));
+                const thresh = sat - floorD >= 10 ? floorD + 0.18 * (sat - floorD) : 45;
+                let tipRow = strong;
+                for (let o = -2 * step; o <= 10 * step; o++) {
+                  const row = clamp(strong + dir * o);
+                  if (rowDist(row) > thresh) tipRow = dir > 0 ? Math.max(tipRow, row) : Math.min(tipRow, row);
+                }
+                tipY = tipRow / dpr;
+              }
+            }
+          }
+          return { num: p.num, row: top ? ("top" as const) : ("bottom" as const), profile, reach, shape, colour, tipY };
+        });
+      },
+      { dataUrl, points },
+    );
+  } finally {
+    await hideStyle.evaluate((element) => (element as Element).remove());
+  }
+}
+
+/**
+ * Whether the board's GEOMETRY actually drew: at least one point renders a
+ * visible triangle. `waitForBoardSettled` only sees tagged elements holding
+ * still — a board whose checkers place but whose points never paint sails
+ * past it and is judged by every downstream geometry check. This is the
+ * pixel-side precondition: read the point boxes, sample what is drawn inside
+ * them, and require one real shape. No points at all is never "drawn".
+ */
+export async function boardGeometryDrawn(page: Page): Promise<boolean> {
+  const points = await readPointBoxes(page);
+  if (points.length === 0) return false;
+  const samples = await sampleTriangleOrientation(page, points);
+  return samples.some((sample) => sample.shape !== "none");
 }

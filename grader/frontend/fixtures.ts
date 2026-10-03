@@ -37,7 +37,7 @@
 import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
 import { BASE_URL, PORT, SETUP_REFUSED, assertSetupTook, startServer, stopServer, type ServerHandle } from "../lib/harness.ts";
-import { waitForBoardSettled } from "./board-geometry.ts";
+import { boardGeometryDrawn, waitForBoardSettled } from "./board-geometry.ts";
 
 export const test = base.extend<{ gameServer: ServerHandle }>({
   gameServer: [
@@ -97,6 +97,11 @@ async function gameReady(page: Page): Promise<void> {
   } catch (err) {
     throw new Error(
       `[needs: REQ-RENDER/point REQ-RENDER/checker REQ-TESTID/point REQ-TESTID/checker] ${(err as Error).message}`,
+    );
+  }
+  if (!(await boardGeometryDrawn(page))) {
+    throw new Error(
+      `[needs: REQ-RENDER/point REQ-RENDER/checker] board geometry never drew: no point renders a visible triangle within 5000ms`,
     );
   }
 }

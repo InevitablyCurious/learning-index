@@ -755,6 +755,10 @@
       "first": "When I open the game, I can see the pieces, but none of them is sitting on a space — the board never comes together.",
       "repeat": "I opened the game again and I can still see the pieces, but none of them is sitting on a space — the board still never comes together."
     },
+    "REQ-RENDER/geometry-not-drawn": {
+      "first": "When I open the game, I can see the pieces, but the board itself never draws — there are no points or triangles, so there's nothing to play on.",
+      "repeat": "I opened the game again and I can still see the pieces, but the board itself still never draws — there are still no points or triangles, so there's still nothing to play on."
+    },
     "REQ-RENDER/die": {
       "first": "I don't see the dice after I roll.",
       "repeat": "I still can't see the dice after rolling."

@@ -502,18 +502,26 @@ function gradability({ backend, frontend, conformance, folded }) {
  * "numeric data-loc" complaint and the model cannot iterate on it. This
  * collapses the aggregated problems[] into WHICH cause happened, stated as one
  * structured fact (null, or {reason, evidence, gates}) in `render_blocked`.
+ * A fourth cause sits PAST the resolution point: the checkers placed, but no
+ * point ever rendered a visible triangle (geometry-not-drawn).
  *
  * The model-facing line is then spoken in TWO VOICES (see main()):
  *   - TEAM voice (REQ-STATE/*) names the technical CAUSE the integration team
  *     hit — server-not-answering / state-empty.
  *   - PLAYER voice (REQ-RENDER/*) names the visible SYMPTOM the player saw —
- *     blank-board (for either backend cause) / no-positions (the API is fine).
+ *     blank-board (for either backend cause) / no-positions (the API is fine) /
+ *     geometry-not-drawn (the API is fine AND the checkers placed — the board
+ *     geometry itself never drew).
  * Both fire together when the resolution point is not reached; for
- * no-positions the team has nothing to add, so only the player speaks.
+ * no-positions the team has nothing to add, so only the player speaks — and
+ * geometry-not-drawn is player-only for the same reason.
  *
  * PRIORITY IS LOAD-BEARING: the frontend "numeric data-loc" throw fires in ALL
  * render-blocked cases, so it can only be attributed to no-positions once
- * server-not-answering and state-empty are ruled out.
+ * server-not-answering and state-empty are ruled out. geometry-not-drawn
+ * closes the ladder on its own distinct signal — gameReady's "board geometry
+ * never drew" throw — which by definition only fires once a checker DID reach
+ * a numeric data-loc.
  */
 function deriveRenderBlocked(problems) {
   const stateProblems = problems.filter((p) => p.check.includes("REQ-STATE/state."));
@@ -544,6 +552,16 @@ function deriveRenderBlocked(problems) {
       evidence:
         "no checker reached a numeric data-loc — the board never settled past the first placed checker",
       gates: noPositions.map((p) => p.check),
+    };
+  }
+
+  const geometryNotDrawn = problems.filter((p) => p.observed.includes("board geometry never drew"));
+  if (geometryNotDrawn.length > 0) {
+    return {
+      reason: "geometry-not-drawn",
+      evidence:
+        "no point rendered a visible triangle — the checkers placed but the board geometry never drew",
+      gates: geometryNotDrawn.map((p) => p.check),
     };
   }
 
@@ -657,7 +675,8 @@ async function main() {
   if (renderBlocked) {
     const reason = renderBlocked.reason;
     // TEAM voice — the integration cause (only the two backend causes have
-    // one; for no-positions the API is fine and the team has nothing to add).
+    // one; for no-positions and geometry-not-drawn the API is fine and the
+    // team has nothing to add).
     if (reason === "server-not-answering" || reason === "state-empty") {
       problems.push({
         check: `conformance:REQ-STATE/${reason} — the board cannot be rendered`,
@@ -666,8 +685,9 @@ async function main() {
       });
     }
     // PLAYER voice — the visible symptom (blank-board for both backend causes,
-    // no-positions for the API-is-fine cause).
-    const symptom = reason === "no-positions" ? "no-positions" : "blank-board";
+    // no-positions / geometry-not-drawn for the API-is-fine causes).
+    const symptom =
+      reason === "no-positions" || reason === "geometry-not-drawn" ? reason : "blank-board";
     problems.push({
       check: `conformance:REQ-RENDER/${symptom} — the board cannot be rendered`,
       expected: "the board renders a placed checker",
