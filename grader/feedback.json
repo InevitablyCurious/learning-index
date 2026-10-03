@@ -675,6 +675,14 @@
       "first": "They're reading the state your app reports and \"points\" isn't a list of 26 numbers — the board positions they read are missing or not numbers. Without it they can't wire that part of their side up.",
       "repeat": "They read your state again after your fix and \"points\" still isn't a list of 26 numbers."
     },
+    "REQ-STATE/server-not-answering": {
+      "first": "They can't get the board state out of your app — the endpoint never answers, so they get nothing back to draw.",
+      "repeat": "They still can't get the board state out of your app — the endpoint still never answers, so they still get nothing back to draw."
+    },
+    "REQ-STATE/state-empty": {
+      "first": "They reach your app, but it hands back an empty game — no state is set up, so they get nothing to draw.",
+      "repeat": "They still reach your app, but it still hands back an empty game — no state is set up, so they still get nothing back to draw."
+    },
     "REQ-DEBUG/debug.setState": {
       "first": "They need to put your game into a specific position to test their own side against, but the app won't take the position — when they send it, they get an error back.",
       "repeat": "Setting your game to a specific position still comes back with an error."
@@ -738,6 +746,14 @@
     "REQ-RENDER/off-tray": {
       "first": "There's nowhere on the board for pieces I've taken off to go.",
       "repeat": "There's still nowhere for my taken-off pieces to sit."
+    },
+    "REQ-RENDER/blank-board": {
+      "first": "When I open the game, the board comes up blank — there are no pieces or spaces to see.",
+      "repeat": "I opened the game again and the board still comes up blank — there are still no pieces or spaces to see."
+    },
+    "REQ-RENDER/no-positions": {
+      "first": "When I open the game, I can see the pieces, but none of them is sitting on a space — the board never comes together.",
+      "repeat": "I opened the game again and I can still see the pieces, but none of them is sitting on a space — the board still never comes together."
     },
     "REQ-RENDER/die": {
       "first": "I don't see the dice after I roll.",

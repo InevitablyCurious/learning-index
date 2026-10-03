@@ -494,6 +494,62 @@ function gradability({ backend, frontend, conformance, folded }) {
   };
 }
 
+/**
+ * RENDER-BLOCKED: WHY THE BOARD NEVER APPEARED.
+ *
+ * When an attempt dies before the "resolution point" — before any checker
+ * carries a numeric data-loc — every downstream frontend gate throws the same
+ * "numeric data-loc" complaint and the model cannot iterate on it. This
+ * collapses the aggregated problems[] into WHICH cause happened, stated as one
+ * structured fact (null, or {reason, evidence, gates}) in `render_blocked`.
+ *
+ * The model-facing line is then spoken in TWO VOICES (see main()):
+ *   - TEAM voice (REQ-STATE/*) names the technical CAUSE the integration team
+ *     hit — server-not-answering / state-empty.
+ *   - PLAYER voice (REQ-RENDER/*) names the visible SYMPTOM the player saw —
+ *     blank-board (for either backend cause) / no-positions (the API is fine).
+ * Both fire together when the resolution point is not reached; for
+ * no-positions the team has nothing to add, so only the player speaks.
+ *
+ * PRIORITY IS LOAD-BEARING: the frontend "numeric data-loc" throw fires in ALL
+ * render-blocked cases, so it can only be attributed to no-positions once
+ * server-not-answering and state-empty are ruled out.
+ */
+function deriveRenderBlocked(problems) {
+  const stateProblems = problems.filter((p) => p.check.includes("REQ-STATE/state."));
+
+  const emptyState = stateProblems.filter((p) => p.observed === "missing");
+  if (emptyState.length > 0) {
+    return {
+      reason: "state-empty",
+      evidence:
+        "the backend answered /api/state but returned an empty state — required state fields are missing",
+      gates: emptyState.map((p) => p.check),
+    };
+  }
+
+  const neverEvaluated = stateProblems.filter((p) => p.observed.startsWith("never evaluated"));
+  if (neverEvaluated.length > 0) {
+    return {
+      reason: "server-not-answering",
+      evidence: "the backend did not answer /api/state — the state fields were never evaluated",
+      gates: neverEvaluated.map((p) => p.check),
+    };
+  }
+
+  const noPositions = problems.filter((p) => p.observed.includes("numeric data-loc"));
+  if (noPositions.length > 0) {
+    return {
+      reason: "no-positions",
+      evidence:
+        "no checker reached a numeric data-loc — the board never settled past the first placed checker",
+      gates: noPositions.map((p) => p.check),
+    };
+  }
+
+  return null;
+}
+
 // Per-gate live streaming is not wired — the phase runners speak on this
 // stderr only when they complete — so the phase is the smallest honest unit of
 // wall clock: one notice after each phase completes, carrying its duration.
@@ -592,6 +648,33 @@ async function main() {
     ...frontend.failedGates,
   ]);
 
+  // RENDER-BLOCKED: one structured fact for the report, plus synthetic
+  // problems in TWO VOICES so the model hears both what the integration team
+  // hit and what the player actually saw. problems ONLY — failedGates is
+  // deliberately untouched: these rows tell the cause, they are not scored
+  // failures.
+  const renderBlocked = deriveRenderBlocked(problems);
+  if (renderBlocked) {
+    const reason = renderBlocked.reason;
+    // TEAM voice — the integration cause (only the two backend causes have
+    // one; for no-positions the API is fine and the team has nothing to add).
+    if (reason === "server-not-answering" || reason === "state-empty") {
+      problems.push({
+        check: `conformance:REQ-STATE/${reason} — the board cannot be rendered`,
+        expected: "the board renders a placed checker",
+        observed: reason,
+      });
+    }
+    // PLAYER voice — the visible symptom (blank-board for both backend causes,
+    // no-positions for the API-is-fine cause).
+    const symptom = reason === "no-positions" ? "no-positions" : "blank-board";
+    problems.push({
+      check: `conformance:REQ-RENDER/${symptom} — the board cannot be rendered`,
+      expected: "the board renders a placed checker",
+      observed: reason,
+    });
+  }
+
   const verdict = Object.values(results).every(Boolean) ? "PASS" : "FAIL";
 
   // A phase "ran" when its runner produced at least one per-test result. That
@@ -624,6 +707,8 @@ async function main() {
     ...folded,
     // ── IS THIS ATTEMPT A MEASUREMENT AT ALL? ────────────────────────────
     ...gradability({ backend, frontend, conformance, folded }),
+    // AFTER both spreads, deliberately: nothing may shadow this field.
+    render_blocked: renderBlocked,
   };
 
   writeReport(OUT_FILE, report);
@@ -683,6 +768,9 @@ main().catch((error) => {
       observed: [],
       phaseRan: { conformance: false, backend: false, frontend: false },
     }),
+    // The runner threw: nothing was measured, so no render-blocked cause can
+    // be claimed.
+    render_blocked: null,
   };
 
   try {

@@ -803,6 +803,8 @@
         "REQ-RENDER/checker",
         "REQ-RENDER/bar",
         "REQ-RENDER/off-tray",
+        "REQ-RENDER/blank-board",
+        "REQ-RENDER/no-positions",
         "REQ-RESPONSIVE/startup",
         "F54",
         "F68",

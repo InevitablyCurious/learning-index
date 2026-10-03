@@ -1600,6 +1600,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 gate_totals = (
                     gate_totals_raw if isinstance(gate_totals_raw, dict) else None
                 )
+                render_blocked = report.get("render_blocked")
 
                 # ── LIVE: ONE RECORD PER GATE, AS THE VERDICT LANDS ─────────
                 # `attempt_reports` below is written to manifest.status.jsonl
@@ -1659,6 +1660,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         told=len(stage_view.visible),
                         withheld=len(stage_view.withheld),
                         unevaluated=len(stage_view.unevaluated),
+                        render_blocked=render_blocked,
                         context_peak=context_peak,
                         context_window=context_window,
                     )
