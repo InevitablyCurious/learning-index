@@ -223,3 +223,34 @@ test("the cell's phase and chunk are the producer's phase.start, not the log's l
   const bare = await fixture({ stream: [{ v: 1, ts: 1, kind: "cell.start", session_id: "s", cell_seq: 0 }] });
   assert.equal((await liveStream.readCell(bare.ctx)).patch.run, null);
 });
+
+// ── RENDER-BLOCKED REACHES THE FEED ─────────────────────────────────────────
+// The harness emits `render_blocked` on attempt.end when the round could not
+// be rendered (null | {reason, evidence, gates}). The feed's field whitelist
+// used to drop it, so the dashboard never saw why a build was blocked. On the
+// wire the field is absent (healthy) or an object (blocked) — the reader
+// normalizes absence to null.
+
+test("attempt.end carries render_blocked through to the feed; absence reads null", async () => {
+  const blocked = {
+    reason: "server-not-answering",
+    evidence: "the backend did not answer /api/state",
+    gates: ["conformance:REQ-STATE/state.points"],
+  };
+  const { ctx } = await fixture({
+    stream: [
+      { v: 1, ts: 1, kind: "cell.start", session_id: "ses_RB", cell_seq: 0, arm: "off" },
+      { v: 1, ts: 2, kind: "gate.result", session_id: "ses_RB", attempt: 1, id: "CONF", status: "fail", phase: "conformance" },
+      { v: 1, ts: 3, kind: "attempt.end", session_id: "ses_RB", attempt: 1, verdict: "fail", failed: 1, render_blocked: blocked },
+    ],
+  });
+  const res = await liveStream.readCell(ctx);
+  assert.equal(res.ok, true, res.reason);
+  const attempt = res.patch.live.attempts.find((a) => a.attempt === 1);
+  assert.deepEqual(attempt.render_blocked, blocked, "reason, evidence and gates must survive the feed whitelist");
+
+  // The default fixture's attempt.end carries no render_blocked: healthy reads null.
+  const healthy = await fixture();
+  const hattempt = (await liveStream.readCell(healthy.ctx)).patch.live.attempts.find((a) => a.attempt === 1);
+  assert.equal(hattempt.render_blocked, null, "absence on the wire means healthy — normalized to null");
+});

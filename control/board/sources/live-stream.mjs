@@ -150,6 +150,10 @@ export async function readCell(ctx) {
           stage: int(r.stage),
           stage_name: str(r.stage_name),
           withheld: int(r.withheld),
+          told: int(r.told),
+          unevaluated: int(r.unevaluated),
+          // Carried verbatim (null | {reason, evidence, gates}); absence means healthy.
+          render_blocked: r.render_blocked ?? null,
         });
       }
       continue;

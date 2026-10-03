@@ -204,6 +204,29 @@ attachListeners();
 
 // ── the static skeleton ──
 
+// The grader's render_blocked fact (control/board/sources/live-stream.mjs)
+// arrives per attempt on the live overlay. The flag is view-derived skeleton
+// state — a pure read of board, no fetch, and independent of activeTab: it
+// always speaks for the LATEST attempt, whichever tab the viewport shows.
+
+/** The three render_blocked reasons the grader emits, in operator-facing words. */
+const RENDER_BLOCKED_LABEL = {
+  "server-not-answering": "the game isn't answering",
+  "state-empty": "the game starts but returns empty",
+  "no-positions": "pieces show but none sits on a numbered space",
+};
+
+/** Flag text for the latest attempt's render_blocked fact; "" when healthy.
+ *  attempts is sorted ascending, so the last entry is the latest attempt. An
+ *  unknown reason falls back to its raw string — stated, never swallowed. */
+function renderBlockedFlag(board) {
+  const attempts = board?.live?.attempts;
+  if (!Array.isArray(attempts) || attempts.length === 0) return "";
+  const rb = attempts[attempts.length - 1]?.render_blocked;
+  if (!rb || typeof rb !== "object" || !rb.reason) return "";
+  return `render blocked — ${RENDER_BLOCKED_LABEL[rb.reason] ?? rb.reason}`;
+}
+
 export function renderBuild(board) {
   // activeCell guards board?.runs?.list ?? [] itself; one call, never repeated.
   const card = activeCell(board);
@@ -216,6 +239,7 @@ export function renderBuild(board) {
   // double-quoted literals so the style-coverage guard sees them.
   const attempts = board?.live?.attempts ?? [];
   const max = board?.max_attempts ?? 5;
+  const flag = renderBlockedFlag(board);
   let tabs = "";
   for (let n = 1; n <= max; n += 1) {
     const enabled = attempts.some((a) => a?.attempt === n);
@@ -231,6 +255,7 @@ export function renderBuild(board) {
       <div class="phead">
         <span class="ttl">LIVE BUILD</span>
         <span class="build-id">${id}</span>
+        <span class="build-blocked">${flag}</span>
         <span class="build-note" data-preserve="1"></span>
       </div>
       <div class="build-tabs">${tabs}</div>
@@ -457,6 +482,9 @@ function renderWrong() {
 }
 
 async function startGame(card, key, signal) {
+  // The boot/refusal reason from play/start, scoped so the catch can surface
+  // it in the frame fallback instead of a bare "no active build".
+  let bootReason = null;
   try {
     const res = await fetch("/api/play/start", {
       method: "POST",
@@ -466,6 +494,7 @@ async function startGame(card, key, signal) {
     });
     const data = res.ok ? await res.json().catch(() => null) : null;
     if (!res.ok || data?.ok !== true || !data.url) {
+      bootReason = data?.reason ?? `play/start → HTTP ${res.status}`;
       throw new Error(
         `POST /api/play/start → ${res.status}${data?.reason ? ` ${data.reason}` : ""}`,
       );
@@ -480,7 +509,7 @@ async function startGame(card, key, signal) {
     console.error("build panel: game boot failed:", err);
     // loadedKey stays unset; requestLoad re-offers the load affordance so the
     // operator can retry. The board never dies for this panel.
-    paintFrameEmpty();
+    paintFrameEmpty(bootReason);
   }
 }
 
@@ -509,9 +538,15 @@ function paintFrame(url) {
   iframeEl = iframe;
 }
 
-function paintFrameEmpty() {
+// The frame fallback. With a reason (the play/start refusal), it states the
+// refusal — escaped, because the reason embeds model/server output. Without
+// one (the no-card teardown and tab-viewport paths), the plain absence.
+function paintFrameEmpty(reason) {
   frameEl = document.querySelector(".build-frame");
-  if (frameEl) frameEl.innerHTML = `<div class="build-empty">no active build</div>`;
+  if (frameEl)
+    frameEl.innerHTML = reason
+      ? `<div class="build-empty">render blocked — ${esc(reason)}</div>`
+      : `<div class="build-empty">no active build</div>`;
 }
 
 // The load affordance: the game boots ONLY from this button's click. Class
