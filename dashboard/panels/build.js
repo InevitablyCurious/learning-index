@@ -53,12 +53,13 @@
 //
 // renderBuild emits ONLY the static skeleton — no fetch, no iframe, no state.
 // The three data-preserve="1" nodes (.build-note, .build-frame,
-// .build-prose-body) are painter-owned: dom.js patch() syncs their attributes
+// .build-wrong) are painter-owned: dom.js patch() syncs their attributes
 // on every morph but never touches their children, so the iframe survives the
 // 2s refresh and paintBuild owns everything inside them.
 
 import { esc } from "../board.js";
 import { activeCell } from "./cells.js";
+import { paintWrong, promptForTab } from "./build-prose.js";
 
 // ── state ── module-level, persists across ticks. The boot guard is
 // loadedKey: play/start fires once per explicit load click, never per tick.
@@ -98,6 +99,19 @@ let listenersAttached = false;
  *  ("1", "2", …) so it compares cleanly against the data-build-tab attribute;
  *  numeric tabs parse where a number is needed. Reset on every run switch. */
 let activeTab = "live";
+/** The selection's feedback messages (kind:"feedback" only), or null before
+ *  the first fetch lands, or {error} when it failed. Which one is DRAWN depends
+ *  on activeTab (build-prose.promptForTab), so a tab click redraws from this
+ *  with no fetch. */
+let feedbackMsgs = null;
+/** Completed-attempt count when feedbackMsgs was last fetched: a live run
+ *  writes a new message each time an attempt is graded, so a changed count
+ *  re-fetches (a read-only GET, allowed on the tick). */
+let feedbackAtDone = null;
+/** A feedback GET is in flight; the tick never starts a second. */
+let feedbackFetching = false;
+/** The board view paintBuild last saw (attempt count, cap, run state). */
+let lastView = null;
 
 // ── interaction ── ONE delegated listener, never per-tick. Bound under a
 // guard (not at raw import) so Node tests can import this module; paintBuild
@@ -118,7 +132,15 @@ function onBuildClick(e) {
         b.classList.toggle("active", b.getAttribute("data-build-tab") === activeTab);
       }
       paintTabViewport();
+      renderWrong();
     }
+    return;
+  }
+  if (t.closest("[data-build-fullprompt]")) {
+    // Show/hide the untouched message under the split lists.
+    const full = document.querySelector(".bw-full");
+    full?.classList.toggle("open");
+    t.closest("[data-build-fullprompt]").textContent = full?.classList.contains("open") ? "hide full prompt" : "show full prompt";
     return;
   }
   if (t.closest("[data-build-load]")) {
@@ -127,12 +149,47 @@ function onBuildClick(e) {
     return;
   }
   if (t.closest("[data-build-reload]")) {
-    // The classic reload: re-assigning src re-navigates the frame.
-    if (iframeEl) iframeEl.src = iframeEl.src;
+    // Reconcile against the LIVE play registry: startPlay reaps-then-spawns on
+    // a fresh port, so the cached boot-time url can go dead while the card
+    // still shows the build. GET /api/play is read-only; never re-POST play/start.
+    void (async () => {
+      const playing = await fetchPlaying();
+      if (playing?.url) {
+        pid = playing.pid ?? null;
+        port = playing.port ?? null;
+        playUrl = playing.url;
+        paintFrame(playing.url);
+      } else {
+        // Nothing running: drop the stale frame + boot state so "load build"
+        // boots again; re-offer the pre-load affordance.
+        loadedKey = null;
+        bootedAt = null;
+        pid = null;
+        port = null;
+        playUrl = null;
+        paintFrameLoad();
+      }
+    })();
     return;
   }
-  if (t.closest("[data-build-open]") && playUrl) {
-    window.open(playUrl, "_blank", "noopener");
+  if (t.closest("[data-build-open]")) {
+    void (async () => {
+      const playing = await fetchPlaying();
+      if (playing?.url) window.open(playing.url, "_blank", "noopener");
+    })();
+    return;
+  }
+}
+
+/** GET /api/play → the current running play server {pid,port,url,…}, or null.
+ *  Same-origin literal (panel-fetch-wiring); read-only, cache-control no-store. */
+async function fetchPlaying() {
+  try {
+    const res = await fetch("/api/play");
+    const data = res.ok ? await res.json().catch(() => null) : null;
+    return data?.playing ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -180,9 +237,9 @@ export function renderBuild(board) {
       <div class="build-frame" data-preserve="1"></div>
       <div class="phead">
         <span class="ttl">WHAT'S STILL WRONG</span>
-        <span class="build-label">problems found in the previous round</span>
+        <span class="build-label">verbatim · follows the attempt tab above</span>
       </div>
-      <pre class="build-prose-body" data-preserve="1"></pre>
+      <div class="build-wrong" data-preserve="1"></div>
     </section>`;
 }
 
@@ -196,10 +253,11 @@ export function paintBuild(view) {
   const key = card ? `${card.run_dir}::${card.sequence_index}` : null;
   // Before every early return: requestLoad boots the selection paintBuild saw.
   currentCard = card;
+  lastView = view;
 
   frameEl = document.querySelector(".build-frame");
   const noteEl = document.querySelector(".build-note");
-  const proseEl = document.querySelector(".build-prose-body");
+  const proseEl = document.querySelector(".build-wrong");
 
   // Liveness, every tick, textContent only. "booted" is tied to the SELECTED
   // key so a deselected run's game never shows as this card's liveness.
@@ -223,6 +281,8 @@ export function paintBuild(view) {
   if (!card || !card.benchmark_id || !card.cell) {
     activeTab = "live"; // run-switch reset: nothing here has attempts to show
     preparedKey = null; // a returning card must re-prepare
+    feedbackMsgs = null;
+    feedbackAtDone = null;
     paintFrameEmpty();
     if (proseEl) proseEl.textContent = "";
     if (loadedKey !== null) {
@@ -230,6 +290,17 @@ export function paintBuild(view) {
       void teardown().catch(() => {}).finally(() => { busy = false; });
     }
     return;
+  }
+
+  // A live run grades another attempt: re-read the prose (GET only), and
+  // keep the readout in step with the selected tab. Both are read-only.
+  if (key === preparedKey || key === loadedKey) {
+    const done = completedAttempts(view);
+    if (done !== feedbackAtDone && !feedbackFetching) {
+      feedbackAtDone = done;
+      void paintProse(card, abort?.signal);
+    }
+    renderWrong();
   }
 
   // Same selection as the booted run: idempotent. NEVER re-POST play/start
@@ -261,6 +332,9 @@ export function paintBuild(view) {
       else abort?.abort(); // kill the previous selection's in-flight prose fetch
       abort = new AbortController();
       preparedKey = key;
+      feedbackMsgs = null;
+      feedbackAtDone = completedAttempts(view);
+      renderWrong();
       void paintProse(card, abort.signal); // own region, own failures
       paintFrameLoad();
     } catch (err) {
@@ -334,6 +408,7 @@ async function requestLoad() {
 // region and catches its own failures, so one never blocks or fails the other.
 
 async function paintProse(card, signal) {
+  feedbackFetching = true;
   try {
     const res = await fetch(
       `/api/feedback?run_dir=${encodeURIComponent(card.run_dir)}&sequence_index=${card.sequence_index}`,
@@ -342,20 +417,43 @@ async function paintProse(card, signal) {
     const data = res.ok ? await res.json() : null;
     if (!res.ok || !data) throw new Error(`GET /api/feedback → ${res.status}`);
     const messages = Array.isArray(data.messages) ? data.messages : [];
-    // The LAST feedback message is the newest round's prose. kind:"chunk" is
-    // the initial GOAL — skipped; anything else is not "what's still wrong".
-    let last = null;
-    for (const m of messages) if (m?.kind === "feedback") last = m;
-    // textContent, NEVER innerHTML: model-derived prose may contain < and >.
-    // Fresh query: the section may have been swapped while the fetch ran.
-    const el = document.querySelector(".build-prose-body");
-    if (el) el.textContent = last ? String(last.text ?? "") : "no feedback recorded";
+    // kind:"chunk" is the initial GOAL and kind:"pass_verdict" is not a
+    // problem list — only the feedback messages are "what's still wrong".
+    feedbackMsgs = messages.filter((m) => m?.kind === "feedback");
   } catch (err) {
+    if (err?.name === "AbortError") return;
     console.error("build panel: feedback fetch failed:", err);
-    const el = document.querySelector(".build-prose-body");
     // Stated absence, never stale prose from another run.
-    if (el) el.textContent = "feedback unavailable";
+    feedbackMsgs = { error: String(err?.message ?? err) };
+  } finally {
+    feedbackFetching = false;
   }
+  renderWrong();
+}
+
+/** Attempts the board reports as completed; the live tab's "how far along". */
+function completedAttempts(view) {
+  return Array.isArray(view?.live?.attempts) ? view.live.attempts.length : 0;
+}
+
+/**
+ * Draw the selected tab's prompt into the readout. A pure function of
+ * (feedbackMsgs, activeTab, lastView): skipped when nothing it reads changed,
+ * so the 2s tick neither flickers nor collapses an open "full prompt".
+ */
+function renderWrong() {
+  const el = document.querySelector(".build-wrong");
+  if (!el) return;
+  const shown = feedbackMsgs === null ? { empty: "loading the prompt…" } : feedbackMsgs.error
+    ? { empty: `feedback unavailable — ${feedbackMsgs.error}` }
+    : promptForTab(feedbackMsgs, activeTab, {
+        completed: completedAttempts(lastView),
+        max: lastView?.max_attempts ?? 5,
+      });
+  const sig = JSON.stringify([activeTab, shown.empty ?? null, shown.meta ?? null, shown.text ?? null]);
+  if (el.dataset.sig === sig) return;
+  el.dataset.sig = sig;
+  paintWrong(el, shown);
 }
 
 async function startGame(card, key, signal) {

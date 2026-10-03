@@ -597,18 +597,39 @@ a:hover{color:var(--type)}
    box-shadow:none, which read as a wireframe rather than a raised surface. */
 .curve,.wall,.ledger,.live,.hold,.rail,.build{background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);padding:var(--pad);display:flex;flex-direction:column;gap:12px;min-width:0}
 /* ── BUILD PANEL ── the frame is a live viewport: URL-bar chrome around a
-   300px iframe well. .build-frame, .build-note and .build-prose-body carry
+   300px iframe well. .build-frame, .build-note and .build-wrong carry
    data-preserve — the painter owns their contents; CSS owns only geometry. */
 .build-frame{border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
 .build-bar{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font:400 10px var(--font)}
 .build-url{flex:1;min-width:0;font-family:var(--font);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .build-btn{font:inherit;background:none;border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:2px 8px;cursor:pointer}
-.build-view{position:relative;height:300px;background:var(--bg-2)}
+.build-view{position:relative;aspect-ratio:16/10;max-height:560px;min-height:300px;background:var(--bg-2)}
 .build-host{width:100%;height:100%}
 .build-host iframe{width:100%;height:100%;border:0;display:block}
 .build-empty{display:flex;align-items:center;justify-content:center;min-height:120px;padding:var(--pad);color:var(--dim);font:400 11px var(--font)}
 .build-id,.build-note,.build-label{color:var(--dim);font:400 10px var(--font)}
-.build-prose-body{margin:0;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-muted);font:400 11px/1.6 var(--font);white-space:pre-wrap;max-height:180px;overflow:auto}
+.build-wrong{display:flex;flex-direction:column;gap:10px;min-width:0}
+.bw-sums{display:flex;gap:8px;flex-wrap:wrap}
+.bw-sum{border:1px solid var(--border-strong);border-radius:99px;padding:1px 11px;font:400 11px var(--font);letter-spacing:.08em;color:var(--c,var(--dim));border-color:var(--c,var(--border-strong))}
+.bw-sum b{font-size:13px;margin-right:4px}
+.bw-cols{display:flex;flex-direction:column;gap:12px}
+.bw-grp{border:1px solid var(--border);border-top:2px solid var(--c,var(--border-strong));border-radius:var(--radius-md);padding:9px 11px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.bw-grp.fixed,.bw-sum.fixed{--c:var(--pass)}
+.bw-grp.regressed,.bw-sum.regressed,.bw-grp.team-regressed,.bw-sum.team-regressed{--c:var(--amber,#e8b44a)}
+.bw-grp.new,.bw-sum.new{--c:var(--danger)}
+.bw-grp.team,.bw-sum.team{--c:var(--comment)}
+.bw-gh{display:flex;justify-content:space-between;font:700 10.5px var(--font);letter-spacing:.14em;color:var(--c,var(--dim))}
+.bw-gh small{color:var(--dim);font-weight:400;letter-spacing:0}
+.bw-lead{color:var(--dim);font:italic 400 11px/1.5 var(--font)}
+.bw-it{display:grid;grid-template-columns:20px minmax(0,1fr);gap:6px;color:var(--type);font:400 12.5px/1.5 var(--font)}
+.bw-it i{font-style:normal;color:var(--c,var(--dim))}
+.bw-foot{display:flex;gap:10px;align-items:center;color:var(--dim);font:400 11px var(--font)}.bw-sp{flex:1}
+.bw-btn{font:inherit;color:var(--dim);background:none;border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:2px 9px;cursor:pointer}
+.bw-btn:hover{color:var(--type);border-color:var(--fg)}
+.bw-full{display:none;margin:0;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--dim);font:400 11px/1.6 var(--font);white-space:pre-wrap;max-height:260px;overflow:auto}
+.bw-full.open{display:block}
+.bw-empty{color:var(--dim);font:400 12px/1.6 var(--font);padding:14px;border:1px dashed var(--border-strong);border-radius:var(--radius-md)}
+.bw-meta{color:var(--dim);font:400 11px var(--font);letter-spacing:.04em}
 /* Attempt-tab strip over the live viewport. Tabs borrow the .chip.ftab
    underline grammar: an unselected tab is a place you can go, so it stays
    dim with a transparent underline; .active gets full --fg text + --fg
@@ -1816,6 +1837,16 @@ a:hover{color:var(--type)}
    than two starved ones. */
 @media (max-width:640px){
   .wall-run{grid-template-columns:minmax(0,1fr)}
+}
+
+/* FULL-WIDTH GATE WALL. The card spans the board, so one grid of squares would
+   be drawn ~80px a side. Wide: squares + legend left at natural size, the
+   running cell's totals and phase spine right, header across both. */
+@media (min-width:1100px){
+  .wall{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);column-gap:28px;align-items:start;align-content:start}
+  .wall>.phead{grid-column:1/-1}
+  .wall>.gwall,.wall>.wall-legend{grid-column:1}
+  .wall>.wall-run{grid-column:2;grid-row:2 / span 3;margin-top:0;padding-top:0;border-top:0}
 }
 
 /* ── TOKEN BREAKDOWN ──────────────────────────────────────────────────────
