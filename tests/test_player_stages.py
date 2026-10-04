@@ -198,6 +198,7 @@ _HELPER_MARKERS = {
     ("frontend/doubles.spec.ts", "[needs: F61]"): ("F39",),  # rollThroughThePage
     ("frontend/core.spec.ts", "[needs: F61]"): ("F03", "F25", "F04", "F45", "F60", "F63"),  # clickOpeningRoll
     ("frontend/fixtures.ts", "[needs: REQ-RENDER/point REQ-RENDER/checker REQ-TESTID/point REQ-TESTID/checker]"): _FRONTEND,
+    ("frontend/fixtures.ts", "[needs: REQ-RENDER/point REQ-RENDER/checker]"): _FRONTEND,
     ("frontend/layout.spec.ts", "[needs: F01]"): _LAYOUT,
     ("frontend/layout.spec.ts", "[needs: REQ-RENDER/point]"): _LAYOUT,
     # Every spec's shared open-the-page helper waits on the board check: with no
