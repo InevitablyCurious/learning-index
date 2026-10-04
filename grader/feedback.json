@@ -748,8 +748,8 @@
       "repeat": "There's still nowhere for my taken-off pieces to sit."
     },
     "REQ-RENDER/blank-board": {
-      "first": "When I open the game, the board comes up blank — there are no pieces or spaces to see.",
-      "repeat": "I opened the game again and the board still comes up blank — there are still no pieces or spaces to see."
+      "first": "When I open the game, the board comes up blank — the points and triangles don't draw, so there's nothing to play on.",
+      "repeat": "I opened the game again and the board still comes up blank — the points and triangles still don't draw."
     },
     "REQ-RENDER/geometry-not-drawn": {
       "first": "When I open the game, I can see the pieces, but the board itself never draws — there are no points or triangles, so there's nothing to play on.",

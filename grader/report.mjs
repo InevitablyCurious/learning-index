@@ -674,6 +674,19 @@ async function main() {
   const renderBlocked = deriveRenderBlocked(problems);
   if (renderBlocked) {
     const reason = renderBlocked.reason;
+    // SUPPRESS THE REDUNDANT COUNT SYMPTOM. When the board is render-blocked,
+    // REQ-RENDER/checker's "incorrect number of pieces" count is a symptom of
+    // the same collapse (nothing drew, so the observed count is 0), not an
+    // independent signal — telling it misdirects the model at the data instead
+    // of the render. The gate still scores in gate_results and failedGates;
+    // only the TOLD problem set drops it. Runs after deriveRenderBlocked so
+    // the classification is undisturbed. `problems` is const, so splice in
+    // place, descending, to keep the remaining indices valid.
+    for (let i = problems.length - 1; i >= 0; i -= 1) {
+      if (problems[i].check.includes("REQ-RENDER/checker")) {
+        problems.splice(i, 1);
+      }
+    }
     // TEAM voice — the integration cause (only the two backend causes have
     // one; for no-positions and geometry-not-drawn the API answered fine and
     // the team has nothing to add).
