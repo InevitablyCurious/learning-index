@@ -557,7 +557,7 @@
     "F71": {
       "name": "Checkers on a point stack evenly, tighter at six",
       "what": "The checkers on a point stack evenly apart (two to five pieces), and a full stack of six sits a little tighter.",
-      "how": "Reads checker boxes by data-loc, sorts by centre y, and compares consecutive pitch: even within a stack for two to five pieces, and a six-piece stack's pitch at least ~3% tighter than the even pitch."
+      "how": "Reads checker boxes by data-loc, sorts by centre y, and compares consecutive pitch: even within a stack for two to five pieces, and a six-piece stack's pitch at least ~3% tighter than the even pitch. Also measures each stack's extent — the mean pitch against the median checker width — flagging stacks that reach too far (spread) or crowd at the edge (bunched), and requiring a six-stack to compress."
     }
   },
   "setup": [

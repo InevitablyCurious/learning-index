@@ -867,6 +867,10 @@
       "first": "Some of the triangles only stand out from the board in the half nearest the edge — I expect each one to stand out most of the way to the middle of the board.",
       "repeat": "Some of the triangles still only stand out from the board in the half nearest the edge — I expect each one to stand out most of the way to the middle of the board."
     },
+    "F30.float": {
+      "first": "The triangles don't reach the edge of the board — I expect each triangle's wide end to sit right at the edge.",
+      "repeat": "The triangles still don't reach the edge of the board — I expect each triangle's wide end to sit right at the edge."
+    },
     "F31": {
       "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place.",
       "repeat": "Fresh game again, and the checkers still don't sit on their points — still drawn off to the side or floating in the wrong place."
@@ -1538,6 +1542,10 @@
     "F71.six": {
       "first": "A stack of six sits as loose as the shorter stacks — I expect a stack of six to sit a little tighter than the shorter stacks.",
       "repeat": "A stack of six still sits as loose as the shorter stacks — I expect a stack of six to sit a little tighter than the shorter stacks."
+    },
+    "F71.reach": {
+      "first": "The checkers on a point reach the wrong distance up the board — I expect a point's checkers packed together from the edge, each piece right against the last, not spread across the whole point and not crowded at the edge.",
+      "repeat": "The checkers on a point still reach the wrong distance up the board — I expect a point's checkers packed together from the edge, each piece right against the last, not spread across the whole point and not crowded at the edge."
     }
   }
 }

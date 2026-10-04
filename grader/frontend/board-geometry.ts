@@ -453,6 +453,10 @@ export interface TriangleSample {
   // Share of the point's width painted at 5%, 10%, ... 95% of the way in from
   // its rim.
   profile: number[];
+  // Where the triangle's wide (rim-side) end first shows paint, as a fraction
+  // of the point's height measured in from the rim (5%-quantized: 0.05, 0.10,
+  // … 0.95; null when nothing is painted).
+  first: number | null;
   // How far in from the rim the paint reaches (0 when nothing is painted).
   reach: number;
   // What the paint is: nothing; a block or band (about as wide at both ends of
@@ -653,7 +657,16 @@ export async function sampleTriangleOrientation(
               }
             }
           }
-          return { num: p.num, row: top ? ("top" as const) : ("bottom" as const), profile, reach, shape, colour, tipY };
+          return {
+            num: p.num,
+            row: top ? ("top" as const) : ("bottom" as const),
+            profile,
+            first: first >= 0 ? depths[first] : null,
+            reach,
+            shape,
+            colour,
+            tipY,
+          };
         });
       },
       { dataUrl, points },

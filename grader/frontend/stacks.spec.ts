@@ -39,7 +39,7 @@
 
 import { type Page } from "@playwright/test";
 import { expect, playerClickUntilShown, setupState, test } from "./fixtures.ts";
-import { readCheckerBoxes, waitForBoardSettled } from "./board-geometry.ts";
+import { readCheckerBoxes, readCheckerShapes, typicalWidth, waitForBoardSettled } from "./board-geometry.ts";
 
 interface ApiState {
   legalMoves: { from: number; to: number; die: number }[];
@@ -348,6 +348,11 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
 
   // Every stack's centre-Ys, read from the candidate's own drawn pieces.
   const boxes = await readCheckerBoxes(page);
+  // The scale anchor: the median checker width across the board — the
+  // candidate's own drawn piece size, so every reach below is a unit-free
+  // ratio, never a px constant.
+  const shapes = await readCheckerShapes(page);
+  const width = typicalWidth(shapes);
   const centresAt = (loc: number): number[] =>
     boxes
       .filter((b) => b.loc === String(loc))
@@ -385,6 +390,24 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
       unevenness,
       `[aspect: uneven] [needs: F02] point ${loc} holds ${held} checkers, drawn at steps of ${pitches.map((p) => p.toFixed(1)).join(", ")} px — widest against narrowest differs by ${Math.round(unevenness * 100)}% of their ${avg.toFixed(1)} px average, where a player needs one even pitch`,
     ).toBeLessThanOrEqual(0.2);
+    // REACH — evenness is relative; this is the step judged against the
+    // piece itself. Extent 1.0 is one checker wide, each piece right
+    // against the last. The 1.4 top sits far above the reference's ~1.0
+    // (a slightly looser but packed board still passes) and far below a
+    // space-between build stretched across the point; the 0.85 bottom is
+    // a step tighter than a checker — crowded, not collapsed (F43 tells
+    // the collapse itself). A board whose median piece has no width
+    // leaves the ratio unreadable — any step against nothing reads as
+    // spread, no step at all as bunched.
+    const extent = width > 0 ? avg / width : avg > 0 ? Infinity : 0;
+    expect(
+      extent,
+      `[aspect: reach] [needs: F02] point ${loc} holds ${held} checkers, drawn at steps of ${extent.toFixed(2)} checker-widths — crowded at the edge, where a player needs each piece one checker-width against the last`,
+    ).toBeGreaterThan(0.85);
+    expect(
+      extent,
+      `[aspect: reach] [needs: F02] point ${loc} holds ${held} checkers, drawn at steps of ${extent.toFixed(2)} checker-widths — spread across the whole point, where a player needs each piece one checker-width against the last`,
+    ).toBeLessThan(1.4);
     evenPitches.push(avg);
   }
 
@@ -400,6 +423,17 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
   ).toBeGreaterThanOrEqual(2);
   const sixPitches = pitchesOf(sixYs);
   const sixPitch = sixPitches.reduce((sum, p) => sum + p, 0) / sixPitches.length;
+  // REACH AT SIX — judged by pitch alone, and judged before the
+  // compression ratio below: a six-stack drawn at the full step fails
+  // both, but what the player sees is the reach, so the reach tells. No
+  // bunched bound here — six pieces are compressed by design (the
+  // reference reaches ~0.94 checker-widths); 1.10 sits between that and
+  // the ~1.14 a spread six-stack measures.
+  const sixExtent = width > 0 ? sixPitch / width : sixPitch > 0 ? Infinity : 0;
+  expect(
+    sixExtent,
+    `[aspect: reach] [needs: F02] point 13 holds six checkers, drawn at steps of ${sixExtent.toFixed(2)} checker-widths — spread across the whole point, where a player needs six pieces kept tight enough to fit the point`,
+  ).toBeLessThan(1.1);
   const evenPitch = evenPitches.reduce((sum, p) => sum + p, 0) / evenPitches.length;
   const tighter = sixPitch / evenPitch;
   expect(

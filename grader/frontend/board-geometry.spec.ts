@@ -411,6 +411,17 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
     short,
     `${needsRows}${short.length === judged.length ? "[aspect: short]" : "[aspect: someshort]"} triangles standing out less than half way in from the rim on points: ${short.join(", ")}`,
   ).toEqual([]);
+
+  // And its wide (rim-side) end sits at the edge of the board: `first` is
+  // where that end first shows paint, 5%-quantized in from the rim, so a
+  // flush base reads 0.05 and a base floating off the edge reads deeper than
+  // the 10% step. An undrawn point has no paint to place (`first` null) — the
+  // undrawn check tells that.
+  const floating = judged.filter((s) => s.first !== null && s.first > 0.10).map((s) => s.num);
+  expect(
+    floating,
+    `${needsRows}[aspect: float] triangles whose wide end doesn't sit at the edge of the board on points: ${floating.join(", ")}`,
+  ).toEqual([]);
 });
 
 // [F40] REQ-GEOMETRY — the two rows line up, as on every backgammon board: the
