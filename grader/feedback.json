@@ -1532,8 +1532,8 @@
       "repeat": "The checkers on a point still aren't spaced evenly — I expect a point's checkers evenly apart, and a stack of six a little tighter than the rest."
     },
     "F71.uneven": {
-      "first": "The checkers on a point sit unevenly apart — I expect a point's checkers spaced evenly from the board's edge toward the middle.",
-      "repeat": "The checkers on a point still sit unevenly apart — I expect a point's checkers spaced evenly from the board's edge toward the middle."
+      "first": "The checkers on a point don't sit packed the way I expect — I expect a point's checkers to sit packed together, stepping evenly from the board's edge toward the middle, each piece right against the last.",
+      "repeat": "The checkers on a point still don't sit packed the way I expect — I expect a point's checkers to sit packed together, stepping evenly from the board's edge toward the middle, each piece right against the last."
     },
     "F71.six": {
       "first": "A stack of six sits as loose as the shorter stacks — I expect a stack of six to sit a little tighter than the shorter stacks.",
