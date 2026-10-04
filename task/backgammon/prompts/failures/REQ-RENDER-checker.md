@@ -1,1 +1,1 @@
-There aren't fifteen pieces each on the board when I start a game.
+There is an incorrect number of pieces on the board when I start a game.

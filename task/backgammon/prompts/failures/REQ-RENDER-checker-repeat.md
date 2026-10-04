@@ -1,1 +1,1 @@
-I counted the pieces again on a new game and there still aren't fifteen each.
+I counted the pieces again on a new game and there is still an incorrect number of them.

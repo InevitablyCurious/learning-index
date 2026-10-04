@@ -509,9 +509,9 @@ function gradability({ backend, frontend, conformance, folded }) {
  *   - TEAM voice (REQ-STATE/*) names the technical CAUSE the integration team
  *     hit — server-not-answering / state-empty.
  *   - PLAYER voice (REQ-RENDER/*) names the visible SYMPTOM the player saw —
- *     blank-board (for either backend cause) / no-positions (the API is fine) /
- *     geometry-not-drawn (the API is fine AND the checkers placed — the board
- *     geometry itself never drew).
+ *     blank-board (for either backend cause, OR no checker reached a numeric
+ *     data-loc — no pieces to see) / geometry-not-drawn (the checkers placed
+ *     but the board geometry never drew).
  * Both fire together when the resolution point is not reached; for
  * no-positions the team has nothing to add, so only the player speaks — and
  * geometry-not-drawn is player-only for the same reason.
@@ -675,8 +675,8 @@ async function main() {
   if (renderBlocked) {
     const reason = renderBlocked.reason;
     // TEAM voice — the integration cause (only the two backend causes have
-    // one; for no-positions and geometry-not-drawn the API is fine and the
-    // team has nothing to add).
+    // one; for no-positions and geometry-not-drawn the API answered fine and
+    // the team has nothing to add).
     if (reason === "server-not-answering" || reason === "state-empty") {
       problems.push({
         check: `conformance:REQ-STATE/${reason} — the board cannot be rendered`,
@@ -684,10 +684,10 @@ async function main() {
         observed: reason,
       });
     }
-    // PLAYER voice — the visible symptom (blank-board for both backend causes,
-    // no-positions / geometry-not-drawn for the API-is-fine causes).
+    // PLAYER voice — the visible symptom (geometry-not-drawn for the
+    // API-is-fine-and-checkers-placed cause; blank-board for the rest).
     const symptom =
-      reason === "no-positions" || reason === "geometry-not-drawn" ? reason : "blank-board";
+      reason === "geometry-not-drawn" ? reason : "blank-board";
     problems.push({
       check: `conformance:REQ-RENDER/${symptom} — the board cannot be rendered`,
       expected: "the board renders a placed checker",

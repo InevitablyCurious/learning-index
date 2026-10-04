@@ -736,8 +736,8 @@
       "repeat": "I counted the spaces on the board again and it's still not right."
     },
     "REQ-RENDER/checker": {
-      "first": "There aren't fifteen pieces each on the board when I start a game.",
-      "repeat": "I counted the pieces again on a new game and there still aren't fifteen each."
+      "first": "There is an incorrect number of pieces on the board when I start a game.",
+      "repeat": "I counted the pieces again on a new game and there is still an incorrect number of them."
     },
     "REQ-RENDER/bar": {
       "first": "There's no bar down the middle of the board.",
@@ -750,10 +750,6 @@
     "REQ-RENDER/blank-board": {
       "first": "When I open the game, the board comes up blank — there are no pieces or spaces to see.",
       "repeat": "I opened the game again and the board still comes up blank — there are still no pieces or spaces to see."
-    },
-    "REQ-RENDER/no-positions": {
-      "first": "When I open the game, I can see the pieces, but none of them is sitting on a space — the board never comes together.",
-      "repeat": "I opened the game again and I can still see the pieces, but none of them is sitting on a space — the board still never comes together."
     },
     "REQ-RENDER/geometry-not-drawn": {
       "first": "When I open the game, I can see the pieces, but the board itself never draws — there are no points or triangles, so there's nothing to play on.",

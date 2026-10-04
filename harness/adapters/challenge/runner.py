@@ -157,6 +157,19 @@ from .worker_config import bench_session_title
 
 
 
+# ── FIRST TROUBLESHOOTING MESSAGE PREAMBLE ──────────────────────────────────
+#
+# GOAL/PROBLEM/TASK frame for the model's FIRST troubleshooting message only —
+# gated on attempt == 1 at the prepend site in the feedback loop. An inline
+# literal, not a pack text: repair/first-round.md re-fires whenever a new stage
+# unlocks, not only round 1, so the one-shot gate cannot live in the pack.
+_FIRST_MESSAGE_PREAMBLE = """GOAL: We are building a fully functioning backgammon game using Node.js and TypeScript, served and played in the browser — a complete, playable game from the opening position through rolling dice, moving checkers around the board, bearing off, and winning.
+
+PROBLEM: The game is not fully functional yet and requires work.
+
+TASK: Here are the problems that require attention:"""
+
+
 def _code_unchanged_since_last_round(attempt_reports: list[dict[str, Any]]) -> bool:
     """True when the last two graded rounds ran against identical code."""
     if len(attempt_reports) < 2:
@@ -1950,6 +1963,13 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     self._progress(
                         f"PROGRESS run_label={run_label} step=feedback-code-unchanged attempt={attempt}"
                     )
+                # FIRST TROUBLESHOOTING MESSAGE ONLY: orient the model with the
+                # GOAL/PROBLEM/TASK frame. Chunk (build) prompts are a separate
+                # emission path (serve.py, before this loop), so this prepend
+                # touches only the round-1 feedback message — never a build
+                # chunk and never a later round.
+                if attempt == 1:
+                    feedback = f"{_FIRST_MESSAGE_PREAMBLE}\n\n{feedback}"
                 self._progress(
                     f"PROGRESS run_label={run_label} step=feedback-problems-only-built attempt={attempt} "
                     f"checks={len(feedback_checks)} repeats={len(repeat_complaints)}"

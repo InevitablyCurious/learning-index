@@ -19,6 +19,7 @@ from harness.adapters.challenge import (
 )
 from harness.adapters.docker_worker import ImageFingerprint
 from harness.adapters.challenge.constants import _REGRESSION_HEADER
+from harness.adapters.challenge.runner import _FIRST_MESSAGE_PREAMBLE
 
 
 def _told(checks):
@@ -254,7 +255,7 @@ def test_prompts_are_delivered_over_the_serve_session_never_on_argv(
 
     assert result.verdict == "PASS"
     feedback_prompt = runner._build_feedback_prompt(checks=[REAL_CHECK])
-    assert delivered == [task_prompt, feedback_prompt]
+    assert delivered == [task_prompt, f"{_FIRST_MESSAGE_PREAMBLE}\n\n{feedback_prompt}"]
 
 
 def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fidelity(
@@ -378,7 +379,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     assert prompt_texts[0] == "INITIAL PROMPT"
     # Feedback 1 — the player's FIRST report, so the first-pass opener. Nothing
     # newly passed after attempt 1, so no pass verdict rides along.
-    assert prompt_texts[1] == runner._build_feedback_prompt(
+    assert prompt_texts[1] == f"{_FIRST_MESSAGE_PREAMBLE}\n\n" + runner._build_feedback_prompt(
         checks=[REAL_PASS1, REAL_CHECK]
     )
     assert runner._humanize_check(REAL_PASS2) not in prompt_texts[1], (
