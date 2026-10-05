@@ -5,13 +5,13 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 ## Summary
 | Bucket | Count |
 |---|---|
-| read+documented | 36 |
+| read+documented | 40 |
 | read+undocumented | 59 |
 | read by sibling/runtime (reclassified) | 17 |
 | documented+unread (dead) | 0 |
 | dead-and-undocumented | 0 |
-| total read | 93 |
-| total documented | 51 |
+| total read | 97 |
+| total documented | 55 |
 
 ## read+documented
 | Name | Default | Controls | Override |
@@ -25,7 +25,12 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | BENCH_SPEND_DB_DSN | postgresql://spend_proxy:spend_proxy_dev@127.0.0.1:5440/spend_proxy | spend meter DB | env or .env |
 | BENCH_LIVE_STREAM | (none) | live-stream path | env |
 | BENCH_LIVE_STREAM_NS | (none) | stream namespace | env |
-| BENCH_PLUGIN_DIR | (none) | THE one plugin pointer: absolute path to the plugin tree baked into the worker image at /opt/bench-plugin; unset ⇒ vanilla (no-plugin) build — read `harness/worker_image.py:49`, `scripts/rebuild_worker_image.py` | env or --plugin-dir |
+| BENCH_PLUGIN_DIR | (none) | THE one plugin pointer: absolute path to the memory plugin's package (any opencode plugin; its package.json names the entry file) baked into the worker image at /opt/bench-plugin. One image serves both arms: only a memory-ON cell lists the plugin in its opencode config. Unset ⇒ vanilla build, which refuses memory-ON cells — read `harness/worker_image.py`, `scripts/rebuild_worker_image.py` | env or --plugin-dir |
+| BENCH_MEMORY_UPSTREAM | (none) | the memory system's server as the egress sidecar reaches it (`scheme://host:port`, e.g. `http://host.docker.internal:8000`); opens the sidecar's memory route (port 4560) for memory-ON cells only — read `harness/memory_slot.py`, `images/sidecar/egress-sidecar.js` | env |
+| BENCH_MEMORY_ENV | (none) | file of the memory plugin's own settings, one `NAME=value` per line, passed into memory-ON cells by name (values never in argv); `{memory_url}` becomes the cell's address for the server; names that decide what the cell is are refused; a relative path is read from the repo root — read `harness/memory_slot.py` | env |
+| BENCH_MEMORY_READY_CMD | (none) | host command (`sh -c`, from the repo root) polled until it exits 0, before and after each memory-ON cell and outside its wall time, so every cell starts from memory that has finished processing the cells before it — read `harness/memory_hooks.py` | env |
+| BENCH_MEMORY_READY_TIMEOUT_S | 1800 | how long the ready command may keep failing before the next memory-ON cell is refused | env |
+| BENCH_MEMORY_COST_CMD | (none) | host command printing one JSON object of the memory system's running counters; read before and after each memory-ON cell, its growth recorded in the cell's `memory.json` — read `harness/memory_hooks.py` | env |
 | OKP_GUARD_BIN | {root}/okp-guard/target/release/okp-guard | YARA guard binary | env |
 | BENCH_TARGET | task/backgammon/golden | gates target dir | env |
 | DEBUG_API | off | debug endpoints on task servers | env =1 |
@@ -33,7 +38,6 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_DASH_PORT | 8717 | dashboard port | env or --port |
 | OKP_DASH_CONTROL_URL | http://127.0.0.1:8718 | the same-origin relay's upstream control plane (always loopback) | env |
 | OKP_LOG_DIR | ~/.okp/logs | plugin log dir | env |
-| OKP_PLUGIN_PATH | (none) | plugin path baked into worker opencode.json | build-time env |
 | BENCH_SELF_COMPACT | off | benchmark-native worker-side self-fire compaction (`images/worker/self-compact.ts`, baked into every worker image at /opt/bench/self-compact.ts) | env =1, exported by the harness per cell when launched with --compact |
 | BENCH_COMPACT_PHASE_FILE | (none) | path to the A2 phase sentinel the compaction arm reads on every session.idle; only `build` may fire, and unset/unreadable never fires | env, set to /okp-compact/phase by the harness per cell when launched with --compact (read-only bind mount, both arms) |
 | BENCH_DEV_MODE | (none) | dev-mode env pin (truthy = on, falsy = off; pinned ⇒ `settable:false`) — read `control/devmode.mjs:48-95` | env |
@@ -129,5 +133,5 @@ none
 ## Notes
 - `OKP_MCP_SEED` was removed from this register: its old note ("read by okp-meta/scripts/lib.sh") was wrong — that script reads `BENCH_MCP_SEED`, a different, live var. As named, `OKP_MCP_SEED` is a drift-ghost with zero occurrences anywhere and was deleted.
 - `OKP_MCP_URL` was removed: a naming-drift ghost of `OKP_MCP_HTTP_URL` (read at `dev/benchmark/leader-signer/vendor/config.ts:96` — moved from the retired `bench/scaffold/leader-signer/`). The bench-doc prose reference in RUNBOOK.md was renamed to the live name.
-- Backend-env removal (2026-09, memory-backend registry retirement): `OKP_RECALL_MODE`, `OKP_MCP_HTTP_URL`, `OKP_ANSWERER_POLICY`, `OKP_INSESSION_EXTRACTION`, `OKP_STATE_DIR`, `OKP_HUB_URL`, `OKP_SERVED_MEMORIES_PATH`, and `OKP_MANAGED_IDENTITY` were struck from this register — no bench-code reader or setter remains (the harness no longer injects them per cell; the vestigial `DockerCellConfig` field contracts were removed too (LI-17)). They are the PLUGIN's own env surface now, owned and documented where the plugin is built (outside this repo). The bench's only plugin-facing vars are `BENCH_PLUGIN_DIR` (the one pointer), plus the flagged compaction/build set kept above (`BENCH_SELF_COMPACT`, `BENCH_COMPACT_PHASE_FILE`, `OKP_PLUGIN_PATH`, `OKP_LOG_DIR`). `OKP_RECALL_MODE` survives in bench code ONLY as the run-context lever `L4_OKP_RECALL_MODE`, read from the operator-supplied `BENCH_RECALL_MODE` env (default `prod`) — a measurement record, not a config this repo sets.
+- Backend-env removal (2026-09, memory-backend registry retirement): `OKP_RECALL_MODE`, `OKP_MCP_HTTP_URL`, `OKP_ANSWERER_POLICY`, `OKP_INSESSION_EXTRACTION`, `OKP_STATE_DIR`, `OKP_HUB_URL`, `OKP_SERVED_MEMORIES_PATH`, and `OKP_MANAGED_IDENTITY` were struck from this register — no bench-code reader or setter remains (the harness no longer injects them per cell; the vestigial `DockerCellConfig` field contracts were removed too (LI-17)). They are the PLUGIN's own env surface now, owned and documented where the plugin is built (outside this repo). The bench's only plugin-facing vars are `BENCH_PLUGIN_DIR` (the one pointer), the memory set kept above (`BENCH_MEMORY_UPSTREAM`, `BENCH_MEMORY_ENV`, `BENCH_MEMORY_READY_CMD`, `BENCH_MEMORY_READY_TIMEOUT_S`, `BENCH_MEMORY_COST_CMD` — docs/memory-systems.md), plus the flagged compaction set (`BENCH_SELF_COMPACT`, `BENCH_COMPACT_PHASE_FILE`, `OKP_LOG_DIR`). `OKP_PLUGIN_PATH` was struck: the image no longer lists the plugin itself (a memory-ON cell's own config does), so nothing reads it. `OKP_RECALL_MODE` survives in bench code ONLY as the run-context lever `L4_OKP_RECALL_MODE`, read from the operator-supplied `BENCH_RECALL_MODE` env (default `prod`) — a measurement record, not a config this repo sets.
 - `BENCH_SPEND_PROXY_BASE_URL` was removed from the register (2026-09-04): the resolver `resolve_spend_proxy_base_url` was deleted in the OpenRouter-proxy cleanup (WO-CLEAN-08); nothing reads this var. The live worker-side var is `BENCH_WORKER_SPEND_PROXY_BASE_URL` (still listed above). The stale `.env.example` line referencing it was removed too.

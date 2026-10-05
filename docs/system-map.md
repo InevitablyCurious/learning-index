@@ -59,25 +59,32 @@ separate, read-only viewer.
 ## 4. Memory story — OFF vs ON
 
 opencode IS the socket: the benchmark defines NO memory-system interface, NO
-registry, and NO adapter. The only integration surface is ONE "which plugin"
-pointer plus a README.
+registry, and NO adapter. The integration surface is ONE "which plugin" pointer
+plus a few run-time settings a memory system with a server needs
+(docs/memory-systems.md).
 
 - **Schedule** (`harness/cumulative/ordering.py`): a full OFF baseline in roster
   order, then a seeded ON schedule. Every model is its own control.
-- **OFF arm.** No plugin — the worker image is built VANILLA (`BENCH_PLUGIN_DIR`
-  unset), so no memory is captured or written. The per-model floor the ON arm is
-  measured against — and since 2026-09-22 that floor is **not one run**: it is the
-  operator's chosen run out of an N-cell batch, reported as the **median problem
-  count over scored runs** (see §8).
-- **ON arm.** The worker image is built with a plugin tree: `BENCH_PLUGIN_DIR`,
-  an absolute path to a real npm package built outside this repo, baked in at
-  `/opt/bench-plugin` (`images/worker/Dockerfile`). The plugin captures learnings
-  during the build; on a later cell it recalls prior memories over the recall
-  seam (`BENCH_MCP_RECALL_URL`), guards them, and reinjects them into the system
-  prompt. The OFF/ON toggle (`memory_mode` off/on) is the only memory-mode
-  distinction.
+- **One image, both arms.** The memory plugin (`BENCH_PLUGIN_DIR`, any opencode
+  plugin package) is baked into the worker image at `/opt/bench-plugin`
+  (`images/worker/Dockerfile`); both arms run on that same image, and both start
+  from the same worktree.
+- **OFF arm.** The cell's opencode config lists no memory plugin, and the cell
+  gets no memory route and no memory settings, so nothing is captured or
+  recalled. The per-model floor the ON arm is measured against — and since
+  2026-09-22 that floor is **not one run**: it is the operator's chosen run out
+  of an N-cell batch, reported as the **median problem count over scored runs**
+  (see §8).
+- **ON arm.** The cell's opencode config lists the baked plugin; the cell gets a
+  route to the memory system's server through its egress sidecar
+  (`BENCH_MEMORY_UPSTREAM`) and the plugin's own settings (`BENCH_MEMORY_ENV`).
+  Around the cell, outside its wall time, the harness waits for the memory system
+  to finish its background work and reads its running cost
+  (`BENCH_MEMORY_READY_CMD`, `BENCH_MEMORY_COST_CMD`). The OFF/ON toggle
+  (`memory_mode` off/on) is the only memory-mode distinction.
 - **The harness reinjects nothing.** Capture, recall, and reinjection belong to
-  the plugin; the benchmark only schedules the arms and measures the Δ.
+  the plugin; the benchmark only schedules the arms and measures the Δ, from
+  outside the memory system (each cell's `memory.json`).
 
 The plugin and any recall store it talks to live **outside** this repo; the
 benchmark names no backend and is agnostic to which plugin is plugged in.

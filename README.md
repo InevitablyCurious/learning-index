@@ -98,9 +98,10 @@ reached in September 2026.
 
 A memory system plugs into opencode through opencode's own plugin mechanism; the benchmark adds no
 memory interface of its own. Point `BENCH_PLUGIN_DIR` at the plugin package and rebuild the worker
-image, and each cell runs with memory OFF or ON. The first system planned is
-[Honcho](https://github.com/plastic-labs/honcho), which publishes an opencode plugin. A full guide
-is on the way.
+image, and each cell runs with memory OFF or ON. The first system is
+[Honcho](https://github.com/plastic-labs/honcho), which publishes an opencode plugin; its kit is in
+[memory-systems/honcho](memory-systems/honcho/). The guide, with Honcho step by step:
+[docs/memory-systems.md](docs/memory-systems.md).
 
 ## Add a challenge
 
@@ -214,7 +215,9 @@ dashboard/   The read-only board.
 images/      Worker and grader Dockerfiles; the egress and loop-kill sidecar.
 scripts/     Entrypoints: run_cumulative.py, image rebuilds, preflight.
 config/      bench.env and the benchmark's environment settings (see ENV-VARS.md).
-docs/        Methodology, related work, and the system map.
+docs/        Methodology, related work, memory systems, and the system map.
+memory-systems/
+             One kit per memory system: its settings and its ready and cost commands.
 data/        How each arm's memory-extraction state is stored.
 runs/        Run output (not tracked).
 tests/       The harness's own test suite — it tests the instrument, never the candidate.

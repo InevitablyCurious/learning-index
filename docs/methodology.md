@@ -1,8 +1,9 @@
 # Methodology
 
-> **Status: proof of concept.** The no-memory baseline runs today. Memory-on runs, scoring a whole
-> chain, counting a memory system's background cost, and changing the task between runs are
-> designed here but not built yet — see [Not built yet](#not-built-yet).
+> **Status: proof of concept.** The no-memory baseline runs today, and memory-on runs are built,
+> with Honcho as the first memory system ([memory systems](memory-systems.md)). Scoring a whole
+> chain and changing the task between runs are designed here but not built yet — see
+> [Not built yet](#not-built-yet).
 
 ## Why this exists
 
@@ -109,8 +110,8 @@ is part of the core protocol.
 A memory system plugs into opencode through opencode's own plugin mechanism. The benchmark defines
 no memory interface of its own.
 
-[Honcho](https://github.com/plastic-labs/honcho) (Plastic Labs, AGPL-3.0) is the first system
-planned, and it publishes an opencode plugin. It shows the three parts every memory system has:
+[Honcho](https://github.com/plastic-labs/honcho) (Plastic Labs, AGPL-3.0) is the first system,
+and it publishes an opencode plugin. It shows the three parts every memory system has:
 
 - **Store.** The session's messages are stored in Honcho, a server with a Postgres database, run on
   the same machine.
@@ -148,8 +149,11 @@ not helped. A stopped chain is recorded with how far it got, and never counts as
 - Problems after the build (the first grading).
 - Cells and rounds used.
 - Problems fixed, and problems broken that had been working, in each round.
-- ON only: the memory delivered into the agent's context — how many items, how many tokens.
-- ON only: the memory system's background cost — its own model calls' tokens and time.
+- The size of each cell's first model request, in both arms. What an ON cell's carries beyond the
+  OFF range is the memory delivered into the agent's context.
+- ON only: whether the plugin reached its memory server, and how those requests ended.
+- ON only: the memory system's background cost — its own model calls' tokens, and the time it took
+  to finish its background work after each cell.
 
 ## Reading the results
 
@@ -258,7 +262,5 @@ changes.
 
 - Scoring a whole chain. Today each cell is scored on its own, and continued cells are marked as
   not a measurement.
-- Counting the memory system's background cost.
-- Memory-on runs with a third-party memory system.
 - Memory under change: challenge versions, a schedule saying which version each chain runs, and
   old-way checks.
