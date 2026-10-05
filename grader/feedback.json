@@ -1540,8 +1540,8 @@
       "repeat": "The checkers on a point still don't sit packed the way I expect — I expect a point's checkers to sit packed together, stepping evenly from the board's edge toward the middle, each piece right against the last."
     },
     "F71.six": {
-      "first": "A stack of six sits as loose as the shorter stacks — I expect a stack of six to sit a little tighter than the shorter stacks.",
-      "repeat": "A stack of six still sits as loose as the shorter stacks — I expect a stack of six to sit a little tighter than the shorter stacks."
+      "first": "A stack of six sits with the same vertical gap as the shorter stacks — I expect the six pieces' vertical gap to be a little tighter than the shorter stacks'.",
+      "repeat": "A stack of six still sits with the same vertical gap as the shorter stacks — I expect the six pieces' vertical gap to be a little tighter than the shorter stacks'."
     },
     "F71.reach": {
       "first": "The checkers on a point reach the wrong distance up the board — I expect a point's checkers packed together from the edge, each piece right against the last, not spread across the whole point and not crowded at the edge.",
