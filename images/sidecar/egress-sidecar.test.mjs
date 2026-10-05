@@ -31,7 +31,7 @@ const COMPACT_PHASE_FILE = process.env.BENCH_COMPACT_PHASE_FILE;
 
 const { createRequire } = await import("node:module");
 const require = createRequire(import.meta.url);
-const { UPSTREAMS, listen } = require("./egress-sidecar.js");
+const { UPSTREAMS, listen, memoryTraffic, MEMORY_ROUTE_FILE } = require("./egress-sidecar.js");
 
 // A stub upstream that answers every request with a body carrying the
 // loop-kill signature — exactly what opencode's message list replays.
@@ -124,7 +124,7 @@ test("(d) only the model-wire ports carry scan in the shipped UPSTREAMS map", ()
   assert.deepEqual(scanned, [4545, 8443]);
 });
 
-test("(f) the memory route exists only when the run names a memory server", async () => {
+test("(g) the memory route exists only when the run names a memory server", async () => {
   const { execFileSync } = await import("node:child_process");
   const routeWith = (env) =>
     JSON.parse(
@@ -142,7 +142,92 @@ test("(f) the memory route exists only when the run names a memory server", asyn
     proto: "http",
     host: "host.docker.internal",
     port: 8000,
+    count: true,
   });
+});
+
+function post(port, body) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      { host: "127.0.0.1", port, path: "/v3/workspaces/w/sessions", method: "POST" },
+      (res) => {
+        let out = "";
+        res.on("data", (c) => (out += c));
+        res.on("end", () => resolve({ status: res.statusCode, body: out }));
+      },
+    );
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
+function resetMemoryTraffic() {
+  Object.assign(memoryTraffic, {
+    requests: 0,
+    answered: {},
+    unreachable: 0,
+    bytes_sent: 0,
+    bytes_received: 0,
+  });
+  fs.rmSync(path.join(MARKER_DIR, MEMORY_ROUTE_FILE), { force: true });
+}
+
+test("(h) memory-route traffic is counted and written for the harness", async () => {
+  resetMemoryTraffic();
+  const reply = JSON.stringify({ id: "ses_1" });
+  const upstream = await stubUpstream(reply);
+  const proxy = await listen(0, {
+    proto: "http",
+    host: "127.0.0.1",
+    port: upstream.address().port,
+    count: true,
+  });
+  try {
+    const sent = JSON.stringify({ messages: [{ content: "hello" }] });
+    const res = await post(proxy.address().port, sent);
+    assert.equal(res.body, reply, "the pipe must stay byte-transparent");
+    await new Promise((r) => setImmediate(r));
+    const counted = JSON.parse(
+      fs.readFileSync(path.join(MARKER_DIR, MEMORY_ROUTE_FILE), "utf8"),
+    );
+    assert.deepEqual(counted, {
+      requests: 1,
+      answered: { "2xx": 1 },
+      unreachable: 0,
+      bytes_sent: Buffer.byteLength(sent),
+      bytes_received: Buffer.byteLength(reply),
+    });
+  } finally {
+    proxy.close();
+    upstream.close();
+  }
+});
+
+test("(i) a memory server that cannot be reached is counted as unreachable", async () => {
+  resetMemoryTraffic();
+  const closed = await stubUpstream("");
+  const deadPort = closed.address().port;
+  await new Promise((r) => closed.close(r)); // nothing listens there now
+  const proxy = await listen(0, { proto: "http", host: "127.0.0.1", port: deadPort, count: true });
+  try {
+    const res = await post(proxy.address().port, "{}");
+    assert.equal(res.status, 502);
+    const counted = JSON.parse(
+      fs.readFileSync(path.join(MARKER_DIR, MEMORY_ROUTE_FILE), "utf8"),
+    );
+    assert.equal(counted.requests, 1);
+    assert.equal(counted.unreachable, 1);
+    assert.deepEqual(counted.answered, {});
+  } finally {
+    proxy.close();
+  }
+});
+
+test("(j) a port without count writes no traffic file", async () => {
+  resetMemoryTraffic();
+  const markers = await markersAfterRequest({ scan: false, sessionId: null });
+  assert.deepEqual(markers, []);
+  assert.equal(memoryTraffic.requests, 0);
 });
 
 test("(e) the ingress forward is registered without scan", async () => {

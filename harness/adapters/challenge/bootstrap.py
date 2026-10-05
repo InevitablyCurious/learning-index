@@ -219,10 +219,16 @@ class BootstrapMixin:
                 memory_url = upstream
             cell_config.memory_upstream = upstream
             cell_config.memory_env = memory_settings(memory_url)
+            # Recorded with the cell (memory_record.py), secrets masked.
+            self._memory_config = {
+                "upstream": upstream or None,
+                "memory_url": memory_url or None,
+                "settings": redacted(cell_config.memory_env),
+            }
             self._progress(
                 f"PROGRESS step=memory-config upstream={upstream or 'none'} "
                 f"memory_url={memory_url or 'none'} "
-                f"settings={redacted(cell_config.memory_env)}"
+                f"settings={self._memory_config['settings']}"
             )
         return cell_config
 

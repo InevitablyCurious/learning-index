@@ -103,6 +103,7 @@ from .feedback import (
 )
 from .grading import GradingMixin
 from .hold_ui import _hold_for_ui_review
+from .memory_record import MemoryRecordMixin
 from .models import (
     ChallengeCellResult,
     _OpencodeRunStats,
@@ -216,6 +217,7 @@ class ChallengeRunner(
     BootstrapMixin,
     GradingMixin,
     ServeMixin,
+    MemoryRecordMixin,
     AgentRunner,
 ):
     def __init__(
@@ -792,12 +794,17 @@ class ChallengeRunner(
         terminal_reason = None
         terminal_exception = None
         try:
+            # The memory measurements bracket the cell, outside its wall time
+            # (memory_record.py): a memory-ON cell waits for the memory system
+            # to finish its background work, before and after.
+            self._memory_begin(run_label=run_label)
             result = self._run_cell_impl(
                 run_label=run_label,
                 run_dir=run_dir,
                 task_id=task_id,
                 run_identity=run_identity,
             )
+            self._memory_finish(run_label=run_label, run_dir=run_dir)
             verdict = str(getattr(result, "verdict", "") or "") or None
             # THE FIELD IS `termination_reason`. This read `terminal_reason`,
             # which ChallengeCellResult does not have and never had, so the

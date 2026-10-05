@@ -19,15 +19,18 @@
  * Forwards method + path + headers (Host rewritten to the upstream host, SNI
  * set for the https upstream), streams request bodies upstream, and pipes
  * responses back (status + headers + body) so chunked/SSE streaming works.
- * Upstream failure -> 502 with a short body. Stdlib only: node:http/node:https
- * here, node:fs in ./loop-kill-scanner.cjs — response bytes are OBSERVED for
- * relay loop-kill signatures (best-effort marker file); the response pipe
- * stays byte-transparent.
+ * Upstream failure -> 502 with a short body. Stdlib only (node:http/https/fs/
+ * path, and node:fs in ./loop-kill-scanner.cjs) — response bytes are OBSERVED
+ * for relay loop-kill signatures (best-effort marker file), and memory-route
+ * traffic is COUNTED (best-effort memory-route.json); the response pipe stays
+ * byte-transparent.
  */
 "use strict";
 
+const fs = require("node:fs");
 const http = require("node:http");
 const https = require("node:https");
+const path = require("node:path");
 const { createLoopKillScanner, writeLoopKillMarker, writeCompactPhaseRepair } =
   require("./loop-kill-scanner.cjs");
 
@@ -61,7 +64,7 @@ const UPSTREAMS = {
 // harness/egress.py. BENCH_MEMORY_UPSTREAM is the server's origin as the sidecar
 // sees it (scheme://host:port), e.g. http://host.docker.internal:8000. Set for
 // memory-ON runs only; unset, the port does not exist. No `scan`: it carries the
-// memory plugin's traffic, not model output.
+// memory plugin's traffic, not model output. `count`: its traffic is counted.
 const MEMORY_PORT = 4560;
 const MEMORY_UPSTREAM = (process.env.BENCH_MEMORY_UPSTREAM || "").trim();
 if (MEMORY_UPSTREAM) {
@@ -71,7 +74,32 @@ if (MEMORY_UPSTREAM) {
     proto: secure ? "https" : "http",
     host: url.hostname,
     port: url.port ? Number(url.port) : secure ? 443 : 80,
+    count: true,
   };
+}
+
+// MEMORY-ROUTE TRAFFIC, the outside evidence that a memory-ON cell's plugin
+// reached its server at all. A plugin that cannot reach memory usually carries
+// on without it, and the cell would then run as a control cell under an ON
+// label. Counted per sidecar (one per cell) and rewritten after every request
+// into the marker dir the harness already reads (harness/adapters/challenge/
+// memory_record.py); best-effort, like the loop-kill marker.
+const MEMORY_ROUTE_FILE = "memory-route.json";
+const memoryTraffic = {
+  requests: 0, // requests the plugin sent
+  answered: {}, // responses by status class ("2xx", "4xx", ...)
+  unreachable: 0, // the server could not be reached (the plugin got a 502)
+  bytes_sent: 0, // request body bytes, plugin -> memory
+  bytes_received: 0, // response body bytes, memory -> plugin
+};
+
+function writeMemoryTraffic() {
+  if (!MARKER_DIR) return; // disabled
+  try {
+    fs.writeFileSync(path.join(MARKER_DIR, MEMORY_ROUTE_FILE), JSON.stringify(memoryTraffic));
+  } catch {
+    // best-effort: swallow write errors, keep forwarding
+  }
 }
 
 // Ingress forward (host :4096 -> cell :4096): contract in harness/egress.py.
@@ -106,7 +134,11 @@ function filterHeaders(headers) {
   return out;
 }
 
-function badGateway(clientRes, err) {
+function badGateway(clientRes, err, up) {
+  if (up && up.count) {
+    memoryTraffic.unreachable += 1;
+    writeMemoryTraffic();
+  }
   if (clientRes.headersSent) {
     clientRes.destroy();
     return;
@@ -157,15 +189,30 @@ function forward(up, clientReq, clientRes) {
   const proxyReq = lib.request(options);
   proxyReq.setTimeout(0); // long model streams: no socket timeout
 
+  if (up.count) {
+    memoryTraffic.requests += 1;
+    clientReq.on("data", (chunk) => {
+      memoryTraffic.bytes_sent += chunk.length;
+    });
+  }
+
   proxyReq.on("response", (proxyRes) => {
     clientRes.writeHead(proxyRes.statusCode, filterHeaders(proxyRes.headers));
     clientRes.flushHeaders(); // start streaming immediately (SSE)
     proxyRes.on("error", () => clientRes.destroy()); // truncated upstream
     // observe only (model wire only) — the pipe stays byte-transparent
     if (scanner) proxyRes.on("data", (chunk) => scanner.feed(chunk));
+    if (up.count) {
+      const statusClass = `${Math.trunc(proxyRes.statusCode / 100)}xx`;
+      memoryTraffic.answered[statusClass] = (memoryTraffic.answered[statusClass] || 0) + 1;
+      proxyRes.on("data", (chunk) => {
+        memoryTraffic.bytes_received += chunk.length;
+      });
+      proxyRes.on("end", writeMemoryTraffic);
+    }
     proxyRes.pipe(clientRes);
   });
-  proxyReq.on("error", (err) => badGateway(clientRes, err));
+  proxyReq.on("error", (err) => badGateway(clientRes, err, up));
 
   clientReq.on("error", () => proxyReq.destroy());
   clientReq.on("aborted", () => proxyReq.destroy());
@@ -207,4 +254,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { UPSTREAMS, forward, listen, main };
+module.exports = { UPSTREAMS, forward, listen, main, memoryTraffic, MEMORY_ROUTE_FILE };
