@@ -506,4 +506,4 @@ ERROR_CAP_PER_TYPE = 20
 # because the model writes code in very large single generations, and one
 # oversized stream can be killed mid-flight by the transport — losing the whole
 # write (2026-08-09).
-_WORKER_AGENTS_MD = _PACK.text("agents.md") + "\n"
+_WORKER_AGENTS_MD = _PACK.text("AGENTS.md") + "\n"

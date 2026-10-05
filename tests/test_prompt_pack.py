@@ -20,7 +20,7 @@ REPO = Path(__file__).resolve().parents[1]
 def test_the_example_challenge_provides_every_prompt_the_run_uses() -> None:
     pack = default_pack()
     for name in (
-        "agents.md",
+        "AGENTS.md",
         "repair/opener.md",
         "repair/first-round.md",
         "repair/repeat-round.md",
@@ -48,9 +48,9 @@ def test_a_missing_prompt_is_loud() -> None:
 
 
 def test_an_empty_prompt_is_loud(tmp_path: Path) -> None:
-    (tmp_path / "agents.md").write_text("\n   \n", encoding="utf-8")
+    (tmp_path / "AGENTS.md").write_text("\n   \n", encoding="utf-8")
     with pytest.raises(MissingPromptError):
-        PromptPack(tmp_path).text("agents.md")
+        PromptPack(tmp_path).text("AGENTS.md")
 
 
 def test_a_challenge_with_no_build_steps_is_loud(tmp_path: Path) -> None:
@@ -70,7 +70,7 @@ def test_the_template_skeleton_still_loads() -> None:
     loader, the first thing a new challenge does is fail."""
     pack = PromptPack(REPO / "challenges" / "TEMPLATE" / "prompts")
     for name in (
-        "agents.md",
+        "AGENTS.md",
         "repair/opener.md",
         "repair/first-round.md",
         "repair/repeat-round.md",

@@ -20,7 +20,7 @@ this; everything below exists there in finished form.
 
 | File | Reaches the model as |
 |---|---|
-| `agents.md` | Standing notes, in front of the model for the whole session. Keep it short — it is resent on every turn. |
+| `AGENTS.md` | Standing notes, in front of the model for the whole session. Keep it short — it is resent on every turn. |
 | `chunk-01.md` … | The build steps, in filename order. One task per step. |
 | `repair/opener.md` | Opens every repair message: how you checked, stated as a plain fact. |
 | `repair/first-round.md` | Heading for the first list of problems. |
