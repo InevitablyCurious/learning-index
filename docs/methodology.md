@@ -167,8 +167,32 @@ not helped. A stopped chain is recorded with how far it got, and never counts as
 
 ## Memory under change (question 3)
 
-The challenge is configurable, so the benchmark can change the job on purpose and watch what the
-memory system does.
+A memory serving a working agent has to survive change. Five of the conditions it meets — among
+many more:
+
+- **Preference drift.** What the user wanted last month is wrong today. A memory that appends
+  instead of superseding turns yesterday's instruction into today's contradiction.
+- **Working-style drift.** How the user works — test-first or prototype-first, their commit and
+  review habits — changes. Procedural memory learned from the old style keeps steering the agent
+  the old way.
+- **Dependency drift.** A fix holds for a version range. Coding knowledge has preconditions —
+  library versions, environment, configuration — and a memory that stores the fix without its
+  preconditions cannot tell when it has expired; applied to the next version, it is a regression
+  delivered with confidence.
+- **The false-fix dichotomy.** Memory learns from outcomes, and outcomes are binary: the error went
+  away, or it did not. A change that suppresses a symptom and a change that removes its cause
+  produce the same outcome, so a memory that records "this fixed it" cannot tell a mask from a
+  repair — and replays the mask with the confidence of a verified solution. A passing test is
+  evidence, not a diagnosis.
+- **Negative-knowledge consensus deviation.** "X doesn't work here" is among the most valuable
+  things a memory can hold, and the hardest to keep true. When a stored prohibition departs from
+  what other sources, newer evidence or common practice now say — because it was wrong, was local,
+  or was overtaken by an upstream change — the agent keeps avoiding what now works. And a
+  prohibition is self-sealing: an agent that obeys it never produces the evidence that would
+  overturn it.
+
+The challenge is configurable, so the benchmark can make these changes happen on purpose and watch
+what the memory system does.
 
 - **The switch.** Run an ON series on version A of a challenge until memory has built up, then
   switch to version B for the chains that follow. Each version has its own OFF baseline.
@@ -194,11 +218,11 @@ changes.
 
 | Kind of change | What changes | In the backgammon challenge |
 |---|---|---|
-| Preference | A requirement | A field name, the board's layout, a rule of the doubling cube |
-| Working style | How the work must be done | Tests required with every change |
-| Dependency | The environment | The Node version, or a library the build relies on |
-| False fix | What counts as fixed | A check that passes only when the cause is fixed, not when the symptom is masked |
-| Negative knowledge | What works | Something that failed under version A works under version B |
+| Preference drift | A requirement | A field name, the board's layout, a rule of the doubling cube |
+| Working-style drift | How the work must be done | Tests required with every change |
+| Dependency drift | The environment | The Node version, or a library the build relies on |
+| False-fix dichotomy | What counts as fixed | A check that passes only when the cause is fixed, not when the symptom is masked |
+| Negative-knowledge deviation | What works | Something that failed under version A works under version B |
 
 ## Rules that keep the numbers honest
 
