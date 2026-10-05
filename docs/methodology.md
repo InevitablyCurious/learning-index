@@ -259,7 +259,6 @@ changes.
 - Scoring a whole chain. Today each cell is scored on its own, and continued cells are marked as
   not a measurement.
 - Counting the memory system's background cost.
-- Memory-on runs with a third-party memory system. The memory-on path still requires a setting
-  (`--org`) left over from an earlier integration; it is being removed.
+- Memory-on runs with a third-party memory system.
 - Memory under change: challenge versions, a schedule saying which version each chain runs, and
   old-way checks.
