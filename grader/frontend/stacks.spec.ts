@@ -359,6 +359,15 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
       .map((b) => b.centerY)
       .sort((a, b) => a - b);
   const pitchesOf = (ys: number[]): number[] => ys.slice(1).map((y, i) => y - ys[i]);
+  // Which row a stack is DRAWN in — above or below the board's middle — so a
+  // spacing line says where the player sees it. Told only "the wrong distance
+  // up the board", run b5c6a356's model measured a six-stack on the wrong row
+  // while point 1's two pieces overlapped, and reasoned in circles until it ran
+  // out of room.
+  const boardBox = await page.getByTestId("board").boundingBox();
+  const middle = boardBox ? boardBox.y + boardBox.height / 2 : 0;
+  const rowOf = (ys: number[]): "top" | "bottom" =>
+    ys.reduce((sum, y) => sum + y, 0) / ys.length < middle ? "top" : "bottom";
 
   // EVEN — a stack of two to five keeps one pitch: the spread between its
   // widest and narrowest step stays a small share of the step itself. The
@@ -399,14 +408,18 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
     // the collapse itself). A board whose median piece has no width
     // leaves the ratio unreadable — any step against nothing reads as
     // spread, no step at all as bunched.
+    // Told as the fault it is — squeezed or spread — and the row it is on: one
+    // line for both, "the wrong distance up the board", sent run b5c6a356's
+    // model reversing itself 48 times between the two.
     const extent = width > 0 ? avg / width : avg > 0 ? Infinity : 0;
+    const row = rowOf(ys);
     expect(
       extent,
-      `[aspect: reach] [needs: F02] point ${loc} holds ${held} checkers, drawn at steps of ${extent.toFixed(2)} checker-widths — crowded at the edge, where a player needs each piece one checker-width against the last`,
+      `${row === "top" ? "[aspect: crowdedtop]" : "[aspect: crowdedbottom]"} [needs: F02] point ${loc} (${row} row) holds ${held} checkers, drawn at steps of ${extent.toFixed(2)} checker-widths — squeezed together at the edge, where a player needs each piece one checker-width against the last`,
     ).toBeGreaterThan(0.85);
     expect(
       extent,
-      `[aspect: reach] [needs: F02] point ${loc} holds ${held} checkers, drawn at steps of ${extent.toFixed(2)} checker-widths — spread across the whole point, where a player needs each piece one checker-width against the last`,
+      `${row === "top" ? "[aspect: spreadtop]" : "[aspect: spreadbottom]"} [needs: F02] point ${loc} (${row} row) holds ${held} checkers, drawn at steps of ${extent.toFixed(2)} checker-widths — spread apart along the point, where a player needs each piece one checker-width against the last`,
     ).toBeLessThan(1.4);
     evenPitches.push(avg);
   }
@@ -430,9 +443,10 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
   // reference reaches ~0.94 checker-widths); 1.10 sits between that and
   // the ~1.14 a spread six-stack measures.
   const sixExtent = width > 0 ? sixPitch / width : sixPitch > 0 ? Infinity : 0;
+  const sixRow = rowOf(sixYs);
   expect(
     sixExtent,
-    `[aspect: reach] [needs: F02] point 13 holds six checkers, drawn at steps of ${sixExtent.toFixed(2)} checker-widths — spread across the whole point, where a player needs six pieces kept tight enough to fit the point`,
+    `${sixRow === "top" ? "[aspect: spreadtop]" : "[aspect: spreadbottom]"} [needs: F02] point 13 (${sixRow} row) holds six checkers, drawn at steps of ${sixExtent.toFixed(2)} checker-widths — spread apart along the point, where a player needs six pieces kept tight enough to fit the point`,
   ).toBeLessThan(1.1);
   const evenPitch = evenPitches.reduce((sum, p) => sum + p, 0) / evenPitches.length;
   const tighter = sixPitch / evenPitch;
