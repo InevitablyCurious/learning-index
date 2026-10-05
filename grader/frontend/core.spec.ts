@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { expect, pickUpAPiece, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
 import { readColumnBox, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
@@ -219,7 +219,7 @@ test("[F03] REQ-HINT — clicking a piece shows its moves", async ({ page }) => 
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-  await clickOpeningRoll(page);
+  await rollAndCheck(page, [6, 5], () => clickOpeningRoll(page));
   await expect
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
     .toBeGreaterThanOrEqual(2);
@@ -242,7 +242,7 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-  await clickOpeningRoll(page);
+  await rollAndCheck(page, [6, 5], () => clickOpeningRoll(page));
   await expect
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
     .toBeGreaterThanOrEqual(2);
@@ -316,7 +316,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-  await clickOpeningRoll(page);
+  await rollAndCheck(page, [5, 3], () => clickOpeningRoll(page));
   await expect
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
     .toBeGreaterThanOrEqual(2);
@@ -408,7 +408,7 @@ test("[F45] REQ-HINT — clicking where a piece can go plays the move", async ({
     await page.reload();
     await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-    await clickOpeningRoll(page);
+    await rollAndCheck(page, [2, 1], () => clickOpeningRoll(page));
     await expect
       .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
       .toBeGreaterThanOrEqual(2);
@@ -456,7 +456,7 @@ test("[F60] REQ-HINT — picking a piece up from its column", async ({ page }) =
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-  await clickOpeningRoll(page);
+  await rollAndCheck(page, [2, 1], () => clickOpeningRoll(page));
   await expect
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
     .toBeGreaterThanOrEqual(2);
@@ -580,7 +580,7 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
     .click({ trial: true, timeout: 5_000 })
     .then(() => true, () => false);
   expect(canRoll, "[aspect: roll] [needs: F38] the Roll button could not be clicked at the start of a game").toBe(true);
-  await page.getByTestId("rollBtn").click();
+  await rollAndCheck(page, [6, 5], () => page.getByTestId("rollBtn").click());
   expect(
     await restingDice(),
     "[aspect: dice] [needs: REQ-RENDER/die REQ-TESTID/die] the opening roll left fewer than two dice on screen",
@@ -589,7 +589,7 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
   // ── A tie: 4 and 4. The page says to roll again, anywhere a player can read
   // it, with any dash; both dice stay up. ──
   await openWith([4, 4]);
-  await page.getByTestId("rollBtn").click();
+  await rollAndCheck(page, [4, 4], () => page.getByTestId("rollBtn").click());
   await expect
     .poll(async () => (await page.locator("body").innerText()).replace(/\s+/g, " "), {
       message: "[aspect: tie] the tied opening roll never showed the words Tie — roll again",
@@ -632,7 +632,7 @@ test("[F63] REQ-OPENING — the opening dice carry whose they are", async ({ pag
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await clickOpeningRoll(page);
+  await rollAndCheck(page, [6, 5], () => clickOpeningRoll(page));
 
   await expect
     .poll(async () => JSON.stringify((await readState(page)).dice), {
@@ -962,8 +962,10 @@ test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
+  // Whose turn the page says it is before the roll — the player's.
+  const yourTurn = ((await page.getByTestId("turnIndicator").textContent()) ?? "").trim();
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 4] });
-  await page.getByTestId("rollBtn").click();
+  await rollAndCheck(page, [2, 4], () => page.getByTestId("rollBtn").click());
 
   // A player with no move exists only once pieces come in off the bar where
   // they should (G06): run 1790633807's entered at the wrong end.
@@ -971,6 +973,12 @@ test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {
   await expect(message).toBeVisible();
   await expect(message, "[needs: G06]").not.toHaveText(/^\s*$/);
   await expect(message, "[needs: G06]").toContainText(/no moves available/i);
+  // The player's own notice: shown while the page still says it is the
+  // player's turn. Run 1791204055's build wiped the player's notice and handed
+  // over at once; the computer's random 6-5 then printed "AI rolled [6, 5] — No
+  // moves available.", and that passed this check for a player never told.
+  const turnAtNotice = ((await page.getByTestId("turnIndicator").textContent()) ?? "").trim();
+  expect(turnAtNotice, "[needs: G06] the notice showed only after the turn indicator moved on from the player").toBe(yourTurn);
 });
 
 test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
@@ -998,7 +1006,7 @@ test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 4] });
-  await page.getByTestId("rollBtn").click();
+  await rollAndCheck(page, [2, 4], () => page.getByTestId("rollBtn").click());
 
   const whiteBarChecker = page.locator(
     '[data-testid="checker"][data-color="white"][data-loc="bar"]',
@@ -1048,7 +1056,7 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
-  await page.getByTestId("rollBtn").click();
+  await rollAndCheck(page, [6, 5], () => page.getByTestId("rollBtn").click());
   // The roll lands and white has a move to play.
   await expect
     .poll(
@@ -1148,7 +1156,7 @@ test("[F48] REQ-TURN — a no-move roll passes by itself", async ({ page }) => {
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
-  await page.getByTestId("rollBtn").click();
+  await rollAndCheck(page, [6, 5], () => page.getByTestId("rollBtn").click());
 
   // The dice stay up…
   await expect

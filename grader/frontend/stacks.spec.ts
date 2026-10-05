@@ -38,7 +38,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { type Page } from "@playwright/test";
-import { expect, playerClickUntilShown, setupState, test } from "./fixtures.ts";
+import { expect, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
 import { readCheckerBoxes, readCheckerShapes, typicalWidth, waitForBoardSettled } from "./board-geometry.ts";
 
 interface ApiState {
@@ -145,7 +145,7 @@ test("[F58] REQ-GEOMETRY — the top piece slides away", async ({ page }) => {
   // A Roll shut at the start of a game is F61's finding, not this check's.
   const canRoll = await page.getByTestId("rollBtn").click({ trial: true, timeout: 5_000 }).then(() => true, () => false);
   expect(canRoll, "[needs: F61] the Roll button could not be clicked at the start of a game").toBe(true);
-  await page.getByTestId("rollBtn").click();
+  await rollAndCheck(page, [2, 1], () => page.getByTestId("rollBtn").click());
   await expect
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61] no dice showed after the roll")
     .toBeGreaterThanOrEqual(2);

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   api,
   debugRoll,
+  debugRollVerified,
   debugSetState,
   emptyPoints,
   getState,
@@ -91,8 +92,7 @@ describe("Backgammon backend server-path integrity", () => {
         message: "",
       }),
     );
-    await debugRoll([1, 2]);
-    const rolled = await api("/api/roll", {});
+    const rolled = await debugRollVerified([1, 2]);
     const winMove = (rolled.legalMoves as Move[]).find((m) => m.from === 1 && m.to === 25);
     expect(winMove).toBeTruthy();
     await api("/api/move", { from: winMove!.from, to: winMove!.to, die: winMove!.die });
@@ -107,8 +107,7 @@ describe("Backgammon backend server-path integrity", () => {
     // An ordinary turn from the opening position: a new game starts with the
     // opening roll (G31), which is not this check's subject.
     await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll" }));
-    await debugRoll([3, 1]);
-    const before = await api("/api/roll", {});
+    const before = await debugRollVerified([3, 1]);
     // No move to undo is not an undo finding: the movable-checker gates report
     // a roll that leaves no move when they fail too (a needs marker,
     // harness/adapters/challenge/stages.py).
@@ -168,8 +167,7 @@ describe("Backgammon backend server-path integrity", () => {
         message: "",
       }),
     );
-    await debugRoll([1, 2]);
-    const rolled = await api("/api/roll", {});
+    const rolled = await debugRollVerified([1, 2]);
     // Finishing the game is the bear-off and win checks' ground (a needs marker).
     const winMove = (rolled.legalMoves as Move[]).find((m) => m.from === 1 && m.to === 25);
     expect(winMove, "[needs: G08]").toBeTruthy();
@@ -220,31 +218,15 @@ describe("Backgammon backend server-path integrity", () => {
     // The player's die is higher: the first move is the player's, with both
     // numbers still to play.
     await api("/api/new", { difficulty: "easy" });
-    await debugRoll([6, 5]);
-    let state = await api("/api/roll", {});
+    let state = await debugRollVerified([6, 5]);
     expect(state.turn, "[aspect: won]").toBe("white");
     expect(state.phase, "[aspect: dice]").toBe("move");
     expect(state.remainingDice, "[aspect: dice]").toContain(6);
     expect(state.remainingDice, "[aspect: dice]").toContain(5);
 
-    // The computer's die is higher: the first move is the computer's, made
-    // with those same two numbers — 3 + 5 = 8 pips, and nothing can be hit at
-    // the opening — and then the turn is the player's. Easy never doubles, so
-    // the computer's turn is only its move.
-    await api("/api/new", { difficulty: "easy" });
-    await debugRoll([3, 5]);
-    state = await api("/api/roll", {});
-    expect(state.turn, "[aspect: first]").toBe("black");
-    const pipsBefore = blackPips(state);
-    await api("/api/ai", {});
-    state = await getState();
-    expect(pipsBefore - blackPips(state), "[aspect: numbers]").toBe(8);
-    expect(state.turn, "[aspect: handback]").toBe("white");
-
     // Equal dice: still the opening roll.
     await api("/api/new", { difficulty: "easy" });
-    await debugRoll([4, 4]);
-    state = await api("/api/roll", {});
+    state = await debugRollVerified([4, 4]);
     expect(state.phase, "[aspect: tie] [needs: G01]").toBe("openingRoll");
 
     // Nobody doubles before the opening move is played: not offered, and a
@@ -258,6 +240,33 @@ describe("Backgammon backend server-path integrity", () => {
     expect(state.cube.value, "[aspect: cubemoved]").toBe(1);
     expect(state.phase, "[aspect: cubemoved]").not.toBe("doubleOffered");
     expect(state.winner, "[aspect: cubemoved]").toBeNull();
+
+    // The computer's die is higher: its first move is made with those same two
+    // numbers — nothing can be hit at the opening, so the pips it moves are their
+    // sum — and then the turn is the player's. Easy never doubles, so the
+    // computer's turn is only its move. A computer that rolls fresh dice for that
+    // move went 5, 6, 7, 8, 7 pips on server code that never changed, and passed
+    // whenever a random roll made 8 (run f3c91051, round 4; WO-GATE-WALL-FLUKES).
+    // So the openings have sums a random roll seldom makes (1-2 = 3, 5-6 = 11),
+    // and behind each sits a queued roll no opening move uses: a re-rolling
+    // computer takes it and moves a sum no opening gives; a correct one leaves it
+    // for the player's next roll, which drains it. Last in this test, so a
+    // computer that ignores its numbers never hides the tie or the cube.
+    for (const [opening, decoy] of [
+      [[1, 2], [6, 6]],
+      [[5, 6], [1, 1]],
+    ] as const) {
+      await api("/api/new", { difficulty: "easy" });
+      state = await debugRollVerified([...opening]);
+      expect(state.turn, "[aspect: first]").toBe("black");
+      const pipsBefore = blackPips(state);
+      await debugRoll([...decoy]);
+      await api("/api/ai", {});
+      state = await getState();
+      expect(pipsBefore - blackPips(state), "[aspect: numbers]").toBe(opening[0] + opening[1]);
+      expect(state.turn, "[aspect: handback]").toBe("white");
+      await api("/api/roll", {});
+    }
   });
 
   // The computer stuck is a turn returned, not a turn hung: black on the bar

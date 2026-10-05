@@ -36,7 +36,7 @@
 
 import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
-import { BASE_URL, PORT, SETUP_REFUSED, assertSetupTook, startServer, stopServer, type ServerHandle } from "../lib/harness.ts";
+import { BASE_URL, PORT, SETUP_REFUSED, assertRollTook, assertSetupTook, startServer, stopServer, type ServerHandle } from "../lib/harness.ts";
 import { boardGeometryDrawn, waitForBoardSettled } from "./board-geometry.ts";
 
 export const test = base.extend<{ gameServer: ServerHandle }>({
@@ -122,6 +122,28 @@ export async function setupState(page: Page, body: Record<string, any>): Promise
   const echo = await response.json().catch(() => null);
   assertSetupTook(body, echo);
   return echo;
+}
+
+/**
+ * Roll through the page and prove the roll used the dice queued for it through
+ * /api/debug/roll. The proof is the page's own POST /api/roll and its answer —
+ * the dice that roll produced — not a later read of the state: a roll with no
+ * move hands the turn to the computer, whose roll a later read would show
+ * (lib/harness.ts assertRollTook). A roll whose answer shows other dice fails
+ * with the SETUP_REFUSED marker, never as the behaviour the gate goes on to
+ * judge; an answer with no dice, or none at all, can't be checked and isn't.
+ */
+export async function rollAndCheck(page: Page, dice: number[], click: () => Promise<unknown>): Promise<any> {
+  const answered = page
+    .waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/api/roll", {
+      timeout: 15_000,
+    })
+    .catch(() => null);
+  await click();
+  const response = await answered;
+  const body = response ? await response.json().catch(() => null) : null;
+  assertRollTook(dice, body?.dice);
+  return body;
 }
 
 // ── CLICK WHERE A PLAYER CLICKS ─────────────────────────────────────────────

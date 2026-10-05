@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, pickUpAPiece, playerClick, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, rollAndCheck, setupState, test } from "./fixtures.ts";
 
 // [F33] REQ-DOUBLES — a double lets the player make FOUR MOVES.
 //
@@ -161,7 +161,7 @@ async function rollThroughThePage(page: Page, dice: number[]): Promise<void> {
   // A Roll shut at the start of a game is F61's finding, not this check's.
   const canRoll = await page.getByTestId("rollBtn").click({ trial: true, timeout: 5_000 }).then(() => true, () => false);
   expect(canRoll, "[needs: F61] the Roll button could not be clicked at the start of a game").toBe(true);
-  await page.getByTestId("rollBtn").click();
+  await rollAndCheck(page, dice, () => page.getByTestId("rollBtn").click());
   // Fewer than two dice after a roll is the dice render check's complaint.
   await expect
     .poll(() => visibleDice(page), { message: "[needs: REQ-RENDER/die F61] fewer than two dice after a roll", timeout: 5_000 })

@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, pickUpAPiece, playerClick, playerClickUntilShown, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
 import { checkerAnimates, hintAnimates } from "../lib/acceptance.ts";
 import { BASE_URL } from "../lib/harness.ts";
 import { isPainted } from "./board-geometry.ts";
@@ -112,7 +112,7 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
   await page.reload();
   const rollBtn = page.locator('[data-testid="rollBtn"]');
   await expect(rollBtn).toBeVisible();
-  await rollBtn.click();
+  await rollAndCheck(page, [3, 5], () => rollBtn.click());
 
   const whiteBarChecker = page.locator(
     '[data-testid="checker"][data-color="white"][data-loc="bar"]',
