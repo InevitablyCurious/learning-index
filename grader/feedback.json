@@ -872,8 +872,8 @@
       "repeat": "The triangles still don't sit at the edge of the board — I expect each triangle's wide end right at the edge."
     },
     "F31": {
-      "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place; I expect each stack to stand as a single straight column of pieces over its point.",
-      "repeat": "Fresh game again, and the checkers still don't sit on their points — still drawn off to the side or floating in the wrong place; I expect each stack to stand as a single straight column of pieces over its point."
+      "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place; I expect each stack to stand as a single straight column of pieces on its point.",
+      "repeat": "Fresh game again, and the checkers still don't sit on their points — still drawn off to the side or floating in the wrong place; I expect each stack to stand as a single straight column of pieces on its point."
     },
     "F31.rim": {
       "first": "Some of the stacks don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point.",
@@ -1548,8 +1548,8 @@
       "repeat": "The checkers on a point still reach the wrong distance up the board — I expect a point's checkers packed together from the edge, each piece right against the last, not spread across the whole point and not crowded at the edge."
     },
     "F71.cascade": {
-      "first": "The pieces of a stack cascade off to the side instead of lining up in a straight line.",
-      "repeat": "The pieces of a stack still cascade off to the side instead of lining up in a straight line."
+      "first": "The pieces of a stack cascade off to the side — I expect each stack to stand as a single straight column.",
+      "repeat": "The pieces of a stack still cascade off to the side — I expect each stack to stand as a single straight column."
     }
   }
 }
