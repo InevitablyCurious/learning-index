@@ -440,4 +440,23 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
     tighter,
     `[aspect: six] [needs: F02] point 13 holds six checkers, drawn at an average step of ${sixPitch.toFixed(1)} px against the ${evenPitch.toFixed(1)} px the two-to-five stacks keep — ${Math.round(tighter * 100)}% of it, where six pieces need a tighter pitch to fit the point`,
   ).toBeLessThanOrEqual(0.97);
+
+  // CASCADE — even pitch says nothing about the horizontal: a stack can step
+  // perfectly and still fan sideways off its point. Per stack, the span of
+  // its pieces' centre-Xs must stay within half a checker width — far above
+  // sub-pixel rounding, far below a fan a player reads as leaning. A lone
+  // piece has no spread to read; a zero-width board leaves the ratio
+  // unreadable and never fires here (the degenerate board is F41/reach's
+  // complaint).
+  const cascadeLimit = width > 0 ? 0.5 * width : Infinity;
+  const stackLocs = [...new Set(boxes.map((b) => Number(b.loc)))].sort((a, b) => a - b);
+  for (const loc of stackLocs) {
+    const xs = boxes.filter((b) => b.loc === String(loc)).map((b) => b.centerX);
+    if (xs.length < 2) continue;
+    const spreadX = Math.max(...xs) - Math.min(...xs);
+    expect(
+      spreadX,
+      `[aspect: cascade] [needs: F02] point ${loc} holds ${xs.length} checkers whose centres span ${spreadX.toFixed(1)} px side to side — over half a checker width, so they cascade off to the side, where a stack's pieces must line up in a single straight column over its point, not drift sideways across it`,
+    ).toBeLessThanOrEqual(cascadeLimit);
+  }
 });

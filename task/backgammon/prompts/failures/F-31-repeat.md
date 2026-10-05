@@ -1,1 +1,1 @@
-Fresh game again, and the checkers still don't sit on their points — still drawn off to the side or floating in the wrong place.
+Fresh game again, and the checkers still don't sit on their points — still drawn off to the side or floating in the wrong place; I expect each stack to stand as a single straight column of pieces over its point.
