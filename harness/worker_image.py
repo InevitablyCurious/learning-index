@@ -22,6 +22,7 @@ source" is — the failure that put a permanently-red check on the board.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -65,6 +66,56 @@ def configured_plugin_dir(env: dict | None = None) -> Path | None:
         return None
     path = Path(raw).expanduser()
     return path if path.is_dir() else None
+
+
+#: WHY THE ENTRY IS READ FROM package.json. opencode loads a plugin from a file
+#: path, and a sealed cell cannot install one by name at run time. Reading the
+#: file the package itself exports, instead of assuming a layout, is what lets
+#: any opencode plugin package plug in unchanged.
+def plugin_entry(plugin_dir: Path) -> str:
+    """The plugin's entry file, relative to its package root (``dist/index.js``).
+
+    Resolved the way a package import is: ``exports["."]`` (a path, or its
+    ``import`` / ``default`` condition), then ``module``, then ``main``. Raises
+    ValueError when nothing is declared or the file is not there — opencode
+    swallows a plugin that fails to load without a word, so a build that bakes
+    one must refuse instead.
+    """
+    manifest = json.loads((plugin_dir / "package.json").read_text(encoding="utf-8"))
+    exports = manifest.get("exports")
+    if isinstance(exports, dict) and "." in exports:
+        exports = exports["."]
+    candidates: list[object] = []
+    if isinstance(exports, str):
+        candidates.append(exports)
+    elif isinstance(exports, dict):
+        for condition in ("import", "default", "node", "require"):
+            value = exports.get(condition)
+            if isinstance(value, dict):
+                value = value.get("default")
+            candidates.append(value)
+    candidates += [manifest.get("module"), manifest.get("main")]
+    for raw in candidates:
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        rel = raw.strip().removeprefix("./")
+        if not (plugin_dir / rel).is_file():
+            raise ValueError(
+                f"{plugin_dir}/package.json names {raw!r} as its entry, but that "
+                "file is not there — build or unpack the package first"
+            )
+        return rel
+    raise ValueError(
+        f"{plugin_dir}/package.json declares no entry (exports '.', module or main)"
+    )
+
+
+def plugin_identity(plugin_dir: Path) -> str:
+    """``name@version`` from the plugin's package.json, recorded on the image."""
+    manifest = json.loads((plugin_dir / "package.json").read_text(encoding="utf-8"))
+    name = str(manifest.get("name") or "unnamed")
+    version = str(manifest.get("version") or "unversioned")
+    return f"{name}@{version}"
 
 
 DIGEST_LABEL = "okp.worker.source_digest"
@@ -194,9 +245,10 @@ def build_argv(
     Dockerfile seam exactly. With `plugin_dir`, the plugin tree is injected as
     the named build context ``okp-plugin`` plus the ``OKP_PLUGIN_CONTEXT`` /
     ``OKP_PLUGIN_PRESENT`` build args — the three literals must match the
-    Dockerfile seam exactly. The baked digest always covers the same inputs the
-    build will see: sidecar-inclusive always, plugin-inclusive with
-    `plugin_dir`.
+    Dockerfile seam exactly — and ``BENCH_PLUGIN_ENTRY`` / ``BENCH_PLUGIN_ID``
+    carry the file opencode loads and the package's name@version. The baked
+    digest always covers the same inputs the build will see: sidecar-inclusive
+    always, plugin-inclusive with `plugin_dir`.
     """
     argv = ["docker", "build"]
     argv += [
@@ -213,6 +265,10 @@ def build_argv(
             "OKP_PLUGIN_CONTEXT=okp-plugin",
             "--build-arg",
             "OKP_PLUGIN_PRESENT=1",
+            "--build-arg",
+            f"BENCH_PLUGIN_ENTRY={plugin_entry(plugin_dir)}",
+            "--build-arg",
+            f"BENCH_PLUGIN_ID={plugin_identity(plugin_dir)}",
         ]
     argv += [
         "--build-arg",

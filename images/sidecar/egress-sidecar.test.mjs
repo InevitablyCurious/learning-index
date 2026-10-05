@@ -119,9 +119,30 @@ test("(d) only the model-wire ports carry scan in the shipped UPSTREAMS map", ()
     .filter(([, up]) => up.scan)
     .map(([port]) => Number(port))
     .sort((a, b) => a - b);
-  // 4545 = local model relay, 8443 = cloud model API. 4550 (MCP), 4440 (hub)
-  // and 4096 (ingress forward) carry our own traffic and must stay unscanned.
+  // 4545 = local model relay, 8443 = cloud model API. 4560 (memory) and 4096
+  // (ingress forward) carry other traffic and must stay unscanned.
   assert.deepEqual(scanned, [4545, 8443]);
+});
+
+test("(f) the memory route exists only when the run names a memory server", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const routeWith = (env) =>
+    JSON.parse(
+      execFileSync(
+        process.execPath,
+        ["-e", 'console.log(JSON.stringify(require("./egress-sidecar.js").UPSTREAMS[4560]||null));'],
+        {
+          cwd: path.dirname(new URL(import.meta.url).pathname),
+          env: { ...process.env, BENCH_MEMORY_UPSTREAM: "", ...env },
+        },
+      ).toString(),
+    );
+  assert.equal(routeWith({}), null);
+  assert.deepEqual(routeWith({ BENCH_MEMORY_UPSTREAM: "http://host.docker.internal:8000" }), {
+    proto: "http",
+    host: "host.docker.internal",
+    port: 8000,
+  });
 });
 
 test("(e) the ingress forward is registered without scan", async () => {

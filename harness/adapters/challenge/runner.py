@@ -67,7 +67,7 @@ from ...cell_isolation import (
 from ..docker_worker import (
     WORKER_IMAGE,
     ImageFingerprint,
-    image_plugin_present,
+    baked_plugin,
 )
 from ..mapping import write_session_mapping
 from ..transcript import write_session_transcript
@@ -1054,14 +1054,28 @@ class ChallengeRunner(
                     worker_image=worker_image_identity.to_dict(),
                 ),
             )
-            # WO-SEP-02 phase 3: read the image-baked plugin label ONCE per cell,
-            # next to the image identity probe, and stash it on self. The
-            # per-cell opencode.json plugin/mcp paths are gated on it. The flag
-            # travels via self because all three call sites must keep the exact
-            # spelling `_write_worker_permission_config(worktree=worktree)` —
-            # the ordering guard in test_challenge_zero_tool_resume.py indexes
-            # on that literal.
-            self._plugin_present = image_plugin_present()
+            # Read the image-baked memory plugin ONCE per cell, next to the image
+            # identity probe, and stash it on self: a memory-ON cell's opencode.json
+            # lists its entry file. It travels via self because all three call
+            # sites must keep the exact spelling
+            # `_write_worker_permission_config(worktree=worktree)` — the ordering
+            # guard in test_challenge_zero_tool_resume.py indexes on that literal.
+            #
+            # An ON cell on an image with no plugin would run with no memory under
+            # an ON label. Refuse it here, before anything is launched.
+            self._baked_plugin = baked_plugin()
+            if self.memory_mode == "on" and self._baked_plugin is None:
+                raise RuntimeError(
+                    f"memory-ON cell, but {WORKER_IMAGE} has no memory plugin baked in. "
+                    "Set BENCH_PLUGIN_DIR to the plugin package and rebuild the worker "
+                    "image (scripts/rebuild_worker_image.py)."
+                )
+            self._progress(
+                f"PROGRESS run_label={run_label} step=memory-plugin "
+                f"memory_mode={self.memory_mode} plugin="
+                f"{self._baked_plugin.identity if self._baked_plugin else 'none'} "
+                f"loaded={str(self.memory_mode == 'on').lower()}"
+            )
 
             sanitized_label = re.sub(r"[^a-zA-Z0-9_.-]", "-", run_label)
             container_name = f"bench-cell-{sanitized_label}-{run_identity}"

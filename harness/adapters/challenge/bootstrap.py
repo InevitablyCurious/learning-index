@@ -35,6 +35,8 @@ from ..docker_worker import DockerCell
 from .constants import _COMPACT_PHASE_FILENAME, _COMPACT_PHASE_REPAIR, _GRADER_DIR
 from .exceptions import ServeTransportError
 from harness.adapters.docker_worker import worker_config_host_dir
+from harness.egress import EGRESS_MEMORY_PORT
+from harness.memory_slot import memory_settings, memory_upstream, redacted
 
 from .transport import compact_phase_for
 from .worker_config import build_worker_opencode_config
@@ -115,9 +117,11 @@ class BootstrapMixin:
     def _write_worker_permission_config(self, *, worktree: Path) -> None:
         gates_dir = str(_GRADER_DIR.resolve())
         golden_dir = str((self.task_dir / "golden").resolve())
-        # Stashed by the Docker arm beside the image-identity probe; default
-        # True keeps direct/mock callers on the plugin-baked path.
-        plugin_present = getattr(self, "_plugin_present", True)
+        # The memory plugin is loaded in memory-ON cells only: listing it is what
+        # switches memory on. The baked plugin is stashed by the Docker arm beside
+        # the image-identity probe; direct/mock callers have none.
+        baked = getattr(self, "_baked_plugin", None)
+        plugin_entry = baked.entry if (self.memory_mode == "on" and baked) else None
         config = build_worker_opencode_config(
             model=self.model,
             reasoning_effort=self.reasoning_effort,
@@ -125,7 +129,7 @@ class BootstrapMixin:
             gates_dir=gates_dir,
             golden_dir=golden_dir,
             session_id=self.session_id,
-            plugin_present=plugin_present,
+            plugin_entry=plugin_entry,
         )
         session_header_set = bool(self.session_id)
         provider_id, _, model_id = self.model.partition("/")
@@ -203,6 +207,23 @@ class BootstrapMixin:
         cell_config.worker_logs_dir = worktree.parent / "worker-logs"
         cell_config.serve_host_port = self.serve_host_port
         cell_config.serve_container_port = self.serve_container_port
+        if self.memory_mode == "on":
+            # The memory system's server, reached through the sidecar's memory
+            # route — or directly on the legacy bridge path, which has no sidecar.
+            upstream = memory_upstream()
+            if not upstream:
+                memory_url = ""  # a memory system that keeps its state in files
+            elif egress_host:
+                memory_url = f"http://{egress_host}:{EGRESS_MEMORY_PORT}"
+            else:
+                memory_url = upstream
+            cell_config.memory_upstream = upstream
+            cell_config.memory_env = memory_settings(memory_url)
+            self._progress(
+                f"PROGRESS step=memory-config upstream={upstream or 'none'} "
+                f"memory_url={memory_url or 'none'} "
+                f"settings={redacted(cell_config.memory_env)}"
+            )
         return cell_config
 
     def _init_worktree_git(self, *, worktree: Path) -> None:

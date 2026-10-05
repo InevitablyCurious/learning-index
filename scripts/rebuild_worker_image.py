@@ -33,6 +33,8 @@ from harness.worker_image import (  # noqa: E402
     IMAGE,
     build_argv,
     configured_plugin_dir,
+    plugin_entry,
+    plugin_identity,
     source_digest,
 )
 
@@ -72,6 +74,16 @@ def main() -> int:
         print(f"{where} has no package.json — not a plugin tree", file=sys.stderr)
         return 2
 
+    # The file opencode will load, read from the package itself. Refuse here,
+    # before docker runs: a plugin that does not load fails silently in a cell.
+    entry = None
+    if plugin_dir is not None:
+        try:
+            entry = plugin_entry(plugin_dir)
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return 2
+
     if shutil.which("docker") is None:
         print("docker is not on PATH — cannot build the worker image", file=sys.stderr)
         return 2
@@ -88,6 +100,7 @@ def main() -> int:
             f"injecting plugin context from {plugin_dir}"
             + (f" (via {ENV_PLUGIN_DIR})" if from_seam else "")
         )
+        print(f"plugin {plugin_identity(plugin_dir)}, loaded from {entry}")
     else:
         # SAY WHEN A BUILD IS VANILLA. A dev machine that has lost the seam
         # builds a plugin-less image that looks identical from the outside, and

@@ -5,13 +5,14 @@
  * Baked into the worker image at /opt/okp/egress-sidecar.js and run in a
  * dedicated sidecar container attached to BOTH the --internal worker network
  * (bench-internal) and the routable bench network. The worker has zero
- * internet route; it reaches model/MCP/hub ONLY through this proxy.
+ * internet route; it reaches the model, and the memory system's server when the
+ * run has one, ONLY through this proxy.
  *
- * Fixed port -> upstream map (MUST match harness/egress.py exactly):
+ * Port -> upstream map (MUST match harness/egress.py exactly):
  *   4545 -> http://host.docker.internal:4545   (local model relay)
- *   4550 -> http://host.docker.internal:4550   (okp MCP)
- *   4440 -> http://host.docker.internal:4440   (hub)
  *   8443 -> https://api.orcarouter.ai:443      (cloud model API; TLS ends here)
+ *   4560 -> $BENCH_MEMORY_UPSTREAM              (the memory system's server; only
+ *            when BENCH_MEMORY_UPSTREAM is set — memory-ON runs)
  *   4096 -> http://<cell container name>:4096  (ingress forward, WO-25; only
  *            when OKP_INGRESS_CELL_HOST is set — see UPSTREAMS mutation below)
  *
@@ -53,10 +54,25 @@ const COMPACT_PHASE_FILE = process.env.BENCH_COMPACT_PHASE_FILE || null;
 // arrives on the wire the model answers on.
 const UPSTREAMS = {
   4545: { proto: "http", host: "host.docker.internal", port: 4545, scan: true },
-  4550: { proto: "http", host: "host.docker.internal", port: 4550 },
-  4440: { proto: "http", host: "host.docker.internal", port: 4440 },
   8443: { proto: "https", host: "api.orcarouter.ai", port: 443, scan: true },
 };
+
+// Memory route (port 4560 -> the memory system's server): contract in
+// harness/egress.py. BENCH_MEMORY_UPSTREAM is the server's origin as the sidecar
+// sees it (scheme://host:port), e.g. http://host.docker.internal:8000. Set for
+// memory-ON runs only; unset, the port does not exist. No `scan`: it carries the
+// memory plugin's traffic, not model output.
+const MEMORY_PORT = 4560;
+const MEMORY_UPSTREAM = (process.env.BENCH_MEMORY_UPSTREAM || "").trim();
+if (MEMORY_UPSTREAM) {
+  const url = new URL(MEMORY_UPSTREAM);
+  const secure = url.protocol === "https:";
+  UPSTREAMS[MEMORY_PORT] = {
+    proto: secure ? "https" : "http",
+    host: url.hostname,
+    port: url.port ? Number(url.port) : secure ? 443 : 80,
+  };
+}
 
 // Ingress forward (host :4096 -> cell :4096): contract in harness/egress.py.
 // OKP_INGRESS_CELL_HOST is the cell's container name, resolved by Docker embedded DNS at request time.

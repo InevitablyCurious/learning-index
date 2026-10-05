@@ -1,10 +1,18 @@
 # syntax=docker/dockerfile:1.7
 
-# Optional-plugin build seam: the dev build passes
-#   --build-context okp-plugin=dev/benchmark/opencode-plugin --build-arg OKP_PLUGIN_CONTEXT=okp-plugin
-# A vanilla `docker build` omits both, so OKP_PLUGIN_CONTEXT defaults to the empty
-# `no-plugin` stage below and the conditional plugin install is skipped with no error.
-# (COPY --from= does not expand variables, hence the FROM ${ARG} AS stage workaround.)
+# Optional memory-plugin build seam: scripts/rebuild_worker_image.py passes the
+# BENCH_PLUGIN_DIR package as
+#   --build-context okp-plugin=<dir> --build-arg OKP_PLUGIN_CONTEXT=okp-plugin
+# plus BENCH_PLUGIN_ENTRY (the file opencode loads, read from the package's own
+# package.json) and BENCH_PLUGIN_ID (name@version). Any opencode plugin package
+# fits. A vanilla `docker build` omits them, so OKP_PLUGIN_CONTEXT defaults to the
+# empty `no-plugin` stage below and the conditional plugin install is skipped with
+# no error. (COPY --from= does not expand variables, hence the FROM ${ARG} AS stage
+# workaround.)
+#
+# The plugin is baked but NOT listed in the image-level opencode.json below: a
+# cell loads it only when the per-cell config lists it, which only memory-ON cells
+# do. One image therefore serves both arms.
 #
 # Sidecar build-context seam: the sidecar files (egress-sidecar.js,
 # loop-kill-scanner.cjs, supervised-shell.js) live in images/sidecar/, outside
@@ -78,49 +86,39 @@ RUN set -eux; \
     mkdir -p /work /etc/xdg/opencode; \
     chmod 0777 /work /etc/xdg/opencode
 
-# Attempt vendored plugin wiring when images/worker/vendor/opencode-plugin is provided.
-# If the vendored plugin is absent, image isolation remains intact; ON-cell plugin validation is
-# handled separately by bench smoke (out of scope for this chunk).
+# Memory plugin install, when a plugin package is provided. Without one, image
+# isolation is intact and the image is vanilla.
 # NOTE: --install-links=true is REQUIRED — a plain `npm i -g <dir>` creates a SYMLINK into
 # /opt/docker-worker-context, which the cleanup step below deletes (dangling plugin path).
 COPY . /opt/docker-worker-context
 COPY --from=plugin-source / /opt/docker-worker-context/vendor/opencode-plugin/
 COPY --from=sidecar-source / /opt/docker-worker-context/sidecar/
 
+ARG BENCH_PLUGIN_ENTRY=
 RUN set -eux; \
-    plugin_path=""; \
     mkdir -p /opt/bench; \
     cp /opt/docker-worker-context/self-compact.ts /opt/bench/self-compact.ts; \
     chmod 0644 /opt/bench/self-compact.ts; \
     if [ -f /opt/docker-worker-context/vendor/opencode-plugin/package.json ]; then \
+      test -n "${BENCH_PLUGIN_ENTRY}"; \
       npm i -g --install-links=true /opt/docker-worker-context/vendor/opencode-plugin; \
       pkg_name="$(node -p 'require("/opt/docker-worker-context/vendor/opencode-plugin/package.json").name')"; \
       ln -s "$(npm root -g)/${pkg_name}" /opt/bench-plugin; \
-      plugin_path="/opt/bench-plugin/plugins/plugin.ts"; \
-      test -f "${plugin_path}"; \
+      test -f "/opt/bench-plugin/${BENCH_PLUGIN_ENTRY}"; \
     else \
-      echo "NOTE: vendored opencode-plugin missing; opencode plugin remains disabled in-image."; \
+      echo "NOTE: no memory plugin provided; the image is vanilla."; \
     fi; \
-    OKP_PLUGIN_PATH="${plugin_path}" node - <<'NODE'
+    node - <<'NODE'
 const fs = require("node:fs")
-const pluginPath = (process.env.OKP_PLUGIN_PATH || "").trim()
 // Benchmark-native self-compaction: wired into EVERY image, with or without a
 // memory plugin. It self-gates on BENCH_SELF_COMPACT=1, so a cell that did not
-// ask for compaction loads it and nothing happens.
+// ask for compaction loads it and nothing happens. The memory plugin is NOT
+// listed here: only a memory-ON cell's own config lists it.
 const selfCompactPath = "/opt/bench/self-compact.ts"
 const config = {
   $schema: "https://opencode.ai/config.json",
   shell: "/opt/okp/supervised-shell.js",
   plugin: [selfCompactPath],
-}
-if (pluginPath) {
-  config.plugin = [pluginPath, selfCompactPath]
-  config.mcp = {
-    okp: {
-      "//": "disabled by design: the plugin supplies its own MCP transport, do not auto-spawn local MCP",
-      enabled: false,
-    },
-  }
 }
 fs.mkdirSync("/etc/xdg/opencode", { recursive: true })
 fs.writeFileSync("/etc/xdg/opencode/opencode.json", `${JSON.stringify(config, null, 2)}\n`, "utf8")
@@ -148,6 +146,11 @@ ARG OKP_WORKER_SOURCE_DIGEST=unset
 LABEL okp.worker.source_digest=$OKP_WORKER_SOURCE_DIGEST
 ARG OKP_PLUGIN_PRESENT=0
 LABEL okp.worker.plugin_present=$OKP_PLUGIN_PRESENT
+# The baked memory plugin: the file a memory-ON cell lists in its opencode
+# config (relative to /opt/bench-plugin) and the package's name@version.
+ARG BENCH_PLUGIN_ID=
+LABEL bench.worker.plugin_entry=$BENCH_PLUGIN_ENTRY
+LABEL bench.worker.plugin_id=$BENCH_PLUGIN_ID
 
 WORKDIR /work
 USER worker

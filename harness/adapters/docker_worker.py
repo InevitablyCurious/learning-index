@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import json
 import logging
@@ -18,6 +18,7 @@ import urllib.request
 from harness.egress import (
     EGRESS_INGRESS_CELL_HOST_ENV,
     EGRESS_INGRESS_PORT_ENV,
+    EGRESS_MEMORY_UPSTREAM_ENV,
     EGRESS_NETWORK,
 )
 from harness.spend_key import resolve_cloud_api_key
@@ -214,6 +215,63 @@ def image_plugin_present(tag: str = WORKER_IMAGE) -> bool:
     return present
 
 
+#: Where the worker Dockerfile links the installed memory plugin package, and
+#: the labels that name its entry file (relative to PLUGIN_ROOT) and name@version.
+PLUGIN_ROOT = "/opt/bench-plugin"
+PLUGIN_ENTRY_LABEL = "bench.worker.plugin_entry"
+PLUGIN_ID_LABEL = "bench.worker.plugin_id"
+
+
+@dataclass(frozen=True)
+class BakedPlugin:
+    """The memory plugin an image carries: the file opencode loads, and its name@version."""
+
+    entry: str
+    identity: str
+
+
+def baked_plugin(tag: str = WORKER_IMAGE) -> BakedPlugin | None:
+    """The memory plugin baked into the image, read from its labels; None if vanilla.
+
+    A missing docker CLI, a failed probe, or an image built before the entry label
+    existed all read as None. The caller decides what that means: an OFF cell
+    needs no plugin, and a memory-ON cell refuses to start without one, rather
+    than run as an OFF cell under an ON label.
+    """
+    labels = (PLUGIN_PRESENT_LABEL, PLUGIN_ENTRY_LABEL, PLUGIN_ID_LABEL)
+    fmt = "|".join(f'{{{{index .Config.Labels "{label}"}}}}' for label in labels)
+    try:
+        completed = subprocess.run(
+            ["docker", "image", "inspect", tag, "--format", fmt],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception as exc:  # noqa: BLE001 - label probe must not raise.
+        _LOG.error("docker_worker.baked_plugin_failed tag=%s err=%s", tag, exc)
+        return None
+    if completed.returncode != 0:
+        detail = _result_detail(completed) or f"exit={completed.returncode}"
+        _LOG.warning("docker_worker.baked_plugin_absent tag=%s detail=%s", tag, detail)
+        return None
+    values = [
+        "" if value.strip() == "<no value>" else value.strip()
+        for value in completed.stdout.strip().split("|")
+    ]
+    present, entry, identity = (values + ["", "", ""])[:3]
+    if present != "1" or not entry:
+        _LOG.info("docker_worker.baked_plugin tag=%s plugin=none", tag)
+        return None
+    plugin = BakedPlugin(entry=f"{PLUGIN_ROOT}/{entry}", identity=identity or "unknown")
+    _LOG.info(
+        "docker_worker.baked_plugin tag=%s plugin=%s entry=%s",
+        tag,
+        plugin.identity,
+        plugin.entry,
+    )
+    return plugin
+
+
 def ensure_network(name: str = WORKER_NETWORK, *, internal: bool = False) -> None:
     """Ensure the benchmark network exists (idempotent).
 
@@ -320,6 +378,14 @@ class DockerCellConfig:
     # the cell is on the --internal network where -p is silently dropped.
     serve_host_port: int = 8719
     serve_container_port: int = 4096
+    # MEMORY — set on memory-ON cells only (harness/memory_slot.py); empty on OFF
+    # cells, which therefore have no route to memory and no memory settings.
+    # memory_upstream opens the sidecar's memory route (harness/egress.py).
+    # memory_env is the memory plugin's own settings, passed into the worker BY
+    # NAME (bare `-e NAME`, values in the docker CLI env) so a key in them never
+    # appears in argv, `docker inspect` or a failure message.
+    memory_upstream: str = ""
+    memory_env: dict[str, str] = field(default_factory=dict)
 
 
 class DockerCell:
@@ -456,6 +522,15 @@ class DockerCell:
                         f"BENCH_COMPACT_PHASE_FILE={self.config.compact_phase_container_file}",
                     ]
                 )
+            # Memory route: opened only when the cell names a memory server,
+            # which only memory-ON cells do. The origin is not a secret.
+            if self.config.memory_upstream:
+                sidecar_cmd.extend(
+                    [
+                        "-e",
+                        f"{EGRESS_MEMORY_UPSTREAM_ENV}={self.config.memory_upstream}",
+                    ]
+                )
             sidecar_cmd.extend(
                 [
                     self.config.image,
@@ -526,6 +601,8 @@ class DockerCell:
             run_env["ORCAROUTER_API_KEY"] = cloud_key
         else:
             run_env["LOCAL_LLM_PROXY_API_KEY"] = proxy_token
+        # The memory plugin's settings: argv names them, this env holds the values.
+        run_env.update(self.config.memory_env)
 
         self._progress(
             "PROGRESS docker-run start "
@@ -1392,6 +1469,11 @@ def _build_run_argv(
     # leak via `docker inspect` or run-failure detail.
     if config.cloud:
         run_cmd.extend(["-e", "ORCAROUTER_API_KEY"])
+
+    # The memory plugin's settings (memory-ON cells), bare `-e NAME` like the
+    # cloud key: docker reads each value from the docker CLI process env.
+    for name in sorted(config.memory_env):
+        run_cmd.extend(["-e", name])
 
     if config.session_db_host_path is not None:
         host_session_db = Path(config.session_db_host_path).expanduser().resolve()

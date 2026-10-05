@@ -38,9 +38,12 @@ covers the sidecar exactly when the build will see it.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -48,6 +51,8 @@ from harness.worker_image import (  # noqa: E402
     BAKED_FILES,
     baked_paths,
     build_argv,
+    plugin_entry,
+    plugin_identity,
     source_digest,
 )
 
@@ -83,12 +88,54 @@ def _sidecar_tree(root: Path) -> Path:
     return sidecar
 
 
-def _plugin_tree(root: Path) -> Path:
-    """A dev-side plugin fixture for the ``plugin_dir`` arm."""
+def _plugin_tree(root: Path, manifest: dict | None = None) -> Path:
+    """A plugin package for the ``plugin_dir`` arm: like any opencode plugin
+    package, it names its entry file in package.json."""
     plugin = root / "opencode-plugin"
-    (plugin / "plugins").mkdir(parents=True)
-    (plugin / "plugins" / "plugin.ts").write_text("export const x = 1\n")
+    (plugin / "dist").mkdir(parents=True)
+    (plugin / "dist" / "index.js").write_text("export const x = 1\n")
+    if manifest is None:
+        manifest = {
+            "name": "memory-plugin",
+            "version": "1.0.0",
+            "exports": {
+                ".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"}
+            },
+        }
+    (plugin / "package.json").write_text(json.dumps(manifest))
     return plugin
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        {"exports": {".": {"import": "./dist/index.js"}}},
+        {"exports": {".": "./dist/index.js"}},
+        {"exports": "./dist/index.js"},
+        {"exports": {".": {"import": {"default": "./dist/index.js"}}}},
+        {"module": "dist/index.js"},
+        {"main": "./dist/index.js"},
+    ],
+)
+def test_the_plugin_entry_is_the_file_its_package_exports(
+    tmp_path: Path, manifest: dict
+) -> None:
+    assert plugin_entry(_plugin_tree(tmp_path, manifest)) == "dist/index.js"
+
+
+def test_a_plugin_package_that_names_no_loadable_file_is_refused(
+    tmp_path: Path,
+) -> None:
+    """opencode drops a plugin that fails to load without a word, so the build
+    must refuse rather than bake one."""
+    with pytest.raises(ValueError, match="declares no entry"):
+        plugin_entry(_plugin_tree(tmp_path, {"name": "x"}))
+    with pytest.raises(ValueError, match="is not there"):
+        plugin_entry(_plugin_tree(tmp_path / "b", {"main": "./dist/missing.js"}))
+
+
+def test_the_plugin_identity_is_name_at_version(tmp_path: Path) -> None:
+    assert plugin_identity(_plugin_tree(tmp_path)) == "memory-plugin@1.0.0"
 
 
 def test_a_touched_but_unchanged_file_does_not_read_as_stale(tmp_path: Path) -> None:
@@ -120,7 +167,7 @@ def test_a_changed_byte_does_read_as_stale(tmp_path: Path) -> None:
     )
 
     before_plugin = source_digest(worker, plugin_dir=plugin)
-    (plugin / "plugins" / "plugin.ts").write_text("export const x = 2\n")
+    (plugin / "dist" / "index.js").write_text("export const x = 2\n")
     assert source_digest(worker, plugin_dir=plugin) != before_plugin, (
         "an edited plugin file must read as stale in the plugin-inclusive digest"
     )
@@ -223,6 +270,9 @@ def test_the_build_carries_the_digest_it_will_be_checked_against(
     assert f"okp-plugin={plugin}" in dev_argv
     assert "OKP_PLUGIN_CONTEXT=okp-plugin" in dev_argv
     assert "OKP_PLUGIN_PRESENT=1" in dev_argv
+    # The file opencode loads and the package identity ride as build args.
+    assert "BENCH_PLUGIN_ENTRY=dist/index.js" in dev_argv
+    assert "BENCH_PLUGIN_ID=memory-plugin@1.0.0" in dev_argv
     # The sidecar seam survives alongside the plugin seam in the dev build.
     assert f"sidecar={worker.parent / 'sidecar'}" in dev_argv
     assert (
