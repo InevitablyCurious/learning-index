@@ -1091,9 +1091,21 @@
       "first": "The board doesn't fill the screen — there's a lot of empty space around it.",
       "repeat": "The board still doesn't fill the screen — there's still a lot of empty space around it."
     },
-    "F37.cutoff": {
-      "first": "Some of the pieces are drawn past the edge of the screen — I expect every piece to be fully on the screen.",
-      "repeat": "Some of the pieces are still drawn past the edge of the screen — I still expect every piece to be fully on the screen."
+    "F37.offbottom": {
+      "first": "Some of the pieces run off the bottom of the screen — I expect every piece to be fully on the screen.",
+      "repeat": "Some of the pieces still run off the bottom of the screen — I expect every piece to be fully on the screen."
+    },
+    "F37.offtop": {
+      "first": "Some of the pieces run off the top of the screen — I expect every piece to be fully on the screen.",
+      "repeat": "Some of the pieces still run off the top of the screen — I expect every piece to be fully on the screen."
+    },
+    "F37.offleft": {
+      "first": "Some of the pieces run off the left side of the screen — I expect every piece to be fully on the screen.",
+      "repeat": "Some of the pieces still run off the left side of the screen — I expect every piece to be fully on the screen."
+    },
+    "F37.offright": {
+      "first": "Some of the pieces run off the right side of the screen — I expect every piece to be fully on the screen.",
+      "repeat": "Some of the pieces still run off the right side of the screen — I expect every piece to be fully on the screen."
     },
     "F38": {
       "first": "Some of the buttons on the right are cut off, overlapping, or too small to use.",

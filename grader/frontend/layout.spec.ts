@@ -81,8 +81,9 @@ interface Layout {
   trayDrawn: boolean;
   trayClearOfPoints: boolean;
   // Pieces with more than a tenth of their drawn circle past the window edge,
-  // and how many there are on the board.
-  piecesPastEdge: number;
+  // by the edge they cross (a piece in a corner counts for both), and how many
+  // there are on the board.
+  piecesPast: { bottom: number; top: number; left: number; right: number };
   pieces: number;
   drawn: Box | null;
   controls: Record<string, Control | null>;
@@ -187,9 +188,15 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
           Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) *
           Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
         return inside < 0.9 * r.width * r.height;
-      }).length;
+      });
+      const piecesPast = {
+        bottom: pastEdge.filter((r) => r.bottom > innerHeight).length,
+        top: pastEdge.filter((r) => r.top < 0).length,
+        left: pastEdge.filter((r) => r.left < 0).length,
+        right: pastEdge.filter((r) => r.right > innerWidth).length,
+      };
       return {
-        piecesPastEdge: pastEdge,
+        piecesPast,
         pieces: pieceEls.length,
         size: `${innerWidth}×${innerHeight}`,
         vw: innerWidth,
@@ -294,10 +301,15 @@ test("[F37] REQ-LAYOUT — the game fits the screen", async ({ page }) => {
     // board that hides its overflow cuts its pieces off at the window's edge
     // (run 1790846840 round 3: 7 pieces below the bottom of an 800 px window,
     // and no check told it — F43 leaves a piece past the window to this one).
-    expect(
-      layout.piecesPastEdge,
-      `[aspect: cutoff] at ${layout.size} ${layout.piecesPastEdge} of ${layout.pieces} pieces are drawn past the edge of the window`,
-    ).toBe(0);
+    // Told by the edge they cross: told only "past the edge", run 898deec7's
+    // model clamped its pieces sideways for five rounds while they hung off the
+    // bottom.
+    const past = layout.piecesPast;
+    const of = `of ${layout.pieces} pieces run past the`;
+    expect(past.bottom, `[aspect: offbottom] at ${layout.size} ${past.bottom} ${of} bottom edge of the window`).toBe(0);
+    expect(past.top, `[aspect: offtop] at ${layout.size} ${past.top} ${of} top edge of the window`).toBe(0);
+    expect(past.left, `[aspect: offleft] at ${layout.size} ${past.left} ${of} left edge of the window`).toBe(0);
+    expect(past.right, `[aspect: offright] at ${layout.size} ${past.right} ${of} right edge of the window`).toBe(0);
     const tall = drawnBoard(layout).h / layout.vh;
     expect(tall, `[aspect: space] at ${layout.size} the board is ${pct(tall)} of the height`).toBeGreaterThanOrEqual(
       BOARD_HEIGHT_MIN,

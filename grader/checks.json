@@ -387,7 +387,7 @@
     "F37": {
       "name": "The game fits the screen",
       "what": "Everything fits without scrolling and the board fills the screen's height.",
-      "how": "At both sizes the page must not scroll either way, a scrollable board must not scroll sideways, no piece may have more than a tenth of its circle past the window's edge, and the drawn board must be at least 70% of the window's height (the reference: 88–89%)."
+      "how": "At both sizes the page must not scroll either way, a scrollable board must not scroll sideways, no piece may have more than a tenth of its circle past the window's edge (told by the edge it crosses: bottom, top, left or right), and the drawn board must be at least 70% of the window's height (the reference: 88–89%)."
     },
     "F38": {
       "name": "Buttons show properly",
