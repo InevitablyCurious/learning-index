@@ -4,7 +4,7 @@ import {
   startServer,
   stopServer,
   debugSetState,
-  debugRoll,
+  debugRollVerified,
   getState,
   api,
   emptyPoints,
@@ -170,8 +170,7 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     // An ordinary turn from the opening position: a new game starts with the
     // opening roll (G31), which is not this check's subject.
     await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll" }));
-    await debugRoll([3, 1]);
-    await api("/api/roll");
+    await debugRollVerified([3, 1]);
 
     const before = await getState();
     expect(before.phase).toBe("move");

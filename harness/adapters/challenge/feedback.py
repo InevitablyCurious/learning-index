@@ -315,6 +315,20 @@ _SETUP_FIELDS_RE = re.compile(
     r"did not take (?P<missed>.+?)(?: \(sent (?P<sent>.+?)\))?(?: \[error: (?P<error>.*)\])?$"
 )
 _SETUP_HTTP_RE = re.compile(r"answered HTTP (?P<code>\d{3})")
+# A roll queued through the debug endpoint that the roll after it never used
+# (grader lib/harness.ts assertRollTook). A roll has no fields to read back, so
+# it gets its own sentence: what was queued, and what came up.
+_SETUP_ROLL_RE = re.compile(r"/api/debug/roll did not take dice \(sent (?P<sent>[^)]*)\) \[rolled (?P<rolled>[^\]]*)\]")
+_ROLL_LINE_FIRST = (
+    "They queued a roll of {sent} through your app's debug endpoint, and the roll that followed came up {rolled}."
+)
+_ROLL_LINE_REPEAT = "They queued {sent} through your debug endpoint again, and the roll that followed still came up {rolled}."
+
+
+def _dice_words(text: str) -> str:
+    """'3, 5' -> '3 and 5'; '4, 4, 4, 4' -> '4, 4, 4 and 4'."""
+    nums = [n.strip() for n in str(text).split(",") if n.strip()]
+    return nums[0] if len(nums) == 1 else ", ".join(nums[:-1]) + " and " + nums[-1]
 # Names what they SENT, because the request is the finding: a whole position
 # and a one-field update are different calls (run 1790191629 — told "a
 # position", the model tested a full board, saw it work, and never tried the
@@ -384,6 +398,9 @@ def setup_refusal_line(observed: str, *, pass_kind: str) -> str | None:
     if SETUP_REFUSED not in text:
         return None
     first = text[text.index(SETUP_REFUSED) :].split("\n", 1)[0]
+    if r := _SETUP_ROLL_RE.search(first):
+        template = _ROLL_LINE_REPEAT if pass_kind == "repeat" else _ROLL_LINE_FIRST
+        return template.format(sent=_dice_words(r.group("sent")), rolled=_dice_words(r.group("rolled")))
     if h := _SETUP_HTTP_RE.search(first):
         if pass_kind == "repeat":
             return f"They sent your debug endpoint the same setup again and it still answers HTTP {h.group('code')}."

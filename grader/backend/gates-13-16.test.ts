@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   PORT,
   api,
-  debugRoll,
+  debugRollVerified,
   debugSetState,
   emptyPoints,
   freePort,
@@ -109,9 +109,7 @@ describe("Backgammon backend gates 13-16", () => {
       // An ordinary turn from the opening position: a new game starts with the
       // opening roll (G31), which is not this check's subject.
       await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll", difficulty: "easy" }));
-      await debugRoll([3, 1]);
-
-      let state = await api("/api/roll", {});
+      let state = await debugRollVerified([3, 1]);
       expect(state.phase).toBe("move");
       expect(sortedDice(state.remainingDice)).toEqual([1, 3]);
 
@@ -138,9 +136,7 @@ describe("Backgammon backend gates 13-16", () => {
       // An ordinary turn from the opening position: a new game starts with the
       // opening roll (G31), which is not this check's subject.
       await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll", difficulty: "easy" }));
-      await debugRoll([4, 2]);
-
-      let state = await api("/api/roll", {});
+      let state = await debugRollVerified([4, 2]);
       // No move after the roll is not the computer's finding: the
       // movable-checker gate reports it when an ordinary roll gives none either
       // (a needs marker, harness/adapters/challenge/stages.py).
@@ -220,8 +216,7 @@ describe("Backgammon backend gates 13-16", () => {
         }),
       );
 
-      await debugRoll([2, 4]);
-      const state = await api("/api/roll", {});
+      const state = await debugRollVerified([2, 4]);
 
       // A stuck player exists only once pieces come in off the bar where they
       // should (G06: run 1790633807's entered at the wrong end and were never

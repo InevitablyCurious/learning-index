@@ -619,6 +619,35 @@ def test_a_refused_setup_is_told_as_the_team_saw_it_never_as_the_gates_player_st
     assert "still didn't take" in again
 
 
+def test_a_roll_that_ignored_the_queued_dice_is_told_as_what_came_up() -> None:
+    # WO-GATE-WALL-FLUKES: a build that ignores /api/debug/roll turned every
+    # dice-forced check into a coin flip. The grader now proves the roll used the
+    # queued dice; a roll that did not is the team's finding, in its own words —
+    # never "didn't read back", which is about a position's fields.
+    from harness.adapters.challenge import ChallengeRunner
+
+    problems = [
+        {
+            "check": "[F03] REQ-HINT — clicking a piece shows its moves",
+            "observed": "Error: SETUP REFUSED: /api/debug/roll did not take dice (sent 6, 5) [rolled 2, 3]",
+        },
+        {
+            "check": "[F25] REQ-HINT — a played move consumes a die",
+            "observed": "Error: SETUP REFUSED: /api/debug/roll did not take dice (sent 6, 5) [rolled 2, 3]",
+        },
+    ]
+    msg = ChallengeRunner._build_feedback_prompt(problems=problems)
+    team = msg.split("software team", 1)[1]
+    assert "They queued a roll of 6 and 5 through your app's debug endpoint" in team
+    assert "came up 2 and 3" in team
+    assert msg.count("queued a roll") == 1, "same finding twice is one line"
+    assert "read back" not in msg
+    again = ChallengeRunner._build_feedback_prompt(
+        problems=problems[:1], repeat_complaints={problems[0]["check"]}
+    )
+    assert "still came up 2 and 3" in again
+
+
 def test_a_failed_api_call_is_told_as_the_status_and_error_the_app_returned() -> None:
     # Run 1790183923: "HTTP 500 from POST /api/new: EROFS …" was told as
     # "their automation fell over while reading your page".

@@ -410,6 +410,50 @@ export async function debugRoll(dice: number[]): Promise<any> {
   return api("/api/debug/roll", { dice });
 }
 
+/** A sorted copy of `xs` when every entry is a finite number, else null. */
+function sortedNumbers(xs: unknown): number[] | null {
+  if (!Array.isArray(xs)) return null;
+  if (!xs.every((v) => typeof v === "number" && Number.isFinite(v))) return null;
+  return [...(xs as number[])].sort((a, b) => a - b);
+}
+
+// THE ROLL QUEUE HAS NO ECHO. /api/debug/roll answers without a queue field, so a
+// build that ignores the queue turned every dice-forced check into a coin flip
+// reported as a verdict (WO-GATE-WALL-FLUKES: G31 flipped 16 times on server code
+// that never changed). The forced dice are checked where they surface — in the
+// answer to the /api/roll that consumed them, never in a later read of the state,
+// which a no-move roll has already handed to the computer. A roll that did not use
+// them fails with the SETUP REFUSED marker, which feedback.py tells in the team's
+// voice. Compared as sorted lists: normal rolls come back sorted, opening rolls as
+// [player, computer]; who won is the check's own question.
+export function assertRollTook(sent: number[], rolled: unknown): void {
+  const want = sortedNumbers(sent);
+  const got = sortedNumbers(rolled);
+  // An answer that carries no dice can't be checked: a build that hands a no-move
+  // roll, or an opening the computer won, straight on may clear them before it
+  // answers (run 1791204055's cp-02; snapshot 1791210678406). Only dice seen, and
+  // different, are a refusal; a queue ignored without a trace is the pre-gate's
+  // REQ-DEBUG/debug.roll finding, told before any of these.
+  if (got === null || got.length === 0) return;
+  const double = want !== null && want.length === 2 && want[0] === want[1];
+  // A double may come back as its two dice or as the four moves it gives.
+  const same =
+    want !== null &&
+    ((want.length === got.length && want.every((v, i) => v === got[i])) ||
+      (double && got.length === 4 && got.every((v) => v === want[0])));
+  if (!same) {
+    throw new Error(`${SETUP_REFUSED}: /api/debug/roll did not take dice (sent ${sent.join(", ")}) [rolled ${got.join(", ")}]`);
+  }
+}
+
+/** Queue `dice`, roll through the API, and prove that roll used them; returns the roll's answer. */
+export async function debugRollVerified(dice: number[]): Promise<any> {
+  await debugRoll(dice);
+  const state = await api("/api/roll", {});
+  assertRollTook(dice, (state as any)?.dice);
+  return state;
+}
+
 export async function health(): Promise<Response> {
   return fetch(`${BASE_URL}/health`, { signal: AbortSignal.timeout(30_000) });
 }
