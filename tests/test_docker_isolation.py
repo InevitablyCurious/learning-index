@@ -63,10 +63,14 @@ def _run(
 
 
 def _require_worker_image() -> None:
-    assert image_exists(WORKER_IMAGE), (
-        "docker worker image missing. Build with: "
-        ".venv/bin/python scripts/rebuild_worker_image.py"
-    )
+    # Skip, as REQUIRES_DOCKER does: CI has docker but never builds the bench
+    # images, and a fresh clone has not built them yet. The reason still names
+    # the fix in the -ra summary, and a run refuses without the image anyway.
+    if not image_exists(WORKER_IMAGE):
+        pytest.skip(
+            "docker worker image not built. Build with: "
+            ".venv/bin/python scripts/rebuild_worker_image.py"
+        )
 
 
 def test_worker_image_fingerprint_returns_id_and_created_from_mocked_inspect(
