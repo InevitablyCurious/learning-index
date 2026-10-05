@@ -45,8 +45,8 @@ def _build_context(args: argparse.Namespace, *, require_runtime: bool) -> CliCon
     # the campaign default org. Centralised here so all subcommands (run,
     # state, ...) resolve identically — previously str(None) reached
     # the sequencer and `state` without --org died on a false org-drift error
-    # (2026-08-09). The ON-cell requirement (--mode on requires an explicit
-    # --org) is enforced in _handle_run BEFORE this fallback is applied.
+    # (2026-08-09). It is optional in both arms: a memory-ON cell's memory is
+    # configured by the memory system's own settings (harness/memory_slot.py).
     if not str(getattr(args, "org", "") or "").strip():
         args.org = DEFAULT_ORG_ID
     layout = _resolve_manifest_layout(str(args.manifest))

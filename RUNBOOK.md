@@ -131,7 +131,7 @@ docker image inspect bench-worker:v1 --format '{{index .Config.Labels "okp.worke
 #    recommended start (above): it owns backgrounding, stdin discipline and log
 #    placement, and writes the log IN-TREE at runs/<tree>/<arm>-cell-<stamp>-s<NNNN>.log —
 #    NOT runs/off-cell-$TS.log. This direct launch places its own log via the
-#    shell redirect below. (OFF; ON cells add `--mode on --org <org>`, §2).
+#    shell redirect below. (OFF; ON cells add `--mode on`, §2).
 #    `--model <alias>` pins the subject: the proxy makes that exact model
 #    resident on the first request (exclusive load on call — no manual load
 #    step). Flags before the subcommand are main-parser flags — argparse
@@ -341,19 +341,13 @@ the corpus empty, so a wipe would destroy nothing AND still be barred.
 
 **BENCH `MODE=on|off`** — one cell. See §3.
 
-**`--org`** — a first-class input to the run command, with mode-dependent requirement.
+**`--org`** — an optional label recorded with the run's cells, in both arms; omitted, the run
+falls back to `okp-org-0`. It does not configure memory: a memory-ON cell's memory is set by the
+memory system's own settings (`BENCH_MEMORY_UPSTREAM`, `BENCH_MEMORY_ENV` — ENV-VARS.md).
 **CLI syntax:** `--org`, `--model`, `--roster-model`, `--task`, `--seed`, `--manifest` are
 MAIN-parser flags and must precede the subcommand
-(`run_cumulative.py --org <org> --model <alias> run --mode on`). argparse rejects them after `run`
+(`run_cumulative.py --model <alias> run --mode on`). argparse rejects them after `run`
 with exit 2 (verified 2026-08-10). `--until-review` is DEAD (removed by `ba2947a`).
-- **ON cells: REQUIRED.** `run_cumulative.py --org <org> --model <alias> run --mode on` — omitting
-  `--org` with `--mode on` errors before any run begins ("`--mode on requires --org <org>`").
-- **OFF cells: OPTIONAL.** Omit `--org` and the run falls back to `okp-org-0`.
-- **The org must already exist.** The bench no longer auto-provisions orgs
-  (`run_cumulative.py:1337-1339`): the maintainer pre-provisions the campaign org via the production
-  dashboard first (connects wallet + imports the 24-word mnemonic), and `--org` names that org. The
-  leader MCP endpoint comes from `BENCH_LEADER_MCP_URL` (the run's existing source; live bench
-  MCP **:4550**, NOT :4450 — see §7 "Known failure: org bootstrap"). Hub :4440.
 
 **EXTRACT** — two distinct surfaces, both separate from the bench command, never folded inside it.
 

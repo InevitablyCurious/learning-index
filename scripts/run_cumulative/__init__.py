@@ -91,14 +91,6 @@ def _handle_run(args: argparse.Namespace) -> int:
             "run_cumulative telemetry cleanup failed (fail-open): %r", _cleanup_exc
         )
 
-    validated_mode = str(getattr(args, "mode", "") or "").strip().lower() or None
-    validated_org = str(getattr(args, "org", "") or "").strip()
-    if validated_mode == "on" and not validated_org:
-        raise RuntimeError(
-            "--mode on requires --org <org>: an ON cell needs a target org. "
-            "Pass --org <org> (provisioned by the production dashboard) or use --mode off."
-        )
-
     context = _build_context(args, require_runtime=True)
     session = _current_session_or_raise(context.sequencer)
     mode_arg = str(getattr(args, "mode", "") or "").strip().lower() or None
@@ -193,9 +185,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--org",
         default=None,
         help=(
-            "Org id for the run; the org is provisioned by the "
-            "production dashboard, not the bench. Required for ON cells "
-            "(--mode on), no default."
+            f"Label recorded with the run's cells (default: {DEFAULT_ORG_ID}). "
+            "Optional in both arms: the memory system's own settings "
+            "(BENCH_MEMORY_ENV) say where its memory lives."
         ),
     )
     parser.add_argument(

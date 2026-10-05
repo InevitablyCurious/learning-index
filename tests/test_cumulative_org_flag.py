@@ -27,31 +27,13 @@ def _preserve_environ():
     os.environ.update(snapshot)
 
 
-def test_on_without_org_errors_before_runtime_build() -> None:
-    """ON cells REQUIRE --org: the validation fires in _handle_run BEFORE
-    _build_context is reached, so no runtime construction happens."""
-    args = SimpleNamespace(mode="on", org="")
-
-    def _forbidden_build_context(*_: Any, **__: Any) -> Any:  # noqa: ANN401
-        raise AssertionError("_build_context must not run for ON-without-org")
-
-    monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(run_cumulative, "_build_context", _forbidden_build_context)
-    try:
-        with pytest.raises(RuntimeError) as excinfo:
-            run_cumulative._handle_run(args)
-    finally:
-        monkeypatch.undo()
-
-    message = str(excinfo.value)
-    assert "--mode on" in message
-    assert "--org" in message
-
-
-def test_on_with_org_and_off_without_org_do_not_raise() -> None:
-    """ON with --org present and OFF without --org both pass the validation."""
+def test_org_is_optional_in_both_arms() -> None:
+    """--org is a label, not a requirement: a memory-ON cell's memory is set by
+    the memory system's own settings (BENCH_MEMORY_ENV), so ON and OFF cells
+    both run with or without it."""
     for args in (
         SimpleNamespace(mode="on", org="okp-org-0"),
+        SimpleNamespace(mode="on", org=""),
         SimpleNamespace(mode="off", org=""),
         SimpleNamespace(mode="", org=""),
     ):

@@ -493,7 +493,7 @@ function baselineConfirm(ledger) {
       ? line({
           glyph: "✓",
           text: "MEMORY ON cell — measured against this model's floor",
-          meta: ui.org ? `org ${ui.org}` : "the server requires an org and will refuse without one",
+          meta: ui.org ? `org ${ui.org}` : "memory: the plugin baked into the worker image",
           kind: "on",
         })
       : line({ glyph: "✓", text: "CONTROL cell — memory off", meta: "this IS the floor; it is measured against nothing", kind: "on" })}
@@ -734,7 +734,7 @@ export async function launchCell({ model, kind, arm = null, org = null } = {}) {
       }
       concurrency = n;
     }
-    // Org is never guessed; the server refuses with org_required.
+    // Org is never guessed; an ON cell runs without one.
     const payload = { model: ui.model, arm: ui.arm ?? "off", kind: ui.kind };
     if ((ui.arm ?? "off") === "on" && ui.org) payload.org = ui.org;
     // Sent only when touched; an absent key applies the server's default.

@@ -229,9 +229,8 @@ class BootstrapMixin:
     def _init_worktree_git(self, *, worktree: Path) -> None:
         # opencode resolves the session worktree by walking up from --dir /work
         # looking for .git; with no .git at/above the bind-mount root it falls
-        # back to "/", so the okp plugin reads /.okp/org.json (absent)
-        # and the session stays DORMANT. git-init the seeded worktree so the
-        # plugin resolves worktree=/work and reads /work/.okp/org.json.
+        # back to "/". git-init the seeded worktree so every session resolves
+        # worktree=/work — the project a memory plugin is handed.
         subprocess.run(
             ["git", "init"],
             cwd=str(worktree),
@@ -263,44 +262,22 @@ class BootstrapMixin:
         self._progress(f"PROGRESS step=worktree-git-init path={worktree}")
 
     def _prepare_memory_mode(self, *, worktree: Path) -> bool:
+        """Both arms start from the same worktree. Returns True for an OFF cell.
 
-        if self.memory_mode == "on":
-            source_org = self._repo_root / ".okp" / "org.json"
-            if not source_org.is_file():
-                raise FileNotFoundError(f"missing required memory marker: {source_org}")
-
-            marker_dir = worktree / ".okp"
-            marker_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source_org, marker_dir / "org.json")
-
-            # Wire the bench-fixture predicate adapter: the plugin observes the
-            # agent's own tool-call output, so the runner is copied into the cell
-            # worktree (outside the frozen scaffold hash) and a predicate.json
-            # declares the bench-fixture reporter. Missing runner source degrades
-            # to a stderr warning while still writing predicate.json so existing
-            # cells keep working.
-            predicate = {"reporter": "bench-fixture", "command": "node bench-check.mjs"}
-            marker_dir.joinpath("predicate.json").write_text(
-                json.dumps(predicate), encoding="utf-8"
-            )
-            runner_source = self.task_dir / "bench" / "bench-check.mjs"
-            if runner_source.is_file():
-                shutil.copy2(runner_source, worktree / "bench-check.mjs")
-            else:
-                self._progress(
-                    f"PROGRESS step=memory-mode warning=bench-runner-missing "
-                    f"path={runner_source}"
-                )
-
-            self._progress(
-                f"PROGRESS step=memory-mode mode=on marker={marker_dir / 'org.json'} "
-                "recall_env_injection=container"
-            )
-            return False
-
+        Memory is switched on in the cell's opencode config (only a memory-ON
+        cell lists the baked plugin — _write_worker_permission_config), never by
+        files in the worktree: the model sees the worktree, so anything put there
+        for one arm only would be a difference between the arms besides memory.
+        A seed snapshot taken under the old OKP wiring can still carry its
+        ``.okp/`` state dir; it is removed in both arms.
+        """
         shutil.rmtree(worktree / ".okp", ignore_errors=True)
-        self._progress("PROGRESS step=memory-mode mode=off pure=true")
-        return True
+        pure = self.memory_mode != "on"
+        self._progress(
+            f"PROGRESS step=memory-mode mode={self.memory_mode} "
+            f"pure={str(pure).lower()}"
+        )
+        return pure
 
     def _load_chunk_prompts(self) -> list[str]:
         """Load the WO-77 chunked first-pass prompts (task/backgammon/prompts/chunk-*.md).

@@ -104,3 +104,26 @@ def test_an_image_without_a_loadable_plugin_reads_as_none(
 ) -> None:
     _inspect_returning(monkeypatch, stdout, returncode)
     assert baked_plugin() is None
+
+
+@pytest.mark.parametrize("memory_mode,pure", [("on", False), ("off", True)])
+def test_both_arms_start_from_the_same_worktree(
+    tmp_path: Path, memory_mode: str, pure: bool
+) -> None:
+    """Memory is switched on in the cell's config, never by files the model sees:
+    no marker, predicate or runner is added for one arm, and a stale ``.okp/``
+    from an old seed snapshot is removed in both."""
+    worktree = tmp_path / "worktree"
+    (worktree / ".okp").mkdir(parents=True)
+    (worktree / ".okp" / "org.json").write_text("{}")
+    (worktree / "package.json").write_text("{}")
+    runner = ChallengeRunner(
+        task_dir=TASK_DIR,
+        work_root=tmp_path / "work-root",
+        model="local/qwen",
+        mock="scaffold",
+        memory_mode=memory_mode,
+    )
+
+    assert runner._prepare_memory_mode(worktree=worktree) is pure
+    assert sorted(p.name for p in worktree.iterdir()) == ["package.json"]

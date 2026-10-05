@@ -169,10 +169,8 @@ export async function finishValidate(
   { model, arm, org, context, kind, entry, cloud, compactRequested = null, requireTodos = false, graderWorkerTarget = null, challengeId = "" },
   { requireConfirm, runsRoot, payload },
 ) {
-  // ON cells need an org; OFF cells must not carry one (the harness's contract).
-  if (arm === "on" && !org) {
-    return refuse("org_required", "an ON (memory) cell requires --org; it needs an org id to write into");
-  }
+  // The org is an optional label on an ON cell (the memory system's own settings
+  // say where its memory lives); a CONTROL cell must not carry one.
   if (arm === "off" && org) {
     return refuse("org_forbidden", "a CONTROL cell must not carry an org — it writes no memories");
   }
