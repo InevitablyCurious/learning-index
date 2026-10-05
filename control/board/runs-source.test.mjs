@@ -23,7 +23,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { read, id, fields } from "./sources/runs.mjs";
+import { read, id, fields, attemptDelta } from "./sources/runs.mjs";
 
 const CURRENT_TREE = "9999999999";
 const CURRENT_RUN = `${CURRENT_TREE}/local/local-llm-proxy/omlx/model-a`;
@@ -34,8 +34,9 @@ const ARCHIVED_RUN = `backups/${STAMP}/${OLD_TREE}/local/local-llm-proxy/omlx/mo
 /** The card contract: EXACTLY these keys, in this order, on every card. */
 const CARD_KEYS = [
   "run_dir", "sequence_index", "benchmark_id", "cell", "archived", "model",
-  "arm", "status", "problems_before", "problems_after", "context_peak",
-  "context_window", "turns", "loop_errors", "stalled_limit_errors",
+  "arm", "status", "problems_before", "problems_after", "problems_fixed",
+  "problems_broke", "context_peak", "context_window", "turns", "loop_errors",
+  "stalled_limit_errors",
 ];
 
 const notice = (event, terminal) =>
@@ -45,6 +46,32 @@ const cutoff = () =>
 
 function writeJsonl(path, records) {
   writeFileSync(path, records.map((r) => JSON.stringify(r)).join("\n") + "\n");
+}
+
+/** gate_results entries: {id, status, phase, duration_ms}, as the harness writes them. */
+const gateResults = (fails, passes) => [
+  ...fails.map((gid) => ({ id: gid, status: "fail", phase: "verify", duration_ms: 1 })),
+  ...passes.map((gid) => ({ id: gid, status: "pass", phase: "verify", duration_ms: 1 })),
+];
+
+/**
+ * One attempt record carrying BOTH gate fields, as real records do: the
+ * colliding `failed_gates` titles (default: three distinct tests under one
+ * bare token, the run-1791151982 [G10] shape — a delta keyed on them sees one
+ * gate, not three) and the `gate_results` roster ids the delta must key on.
+ */
+const G10_TITLES = [
+  "[G10] REQ-WINCLASS — classifies single when loser has already borne off",
+  "[G10] REQ-WINCLASS — classifies gammon when loser has no off, no bar",
+  "[G10] REQ-WINCLASS — a gammon win scores double points",
+];
+function attemptRec(attempt, fails, passes, failedGates = G10_TITLES) {
+  return {
+    type: "attempt", sequence_index: 0, attempt, memory_mode: "off",
+    failed_gates: failedGates,
+    gate_results: gateResults(fails, passes),
+    progress: { turns: 10, problems_before: fails.length, problems_after: fails.length },
+  };
 }
 
 function fixture() {
@@ -202,6 +229,8 @@ test("runs source: each card carries EXACTLY the contract keys, with the stated 
       status: "scored",
       problems_before: 23,
       problems_after: 12,
+      problems_fixed: null, // one attempt, no gate_results — no identity delta
+      problems_broke: null,
       context_peak: 120000,
       context_window: 131072,
       turns: 42,
@@ -223,6 +252,8 @@ test("runs source: each card carries EXACTLY the contract keys, with the stated 
       status: "harness_error",
       problems_before: null,
       problems_after: null,
+      problems_fixed: null, // no manifest, and the ledger states counts alone
+      problems_broke: null,
       context_peak: null,
       context_window: null,
       turns: null,
@@ -343,4 +374,53 @@ test("runs source: a run that aborted before its status stream reads problems fr
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
   }
+});
+
+test("runs source: a swap the counts hide — 3 → 3, but one gate fixed and one broke", async () => {
+  // The card used to read "problems 3 → 3": attempt 1 fails {A,B,C}, attempt 2
+  // fails {B,C,D} — a swap the counts cannot show. The identity delta keys on
+  // gate_results[].id; the colliding failed_gates titles (three [G10] tests,
+  // one bare token) must never be keyed on, and passing gates (P, and A once
+  // fixed) must never count as failed.
+  const runsRoot = fixture();
+  try {
+    writeJsonl(join(runsRoot, CURRENT_RUN, "manifest.status.jsonl"), [
+      attemptRec(1, ["A", "B", "C"], ["P"]),
+      attemptRec(2, ["B", "C", "D"], ["A", "P"]),
+    ]);
+    const res = await read({ runsRoot, benchRoot: runsRoot });
+    const current = fixtureCards(res.patch.runs.list).find((c) => !c.archived);
+    assert.equal(current.problems_before, 3);
+    assert.equal(current.problems_after, 3, "the counts are unchanged — that is the whole problem");
+    assert.equal(current.problems_fixed, 1, "A failed in the first attempt, not the last");
+    assert.equal(current.problems_broke, 1, "D failed in the last attempt, not the first");
+  } finally {
+    rmSync(runsRoot, { recursive: true, force: true });
+  }
+});
+
+test("runs source: attemptDelta — pure fix, pure regression, swap, and the conservative null", () => {
+  // Pure fix: {A,B} → {B}. One fixed, nothing broke.
+  assert.deepEqual(
+    attemptDelta([attemptRec(1, ["A", "B"], []), attemptRec(2, ["B"], ["A"])]),
+    { fixed: 1, broke: 0 },
+  );
+  // Pure regression: {B} → {A,B}.
+  assert.deepEqual(
+    attemptDelta([attemptRec(1, ["B"], []), attemptRec(2, ["A", "B"], [])]),
+    { fixed: 0, broke: 1 },
+  );
+  // The swap at the helper level: {A,B,C} → {B,C,D}.
+  assert.deepEqual(
+    attemptDelta([attemptRec(1, ["A", "B", "C"], ["P"]), attemptRec(2, ["B", "C", "D"], ["A", "P"])]),
+    { fixed: 1, broke: 1 },
+  );
+  // Conservative: fewer than two attempts with a usable gate_results array —
+  // one attempt, a null gate_results, no records at all — compute nothing.
+  assert.equal(attemptDelta([attemptRec(1, ["A"], [])]), null);
+  assert.equal(
+    attemptDelta([attemptRec(1, ["A"], []), { type: "attempt", attempt: 2, gate_results: null }]),
+    null,
+  );
+  assert.equal(attemptDelta([]), null);
 });

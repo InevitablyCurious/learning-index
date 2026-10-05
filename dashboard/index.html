@@ -1711,6 +1711,11 @@ a:hover{color:var(--type)}
 .ph-churn{font:700 10px var(--font);letter-spacing:.08em;white-space:nowrap;color:var(--dim)}
 .ph-churn.good{color:var(--check)}
 .ph-churn.bad{color:var(--danger)}
+/* Run-card problems as identity deltas (+broke red / −fixed green), mirroring
+   the churn colours: a regression is never green, a fix is never red. */
+.cc-delta{color:var(--type)}
+.cc-delta.good{color:var(--check)}
+.cc-delta.bad{color:var(--danger)}
 .ph-stage{font:700 10px var(--font);letter-spacing:.06em;color:var(--warn,#e0b34d);flex-basis:100%;text-align:right;white-space:normal}
 .ph-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font:700 12px var(--font);color:var(--dim)}
 .ph.running .ph-top,.ph.done .ph-top{color:var(--type)}

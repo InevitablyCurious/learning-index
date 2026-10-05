@@ -18,8 +18,9 @@
 // ── SIX THINGS, STATED ───────────────────────────────────────────────────────
 //
 // A card shows exactly: the status header (dot + identity + tag), problems
-// before → after, peak context / window, turns, loop errors, and
-// stalled/limit errors. A field no artifact recorded is null and renders
+// (identity deltas +broke / −fixed when stated, else before → after), peak
+// context / window, turns, loop errors, and stalled/limit errors. A field no
+// artifact recorded is null and renders
 // "not recorded" — never 0, never derived. No progress bar, no meta line, no
 // median marker: the card is a measurement record, not a chart.
 //
@@ -121,8 +122,8 @@ function compact(n) {
 }
 
 /** One label/value row. Labels are this file's own literals; value HTML comes
- *  from statedPair/statedNum (which escape nothing user-made — numbers only)
- *  or from nul(), the single null renderer. */
+ *  from statedPair/statedNum/problemsDelta (which escape nothing user-made —
+ *  numbers only) or from nul(), the single null renderer. */
 function field(label, valueHtml) {
   return `<span class="cc-f"><b class="cc-fl">${label}</b><span class="cc-fv">${valueHtml}</span></span>`;
 }
@@ -140,6 +141,23 @@ function statedPair(a, b, fmt, join) {
     : nul("not recorded");
 }
 
+/** Problems as IDENTITY, not arithmetic: what this run BROKE (+N, red) and
+ *  what it FIXED (−N, green), each exactly as stated. A swap renders BOTH
+ *  (+3 −3) — a net count would call it zero and hide it. Falls back to the
+ *  stated before → after pair when the identity fields are absent, or when
+ *  nothing changed (both zero: the pair is the honest statement then). */
+function problemsDelta(c) {
+  const fixed = c.problems_fixed;
+  const broke = c.problems_broke;
+  if (Number.isFinite(fixed) && Number.isFinite(broke) && (fixed > 0 || broke > 0)) {
+    const parts = [];
+    if (broke > 0) parts.push(`<span class="cc-delta bad">+${broke}</span>`);
+    if (fixed > 0) parts.push(`<span class="cc-delta good">−${fixed}</span>`);
+    return parts.join(" ");
+  }
+  return statedPair(c.problems_before, c.problems_after, String, "→");
+}
+
 function card(c, activeKey) {
   const st = statusOf(c);
   const on = cellKeyOf(c) === activeKey;
@@ -155,7 +173,7 @@ function card(c, activeKey) {
         <span class="cc-tag ${st.tag}">${st.text}</span>
       </span>
       <span class="cc-fields">
-        ${field("problems", statedPair(c.problems_before, c.problems_after, String, "→"))}
+        ${field("problems", problemsDelta(c))}
         ${field("peak ctx", statedPair(c.context_peak, c.context_window, compact, "/"))}
         ${field("turns", statedNum(c.turns))}
         ${field("loop errors", statedNum(c.loop_errors))}

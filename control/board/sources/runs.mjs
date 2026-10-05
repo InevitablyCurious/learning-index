@@ -144,19 +144,58 @@ async function manifestBySeq(modelDir) {
 }
 
 /**
+ * The identity-based fixed/broke delta between a cell's FIRST and LAST attempt.
+ * Counts hide swaps — a run that fixes 3 gates and breaks 3 reads "53 → 53" —
+ * so this diffs the failing gate IDENTITIES, not their number: fixed = failed
+ * in first but not last (green), broke = failed in last but not first (red).
+ * The key is `gate_results[].id` — the roster id (bare token when unique, else
+ * the full slug), byte-identical to the live stream's gate key. NEVER the
+ * `failed_gates` titles: parseGate's bare tokens collide (run 1791151982 lists
+ * three distinct [G10] REQ-WINCLASS tests that all fold to "G10"), and
+ * conformance titles live in a different id space. Conservative: null unless
+ * BOTH compared attempts state a usable gate_results array — fewer than two
+ * attempts with one compute nothing. Returns { fixed, broke } or null.
+ */
+export function attemptDelta(recs) {
+  const byAttempt = new Map();
+  for (const r of recs ?? []) {
+    const attempt = int(r?.attempt);
+    if (attempt === null || !Array.isArray(r?.gate_results)) continue;
+    const failed = new Set();
+    for (const gr of r.gate_results) {
+      if (gr?.status === "fail") failed.add(String(gr.id));
+    }
+    byAttempt.set(attempt, failed); // append-only stream: last stated wins
+  }
+  if (byAttempt.size < 2) return null;
+  const attempts = [...byAttempt.keys()].sort((a, b) => a - b);
+  const first = byAttempt.get(attempts[0]);
+  const last = byAttempt.get(attempts[attempts.length - 1]);
+  let fixed = 0;
+  let broke = 0;
+  for (const id of first) if (!last.has(id)) fixed += 1;
+  for (const id of last) if (!first.has(id)) broke += 1;
+  return { fixed, broke };
+}
+
+/**
  * Fold one cell's attempt records into the fields a card reads. Cumulative
  * fields (progress.*) take the LAST stated value — the terminal attempt's
  * progress is the cell's final progress. Cell-level counters
  * (guard_aborted_turns, stalled_turns, cap_cutoffs) are copied to every
  * attempt row, so last stated = the value. context_peak is PER ATTEMPT: the
- * run's peak is the highest peak stated, never the last attempt's. A field no
- * record states stays null.
+ * run's peak is the highest peak stated, never the last attempt's.
+ * problems_fixed/problems_broke are NOT cumulative — they are the identity
+ * delta (attemptDelta) between the first and last attempt's failed-gate sets.
+ * A field no record states stays null.
  */
 function foldManifest(recs) {
   const out = {
     turns: null,
     problems_before: null,
     problems_after: null,
+    problems_fixed: null,
+    problems_broke: null,
     context_peak: null,
     context_window: null,
     guard_aborted_turns: null,
@@ -180,6 +219,11 @@ function foldManifest(recs) {
     out.terminal_reason = str(r.terminal_reason) ?? out.terminal_reason;
     out.model = str(r.served_model?.model) ?? out.model;
     out.arm = str(r.memory_mode) ?? out.arm;
+  }
+  const delta = attemptDelta(recs);
+  if (delta !== null) {
+    out.problems_fixed = delta.fixed;
+    out.problems_broke = delta.broke;
   }
   return out;
 }
@@ -460,6 +504,11 @@ export async function read(ctx) {
         status,
         problems_before: man?.problems_before ?? int(ledger?.problems_before) ?? graded?.first ?? null,
         problems_after: man?.problems_after ?? int(ledger?.problems_after) ?? graded?.last ?? null,
+        // Identity delta: only the manifest's attempt records carry gate
+        // identities — the ledger and the grader reports state counts alone,
+        // so the archived fallbacks leave these null ("not recorded").
+        problems_fixed: man?.problems_fixed ?? null,
+        problems_broke: man?.problems_broke ?? null,
         context_peak: contextPeak,
         context_window: contextWindow,
         turns: man?.turns ?? int(ledger?.turns) ?? null,

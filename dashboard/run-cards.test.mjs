@@ -99,6 +99,32 @@ test("null is 'not recorded' — never 0, never derived, never half a pair", () 
   assert.ok(!html.includes(">0<"), "and a null never renders as 0");
 });
 
+// ── problems as IDENTITY: +broke (red) / −fixed (green), never a net count ──
+
+test("a swap renders BOTH deltas — never net-zero, never the count pair", () => {
+  const one = firstCard(renderCells(boardWith([card({ problems_fixed: 1, problems_broke: 1 })])));
+  assert.ok(one.includes('<span class="cc-delta bad">+1</span>'), "broke renders +N red");
+  assert.ok(one.includes('<span class="cc-delta good">−1</span>'), "fixed renders −N green (U+2212)");
+  assert.ok(one.indexOf("cc-delta bad") < one.indexOf("cc-delta good"), "broke (+) leads, fixed (−) follows");
+  assert.ok(!one.includes("→"), "identity data replaces the before → after pair");
+});
+
+test("a pure fix renders −N green only", () => {
+  const one = firstCard(renderCells(boardWith([card({ problems_fixed: 1, problems_broke: 0 })])));
+  assert.ok(one.includes('<span class="cc-delta good">−1</span>'), "fixed renders −N green");
+  assert.ok(!one.includes("cc-delta bad"), "nothing broke, so no red delta");
+  assert.ok(!one.includes("+"), "and no + glyph anywhere on the card");
+  assert.ok(!one.includes("→"), "identity data replaces the count pair");
+});
+
+test("a pure regression renders +N red only", () => {
+  const one = firstCard(renderCells(boardWith([card({ problems_fixed: 0, problems_broke: 1 })])));
+  assert.ok(one.includes('<span class="cc-delta bad">+1</span>'), "broke renders +N red");
+  assert.ok(!one.includes("cc-delta good"), "nothing fixed, so no green delta");
+  assert.ok(!one.includes("−"), "and no − glyph anywhere on the card");
+  assert.ok(!one.includes("→"), "identity data replaces the count pair");
+});
+
 test("status → tag text and dot", () => {
   const cases = [
     ["live", "LIVE", "cc-live"],
