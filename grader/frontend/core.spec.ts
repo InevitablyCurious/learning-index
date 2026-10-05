@@ -940,7 +940,13 @@ test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {
   const points = emptyPoints();
   points[23] = -2; // black blocks white entry for die 2 (25-2=23)
   points[21] = -2; // black blocks white entry for die 4 (25-4=21)
-  points[24] = -11; // remaining black checkers — the golden client requires exactly 15 per side
+  // The remaining black checkers — the golden client requires exactly 15 per
+  // side — far from black's home with room ahead: whatever the computer rolls
+  // next, it can move, so its own "no moves" message never stands in for the
+  // player's (run 1791204055: the build wiped the player's notice, the
+  // computer's random 6-5 found no move, and "AI rolled [6, 5] — No moves
+  // available." passed this check).
+  points[2] = -11;
   points[1] = 14; // 14 white in home; the 15th white checker is on the bar (below)
 
   await setupState(page, {
@@ -973,7 +979,9 @@ test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
   const points = emptyPoints();
   points[23] = -2; // black blocks white entry for die 2 (25-2=23)
   points[21] = -2; // black blocks white entry for die 4 (25-4=21)
-  points[24] = -11; // remaining black checkers — the golden client requires exactly 15 per side
+  // The remaining black checkers, far from black's home with room ahead, so
+  // the computer's next roll always has a move — as in F05.
+  points[2] = -11;
   points[1] = 14; // 14 white in home; the 15th white checker is on the bar (below)
 
   await setupState(page, {
