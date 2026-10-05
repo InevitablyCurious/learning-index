@@ -24,7 +24,8 @@ import { existsSync } from "node:fs";
 
 import { refuse } from "./contract.mjs";
 import { sendJson } from "./lib/http.mjs";
-import { args, BENCH_ROOT, PYTHON, initState } from "./state.mjs";
+import { args, BENCH_ROOT, RUNS_ROOT, PYTHON, initState } from "./state.mjs";
+import { startChainLoop } from "./continuous.mjs";
 import { routes as metaRoutes } from "./routes/meta.mjs";
 import { routes as rosterRoutes } from "./routes/roster.mjs";
 import { routes as snapshotRoutes } from "./routes/snapshots.mjs";
@@ -36,6 +37,7 @@ import { routes as eventRoutes } from "./routes/events.mjs";
 import { routes as wallRoutes } from "./routes/wall.mjs";
 import { routes as boardRoutes, startBoardLoops } from "./routes/board.mjs";
 import { routes as screenshotRoutes } from "./routes/screenshot.mjs";
+import { routes as continuousRoutes } from "./routes/continuous.mjs";
 
 // Import-time side effects (event subscription, persist timer, shutdown
 // handlers), in their original order.
@@ -48,6 +50,7 @@ for (const r of [
   ...rosterRoutes,
   ...snapshotRoutes,
   ...runRoutes,
+  ...continuousRoutes,
   ...treeRoutes,
   ...toolRoutes,
 ...challengeRoutes,
@@ -83,6 +86,8 @@ const server = createServer(async (req, res) => {
 // 127.0.0.1 only; there is no flag to change this.
 server.listen(args.port, "127.0.0.1", () => {
   startBoardLoops();
+  // Continuous mode drives this server's own routes, so it starts once they answer.
+  startChainLoop({ benchRoot: BENCH_ROOT, runsRoot: RUNS_ROOT, port: args.port });
   console.log(`bench control plane → http://127.0.0.1:${args.port}`);
   console.log(`  bench root : ${BENCH_ROOT}`);
   console.log(`  python     : ${PYTHON}${existsSync(PYTHON) ? "" : "  (MISSING)"}`);

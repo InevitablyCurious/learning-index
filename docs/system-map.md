@@ -142,9 +142,11 @@ plane exposes `snapshot_depth ?? 1` and drops `cell_seq` (`control/snapshots.mjs
 
 **The run→snapshot join key is end-of-run-only.** `produced_snapshot_id` on
 `manifest.session_records[]` (`harness/cumulative/types.py:582`) is populated ONLY
-by the end-of-run capture (`runner.py:629`), never the attempt-1 capture — so a
-normal unseeded baseline reports null even though its snapshot exists on disk. It
-is the durable link the run-delete path consumes.
+by the end-of-run capture (`_capture_end_of_run_snapshot`, at the attempt ceiling
+or out of context, seeded or fresh), never the attempt-1 capture — so a baseline
+that passed reports null even though its build snapshot exists on disk. It is the
+durable link the run-delete path consumes, and the snapshot continuous mode
+chains from (`control/continuous.mjs`, RUNBOOK §19).
 
 **The manifest is campaign-nested, not at run root.** The manifest holding
 `session_records[].produced_snapshot_id` lives at

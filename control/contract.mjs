@@ -127,7 +127,7 @@ export const STALL_THRESHOLD_S = 900;
  * The confirmation token is a pure function of the submitted parameters, so a
  * preview for one configuration cannot confirm a different one.
  */
-export function confirmationToken({ model, arm, org, context, kind, compact, snapshotId }) {
+export function confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous = false }) {
   const parts = [
     `model=${model ?? ""}`,
     `arm=${arm ?? ""}`,
@@ -141,6 +141,9 @@ export function confirmationToken({ model, arm, org, context, kind, compact, sna
     // The armed snapshot is in the token: re-arming disarms the confirmation.
     `snapshotId=${snapshotId ?? ""}`,
   ];
+  // Continuous mode keeps starting runs after this one, so a confirmation for a
+  // single run must not start a chain. Present only when on.
+  if (continuous === true) parts.push("continuous=on");
   return parts.join("|");
 }
 
@@ -148,7 +151,7 @@ export function confirmationToken({ model, arm, org, context, kind, compact, sna
  * The restatement shown before START, composed by the server so the words read
  * are the words acted on.
  */
-export function restatement({ model, arm, org, context, kind, cloud = null, compact = false }) {
+export function restatement({ model, arm, org, context, kind, cloud = null, compact = false, continuous = false }) {
   const armWord = arm === "on" ? "MEMORY ON" : arm === "off" ? "CONTROL" : "UNKNOWN ARM";
   const isCloud = kind === "cloud";
   return [
@@ -170,6 +173,11 @@ export function restatement({ model, arm, org, context, kind, cloud = null, comp
       : "compaction: OFF — the build runs uncompacted, and the repair phase " +
         "starts with whatever context the build left",
     org ? `org: ${org}` : "org: not applicable to a control cell",
+    // Stated only when on: the one line that says this start is not one run.
+    ...(continuous
+      ? ["continuous: ON — when this run ends the tree is reset and the next run starts from its end " +
+          "snapshot, and so on until the model passes everything"]
+      : []),
   ].join("\n");
 }
 

@@ -314,6 +314,7 @@ import {
   feedExportLabel,
 } from "./panels/live.js";
 import { renderHold } from "./panels/hold.js";
+import { renderContinuous } from "./panels/continuous.js";
 import { renderCells, setSelectedCell, selectedCell, observeCellStrip, activeCell } from "./panels/cells.js";
 import { renderRail } from "./panels/rail.js";
 import { renderRecall } from "./panels/recall.js";
@@ -331,6 +332,7 @@ import {
   setCreateModel,
   toggleCreateCompact,
   toggleCreateConcurrency,
+  toggleCreateContinuous,
   setCreateConcurrencyN,
   openCellConfirm,
   setCreateQuery,
@@ -358,6 +360,7 @@ import {
   doLoadTools,
   doRunTool,
   releaseHold,
+  doEndContinuous,
   detachTui,
   doLoadBackups,
   doArmRestore,
@@ -397,6 +400,7 @@ function render() {
   patch(root, `
     <div class="shell">
       ${renderTopbar(view, { stale: consecutiveErrors > 0, lastError })}
+      ${renderContinuous(view)}
       ${renderHold(view)}
       ${renderCells(view)}
       <div class="axes-row">
@@ -563,7 +567,7 @@ export function followActiveCell(b, repaint) {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
+  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-continuous-end],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-continuous],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
   if (!t) return;
 
   if (t.dataset.gateId) {
@@ -593,6 +597,7 @@ function onClick(e) {
   if (t.hasAttribute("data-tui-detach-yes")) { void detachTui(); return; }
   if (t.hasAttribute("data-tui-cancel")) { cancelDetach(); render(); return; }
   if (t.hasAttribute("data-hold-release")) { void releaseHold(); return; }
+  if (t.hasAttribute("data-continuous-end")) { void doEndContinuous(); return; }
 
   // ── [+ BASELINE] ── pure selection held in panels/create.js; only launch
   // reaches the network.
@@ -624,6 +629,7 @@ function onClick(e) {
   // Flip away from what is currently shown.
   if (t.dataset.createCompact) { toggleCreateCompact(t.dataset.createCompact === "on"); render(); return; }
   if (t.dataset.createConcurrency) { toggleCreateConcurrency(); render(); return; }
+  if (t.dataset.createContinuous) { toggleCreateContinuous(); render(); return; }
   if (t.hasAttribute("data-create-baseline-continue")) {
     // Runs preflight, preview and start; results land on BASELINE · 4.
     void doLaunchBaseline();

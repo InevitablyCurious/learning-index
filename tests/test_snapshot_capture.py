@@ -244,6 +244,39 @@ def test_no_snapshot_beyond_attempt_one(
     assert len(_snapshot_dirs(tmp_path)) == 1
 
 
+def test_fresh_cell_stuck_at_the_ceiling_also_leaves_its_end(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A fresh cell that never passes leaves its build AND its end: continuous
+    mode's first run is fresh, and the next run chains from where it got to."""
+    runner = _make_runner(tmp_path, mock="scaffold", max_attempts=2)
+
+    def _gate(**kwargs: Any) -> dict[str, Any]:
+        return {
+            "verdict": "FAIL",
+            "conformed": True,
+            "problems": [{"check": "[G02] REQ-PIP — pip count"}],
+            "failed_gates": ["[G02] REQ-PIP — pip count"],
+            "gate_results": [],
+            "gate_totals": {},
+        }
+
+    result = _drive(runner, tmp_path, monkeypatch, _gate)
+
+    assert result.termination_reason == "attempt_ceiling_reached"
+    depths = {
+        d.name: json.loads((d / "snapshot.json").read_text(encoding="utf-8")).get(
+            "snapshot_depth"
+        )
+        for d in _snapshot_dirs(tmp_path)
+    }
+    # The build capture omits its depth (read as 1); the end is one deeper.
+    assert sorted(depths.values(), key=str) == [2, None]
+    assert result.produced_snapshot_id == next(
+        name for name, depth in depths.items() if depth == 2
+    )
+
+
 def test_corpus_hashes_flow_into_snapshot(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

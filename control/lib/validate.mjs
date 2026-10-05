@@ -14,6 +14,7 @@ import {
 } from "../cloud.mjs";
 import { resolveDevMode } from "../devmode.mjs";
 import { readSnapshot, seedableBy, resolveArmed } from "../snapshots.mjs";
+import { readChain } from "../continuous.mjs";
 import { substrateRefreshInFlight } from "../tooljobs.mjs";
 // The serial gate's one source of in-flight truth: the N-slot run ledger.
 import { inFlightModels } from "../run-ledger.mjs";
@@ -232,7 +233,33 @@ export async function finishValidate(
     }
   }
 
-  const expected = confirmationToken({ model, arm, org, context, kind, compact, snapshotId });
+  // ── CONTINUOUS MODE ── this start begins a chain: every later run starts from
+  // the last one's end snapshot (control/continuous.mjs). One chain at a time,
+  // one cell at a time, CONTROL cells only, and seeding needs dev mode.
+  const continuous = payload?.continuous === true;
+  if (continuous) {
+    if (arm !== "off") {
+      return refuse("continuous_baseline_only",
+        "continuous mode is set on the + baseline sequence: it chains CONTROL cells, each from the " +
+          "last one's end snapshot — a MEMORY ON cell is one step on its track");
+    }
+    if ((payload?.concurrency ?? 1) !== 1) {
+      return refuse("continuous_one_cell",
+        `continuous mode runs one cell at a time, each from the one before it — got concurrency ${JSON.stringify(payload.concurrency)}`);
+    }
+    if (!devMode.enabled) {
+      return refuse("dev_mode_off",
+        "continuous mode starts every run after the first from the last run's end snapshot, and seeding " +
+          "is a development capability — turn dev mode on in SETTINGS first");
+    }
+    const chain = await readChain({ benchRoot: BENCH_ROOT });
+    if (chain?.active) {
+      return refuse("continuous_active",
+        `continuous mode is already running (run ${chain.links.length}) — end it from its banner first`);
+    }
+  }
+
+  const expected = confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous });
   if (requireConfirm && payload?.confirm !== expected) {
     return refuse(
       "bad_confirmation",
@@ -240,7 +267,7 @@ export async function finishValidate(
         "preview was shown. Review the restatement and confirm again.",
       {
         expected_token: expected,
-        restatement: restatement({ model, arm, org, context, kind, cloud, compact }),
+        restatement: restatement({ model, arm, org, context, kind, cloud, compact, continuous }),
       },
     );
   }
@@ -258,5 +285,5 @@ export async function finishValidate(
     }
   }
 
-  return { ok: true, model, arm, org, context, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge };
+  return { ok: true, model, arm, org, context, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous };
 }

@@ -54,6 +54,7 @@ const STATIC = {
   "/panels/live/history.js": { file: "panels/live/history.js", type: "text/javascript; charset=utf-8" },
   "/panels/live/backend.js": { file: "panels/live/backend.js", type: "text/javascript; charset=utf-8" },
   "/panels/hold.js": { file: "panels/hold.js", type: "text/javascript; charset=utf-8" },
+  "/panels/continuous.js": { file: "panels/continuous.js", type: "text/javascript; charset=utf-8" },
   "/panels/cells.js": { file: "panels/cells.js", type: "text/javascript; charset=utf-8" },
   "/panels/tui.js": { file: "panels/tui.js", type: "text/javascript; charset=utf-8" },
   "/panels/wall.js": { file: "panels/wall.js", type: "text/javascript; charset=utf-8" },

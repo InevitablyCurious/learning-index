@@ -1759,14 +1759,18 @@ snapshot is structurally ineligible) and emits a `notice`. Excluded: `.git/`,
 `.okp/`, `AGENTS.md`, `opencode.json`, `test-results/`; `test/*.cjs` are included
 (genuinely model-authored).
 
-**End-of-run chaining (seeded runs only).** A *seeded* dev-mode run that reaches
-the attempt ceiling (`attempt_ceiling_reached`, regardless of verdict/void)
-promotes its final worktree into a NEW snapshot — `_capture_end_of_run_snapshot`
-(`harness/adapters/challenge/runner.py:565`, call site `:1641-1642` gated on
-`self._seed_snapshot_tree is not None`) — so a chain carries its accumulated
-fixes forward instead of discarding them. Exits that leave no final checkpoint
-(`harness_error`, `transport_incomplete`) skip chaining entirely. The new
-snapshot's depth is the seed's depth + 1 (`runner.py:595`).
+**End-of-run chaining (every stuck run).** A run that reaches the attempt
+ceiling (`attempt_ceiling_reached`, regardless of verdict/void) or runs out of
+context (`context_exhausted`) promotes its final graded worktree into a NEW
+snapshot — `_capture_end_of_run_snapshot` (`harness/adapters/challenge/runner.py`,
+one call at each of those two exits) — so the next run carries its accumulated
+fixes forward instead of discarding them. Seeded and fresh runs alike: a fresh
+baseline that never passes leaves its attempt-1 build snapshot (depth 1) AND its
+end snapshot (depth 2), which is what continuous mode (§19) chains from after its
+first run. Exits that leave no final checkpoint (`harness_error`,
+`transport_incomplete`) and a run that passes (`gates_green`) capture no end. The
+new snapshot's depth is the seed's depth + 1, a fresh run counting as depth 1.
+Seeding FROM any snapshot stays dev-mode only.
 
 ### The chain model — `snapshot_depth`, not `cell_seq`
 
@@ -1783,8 +1787,8 @@ snapshot's depth is the seed's depth + 1 (`runner.py:595`).
   snapshot's real depth, not a hardcoded 1.
 - **`produced_snapshot_id`** is the durable run→snapshot join key, written onto
   `manifest.session_records[]` (`harness/cumulative/types.py:582`) ONLY by the
-  end-of-run chaining capture (`runner.py:629`) — a normal unseeded baseline
-  reports null even though its attempt-1 snapshot exists on disk. The run
+  end-of-run chaining capture — never the attempt-1 capture, so a baseline that
+  passed reports null even though its attempt-1 snapshot exists on disk. The run
   manifest is **campaign-nested**, NOT at run root:
   `<runs_root>/<treeId>/<substrate>/<router>/<provider>/<model>/manifest.json`
   (`control/campaign.mjs:72-73`), and under
@@ -1862,3 +1866,69 @@ only) and the seed's `snapshot_depth` threaded into the cell
 
 - `BENCH_SEED_SNAPSHOT` — pins the armed snapshot id; unset it to arm from the board.
 - `BENCH_SEED_SNAPSHOT_FILE` — overrides the armed-state file (default `config/armed-snapshot.json`).
+## 19. CONTINUOUS MODE
+
+The way the benchmark is meant to be run once the system is judged healthy: the
+operator starts ONE baseline with **CONTINUOUS: ON** (the + baseline sequence's
+confirm frame), and from then on every run that ends stuck is followed by the next
+run, started from its end snapshot (§18), until the model passes everything. There
+is no analysis between runs and no judgement of faults — it only chains.
+
+### What it does between runs (`control/continuous.mjs`)
+
+A watcher in the control plane looks at the chain every 15 s. When the chain's run
+is no longer in flight it writes down how the run ended — `verdict` and
+`terminal_reason` from the cell's own `cell.end`, the end snapshot from the
+campaign manifest's `produced_snapshot_id` — and then drives the control plane's
+OWN routes in the order an operator's run takes:
+
+1. `POST /api/tree/reset/preview` → `POST /api/tree/reset` (the finished run is
+   archived into `runs/backups/`, as a hand reset does);
+2. `POST /api/snapshots/arm` with the end snapshot;
+3. `GET /api/preflight` (compaction checked unless the payload turned it off);
+4. `POST /api/run/preview` — the token must carry `snapshotId=<that snapshot>`;
+5. `POST /api/run/start` with the operator's original payload and that token.
+
+So a chained run passes every gate a hand-started run does and is refused for the
+same reasons. The outcome is written BEFORE the reset, so a restart mid-chain never
+needs to read a run that has moved, and a restart after the reset does not reset
+again.
+
+### When it stops
+
+It ENDS — never retries — and the board's banner says why:
+
+| code | when |
+|---|---|
+| `passed` | the run's `cell.end` verdict is PASS (`gates_green`) — the model passed everything |
+| `run_stopped` | the run's `cell.end` says `stopped` |
+| `operator_stop` | the operator pressed STOP (the run stop ends the chain first) |
+| `operator_end` | END AFTER THIS RUN on the banner — the run in flight finishes, no next run starts |
+| `no_end_snapshot` | the run ended without an end snapshot (`harness_error`, `transport_incomplete`, a budget stop, …) |
+| `dev_mode_off` | dev mode was turned off — every chained run is seeded |
+| `cell_in_flight` | another cell is running — the chain never resets the tree under it |
+| `reset_refused`, `arm_refused`, `preflight_failed`, `preview_refused`, `start_refused` | that step was refused; the server's own code and reason are kept |
+| `not_seeded` | the preview was not seeded from the armed snapshot — the chain never starts a fresh build in its place |
+| `chain_error` | anything that threw |
+
+It only WAITS (the next tick) while a substrate refresh (a `blocks_runs` tool job)
+is running; the banner shows what it is waiting for.
+
+### Starting it
+
+The start request carries `continuous: true`. The start refuses it on the MEMORY
+ON arm (`continuous_baseline_only`), with more than one cell
+(`continuous_one_cell`), with dev mode off (`dev_mode_off`), and while another
+chain is active (`continuous_active`). It is in the confirmation token
+(`continuous=on`) and the restatement, so a confirmation for one run never starts
+a chain.
+
+### State and routes
+
+- State: `config/continuous.json` (override `BENCH_CONTINUOUS_FILE`), beside the
+  armed snapshot, so a tree reset never moves it: `active`, the original
+  `payload`, `links[]` (one per run: `run_id`, `run_dir`, `sequence_index`,
+  `log_path`, `seeded_from`, `outcome`), `waiting`, `ended {at, code, reason}`.
+- `GET /api/continuous` — the chain (null when none was ever started); the board
+  carries the same object as `board.continuous`.
+- `POST /api/continuous/stop` — END AFTER THIS RUN.

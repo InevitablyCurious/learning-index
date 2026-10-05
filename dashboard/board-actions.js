@@ -17,6 +17,7 @@ import { notePickRefusal } from "./panels/ledger.js";
 import { loadBackups, armRestore, commitRestore } from "./panels/restore.js";
 import { previewStop, commitStop } from "./panels/runstart.js";
 import { cancelDetach } from "./panels/tui.js";
+import { setContinuousRefusal } from "./panels/continuous.js";
 
 export async function doPreviewStop() {
   const reach = controlReachability(board);
@@ -106,6 +107,32 @@ export async function releaseHold() {
   } catch (err) {
     console.error("hold release failed:", err);
   }
+}
+
+/**
+ * END AFTER THIS RUN: continuous mode stops chaining; the run in flight goes
+ * on. A refusal is shown in the banner itself. The next poll's ended chain is
+ * the success signal.
+ */
+export async function doEndContinuous() {
+  const reach = controlReachability(board);
+  if (!reach.ok) {
+    setContinuousRefusal(`ending continuous mode is unavailable — ${reach.code}: ${reach.reason}`);
+    render();
+    return;
+  }
+  try {
+    const res = await fetch(`/api/continuous/stop`, { method: "POST" });
+    const data = await res.json().catch(() => null);
+    setContinuousRefusal(
+      res.ok && data?.ok !== false
+        ? null
+        : `${data?.code ?? `HTTP ${res.status}`}: ${data?.reason ?? "ending continuous mode was refused"}`,
+    );
+  } catch (err) {
+    setContinuousRefusal(`ending continuous mode failed: ${err?.message ?? err}`);
+  }
+  render();
 }
 
 export async function detachTui() {

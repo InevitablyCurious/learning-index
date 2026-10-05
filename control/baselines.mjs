@@ -332,9 +332,10 @@ export async function collectCells(runsRoot) {
 /**
  * How a cell ended, from the last cell.end on its own live.jsonl
  * (harness/live_stream.py), or null when it recorded no end. The tail is
- * enough: cell.end is the stream's last word.
+ * enough: cell.end is the stream's last word. Continuous mode reads the verdict
+ * from here too (control/continuous.mjs).
  */
-async function readCellEnd(cellDir) {
+export async function readCellEnd(cellDir) {
   const tail = await readTail(join(cellDir, "live.jsonl"));
   const lines = tail.split("\n");
   for (let i = lines.length - 1; i >= 0; i -= 1) {
@@ -342,7 +343,11 @@ async function readCellEnd(cellDir) {
     try {
       const rec = JSON.parse(lines[i]);
       if (rec?.kind !== "cell.end") continue;
-      return { terminal_reason: str(rec.terminal_reason), terminal_exception: str(rec.terminal_exception) };
+      return {
+        verdict: str(rec.verdict),
+        terminal_reason: str(rec.terminal_reason),
+        terminal_exception: str(rec.terminal_exception),
+      };
     } catch {
       continue;
     }

@@ -41,6 +41,10 @@ const ui = {
   // String; the count N, default the verified ceiling. Stored as a string so a
   // half-typed value survives; parsed at launch.
   concurrencyN: "8",
+  // Continuous mode, default OFF: when the run ends the next starts from its end
+  // snapshot (control/continuous.mjs). One cell at a time, so it and concurrency
+  // turn each other off.
+  continuous: false,
 
   // "Working" and "refused" are different facts; never shown as each other.
   pending: false,
@@ -73,6 +77,7 @@ export function openCreate() {
   ui.compact = null;
   ui.concurrency = false;
   ui.concurrencyN = "8";
+  ui.continuous = false;
   ui.pending = false;
   ui.refusal = null;
   ui.launch = null;
@@ -177,6 +182,12 @@ export function setCreateQuery(q) {
 
 export function toggleCreateConcurrency() {
   ui.concurrency = !ui.concurrency;
+  if (ui.concurrency) ui.continuous = false;
+}
+
+export function toggleCreateContinuous() {
+  ui.continuous = !ui.continuous;
+  if (ui.continuous) ui.concurrency = false;
 }
 
 export function setCreateConcurrencyN(v) {
@@ -207,7 +218,7 @@ function frame(board, ledger) {
     case "b2": return baselineModel(ledger);
     case "b2s": return baselineSeed(ledger, board);
     case "bc": return baselineChallenge(board);
-    case "b3": return baselineConfirm(ledger);
+    case "b3": return baselineConfirm(ledger, board);
     case "b4": return launchProgress(board);
     // An unknown step is a map bug; fall back to the first frame.
     default: return baselineKind(ledger);
@@ -476,7 +487,7 @@ function baselineChallenge(board) {
   });
 }
 
-function baselineConfirm(ledger) {
+function baselineConfirm(ledger, board) {
   const m = (ledger?.startable ?? []).find((x) => x.id === ui.model) ?? null;
   const cloud = ledger?.cloud ?? null;
   const isCloud = ui.kind === "cloud";
@@ -529,6 +540,7 @@ function baselineConfirm(ledger) {
       : line({ glyph: "·", text: "this cell IS the floor", meta: "an OFF baseline is measured against nothing — it is what everything else is subtracted from", kind: "ghost" })}
     ${compactOn ? "" : compactOffWarning(compactDefault)}
     ${isOn ? "" : concurrencyControl()}
+    ${isOn ? "" : continuousControl(isDevModeOn(board))}
     ${seedWarning()}`;
 
   return shell({
@@ -587,6 +599,41 @@ function concurrencyControl() {
       CONCURRENT: ${ui.concurrency ? "ON" : "OFF"}
     </button>
     <input class="cconcurrent-n" data-create-concurrency-n="1" value="${esc(ui.concurrencyN)}" inputmode="numeric" aria-label="cells at once"${ui.concurrency ? "" : " disabled"}>
+    ${note}`;
+}
+
+/**
+ * The continuous control: when this run ends, the tree is reset and the next run
+ * starts from its end snapshot, until the model passes everything
+ * (control/continuous.mjs). Every run after the first is seeded, so the server
+ * refuses it with dev mode off — said here before START, never discovered after.
+ */
+function continuousControl(devOn) {
+  let note = "";
+  if (ui.continuous && !devOn) {
+    note = `
+      <div class="cwarn override" role="alert">
+        <span class="cwarn-head">${esc("DEV MODE IS OFF — LAUNCH WILL BE REFUSED")}</span>
+        <span class="cwarn-body">${esc(
+          "Every run after the first starts from the last run's end snapshot, and seeding is a " +
+            "dev-mode capability. Turn dev mode on in SETTINGS first.",
+        )}</span>
+      </div>`;
+  } else if (ui.continuous) {
+    note = `
+      <div class="cwarn" role="note">
+        <span class="cwarn-head">${esc("CONTINUOUS — THIS START IS NOT ONE RUN")}</span>
+        <span class="cwarn-body">${esc(
+          "When this run ends, the tree is reset and the next run starts from its end snapshot, " +
+            "and so on until the model passes everything. The banner at the top shows the chain " +
+            "and ends it.",
+        )}</span>
+      </div>`;
+  }
+  return `
+    <button class="ccontinuous-btn" data-create-continuous="${ui.continuous ? "on" : "off"}" aria-pressed="${ui.continuous}">
+      CONTINUOUS: ${ui.continuous ? "ON" : "OFF"}
+    </button>
     ${note}`;
 }
 
@@ -686,6 +733,7 @@ export function openCellConfirm({ model, kind, arm = "off", org = null } = {}) {
   ui.org = org;
   ui.compact = null;
   ui.concurrency = false;
+  ui.continuous = false;
   ui.refusal = null;
   ui.launch = null;
   ui.step = "b3";
@@ -742,6 +790,9 @@ export async function launchCell({ model, kind, arm = null, org = null } = {}) {
     // Sent only when the operator turned the toggle on; absent = the server's
     // default of 1. (The value is already validated above.)
     if (concurrency !== null) payload.concurrency = concurrency;
+    // Sent only when on, and only on the baseline arm; it is in the confirmation
+    // token, so the server never starts a chain the operator did not confirm.
+    if (ui.continuous && (ui.arm ?? "off") !== "on") payload.continuous = true;
     // The challenge: the server refuses an unknown one, or a second challenge on a
     // baseline that already built another.
     if (ui.challenge) payload.challenge = ui.challenge;

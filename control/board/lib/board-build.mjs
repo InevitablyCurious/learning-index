@@ -23,6 +23,7 @@ import * as liveStream from "../sources/live-stream.mjs";
 import * as toolJobs from "../sources/tool-jobs.mjs";
 import * as cells from "../sources/cells.mjs";
 import * as runs from "../sources/runs.mjs";
+import * as continuous from "../sources/continuous.mjs";
 
 // Every source is always on: each one reports its own absence ("unwired",
 // with a reason) instead of being switched off by configuration.
@@ -30,7 +31,7 @@ import * as runs from "../sources/runs.mjs";
 // Board-wide sources: one read for the whole board.
 const MODS = [
   runManifest, statusStream, stackLedger, funnelCells, pluginLog,
-  controlPlane, toolJobs, cells, runs,
+  controlPlane, toolJobs, cells, runs, continuous,
 ];
 
 // ── PER-CELL SOURCES ── everything that describes ONE cell. Each exports
@@ -80,6 +81,8 @@ const ORDER = [
   // Owns `suite` alone (split from control-plane so a slow suite can't hold the
   // TUI); position not load-bearing.
   "gate-suite",
+  // Owns `continuous` alone — one small file read; listed so it never sorts first.
+  "continuous",
 ];
 
 async function buildBoard(cfg) {

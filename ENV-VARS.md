@@ -44,6 +44,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | BENCH_DEV_MODE_FILE | <bench>/config/devmode.json | dev-mode state file location — read `control/devmode.mjs:57-59` | env |
 | BENCH_SEED_SNAPSHOT | (none) | pins the armed build-snapshot id (env pin ⇒ `settable:false`) — read `control/snapshots.mjs:252` | env |
 | BENCH_SEED_SNAPSHOT_FILE | <bench>/config/armed-snapshot.json | armed-snapshot state file location — read `control/snapshots.mjs:241` | env |
+| BENCH_CONTINUOUS_FILE | <bench>/config/continuous.json | continuous-mode chain state file location — read `control/continuous.mjs` (`chainStateFile`) | env |
 
 ## read+undocumented
 | Name | Default | Controls | Override |

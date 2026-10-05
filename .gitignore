@@ -87,6 +87,8 @@ config/devmode.json
 # The snapshot armed for the next seeded run. Operator machine state, same
 # class as devmode.json above — never committed.
 config/armed-snapshot.json
+# The continuous-mode chain (control/continuous.mjs). Operator machine state.
+config/continuous.json
 
 # Challenge repos cloned in here are their own repos, never this one.
 challenges/*

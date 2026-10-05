@@ -636,12 +636,14 @@ class ChallengeRunner(
         session_id: str | None,
         attempt: int,
     ) -> str | None:
-        """Promote an exhausted seeded cell's final attempt into a new snapshot.
+        """Promote a stuck cell's final graded attempt into a new snapshot.
 
-        Dev-mode only: fires at the attempt ceiling, copies the final attempt's
-        checkpoint tree (already excluded + frozen) into runs/snapshots/ with
-        snapshot_depth = seed depth + 1, and records the new id on self so the
-        cell result can carry it back to the campaign (the run->snapshot join key).
+        Fires at the attempt ceiling and when the cell runs out of context, for
+        seeded and fresh cells alike: copies the final attempt's checkpoint tree
+        (already excluded + frozen) into runs/snapshots/ with snapshot_depth =
+        seed depth + 1 (a fresh cell's build is depth 1, so its end is 2), and
+        records the new id on self so the cell result can carry it back to the
+        campaign (the run->snapshot join key). Seeding from it stays dev-mode only.
 
         Instrumentation: never raises, never fails a cell. Failure degrades to
         "no snapshot" plus one warn notice.
@@ -1805,25 +1807,24 @@ class ChallengeRunner(
                         termination_reason = "transport_incomplete"
                     else:
                         termination_reason = "attempt_ceiling_reached"
-                        # WO-LI-SNAPSHOT-CHAIN: dev-mode only. A seeded cell that
-                        # exhausts its attempts promotes its FINAL attempt's
-                        # checkpoint tree into a new snapshot (snapshot_depth =
-                        # seed depth + 1). Skipped on harness_error (no checkpoint)
-                        # and transport_incomplete (breaks earlier, never here).
-                        if self._seed_snapshot_tree is not None:
-                            self._capture_end_of_run_snapshot(
-                                worktree=(
-                                    run_dir
-                                    / "checkpoints"
-                                    / f"cp-{attempt:02d}"
-                                    / "tree"
-                                ),
-                                state_hash=attempt_state_hash,
-                                run_label=run_label,
-                                run_identity=run_identity,
-                                session_id=session_id,
-                                attempt=attempt,
-                            )
+                        # WO-LI-SNAPSHOT-CHAIN: a cell that exhausts its attempts,
+                        # seeded or fresh, promotes its FINAL attempt's checkpoint
+                        # tree into a new snapshot (snapshot_depth = seed depth + 1)
+                        # so the next run can chain from where this one got to — a
+                        # fresh baseline included, or continuous mode has nothing
+                        # to continue from after its first run. Skipped on
+                        # harness_error (no checkpoint) and transport_incomplete
+                        # (breaks earlier, never here).
+                        self._capture_end_of_run_snapshot(
+                            worktree=(
+                                run_dir / "checkpoints" / f"cp-{attempt:02d}" / "tree"
+                            ),
+                            state_hash=attempt_state_hash,
+                            run_label=run_label,
+                            run_identity=run_identity,
+                            session_id=session_id,
+                            attempt=attempt,
+                        )
                     break
 
                 if worker_killed_reason in _HARNESS_LIMIT_REASONS:
@@ -2107,22 +2108,21 @@ class ChallengeRunner(
                         f"PROGRESS run_label={run_label} step=context-exhausted-stop "
                         f"phase=feedback-{attempt} graded={len(attempt_reports)}"
                     )
-                    # A seeded cell out of room is stuck the same way as one out
-                    # of attempts: promote the round it was graded on, so the
-                    # next run chains from where this one got to (dev-mode only,
-                    # as at the ceiling). Run 1790785038 stopped here with no
+                    # A cell out of room is stuck the same way as one out of
+                    # attempts: promote the round it was graded on, so the next
+                    # run chains from where this one got to (seeded or fresh, as
+                    # at the ceiling). Run 1790785038 stopped here with no
                     # snapshot to continue from.
-                    if self._seed_snapshot_tree is not None:
-                        self._capture_end_of_run_snapshot(
-                            worktree=(
-                                run_dir / "checkpoints" / f"cp-{attempt:02d}" / "tree"
-                            ),
-                            state_hash=attempt_state_hash,
-                            run_label=run_label,
-                            run_identity=run_identity,
-                            session_id=session_id,
-                            attempt=attempt,
-                        )
+                    self._capture_end_of_run_snapshot(
+                        worktree=(
+                            run_dir / "checkpoints" / f"cp-{attempt:02d}" / "tree"
+                        ),
+                        state_hash=attempt_state_hash,
+                        run_label=run_label,
+                        run_identity=run_identity,
+                        session_id=session_id,
+                        attempt=attempt,
+                    )
                     break
                 if feedback_run.budget_stop_detected:
                     verdict = "BUDGET_STOP"

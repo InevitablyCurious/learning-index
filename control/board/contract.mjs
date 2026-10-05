@@ -121,6 +121,11 @@ export function emptyBoard() {
     // offered, even when the UI link is dead (then no link is shown).
     hold: null,
 
+    // ── CONTINUOUS MODE ── owned by sources/continuous.mjs: the chain as
+    // control/continuous.mjs keeps it (active, its runs, why it ended). null =
+    // no chain was ever started: the banner renders nothing.
+    continuous: null,
+
     // ── THE LEARNING VIEW ── the model's own account of what it learned this
     // cell, the gate×attempt matrix and the learning ledger (sources/learning.mjs,
     // panels/learning.js). null = no active run. Window labels come from

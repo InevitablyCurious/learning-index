@@ -40,6 +40,7 @@ import { sendJson, readBody } from "../lib/http.mjs";
 import { validateStart } from "../lib/validate.mjs";
 import { substrateRefreshInFlight } from "../tooljobs.mjs";
 import { stopAll } from "../lib/lifecycle.mjs";
+import { beginChain, endChain, readChain } from "../continuous.mjs";
 
 // The stop confirmation token, shared by preview and commit. Bound to EVERY
 // run in flight: a cell starting or ending, or a new pid/log, re-mints it, so a
@@ -98,11 +99,12 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge } = check;
+      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous } = check;
       sendJson(res, 200, {
         ok: true,
-        token: confirmationToken({ model, arm, org, context, kind, compact, snapshotId }),
-        restatement: restatement({ model, arm, org, context, kind, cloud, compact }),
+        token: confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous }),
+        restatement: restatement({ model, arm, org, context, kind, cloud, compact, continuous }),
+        continuous: continuous === true,
         // The resolved compaction answer, so the frame shows what the token was
         // minted for.
         compact: compact === true,
@@ -170,7 +172,7 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge } = check;
+      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous } = check;
 
       // Argv array, no shell — the SHARED argv, identical for every cell of
       // the batch except the per-cell --sequence-index spliced in below.
@@ -440,9 +442,38 @@ export const routes = [
         return;
       }
 
+      // Continuous mode: this launch is the chain's first run (control/continuous.mjs
+      // starts every later one). Not recorded = it will not chain, and says so.
+      let chain = null;
+      if (continuous) {
+        try {
+          chain = await beginChain({
+            benchRoot: BENCH_ROOT,
+            payload,
+            link: {
+              run_id: runs[0].run_id,
+              run_dir: target.run_dir,
+              sequence_index: runs[0].sequence_index,
+              log_path: runs[0].log_path,
+              seeded_from: snapshotId ?? null,
+              started_at: Date.now(),
+            },
+          });
+        } catch (err) {
+          sendJson(res, 500, refuse(
+            "continuous_not_recorded",
+            `the run started (pid ${runs[0].pid ?? "?"}), but continuous mode could not be recorded, ` +
+              `so it will not chain — ${err?.message ?? err}`,
+            { runs, tree_error },
+          ));
+          return;
+        }
+      }
+
       sendJson(res, 200, {
         ok: true,
         runs,
+        ...(chain ? { continuous: chain } : {}),
         // null is healthy; non-null means these runs are filed outside the tree.
         tree_error,
         // The N=1 mirror: the dashboard's single-start consumer
@@ -530,11 +561,19 @@ export const routes = [
         );
         return;
       }
+      // Stopping the run stops continuous mode too, before the run's end can
+      // start the next one. Recorded with the operator as the reason.
+      const chainWasActive = (await readChain({ benchRoot: BENCH_ROOT }))?.active === true;
+      if (chainWasActive) {
+        await endChain({ benchRoot: BENCH_ROOT, code: "operator_stop", reason: "the operator stopped the run" });
+      }
       const done = await stopAll();
       const after = await readRunState({ runsRoot: RUNS_ROOT });
       sendJson(res, 200, {
         ok: true,
         stopped: true,
+        // Only when this stop ended a running chain.
+        ...(chainWasActive ? { continuous_ended: true } : {}),
         runs: done.runs,
         signalled: done.signalled,
         // From a re-read: "signal sent" is not "nothing is running".

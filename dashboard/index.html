@@ -716,6 +716,15 @@ a:hover{color:var(--type)}
 .hold{gap:10px}
 .hold.lan,.hold.dead{border-color:var(--danger)}
 .hold-url,.hold-actions,.hold-diag{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+/* CONTINUOUS MODE — the chain's banner (panels/continuous.js): accent while it
+   runs, plain once it ended, ok-green when the model passed everything. */
+.cont{background:var(--surface-raised);border:1px solid var(--accent);border-radius:var(--radius-xl);padding:var(--pad);display:flex;flex-direction:column;gap:10px;min-width:0}
+.cont.ended{border-color:var(--border)}
+.cont.passed{border-color:var(--ok)}
+.cont-line{font:400 12px/1.6 var(--font);color:var(--fg)}
+.cont-wait{color:var(--warn)}
+.cont-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.cont-refusal{font:400 12px/1.6 var(--font);color:var(--danger)}
 .muted-box{padding:8px 10px;border:1px solid var(--danger);border-radius:var(--radius-sm)}
 
 /* THE FREEZE REFUSAL. Rendered where the click happened, because a refusal the
@@ -840,6 +849,8 @@ a:hover{color:var(--type)}
 .ccompact-btn.override{border:1px solid var(--danger);color:var(--danger)}
 .cconcurrent-btn{font:400 11px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;cursor:pointer}
 .cconcurrent-btn:hover{border-color:var(--border-strong)}
+.ccontinuous-btn{font:400 11px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;cursor:pointer}
+.ccontinuous-btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
 .ctitle{font:700 14px/1.35 var(--font);color:var(--type)}
 .cbody{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
 .cnote{font:400 11.5px/1.5 var(--font);color:var(--dim)}
