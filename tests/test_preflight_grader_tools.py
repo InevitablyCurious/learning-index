@@ -63,7 +63,10 @@ def test_missing_tools_refuse_without_running_the_lister(tmp_path: Path) -> None
 
 
 def test_a_complete_non_empty_list_passes(tmp_path: Path) -> None:
-    roster = {"total": 117, "enumeration": {"complete": True, "incomplete_reason": None}}
+    roster = {
+        "total": 117,
+        "enumeration": {"complete": True, "incomplete_reason": None},
+    }
     c = Check()
     check_grader_tools(c, grader_dir=_installed(tmp_path), run=_writes_roster(roster))
     row = _only_row(c)
@@ -74,7 +77,10 @@ def test_a_complete_non_empty_list_passes(tmp_path: Path) -> None:
 def test_an_incomplete_list_refuses_and_names_the_reason(tmp_path: Path) -> None:
     roster = {
         "total": 71,
-        "enumeration": {"complete": False, "incomplete_reason": "frontend: list failed"},
+        "enumeration": {
+            "complete": False,
+            "incomplete_reason": "frontend: list failed",
+        },
     }
     c = Check()
     check_grader_tools(c, grader_dir=_installed(tmp_path), run=_writes_roster(roster))

@@ -24,12 +24,7 @@ def _told(checks):
     }
 
 
-PROMPTS = (
-    Path(__file__).resolve().parents[1]
-    / "task"
-    / "backgammon"
-    / "prompts"
-)
+PROMPTS = Path(__file__).resolve().parents[1] / "task" / "backgammon" / "prompts"
 
 
 def _override(token: str, kind: str = "first") -> str:
@@ -49,19 +44,27 @@ def test_build_pass_verdict_lists_what_is_no_longer_happening() -> None:
     e07 = _override("E07")
     g07 = _override("G07")
 
-    single = ChallengeRunner._build_pass_verdict(newly_passing=["[E07] REQ-ALLINHOME-BAR — bar not all home"], told=_told(["[E07] REQ-ALLINHOME-BAR — bar not all home"]))
+    single = ChallengeRunner._build_pass_verdict(
+        newly_passing=["[E07] REQ-ALLINHOME-BAR — bar not all home"],
+        told=_told(["[E07] REQ-ALLINHOME-BAR — bar not all home"]),
+    )
     assert single == (
         f"That fixed it — I'm not running into this any more:\n\n1) {e07}"
     )
     assert "[E07]" not in single and "REQ-" not in single
 
-    multi = ChallengeRunner._build_pass_verdict(newly_passing=[
+    multi = ChallengeRunner._build_pass_verdict(
+        newly_passing=[
             "[E07] REQ-ALLINHOME-BAR — bar not all home",
             "[G07] REQ-HIT — hit to bar",
-        ], told=_told([
-            "[E07] REQ-ALLINHOME-BAR — bar not all home",
-            "[G07] REQ-HIT — hit to bar",
-        ]))
+        ],
+        told=_told(
+            [
+                "[E07] REQ-ALLINHOME-BAR — bar not all home",
+                "[G07] REQ-HIT — hit to bar",
+            ]
+        ),
+    )
     assert multi == (
         f"That fixed it — I'm not running into these any more:\n\n1) {e07}\n2) {g07}"
     )
@@ -82,10 +85,16 @@ def test_build_pass_verdict_bounds_a_mass_pass() -> None:
 
     # Fourteen real frontend gates — whichever exist, since gates come and go
     # (F13 was folded into F37).
-    tokens = sorted(k for k in ChallengeRunner._feedback_overrides() if k[:1] == "F" and k[1:].isdigit())[:14]
+    tokens = sorted(
+        k
+        for k in ChallengeRunner._feedback_overrides()
+        if k[:1] == "F" and k[1:].isdigit()
+    )[:14]
     gates = [f"[{t}] REQ-X — frontend gate {t}" for t in tokens]
     assert len(gates) > _PASS_VERDICT_MAX_LISTED
-    verdict = ChallengeRunner._build_pass_verdict(newly_passing=gates, told=_told(gates))
+    verdict = ChallengeRunner._build_pass_verdict(
+        newly_passing=gates, told=_told(gates)
+    )
 
     numbered = [ln for ln in verdict.splitlines() if ln[:1].isdigit()]
     assert len(numbered) == _PASS_VERDICT_MAX_LISTED
@@ -97,7 +106,10 @@ def test_build_pass_verdict_hard_fails_on_an_uncovered_gate() -> None:
     """A pass-verdict item with no override is a misconfigured benchmark, not a
     thing to route around — it would otherwise leak the gate's title."""
     with pytest.raises(MissingFeedbackOverrideError):
-        ChallengeRunner._build_pass_verdict(newly_passing=["[ZZ9] REQ-NOTHING — some gate"], told=_told(["[ZZ9] REQ-NOTHING — some gate"]))
+        ChallengeRunner._build_pass_verdict(
+            newly_passing=["[ZZ9] REQ-NOTHING — some gate"],
+            told=_told(["[ZZ9] REQ-NOTHING — some gate"]),
+        )
 
 
 def test_build_feedback_prompt_openers_and_invariants() -> None:

@@ -41,14 +41,22 @@ GATES = default_spec().grader_dir
 def grade(workers: int, out_dir: Path, roster: Path) -> dict:
     out = out_dir / f"w{workers}.json"
     argv = [
-        "docker", "run", "--rm",
-        "-e", f"BENCH_WORKERS={workers}",
-        "-v", f"{GOLDEN}:/candidate:ro",
-        "-v", f"{out_dir}:/out",
+        "docker",
+        "run",
+        "--rm",
+        "-e",
+        f"BENCH_WORKERS={workers}",
+        "-v",
+        f"{GOLDEN}:/candidate:ro",
+        "-v",
+        f"{out_dir}:/out",
         IMAGE,
-        "--target", "/candidate",
-        "--roster", f"/out/{roster.name}",
-        "--out", f"/out/{out.name}",
+        "--target",
+        "/candidate",
+        "--roster",
+        f"/out/{roster.name}",
+        "--out",
+        f"/out/{out.name}",
     ]
     proc = subprocess.run(argv, capture_output=True, text=True, check=False)  # noqa: S603
     if not out.is_file():
@@ -67,7 +75,9 @@ def main() -> int:
         roster = out_dir / "roster.json"
         subprocess.run(  # noqa: S603
             ["node", "roster.mjs", "--out", str(roster)],
-            cwd=GATES, check=True, capture_output=True,
+            cwd=GATES,
+            check=True,
+            capture_output=True,
         )
 
         print(f"grading the golden at 1 worker and at {max_workers} ...", flush=True)
@@ -85,7 +95,10 @@ def main() -> int:
     if disagree:
         print(f"\nPARITY BROKEN — {len(disagree)} gate(s) differ:", file=sys.stderr)
         for k in disagree:
-            print(f"  {k}\n    1 worker={a.get(k)}  {max_workers} workers={b.get(k)}", file=sys.stderr)
+            print(
+                f"  {k}\n    1 worker={a.get(k)}  {max_workers} workers={b.get(k)}",
+                file=sys.stderr,
+            )
         print(
             "\nParallelism is changing what the grader reports. Until this is "
             "fixed, grade with BENCH_WORKERS=1.",
@@ -96,7 +109,9 @@ def main() -> int:
     # A pass count that matches by accident is not parity. The golden must also
     # actually be green, or "they agree" could mean "both broken the same way".
     if one["gate_totals"]["pass"] != one["gate_totals"]["total"]:
-        print("\nthe golden did not grade clean — parity is meaningless", file=sys.stderr)
+        print(
+            "\nthe golden did not grade clean — parity is meaningless", file=sys.stderr
+        )
         return 1
 
     print("\nparity holds: identical gate-for-gate, and the golden is green")

@@ -117,8 +117,12 @@ def test_session_db_volume_name_follows_container_name_and_stays_distinct(
     volume_a = cell_a.session_db_volume_name()
     volume_b = cell_b.session_db_volume_name()
 
-    assert volume_a == "bench-cell-cumulative-0000-off-somemodel-aaaa1111aaaa-session-db"
-    assert volume_b == "bench-cell-cumulative-0000-off-somemodel-bbbb2222bbbb-session-db"
+    assert (
+        volume_a == "bench-cell-cumulative-0000-off-somemodel-aaaa1111aaaa-session-db"
+    )
+    assert (
+        volume_b == "bench-cell-cumulative-0000-off-somemodel-bbbb2222bbbb-session-db"
+    )
     assert volume_a != volume_b
     # cell_isolation.py:220 derives the residue-check volume identically — if
     # these two derivations ever diverge, the preflight checks a name the

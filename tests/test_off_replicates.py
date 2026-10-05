@@ -16,7 +16,10 @@ from harness.cumulative.types import RosterEntry
 
 
 def roster(*models: str) -> list[RosterEntry]:
-    return [RosterEntry(model=m, role="candidate", provider_pin=m.split("/")[0]) for m in models]
+    return [
+        RosterEntry(model=m, role="candidate", provider_pin=m.split("/")[0])
+        for m in models
+    ]
 
 
 def test_one_replicate_is_the_old_behaviour() -> None:

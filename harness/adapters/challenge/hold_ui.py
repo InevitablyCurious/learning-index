@@ -160,7 +160,10 @@ def _hold_for_ui_review(
     UI server is killed in a finally — the ProcessReaper does not watch it.
     """
     import harness.adapters.challenge as _pkg
-    _HOLD_UI_PORT = _pkg._HOLD_UI_PORT  # late-bound: tests monkeypatch the package attr; read it once at call time
+
+    _HOLD_UI_PORT = (
+        _pkg._HOLD_UI_PORT
+    )  # late-bound: tests monkeypatch the package attr; read it once at call time
     if (os.environ.get(_HOLD_UI_ENV) or "").strip() != "1":
         return
 

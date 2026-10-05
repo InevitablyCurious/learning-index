@@ -72,8 +72,7 @@ def _make_session_db(db_path: Path, turns: list[tuple[str, list[dict]]]) -> None
                 conn.execute(
                     "INSERT INTO part (id, message_id, session_id, "
                     "time_created, time_updated, data) VALUES (?,?,?,?,?,?)",
-                    (f"p{pid}", f"m{mid}", "ses-1", ptime, ptime,
-                     json.dumps(part)),
+                    (f"p{pid}", f"m{mid}", "ses-1", ptime, ptime, json.dumps(part)),
                 )
         conn.commit()
     finally:
@@ -94,9 +93,7 @@ def _cp(attempt: int, phase: str, id: str) -> dict:
 
 def _write_index(path: Path, run_id: str, checkpoints: list[dict]) -> None:
     path.write_text(
-        json.dumps(
-            {"run_id": run_id, "checkpoints": checkpoints, "diffs": []}
-        ),
+        json.dumps({"run_id": run_id, "checkpoints": checkpoints, "diffs": []}),
         encoding="utf-8",
     )
 

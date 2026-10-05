@@ -22,7 +22,10 @@ from harness.serve_client import DeltaCounter, ServeClientError
 
 
 def _event(kind: str, session: str) -> dict:
-    return {"type": kind, "properties": {"sessionID": session, "field": "text", "delta": "x"}}
+    return {
+        "type": kind,
+        "properties": {"sessionID": session, "field": "text", "delta": "x"},
+    }
 
 
 class _Stream(http.server.BaseHTTPRequestHandler):
@@ -64,12 +67,16 @@ def _until(predicate, timeout_s: float = 5.0) -> bool:
 
 
 def test_counts_only_this_sessions_streamed_tokens():
-    server, _, url = _serve([[
-        _event("message.part.delta", "ses_A"),
-        _event("message.part.delta", "ses_B"),  # another session's tokens
-        _event("message.part.updated", "ses_A"),  # a stored update, not a token
-        _event("message.part.delta", "ses_A"),
-    ]])
+    server, _, url = _serve(
+        [
+            [
+                _event("message.part.delta", "ses_A"),
+                _event("message.part.delta", "ses_B"),  # another session's tokens
+                _event("message.part.updated", "ses_A"),  # a stored update, not a token
+                _event("message.part.delta", "ses_A"),
+            ]
+        ]
+    )
     counter = DeltaCounter(url, "ses_A")
     try:
         assert _until(lambda: counter.count() == 2)
@@ -81,13 +88,20 @@ def test_counts_only_this_sessions_streamed_tokens():
 
 
 def test_keeps_counting_across_a_dropped_stream():
-    server, handler, url = _serve([
-        [_event("message.part.delta", "ses_A")],
-        [_event("message.part.delta", "ses_A"), _event("message.part.delta", "ses_A")],
-    ])
+    server, handler, url = _serve(
+        [
+            [_event("message.part.delta", "ses_A")],
+            [
+                _event("message.part.delta", "ses_A"),
+                _event("message.part.delta", "ses_A"),
+            ],
+        ]
+    )
     counter = DeltaCounter(url, "ses_A")
     try:
-        assert _until(lambda: counter.count() == 3), "the count must survive a reconnect"
+        assert _until(lambda: counter.count() == 3), (
+            "the count must survive a reconnect"
+        )
         assert handler.served >= 2
     finally:
         counter.close()

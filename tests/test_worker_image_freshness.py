@@ -196,7 +196,9 @@ def test_the_digest_covers_the_files_the_image_actually_bakes(tmp_path: Path) ->
     )
 
 
-def test_the_build_carries_the_digest_it_will_be_checked_against(tmp_path: Path) -> None:
+def test_the_build_carries_the_digest_it_will_be_checked_against(
+    tmp_path: Path,
+) -> None:
     """Write and read are the same value, or the check can never pass.
 
     Order-independent by design: ``build_argv`` prepends the ALWAYS-present
@@ -223,7 +225,10 @@ def test_the_build_carries_the_digest_it_will_be_checked_against(tmp_path: Path)
     assert "OKP_PLUGIN_PRESENT=1" in dev_argv
     # The sidecar seam survives alongside the plugin seam in the dev build.
     assert f"sidecar={worker.parent / 'sidecar'}" in dev_argv
-    assert f"OKP_WORKER_SOURCE_DIGEST={source_digest(worker, plugin_dir=plugin)}" in dev_argv
+    assert (
+        f"OKP_WORKER_SOURCE_DIGEST={source_digest(worker, plugin_dir=plugin)}"
+        in dev_argv
+    )
 
 
 def _dockerignore_whitelist(path: Path) -> set[str]:

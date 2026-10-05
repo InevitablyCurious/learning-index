@@ -49,7 +49,11 @@ def build_off_order(
     (relied on by explicit-index mode) requires.
     """
     _require_non_empty_roster(roster)
-    if not isinstance(replicates, int) or isinstance(replicates, bool) or replicates < 1:
+    if (
+        not isinstance(replicates, int)
+        or isinstance(replicates, bool)
+        or replicates < 1
+    ):
         raise ValueError(f"replicates must be a positive integer, got {replicates!r}")
     sessions: list[ScheduledSession] = []
     for roster_index, entry in enumerate(roster):

@@ -62,11 +62,19 @@ def test_the_eight_inputs_carry_control_batch_mjs_names(tmp_path: Path) -> None:
     grader.mkdir()
     (grader / "g").write_bytes(b"g")
     values = cell_fingerprint(
-        task_dir=tmp_path, grader_dir=grader, model="m", challenge="backgammon",
-        compaction=True, worker_image={"image_id": "sha256:x", "created": "t", "extra": "dropped"},
+        task_dir=tmp_path,
+        grader_dir=grader,
+        model="m",
+        challenge="backgammon",
+        compaction=True,
+        worker_image={"image_id": "sha256:x", "created": "t", "extra": "dropped"},
     )
     src = (REPO / "control" / "batch.mjs").read_text(encoding="utf-8")
-    block = src[src.index("export const FINGERPRINT_INPUTS"):src.index("];", src.index("export const FINGERPRINT_INPUTS"))]
+    block = src[
+        src.index("export const FINGERPRINT_INPUTS") : src.index(
+            "];", src.index("export const FINGERPRINT_INPUTS")
+        )
+    ]
     names = re.findall(r'name: "([a-z_]+)"', block)
     assert sorted(values) == sorted(names)
     assert values["worker_image"] == {"image_id": "sha256:x", "created": "t"}

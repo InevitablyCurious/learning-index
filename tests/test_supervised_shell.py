@@ -25,7 +25,10 @@ from pathlib import Path
 
 #: The real wrapper, not a fixture — these tests exercise the shipped file.
 WRAPPER = (
-    Path(__file__).resolve().parent.parent / "images" / "sidecar" / "supervised-shell.js"
+    Path(__file__).resolve().parent.parent
+    / "images"
+    / "sidecar"
+    / "supervised-shell.js"
 )
 
 

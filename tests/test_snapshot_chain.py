@@ -259,10 +259,9 @@ def test_seeded_cell_at_ceiling_promotes_snapshot_with_depth_and_join_key(
     # The run->snapshot join key names the promoted snapshot directory.
     assert result.produced_snapshot_id == dirs[0].name
     # Sanity: the seeded tree content was carried into the promoted tree.
-    assert (
-        (dirs[0] / "tree" / "src" / "game.ts").read_text(encoding="utf-8")
-        == seeded_src
-    )
+    assert (dirs[0] / "tree" / "src" / "game.ts").read_text(
+        encoding="utf-8"
+    ) == seeded_src
 
 
 # ── HARNESS ERROR: no checkpoint, no promotion ──────────────────────────────
@@ -312,7 +311,9 @@ def test_seeded_cell_out_of_room_promotes_its_last_graded_round(
         seed_snapshot_tree=seed_tree,
         seed_snapshot_depth=1,
     )
-    monkeypatch.setattr(runner, "_load_chunk_prompts", lambda *args, **kwargs: ["BUILD PROMPT"])
+    monkeypatch.setattr(
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["BUILD PROMPT"]
+    )
 
     def _out_of_room(**kwargs: Any) -> _OpencodeRunStats:
         return _OpencodeRunStats(
@@ -336,4 +337,6 @@ def test_seeded_cell_out_of_room_promotes_its_last_graded_round(
     assert len(dirs) == 1, f"expected exactly one promoted snapshot, got {dirs}"
     assert _read_snapshot(tmp_path)["snapshot_depth"] == 2
     assert result.produced_snapshot_id == dirs[0].name
-    assert (dirs[0] / "tree" / "src" / "game.ts").read_text(encoding="utf-8") == seeded_src
+    assert (dirs[0] / "tree" / "src" / "game.ts").read_text(
+        encoding="utf-8"
+    ) == seeded_src

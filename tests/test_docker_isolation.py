@@ -206,7 +206,9 @@ def _assert_mounts_are_only_worktree_and_settings(
     destinations = {str(mount.get("Destination", "")) for mount in mounts}
     assert destinations == {"/work", WORKER_CONFIG_CONTAINER_DIR}
 
-    settings = [m for m in mounts if m.get("Destination") == WORKER_CONFIG_CONTAINER_DIR]
+    settings = [
+        m for m in mounts if m.get("Destination") == WORKER_CONFIG_CONTAINER_DIR
+    ]
     assert len(settings) == 1 and settings[0].get("RW") is False, settings
 
     expected_sources = {
@@ -306,7 +308,9 @@ def test_docker_cell_forwards_ephemeral_proxy_token_not_host_key(
         raise AssertionError(f"unexpected docker invocation: {argv!r}")
 
     monkeypatch.setenv("LOCAL_LLM_PROXY_API_KEY", host_local_proxy_key)
-    monkeypatch.setattr("harness.adapters.docker_worker.ensure_network", lambda *_: None)
+    monkeypatch.setattr(
+        "harness.adapters.docker_worker.ensure_network", lambda *_: None
+    )
     monkeypatch.setattr("harness.adapters.docker_worker._host_uid", lambda: 501)
     monkeypatch.setattr("harness.adapters.docker_worker._host_gid", lambda: 20)
     monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)
@@ -394,9 +398,9 @@ def test_egress_sidecar_mounts_loop_kill_marker_dir(
     marker_dir = tmp_path / "loop-kill-markers"
     assert marker_dir.is_dir(), "marker dir must be created in the run_dir"
 
-    assert _contains_pair(
-        sidecar_argv, "-v", f"{marker_dir.resolve()}:/okp-markers"
-    ), f"sidecar argv missing marker bind mount: {sidecar_argv!r}"
+    assert _contains_pair(sidecar_argv, "-v", f"{marker_dir.resolve()}:/okp-markers"), (
+        f"sidecar argv missing marker bind mount: {sidecar_argv!r}"
+    )
     assert _contains_pair(
         sidecar_argv, "-e", "OKP_LOOP_KILL_MARKER_DIR=/okp-markers"
     ), f"sidecar argv missing marker dir env: {sidecar_argv!r}"
@@ -1026,7 +1030,9 @@ def test_run_argv_redirects_xdg_state_into_writable_home_and_loads_per_cell_conf
     assert _contains_pair(argv, "-e", f"OPENCODE_CONFIG={WORKER_CONFIG_CONTAINER_FILE}")
     assert not WORKER_CONFIG_CONTAINER_FILE.startswith("/work")
     assert _contains_pair(
-        argv, "-v", f"{worker_config_host_dir(cfg.worktree)}:{WORKER_CONFIG_CONTAINER_DIR}:ro"
+        argv,
+        "-v",
+        f"{worker_config_host_dir(cfg.worktree)}:{WORKER_CONFIG_CONTAINER_DIR}:ro",
     )
     # HOME still points at the writable tmpfs.
     assert _contains_pair(argv, "-e", f"HOME={home}")

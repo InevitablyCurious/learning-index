@@ -50,7 +50,5 @@ def resolve_serve_host_port() -> int:
             f"{SERVE_HOST_PORT_ENV}={raw!r} is not a valid port number"
         ) from exc
     if port <= 0:
-        raise ValueError(
-            f"{SERVE_HOST_PORT_ENV} must be a positive port, got {raw!r}"
-        )
+        raise ValueError(f"{SERVE_HOST_PORT_ENV} must be a positive port, got {raw!r}")
     return port

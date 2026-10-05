@@ -35,8 +35,10 @@ def _preflight():
 
 def _iso(offset_s: float) -> str:
     return (
-        dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=offset_s)
-    ).isoformat().replace("+00:00", "Z")
+        (dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=offset_s))
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def test_a_control_plane_started_after_the_source_is_fresh() -> None:

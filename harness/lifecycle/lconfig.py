@@ -49,9 +49,7 @@ class LifecycleConfig:
     # the run targets — created by the production dashboard, never by the bench.
     # The bench consumes this id as data only (no mint/verify/fund). Empty string
     # means no pin; callers resolve the org or fail loud themselves.
-    org_id: str = field(
-        default_factory=lambda: os.environ.get("BENCH_ORG_ID") or ""
-    )
+    org_id: str = field(default_factory=lambda: os.environ.get("BENCH_ORG_ID") or "")
     leader_signer_dir: str = field(
         default_factory=lambda: (
             os.environ.get("BENCH_LEADER_SIGNER_DIR")
@@ -59,9 +57,7 @@ class LifecycleConfig:
         )
     )
     runs_dir: str = field(
-        default_factory=lambda: (
-            os.environ.get("BENCH_RUNS_DIR") or str(_REPO / "runs")
-        )
+        default_factory=lambda: os.environ.get("BENCH_RUNS_DIR") or str(_REPO / "runs")
     )
     mc_version: int = 1
     epoch_id: int = 0

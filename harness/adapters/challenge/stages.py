@@ -91,7 +91,11 @@ def needs_of(problem: dict[str, Any]) -> tuple[str, ...]:
 def load_stages(checks_json: Path) -> list[Stage]:
     data = json.loads(Path(checks_json).read_text(encoding="utf-8"))
     stages = [
-        Stage(number=int(s["stage"]), name=str(s["name"]), keys=tuple(str(k) for k in s["checks"]))
+        Stage(
+            number=int(s["stage"]),
+            name=str(s["name"]),
+            keys=tuple(str(k) for k in s["checks"]),
+        )
         for s in data.get("stages") or []
     ]
     if not stages:
@@ -136,7 +140,9 @@ def player_view(
     checks the grader never reached, or that stopped at a step another failing
     check reports, are told to no one."""
     records = [p for p in problems if isinstance(p, dict)]
-    failed = {ident for p in records if (ident := check_id(str(p.get("check", "")).strip()))}
+    failed = {
+        ident for p in records if (ident := check_id(str(p.get("check", "")).strip()))
+    }
     staged: list[tuple[Stage, dict[str, Any]]] = []
     unevaluated: list[str] = []
     for problem in records:
@@ -153,4 +159,6 @@ def player_view(
     stage = next(s for s, _ in staged if s.number == first)
     visible = [p for s, p in staged if s.number == first]
     withheld = [str(p.get("check", "")).strip() for s, p in staged if s.number != first]
-    return PlayerView(stage=stage, visible=visible, withheld=withheld, unevaluated=unevaluated)
+    return PlayerView(
+        stage=stage, visible=visible, withheld=withheld, unevaluated=unevaluated
+    )

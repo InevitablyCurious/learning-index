@@ -114,9 +114,7 @@ def _write_notice(transcript_path: Path) -> None:
 
 def _read_part_rows(session_db_path: Path) -> list[tuple[str, str]]:
     """Return (pdata, mdata) rows for every session, in canonical order."""
-    conn = sqlite3.connect(
-        f"file:{session_db_path}?mode=ro", uri=True, timeout=5.0
-    )
+    conn = sqlite3.connect(f"file:{session_db_path}?mode=ro", uri=True, timeout=5.0)
     try:
         session_ids = [row[0] for row in conn.execute(_SESSION_IDS_SQL)]
         rows: list[tuple[str, str]] = []
@@ -239,9 +237,7 @@ def _output_chars(output) -> int:
 
 def _input_snippet(value) -> str:
     snippet = (
-        value
-        if isinstance(value, str)
-        else json.dumps(value, separators=(",", ":"))
+        value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
     )
     if len(snippet) > _INPUT_LIMIT:
         snippet = snippet[:_INPUT_LIMIT] + _TRUNCATION_NOTE

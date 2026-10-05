@@ -98,7 +98,12 @@ def message_context_tokens(message: Any) -> int:
     cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
     return sum(
         int(v or 0)
-        for v in (tokens.get("input"), tokens.get("output"), cache.get("read"), cache.get("write"))
+        for v in (
+            tokens.get("input"),
+            tokens.get("output"),
+            cache.get("read"),
+            cache.get("write"),
+        )
     )
 
 
@@ -137,7 +142,9 @@ def has_context_overflow(messages: list[Any]) -> bool:
     return False
 
 
-def context_exhausted(messages: list[Any], limit_tokens: int | None) -> tuple[bool, int]:
+def context_exhausted(
+    messages: list[Any], limit_tokens: int | None
+) -> tuple[bool, int]:
     """(exhausted, newest size) for a message list against a limit."""
     size = latest_context_tokens(messages)
     if has_context_overflow(messages):

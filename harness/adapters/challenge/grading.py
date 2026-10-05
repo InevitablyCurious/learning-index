@@ -35,7 +35,11 @@ from harness.grader_run import (
 )
 
 from .constants import _REPO_ROOT
-from .exceptions import GateTimeoutError, GraderReportUnreadableError, InstrumentFaultError
+from .exceptions import (
+    GateTimeoutError,
+    GraderReportUnreadableError,
+    InstrumentFaultError,
+)
 
 
 class GradingMixin:
@@ -259,7 +263,11 @@ class GradingMixin:
                 # broke for other reasons is regraded.
                 aborted = set(report.get("aborted_runners") or [])
                 timed_out = set(report.get("timed_out_runners") or [])
-                if aborted and aborted <= timed_out and not report.get("skipped_runners"):
+                if (
+                    aborted
+                    and aborted <= timed_out
+                    and not report.get("skipped_runners")
+                ):
                     return report
                 failure = f"not gradable: {report.get('ungradable_reason') or 'no reason given'}"
             except GraderReportUnreadableError as exc:

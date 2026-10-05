@@ -190,12 +190,12 @@ def test_sidecar_gets_rw_sentinel_mount_and_phase_env_when_compacting(
     sidecar_argv, worker_argv = run_argvs
 
     host = cfg.compact_phase_host_path.expanduser().resolve()
-    assert _contains_pair(
-        sidecar_argv, "-v", f"{host}:/okp-compact"
-    ), f"sidecar argv missing RW phase mount: {sidecar_argv!r}"
-    assert not any(
-        part == f"{host}:/okp-compact:ro" for part in sidecar_argv
-    ), "sidecar phase mount must be RW, not :ro"
+    assert _contains_pair(sidecar_argv, "-v", f"{host}:/okp-compact"), (
+        f"sidecar argv missing RW phase mount: {sidecar_argv!r}"
+    )
+    assert not any(part == f"{host}:/okp-compact:ro" for part in sidecar_argv), (
+        "sidecar phase mount must be RW, not :ro"
+    )
     assert _contains_pair(
         sidecar_argv, "-e", "BENCH_COMPACT_PHASE_FILE=/okp-compact/phase"
     ), f"sidecar argv missing phase env: {sidecar_argv!r}"

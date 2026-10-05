@@ -236,9 +236,7 @@ class RunConfig:
     # host port bound to the container-side serve port. The founder attaches a TUI via
     # `opencode attach http://127.0.0.1:<serve_host_port>`. 8719 is the bench's host port; the container side stays opencode serve's default 4096.
     serve_host_port: int = field(
-        default_factory=lambda: int(
-            os.environ.get("BENCH_SERVE_HOST_PORT") or "8719"
-        )
+        default_factory=lambda: int(os.environ.get("BENCH_SERVE_HOST_PORT") or "8719")
     )  # host-published port for the per-cell opencode serve
     session_token_path: str = "~/.okp/mcp-session-token"  # Bearer token source (seam)
     harness_version: str = "0.1.0"

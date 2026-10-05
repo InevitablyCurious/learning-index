@@ -15,7 +15,12 @@ from __future__ import annotations
 
 import pytest
 
-from harness.serve_client import REASON_MODEL_SILENT, ServeClient, ServeClientError, tool_call_running
+from harness.serve_client import (
+    REASON_MODEL_SILENT,
+    ServeClient,
+    ServeClientError,
+    tool_call_running,
+)
 
 
 class _FakeDeltas:
@@ -39,7 +44,13 @@ class _FakeClient(ServeClient):
     """Drives wait_idle_detailed off scripted busy/progress, with no clock wait."""
 
     def __init__(
-        self, *, tokens=None, busy=True, raise_progress=False, advancing=False, streaming=False,
+        self,
+        *,
+        tokens=None,
+        busy=True,
+        raise_progress=False,
+        advancing=False,
+        streaming=False,
         tool_running=True,
     ):
         self.poll_interval = 0.0
@@ -109,7 +120,9 @@ class TestStallDetection:
         # killed exactly this, mid-sentence, as a 10-minute "stall".
         c = _FakeClient(tokens=[(5, 20)] * 500, streaming=True)
         reached, reason = _wait(c, stall_timeout_s=0.0, timeout_s=0.25)
-        assert reason == "timeout", "streamed tokens are progress; only the budget ends this turn"
+        assert reason == "timeout", (
+            "streamed tokens are progress; only the budget ends this turn"
+        )
         assert reached is False
 
     def test_a_wedged_command_is_stalled(self):
@@ -212,13 +225,19 @@ class TestStallIsNotAModelFailure:
         from pathlib import Path
 
         src = (
-            Path(__file__).resolve().parents[1] / "harness" / "adapters" / "challenge" / "serve.py"
+            Path(__file__).resolve().parents[1]
+            / "harness"
+            / "adapters"
+            / "challenge"
+            / "serve.py"
         ).read_text(encoding="utf-8")
         assert "stall_timeout_s=DEFAULT_TURN_STALL_TIMEOUT_S" in src
         # Layout belongs to the formatter; the canary is the semantic mapping:
         # a stalled turn is now a recoverable harness-raised terminal
         # (TURN_TERMINAL_STALLED), still never a model failure.
-        assert "terminal, reason = TURN_TERMINAL_STALLED, REASON_TOOL_CALL_TIMEOUT" in src
+        assert (
+            "terminal, reason = TURN_TERMINAL_STALLED, REASON_TOOL_CALL_TIMEOUT" in src
+        )
 
 
 class TestToolCallRunning:
@@ -228,14 +247,38 @@ class TestToolCallRunning:
 
     def test_a_pending_or_running_tool_part_is_running(self):
         for status in ("pending", "running"):
-            msgs = [self._assistant({"type": "step-start"}, {"type": "tool", "state": {"status": status}})]
+            msgs = [
+                self._assistant(
+                    {"type": "step-start"},
+                    {"type": "tool", "state": {"status": status}},
+                )
+            ]
             assert tool_call_running(msgs) is True
 
     def test_thinking_or_a_finished_tool_is_not(self):
         # R7's stalled turns: a step-start and one reasoning part, no tool.
-        assert tool_call_running([self._assistant({"type": "step-start"}, {"type": "reasoning", "text": ""})]) is False
-        assert tool_call_running([self._assistant({"type": "tool", "state": {"status": "completed"}})]) is False
-        assert tool_call_running([self._assistant({"type": "tool", "state": {"status": "error"}})]) is False
+        assert (
+            tool_call_running(
+                [
+                    self._assistant(
+                        {"type": "step-start"}, {"type": "reasoning", "text": ""}
+                    )
+                ]
+            )
+            is False
+        )
+        assert (
+            tool_call_running(
+                [self._assistant({"type": "tool", "state": {"status": "completed"}})]
+            )
+            is False
+        )
+        assert (
+            tool_call_running(
+                [self._assistant({"type": "tool", "state": {"status": "error"}})]
+            )
+            is False
+        )
         assert tool_call_running([]) is False
 
     def test_only_the_newest_assistant_message_counts(self):

@@ -54,8 +54,12 @@ _PROMPT = "build the thing"
 
 
 def _cut_tokens(
-    *, inp: int = 100, out: int = _CAP, reasoning: int = 0,
-    cache_read: int = 0, cache_write: int = 0,
+    *,
+    inp: int = 100,
+    out: int = _CAP,
+    reasoning: int = 0,
+    cache_read: int = 0,
+    cache_write: int = 0,
 ) -> dict[str, Any]:
     """info.tokens as opencode records them on a finished assistant message."""
     return {
@@ -75,8 +79,13 @@ def _length_at_cap(**token_kwargs: Any) -> dict[str, Any]:
 
 
 def _cum_read(
-    *, turns: int, out: int, cap_cutoffs: int, inp: int = 100,
-    provider_truncations: int = 0, last_finish: str | None = "length",
+    *,
+    turns: int,
+    out: int,
+    cap_cutoffs: int,
+    inp: int = 100,
+    provider_truncations: int = 0,
+    last_finish: str | None = "length",
 ) -> dict[str, Any]:
     """A session-CUMULATIVE metrics read (the canned side of the fake; the
     windowed classification read is derived from the fake transcript through
@@ -143,9 +152,11 @@ def _drive(
 def _nudge_file(name: str) -> str:
     """The nudge wording as it sits on disk, read exactly as PromptPack.text
     reads it (trailing newlines stripped, nothing else)."""
-    return (TASK_DIR / "prompts" / "nudges" / name).read_text(
-        encoding="utf-8"
-    ).rstrip("\n")
+    return (
+        (TASK_DIR / "prompts" / "nudges" / name)
+        .read_text(encoding="utf-8")
+        .rstrip("\n")
+    )
 
 
 def _make_runner_mode(tmp_path: Path, memory_mode: str) -> ChallengeRunner:
@@ -196,7 +207,7 @@ def test_prose_cap_cutoff_nudges_with_the_cap_cutoff_wording(
     client = _FakeServeClient()
     client.assistant_terminal_script = [_length_at_cap()]
     client.metrics_script = [
-        dict(_ZERO_METRICS),                          # phase baseline
+        dict(_ZERO_METRICS),  # phase baseline
         _cum_read(turns=1, out=_CAP, cap_cutoffs=1),  # the cut turn
         _cum_read(turns=2, out=_CAP, cap_cutoffs=1),  # post-nudge, clean
     ]
@@ -317,9 +328,7 @@ def test_cap_cutoff_nudge_budget_stops_at_two(tmp_path: Path) -> None:
 
     # The third anomaly stays unretried — it ended the drive.
     assert [a["retried"] for a in stats.turn_anomalies] == [True, True, False]
-    assert all(
-        a["terminal"] == TURN_TERMINAL_CAP_CUTOFF for a in stats.turn_anomalies
-    )
+    assert all(a["terminal"] == TURN_TERMINAL_CAP_CUTOFF for a in stats.turn_anomalies)
 
 
 # ── 4. NO-CONTEXT-ROOM guard ────────────────────────────────────────────────
@@ -392,7 +401,9 @@ def test_the_room_check_counts_the_cut_output_too(
     (notice,) = _cutoff_notices(live_path)
     assert notice["detail"]["reason"] == "no_context_room"
     assert stats.context_peak_tokens == 20_000 + _CAP
-    assert runner._cell_context_peak == 20_000 + _CAP, "maxed into the cell's peak for cell.end"
+    assert runner._cell_context_peak == 20_000 + _CAP, (
+        "maxed into the cell's peak for cell.end"
+    )
 
 
 # ── 5. BELOW-CAP does NOT fire ──────────────────────────────────────────────
@@ -411,9 +422,7 @@ def test_length_below_the_cap_stays_a_provider_truncation(
     ]
     client.metrics_script = [
         dict(_ZERO_METRICS),
-        _cum_read(
-            turns=1, out=5_000, cap_cutoffs=0, provider_truncations=1
-        ),
+        _cum_read(turns=1, out=5_000, cap_cutoffs=0, provider_truncations=1),
     ]
 
     stats, live_path = _drive(runner, client, tmp_path)
@@ -497,6 +506,9 @@ def test_an_unreadable_session_fails_loud_never_scores_the_cut_as_a_provider_tru
     runner = _make_runner(tmp_path)
     client = _UnreadableAfterSend()
     client.assistant_terminal_script = [_length_at_cap()]
-    client.metrics_script = [dict(_ZERO_METRICS), _cum_read(turns=1, out=_CAP, cap_cutoffs=1)]
+    client.metrics_script = [
+        dict(_ZERO_METRICS),
+        _cum_read(turns=1, out=_CAP, cap_cutoffs=1),
+    ]
     with pytest.raises(ServeTransportError, match="cap cut-off"):
         _drive(runner, client, tmp_path)

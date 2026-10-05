@@ -289,7 +289,9 @@ def test_cloud_enter_injects_key_from_resolver_not_literal(
         "harness.adapters.docker_worker.resolve_cloud_api_key",
         lambda **kwargs: "sk-orca-fake",
     )
-    monkeypatch.setattr("harness.adapters.docker_worker.ensure_network", lambda *_: None)
+    monkeypatch.setattr(
+        "harness.adapters.docker_worker.ensure_network", lambda *_: None
+    )
     monkeypatch.setattr("harness.adapters.docker_worker._host_uid", lambda: 501)
     monkeypatch.setattr("harness.adapters.docker_worker._host_gid", lambda: 20)
     monkeypatch.setattr("harness.adapters.docker_worker.subprocess.run", _fake_run)

@@ -214,7 +214,7 @@ def test_a_chunk_boundary_with_no_compaction_fire_aborts_the_cell(
     runner = _make_runner(tmp_path, compact=True)
     client = _FakeServeClient()
     client.compaction_on_idle = None  # the plugin never fired
-    client.busy_result = False        # session never goes busy
+    client.busy_result = False  # session never goes busy
     # busy_result=False also takes the drive through the never-busy raced-turn
     # path, which reads an extra `early` metrics snapshot — hence three entries.
     client.metrics_script = [

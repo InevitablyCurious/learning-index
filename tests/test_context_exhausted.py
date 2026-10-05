@@ -47,19 +47,34 @@ def test_a_model_with_no_declared_limit_refuses_rather_than_runs_unguarded() -> 
 
 def test_sizes_and_overflow_errors_are_read_from_messages() -> None:
     messages = [
-        {"info": {"role": "assistant", "tokens": {"input": 10, "output": 5, "cache": {"read": 100, "write": 0}}}},
+        {
+            "info": {
+                "role": "assistant",
+                "tokens": {
+                    "input": 10,
+                    "output": 5,
+                    "cache": {"read": 100, "write": 0},
+                },
+            }
+        },
         {"info": {"role": "user"}},
     ]
     assert latest_context_tokens(messages) == 115
     assert context_exhausted(messages, 200) == (False, 115)
     assert context_exhausted(messages, 115) == (True, 115)
-    overflow = messages + [{"info": {"role": "assistant", "error": {"name": "ContextOverflowError"}}}]
+    overflow = messages + [
+        {"info": {"role": "assistant", "error": {"name": "ContextOverflowError"}}}
+    ]
     assert context_exhausted(overflow, 10_000_000)[0] is True
 
 
 def test_the_worker_never_compacts_on_its_own() -> None:
     config = build_worker_opencode_config(
-        model=QWEN, reasoning_effort=None, proxy_base_url=None, gates_dir="/g", golden_dir="/x"
+        model=QWEN,
+        reasoning_effort=None,
+        proxy_base_url=None,
+        gates_dir="/g",
+        golden_dir="/x",
     )
     assert config["compaction"] == {"auto": False}
 
@@ -67,7 +82,9 @@ def test_the_worker_never_compacts_on_its_own() -> None:
 # ── the drive ───────────────────────────────────────────────────────────────
 
 
-def _drive(runner: ChallengeRunner, client: _FakeServeClient, phase: str = "feedback-1") -> _OpencodeRunStats:
+def _drive(
+    runner: ChallengeRunner, client: _FakeServeClient, phase: str = "feedback-1"
+) -> _OpencodeRunStats:
     return runner._run_opencode_serve(
         active_cell=_FakeCell(),
         serve_client=client,
@@ -82,16 +99,31 @@ def _drive(runner: ChallengeRunner, client: _FakeServeClient, phase: str = "feed
 def _client(metrics: dict[str, Any] | None = None) -> _FakeServeClient:
     client = _FakeServeClient()
     client.metrics_result = metrics or {
-        "turns": 3, "input_tokens": 100, "output_tokens": 50, "reasoning_tokens": 0,
-        "cost_usd": 0.0, "provider_truncations": 0, "error_parts": 0,
+        "turns": 3,
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "reasoning_tokens": 0,
+        "cost_usd": 0.0,
+        "provider_truncations": 0,
+        "error_parts": 0,
     }
     return client
 
 
-def test_a_turn_that_ends_past_the_line_stops_the_phase_without_a_nudge(tmp_path: Path) -> None:
+def test_a_turn_that_ends_past_the_line_stops_the_phase_without_a_nudge(
+    tmp_path: Path,
+) -> None:
     runner = _make_runner(tmp_path)
     client = _client()
-    client.assistant_terminal_script = [{"tokens": {"input": 480, "output": 500, "cache": {"read": 229_300, "write": 0}}}]
+    client.assistant_terminal_script = [
+        {
+            "tokens": {
+                "input": 480,
+                "output": 500,
+                "cache": {"read": 229_300, "write": 0},
+            }
+        }
+    ]
     stats = _drive(runner, client)
     assert stats.context_exhausted is True
     assert stats.killed_reason == CONTEXT_EXHAUSTED
@@ -99,23 +131,38 @@ def test_a_turn_that_ends_past_the_line_stops_the_phase_without_a_nudge(tmp_path
     assert stats.context_tokens == 230_280
     assert stats.context_limit_tokens == 230_144
     assert len(client.sent_prompts) == 1, "a session out of room is never nudged"
-    assert stats.turn_anomalies == (), "running out of room is a result, not an instrument anomaly"
+    assert stats.turn_anomalies == (), (
+        "running out of room is a result, not an instrument anomaly"
+    )
 
 
 def test_a_turn_under_the_line_is_untouched(tmp_path: Path) -> None:
     runner = _make_runner(tmp_path)
     client = _client()
-    client.assistant_terminal_script = [{"tokens": {"input": 480, "output": 500, "cache": {"read": 228_000, "write": 0}}}]
+    client.assistant_terminal_script = [
+        {
+            "tokens": {
+                "input": 480,
+                "output": 500,
+                "cache": {"read": 228_000, "write": 0},
+            }
+        }
+    ]
     stats = _drive(runner, client)
     assert stats.context_exhausted is False
     assert stats.killed_reason is None
 
 
-def test_an_overflowed_request_stops_instead_of_being_retried_as_a_transport_error(tmp_path: Path) -> None:
+def test_an_overflowed_request_stops_instead_of_being_retried_as_a_transport_error(
+    tmp_path: Path,
+) -> None:
     runner = _make_runner(tmp_path)
     client = _client()
     client.assistant_terminal_script = [
-        {"info_error": "This model's maximum context length is 262144 tokens.", "error_name": "ContextOverflowError"}
+        {
+            "info_error": "This model's maximum context length is 262144 tokens.",
+            "error_name": "ContextOverflowError",
+        }
     ]
     stats = _drive(runner, client)
     assert stats.context_exhausted is True
@@ -154,24 +201,41 @@ def test_the_real_waiter_ends_a_turn_that_crosses_the_line() -> None:
 
 
 def _stats(**over: Any) -> _OpencodeRunStats:
-    base: dict[str, Any] = {"input_tokens": 10, "output_tokens": 20, "reasoning_tokens": 5, "turns": 1,
-                             "session_id": "sess-1", "killed_reason": None, "exit_code": 0, "cost_usd": 0.0}
+    base: dict[str, Any] = {
+        "input_tokens": 10,
+        "output_tokens": 20,
+        "reasoning_tokens": 5,
+        "turns": 1,
+        "session_id": "sess-1",
+        "killed_reason": None,
+        "exit_code": 0,
+        "cost_usd": 0.0,
+    }
     base.update(over)
     return _OpencodeRunStats(**base)
 
 
-def _cell(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, exhaust_phase: str) -> tuple[Any, dict[str, int], list[str]]:
+def _cell(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, exhaust_phase: str
+) -> tuple[Any, dict[str, int], list[str]]:
     from tests.test_challenge_budget_stop import REAL_CHECK, _patch_fake_docker
     from tests.test_challenge_budget_stop import _make_runner as make
 
     runner = make(tmp_path, max_attempts=5)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(runner, "_load_chunk_prompts", lambda *a, **k: ["CHUNK ONE", "CHUNK TWO"])
+    monkeypatch.setattr(
+        runner, "_load_chunk_prompts", lambda *a, **k: ["CHUNK ONE", "CHUNK TWO"]
+    )
     grades = {"count": 0}
 
     def _gate(**kwargs: Any) -> dict[str, Any]:
         grades["count"] += 1
-        return {"verdict": "FAIL", "conformed": True, "problems": [{"check": REAL_CHECK}], "failed_gates": [REAL_CHECK]}
+        return {
+            "verdict": "FAIL",
+            "conformed": True,
+            "problems": [{"check": REAL_CHECK}],
+            "failed_gates": [REAL_CHECK],
+        }
 
     monkeypatch.setattr(runner, "_run_gate_report", _gate)
     phases: list[str] = []
@@ -179,12 +243,18 @@ def _cell(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, exhaust_phase: str) -
     def _serve(**kwargs: Any) -> _OpencodeRunStats:
         phases.append(kwargs["phase"])
         if kwargs["phase"] == exhaust_phase:
-            return _stats(killed_reason=CONTEXT_EXHAUSTED, context_exhausted=True,
-                          context_tokens=231_000, context_limit_tokens=230_144)
+            return _stats(
+                killed_reason=CONTEXT_EXHAUSTED,
+                context_exhausted=True,
+                context_tokens=231_000,
+                context_limit_tokens=230_144,
+            )
         return _stats()
 
     monkeypatch.setattr(runner, "_run_opencode_serve", _serve)
-    result = runner._run_cell_impl(run_label="ctx", run_dir=tmp_path / "ctx", task_id="backgammon")
+    result = runner._run_cell_impl(
+        run_label="ctx", run_dir=tmp_path / "ctx", task_id="backgammon"
+    )
     return result, grades, phases
 
 
@@ -195,7 +265,9 @@ def test_running_out_in_a_repair_round_stops_the_run_and_keeps_the_last_grade(
     assert result.termination_reason == CONTEXT_EXHAUSTED
     assert result.attempts_to_green == "CONTEXT_EXHAUSTED"
     assert result.verdict == "FAIL"
-    assert grades["count"] == 2, "rounds graded before the stop stand; nothing after it runs"
+    assert grades["count"] == 2, (
+        "rounds graded before the stop stand; nothing after it runs"
+    )
     assert phases[-1] == "feedback-2"
 
 
@@ -219,9 +291,21 @@ def test_the_peak_is_counted_as_opencode_counts_it() -> None:
         body = {**tokens, **({"total": total} if total is not None else {})}
         return {"info": {"role": "assistant", "tokens": body}}
 
-    cut = msg(total=224_334, input=65_358, output=32_000, reasoning=0, cache={"read": 126_976, "write": 0})
+    cut = msg(
+        total=224_334,
+        input=65_358,
+        output=32_000,
+        reasoning=0,
+        cache={"read": 126_976, "write": 0},
+    )
     killed = msg(input=0, output=0, reasoning=0, cache={"read": 0, "write": 0})
-    last = msg(total=256_688, input=68_093, output=179, reasoning=0, cache={"read": 188_416, "write": 0})
+    last = msg(
+        total=256_688,
+        input=68_093,
+        output=179,
+        reasoning=0,
+        cache={"read": 188_416, "write": 0},
+    )
     user = {"info": {"role": "user"}}
     assert max_context_tokens([user, cut, killed, last, killed]) == 256_688
     assert max_context_tokens([user, killed]) is None, "absent, never 0"

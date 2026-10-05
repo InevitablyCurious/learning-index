@@ -63,7 +63,7 @@ def test_the_number_reaches_the_line() -> None:
 
 
 def test_an_absent_duration_degrades_to_a_phrase_never_a_zero() -> None:
-    """"It hung for 0 seconds" would be a false report, so it is never said."""
+    """ "It hung for 0 seconds" would be a false report, so it is never said."""
     line = R._humanize_check("REQ-RESPONSIVE/moving", pass_kind="first", observed="")
     assert "{seconds}" not in line
     assert "0 seconds" not in line
@@ -87,8 +87,14 @@ def test_the_graders_observed_format_is_parseable_here() -> None:
 
 @pytest.mark.parametrize(
     "area,expected_stage",
-    [("startup", 1), ("moving", 2), ("playing", 2), ("awkwardroll", 3),
-     ("bearingoff", 4), ("aiturn", 7)],
+    [
+        ("startup", 1),
+        ("moving", 2),
+        ("playing", 2),
+        ("awkwardroll", 3),
+        ("bearingoff", 4),
+        ("aiturn", 7),
+    ],
 )
 def test_a_stall_speaks_only_when_its_situation_is_reachable(
     area: str, expected_stage: int

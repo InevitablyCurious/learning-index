@@ -156,7 +156,6 @@ from .worker_config import bench_session_title
 # recovery-nudge block below.
 
 
-
 # ── FIRST TROUBLESHOOTING MESSAGE PREAMBLE ──────────────────────────────────
 #
 # GOAL/PROBLEM/TASK frame for the model's FIRST troubleshooting message only —
@@ -207,7 +206,18 @@ def _regressed_checks(
         if isinstance(p, dict) and str(p.get("check", "")).strip() not in prev_failed
     }
 
-class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, TransportMixin, BootstrapMixin, GradingMixin, ServeMixin, AgentRunner):
+
+class ChallengeRunner(
+    UtilsMixin,
+    PricingMixin,
+    FeedbackMixin,
+    TelemetryMixin,
+    TransportMixin,
+    BootstrapMixin,
+    GradingMixin,
+    ServeMixin,
+    AgentRunner,
+):
     def __init__(
         self,
         *,
@@ -374,9 +384,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
         # Live-view topology: fixed serve ports for the persistent per-cell opencode
         # serve, defaulted from env consistent with config.RunConfig (mirror of the
         # hub_url/mcp_recall_url env-override seam).
-        self.serve_host_port = int(
-            os.environ.get("BENCH_SERVE_HOST_PORT") or "8719"
-        )
+        self.serve_host_port = int(os.environ.get("BENCH_SERVE_HOST_PORT") or "8719")
         self.serve_container_port = int(
             os.environ.get("BENCH_SERVE_CONTAINER_PORT") or "4096"
         )
@@ -577,7 +585,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         if build_started is not None
                         else None
                     ),
-                    "wall_cost_usd": first_run.cost_usd if first_run is not None else None,
+                    "wall_cost_usd": first_run.cost_usd
+                    if first_run is not None
+                    else None,
                 },
                 "cell_void": cell_void,
             }
@@ -815,7 +825,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
             # THE BOARD'S STOP IS NOT A HARNESS FAULT. It sends SIGINT, which
             # arrives as KeyboardInterrupt; recording it as harness_error voided
             # runs an operator had simply stopped (1789710421, 1789711588).
-            terminal_reason = "stopped" if isinstance(exc, KeyboardInterrupt) else "harness_error"
+            terminal_reason = (
+                "stopped" if isinstance(exc, KeyboardInterrupt) else "harness_error"
+            )
             terminal_exception = type(exc).__name__
             raise
         finally:
@@ -935,7 +947,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 worktree=worktree, snapshot_tree=self._seed_snapshot_tree
             )
         else:
-            assert_clean_worktree(worktree=worktree, scaffold=self.task_dir / "scaffold")
+            assert_clean_worktree(
+                worktree=worktree, scaffold=self.task_dir / "scaffold"
+            )
         self._progress(
             f"PROGRESS run_label={run_label} step=isolation-worktree result=clean dst={worktree}"
         )
@@ -1417,9 +1431,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                     chunk_reports=first_run.chunk_reports,
                     expected=build_chunk_expected,
                 )
-                incomplete = [
-                    row for row in completion if row["state"] != "complete"
-                ]
+                incomplete = [row for row in completion if row["state"] != "complete"]
                 if incomplete:
                     detail = ", ".join(
                         f"chunk {row['chunk']} {row['state']}" for row in incomplete
@@ -1524,7 +1536,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                                 worktree=worktree,
                                 attempt=attempt,
                                 phase=(
-                                    "initial" if attempt == 1 else f"feedback-{attempt - 1}"
+                                    "initial"
+                                    if attempt == 1
+                                    else f"feedback-{attempt - 1}"
                                 ),
                                 state_hash=attempt_state_hash,
                                 run_label=run_label,
@@ -1580,7 +1594,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                                 worktree=worktree,
                                 attempt=attempt,
                                 phase=(
-                                    "initial" if attempt == 1 else f"feedback-{attempt - 1}"
+                                    "initial"
+                                    if attempt == 1
+                                    else f"feedback-{attempt - 1}"
                                 ),
                                 state_hash=attempt_state_hash,
                                 run_label=run_label,
@@ -1628,7 +1644,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 # gate appears only once it has a real recorded verdict.
                 # THE STAGE A PLAYER HAS REACHED: the earliest one still failing.
                 stage_view = player_view(
-                    problems, self._player_stages(), is_infra=self._is_harness_infra_check
+                    problems,
+                    self._player_stages(),
+                    is_infra=self._is_harness_infra_check,
                 )
                 context_peak = (
                     prev_run_stats.context_peak_tokens
@@ -1698,8 +1716,12 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                             ),
                             # PLAYER ORDER: the stage this round reached, and how
                             # many failing checks lay beyond it (graded, not told).
-                            "player_stage": stage_view.stage.number if stage_view.stage else None,
-                            "player_stage_name": stage_view.stage.name if stage_view.stage else None,
+                            "player_stage": stage_view.stage.number
+                            if stage_view.stage
+                            else None,
+                            "player_stage_name": stage_view.stage.name
+                            if stage_view.stage
+                            else None,
                             "told_checks": len(stage_view.visible),
                             "withheld_checks": len(stage_view.withheld),
                             "unevaluated_checks": len(stage_view.unevaluated),
@@ -1770,7 +1792,10 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                         if self._seed_snapshot_tree is not None:
                             self._capture_end_of_run_snapshot(
                                 worktree=(
-                                    run_dir / "checkpoints" / f"cp-{attempt:02d}" / "tree"
+                                    run_dir
+                                    / "checkpoints"
+                                    / f"cp-{attempt:02d}"
+                                    / "tree"
                                 ),
                                 state_hash=attempt_state_hash,
                                 run_label=run_label,
@@ -1869,9 +1894,13 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 # reported fixed — a check the model never heard about passing
                 # is not news to it.
                 now_failing = set(attempt_reports[-1]["failed_gates"]) | {
-                    str(p.get("check", "")).strip() for p in problems if isinstance(p, dict)
+                    str(p.get("check", "")).strip()
+                    for p in problems
+                    if isinstance(p, dict)
                 }
-                newly_passing = sorted(c for c in told_last_round if c not in now_failing)
+                newly_passing = sorted(
+                    c for c in told_last_round if c not in now_failing
+                )
                 still_failing = sorted(set(attempt_reports[-1]["failed_gates"]))
                 self._progress(
                     f"PROGRESS run_label={run_label} step=feedback-verdict-composed attempt={attempt} "
@@ -1914,7 +1943,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 # sighting. Keyed on everything told, run 1790357047 told "The
                 # off tray is still drawn over some of the points." two rounds
                 # after "That fixed it" — the model had undone its own fix.
-                told_open &= {self._complaint_id(p) for p in problems if isinstance(p, dict)}
+                told_open &= {
+                    self._complaint_id(p) for p in problems if isinstance(p, dict)
+                }
                 visible_complaints = {self._complaint_id(p) for p in stage_view.visible}
                 repeat_complaints = visible_complaints & told_open
                 self._progress(
@@ -1929,7 +1960,9 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
                 for p in stage_view.visible:
                     check = str(p.get("check", "")).strip()
                     if check and check not in told_first_label:
-                        told_first_label[check] = self._told_label(p, pass_kind="first")[0]
+                        told_first_label[check] = self._told_label(
+                            p, pass_kind="first"
+                        )[0]
                 # A check told this round that PASSED the immediately-previous
                 # graded round is a REGRESSION — the model's own fix undid code
                 # that worked — and is told under its own opener (feedback.py).
@@ -2437,6 +2470,7 @@ class ChallengeRunner(UtilsMixin, PricingMixin, FeedbackMixin, TelemetryMixin, T
             cached = load_stages(_GRADER_DIR / "checks.json")
             cls._PLAYER_STAGES_CACHE = cached
         return cached
+
     _TESTER_CONF_EXACT = ("REQ-BIND/boot",)
 
     # Numbered gates a player cannot observe: they call the engine's named

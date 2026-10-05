@@ -90,11 +90,15 @@ def test_the_template_skeleton_still_loads() -> None:
     assert pack.text("nudges/write-limit.md") in pack.nudge("nudges/cut-off.md")
 
 
-def test_a_challenge_directory_can_be_pointed_at_by_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_challenge_directory_can_be_pointed_at_by_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A challenge is its own repo, cloned anywhere; BENCH_TASK_DIR selects it."""
     from harness import prompt_pack
 
     monkeypatch.setenv(prompt_pack.TASK_DIR_ENV, str(REPO / "challenges" / "TEMPLATE"))
-    assert prompt_pack.default_task_dir() == (REPO / "challenges" / "TEMPLATE").resolve()
+    assert (
+        prompt_pack.default_task_dir() == (REPO / "challenges" / "TEMPLATE").resolve()
+    )
     monkeypatch.delenv(prompt_pack.TASK_DIR_ENV)
     assert prompt_pack.default_task_dir().name == "backgammon"

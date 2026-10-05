@@ -80,8 +80,7 @@ def test_gate_argv_never_threads_a_host_serve_port(tmp_path: Path) -> None:
     # spellings are pinned absent.
     for port_env in ("BENCH_PORT", "BENCH_SERVE_HOST_PORT"):
         assert port_env not in argv, (
-            f"-e {port_env} (bare inherit form) must never be threaded into "
-            "the grader"
+            f"-e {port_env} (bare inherit form) must never be threaded into the grader"
         )
         assert not any(a.startswith(f"{port_env}=") for a in argv), (
             f"-e {port_env}=... must never be threaded into the grader: it "

@@ -65,6 +65,8 @@ def configured_plugin_dir(env: dict | None = None) -> Path | None:
         return None
     path = Path(raw).expanduser()
     return path if path.is_dir() else None
+
+
 DIGEST_LABEL = "okp.worker.source_digest"
 
 #: Files actually BAKED into the image from the worker context. The plugin tree
@@ -122,7 +124,8 @@ def source_digest(worker_dir: Path, plugin_dir: Path | None = None) -> str:
     digest.
     """
     entries: list[tuple[str, Path]] = [
-        (path.relative_to(worker_dir).as_posix(), path) for path in baked_paths(worker_dir)
+        (path.relative_to(worker_dir).as_posix(), path)
+        for path in baked_paths(worker_dir)
     ]
     sidecar_dir = worker_dir.parent / "sidecar"
     if sidecar_dir.is_dir():
@@ -130,7 +133,9 @@ def source_digest(worker_dir: Path, plugin_dir: Path | None = None) -> str:
             if not path.is_file():
                 continue
             rel = path.relative_to(sidecar_dir).as_posix()
-            if rel.endswith(".DS_Store") or any(rel.startswith(x) for x in BAKED_EXCLUDED):
+            if rel.endswith(".DS_Store") or any(
+                rel.startswith(x) for x in BAKED_EXCLUDED
+            ):
                 continue
             entries.append((f"sidecar/{rel}", path))
     if plugin_dir is not None:
@@ -138,7 +143,9 @@ def source_digest(worker_dir: Path, plugin_dir: Path | None = None) -> str:
             if not path.is_file():
                 continue
             rel = path.relative_to(plugin_dir).as_posix()
-            if rel.endswith(".DS_Store") or any(rel.startswith(x) for x in BAKED_EXCLUDED):
+            if rel.endswith(".DS_Store") or any(
+                rel.startswith(x) for x in BAKED_EXCLUDED
+            ):
                 continue
             entries.append((f"plugin/{rel}", path))
     h = hashlib.sha256()
@@ -158,7 +165,14 @@ def image_digest(image: str = IMAGE) -> str | None:
     at — see preflight.
     """
     proc = subprocess.run(
-        ["docker", "image", "inspect", image, "--format", "{{index .Config.Labels \"" + DIGEST_LABEL + "\"}}"],
+        [
+            "docker",
+            "image",
+            "inspect",
+            image,
+            "--format",
+            '{{index .Config.Labels "' + DIGEST_LABEL + '"}}',
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -169,7 +183,9 @@ def image_digest(image: str = IMAGE) -> str | None:
     return "" if value in ("", "<no value>", "unset") else value
 
 
-def build_argv(worker_dir: Path, image: str = IMAGE, plugin_dir: Path | None = None) -> list[str]:
+def build_argv(
+    worker_dir: Path, image: str = IMAGE, plugin_dir: Path | None = None
+) -> list[str]:
     """The exact build command, digest included. The one sanctioned rebuild.
 
     The sidecar tree is ALWAYS injected as the named build context

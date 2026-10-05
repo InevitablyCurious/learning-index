@@ -80,7 +80,14 @@ def image_digest(image: str = IMAGE) -> str | None:
     """
     try:
         out = subprocess.run(  # noqa: S603 - fixed argv
-            ["docker", "image", "inspect", image, "--format", f"{{{{ index .Config.Labels \"{LABEL}\" }}}}"],
+            [
+                "docker",
+                "image",
+                "inspect",
+                image,
+                "--format",
+                f'{{{{ index .Config.Labels "{LABEL}" }}}}',
+            ],
             capture_output=True,
             text=True,
             check=False,

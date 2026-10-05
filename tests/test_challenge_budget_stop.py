@@ -33,7 +33,6 @@ def _told(checks):
     }
 
 
-
 TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
 # A real graded gate check (a bracket token that HAS a feedback override). The
@@ -279,7 +278,11 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
             return {
                 "verdict": "FAIL",
                 "conformed": True,
-                "problems": [{"check": REAL_PASS1}, {"check": REAL_CHECK}, {"check": REAL_PASS2}],
+                "problems": [
+                    {"check": REAL_PASS1},
+                    {"check": REAL_CHECK},
+                    {"check": REAL_PASS2},
+                ],
                 "failed_gates": [REAL_PASS1, REAL_CHECK, REAL_PASS2],
             }
         if gate_calls["count"] == 2:
@@ -330,7 +333,8 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     # stays out of it.
     hashes = iter(f"hash-{n}" for n in range(100))
     monkeypatch.setattr(
-        "harness.adapters.challenge.runner._snapshot_state_hash", lambda _worktree: next(hashes)
+        "harness.adapters.challenge.runner._snapshot_state_hash",
+        lambda _worktree: next(hashes),
     )
 
     result = runner._run_cell_impl(
@@ -351,7 +355,9 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     # PLAYER ORDER: only a check the model was TOLD about can be reported fixed.
     # REAL_PASS2 (G03, stage 2) was withheld in round 1, so its passing is not
     # news to the model and is not named.
-    pass_verdict = runner._build_pass_verdict(newly_passing=[REAL_PASS1], told=_told([REAL_PASS1]))
+    pass_verdict = runner._build_pass_verdict(
+        newly_passing=[REAL_PASS1], told=_told([REAL_PASS1])
+    )
     # REAL_CHECK failed in BOTH of the last two attempts, so it is a repeat and
     # renders as that gate's second-sighting line — the gradient, per gate.
     failure_feedback = runner._build_feedback_prompt(
@@ -379,7 +385,9 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     assert prompt_texts[0] == "INITIAL PROMPT"
     # Feedback 1 — the player's FIRST report, so the first-pass opener. Nothing
     # newly passed after attempt 1, so no pass verdict rides along.
-    assert prompt_texts[1] == f"{_FIRST_MESSAGE_PREAMBLE}\n\n" + runner._build_feedback_prompt(
+    assert prompt_texts[
+        1
+    ] == f"{_FIRST_MESSAGE_PREAMBLE}\n\n" + runner._build_feedback_prompt(
         checks=[REAL_PASS1, REAL_CHECK]
     )
     assert runner._humanize_check(REAL_PASS2) not in prompt_texts[1], (
@@ -526,26 +534,38 @@ def test_a_complaint_that_was_fixed_and_came_back_is_not_still_there(
 
     def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:
         calls.append({"phase": kwargs.get("phase"), "prompt": kwargs.get("prompt")})
-        return _stats(session_id="sess-1", exit_code=0, cost_usd=0.0, terminal_zero_tool_turn=False)
+        return _stats(
+            session_id="sess-1",
+            exit_code=0,
+            cost_usd=0.0,
+            terminal_zero_tool_turn=False,
+        )
 
     monkeypatch.setattr(runner, "_run_opencode_serve", _fake_opencode)
     hashes = iter(f"hash-{n}" for n in range(100))
     monkeypatch.setattr(
-        "harness.adapters.challenge.runner._snapshot_state_hash", lambda _worktree: next(hashes)
+        "harness.adapters.challenge.runner._snapshot_state_hash",
+        lambda _worktree: next(hashes),
     )
 
     runner._run_cell_impl(
-        run_label="complaint-came-back", run_dir=tmp_path / "complaint-came-back", task_id="backgammon"
+        run_label="complaint-came-back",
+        run_dir=tmp_path / "complaint-came-back",
+        task_id="backgammon",
     )
 
     third = calls[3]["prompt"]
     first_line = runner._humanize_check(came_back)
     still_line = runner._told_label({"check": came_back}, pass_kind="repeat")[0]
-    assert first_line in third and still_line not in third, "the returning complaint is a first sighting"
+    assert first_line in third and still_line not in third, (
+        "the returning complaint is a first sighting"
+    )
     assert runner._told_label({"check": stays}, pass_kind="repeat")[0] in third, (
         "the complaint that never went away keeps its second-sighting line"
     )
-    assert _REGRESSION_HEADER in third, "the returning complaint is told as a regression"
+    assert _REGRESSION_HEADER in third, (
+        "the returning complaint is told as a regression"
+    )
     assert "I'm still seeing these problems" in third, (
         "the complaint that never went away is still headed 'still'"
     )
@@ -904,9 +924,13 @@ def test_partial_chunked_build_aborts_with_incomplete_build_error(
         opencode_calls["count"] += 1
         if opencode_calls["count"] == 1:
             # Chunk 1 completes cleanly (marker lands via the fake ServeClient).
-            return _stats(session_id="sess-1", killed_reason=None, exit_code=0, cost_usd=0.1)
+            return _stats(
+                session_id="sess-1", killed_reason=None, exit_code=0, cost_usd=0.1
+            )
         # Chunk 2 stalls: harness-limit kill, no marker -> state "died".
-        return _stats(session_id="sess-1", killed_reason="turn_stalled", exit_code=1, cost_usd=0.1)
+        return _stats(
+            session_id="sess-1", killed_reason="turn_stalled", exit_code=1, cost_usd=0.1
+        )
 
     monkeypatch.setattr(runner, "_run_opencode_serve", _fake_opencode)
 

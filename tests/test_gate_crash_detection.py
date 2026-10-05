@@ -178,7 +178,9 @@ def test_a_dead_worker_marks_only_the_gates_that_never_reported() -> None:
 
     measured, lost = out["withDeath"]
     assert measured["id"] == "G-OK" and measured["status"] == "pass"
-    assert "not_run_cause" not in measured, "a real verdict must never carry a death cause"
+    assert "not_run_cause" not in measured, (
+        "a real verdict must never carry a death cause"
+    )
 
     assert lost["id"] == "G-LOST" and lost["status"] == "not_run"
     assert lost["not_run_cause"] == "runner_died"

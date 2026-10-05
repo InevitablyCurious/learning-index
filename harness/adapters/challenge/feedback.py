@@ -348,13 +348,15 @@ def _describe_sent(keys: list[str]) -> str:
 # /api/new: EROFS …" into "their automation fell over while reading your page"
 # and thirty tag complaints, and the model never learned the call was failing.
 _HTTP_ERROR_RES = (
-    re.compile(r"HTTP (?P<code>\d{3}) from (?P<method>GET|POST) (?P<path>/\S*?):?\s(?P<detail>.*)"),
+    re.compile(
+        r"HTTP (?P<code>\d{3}) from (?P<method>GET|POST) (?P<path>/\S*?):?\s(?P<detail>.*)"
+    ),
     re.compile(r"(?P<method>GET|POST) (?P<path>/\S+) failed \((?P<code>\d{3})\)"),
 )
-_HTTP_LINE_FIRST = (
-    'When they called {method} {path} on your app it answered HTTP {code} instead of the game state{detail}.'
+_HTTP_LINE_FIRST = "When they called {method} {path} on your app it answered HTTP {code} instead of the game state{detail}."
+_HTTP_LINE_REPEAT = (
+    "They called {method} {path} again and it still answers HTTP {code}{detail}."
 )
-_HTTP_LINE_REPEAT = 'They called {method} {path} again and it still answers HTTP {code}{detail}.'
 
 
 def http_error_line(observed: str, *, pass_kind: str) -> str | None:
@@ -367,7 +369,12 @@ def http_error_line(observed: str, *, pass_kind: str) -> str | None:
             raw = (m.groupdict().get("detail") or "").strip()
             detail = f' — the response said: "{raw[:140]}"' if raw else ""
             template = _HTTP_LINE_REPEAT if pass_kind == "repeat" else _HTTP_LINE_FIRST
-            return template.format(method=m.group("method"), path=m.group("path"), code=m.group("code"), detail=detail)
+            return template.format(
+                method=m.group("method"),
+                path=m.group("path"),
+                code=m.group("code"),
+                detail=detail,
+            )
     return None
 
 
@@ -376,7 +383,7 @@ def setup_refusal_line(observed: str, *, pass_kind: str) -> str | None:
     text = str(observed or "")
     if SETUP_REFUSED not in text:
         return None
-    first = text[text.index(SETUP_REFUSED):].split("\n", 1)[0]
+    first = text[text.index(SETUP_REFUSED) :].split("\n", 1)[0]
     if h := _SETUP_HTTP_RE.search(first):
         if pass_kind == "repeat":
             return f"They sent your debug endpoint the same setup again and it still answers HTTP {h.group('code')}."
@@ -385,11 +392,21 @@ def setup_refusal_line(observed: str, *, pass_kind: str) -> str | None:
             f"and it answered HTTP {h.group('code')}."
         )
     m = _SETUP_FIELDS_RE.search(first)
-    missed = ", ".join(f'"{k.strip()}"' for k in m.group("missed").split(",")) if m else "what they set"
-    sent_keys = [k.strip() for k in m.group("sent").split(",")] if m and m.group("sent") else []
+    missed = (
+        ", ".join(f'"{k.strip()}"' for k in m.group("missed").split(","))
+        if m
+        else "what they set"
+    )
+    sent_keys = (
+        [k.strip() for k in m.group("sent").split(",")] if m and m.group("sent") else []
+    )
     sent = _describe_sent(sent_keys) if sent_keys else "a request"
     template = _SETUP_LINE_REPEAT if pass_kind == "repeat" else _SETUP_LINE_FIRST
-    said = f' The response said: "{m.group("error").strip()[:140]}".' if m and m.group("error") else ""
+    said = (
+        f' The response said: "{m.group("error").strip()[:140]}".'
+        if m and m.group("error")
+        else ""
+    )
     return template.format(sent=sent, missed=missed) + said
 
 
@@ -406,7 +423,10 @@ class FeedbackMixin:
         key = m.group(1)
         if key.startswith(cls._TESTER_CONF_PREFIXES):
             return "tester"
-        if any(key == exact or key.startswith(f"{exact} ") for exact in cls._TESTER_CONF_EXACT):
+        if any(
+            key == exact or key.startswith(f"{exact} ")
+            for exact in cls._TESTER_CONF_EXACT
+        ):
             return "tester"
         return "team"
 
@@ -494,7 +514,11 @@ class FeedbackMixin:
         # never looked at the black layout, the only thing wrong (run
         # 1790196821). Absent the marker, the gate's own line.
         aspect = m.group(1) if (m := _ASPECT_RE.search(str(observed or ""))) else None
-        aspect_key = f"{token_key or conf_key}.{aspect}" if (token_key or conf_key) and aspect else None
+        aspect_key = (
+            f"{token_key or conf_key}.{aspect}"
+            if (token_key or conf_key) and aspect
+            else None
+        )
         for key in (aspect_key, raw, token_key, conf_key, "CONF"):
             if key and key in overrides:
                 # "CONF" must only resolve conformance checks, never a stray use
@@ -542,7 +566,11 @@ class FeedbackMixin:
         could have said it.
         """
         raw = str(record.get("check", "")).strip()
-        aspect = m.group(1) if (m := _ASPECT_RE.search(str(record.get("observed", "") or ""))) else None
+        aspect = (
+            m.group(1)
+            if (m := _ASPECT_RE.search(str(record.get("observed", "") or "")))
+            else None
+        )
         return f"{raw} [aspect: {aspect}]" if aspect else raw
 
     @classmethod
@@ -556,9 +584,9 @@ class FeedbackMixin:
         """
         raw_check = str(record.get("check", "")).strip()
         observed = str(record.get("observed", "") or "")
-        setup_line = setup_refusal_line(observed, pass_kind=pass_kind) or http_error_line(
+        setup_line = setup_refusal_line(
             observed, pass_kind=pass_kind
-        )
+        ) or http_error_line(observed, pass_kind=pass_kind)
         if setup_line:
             return setup_line, "team"
         label = cls._humanize_check(
@@ -834,7 +862,11 @@ class FeedbackMixin:
             cls.feedback_channel(check) == "tester"
             for check in ((withheld or []) + (unevaluated or []))
         )
-        tester_speaks = bool(by_channel["tester"]) or not by_channel["team"] or not tester_fell_silent
+        tester_speaks = (
+            bool(by_channel["tester"])
+            or not by_channel["team"]
+            or not tester_fell_silent
+        )
 
         lines: list[str] = [_EXCUSE_ELIMINATOR, ""]
         if tester_speaks:
@@ -923,7 +955,10 @@ class FeedbackMixin:
         for real, exactly as before the cache existed. Never raises.
         """
         import harness.adapters.challenge as _pkg
-        compute_grader_hash = _pkg.compute_grader_hash  # late-bound: tests patch the package attr; read once per call
+
+        compute_grader_hash = (
+            _pkg.compute_grader_hash
+        )  # late-bound: tests patch the package attr; read once per call
         try:
             current = compute_grader_hash(_GRADER_DIR)
             stored = json.loads(

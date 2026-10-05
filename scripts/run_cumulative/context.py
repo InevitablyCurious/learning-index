@@ -88,8 +88,7 @@ def _build_context(args: argparse.Namespace, *, require_runtime: bool) -> CliCon
         config_fingerprint=config_fingerprint,
         on_budget=int(args.on_budget),
         run_context=current_run_context,
-        chunk_plan_hash=compute_task_template_hash(PROMPTS_DIR)
-        or "",
+        chunk_plan_hash=compute_task_template_hash(PROMPTS_DIR) or "",
         sequence_index=args.sequence_index,
         off_replicates=getattr(args, "off_replicates", 1) or 1,
     )

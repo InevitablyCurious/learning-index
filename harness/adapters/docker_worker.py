@@ -195,9 +195,7 @@ def image_plugin_present(tag: str = WORKER_IMAGE) -> bool:
         )
         return False
     except Exception as exc:  # noqa: BLE001 - label probe must not raise.
-        _LOG.error(
-            "docker_worker.image_plugin_present_failed tag=%s err=%s", tag, exc
-        )
+        _LOG.error("docker_worker.image_plugin_present_failed tag=%s err=%s", tag, exc)
         return False
 
     if completed.returncode != 0:
@@ -593,13 +591,25 @@ class DockerCell:
         except (OSError, subprocess.SubprocessError) as exc:
             # Docker itself could not be asked: that is not evidence the worker
             # died, so report it running and let the normal wait continue.
-            return {"running": True, "exit_code": None, "detail": f"inspect failed: {exc}"}
+            return {
+                "running": True,
+                "exit_code": None,
+                "detail": f"inspect failed: {exc}",
+            }
         if done.returncode != 0:
-            return {"running": False, "exit_code": None, "detail": done.stderr.strip()[:200]}
+            return {
+                "running": False,
+                "exit_code": None,
+                "detail": done.stderr.strip()[:200],
+            }
         try:
             state = json.loads(done.stdout)
         except ValueError:
-            return {"running": True, "exit_code": None, "detail": "unreadable inspect output"}
+            return {
+                "running": True,
+                "exit_code": None,
+                "detail": "unreadable inspect output",
+            }
         return {
             "running": bool(state.get("Running")),
             "exit_code": state.get("ExitCode"),
@@ -1456,9 +1466,7 @@ def _build_run_argv(
                 "would never compact; refusing to launch a cell that cannot "
                 "honour --compact"
             )
-        host_compact_phase = (
-            Path(config.compact_phase_host_path).expanduser().resolve()
-        )
+        host_compact_phase = Path(config.compact_phase_host_path).expanduser().resolve()
         host_compact_phase.mkdir(parents=True, exist_ok=True)
         run_cmd.extend(
             [

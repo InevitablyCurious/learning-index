@@ -732,9 +732,7 @@ def test_write_scorecard_republishes_as_the_stream_grows(tmp_path: Path) -> None
         session_id="ses-grow-0",
         full_green=True,
     )
-    first = json.loads(
-        Path(write_scorecard(manifest_path)).read_text(encoding="utf-8")
-    )
+    first = json.loads(Path(write_scorecard(manifest_path)).read_text(encoding="utf-8"))
     assert first["scored_sessions"] == 1
 
     _write_scored_attempt(

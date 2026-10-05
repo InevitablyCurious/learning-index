@@ -832,9 +832,12 @@ def test_serve_drive_finalize_timeout_recovers_with_resume_nudge(
     assert anomaly["retried"] is True
     assert anomaly["retry_kind"] == "harness_resume"
     assert _is_unrecovered_anomaly(anomaly) is False  # recovered → not unrecovered
-    assert _is_unrecovered_anomaly(
-        {"terminal": TURN_TERMINAL_TRUNCATED, "reason": "stream-incomplete"}
-    ) is True  # a non-recoverable class still counts
+    assert (
+        _is_unrecovered_anomaly(
+            {"terminal": TURN_TERMINAL_TRUNCATED, "reason": "stream-incomplete"}
+        )
+        is True
+    )  # a non-recoverable class still counts
     assert cell.kill_calls == 0
 
 
@@ -892,10 +895,24 @@ def test_the_models_own_terminals_are_not_instrument_anomalies() -> None:
     from harness.adapters.challenge import _is_instrument_anomaly
     from harness.adapters.challenge.constants import TURN_TERMINAL_CAP_CUTOFF
 
-    for terminal in (TURN_TERMINAL_GUARD_ABORT, TURN_TERMINAL_STALLED, TURN_TERMINAL_CAP_CUTOFF):
-        assert _is_instrument_anomaly({"terminal": terminal, "reason": "stream-incomplete"}) is False
+    for terminal in (
+        TURN_TERMINAL_GUARD_ABORT,
+        TURN_TERMINAL_STALLED,
+        TURN_TERMINAL_CAP_CUTOFF,
+    ):
+        assert (
+            _is_instrument_anomaly(
+                {"terminal": terminal, "reason": "stream-incomplete"}
+            )
+            is False
+        )
     for terminal in (TURN_TERMINAL_TRANSPORT_ERROR, TURN_TERMINAL_TRUNCATED):
-        assert _is_instrument_anomaly({"terminal": terminal, "reason": "stream-incomplete"}) is True
+        assert (
+            _is_instrument_anomaly(
+                {"terminal": terminal, "reason": "stream-incomplete"}
+            )
+            is True
+        )
 
 
 def test_serve_drive_model_silence_is_ours_and_gets_the_connection_line(
@@ -907,7 +924,10 @@ def test_serve_drive_model_silence_is_ours_and_gets_the_connection_line(
     as a stall, recorded as a transport error of OURS (reason model_silent,
     recovered like a provider outage — Jerry, 2026-09-24) and re-driven with the
     existing connection line, never the stall line."""
-    from harness.adapters.challenge import _PROVIDER_RECOVERY_NUDGE, _is_instrument_anomaly
+    from harness.adapters.challenge import (
+        _PROVIDER_RECOVERY_NUDGE,
+        _is_instrument_anomaly,
+    )
     from harness.serve_client import REASON_MODEL_SILENT
 
     runner = _make_runner(tmp_path)
@@ -933,7 +953,9 @@ def test_serve_drive_model_silence_is_ours_and_gets_the_connection_line(
 
     sent = [text for _, text in client.sent_prompts]
     assert _PROVIDER_RECOVERY_NUDGE in sent
-    assert _STALL_RECOVERY_NUDGE not in sent, "no command ran; the stall line would be false"
+    assert _STALL_RECOVERY_NUDGE not in sent, (
+        "no command ran; the stall line would be false"
+    )
     assert stats.recovery_nudges == 1
     assert stats.killed_reason is None
     assert stats.exit_code == 0

@@ -39,7 +39,11 @@ def test_every_gate_token_in_the_suite_has_a_stage() -> None:
 
 
 def test_every_complaint_key_and_every_drawn_or_tagged_element_has_a_stage() -> None:
-    keys = [k for k in json.loads((_GRADER_DIR / "feedback.json").read_text())["gates"] if k != "CONF"]
+    keys = [
+        k
+        for k in json.loads((_GRADER_DIR / "feedback.json").read_text())["gates"]
+        if k != "CONF"
+    ]
     for label in ("point", "checker", "bar", "off-tray", "die"):
         keys += [f"REQ-RENDER/{label}", f"REQ-TESTID/{label}"]
     keys += ["REQ-TESTID/testid.anything", "REQ-STATE/state.anything"]
@@ -73,12 +77,20 @@ def test_only_the_earliest_failing_stage_is_told() -> None:
 
 
 def test_a_clean_stage_unlocks_the_next_failing_one_skipping_clean_stages() -> None:
-    view = player_view([{"check": "[G10] REQ-WINCLASS — x"}, {"check": "[G14] x"}], STAGES, is_infra=_infra)
+    view = player_view(
+        [{"check": "[G10] REQ-WINCLASS — x"}, {"check": "[G14] x"}],
+        STAGES,
+        is_infra=_infra,
+    )
     assert view.stage is not None and view.stage.number == 5
 
 
 def test_runner_deaths_are_never_staged_or_told() -> None:
-    view = player_view([{"check": "backend:runner backend/gates-13-16.test.ts"}], STAGES, is_infra=_infra)
+    view = player_view(
+        [{"check": "backend:runner backend/gates-13-16.test.ts"}],
+        STAGES,
+        is_infra=_infra,
+    )
     assert view.stage is None and view.visible == [] and view.withheld == []
 
 
@@ -89,23 +101,47 @@ def test_a_check_the_grader_never_reached_is_told_to_no_one() -> None:
     # of them; only the check that actually failed may be told.
     skipped = "never evaluated — an earlier step failed and skipped it"
     problems = [
-        {"check": "conformance:REQ-TESTID/testid.board", "expected": "this check is evaluated", "observed": skipped},
-        {"check": "conformance:REQ-RENDER/checker", "expected": "this check is evaluated", "observed": skipped},
-        {"check": "conformance:REQ-TESTID/dom — page DOM exposes the required testids", "observed": "HTTP 500 from POST /api/new"},
+        {
+            "check": "conformance:REQ-TESTID/testid.board",
+            "expected": "this check is evaluated",
+            "observed": skipped,
+        },
+        {
+            "check": "conformance:REQ-RENDER/checker",
+            "expected": "this check is evaluated",
+            "observed": skipped,
+        },
+        {
+            "check": "conformance:REQ-TESTID/dom — page DOM exposes the required testids",
+            "observed": "HTTP 500 from POST /api/new",
+        },
     ]
     view = player_view(problems, STAGES, is_infra=_infra)
-    assert [p["check"].split(" ")[0] for p in view.visible] == ["conformance:REQ-TESTID/dom"]
-    assert sorted(view.unevaluated) == ["conformance:REQ-RENDER/checker", "conformance:REQ-TESTID/testid.board"]
+    assert [p["check"].split(" ")[0] for p in view.visible] == [
+        "conformance:REQ-TESTID/dom"
+    ]
+    assert sorted(view.unevaluated) == [
+        "conformance:REQ-RENDER/checker",
+        "conformance:REQ-TESTID/testid.board",
+    ]
     assert view.withheld == []
     only_skipped = player_view(problems[:2], STAGES, is_infra=_infra)
-    assert only_skipped.stage is None and only_skipped.visible == [] and len(only_skipped.unevaluated) == 2
+    assert (
+        only_skipped.stage is None
+        and only_skipped.visible == []
+        and len(only_skipped.unevaluated) == 2
+    )
 
 
 def test_the_report_runners_own_death_is_never_staged_or_told() -> None:
     # grader/report.mjs publishes `runner:exception` when it throws (gradable
     # false). Unrecognised, it reached stage_of, which raises for an unstaged
     # check and aborts the campaign.
-    view = player_view([{"check": "runner:exception", "observed": "TypeError"}], STAGES, is_infra=_infra)
+    view = player_view(
+        [{"check": "runner:exception", "observed": "TypeError"}],
+        STAGES,
+        is_infra=_infra,
+    )
     assert view.stage is None and view.visible == [] and view.withheld == []
 
 
@@ -113,15 +149,23 @@ def test_the_report_runners_own_death_is_never_staged_or_told() -> None:
 
 
 def _doubles(observed: str) -> dict[str, str]:
-    return {"check": "[F33] REQ-DOUBLES — a double lets the player make four moves", "observed": observed}
+    return {
+        "check": "[F33] REQ-DOUBLES — a double lets the player make four moves",
+        "observed": observed,
+    }
 
 
 def test_a_stuck_check_is_not_told_when_the_check_for_that_step_failed_too() -> None:
     # FIX-2 mutation M27, no hints anywhere: the doubles gate told "I rolled a
     # double and could only make two moves" to a player who could make none.
     problems = [
-        _doubles("Error: move 1: no hint appeared [aspect: nomove] [needs: REQ-HINT/hint F03 F25]"),
-        {"check": "[F03] REQ-HINT — clicking a piece shows its moves", "observed": "Error: Could not reveal hints"},
+        _doubles(
+            "Error: move 1: no hint appeared [aspect: nomove] [needs: REQ-HINT/hint F03 F25]"
+        ),
+        {
+            "check": "[F03] REQ-HINT — clicking a piece shows its moves",
+            "observed": "Error: Could not reveal hints",
+        },
     ]
     view = player_view(problems, STAGES, is_infra=_infra)
     assert [p["check"][:5] for p in view.visible] == ["[F03]"]
@@ -131,9 +175,15 @@ def test_a_stuck_check_is_not_told_when_the_check_for_that_step_failed_too() -> 
 def test_a_stuck_check_is_told_when_the_step_failed_only_in_its_own_situation() -> None:
     # Hints vanish only on a double: every ordinary-roll check passes, so the
     # double's own line is what the player saw — hiding it would skip stage 2.
-    view = player_view([_doubles("Error: move 1: no hint appeared [aspect: nomove] [needs: F25]")], STAGES, is_infra=_infra)
+    view = player_view(
+        [_doubles("Error: move 1: no hint appeared [aspect: nomove] [needs: F25]")],
+        STAGES,
+        is_infra=_infra,
+    )
     assert view.stage is not None and view.stage.number == 2
-    assert [p["check"][:5] for p in view.visible] == ["[F33]"] and view.unevaluated == []
+    assert [p["check"][:5] for p in view.visible] == [
+        "[F33]"
+    ] and view.unevaluated == []
     label, _ = ChallengeRunner._told_label(view.visible[0], pass_kind="first")
     assert label == ChallengeRunner._feedback_overrides()["F33.nomove"]["first"]
 
@@ -141,20 +191,33 @@ def test_a_stuck_check_is_told_when_the_step_failed_only_in_its_own_situation() 
 def test_a_chain_of_stuck_checks_is_told_as_the_one_step_that_failed() -> None:
     problems = [
         _doubles("move 1: no checker to pick up [aspect: nomove] [needs: F25]"),
-        {"check": "[F25] REQ-HINT — a played move consumes a die", "observed": "[needs: REQ-HINT/hint F03]"},
-        {"check": "conformance:REQ-HINT/hint — selecting a movable checker shows move hints", "observed": "none"},
+        {
+            "check": "[F25] REQ-HINT — a played move consumes a die",
+            "observed": "[needs: REQ-HINT/hint F03]",
+        },
+        {
+            "check": "conformance:REQ-HINT/hint — selecting a movable checker shows move hints",
+            "observed": "none",
+        },
     ]
     view = player_view(problems, STAGES, is_infra=_infra)
-    assert [p["check"].split(" ")[0] for p in view.visible] == ["conformance:REQ-HINT/hint"]
+    assert [p["check"].split(" ")[0] for p in view.visible] == [
+        "conformance:REQ-HINT/hint"
+    ]
     assert sorted(c[:5] for c in view.unevaluated) == ["[F25]", "[F33]"]
 
 
 def test_moves_after_the_first_are_the_doubles_checks_own_finding() -> None:
     # The player has made moves, so how many is the complaint — whatever else fails.
-    problems = [_doubles("move 3: no hint appeared [aspect: two]"), {"check": "[F25] REQ-HINT — x", "observed": "x"}]
+    problems = [
+        _doubles("move 3: no hint appeared [aspect: two]"),
+        {"check": "[F25] REQ-HINT — x", "observed": "x"},
+    ]
     view = player_view(problems, STAGES, is_infra=_infra)
     assert sorted(p["check"][:5] for p in view.visible) == ["[F25]", "[F33]"]
-    label, _ = ChallengeRunner._told_label(_doubles("move 3: no hint appeared [aspect: two]"), pass_kind="first")
+    label, _ = ChallengeRunner._told_label(
+        _doubles("move 3: no hint appeared [aspect: two]"), pass_kind="first"
+    )
     assert label == "I rolled a double and could only make two moves."
 
 
@@ -178,15 +241,38 @@ _FRONTEND = tuple(
         {
             m.group(1)
             for path in (_GRADER_DIR / "frontend").glob("*.spec.ts")
-            for m in re.finditer(r"\b(?:test|it)\(\s*[\"'`]\[([A-Z]+[0-9]*)\]", path.read_text(encoding="utf-8"))
+            for m in re.finditer(
+                r"\b(?:test|it)\(\s*[\"'`]\[([A-Z]+[0-9]*)\]",
+                path.read_text(encoding="utf-8"),
+            )
         }
     )
 )
 _STATIC_TESTIDS = (
-    "scoreWhite", "scoreBlack", "difficulty", "newGameBtn", "board", "playfield",
-    "checkerLayer", "pointHints", "turnIndicator", "pipWhite", "pipBlack", "cube",
-    "cubeVal", "cubeOwner", "dice", "rollBtn", "doubleBtn", "undoBtn", "endTurnBtn",
-    "message", "modalOverlay", "modalTitle", "modalBody", "modalBtns",
+    "scoreWhite",
+    "scoreBlack",
+    "difficulty",
+    "newGameBtn",
+    "board",
+    "playfield",
+    "checkerLayer",
+    "pointHints",
+    "turnIndicator",
+    "pipWhite",
+    "pipBlack",
+    "cube",
+    "cubeVal",
+    "cubeOwner",
+    "dice",
+    "rollBtn",
+    "doubleBtn",
+    "undoBtn",
+    "endTurnBtn",
+    "message",
+    "modalOverlay",
+    "modalTitle",
+    "modalBody",
+    "modalBtns",
 )
 _HELPER_MARKERS = {
     ("frontend/core.spec.ts", "[aspect: format]"): ("F06",),  # readInt
@@ -194,10 +280,22 @@ _HELPER_MARKERS = {
     # bearOffTheLastPiece: the player's own last bear-off, shared by the end-of-game checks.
     ("frontend/core.spec.ts", "[needs: F03]"): ("F51", "F53"),
     ("frontend/core.spec.ts", "[needs: F04]"): ("F51", "F53"),
-    ("frontend/doubles.spec.ts", "[needs: REQ-RENDER/die F61]"): ("F39",),  # rollThroughThePage
+    ("frontend/doubles.spec.ts", "[needs: REQ-RENDER/die F61]"): (
+        "F39",
+    ),  # rollThroughThePage
     ("frontend/doubles.spec.ts", "[needs: F61]"): ("F39",),  # rollThroughThePage
-    ("frontend/core.spec.ts", "[needs: F61]"): ("F03", "F25", "F04", "F45", "F60", "F63"),  # clickOpeningRoll
-    ("frontend/fixtures.ts", "[needs: REQ-RENDER/point REQ-RENDER/checker REQ-TESTID/point REQ-TESTID/checker]"): _FRONTEND,
+    ("frontend/core.spec.ts", "[needs: F61]"): (
+        "F03",
+        "F25",
+        "F04",
+        "F45",
+        "F60",
+        "F63",
+    ),  # clickOpeningRoll
+    (
+        "frontend/fixtures.ts",
+        "[needs: REQ-RENDER/point REQ-RENDER/checker REQ-TESTID/point REQ-TESTID/checker]",
+    ): _FRONTEND,
     ("frontend/fixtures.ts", "[needs: REQ-RENDER/point REQ-RENDER/checker]"): _FRONTEND,
     ("frontend/layout.spec.ts", "[needs: F01]"): _LAYOUT,
     ("frontend/layout.spec.ts", "[needs: REQ-RENDER/point]"): _LAYOUT,
@@ -208,21 +306,42 @@ _HELPER_MARKERS = {
             sorted(
                 {
                     m.group(1)
-                    for m in _TITLE.finditer((_GRADER_DIR / "frontend" / spec).read_text(encoding="utf-8"))
+                    for m in _TITLE.finditer(
+                        (_GRADER_DIR / "frontend" / spec).read_text(encoding="utf-8")
+                    )
                 }
                 - {"F01"}
             )
         )
-        for spec in ("core.spec.ts", "board-geometry.spec.ts", "edges.spec.ts", "doubles.spec.ts")
+        for spec in (
+            "core.spec.ts",
+            "board-geometry.spec.ts",
+            "edges.spec.ts",
+            "doubles.spec.ts",
+        )
     },
     # layout.spec.ts ASPECT_OF: F38 names the item on the right that isn't showing.
-    **{("frontend/layout.spec.ts", f"[aspect: {a}]"): ("F38",) for a in (
-        "roll", "double", "undo", "endturn", "newgame", "difficulty",
-        "cube", "pipwhite", "pipblack", "turn", "message",
-    )},
+    **{
+        ("frontend/layout.spec.ts", f"[aspect: {a}]"): ("F38",)
+        for a in (
+            "roll",
+            "double",
+            "undo",
+            "endturn",
+            "newgame",
+            "difficulty",
+            "cube",
+            "pipwhite",
+            "pipblack",
+            "turn",
+            "message",
+        )
+    },
     # pregate.ts flags a duplicated data-testid with an [aspect: dup] marker on
     # the same REQ-TESTID/testid.<tag> id; each tag owns the dup line.
-    ("conformance/pregate.ts", "[aspect: dup]"): tuple(f"REQ-TESTID/testid.{t}" for t in _STATIC_TESTIDS),
+    ("conformance/pregate.ts", "[aspect: dup]"): tuple(
+        f"REQ-TESTID/testid.{t}" for t in _STATIC_TESTIDS
+    ),
 }
 
 
@@ -276,24 +395,41 @@ def _suite_markers() -> list[tuple[str, str, str, str]]:
     for directory in ("backend", "frontend", "conformance"):
         for path in sorted((_GRADER_DIR / directory).rglob("*.ts")):
             code = _blank_comments(path.read_text(encoding="utf-8"))
-            spans = [(m.group(1), m.start(), _call_end(code, code.index("(", m.start()))) for m in _TITLE.finditer(code)]
+            spans = [
+                (m.group(1), m.start(), _call_end(code, code.index("(", m.start())))
+                for m in _TITLE.finditer(code)
+            ]
             rel = path.relative_to(_GRADER_DIR).as_posix()
             for mark in _MARKER.finditer(code):
-                owners = [token for token, start, end in spans if start <= mark.start() < end]
+                owners = [
+                    token for token, start, end in spans if start <= mark.start() < end
+                ]
                 gates = owners[-1:] or _HELPER_MARKERS.get((rel, mark.group(0)))
-                assert gates, f"{rel}: {mark.group(0)} sits in no gate's test — list it in _HELPER_MARKERS"
-                found.extend((rel, gate, mark.group(1), mark.group(2)) for gate in gates)
+                assert gates, (
+                    f"{rel}: {mark.group(0)} sits in no gate's test — list it in _HELPER_MARKERS"
+                )
+                found.extend(
+                    (rel, gate, mark.group(1), mark.group(2)) for gate in gates
+                )
     return found
 
 
 def test_every_aspect_marker_has_its_gates_first_and_repeat_lines() -> None:
     lines = load_feedback_overrides_from_failures(_PACK.dir)
-    aspects = {f"{owner}.{value}" for _, owner, kind, value in _suite_markers() if kind == "aspect"}
-    assert "F33.nomove" in aspects and "G03.plainmoves" in aspects  # the scan sees the suite
+    aspects = {
+        f"{owner}.{value}"
+        for _, owner, kind, value in _suite_markers()
+        if kind == "aspect"
+    }
+    assert (
+        "F33.nomove" in aspects and "G03.plainmoves" in aspects
+    )  # the scan sees the suite
     assert sorted(a for a in aspects if a not in lines) == []
 
 
-def test_a_needed_check_exists_in_the_same_or_an_earlier_stage_and_never_in_a_cycle() -> None:
+def test_a_needed_check_exists_in_the_same_or_an_earlier_stage_and_never_in_a_cycle() -> (
+    None
+):
     # A needed check must be one the player can hear: withholding a stuck check
     # is only honest when the check it names has a complaint line of its own.
     known = set(load_feedback_overrides_from_failures(_PACK.dir))
@@ -304,9 +440,15 @@ def test_a_needed_check_exists_in_the_same_or_an_earlier_stage_and_never_in_a_cy
         own_stage = stage_of(f"[{owner}] x", STAGES).number
         for ident in value.split():
             assert ident != owner, f"{rel}: {owner} needs itself"
-            assert ident in known, f"{rel}: {owner} needs {ident}, which has no complaint line"
-            needed = stage_of(ident if ident.startswith("REQ-") else f"[{ident}] x", STAGES).number
-            assert needed <= own_stage, f"{rel}: {owner} (stage {own_stage}) needs {ident} (stage {needed})"
+            assert ident in known, (
+                f"{rel}: {owner} needs {ident}, which has no complaint line"
+            )
+            needed = stage_of(
+                ident if ident.startswith("REQ-") else f"[{ident}] x", STAGES
+            ).number
+            assert needed <= own_stage, (
+                f"{rel}: {owner} (stage {own_stage}) needs {ident} (stage {needed})"
+            )
             graph.setdefault(owner, set()).add(ident)
     assert graph, "no needs markers found — the scan is not reading the suite"
 
@@ -325,13 +467,23 @@ def test_a_new_complaint_from_a_check_already_told_is_a_first_sighting() -> None
     # the points.", a complaint the player had never made. Repeats are per
     # complaint (check + aspect), not per check.
     check = "[F32] REQ-GEOMETRY — off tray is visible"
-    told_before = {ChallengeRunner._complaint_id({"check": check, "observed": "expected the off tray to be drawn"})}
-    record = {"check": check, "observed": "[aspect: overlap] the off tray is drawn over points"}
-    message = ChallengeRunner._build_feedback_prompt(problems=[record], repeat_complaints=told_before)
+    told_before = {
+        ChallengeRunner._complaint_id(
+            {"check": check, "observed": "expected the off tray to be drawn"}
+        )
+    }
+    record = {
+        "check": check,
+        "observed": "[aspect: overlap] the off tray is drawn over points",
+    }
+    message = ChallengeRunner._build_feedback_prompt(
+        problems=[record], repeat_complaints=told_before
+    )
     lines = ChallengeRunner._feedback_overrides()["F32.overlap"]
     assert lines["first"] in message and lines["repeat"] not in message
     again = ChallengeRunner._build_feedback_prompt(
-        problems=[record], repeat_complaints=told_before | {ChallengeRunner._complaint_id(record)}
+        problems=[record],
+        repeat_complaints=told_before | {ChallengeRunner._complaint_id(record)},
     )
     assert lines["repeat"] in again
 
@@ -340,6 +492,11 @@ def test_every_needs_marker_in_one_message_counts() -> None:
     # Fourteen assertions write two markers; the runtime once read only the first.
     from harness.adapters.challenge.stages import needs_of
 
-    assert needs_of({"observed": "[needs: F01] [needs: G12] no way to take the double"}) == ("F01", "G12")
-    assert needs_of({"observed": "[aspect: shown] [needs: F01 G25] x"}) == ("F01", "G25")
+    assert needs_of(
+        {"observed": "[needs: F01] [needs: G12] no way to take the double"}
+    ) == ("F01", "G12")
+    assert needs_of({"observed": "[aspect: shown] [needs: F01 G25] x"}) == (
+        "F01",
+        "G25",
+    )
     assert needs_of({"observed": "nothing needed"}) == ()

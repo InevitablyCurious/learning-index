@@ -28,7 +28,9 @@ GOLDEN_SERVER = REPO / "task" / "backgammon" / "golden" / "src" / "server.ts"
 
 
 def _prompts() -> str:
-    return "\n".join(p.read_text(encoding="utf-8") for p in sorted(PROMPTS_DIR.glob("chunk-*.md")))
+    return "\n".join(
+        p.read_text(encoding="utf-8") for p in sorted(PROMPTS_DIR.glob("chunk-*.md"))
+    )
 
 
 def _check_sources() -> str:
@@ -51,7 +53,9 @@ def _tags_the_checks_use() -> set[str]:
     src = _check_sources()
     tags = set(re.findall(r'getByTestId\(\s*["\']([A-Za-z-]+)["\']', src))
     tags |= set(re.findall(r'data-testid=\\?["\']([A-Za-z-]+)', src))
-    tags |= set(_pregate_list("REQUIRED_STATIC_TESTIDS")) | set(_pregate_list("COUNTED_ELEMENT_LABELS"))
+    tags |= set(_pregate_list("REQUIRED_STATIC_TESTIDS")) | set(
+        _pregate_list("COUNTED_ELEMENT_LABELS")
+    )
     return tags
 
 
@@ -87,7 +91,9 @@ def test_every_data_attribute_is_named_on_both_sides() -> None:
     assert used <= set(re.findall(r"\b(data-[a-z-]+)", _prompts())), (
         f"checks read data- attributes the prompts never name: {sorted(used - named)}"
     )
-    assert named <= used, f"the prompts name data- attributes no check reads: {sorted(named - used)}"
+    assert named <= used, (
+        f"the prompts name data- attributes no check reads: {sorted(named - used)}"
+    )
 
 
 def test_every_route_a_check_calls_is_in_the_prompts() -> None:
@@ -146,16 +152,24 @@ def test_every_word_pattern_a_check_defines_is_stated_in_the_prompts() -> None:
     prompts = _prompts()
     constants = set(re.findall(r"\bconst ([A-Z][A-Z_]+) = /", src))
     unlisted = sorted(constants - set(_WORDS))
-    assert not unlisted, f"word patterns in the checks with no prompt sentence listed here: {unlisted}"
+    assert not unlisted, (
+        f"word patterns in the checks with no prompt sentence listed here: {unlisted}"
+    )
     for name, sentence in _WORDS.items():
         assert sentence in prompts, f"{name}: the prompts no longer say {sentence!r}"
     for literal, sentence in _LITERALS.items():
-        assert literal.lower() in src.lower(), f"{literal!r} is no longer matched by any check — drop it here"
-        assert sentence in prompts, f"{literal!r}: the prompts no longer say {sentence!r}"
+        assert literal.lower() in src.lower(), (
+            f"{literal!r} is no longer matched by any check — drop it here"
+        )
+        assert sentence in prompts, (
+            f"{literal!r}: the prompts no longer say {sentence!r}"
+        )
 
 
 def test_the_static_id_check_and_the_prompts_id_rule_go_together() -> None:
-    checks_ids = "REQ-TESTID/id." in (GRADER / "conformance" / "pregate.ts").read_text(encoding="utf-8")
+    checks_ids = "REQ-TESTID/id." in (GRADER / "conformance" / "pregate.ts").read_text(
+        encoding="utf-8"
+    )
     states_ids = "keep their existing `id`" in _prompts()
     assert checks_ids == states_ids, (
         "the pre-gate checks static ids but the prompts never say to keep them"
@@ -169,7 +183,9 @@ def test_the_point_column_check_and_the_prompts_column_rule_go_together() -> Non
     # "point", and the prompts never said that element is the point's column: run
     # 1790775221 made every point the full height of the board, over the point
     # opposite, and the tester was left to describe the wreckage.
-    checks_columns = "REQ-TESTID/point-column" in (GRADER / "conformance" / "pregate.ts").read_text(encoding="utf-8")
+    checks_columns = "REQ-TESTID/point-column" in (
+        GRADER / "conformance" / "pregate.ts"
+    ).read_text(encoding="utf-8")
     states_columns = "on the element that is the point's column" in _prompts()
     assert checks_columns == states_columns, (
         "the pre-gate checks each point's column but the prompts never put the tag on the column"
@@ -187,5 +203,11 @@ def test_the_repair_reminder_lists_every_tag_the_prompts_require() -> None:
     # The repair rounds remind the model what not to rename. Fast Forward's tag
     # joined chunk-04 in batch 4 and never reached this list.
     reminder = (PROMPTS_DIR / "repair" / "constraints.md").read_text(encoding="utf-8")
-    missing = sorted(t for t in _tags_the_prompts_name() if not re.search(r"\b" + re.escape(t) + r"\b", reminder))
-    assert not missing, f"tags the prompts require that the repair reminder never lists: {missing}"
+    missing = sorted(
+        t
+        for t in _tags_the_prompts_name()
+        if not re.search(r"\b" + re.escape(t) + r"\b", reminder)
+    )
+    assert not missing, (
+        f"tags the prompts require that the repair reminder never lists: {missing}"
+    )

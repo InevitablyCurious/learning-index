@@ -816,7 +816,9 @@ class RealSessionRunner:
                     # PLAYER ORDER: the stage this round reached and how many
                     # failing checks lay past it — where a model gets stuck.
                     attempt_record["player_stage"] = attempt.get("player_stage")
-                    attempt_record["player_stage_name"] = attempt.get("player_stage_name")
+                    attempt_record["player_stage_name"] = attempt.get(
+                        "player_stage_name"
+                    )
                     attempt_record["withheld_checks"] = attempt.get("withheld_checks")
                     if attempt.get("context_peak") is not None:
                         attempt_record["context_peak"] = attempt.get("context_peak")

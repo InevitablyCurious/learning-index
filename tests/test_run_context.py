@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from harness.cumulative.manifest import CumulativeManifest, resume_or_create, roster_hash
+from harness.cumulative.manifest import (
+    CumulativeManifest,
+    resume_or_create,
+    roster_hash,
+)
 from harness.cumulative.ordering import build_schedule
 from harness.cumulative.run_context import compare_run_context
 from harness.cumulative.types import RosterEntry

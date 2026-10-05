@@ -29,12 +29,16 @@ class _Unreachable(ServeClient):
 
 
 def test_a_dead_worker_ends_the_wait_at_once() -> None:
-    idle, reason = _Unreachable().wait_idle_detailed("s", timeout_s=30, worker_alive=lambda: False)
+    idle, reason = _Unreachable().wait_idle_detailed(
+        "s", timeout_s=30, worker_alive=lambda: False
+    )
     assert (idle, reason) == (False, WORKER_DIED)
 
 
 def test_an_unreachable_but_live_worker_is_still_waited_on() -> None:
-    idle, reason = _Unreachable().wait_idle_detailed("s", timeout_s=0.2, worker_alive=lambda: True)
+    idle, reason = _Unreachable().wait_idle_detailed(
+        "s", timeout_s=0.2, worker_alive=lambda: True
+    )
     assert (idle, reason) == (False, "timeout")
 
 
@@ -46,12 +50,24 @@ class _DeadCell(_FakeCell):
 def test_the_drive_stops_on_a_dead_worker_without_nudging(tmp_path: Path) -> None:
     runner = _make_runner(tmp_path)
     client = _FakeServeClient()
-    client.metrics_result = {"turns": 1, "input_tokens": 1, "output_tokens": 1, "reasoning_tokens": 0,
-                             "cost_usd": 0.0, "provider_truncations": 0, "error_parts": 0}
+    client.metrics_result = {
+        "turns": 1,
+        "input_tokens": 1,
+        "output_tokens": 1,
+        "reasoning_tokens": 0,
+        "cost_usd": 0.0,
+        "provider_truncations": 0,
+        "error_parts": 0,
+    }
     client.wait_script = [(False, WORKER_DIED)]
     stats = runner._run_opencode_serve(
-        active_cell=_DeadCell(), serve_client=client, session_id="s", prompt="fix",
-        run_label="cell", phase="feedback-2", timeout_s=60.0,
+        active_cell=_DeadCell(),
+        serve_client=client,
+        session_id="s",
+        prompt="fix",
+        run_label="cell",
+        phase="feedback-2",
+        timeout_s=60.0,
     )
     assert stats.killed_reason == WORKER_DIED
     assert stats.exit_code == 1
@@ -60,8 +76,16 @@ def test_the_drive_stops_on_a_dead_worker_without_nudging(tmp_path: Path) -> Non
 
 
 def _stats(**over: Any) -> _OpencodeRunStats:
-    base: dict[str, Any] = {"input_tokens": 1, "output_tokens": 1, "reasoning_tokens": 0, "turns": 1,
-                            "session_id": "sess-1", "killed_reason": None, "exit_code": 0, "cost_usd": 0.0}
+    base: dict[str, Any] = {
+        "input_tokens": 1,
+        "output_tokens": 1,
+        "reasoning_tokens": 0,
+        "turns": 1,
+        "session_id": "sess-1",
+        "killed_reason": None,
+        "exit_code": 0,
+        "cost_usd": 0.0,
+    }
     base.update(over)
     return _OpencodeRunStats(**base)
 
@@ -79,14 +103,26 @@ def test_a_worker_that_dies_in_a_repair_round_ends_the_cell_keeping_the_last_gra
 
     def _gate(**kwargs: Any) -> dict[str, Any]:
         grades["n"] += 1
-        return {"verdict": "FAIL", "conformed": True, "problems": [{"check": REAL_CHECK}], "failed_gates": [REAL_CHECK]}
+        return {
+            "verdict": "FAIL",
+            "conformed": True,
+            "problems": [{"check": REAL_CHECK}],
+            "failed_gates": [REAL_CHECK],
+        }
 
     monkeypatch.setattr(runner, "_run_gate_report", _gate)
     monkeypatch.setattr(
-        runner, "_run_opencode_serve",
-        lambda **kw: _stats(killed_reason=WORKER_DIED, exit_code=1) if kw["phase"] == "feedback-2" else _stats(),
+        runner,
+        "_run_opencode_serve",
+        lambda **kw: (
+            _stats(killed_reason=WORKER_DIED, exit_code=1)
+            if kw["phase"] == "feedback-2"
+            else _stats()
+        ),
     )
-    result = runner._run_cell_impl(run_label="dead", run_dir=tmp_path / "dead", task_id="backgammon")
+    result = runner._run_cell_impl(
+        run_label="dead", run_dir=tmp_path / "dead", task_id="backgammon"
+    )
     assert result.termination_reason == WORKER_DIED
     assert result.attempts_to_green == "WORKER_DIED"
     assert grades["n"] == 2
@@ -105,7 +141,10 @@ def test_a_board_stop_is_recorded_as_stopped_not_as_a_harness_error(
     run_dir.mkdir()
     with pytest.raises(KeyboardInterrupt):
         runner.run_cell("stopped", run_dir, "backgammon")
-    ends = [json.loads(line) for line in (run_dir / "live.jsonl").read_text().splitlines()
-            if '"cell.end"' in line]
+    ends = [
+        json.loads(line)
+        for line in (run_dir / "live.jsonl").read_text().splitlines()
+        if '"cell.end"' in line
+    ]
     assert ends[-1]["terminal_reason"] == "stopped"
     assert ends[-1]["terminal_exception"] == "KeyboardInterrupt"

@@ -29,7 +29,9 @@ def test_allocate_free_host_port_two_calls_distinct() -> None:
         if first != second:
             distinct = True
             break
-    assert distinct, "allocate_free_host_port() never returned two distinct ports in 20 attempts"
+    assert distinct, (
+        "allocate_free_host_port() never returned two distinct ports in 20 attempts"
+    )
 
 
 def test_resolve_pinned_env_returns_exact_port_without_overwrite(

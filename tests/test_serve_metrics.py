@@ -373,21 +373,27 @@ def test_message_token_helpers():
 # classify_transport_anomaly
 # ---------------------------------------------------------------------------
 def test_classify_transport_anomaly_truncated():
-    assert classify_transport_anomaly({"provider_truncations": 1, "error_parts": 0}) == (
+    assert classify_transport_anomaly(
+        {"provider_truncations": 1, "error_parts": 0}
+    ) == (
         "truncated",
         "stream-incomplete",
     )
 
 
 def test_classify_transport_anomaly_error():
-    assert classify_transport_anomaly({"provider_truncations": 0, "error_parts": 1}) == (
+    assert classify_transport_anomaly(
+        {"provider_truncations": 0, "error_parts": 1}
+    ) == (
         "transport_error",
         "error_event",
     )
 
 
 def test_classify_transport_anomaly_clean():
-    assert classify_transport_anomaly({"provider_truncations": 0, "error_parts": 0}) == (
+    assert classify_transport_anomaly(
+        {"provider_truncations": 0, "error_parts": 0}
+    ) == (
         None,
         None,
     )
@@ -676,7 +682,12 @@ def test_metrics_since_windows_the_classification_surface():
                 "role": "assistant",
                 "tokens": {"input": 10, "output": 5, "reasoning": 0},
             },
-            "parts": [{"type": "text", "text": "recovered work, carried on from where I stopped"}],
+            "parts": [
+                {
+                    "type": "text",
+                    "text": "recovered work, carried on from where I stopped",
+                }
+            ],
         },
     ]
     client.get_messages = lambda session_id: messages  # type: ignore[method-assign]

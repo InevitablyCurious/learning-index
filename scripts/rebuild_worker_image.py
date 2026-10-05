@@ -64,7 +64,11 @@ def main() -> int:
         from_seam = plugin_dir is not None
 
     if plugin_dir is not None and not (plugin_dir / "package.json").is_file():
-        where = f"{ENV_PLUGIN_DIR}={plugin_dir}" if from_seam else f"--plugin-dir {plugin_dir}"
+        where = (
+            f"{ENV_PLUGIN_DIR}={plugin_dir}"
+            if from_seam
+            else f"--plugin-dir {plugin_dir}"
+        )
         print(f"{where} has no package.json — not a plugin tree", file=sys.stderr)
         return 2
 
@@ -80,21 +84,34 @@ def main() -> int:
     digest = source_digest(worker_dir, plugin_dir)
     print(f"building {IMAGE} from {worker_dir}")
     if plugin_dir is not None:
-        print(f"injecting plugin context from {plugin_dir}" + (f" (via {ENV_PLUGIN_DIR})" if from_seam else ""))
+        print(
+            f"injecting plugin context from {plugin_dir}"
+            + (f" (via {ENV_PLUGIN_DIR})" if from_seam else "")
+        )
     else:
         # SAY WHEN A BUILD IS VANILLA. A dev machine that has lost the seam
         # builds a plugin-less image that looks identical from the outside, and
         # the failure only surfaces as a cell with no extraction tool.
         print(f"no plugin configured ({ENV_PLUGIN_DIR} unset) — building vanilla")
-    print(f"source digest {digest[:12]}" + (" (plugin-inclusive)" if plugin_dir is not None else ""))
+    print(
+        f"source digest {digest[:12]}"
+        + (" (plugin-inclusive)" if plugin_dir is not None else "")
+    )
     sys.stdout.flush()
 
-    code = subprocess.run(build_argv(worker_dir, plugin_dir=plugin_dir), cwd=REPO, check=False).returncode
+    code = subprocess.run(
+        build_argv(worker_dir, plugin_dir=plugin_dir), cwd=REPO, check=False
+    ).returncode
     if code != 0:
-        print(f"\ndocker build exited {code} — the image was NOT replaced", file=sys.stderr)
+        print(
+            f"\ndocker build exited {code} — the image was NOT replaced",
+            file=sys.stderr,
+        )
         return code
 
-    print(f"\n{IMAGE} now carries source digest {digest[:12]} — preflight will read it back")
+    print(
+        f"\n{IMAGE} now carries source digest {digest[:12]} — preflight will read it back"
+    )
     return 0
 
 

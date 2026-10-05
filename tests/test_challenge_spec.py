@@ -39,7 +39,9 @@ def test_the_adapter_reads_those_facts_rather_than_its_own() -> None:
 
     spec = default_spec()
     assert c._GRADER_DIR == spec.grader_dir
-    assert c._HOLD_UI_PORT == 0  # auto-allocate sentinel (free per-cell port); no longer spec.app_port
+    assert (
+        c._HOLD_UI_PORT == 0
+    )  # auto-allocate sentinel (free per-cell port); no longer spec.app_port
     assert c._STUB_SENTINEL == spec.stub_sentinel
     assert c._CHUNK_STUB_FILE == spec.chunk_stub_files
     assert DECLARED_TEST_COMMANDS == spec.test_commands
@@ -84,7 +86,9 @@ def test_the_template_declares_a_complete_manifest() -> None:
     assert "scaffold_hash" not in raw
 
 
-def test_an_unfrozen_challenge_refuses_to_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_unfrozen_challenge_refuses_to_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Without a frozen fingerprint two runs of a challenge are not comparable,
     so the run path stops and says how to freeze rather than scoring anyway."""
     import sys

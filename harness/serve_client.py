@@ -115,7 +115,10 @@ def tool_call_running(messages: list) -> bool:
     from a model server that sent nothing at all.
     """
     for msg in reversed(messages):
-        if not isinstance(msg, dict) or (msg.get("info") or {}).get("role") != "assistant":
+        if (
+            not isinstance(msg, dict)
+            or (msg.get("info") or {}).get("role") != "assistant"
+        ):
             continue
         return any(
             isinstance(part, dict)
@@ -147,7 +150,9 @@ class DeltaCounter:
     another thread races http.client's readline.
     """
 
-    def __init__(self, url: str, session_id: str, *, read_timeout_s: float = 30.0) -> None:
+    def __init__(
+        self, url: str, session_id: str, *, read_timeout_s: float = 30.0
+    ) -> None:
         self._url = url
         self._session_id = session_id
         self._read_timeout_s = read_timeout_s
@@ -194,7 +199,7 @@ class DeltaCounter:
         if not line.startswith("data:"):
             return
         try:
-            event = json.loads(line[len("data:"):])
+            event = json.loads(line[len("data:") :])
         except ValueError:
             return
         if (
@@ -203,6 +208,7 @@ class DeltaCounter:
             and (event.get("properties") or {}).get("sessionID") == self._session_id
         ):
             self._count += 1
+
 
 class ServeClient:
     """Thin stdlib-urllib client for a running ``opencode serve``.
@@ -277,7 +283,9 @@ class ServeClient:
                 continue
             if info.get("role") != "assistant":
                 continue
-            is_compaction = info.get("agent") == "compaction" or info.get("summary") is True
+            is_compaction = (
+                info.get("agent") == "compaction" or info.get("summary") is True
+            )
             if is_compaction and not info.get("error"):
                 found += 1
         return found
@@ -304,7 +312,9 @@ class ServeClient:
                 continue
             if info.get("role") != "assistant":
                 continue
-            is_compaction = info.get("agent") == "compaction" or info.get("summary") is True
+            is_compaction = (
+                info.get("agent") == "compaction" or info.get("summary") is True
+            )
             if not is_compaction:
                 continue
             err = info.get("error")
@@ -454,7 +464,9 @@ class ServeClient:
         last_token: tuple[int, ...] | None = None
         next_progress_check = time.monotonic()
         # Streamed tokens are progress the stored transcript cannot show.
-        deltas = self.open_delta_counter(session_id) if stall_timeout_s is not None else None
+        deltas = (
+            self.open_delta_counter(session_id) if stall_timeout_s is not None else None
+        )
         try:
             while time.monotonic() < deadline:
                 if loop_kill_marker_dir is not None and read_loop_kill_marker(
@@ -481,10 +493,13 @@ class ServeClient:
                     if context_limit_tokens is not None:
                         try:
                             exhausted, _size = context_exhausted(
-                                _as_list(self.get_messages(session_id)), context_limit_tokens
+                                _as_list(self.get_messages(session_id)),
+                                context_limit_tokens,
                             )
                         except ServeClientError:
-                            exhausted = False  # a failed read is not evidence of anything
+                            exhausted = (
+                                False  # a failed read is not evidence of anything
+                            )
                         if exhausted:
                             return False, CONTEXT_EXHAUSTED
                     try:

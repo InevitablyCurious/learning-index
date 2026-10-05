@@ -72,7 +72,9 @@ def test_seeded_agents_md_has_no_evaluation_vocabulary() -> None:
 
 def test_agents_md_does_not_name_the_model_to_itself() -> None:
     # runner.py is where the seeded AGENTS.md is written.
-    adapter = (REPO_ROOT / "harness" / "adapters" / "challenge" / "runner.py").read_text("utf-8")
+    adapter = (
+        REPO_ROOT / "harness" / "adapters" / "challenge" / "runner.py"
+    ).read_text("utf-8")
     assert '(worktree / "AGENTS.md").write_text(' in adapter
     assert "- Model: {self.model}" not in adapter
 
@@ -112,7 +114,10 @@ def test_seeded_worktree_has_no_evaluation_vocabulary(tmp_path: Path) -> None:
             continue
     surfaces["git log"] = subprocess.run(
         ["git", "log", "--format=%an%n%ae%n%cn%n%ce%n%B"],
-        cwd=worktree, capture_output=True, text=True, check=True,
+        cwd=worktree,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout
 
     leaks = {name: _offending_lines(text) for name, text in surfaces.items()}

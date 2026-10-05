@@ -52,7 +52,10 @@ def test_serve_launch_carries_per_cell_config_env() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     adapter_path = repo_root / "harness" / "adapters" / "docker_worker.py"
     payload = adapter_path.read_text(encoding="utf-8")
-    assert 'f"OPENCODE_CONFIG={WORKER_CONFIG_CONTAINER_FILE} nohup opencode serve "' in payload, (
+    assert (
+        'f"OPENCODE_CONFIG={WORKER_CONFIG_CONTAINER_FILE} nohup opencode serve "'
+        in payload
+    ), (
         "the serve launch script must set OPENCODE_CONFIG to the mounted per-cell file "
         "so the per-cell config (local :4545 routing) is loaded by `opencode serve`."
     )

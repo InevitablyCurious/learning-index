@@ -149,9 +149,7 @@ def test_from_dict_round_trips_require_todos_and_grader_worker_target() -> None:
 
     # A manifest predating both fields decodes to the constructor defaults.
     legacy = {
-        k: v
-        for k, v in d.items()
-        if k not in ("require_todos", "grader_worker_target")
+        k: v for k, v in d.items() if k not in ("require_todos", "grader_worker_target")
     }
     decoded_legacy = RunManifest.from_dict(legacy)
     assert decoded_legacy.require_todos is False

@@ -32,7 +32,6 @@ WRONG = "BENCH_DEBUG"
 # Files the model reads, and files the grader runs. Both must agree.
 SOURCES = [
     TASK / "prompts" / "chunk-04.md",
-    
     TASK / "scaffold" / "src" / "server.ts",
     TASK / "golden" / "src" / "server.ts",
     REPO / "grader" / "lib" / "harness.ts",
@@ -131,7 +130,8 @@ def test_every_graded_function_is_published_in_the_contract() -> None:
     # The published surface is the six build prompts: CONTRACT.md moved out of
     # the scaffold on 2026-09-15 and is no longer seeded into the work folder.
     contract = "\n".join(
-        p.read_text(encoding="utf-8") for p in sorted((TASK / "prompts").glob("chunk-*.md"))
+        p.read_text(encoding="utf-8")
+        for p in sorted((TASK / "prompts").glob("chunk-*.md"))
     )
     called = _functions_the_gates_call()
     assert called, (

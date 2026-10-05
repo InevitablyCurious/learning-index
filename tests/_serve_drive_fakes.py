@@ -52,7 +52,9 @@ class _FakeCell:
     def compact_phase(self) -> str | None:
         """The phase value this cell's worker would currently read, or None."""
         sentinel = Path(self.config.compact_phase_host_path) / "phase"
-        return sentinel.read_text(encoding="utf-8").strip() if sentinel.is_file() else None
+        return (
+            sentinel.read_text(encoding="utf-8").strip() if sentinel.is_file() else None
+        )
 
 
 class _FakeServeClient:
@@ -212,7 +214,11 @@ class _FakeServeClient:
             return False
         # The settle's wait: the plugin saw the build sentinel on idle and
         # fired — a compaction message lands on the transcript.
-        info: dict[str, Any] = {"role": "assistant", "agent": "compaction", "summary": True}
+        info: dict[str, Any] = {
+            "role": "assistant",
+            "agent": "compaction",
+            "summary": True,
+        }
         if self.compaction_on_idle == "killed":
             # MEASURED SHAPE (run 1788415430): a guard-killed compaction still
             # carries summary=True. That is why the receipt keys on the ERROR.
@@ -229,7 +235,9 @@ class _FakeServeClient:
             info = msg.get("info") if isinstance(msg, dict) else None
             if not isinstance(info, dict) or info.get("role") != "assistant":
                 continue
-            if (info.get("agent") == "compaction" or info.get("summary") is True) and not info.get("error"):
+            if (
+                info.get("agent") == "compaction" or info.get("summary") is True
+            ) and not info.get("error"):
                 found += 1
         return found
 
@@ -246,7 +254,10 @@ class _FakeServeClient:
                 continue
             err_data = err.get("data") if isinstance(err.get("data"), dict) else {}
             err_text = str(err_data.get("message") or err.get("message") or "").lower()
-            if "relay_loop_detected" in err_text or "generation loop detected" in err_text:
+            if (
+                "relay_loop_detected" in err_text
+                or "generation loop detected" in err_text
+            ):
                 found += 1
         return found
 

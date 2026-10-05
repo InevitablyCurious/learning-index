@@ -105,9 +105,22 @@ def test_prune_keeps_every_log_of_a_concurrent_batch(tmp_path: Path) -> None:
     running cells through them, so the board went blind. A batch shares one
     launch stamp, and retention keeps whole launches."""
     module = _load_run_cumulative_module()
-    old = [_make_entry(tmp_path, f"off-cell-2026092{i}T000000-s0000.log", is_dir=False, mtime=10 + i) for i in range(3)]
+    old = [
+        _make_entry(
+            tmp_path,
+            f"off-cell-2026092{i}T000000-s0000.log",
+            is_dir=False,
+            mtime=10 + i,
+        )
+        for i in range(3)
+    ]
     batch = [
-        _make_entry(tmp_path, f"off-cell-20260923T065214-s{seq:04d}.log", is_dir=False, mtime=100 + seq)
+        _make_entry(
+            tmp_path,
+            f"off-cell-20260923T065214-s{seq:04d}.log",
+            is_dir=False,
+            mtime=100 + seq,
+        )
         for seq in range(8)
     ]
 

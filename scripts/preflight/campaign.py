@@ -50,7 +50,9 @@ def check_run_dir(c: Check, args, runs_root=None) -> None:
     """
     node = shutil.which("node")
     if node is None:
-        c.add("campaign slot", False, "node not on PATH — cannot ask control/campaign.mjs")
+        c.add(
+            "campaign slot", False, "node not on PATH — cannot ask control/campaign.mjs"
+        )
         return
     runs_root = runs_root or REPO / "runs"
     proc = subprocess.run(
@@ -60,23 +62,36 @@ def check_run_dir(c: Check, args, runs_root=None) -> None:
         check=False,
         cwd=str(REPO / "control"),
         timeout=60,
-        env={**os.environ, "SLOT_RUNS_ROOT": str(runs_root), "SLOT_SUBJECT": json.dumps(_subject(args))},
+        env={
+            **os.environ,
+            "SLOT_RUNS_ROOT": str(runs_root),
+            "SLOT_SUBJECT": json.dumps(_subject(args)),
+        },
     )
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()
         c.add(
             "campaign slot",
             False,
-            "control/campaign.mjs FAILED TO RUN: " + (detail[-1][:160] if detail else f"exit {proc.returncode}"),
+            "control/campaign.mjs FAILED TO RUN: "
+            + (detail[-1][:160] if detail else f"exit {proc.returncode}"),
         )
         return
     res = json.loads(proc.stdout)
     if res["pointer_error"]:
-        c.add("campaign slot", False, f"{res['pointer_error']} — refusing to guess which tree is live")
+        c.add(
+            "campaign slot",
+            False,
+            f"{res['pointer_error']} — refusing to guess which tree is live",
+        )
         return
 
     rel = res["run_dir"]
-    tree_note = f"active tree {res['tree']}" if res["tree"] else "no active tree — legacy flat layout"
+    tree_note = (
+        f"active tree {res['tree']}"
+        if res["tree"]
+        else "no active tree — legacy flat layout"
+    )
     if not (runs_root / rel).exists():
         c.add("campaign slot", True, f"{rel} ABSENT ({tree_note}) — clean slate")
         return

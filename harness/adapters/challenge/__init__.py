@@ -42,6 +42,7 @@ from .models import (
     _OpencodeRunStats,
     ChallengeCellResult,
 )
+
 # WO-LI15-I1B STAGE 1B: the module-level constants and the clean function
 # leaves live in .constants / .feedback / .telemetry / .transport,
 # re-exported here so every name stays resolvable as
@@ -88,6 +89,7 @@ from .constants import (
     _WORKER_AGENTS_MD,
     _WRITE_CHUNKING_DIRECTIVE,
 )
+
 # WO-LI15-I2B STAGE 2B: the feedback, telemetry and transport function
 # leaves live in .feedback / .telemetry / .transport beside their mixin
 # method groups (the mixins are imported by .runner for the bases).
@@ -122,6 +124,7 @@ from .transport import (
     _iso_utc,
     _provider_backoff_seconds,
 )
+
 # WO-LI15-I1C STAGE 1C: the hold-UI and worker-config function leaves live in
 # .hold_ui / .worker_config, re-exported here so every name stays resolvable as
 # harness.adapters.challenge.<name>. _HOLD_UI_PORT stays a PACKAGE global (from
@@ -140,6 +143,7 @@ from .worker_config import (
     _safe_title_org_component,
     bench_session_title,
 )
+
 # PATCH SEAMS from ..docker_worker: tests monkeypatch DockerCell /
 # DockerCellConfig / docker_available / worker_image_fingerprint ON THIS
 # PACKAGE; .runner (_run_cell_impl) and .bootstrap (_build_cell_config)
@@ -153,12 +157,14 @@ from ..docker_worker import (
     docker_available,
     worker_image_fingerprint,
 )
+
 # PATCH SEAM: tests monkeypatch ServeClient ON THIS PACKAGE; .runner
 # (_run_cell_impl) late-binds it at CALL time. serve.py references it ONLY
 # as a PEP 563 string annotation and consumes the serve_client INSTANCE
 # passed in, so the patch seam stays exactly where the tests set it.
 # ServeClientError is a plain re-export (tests read it from this package).
 from harness.serve_client import ServeClient, ServeClientError
+
 # PATCH SEAMS: tests monkeypatch capture_snapshot / compute_grader_hash ON
 # THIS PACKAGE; .runner (_capture_attempt_one_snapshot) late-binds them at
 # CALL time.

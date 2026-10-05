@@ -246,9 +246,7 @@ def test_cell_container_sweep_is_scoped_to_run_identity(monkeypatch):
     removed = reaper._remove_cell_containers()
 
     assert removed == []
-    assert calls == [
-        ["/fake/docker", "ps", "-aq", "--filter", "name=-abc123$"]
-    ]
+    assert calls == [["/fake/docker", "ps", "-aq", "--filter", "name=-abc123$"]]
 
 
 def test_cell_container_sweep_without_run_identity_sweeps_nothing(monkeypatch):

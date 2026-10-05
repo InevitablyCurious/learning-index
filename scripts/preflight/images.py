@@ -76,7 +76,9 @@ def check_image(c: Check) -> None:
     ok = baked == want
     # NAME WHICH BUILD WAS COMPARED. "Stale" against the wrong question is the
     # failure this check just had, and an operator reading it could not tell.
-    flavour = "with the configured plugin" if plugin_dir else "vanilla (no plugin configured)"
+    flavour = (
+        "with the configured plugin" if plugin_dir else "vanilla (no plugin configured)"
+    )
     c.add(
         "worker image",
         ok,
@@ -247,10 +249,19 @@ def check_self_compact_tool(c: Check, args) -> None:
     )
     proc = subprocess.run(
         [
-            "docker", "run", "--rm",
-            "--entrypoint", "node", "bench-worker:v1", "-e", probe,
+            "docker",
+            "run",
+            "--rm",
+            "--entrypoint",
+            "node",
+            "bench-worker:v1",
+            "-e",
+            probe,
         ],
-        capture_output=True, text=True, check=False, timeout=180,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=180,
     )
     tail = (proc.stdout or "").strip().splitlines()
     wired: list = []

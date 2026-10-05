@@ -55,8 +55,7 @@ def write_session_mapping(
                     "run_id": run_id,
                     "phases": [],
                     "notice": (
-                        "checkpoint index unreadable: "
-                        f"{exc.__class__.__name__}"
+                        f"checkpoint index unreadable: {exc.__class__.__name__}"
                     ),
                 },
             )
@@ -107,8 +106,7 @@ def write_session_mapping(
         phases, notices = _build_phases(checkpoints, entries, feedback_events)
         if not entries:
             notices.append(
-                "session db yielded no transcriptable entries "
-                "(empty or unreadable)"
+                "session db yielded no transcriptable entries (empty or unreadable)"
             )
         payload = {"run_id": mapping_run_id, "phases": phases}
         if notices:
@@ -131,9 +129,7 @@ def write_session_mapping(
                 },
             )
         except OSError:
-            _LOG.warning(
-                "session mapping notice unwritable path=%s", mapping_path
-            )
+            _LOG.warning("session mapping notice unwritable path=%s", mapping_path)
         return "unreadable"
 
 
@@ -194,9 +190,7 @@ def _build_phases(
     ``phase``, ``attempt``, ``checkpoint`` (id or None) and ``entries``
     (inclusive [start, end] or None).
     """
-    user_entries = [
-        (e["seq"], e["text"]) for e in entries if e["role"] == "user"
-    ]
+    user_entries = [(e["seq"], e["text"]) for e in entries if e["role"] == "user"]
     boundaries: dict[int, int] = {}
     unmatched: list[int] = []
     last_seq = 0
@@ -226,16 +220,12 @@ def _build_phases(
         start = 1 if attempt == 1 else boundaries.get(attempt)
         if start is None:
             rng = None
-            notices.append(
-                f"attempt {attempt}: no phase boundary found in transcript"
-            )
+            notices.append(f"attempt {attempt}: no phase boundary found in transcript")
         elif i == len(all_attempts) - 1:
             rng = [start, n] if start <= n else None
         else:
             next_attempt = all_attempts[i + 1]
-            next_start = (
-                1 if next_attempt == 1 else boundaries.get(next_attempt)
-            )
+            next_start = 1 if next_attempt == 1 else boundaries.get(next_attempt)
             if next_start is None:
                 rng = None
                 notices.append(
@@ -267,6 +257,4 @@ def _build_phases(
 
 
 def _write_mapping(mapping_path: Path, payload: dict) -> None:
-    mapping_path.write_text(
-        json.dumps(payload, indent=2) + "\n", encoding="utf-8"
-    )
+    mapping_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

@@ -56,7 +56,9 @@ def test_a_configured_tree_resolves(tmp_path: Path) -> None:
     assert configured_plugin_dir({ENV_PLUGIN_DIR: str(tree)}) == tree
 
 
-def test_the_plugin_changes_the_digest_which_is_the_whole_problem(tmp_path: Path) -> None:
+def test_the_plugin_changes_the_digest_which_is_the_whole_problem(
+    tmp_path: Path,
+) -> None:
     """If the plugin did not move the digest there would be nothing to reconcile.
 
     It does, because the plugin is baked in — so a checker that ignores the seam
@@ -87,7 +89,7 @@ def test_builder_and_checker_agree_when_both_read_the_seam(tmp_path: Path) -> No
 
     for env in ({}, {ENV_PLUGIN_DIR: str(tree)}):
         resolved = configured_plugin_dir(env)
-        built = source_digest(wd, plugin_dir=resolved)   # what the rebuild bakes
+        built = source_digest(wd, plugin_dir=resolved)  # what the rebuild bakes
         wanted = source_digest(wd, plugin_dir=resolved)  # what preflight expects
         assert built == wanted
 

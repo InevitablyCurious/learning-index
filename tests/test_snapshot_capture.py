@@ -393,9 +393,7 @@ def test_seeded_cell_skips_build_and_reaches_first_feedback_round(
     # (.git-free, AGENTS.md-free by snapshot construction).
     seed_tree = tmp_path / "seed-snapshot-tree"
     (seed_tree / "src").mkdir(parents=True)
-    (seed_tree / "package.json").write_text(
-        '{"name": "seeded"}\n', encoding="utf-8"
-    )
+    (seed_tree / "package.json").write_text('{"name": "seeded"}\n', encoding="utf-8")
     seeded_src = "// built by the snapshot's source cell\nexport const seeded = true;\n"
     (seed_tree / "src" / "game.ts").write_text(seeded_src, encoding="utf-8")
 
@@ -471,9 +469,9 @@ def test_seeded_cell_skips_build_and_reaches_first_feedback_round(
     # F3: no snapshot-of-a-snapshot was captured at attempt 1.
     assert _snapshot_dirs(tmp_path) == []
     # The worktree really was seeded from the snapshot tree, not the scaffold.
-    assert (
-        Path(result.worktree) / "src" / "game.ts"
-    ).read_text(encoding="utf-8") == seeded_src
+    assert (Path(result.worktree) / "src" / "game.ts").read_text(
+        encoding="utf-8"
+    ) == seeded_src
 
 
 # ── WO-SNAP-04B: DRIFTED SEED PROVENANCE WARNS, NEVER REFUSES ───────────────

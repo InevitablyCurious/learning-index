@@ -57,7 +57,12 @@ def test_cell_start_carries_the_serve_port(tmp_path):
     # the manifest/status only land at cell END. These field NAMES are the
     # contract between the harness writer and the board's reader.
     s = LiveStream.for_run(tmp_path, run_id="r1")
-    s.emit("cell.start", session_id="ses_abc", serve_host_port=18432, serve_url="http://127.0.0.1:18432")
+    s.emit(
+        "cell.start",
+        session_id="ses_abc",
+        serve_host_port=18432,
+        serve_url="http://127.0.0.1:18432",
+    )
     (rec,) = _lines(s.path)
     assert rec["serve_host_port"] == 18432
     assert rec["serve_url"] == "http://127.0.0.1:18432"

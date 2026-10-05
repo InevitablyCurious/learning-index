@@ -137,6 +137,7 @@ def test_run_cell_attempt_without_serve_session_aborts(tmp_path: Path) -> None:
     assert "feedback-2" in str(excinfo.value)
     assert "one transport" in str(excinfo.value)
 
+
 def test_run_cell_attempt_serve_driven_resume_truncation_writes_evidence(
     tmp_path: Path,
 ) -> None:

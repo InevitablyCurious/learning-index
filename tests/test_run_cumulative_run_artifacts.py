@@ -876,7 +876,6 @@ def test_handle_run_refuses_snapshot_error_with_clean_line(
     assert exit_code == 2
     err = capsys.readouterr().err
     assert (
-        "SEED SNAPSHOT REFUSED: snapshot 'snap-1' carries author_model="
-        "'other'" in err
+        "SEED SNAPSHOT REFUSED: snapshot 'snap-1' carries author_model='other'" in err
     )
     assert "Traceback" not in err

@@ -164,9 +164,7 @@ def _export_cell_telemetry(
 
     try:
         override = os.environ.get("BENCH_DATA_DIR", "").strip()
-        data_dir = (
-            Path(override) if override else _REPO_ROOT / "data"
-        )
+        data_dir = Path(override) if override else _REPO_ROOT / "data"
         dest = data_dir / "cells" / f"{int(time.time())}-{run_label}"
         dest.mkdir(parents=True, exist_ok=True)
         for name, path in present.items():
@@ -362,9 +360,7 @@ class TelemetryMixin:
                 continue
 
             state = (
-                payload.get("state")
-                if isinstance(payload.get("state"), dict)
-                else {}
+                payload.get("state") if isinstance(payload.get("state"), dict) else {}
             )
             tool_input = (
                 state.get("input") if isinstance(state.get("input"), dict) else {}

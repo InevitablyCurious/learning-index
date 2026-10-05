@@ -38,7 +38,9 @@ class _Grader:
 def _grade(tmp_path: Path, outcomes):
     g = _Grader(outcomes)
     rep, log = tmp_path / "attempt-2-report.json", tmp_path / "attempt-2-gate.log"
-    return g, g._grade_measured(worktree=tmp_path, report_path=rep, log_path=log, attempt=2)
+    return g, g._grade_measured(
+        worktree=tmp_path, report_path=rep, log_path=log, attempt=2
+    )
 
 
 def test_a_measured_pass_is_used_as_is(tmp_path: Path) -> None:
@@ -46,10 +48,15 @@ def test_a_measured_pass_is_used_as_is(tmp_path: Path) -> None:
     assert report["verdict"] == "FAIL" and g.outcomes == [] and not g.progress
 
 
-def test_an_unmeasured_pass_is_regraded_once_and_its_evidence_kept(tmp_path: Path) -> None:
+def test_an_unmeasured_pass_is_regraded_once_and_its_evidence_kept(
+    tmp_path: Path,
+) -> None:
     g, report = _grade(
         tmp_path,
-        [{"gradable": False, "ungradable_reason": "backend runner aborted"}, {"gradable": True, "verdict": "PASS"}],
+        [
+            {"gradable": False, "ungradable_reason": "backend runner aborted"},
+            {"gradable": True, "verdict": "PASS"},
+        ],
     )
     assert report["verdict"] == "PASS"
     assert (tmp_path / "attempt-2-report.first-pass.json").is_file()
@@ -62,7 +69,9 @@ def test_twice_unmeasured_is_an_instrument_fault(tmp_path: Path) -> None:
         _grade(tmp_path, [GraderReportUnreadableError("missing"), {"gradable": False}])
 
 
-def test_a_deadline_kill_is_the_candidates_hang_not_the_instrument(tmp_path: Path) -> None:
+def test_a_deadline_kill_is_the_candidates_hang_not_the_instrument(
+    tmp_path: Path,
+) -> None:
     # report.mjs: a runner killed on a deadline means the code under test did
     # not return. Regrading would hang again and void the model's failure.
     hang = {
@@ -77,6 +86,10 @@ def test_a_deadline_kill_is_the_candidates_hang_not_the_instrument(tmp_path: Pat
 
 
 def test_an_abort_that_was_not_a_deadline_is_still_regraded(tmp_path: Path) -> None:
-    crashed = {"gradable": False, "aborted_runners": ["conformance"], "timed_out_runners": []}
+    crashed = {
+        "gradable": False,
+        "aborted_runners": ["conformance"],
+        "timed_out_runners": [],
+    }
     g, report = _grade(tmp_path, [crashed, {"gradable": True}])
     assert report == {"gradable": True} and any("step=regrade" in p for p in g.progress)

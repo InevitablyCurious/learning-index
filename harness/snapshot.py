@@ -141,8 +141,7 @@ def load_snapshot(snapshot_id: str, runs_root: Path) -> LoadedSnapshot:
         payload = json.loads(manifest.read_text(encoding="utf-8"))
     except (ValueError, OSError) as exc:
         raise SnapshotUnreadableError(
-            f"snapshot {snapshot_id!r} has no parseable manifest at "
-            f"{manifest}: {exc!r}"
+            f"snapshot {snapshot_id!r} has no parseable manifest at {manifest}: {exc!r}"
         ) from exc
     if not isinstance(payload, dict):
         raise SnapshotUnreadableError(
@@ -233,9 +232,7 @@ def compute_grader_hash(gates: Path) -> str | None:
     if gates is None or not gates.is_dir():
         return None
     digest = hashlib.sha256()
-    files = sorted(
-        (p for p in gates.rglob("*") if p.is_file()), key=lambda p: str(p)
-    )
+    files = sorted((p for p in gates.rglob("*") if p.is_file()), key=lambda p: str(p))
     for path in files:
         try:
             rel_parts = path.relative_to(gates).parts

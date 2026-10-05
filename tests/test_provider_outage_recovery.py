@@ -75,7 +75,9 @@ class TestClassification:
         assert reason == REASON_STREAM_INCOMPLETE
 
     def test_a_clean_window_is_still_clean(self):
-        assert classify_transport_anomaly({"error_texts": [], "provider_truncations": 0}) == (
+        assert classify_transport_anomaly(
+            {"error_texts": [], "provider_truncations": 0}
+        ) == (
             None,
             None,
         )
@@ -160,7 +162,11 @@ class TestRecoveryIsWired:
         from pathlib import Path
 
         src = (
-            Path(__file__).resolve().parents[1] / "harness" / "adapters" / "challenge" / "serve.py"
+            Path(__file__).resolve().parents[1]
+            / "harness"
+            / "adapters"
+            / "challenge"
+            / "serve.py"
         ).read_text(encoding="utf-8")
         assert "or is_provider_outage" in src
         assert "prompt_to_send = _PROVIDER_RECOVERY_NUDGE" in src

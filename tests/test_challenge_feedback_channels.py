@@ -79,7 +79,11 @@ def test_the_channel_is_decided_in_one_place() -> None:
 def test_a_missing_field_is_never_reported_as_a_boot_failure() -> None:
     """The exact regression, stated as the thing that must not happen again."""
     msg = R._build_feedback_prompt(
-        problems=[_problem('conformance:REQ-STATE/state.winType — /api/state carries "winType"')],
+        problems=[
+            _problem(
+                'conformance:REQ-STATE/state.winType — /api/state carries "winType"'
+            )
+        ],
     )
     assert "doesn't seem to start up" not in msg
     assert "come up at all" not in msg
@@ -90,8 +94,12 @@ def test_the_two_lists_are_separate_and_each_numbered_from_one() -> None:
     msg = R._build_feedback_prompt(
         problems=[
             _problem("[G07] REQ-HIT — hitting → bar"),
-            _problem('conformance:REQ-STATE/state.winType — /api/state carries "winType"'),
-            _problem('conformance:REQ-STATE/state.turnOver — /api/state carries "turnOver"'),
+            _problem(
+                'conformance:REQ-STATE/state.winType — /api/state carries "winType"'
+            ),
+            _problem(
+                'conformance:REQ-STATE/state.turnOver — /api/state carries "turnOver"'
+            ),
         ],
     )
     tester_part, _, team_part = msg.partition("my software team")
@@ -120,10 +128,15 @@ def test_a_tester_whose_checks_went_unevaluated_does_not_claim_a_clean_look() ->
         [
             {"check": "conformance:REQ-TESTID/testid.board", "observed": skipped},
             {"check": "conformance:REQ-RENDER/checker", "observed": skipped},
-            {"check": "conformance:REQ-TESTID/dom — page DOM exposes the required testids", "observed": "missing"},
+            {
+                "check": "conformance:REQ-TESTID/dom — page DOM exposes the required testids",
+                "observed": "missing",
+            },
         ]
     )
-    assert [p["check"].split(" ")[0] for p in view.visible] == ["conformance:REQ-TESTID/dom"]
+    assert [p["check"].split(" ")[0] for p in view.visible] == [
+        "conformance:REQ-TESTID/dom"
+    ]
     assert "conformance:REQ-RENDER/checker" in view.unevaluated
     assert "Nothing jumped out" not in msg
     assert "while playing the game" not in msg, "no tester opener promising a list"
@@ -139,11 +152,20 @@ def test_a_tester_whose_checks_went_unevaluated_does_not_claim_a_clean_look() ->
         "Error: POST /api/new failed (500)",
     ],
 )
-def test_a_tester_check_told_in_the_teams_voice_still_silences_the_tester(observed: str) -> None:
+def test_a_tester_check_told_in_the_teams_voice_still_silences_the_tester(
+    observed: str,
+) -> None:
     """D1: a player-visible check whose finding is a refused setup or a failed
     API call is TOLD in the team's voice, but it is still a player check — the
     tester had something they could not say, so they say nothing."""
-    view, msg = _feedback([{"check": "[F02] REQ-RENDER — start game renders full board", "observed": observed}])
+    view, msg = _feedback(
+        [
+            {
+                "check": "[F02] REQ-RENDER — start game renders full board",
+                "observed": observed,
+            }
+        ]
+    )
     assert view.visible and view.visible[0]["check"].startswith("[F02]")
     assert "Nothing jumped out" not in msg
     assert "while playing the game" not in msg
@@ -160,7 +182,9 @@ def test_a_later_stage_tester_failure_silences_the_tester() -> None:
             {"check": "[G07] REQ-HIT — hitting → bar", "observed": "x"},
         ]
     )
-    assert [p["check"].split(" ")[0] for p in view.visible] == ["conformance:REQ-TESTID/testid.board"]
+    assert [p["check"].split(" ")[0] for p in view.visible] == [
+        "conformance:REQ-TESTID/testid.board"
+    ]
     assert view.withheld == ["[G07] REQ-HIT — hitting → bar"]
     assert "Nothing jumped out" not in msg
     assert "while playing the game" not in msg
@@ -172,9 +196,16 @@ def test_no_failing_tester_check_keeps_the_tester_claiming_a_clean_look() -> Non
     """Every player-visible check this round is team-owned: the tester genuinely
     saw nothing, so the honest line is the clean-look one."""
     view, msg = _feedback(
-        [{"check": 'conformance:REQ-STATE/state.winType — /api/state carries "winType"', "observed": "missing"}]
+        [
+            {
+                "check": 'conformance:REQ-STATE/state.winType — /api/state carries "winType"',
+                "observed": "missing",
+            }
+        ]
     )
-    assert [p["check"].split(" ")[0] for p in view.visible] == ["conformance:REQ-STATE/state.winType"]
+    assert [p["check"].split(" ")[0] for p in view.visible] == [
+        "conformance:REQ-STATE/state.winType"
+    ]
     assert view.withheld == [] and view.unevaluated == []
     assert "1) Nothing jumped out at me this time while I was playing." in msg
     assert "Also, my software team" in msg
@@ -183,7 +214,12 @@ def test_no_failing_tester_check_keeps_the_tester_claiming_a_clean_look() -> Non
 def test_nothing_at_all_still_says_something_is_broken() -> None:
     """A FAIL with no itemised checks is still a failure, never a clean run."""
     view, msg = _feedback([])
-    assert view.stage is None and view.visible == [] and view.withheld == [] and view.unevaluated == []
+    assert (
+        view.stage is None
+        and view.visible == []
+        and view.withheld == []
+        and view.unevaluated == []
+    )
     assert "1) Something is still broken but I couldn't pin down what it was." in msg
     assert "Nothing jumped out" not in msg
 
@@ -196,12 +232,17 @@ def test_the_team_alone_is_not_the_graders_vocabulary() -> None:
         [
             {"check": "conformance:REQ-TESTID/testid.board", "observed": skipped},
             {"check": "conformance:REQ-RENDER/checker", "observed": skipped},
-            {"check": "conformance:REQ-TESTID/dom — page DOM exposes the required testids", "observed": "missing"},
+            {
+                "check": "conformance:REQ-TESTID/dom — page DOM exposes the required testids",
+                "observed": "missing",
+            },
         ]
     )
     lowered = msg.lower()
     for word in ("conformance", "pre-gate", "gate", "harness", "benchmark", "grader"):
-        assert word not in lowered, f"the message says {word!r} — that is grader vocabulary"
+        assert word not in lowered, (
+            f"the message says {word!r} — that is grader vocabulary"
+        )
     assert "Also, my software team" not in msg
     assert "My software team" in msg
 
@@ -215,7 +256,11 @@ def test_the_team_carries_its_own_excuse_eliminator() -> None:
     "they're on an old build".
     """
     msg = R._build_feedback_prompt(
-        problems=[_problem('conformance:REQ-STATE/state.winType — /api/state carries "winType"')],
+        problems=[
+            _problem(
+                'conformance:REQ-STATE/state.winType — /api/state carries "winType"'
+            )
+        ],
     )
     assert "clean checkout" in msg and "isn't there to find" in msg
     # And the original one still opens the message.
@@ -227,11 +272,17 @@ def test_the_teams_opener_is_not_the_graders_vocabulary() -> None:
     # harness's own word for the gate; a customer integrating an app would never
     # say it, and it tells the model it is being measured.
     msg = R._build_feedback_prompt(
-        problems=[_problem('conformance:REQ-STATE/state.winType — /api/state carries "winType"')],
+        problems=[
+            _problem(
+                'conformance:REQ-STATE/state.winType — /api/state carries "winType"'
+            )
+        ],
     )
     lowered = msg.lower()
     for word in ("conformance", "pre-gate", "gate", "harness", "benchmark", "grader"):
-        assert word not in lowered, f"the message says {word!r} — that is grader vocabulary"
+        assert word not in lowered, (
+            f"the message says {word!r} — that is grader vocabulary"
+        )
 
 
 def test_every_conformance_check_the_pregate_can_emit_has_a_line() -> None:
@@ -242,14 +293,20 @@ def test_every_conformance_check_the_pregate_can_emit_has_a_line() -> None:
     this whole change removes creeps back one check at a time.
     """
     src = (GATES / "conformance" / "pregate.ts").read_text(encoding="utf-8")
-    overrides = json.loads((GATES / "feedback.json").read_text(encoding="utf-8"))["gates"]
+    overrides = json.loads((GATES / "feedback.json").read_text(encoding="utf-8"))[
+        "gates"
+    ]
 
     import re
 
     def block(name: str) -> list[str]:
         m = re.search(name + r"\s*:\s*string\[\]\s*=\s*\[(.*?)\n\];", src, re.S)
         assert m, f"{name} not found in pregate.ts"
-        return [x.strip().strip('",') for x in m.group(1).split("\n") if x.strip().strip('",')]
+        return [
+            x.strip().strip('",')
+            for x in m.group(1).split("\n")
+            if x.strip().strip('",')
+        ]
 
     expected = [f"REQ-STATE/state.{k}" for k in block("REQUIRED_STATE_KEYS")]
     expected += [f"REQ-TESTID/testid.{t}" for t in block("REQUIRED_STATIC_TESTIDS")]
@@ -264,7 +321,9 @@ def test_every_conformance_check_the_pregate_can_emit_has_a_line() -> None:
 
 @pytest.mark.parametrize("channel", ["tester", "team"])
 def test_each_channel_actually_has_lines_written_for_it(channel: str) -> None:
-    overrides = json.loads((GATES / "feedback.json").read_text(encoding="utf-8"))["gates"]
+    overrides = json.loads((GATES / "feedback.json").read_text(encoding="utf-8"))[
+        "gates"
+    ]
     got = [k for k in overrides if R.feedback_channel(k) == channel]
     assert got, f"no {channel} lines at all — the split is not wired"
 
@@ -295,7 +354,9 @@ def test_no_line_is_truncated_in_delivery() -> None:
     msg = R._build_feedback_prompt(
         problems=[
             _problem("[E04] REQ-DOUBLES — doubles"),
-            _problem('conformance:REQ-STATE/state.points — /api/state carries "points"'),
+            _problem(
+                'conformance:REQ-STATE/state.points — /api/state carries "points"'
+            ),
         ],
     )
     assert "…" not in msg, "a delivered complaint was truncated"
@@ -312,13 +373,17 @@ def test_the_team_line_states_what_the_missing_thing_IS() -> None:
     """
     msg = R._build_feedback_prompt(
         problems=[
-            _problem('conformance:REQ-STATE/state.winType — /api/state carries "winType"'),
+            _problem(
+                'conformance:REQ-STATE/state.winType — /api/state carries "winType"'
+            ),
             _problem('conformance:REQ-TESTID/testid.rollBtn — page exposes "rollBtn"'),
         ],
     )
     # The field is named AND said what it is.
     assert "winType" in msg
-    assert "single, gammon or backgammon" in msg, "the shape of the value must travel with it"
+    assert "single, gammon or backgammon" in msg, (
+        "the shape of the value must travel with it"
+    )
     # The handle is named AND said what element it belongs to.
     assert "rollBtn" in msg and "roll button" in msg
 
@@ -330,7 +395,7 @@ def test_the_teams_closing_claim_is_true_on_a_seeded_cell() -> None:
     excuse eliminator that says a false thing is an excuse generator.
     """
     msg = R._build_feedback_prompt(
-        problems=[_problem('conformance:REQ-STATE/state.winType — x')],
+        problems=[_problem("conformance:REQ-STATE/state.winType — x")],
     )
     assert "spec you were given" not in msg
     assert "the written spec for this app" in msg
@@ -353,7 +418,10 @@ def test_the_pregate_emits_the_PROBLEM_lines_report_mjs_parses() -> None:
     invisible from either file alone.
     """
     spec = (GATES / "conformance" / "pregate.spec.ts").read_text(encoding="utf-8")
-    assert "PROBLEM ${found.check}: expected ${found.expected}, observed ${found.observed}" in spec, (
+    assert (
+        "PROBLEM ${found.check}: expected ${found.expected}, observed ${found.observed}"
+        in spec
+    ), (
         "pregate.spec.ts must emit the PROBLEM line report.mjs parses — without it "
         "`problems` is empty and every conformance finding is lost"
     )
@@ -374,7 +442,12 @@ def test_one_conformance_finding_is_one_gate() -> None:
     shape check: two findings, one gate).
     """
     src = (GATES / "conformance" / "pregate.ts").read_text(encoding="utf-8")
-    for guarded in ('if (present("pip"))', 'hasOwnProperty.call(echoed, "off")', 'present("legalMoves")', 'present("canDouble")'):
+    for guarded in (
+        'if (present("pip"))',
+        'hasOwnProperty.call(echoed, "off")',
+        'present("legalMoves")',
+        'present("canDouble")',
+    ):
         assert guarded in src, f"{guarded} missing — a missing field would report twice"
 
 
@@ -444,9 +517,7 @@ def test_a_stall_reaches_the_model_in_the_players_voice(area: str) -> None:
 @pytest.mark.parametrize("area", STALL_AREAS)
 def test_a_stall_line_says_it_froze_and_nothing_about_why(area: str) -> None:
     for kind in ("first", "repeat"):
-        line = R._humanize_check(
-            f"REQ-RESPONSIVE/{area}", pass_kind=kind
-        ).lower()
+        line = R._humanize_check(f"REQ-RESPONSIVE/{area}", pass_kind=kind).lower()
         # The symptom, in words a player would use. Deliberately broad: a hang
         # is described several honest ways — it froze, it never came back, I
         # had to force it closed — and narrowing this list would push the prose
@@ -470,7 +541,14 @@ def test_a_stall_line_says_it_froze_and_nothing_about_why(area: str) -> None:
         ), f"{area}/{kind} does not describe a freeze: {line}"
         # And never the cause. Naming a loop, a function or a file would hand
         # over the fix — finding it is the work being measured.
-        for leak in ("loop", "infinite", "recurs", "function", "timeout", "hang detected"):
+        for leak in (
+            "loop",
+            "infinite",
+            "recurs",
+            "function",
+            "timeout",
+            "hang detected",
+        ):
             assert leak not in line, f"{area}/{kind} names the cause: {leak}"
 
 
@@ -505,7 +583,9 @@ def test_one_hang_is_reported_once_not_once_per_unmeasured_gate() -> None:
     assert "edge-gates" not in msg
 
 
-def test_a_refused_setup_is_told_as_the_team_saw_it_never_as_the_gates_player_story() -> None:
+def test_a_refused_setup_is_told_as_the_team_saw_it_never_as_the_gates_player_story() -> (
+    None
+):
     # Run 1790183923: the endpoint refused every partial body, F19's setup
     # never took, and the model was told "I picked the hard computer,
     # refreshed the page…" — which never happened. The grader now marks it.
@@ -575,7 +655,9 @@ def test_that_fixed_it_quotes_what_was_actually_said() -> None:
     assert "debug endpoint" in verdict
     assert "hard computer" not in verdict
     # A check never told is never reported fixed.
-    assert R._build_pass_verdict(newly_passing=["[G05] REQ-HIGHER-DIE — x"], told={}) == ""
+    assert (
+        R._build_pass_verdict(newly_passing=["[G05] REQ-HIGHER-DIE — x"], told={}) == ""
+    )
 
 
 def test_a_labelled_assertion_is_told_as_that_aspect() -> None:
@@ -588,7 +670,9 @@ def test_a_labelled_assertion_is_told_as_that_aspect() -> None:
         observed="AssertionError: [aspect: pieces]: expected [ Array(26) ] to deeply equal [ Array(26) ]",
     )
     assert "pieces" in pieces and "cube" not in pieces
-    plain = R._humanize_check("[G01] REQ-INIT — initial position", observed="AssertionError: x")
+    plain = R._humanize_check(
+        "[G01] REQ-INIT — initial position", observed="AssertionError: x"
+    )
     assert plain != pieces
 
 
@@ -602,15 +686,21 @@ def test_f06_aspects_resolve_to_three_distinct_complaints() -> None:
 
     check = "[F06] REQ-PIPUI — pip display cross-checked vs engine"
 
-    value = R._humanize_check(check, observed="AssertionError: [aspect: value]: expected 208 to be 167")
+    value = R._humanize_check(
+        check, observed="AssertionError: [aspect: value]: expected 208 to be 167"
+    )
     assert "wrong numbers for the position" in value
     # A wrong-number failure must NOT read as a sync problem.
     assert "own count" not in value
 
-    sync = R._humanize_check(check, observed="AssertionError: [aspect: sync]: expected 208 to be 167")
+    sync = R._humanize_check(
+        check, observed="AssertionError: [aspect: sync]: expected 208 to be 167"
+    )
     assert "own count" in sync  # the screen disagrees with the game's count
 
-    fmt = R._humanize_check(check, observed="AssertionError: [aspect: format]: expected '208' to match")
+    fmt = R._humanize_check(
+        check, observed="AssertionError: [aspect: format]: expected '208' to match"
+    )
     assert "aren't readable" in fmt and "plain numbers" in fmt  # not a plain number
 
     # Three causes, three different lines.

@@ -97,7 +97,9 @@ def write_cell_fingerprint(cell_dir: Path, values: Mapping[str, Any]) -> Path:
         "recorded_at": datetime.now(timezone.utc).isoformat(),
         "values": dict(values),
     }
-    tmp.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    tmp.write_text(
+        json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     tmp.replace(path)
     return path
 

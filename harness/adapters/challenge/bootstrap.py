@@ -74,11 +74,7 @@ class BootstrapMixin:
                 "in, and the sentinel is the ONLY thing that decides whether an "
                 "idle may compact"
             )
-        value = (
-            _COMPACT_PHASE_REPAIR
-            if held
-            else compact_phase_for(phase)
-        )
+        value = _COMPACT_PHASE_REPAIR if held else compact_phase_for(phase)
         target = Path(host_dir).expanduser().resolve() / _COMPACT_PHASE_FILENAME
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -175,7 +171,10 @@ class BootstrapMixin:
         egress_host: str = "",
     ) -> DockerCellConfig:
         import harness.adapters.challenge as _pkg
-        DockerCellConfig = _pkg.DockerCellConfig  # late-bound: tests patch the package attr; read once per call
+
+        DockerCellConfig = (
+            _pkg.DockerCellConfig
+        )  # late-bound: tests patch the package attr; read once per call
         session_db_dir = worktree.parent / "session-db"
         session_db_dir.mkdir(parents=True, exist_ok=True)
         cell_config = DockerCellConfig(

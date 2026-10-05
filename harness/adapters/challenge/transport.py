@@ -91,7 +91,10 @@ def _is_unrecovered_anomaly(record: dict[str, Any]) -> bool:
         return False
     if terminal == TURN_TERMINAL_TRANSPORT_ERROR and str(
         record.get("reason") or ""
-    ) in ({REASON_PROVIDER_UNAVAILABLE, REASON_MODEL_SILENT} | RECOVERABLE_STREAM_DEATH_REASONS):
+    ) in (
+        {REASON_PROVIDER_UNAVAILABLE, REASON_MODEL_SILENT}
+        | RECOVERABLE_STREAM_DEATH_REASONS
+    ):
         return False
     if terminal == TURN_TERMINAL_CAP_CUTOFF:
         return False

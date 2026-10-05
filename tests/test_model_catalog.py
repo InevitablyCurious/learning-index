@@ -9,7 +9,9 @@ from tests.conftest import PROXY_BENCH_ROWS
 
 def test_registry_is_the_proxy_bench_rows() -> None:
     registry = model_catalog.worker_model_registry()
-    bench_ids = {r["id"] for r in PROXY_BENCH_ROWS if r["purpose"] == model_catalog.BENCH_PURPOSE}
+    bench_ids = {
+        r["id"] for r in PROXY_BENCH_ROWS if r["purpose"] == model_catalog.BENCH_PURPOSE
+    }
     assert set(registry) == bench_ids, "interactive aliases are never worker models"
     block = registry["deepseek-v4-flash-bench"]
     assert block["name"] == "DeepSeek V4 Flash 0731 MXFP4 via Proxy (bench)"
@@ -25,7 +27,10 @@ def test_limits_follow_the_proxy(monkeypatch) -> None:
             r["context_length"] = 131_072
     monkeypatch.setattr(model_catalog, "fetch_proxy_models", lambda *a, **k: rows)
     model_catalog.worker_model_registry.cache_clear()
-    assert model_limits("local-llm-proxy/qwen3.6-35b-a3b-bench") == {"context": 131_072, "output": 32_768}
+    assert model_limits("local-llm-proxy/qwen3.6-35b-a3b-bench") == {
+        "context": 131_072,
+        "output": 32_768,
+    }
 
 
 def test_proxy_down_is_a_hard_error(monkeypatch) -> None:

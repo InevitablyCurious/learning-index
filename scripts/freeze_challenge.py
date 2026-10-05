@@ -50,7 +50,9 @@ def main() -> int:
 
     raw = json.loads(manifest.read_text(encoding="utf-8"))
     raw["scaffold_hash"] = live
-    manifest.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    manifest.write_text(
+        json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     print(f"\nwrote scaffold_hash to {manifest}")
     return 0
 

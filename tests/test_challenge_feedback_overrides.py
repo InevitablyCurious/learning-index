@@ -92,6 +92,7 @@ _PRESCRIPTIVE_PHRASES = (
     "correct value",
 )
 
+
 # DEVELOPER VOICE. A person playing the game has never seen the source. Naming
 # the machinery tells the model it is being graded, which the feedback voice
 # exists to conceal, and usually points straight at the file to edit.
@@ -308,7 +309,9 @@ def test_no_override_speaks_in_developer_voice(key: str, kind: str, text: str) -
     other guard in this file runs on both channels unchanged.
     """
     if _channel(key) != "tester":
-        pytest.skip(f"{key} is the software team's line — see test_team_line_is_not_the_graders_voice")
+        pytest.skip(
+            f"{key} is the software team's line — see test_team_line_is_not_the_graders_voice"
+        )
     lowered = text.lower()
     found = [noun for noun in _DEVELOPER_NOUNS if noun in lowered]
     assert not found, (
@@ -356,7 +359,9 @@ def test_team_line_is_not_the_graders_voice(key: str, kind: str, text: str) -> N
 
 
 @pytest.mark.parametrize("key,kind,text", _lines(), ids=_line_ids())
-def test_no_override_restates_its_own_test_title(key: str, kind: str, text: str) -> None:
+def test_no_override_restates_its_own_test_title(
+    key: str, kind: str, text: str
+) -> None:
     """The failure mode this file exists to prevent, checked directly.
 
     Copying the title in is the easy mistake — it reads like a description of
@@ -398,7 +403,9 @@ def test_the_override_actually_reaches_the_delivered_message() -> None:
     if key not in overrides:
         pytest.skip("E08 has no override written yet")
 
-    check = f"[{key}] REQ-SEQ-DEDUP — full-turn sequences are distinct by RESULTING BOARD"
+    check = (
+        f"[{key}] REQ-SEQ-DEDUP — full-turn sequences are distinct by RESULTING BOARD"
+    )
 
     first = ChallengeRunner._build_feedback_prompt(problems=[{"check": check}])
     assert overrides[key]["first"] in first

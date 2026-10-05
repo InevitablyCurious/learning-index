@@ -42,7 +42,9 @@ def proxy_url() -> str:
     return (os.environ.get("OKP_CONTROL_PROXY_URL") or DEFAULT_PROXY_URL).rstrip("/")
 
 
-def fetch_proxy_models(url: str | None = None, timeout_s: float = 5.0) -> list[dict[str, Any]]:
+def fetch_proxy_models(
+    url: str | None = None, timeout_s: float = 5.0
+) -> list[dict[str, Any]]:
     """Raw ``data`` rows of the proxy's ``/v1/models``."""
     root = (url or proxy_url()).rstrip("/")
     target = f"{root}/v1/models"
@@ -69,7 +71,12 @@ def model_block(row: dict[str, Any]) -> dict[str, Any]:
     """
     context = row.get("context_length")
     output = row.get("max_output_tokens")
-    if not isinstance(context, int) or context <= 0 or not isinstance(output, int) or output <= 0:
+    if (
+        not isinstance(context, int)
+        or context <= 0
+        or not isinstance(output, int)
+        or output <= 0
+    ):
         raise ModelCatalogUnavailable(
             f"proxy model {row.get('id')!r} reports no usable context_length/max_output_tokens"
         )
@@ -89,7 +96,9 @@ def build_registry(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {
         str(row["id"]): model_block(row)
         for row in rows
-        if isinstance(row, dict) and row.get("purpose") == BENCH_PURPOSE and row.get("id")
+        if isinstance(row, dict)
+        and row.get("purpose") == BENCH_PURPOSE
+        and row.get("id")
     }
 
 

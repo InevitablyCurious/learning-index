@@ -105,7 +105,9 @@ def test_the_block_ends_the_both_channels_message() -> None:
     _, msg = _feedback(
         [
             _problem("[G01] REQ-INIT — initial position"),
-            _problem('conformance:REQ-STATE/state.winType — /api/state carries "winType"'),
+            _problem(
+                'conformance:REQ-STATE/state.winType — /api/state carries "winType"'
+            ),
         ]
     )
     _ends_with_the_block(msg)
@@ -146,25 +148,77 @@ def test_the_block_ends_the_could_not_pin_it_down_message() -> None:
 # one set — each set is parsed and guarded independently, never merged.
 
 STATIC_TESTIDS = (
-    "scoreWhite", "scoreBlack", "difficulty", "newGameBtn", "board",
-    "playfield", "checkerLayer", "pointHints", "turnIndicator", "pipWhite",
-    "pipBlack", "cube", "cubeVal", "cubeOwner", "dice", "rollBtn",
-    "doubleBtn", "undoBtn", "endTurnBtn", "message", "modalOverlay",
-    "modalTitle", "modalBody", "modalBtns",
+    "scoreWhite",
+    "scoreBlack",
+    "difficulty",
+    "newGameBtn",
+    "board",
+    "playfield",
+    "checkerLayer",
+    "pointHints",
+    "turnIndicator",
+    "pipWhite",
+    "pipBlack",
+    "cube",
+    "cubeVal",
+    "cubeOwner",
+    "dice",
+    "rollBtn",
+    "doubleBtn",
+    "undoBtn",
+    "endTurnBtn",
+    "message",
+    "modalOverlay",
+    "modalTitle",
+    "modalBody",
+    "modalBtns",
 )
-DYNAMIC_TESTIDS = ("point", "checker", "hint", "die", "bar", "off-tray", "off-you", "checkerCount", "fastForwardBtn")
+DYNAMIC_TESTIDS = (
+    "point",
+    "checker",
+    "hint",
+    "die",
+    "bar",
+    "off-tray",
+    "off-you",
+    "checkerCount",
+    "fastForwardBtn",
+)
 POST_ROUTES = (
-    "/api/state", "/api/new", "/api/roll", "/api/move", "/api/undo",
-    "/api/endturn", "/api/double", "/api/double/respond", "/api/ai",
+    "/api/state",
+    "/api/new",
+    "/api/roll",
+    "/api/move",
+    "/api/undo",
+    "/api/endturn",
+    "/api/double",
+    "/api/double/respond",
+    "/api/ai",
 )
 GET_ROUTES = ("/health",)
 DEBUG_ROUTES = ("/api/debug/state", "/api/debug/roll")
 ALL_ROUTES = POST_ROUTES + GET_ROUTES + DEBUG_ROUTES
 STATE_KEYS = (
-    "points", "bar", "off", "turn", "phase", "dice", "remainingDice",
-    "cube", "difficulty", "score", "winner", "winType", "pointsWon",
-    "doubleOfferedBy", "message", "turnOver", "gamesPlayed", "pip",
-    "legalMoves", "canDouble",
+    "points",
+    "bar",
+    "off",
+    "turn",
+    "phase",
+    "dice",
+    "remainingDice",
+    "cube",
+    "difficulty",
+    "score",
+    "winner",
+    "winType",
+    "pointsWon",
+    "doubleOfferedBy",
+    "message",
+    "turnOver",
+    "gamesPlayed",
+    "pip",
+    "legalMoves",
+    "canDouble",
 )
 
 
@@ -223,7 +277,9 @@ def test_every_name_in_the_block_is_in_the_build_steps() -> None:
         f"data-testid tags named in constraints.md but absent from chunk-04.md: {absent}"
     )
     absent = [r for r in routes if r not in chunk03]
-    assert not absent, f"routes named in constraints.md but absent from chunk-03.md: {absent}"
+    assert not absent, (
+        f"routes named in constraints.md but absent from chunk-03.md: {absent}"
+    )
     absent = [k for k in keys if k not in chunk03]
     assert not absent, (
         f"state keys named in constraints.md but absent from chunk-03.md: {absent}"
@@ -242,9 +298,13 @@ def test_every_required_name_reaches_the_block() -> None:
     keys = _parsed_state_keys()
 
     absent = [t for t in STATIC_TESTIDS if t not in static]
-    assert not absent, f"static data-testid tags missing from the constraints block: {absent}"
+    assert not absent, (
+        f"static data-testid tags missing from the constraints block: {absent}"
+    )
     absent = [t for t in DYNAMIC_TESTIDS if t not in dynamic]
-    assert not absent, f"dynamic data-testid tags missing from the constraints block: {absent}"
+    assert not absent, (
+        f"dynamic data-testid tags missing from the constraints block: {absent}"
+    )
     absent = [r for r in ALL_ROUTES if r not in routes]
     assert not absent, f"routes missing from the constraints block: {absent}"
     absent = [k for k in STATE_KEYS if k not in keys]
@@ -260,7 +320,9 @@ def test_the_authoritative_sets_stay_pinned_to_the_build_steps() -> None:
     chunk04 = CHUNK_04.read_text(encoding="utf-8")
 
     absent = [t for t in STATIC_TESTIDS + DYNAMIC_TESTIDS if t not in chunk04]
-    assert not absent, f"authoritative data-testid tags absent from chunk-04.md: {absent}"
+    assert not absent, (
+        f"authoritative data-testid tags absent from chunk-04.md: {absent}"
+    )
     absent = [r for r in ALL_ROUTES if r not in chunk03]
     assert not absent, f"authoritative routes absent from chunk-03.md: {absent}"
     absent = [k for k in STATE_KEYS if k not in chunk03]

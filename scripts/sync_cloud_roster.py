@@ -160,7 +160,9 @@ def main() -> int:
         if (v.get("limit") or {}).get("context", 0) < CONTEXT_ADVISORY_FLOOR
     )
     print(f"regenerated {MIRROR.relative_to(BENCH_ROOT)} — {len(models)} models")
-    print(f"  {len(low)} below the {CONTEXT_ADVISORY_FLOOR} advisory floor (offered, badged in the UI)")
+    print(
+        f"  {len(low)} below the {CONTEXT_ADVISORY_FLOOR} advisory floor (offered, badged in the UI)"
+    )
     return 0
 
 

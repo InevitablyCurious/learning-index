@@ -725,8 +725,8 @@ class ServeMixin:
                             f"finish as a cap cut-off: {exc}"
                         ) from exc
                     _cap_last = last_assistant_message(_cap_msgs)
-                    cap_cutoff_output, cap_cutoff_reasoning = (
-                        message_generation_tokens(_cap_last)
+                    cap_cutoff_output, cap_cutoff_reasoning = message_generation_tokens(
+                        _cap_last
                     )
                     if cap_cutoff_output + cap_cutoff_reasoning >= cap:
                         is_cap_cutoff = True
@@ -825,7 +825,8 @@ class ServeMixin:
                                 "reasoning_tokens": cap_cutoff_reasoning,
                                 "cap": cap,
                                 "wording": (
-                                    "cut-off" if cap_cutoff_has_tool_part
+                                    "cut-off"
+                                    if cap_cutoff_has_tool_part
                                     else "cap-cutoff"
                                 ),
                             },
@@ -840,9 +841,7 @@ class ServeMixin:
                             else _CAP_CUTOFF_RECOVERY_NUDGE
                         )
                         try:
-                            class_watermark = len(
-                                serve_client.get_messages(session_id)
-                            )
+                            class_watermark = len(serve_client.get_messages(session_id))
                         except ServeClientError:
                             pass
                         continue
@@ -850,7 +849,8 @@ class ServeMixin:
                 # The provider said it was unavailable, or sent nothing at all.
                 is_provider_outage = (
                     mapped_terminal == TURN_TERMINAL_TRANSPORT_ERROR
-                    and str(reason or "") in (REASON_PROVIDER_UNAVAILABLE, REASON_MODEL_SILENT)
+                    and str(reason or "")
+                    in (REASON_PROVIDER_UNAVAILABLE, REASON_MODEL_SILENT)
                 )
                 # RELAY STREAM DEATH — both of the relay's shapes, one class,
                 # one recovery (the resume nudge). The reason recorded on the

@@ -86,7 +86,11 @@ def _write_session_db(path: Path, parts: list[Any]) -> Path:
     try:
         conn.execute("CREATE TABLE part (id TEXT PRIMARY KEY, data TEXT NOT NULL)")
         for i, part in enumerate(parts):
-            raw = part if isinstance(part, str) else json.dumps(part, separators=(",", ":"))
+            raw = (
+                part
+                if isinstance(part, str)
+                else json.dumps(part, separators=(",", ":"))
+            )
             conn.execute("INSERT INTO part (id, data) VALUES (?, ?)", (f"prt-{i}", raw))
         conn.commit()
     finally:
