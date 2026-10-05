@@ -868,8 +868,8 @@
       "repeat": "Some of the triangles still only stand out from the board in the half nearest the edge — I expect each one to stand out most of the way to the middle of the board."
     },
     "F30.float": {
-      "first": "The triangles don't reach the edge of the board — I expect each triangle's wide end to sit right at the edge.",
-      "repeat": "The triangles still don't reach the edge of the board — I expect each triangle's wide end to sit right at the edge."
+      "first": "The triangles don't sit at the edge of the board — I expect each triangle's wide end right at the edge.",
+      "repeat": "The triangles still don't sit at the edge of the board — I expect each triangle's wide end right at the edge."
     },
     "F31": {
       "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place.",
