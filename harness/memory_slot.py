@@ -11,6 +11,7 @@ from the operator's environment and reaches memory-ON cells only:
 - BENCH_MEMORY_ENV: a file of the plugin's own settings, one NAME=value per
   line, passed into the worker by name. ``{memory_url}`` in a value becomes the
   address the cell reaches the server at, e.g. ``HONCHO_BASE_URL={memory_url}``.
+  A relative path is read from the repository root.
 
 The benchmark reads these settings; it never interprets them. Which names a
 plugin needs is the memory system's business.
@@ -24,6 +25,8 @@ from pathlib import Path
 
 ENV_MEMORY_UPSTREAM = "BENCH_MEMORY_UPSTREAM"
 ENV_MEMORY_ENV = "BENCH_MEMORY_ENV"
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 #: The placeholder a settings value may use for the server's in-cell address.
 MEMORY_URL_PLACEHOLDER = "{memory_url}"
@@ -87,7 +90,7 @@ def memory_settings(memory_url: str, env: dict | None = None) -> dict[str, str]:
     raw = (env if env is not None else os.environ).get(ENV_MEMORY_ENV, "").strip()
     if not raw:
         return {}
-    path = Path(raw).expanduser()
+    path = REPO_ROOT / Path(raw).expanduser()  # an absolute path stays itself
     if not path.is_file():
         raise FileNotFoundError(f"{ENV_MEMORY_ENV}={raw} is not a file")
     settings = parse_settings(path.read_text(encoding="utf-8"))

@@ -3,8 +3,8 @@
 A memory system keeps working after a cell ends: Honcho, for one, turns the
 cell's messages into memories in a background queue. Two commands from the
 operator's environment let the benchmark see that work without knowing which
-memory system it is. Both run on the host, through ``sh -c``, with the
-operator's environment:
+memory system it is. Both run on the host, through ``sh -c``, from the
+repository root, with the operator's environment:
 
 - BENCH_MEMORY_READY_CMD exits 0 once the memory system has finished
   processing what it was given. It is polled before each memory-ON cell, so
@@ -31,6 +31,8 @@ import time
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from harness.memory_slot import REPO_ROOT
+
 ENV_MEMORY_READY_CMD = "BENCH_MEMORY_READY_CMD"
 ENV_MEMORY_READY_TIMEOUT = "BENCH_MEMORY_READY_TIMEOUT_S"
 ENV_MEMORY_COST_CMD = "BENCH_MEMORY_COST_CMD"
@@ -56,6 +58,7 @@ def _env(env: Mapping[str, str] | None) -> Mapping[str, str]:
 def _run(command: str, run: Runner) -> subprocess.CompletedProcess:
     return run(
         ["sh", "-c", command],
+        cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         timeout=COMMAND_TIMEOUT_S,

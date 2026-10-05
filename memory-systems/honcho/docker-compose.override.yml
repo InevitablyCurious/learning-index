@@ -1,0 +1,14 @@
+# Learning-Index's addition to Honcho's docker-compose.yml: the telemetry sink
+# that totals Honcho's own model use for the benchmark's cost record. Copy this
+# file and telemetry_sink.py into the Honcho checkout, beside
+# docker-compose.yml; `docker compose up -d` then starts the sink with the rest
+# of Honcho, and honcho.env points Honcho's telemetry at it.
+services:
+  telemetry-sink:
+    image: python:3.12-slim
+    command: ["python", "/sink/telemetry_sink.py", "--port", "8795"]
+    volumes:
+      - ./telemetry_sink.py:/sink/telemetry_sink.py:ro
+    ports:
+      - "127.0.0.1:8795:8795"
+    restart: unless-stopped
