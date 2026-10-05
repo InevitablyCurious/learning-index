@@ -9,15 +9,6 @@ import { esc, clip } from "../board.js";
 import { provisional, spine } from "./live.js";
 
 /**
- * Columns ~ sqrt(2.5 × gates), clamped to 8–28, so the wall keeps a roughly
- * 2.5:1 block as the suite grows (12 columns for 53 gates, 17 for 118).
- */
-export function wallColumns(total) {
-  if (!Number.isFinite(total) || total <= 0) return 12;
-  return Math.max(8, Math.min(28, Math.round(Math.sqrt(total * 2.5))));
-}
-
-/**
  * Server facts → visual class; the only place this mapping exists.
  *   green      passed on the first attempt and never broke
  *   recovered  passing now, but not from the start (red rim, digit = attempt)
@@ -371,7 +362,7 @@ function overlayLive(gates, live) {
   });
 }
 
-/** The grid; column count from wallColumns(). */
+/** The grid: fixed-size squares, as many per row as the card holds. */
 function grid(gates) {
   const cells = gates
     .map((g) => {
@@ -402,9 +393,8 @@ function grid(gates) {
       return `<span class="gcell ${esc(st)}${pinned}" data-gate-id="${esc(g.id)}" tabindex="0" aria-label="${esc(`${label} — ${VISUAL_WORD[st]}${when}`)}">${mark}</span>`;
     })
     .join("");
-  // --wall-cols lets the CSS size bands from the actual cell (see .gwall).
-  const cols = wallColumns(gates.length);
-  return `<div class="gwall" style="--wall-cols:${cols};grid-template-columns:repeat(${cols},1fr)">${cells}</div>`;
+  // Fixed small squares that wrap to the card's width (see .gwall).
+  return `<div class="gwall">${cells}</div>`;
 }
 
 /** The tooltip gloss, kept beside the colours so the two cannot drift apart. */

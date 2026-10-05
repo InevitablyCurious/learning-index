@@ -68,7 +68,7 @@ globalThis.window = {
 };
 globalThis.setInterval = noop;
 
-const { renderWall, gateVisual, wallColumns } = await import("./panels/wall.js");
+const { renderWall, gateVisual } = await import("./panels/wall.js");
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 //
@@ -353,42 +353,17 @@ test("SLOTS NEVER REFLOW: slot count and order survive every state change", () =
   assert.equal(new Set(ids).size, 1, `slot ORDER moved across frames: ${JSON.stringify(ids)}`);
 });
 
-test("the grid keeps its SHAPE as the suite grows", () => {
-  // WAS "a fixed 12 columns at every suite size" (design §9.3), and that was
-  // right while the suite was 53. Conformance is now 65 individual gates and
-  // the suite is 117 — at 12 columns that is ten rows of squares instead of
-  // five, and the card doubled in height for nothing a reader gains.
-  //
-  // Cells are `aspect-ratio: 1`, so at a fixed width the column count sets BOTH
-  // the cell size and the row count and the height falls with the SQUARE of it.
-  // What must hold is the block's shape, not a magic number.
-  //
-  // The 53-gate case still draws 12 — the old look is preserved exactly, which
-  // is what makes this a generalisation rather than a change of appearance.
-  assert.equal(wallColumns(53), 12, "the previous suite must look exactly as it did");
-
-  for (const n of [1, 5, 71, 117, 240]) {
-    const cols = wallColumns(n);
-    const rows = Math.ceil(n / cols);
-    assert.ok(cols >= 8 && cols <= 28, `suite ${n}: ${cols} columns is outside the readable range`);
-    // Never a tall thin column of squares, never a single long strip.
-    if (n >= 20) {
-      assert.ok(rows <= cols, `suite ${n}: ${rows} rows x ${cols} cols is taller than it is wide`);
-      assert.ok(cols <= rows * 4, `suite ${n}: ${cols} cols x ${rows} rows is a strip, not a block`);
-    }
+test("the grid is fixed-size squares that wrap, whatever the suite size", () => {
+  // The squares keep one small edge length (--wall-cell in the stylesheet) and
+  // as many fit per row as the card is wide, so the card's height follows the
+  // gate count and never the other way round.
+  for (const n of [1, 71, 213]) {
+    const gates = Array.from({ length: n }, (_, i) => ({ ...GATES[0], id: `C:${i}` }));
+    const html = renderWall(boardWith(suiteWith(gates)));
+    assert.ok(html.includes('class="gwall"'));
+    assert.equal(html.match(/class="gcell /g).length, n + 5 /* the legend's five swatches */);
+    assert.doesNotMatch(html, /--wall-cols|repeat\(/);
   }
-});
-
-test("the wall publishes its column count so the CSS can size the cell", () => {
-  // Every band on a square (the recovered rim, its inset, the attempt digit)
-  // used to be a `cqw` fraction chosen when the grid was fixed at 12 columns.
-  // At 17 columns a rim sized for a 45px square would be drawn on a 31px one,
-  // so the count has to reach the stylesheet.
-  const gates = Array.from({ length: 117 }, (_, i) => ({ ...GATES[0], id: `C:${i}` }));
-  const html = renderWall(boardWith(suiteWith(gates)));
-  const cols = wallColumns(117);
-  assert.ok(html.includes(`--wall-cols:${cols}`), "the cell size cannot be derived without it");
-  assert.ok(html.includes(`repeat(${cols},1fr)`));
 });
 
 // ── PROVENANCE: the wall names the run it is showing ─────────────────────────

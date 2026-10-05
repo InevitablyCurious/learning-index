@@ -81,7 +81,6 @@ function subhead(board) {
   if (tab === "learning") {
     return "intra-cell mechanism · one session, five phases at one task · two timescales, never conflated";
   }
-  if (tab === "tui") return "the cell's terminal, mirrored read-only · 130 × 40, scaled to this card";
   return "";
 }
 

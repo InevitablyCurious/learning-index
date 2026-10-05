@@ -68,25 +68,16 @@ test("the closed attempt's verdict is shown, from attempt.end", () => {
   // "already graded" must be legible on the row itself, not inferred by
   // comparing this column against the gate wall beside it.
   const html = spine({ ...RUNNING, phase: "initial-chunk-6" }, gradingBoard());
-  assert.match(html, /FAIL · 27 failed/);
+  const flat = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.match(flat, /FAIL .*\/ .*\/ 27/);
 });
 
-test("the attempt count and the gate wall now count the same thing", () => {
-  // THIS TEST INVERTED, 2026-09-05, and the inversion is the point.
-  //
-  // It used to assert the row must NOT say "failed", because the wall counted
-  // failing GATES (conformance being ONE gate) while this row counted
-  // `attempt.end.failed` = `len(failed_gates)`, which listed each conformance
-  // sub-problem separately. Measured across all five attempts of run
-  // 1788599410 they ran a constant +10 apart, and calling both "failed" read as
-  // a contradiction — so the row said "findings" instead.
-  //
-  // Conformance is now 65 real gates (`grader/conformance/pregate.spec.ts`),
-  // so one finding IS one gate. The workaround is removed rather than left
-  // behind a condition that no longer holds — a stale relabelling is a second
-  // vocabulary for one fact, which is the defect it was working around.
+test("the total on the phase row is the gate runner's own failed count", () => {
+  // `attempt.end.failed` is len(failed_gates), and since conformance became 65
+  // real gates one finding IS one gate, so this total and the wall count the
+  // same thing. The row reads -fixed / +broke / total and never says "findings".
   const html = spine({ ...RUNNING, phase: "initial-chunk-6" }, gradingBoard());
-  assert.match(html, /\d+ failed/);
+  assert.match(html.replace(/<[^>]+>/g, " "), /\/\s+27/);
   assert.ok(!html.includes("findings"), "the divergence is closed at the source");
 });
 

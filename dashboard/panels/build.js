@@ -141,6 +141,7 @@ function onBuildClick(e) {
     const full = document.querySelector(".bw-full");
     full?.classList.toggle("open");
     t.closest("[data-build-fullprompt]").textContent = full?.classList.contains("open") ? "hide full prompt" : "show full prompt";
+    fitProblems();
     return;
   }
   if (t.closest("[data-build-load]")) {
@@ -217,7 +218,8 @@ const RENDER_BLOCKED_LABEL = {
   "geometry-not-drawn": "the board geometry didn't draw",
 };
 
-/** Flag text for the latest attempt's render_blocked fact; "" when healthy.
+/** Flag HTML for the latest attempt's render_blocked fact; "" when healthy.
+ *  The labels are this file's own literals; an unknown reason is escaped.
  *  attempts is sorted ascending, so the last entry is the latest attempt. An
  *  unknown reason falls back to its raw string — stated, never swallowed. */
 function renderBlockedFlag(board) {
@@ -225,7 +227,7 @@ function renderBlockedFlag(board) {
   if (!Array.isArray(attempts) || attempts.length === 0) return "";
   const rb = attempts[attempts.length - 1]?.render_blocked;
   if (!rb || typeof rb !== "object" || !rb.reason) return "";
-  return `render blocked — ${RENDER_BLOCKED_LABEL[rb.reason] ?? rb.reason}`;
+  return `render blocked — ${RENDER_BLOCKED_LABEL[rb.reason] ?? esc(String(rb.reason))}`;
 }
 
 export function renderBuild(board) {
@@ -256,16 +258,21 @@ export function renderBuild(board) {
       <div class="phead">
         <span class="ttl">LIVE BUILD</span>
         <span class="build-id">${id}</span>
-        <span class="build-blocked">${flag}</span>
         <span class="build-note" data-preserve="1"></span>
+        <span class="build-blocked">${flag}</span>
+        <div class="build-tabs">${tabs}</div>
       </div>
-      <div class="build-tabs">${tabs}</div>
-      <div class="build-frame" data-preserve="1"></div>
-      <div class="phead">
-        <span class="ttl">WHAT'S STILL WRONG</span>
-        <span class="build-label">verbatim · follows the attempt tab above</span>
+      <div class="build-split">
+        <div class="build-left">
+          <div class="build-frame" data-preserve="1"></div>
+        </div>
+        <div class="build-right">
+          <div class="phead">
+            <span class="ttl">WHAT'S STILL WRONG</span>
+          </div>
+          <div class="build-wrong" data-preserve="1"></div>
+        </div>
       </div>
-      <div class="build-wrong" data-preserve="1"></div>
     </section>`;
 }
 
@@ -480,6 +487,73 @@ function renderWrong() {
   if (el.dataset.sig === sig) return;
   el.dataset.sig = sig;
   paintWrong(el, shown);
+  fitProblems();
+}
+
+// ── fit ── the card's geometry, solved from its height. Called by panels/fit.js
+// after every patch and on resize; reads layout, writes only sizes.
+
+/** The operator's own screen: the game is laid out at its shape, never stretched. */
+function screenSize() {
+  return { w: window.screen?.width || 1920, h: window.screen?.height || 1080 };
+}
+
+const PROBLEM_FONT_MIN = 9;
+const PROBLEM_FONT_MAX = 12.5;
+
+/**
+ * The game column is as wide as the screen's shape needs at the card's height
+ * (capped at 60% of the card, the rest goes to the problems); then the stage
+ * and the problem text are fitted to what they were given.
+ */
+export function fitBuild() {
+  const split = document.querySelector(".build-split");
+  const left = split?.querySelector(".build-left");
+  if (!split || !left) return;
+  if (window.innerWidth < 1100) {
+    split.style.removeProperty("--build-cols");
+  } else {
+    const bar = left.querySelector(".build-bar")?.offsetHeight ?? 0;
+    const wellH = left.clientHeight - bar - 2;
+    const { w, h } = screenSize();
+    const gw = Math.min(Math.round(split.clientWidth * 0.6), Math.round((wellH * w) / h) + 2);
+    split.style.setProperty("--build-cols", `${gw}px minmax(0,1fr)`);
+  }
+  fitStage();
+  fitProblems();
+}
+
+/** Lay the iframe out at the screen's size and scale it evenly into its well. */
+function fitStage() {
+  if (!iframeEl?.isConnected) return;
+  const view = iframeEl.closest(".build-view");
+  if (!view || !view.clientWidth || !view.clientHeight) return;
+  const { w, h } = screenSize();
+  const scale = Math.min(view.clientWidth / w, view.clientHeight / h);
+  iframeEl.style.width = `${w}px`;
+  iframeEl.style.height = `${h}px`;
+  iframeEl.style.transform = `translate(-50%,-50%) scale(${scale})`;
+  const read = view.querySelector(".build-size");
+  if (read) read.textContent = `${w}×${h} @ ${Math.round(scale * 100)}%`;
+}
+
+/**
+ * The largest problem-text size at which the whole readout fits its column
+ * without scrolling, between 9px and 12.5px. Beyond the floor it scrolls. Left
+ * alone while the full prompt is open: that is a reading mode, not a fit.
+ */
+function fitProblems() {
+  const el = document.querySelector(".build-wrong");
+  if (!el || !el.clientHeight || el.querySelector(".bw-full.open")) return;
+  let lo = PROBLEM_FONT_MIN;
+  let hi = PROBLEM_FONT_MAX;
+  for (let i = 0; i < 9; i += 1) {
+    const mid = (lo + hi) / 2;
+    el.style.setProperty("--bw-fit", `${mid}px`);
+    if (el.scrollHeight <= el.clientHeight + 1) lo = mid;
+    else hi = mid;
+  }
+  el.style.setProperty("--bw-fit", `${lo}px`);
 }
 
 async function startGame(card, key, signal) {
@@ -526,7 +600,7 @@ function paintFrame(url) {
     `<div class="build-bar"><span class="build-url">${esc(url)}</span>` +
     `<button type="button" class="build-btn" data-build-reload>reload</button>` +
     `<button type="button" class="build-btn" data-build-open>open ↗</button></div>` +
-    `<div class="build-view"><div class="build-host"></div></div>`;
+    `<div class="build-view"><div class="build-host"></div><span class="build-size"></span></div>`;
   // The iframe is BUILT, never parsed from a string, so sandbox and
   // referrerpolicy reliably exist before the first navigation. Untrusted
   // model output: scripts + its own origin only — every other capability
@@ -537,6 +611,7 @@ function paintFrame(url) {
   iframe.src = url;
   frameEl.querySelector(".build-host")?.appendChild(iframe);
   iframeEl = iframe;
+  fitStage();
 }
 
 // The frame fallback. With a reason (the play/start refusal), it states the

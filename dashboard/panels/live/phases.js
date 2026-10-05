@@ -111,9 +111,7 @@ function phaseRow(p, state, r, board, verdict, stated, ended) {
                 + "as the gate runner recorded it.",
               )}"`
             : ""
-        }>${esc(
-          `${verdict.verdict ?? "?"}${Number.isFinite(verdict.failed) ? ` · ${verdict.failed} failed` : ""}`,
-        )}</span>${churn(verdict)}${stageChip(verdict)}`
+        }>${esc(verdict.verdict ?? "?")}</span>${churn(verdict)}`
       : state === "stopped"
         ? `<span class="ph-verdict bad" title="${esc(`the cell stopped (${ended?.terminal_reason ?? "reason not recorded"}) before this phase was graded`)}">${esc(
           `NOT GRADED${ended?.terminal_reason ? ` — ${END_WORD[ended.terminal_reason] ?? ended.terminal_reason}` : ""}`,
@@ -128,29 +126,16 @@ function phaseRow(p, state, r, board, verdict, stated, ended) {
 }
 
 /**
- * Player order: the stage this round reached; the model was told only that
- * stage's problems.
- */
-function stageChip(v) {
-  if (!Number.isFinite(v.stage)) return "";
-  const past = Number.isFinite(v.withheld) && v.withheld ? ` · ${v.withheld} held back` : "";
-  return `<span class="ph-stage" title="${esc(
-    `the model was told only the problems of stage ${v.stage} (${v.stage_name ?? ""}); `
-    + `${v.withheld ?? 0} failing checks in later stages were graded but not told`,
-  )}">${esc(`stage ${v.stage}${v.stage_name ? ` · ${v.stage_name}` : ""}${past}`)}</span>`;
-}
-
-/**
- * What a closed attempt changed against the one before (fixed/broke), so a
- * round that fixed two and broke two doesn't look like nothing moved.
+ * What a closed attempt changed against the one before, as ONE figure read
+ * left to right: `-fixed / +broke / total failing`. Fixed is green, broke is
+ * red, and a round that fixed two and broke two still shows both (a net count
+ * would call it zero and hide it). Any figure not observed is a dash, never 0.
  */
 function churn(v) {
-  if (!Number.isFinite(v.fixed) || !Number.isFinite(v.broke)) return "";
-  if (!v.fixed && !v.broke) return `<span class="ph-churn">no change</span>`;
-  const bits = [];
-  if (v.fixed) bits.push(`<span class="ph-churn good">${esc(`${v.fixed} fixed`)}</span>`);
-  if (v.broke) bits.push(`<span class="ph-churn bad">${esc(`${v.broke} broke`)}</span>`);
-  return bits.join("");
+  const num = (n, sign, cls) =>
+    Number.isFinite(n) ? `<span class="ph-churn ${cls}">${sign}${esc(String(n))}</span>` : `<span class="ph-churn">\u2014</span>`;
+  const total = Number.isFinite(v.failed) ? `<span class="ph-churn tot">${esc(String(v.failed))}</span>` : `<span class="ph-churn">\u2014</span>`;
+  return `<span class="ph-val">${num(v.fixed, "-", "good")} / ${num(v.broke, "+", "bad")} / ${total}</span>`;
 }
 
 /**

@@ -17,18 +17,20 @@ function board(attempts, ended) {
   return { live: { phase: "feedback-4", phase_ts: 5, attempts, ended } };
 }
 
-test("a round that fixed and broke gates says so beside its failing count", () => {
+test("a graded round reads -fixed / +broke / total, and an unobserved figure is a dash", () => {
   const html = spine(STOPPED, board([
     { attempt: 1, verdict: "FAIL", failed: 27 },
     { attempt: 2, verdict: "FAIL", failed: 27, fixed: 2, broke: 2 },
     { attempt: 3, verdict: "FAIL", failed: 27, fixed: 0, broke: 0 },
   ], null));
   const row2 = html.slice(html.indexOf("2 —"), html.indexOf("3 —"));
-  assert.match(row2, /FAIL · 27 failed/);
-  assert.match(row2, /2 fixed/);
-  assert.match(row2, /2 broke/);
+  const flat = (h) => h.replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
+  assert.match(flat(row2), /FAIL ?-2 \/ \+2 \/ 27/);
   const row3 = html.slice(html.indexOf("3 —"), html.indexOf("4 —"));
-  assert.match(row3, /no change/);
+  assert.match(flat(row3), /FAIL ?-0 \/ \+0 \/ 27/);
+  // The first round has no fixed/broke yet: dashes, never zeros.
+  const row1 = html.slice(html.indexOf("1 —"), html.indexOf("2 —"));
+  assert.match(flat(row1), /FAIL ?— \/ — \/ 27/);
 });
 
 test("the phase a stopped cell was in reads STOPPED and NOT GRADED, never DONE", () => {
@@ -80,11 +82,11 @@ test("the stream reader counts fixed and broke per attempt and reports how the c
   rmSync(root, { recursive: true, force: true });
 });
 
-test("each graded round names the stage it reached and how much was held back", () => {
+test("the stage line is not drawn on a graded round", () => {
   const html = spine(STOPPED, board([
     { attempt: 1, verdict: "FAIL", failed: 27, stage: 2, stage_name: "A new game looks right", withheld: 24 },
   ], null));
-  assert.match(html, /stage 2 · A new game looks right · 24 held back/);
+  assert.doesNotMatch(html, /held back/);
 });
 
 test("a round cut off by a dead worker or a board stop says which", () => {

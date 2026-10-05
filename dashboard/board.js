@@ -297,6 +297,7 @@ import {
 import { renderCurve, setCurveMetric, setCurveTab, curveTab } from "./panels/curve.js";
 import { clearGatePin, fitGateCard, refitGateCard, renderWall, setGateHover, toggleGatePin } from "./panels/wall.js";
 import { renderBuild, paintBuild } from "./panels/build.js";
+import { fitTopRow } from "./panels/fit.js";
 import { renderLedger, toggleBaselineRow, toggleSuperseded } from "./panels/ledger.js";
 import {
   renderLive,
@@ -412,6 +413,8 @@ function render() {
   `);
   // The gate card is drawn invisible, measured, then placed where it fits whole.
   if (fitGateCard(document.querySelector(".gcard"))) render();
+  // One screen: the row's height and its two cards' widths, solved from the window.
+  try { fitTopRow(); } catch (err) { console.error("top row fit failed:", err); }
 
   // After the swap: the feed and overlay paint separately. Each is wrapped so a
   // throw costs that surface, never the board, and is printed.
@@ -480,7 +483,7 @@ function bindInteraction() {
   window.addEventListener("resize", () => { if (refitGateCard()) render(); });
   window.addEventListener("scroll", () => { if (refitGateCard()) render(); }, { passive: true });
   // Resizing changes the font size that fits 130 columns; refit while dragging.
-  window.addEventListener("resize", () => { try { fitTui(); } catch { /* the board never dies for the mirror */ } });
+  window.addEventListener("resize", () => { try { fitTopRow(); fitTui(); } catch { /* the board never dies for the mirror */ } });
   // Back from a background tab: put counters back on their published values.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;

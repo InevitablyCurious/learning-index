@@ -61,7 +61,7 @@ test("the strip renders with a SINGLE run — the <2 hide is gone", () => {
   setSelectedCell(null);
   const html = renderCells(boardWith([card()]));
   assert.match(html, /class="cellcard/, "one run renders a card");
-  assert.ok(html.includes("RUNS · 1 run"), "the header counts the single run");
+  assert.ok(!html.includes("RUNS ·"), "the strip carries no header or tally");
   assert.ok(!html.includes("1 runs"), "and pluralises it honestly");
 });
 

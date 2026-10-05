@@ -186,31 +186,14 @@ export function renderCells(board) {
   const runs = board?.runs;
   const list = runs?.list ?? [];
   // The strip ALWAYS renders — one run is the board's ordinary state, and
-  // zero runs is a designed absence the header states, not a hidden section.
+  // zero runs is a designed absence it states, not a hidden section.
   const active = activeCell(board);
   const activeKey = active ? cellKeyOf(active) : null;
-  const k = runs?.counts ?? {};
-
-  const total = k.total ?? list.length;
-  const summary = `${total} run${total === 1 ? "" : "s"}`;
-  const tally = [
-    k.live ? `${k.live} live` : null,
-    k.scored ? `${k.scored} scored` : null,
-    k.void ? `${k.void} void` : null,
-    k.harness_error ? `${k.harness_error} harness error` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
 
   return `
     <section class="cells" aria-label="runs, current and archived">
-      <div class="cells-head">
-        <span class="kick">RUNS · ${esc(summary)}</span>
-        <span class="spacer"></span>
-        <span class="note">${tally ? esc(tally) : nul("no runs recorded")}</span>
-      </div>
       <div class="cells-scroll">
-        ${list.map((c) => card(c, activeKey)).join("")}
+        ${list.length ? list.map((c) => card(c, activeKey)).join("") : `<span class="note">${nul("no runs recorded")}</span>`}
       </div>
     </section>`;
 }

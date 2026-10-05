@@ -534,13 +534,12 @@ a:hover{color:var(--type)}
    characters of JetBrains Mono at 10px, which is what every line inside is
    written to. A card that wraps loses a row, so the width is a budget, not a
    preference. */
-.cells{display:flex;flex-direction:column;gap:8px;min-width:0}
-.cells-head{display:flex;align-items:baseline;gap:10px}
+.cells{display:flex;align-items:center;gap:10px;min-width:0}
 /* Horizontal scroll with snap: cards settle on their own edge instead of
    stopping mid-card. The right-edge fade is the "more this way" cue and is a
    gradient to the canvas colour, so the strip reads as running under the edge
    rather than as a border. */
-.cells-scroll{position:relative;display:flex;gap:7px;overflow-x:auto;padding-bottom:7px;scroll-snap-type:x proximity;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--fg) 14%,transparent) transparent;
+.cells-scroll{position:relative;flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scroll-snap-type:x proximity;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--fg) 14%,transparent) transparent;
   --fade-l:0px;--fade-r:34px;
   -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 var(--fade-l),#000 calc(100% - var(--fade-r)),transparent 100%);
   mask-image:linear-gradient(90deg,transparent 0,#000 var(--fade-l),#000 calc(100% - var(--fade-r)),transparent 100%)}
@@ -553,13 +552,13 @@ a:hover{color:var(--type)}
 .cells-scroll::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--fg) 14%,transparent);border-radius:var(--radius-pill)}
 .cells-scroll:hover::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--fg) 26%,transparent)}
 .cells-scroll::-webkit-scrollbar-track{background:transparent}
-.cellcard{flex:0 0 192px;scroll-snap-align:start;display:flex;flex-direction:column;gap:6px;
-  background:transparent;border:1px solid var(--border);border-radius:var(--radius-md);
-  padding:8px 9px;font:400 11px var(--font);color:var(--fg);text-align:left;cursor:pointer;
+.cellcard{flex:0 0 auto;scroll-snap-align:start;display:flex;flex-direction:column;gap:2px;white-space:nowrap;
+  background:transparent;border:1px solid var(--border);border-left:3px solid var(--sc,var(--border-strong));border-radius:var(--radius-md);
+  padding:3px 12px 4px 9px;font:400 11px var(--font);color:var(--fg);text-align:left;cursor:pointer;
   transition:border-color .12s ease,background .12s ease}
 .cellcard:hover{border-color:var(--border-strong);background:color-mix(in srgb,var(--fg) 4%,transparent)}
 .cellcard:focus-visible{outline:none;box-shadow:0 0 0 2px var(--focus-ring)}
-.cellcard.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.cellcard.on{border-color:var(--accent) var(--accent) var(--accent) var(--sc,var(--accent));background:color-mix(in srgb,var(--accent) 7%,transparent)}
 /* A void or harness-errored run is dimmed, never hidden: it is where the
    operator finds out why it died, and a strip that dropped its failures would
    overstate itself. */
@@ -575,7 +574,7 @@ a:hover{color:var(--type)}
 .cc-dot.cc-void{background:transparent;border:1px solid var(--warn)}
 .cc-dot.cc-harness{background:transparent;border:1px solid var(--danger)}
 .cc-dot.cc-unknown{background:transparent;border:1px solid var(--comment)}
-.cc-tag{margin-left:auto;font-size:10px;letter-spacing:.04em;white-space:nowrap;flex:0 0 auto}
+.cc-tag{font-size:10px;letter-spacing:.04em;white-space:nowrap;flex:0 0 auto}
 .cc-tag.t-live{color:var(--check)}
 .cc-tag.t-scored{color:var(--check)}
 .cc-tag.t-void{color:var(--warn)}
@@ -585,51 +584,71 @@ a:hover{color:var(--type)}
    (bold, --type) scoped to card size — the same derivation as the rail's .8 of
    --fs-metric; a null flows through the single .null renderer as
    "not recorded". Labels are the --comment terminal voice. */
-.cc-fields{display:flex;flex-direction:column;gap:3px}
+/* TWO LINES PER RUN. Line one: who it is and how it ended; line two: the
+   figures. The left rule carries the status colour so a long scroll can be read
+   by colour alone, and the problems figure is the one that stands out. */
+.cellcard:has(.cc-dot.cc-live){--sc:var(--check)}
+.cellcard:has(.cc-dot.cc-scored){--sc:var(--fg)}
+.cellcard:has(.cc-dot.cc-void){--sc:var(--warn)}
+.cellcard:has(.cc-dot.cc-harness){--sc:var(--danger)}
+.cc-fields{display:flex;gap:12px}
+.cc-f:first-child .cc-fv{font-weight:700}
+.cc-f:first-child .cc-fv .snum{color:var(--type)}
 .cc-f{display:flex;align-items:baseline;gap:6px}
 .cc-fl{font:700 10px var(--font);letter-spacing:.06em;color:var(--comment);white-space:nowrap}
-.cc-fv{margin-left:auto;font:400 10px var(--font);color:var(--dim);text-align:right;white-space:nowrap}
+.cc-fv{font:400 10px var(--font);color:var(--dim);text-align:right;white-space:nowrap}
 .cc-fv .snum{font-size:10.5px;line-height:1.6}
 @media (prefers-reduced-motion:reduce){.cellcard{transition:none}}
-.axes-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:var(--gap);align-items:stretch}
+/* ONE ROW, ONE HEIGHT. panels/fit.js solves --rowh so the cells strip, this row
+   and the gate wall share one screen, and --axes-cols so the TUI card is exactly
+   as wide as its height needs. Unset (a narrow window) it is two flexible
+   columns of natural height. */
+.axes-row{display:grid;grid-template-columns:var(--axes-cols,minmax(0,1fr) minmax(0,1fr));grid-template-rows:minmax(0,1fr);height:var(--rowh,auto);gap:var(--gap);align-items:stretch}
+.axes-row>.curve,.axes-row>.build{min-height:0;overflow:hidden;padding:6px 10px;gap:6px}
 /* THE PANEL. 12px radius + --border (not --hairline) is the artifact's own
    §8.1 measurement; the rewrite had flattened every panel to a 4px box with
    box-shadow:none, which read as a wireframe rather than a raised surface. */
 .curve,.wall,.ledger,.live,.hold,.rail,.build{background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);padding:var(--pad);display:flex;flex-direction:column;gap:12px;min-width:0}
-/* ── BUILD PANEL ── the frame is a live viewport: URL-bar chrome around a
-   300px iframe well. .build-frame, .build-note and .build-wrong carry
-   data-preserve — the painter owns their contents; CSS owns only geometry. */
-.build-frame{border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden}
-.build-bar{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);font:400 10px var(--font)}
+/* ── BUILD PANEL ── split down the middle: the game on the left, the problems
+   on the right. The game is laid out at the operator's own screen size and
+   scaled evenly to fit (panels/build.js fitStage), so it is never stretched.
+   .build-frame, .build-note and .build-wrong carry data-preserve — the painter
+   owns their contents; CSS owns only geometry. */
+.build-split{flex:1;min-height:0;display:grid;grid-template-columns:var(--build-cols,minmax(0,1fr) minmax(0,1fr));gap:10px}
+.build-left,.build-right{min-height:0;min-width:0;display:flex;flex-direction:column;gap:5px}
+.build-frame{flex:1;min-height:0;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;display:flex;flex-direction:column}
+.build-bar{flex:none;display:flex;align-items:center;gap:8px;padding:2px 8px;border-bottom:1px solid var(--border);font:400 10px var(--font)}
 .build-url{flex:1;min-width:0;font-family:var(--font);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.build-btn{font:inherit;background:none;border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:2px 8px;cursor:pointer}
-.build-view{position:relative;aspect-ratio:16/10;max-height:560px;min-height:300px;background:var(--bg-2)}
-.build-host{width:100%;height:100%}
-.build-host iframe{width:100%;height:100%;border:0;display:block}
-.build-empty{display:flex;align-items:center;justify-content:center;min-height:120px;padding:var(--pad);color:var(--dim);font:400 11px var(--font)}
+.build-btn{font:inherit;background:none;border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:0 8px;cursor:pointer}
+.build-view{position:relative;flex:1;min-height:0;overflow:hidden;background:var(--bg)}
+.build-host{position:absolute;inset:0}
+.build-host iframe{position:absolute;left:50%;top:50%;border:0;display:block;transform-origin:center center;background:#fff}
+.build-host img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.build-size{position:absolute;right:6px;bottom:4px;padding:0 5px;border-radius:4px;background:color-mix(in srgb,var(--bg) 80%,transparent);color:var(--dim);font:400 10px var(--font);pointer-events:none}
+.build-empty{display:flex;flex:1;align-items:center;justify-content:center;min-height:60px;padding:var(--pad);color:var(--dim);font:400 11px var(--font)}
 .build-id,.build-note,.build-label{color:var(--dim);font:400 10px var(--font)}
 /* render-blocked flag: a build fact, not a gate failure — distinguished from the dim notes by weight (like .bc.died), never --danger; :empty hides the always-present span so it adds no stray 12px flex gap in .phead */
 .build-blocked{color:var(--fg);font:700 10px var(--font)}
 .build-blocked:empty{display:none}
-.build-wrong{display:flex;flex-direction:column;gap:10px;min-width:0}
-.bw-sums{display:flex;gap:8px;flex-wrap:wrap}
-.bw-sum{border:1px solid var(--border-strong);border-radius:99px;padding:1px 11px;font:400 11px var(--font);letter-spacing:.08em;color:var(--c,var(--dim));border-color:var(--c,var(--border-strong))}
-.bw-sum b{font-size:13px;margin-right:4px}
-.bw-cols{display:flex;flex-direction:column;gap:12px}
-.bw-grp{border:1px solid var(--border);border-top:2px solid var(--c,var(--border-strong));border-radius:var(--radius-md);padding:9px 11px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.build-wrong{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:.5em;min-width:0;font-size:var(--bw-fit,12px)}
+.bw-sums{display:flex;gap:.6em;flex-wrap:wrap}
+.bw-sum{border:1px solid var(--border-strong);border-radius:99px;padding:0 .9em;font:400 .88em var(--font);letter-spacing:.08em;color:var(--c,var(--dim));border-color:var(--c,var(--border-strong))}
+.bw-sum b{font-size:1.1em;margin-right:.4em}
+.bw-cols{display:flex;flex-direction:column;gap:.5em}
+.bw-grp{border:1px solid var(--border);border-top:2px solid var(--c,var(--border-strong));border-radius:var(--radius-md);padding:.45em .7em;display:flex;flex-direction:column;gap:.3em;min-width:0}
 .bw-grp.fixed,.bw-sum.fixed{--c:var(--pass)}
 .bw-grp.regressed,.bw-sum.regressed,.bw-grp.team-regressed,.bw-sum.team-regressed{--c:var(--amber,#e8b44a)}
 .bw-grp.new,.bw-sum.new{--c:var(--danger)}
 .bw-grp.team,.bw-sum.team{--c:var(--comment)}
-.bw-gh{display:flex;justify-content:space-between;font:700 10.5px var(--font);letter-spacing:.14em;color:var(--c,var(--dim))}
+.bw-gh{display:flex;justify-content:space-between;font:700 .84em var(--font);letter-spacing:.14em;color:var(--c,var(--dim))}
 .bw-gh small{color:var(--dim);font-weight:400;letter-spacing:0}
-.bw-lead{color:var(--dim);font:italic 400 11px/1.5 var(--font)}
-.bw-it{display:grid;grid-template-columns:20px minmax(0,1fr);gap:6px;color:var(--type);font:400 12.5px/1.5 var(--font)}
+.bw-lead{color:var(--dim);font:italic 400 .88em/1.4 var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bw-it{display:grid;grid-template-columns:1.7em minmax(0,1fr);gap:.3em;color:var(--type);font:400 1em/1.4 var(--font)}
 .bw-it i{font-style:normal;color:var(--c,var(--dim))}
-.bw-foot{display:flex;gap:10px;align-items:center;color:var(--dim);font:400 11px var(--font)}.bw-sp{flex:1}
-.bw-btn{font:inherit;color:var(--dim);background:none;border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:2px 9px;cursor:pointer}
+.bw-foot{display:flex;gap:10px;align-items:center;color:var(--dim);font:400 .84em var(--font)}.bw-sp{flex:1}
+.bw-btn{font:inherit;color:var(--dim);background:none;border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:0 .8em;cursor:pointer}
 .bw-btn:hover{color:var(--type);border-color:var(--fg)}
-.bw-full{display:none;margin:0;padding:10px;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--dim);font:400 11px/1.6 var(--font);white-space:pre-wrap;max-height:260px;overflow:auto}
+.bw-full{display:none;margin:0;padding:.8em;border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--dim);font:400 .9em/1.6 var(--font);white-space:pre-wrap}
 .bw-full.open{display:block}
 .bw-empty{color:var(--dim);font:400 12px/1.6 var(--font);padding:14px;border:1px dashed var(--border-strong);border-radius:var(--radius-md)}
 .bw-meta{color:var(--dim);font:400 11px var(--font);letter-spacing:.04em}
@@ -640,11 +659,10 @@ a:hover{color:var(--type)}
    not-allowed — and sorts after .active so a stale active+disabled button
    still reads as off. .build-host img mirrors the iframe fill so a captured
    screenshot occupies the same 300px well (.build-view owns the height). */
-.build-tabs{display:flex;gap:2px}
+.build-tabs{display:flex;gap:2px;margin-left:6px}
 .build-tab{font:400 11px var(--font);background:transparent;color:var(--dim);border:0;border-bottom:2px solid transparent;border-radius:0;padding:3px 8px;cursor:pointer}
 .build-tab.active{color:var(--fg);border-bottom-color:var(--fg)}
 .build-tab:disabled{color:var(--dim);border-color:var(--hairline);cursor:not-allowed}
-.build-host img{width:100%;height:100%;border:0;display:block}
 .curve-frame,.curve-foot,.hold-line,.hold-diag,.tui-head,.tui-foot,.ledger-head,.axis,.big,.prov,.feed-head{font-family:var(--font)}
 .curve-frame{padding:22px;border:1px solid var(--border);border-radius:var(--radius-md);background:linear-gradient(180deg,color-mix(in srgb,var(--bg-2) 85%, transparent),var(--bg-2))}
 .curve-svg{overflow:visible}
@@ -1234,8 +1252,8 @@ a:hover{color:var(--type)}
    font size that makes 130 columns fill exactly that width. Nothing here may
    set a width, a height or a transform on it — that would put a second opinion
    about the terminal's size in a second file, which is the whole defect. */
-.tui-mirror{display:flex;flex-direction:column;gap:10px;padding-top:10px;min-width:0}
-.tui-screen{width:100%;min-width:0;border:1px solid var(--hairline);border-radius:var(--radius-md);background:var(--bg);padding:10px;box-sizing:border-box;overflow:hidden}
+.tui-mirror{flex:1;min-height:0;display:flex;flex-direction:column;gap:4px;min-width:0}
+.tui-screen{flex:1;min-height:0;width:100%;min-width:0;border:1px solid var(--hairline);border-radius:var(--radius-md);background:var(--bg);padding:5px 8px;box-sizing:border-box;overflow:hidden}
 .tui-term{width:100%;min-width:0}
 /* THE YIELD RULE IS A TOGGLE, NOT A SWAP. The feed and the terminal are both
    in the tree at all times so the terminal's node is never rebuilt; exactly one
@@ -1310,11 +1328,11 @@ a:hover{color:var(--type)}
    suite size. The fractions below reproduce the original 12-column values
    exactly (rim 3.56px, inset 1.95px, digit 24.1px at a 574px card). */
 .gwall{
-  container-type:inline-size;display:grid;gap:3px;grid-auto-rows:1fr;
-  --wall-gap:3px;
-  --wall-cell:calc((100cqw - (var(--wall-cols,12) - 1) * var(--wall-gap)) / var(--wall-cols,12));
+  display:grid;gap:2px;justify-content:start;
+  --wall-cell:28px;
+  grid-template-columns:repeat(auto-fill,var(--wall-cell));grid-auto-rows:var(--wall-cell);
 }
-.gcell{aspect-ratio:1;border-radius:2px;background:var(--check);border:1px solid transparent;min-width:0}
+.gcell{aspect-ratio:1;border-radius:3px;background:var(--check);border:1px solid transparent;min-width:0}
 .gcell.green{background:var(--check);border-color:var(--check)}
 /* PASSING, BUT NOT FIRST TRY. Green core, danger rim — the fill still says
    "this passes" and the rim says "it did not always". Read as green at a
@@ -1347,7 +1365,7 @@ a:hover{color:var(--type)}
      must clear the gap without touching the rim. A single digit is therefore a
      little short of the core's full height, which is the correct trade — a
      clipped "10" would be a wrong reading. */
-  font:700 clamp(8px, calc(var(--wall-cell) * 0.535), 42px)/1 var(--font);
+  font:700 clamp(8px, calc(var(--wall-cell) * 0.34), 42px)/1 var(--font);
 }
 /* The legend swatch is a fixed 9px: it cannot carry three bands or a readable
    digit, so it falls back to a plain green chip with a thin rim. A smudge is
@@ -1370,7 +1388,7 @@ a:hover{color:var(--type)}
   /* IDENTICAL to .gcell.recovered — the X and the attempt digit must render at
      the same size, and the only way to guarantee that is one declaration in
      both places. Sized off the GRID (cqw), so it tracks the square. */
-  font:700 clamp(8px, calc(var(--wall-cell) * 0.535), 42px)/1 var(--font);
+  font:700 clamp(8px, calc(var(--wall-cell) * 0.34), 42px)/1 var(--font);
 }
 /* The ✕ is dropped at legend size: a 9px swatch cannot carry a readable mark,
    and a smudge is worse than a clean fill. The words beside it do that work. */
@@ -1393,7 +1411,7 @@ a:hover{color:var(--type)}
   background:transparent;border:2px solid var(--type);
   display:flex;align-items:center;justify-content:center;
   color:var(--type);overflow:hidden;
-  font:700 clamp(8px, calc(var(--wall-cell) * 0.535), 42px)/1 var(--font);
+  font:700 clamp(8px, calc(var(--wall-cell) * 0.34), 42px)/1 var(--font);
 }
 /* Dropped at legend size for the same reason as the X: a 9px swatch cannot
    carry a readable mark, and the words beside it do that work. */
@@ -1695,32 +1713,32 @@ a:hover{color:var(--type)}
 .live{display:flex;flex-direction:column;gap:8px;min-width:0}
 .live-feed{display:flex;flex-direction:column;gap:8px;min-width:0}
 .live-feed{min-height:0}
-.spine{display:flex;flex-direction:column;gap:8px}
+.spine{display:flex;flex-direction:column;gap:0}
 /* A PHASE. The running phase carries a 3px left rule; a done phase does not.
    `.now` is the only bright tick — motion is never implied on a stopped cell. */
-.ph{border:1px solid var(--border);border-radius:var(--radius-md);padding:9px 11px;display:flex;flex-direction:column;gap:7px;min-width:0}
-.ph.running{border-color:var(--fg);border-left-width:3px;background:var(--bg)}
-.ph.done{border-color:var(--border)}
-.ph.pending{border-color:var(--hairline);color:var(--dim)}
+.ph{border:0;border-top:1px solid var(--hairline);border-radius:0;padding:3px 0;display:flex;flex-direction:column;gap:2px;min-width:0}
+.ph.running{background:color-mix(in srgb,var(--fg) 6%,transparent)}
+.ph.pending{color:var(--dim)}
 /* The cell stopped inside this phase (STOPPED) or before it (NOT RUN): never DONE. */
-.ph.stopped{border-color:var(--warn,#e0b34d);border-left-width:3px}
+.ph.stopped{box-shadow:inset 3px 0 0 var(--warn,#e0b34d);padding-left:6px}
 .ph.stopped .ph-top{color:var(--type)}
-.ph.notrun{border-color:var(--hairline);color:var(--dim)}
+.ph.notrun{color:var(--dim)}
 /* Verdict plus what the round changed, kept together on the row. */
-.ph-out{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;justify-content:flex-end;min-width:0}
+.ph-out{display:flex;align-items:center;gap:10px;justify-content:flex-end;margin-left:auto;min-width:0}
+.ph-val{white-space:nowrap}
 .ph-churn{font:700 10px var(--font);letter-spacing:.08em;white-space:nowrap;color:var(--dim)}
 .ph-churn.good{color:var(--check)}
 .ph-churn.bad{color:var(--danger)}
+.ph-churn.tot{color:var(--type)}
 /* Run-card problems as identity deltas (+broke red / −fixed green), mirroring
    the churn colours: a regression is never green, a fix is never red. */
 .cc-delta{color:var(--type)}
 .cc-delta.good{color:var(--check)}
 .cc-delta.bad{color:var(--danger)}
-.ph-stage{font:700 10px var(--font);letter-spacing:.06em;color:var(--warn,#e0b34d);flex-basis:100%;text-align:right;white-space:normal}
-.ph-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font:700 12px var(--font);color:var(--dim)}
+.ph-top{display:flex;align-items:center;gap:10px;font:700 11.5px var(--font);color:var(--dim)}
 .ph.running .ph-top,.ph.done .ph-top{color:var(--type)}
-.ph-state{letter-spacing:.14em;flex:none}
-.ph-note{font:400 11.5px var(--font);color:var(--dim)}
+.ph-state{letter-spacing:.1em;flex:none;min-width:58px;text-align:right;font-size:10px}
+.ph-note{font:400 10.5px var(--font);color:var(--dim)}
 .ticks{display:flex;gap:3px}
 .tick{flex:1;height:6px;border:1px solid var(--border-strong);border-radius:1px}
 .tick.done{background:var(--fg);border-color:var(--fg)}
@@ -1729,7 +1747,7 @@ a:hover{color:var(--type)}
    harness's own `attempt.end` record — a closed attempt states how it went, and
    the spine says so rather than leaving the operator to infer it by comparing
    this column against the gate wall beside it. */
-.ph-verdict{font:700 10px var(--font);letter-spacing:.10em;white-space:nowrap;padding:2px 6px;border-radius:var(--radius-sm);border:1px solid currentColor}
+.ph-verdict{font:700 10px var(--font);letter-spacing:.10em;white-space:nowrap;padding:0 6px;border-radius:var(--radius-sm);border:1px solid currentColor}
 .ph-verdict.good{color:var(--check)}
 .ph-verdict.bad{color:var(--danger)}
 
@@ -1817,7 +1835,7 @@ a:hover{color:var(--type)}
    `minmax(0,1fr)` on both, not `1fr` — a grid column's default minimum is
    min-content, and the token rows carry long unbroken figures that would
    otherwise push the column wider than its share and shove the spine off. */
-.wall-run{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--gap);align-items:start;margin-top:9px;padding-top:9px;border-top:1px solid var(--hairline)}
+.wall-run{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;align-items:start;margin-top:6px;padding-top:6px;border-top:1px solid var(--hairline)}
 .wr-col{min-width:0}
 /* The totals block already drew its own rule when it sat alone at the foot of
    the card. The container carries it now, for both columns at once. */
@@ -1826,7 +1844,14 @@ a:hover{color:var(--type)}
 /* HALF A CARD IS NARROW. The phase title and its state word share a row and no
    longer always fit on one line; wrapping is correct, clipping the phase name
    is not. */
-.wall-run .ph-top{flex-wrap:wrap;row-gap:2px}
+/* The cell's totals compress to a three-column grid and one headline row; the
+   phases are single-line rows. */
+.wall-run .big{font-size:17px;gap:18px}
+.wall-run .tkbl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px 16px;margin-top:4px}
+.wall-run .tkhead{display:none}
+.wall-run .tkrow.tksum{grid-column:span 2;margin-top:0;padding-top:0;border-top:0}
+.wall-run .tkrow.tkrate{margin-top:0;padding-top:0;border-top:0}
+.wall-run .tknote{font-size:10px}
 
 /* ONE COLUMN ONLY WHEN GENUINELY NARROW.
    The first attempt collapsed at 1400px, which is ABOVE the width this board is
@@ -1843,8 +1868,13 @@ a:hover{color:var(--type)}
    card of ~430px — so the split holds everywhere this board is usable and gives
    up only on a genuinely small screen, where one full-width column is better
    than two starved ones. */
-@media (max-width:640px){
-  .wall-run{grid-template-columns:minmax(0,1fr)}
+/* WIDE: the squares and legend on the left, the cell's totals and phases on
+   the right, the header across both. Narrow: one column. */
+@media (min-width:1100px){
+  .wall{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);column-gap:22px;align-items:start;align-content:start;gap:6px 22px;padding:6px 10px}
+  .wall>.phead{grid-column:1/-1}
+  .wall>.gwall,.wall>.wall-legend{grid-column:1}
+  .wall>.wall-run{grid-column:2;grid-row:2 / span 3;margin-top:0;padding-top:0;border-top:0}
 }
 
 /* FULL-WIDTH GATE WALL. The card spans the board, so one grid of squares would

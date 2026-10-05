@@ -110,11 +110,13 @@ function mirrorScreen(board, t, status) {
     </div>`;
 }
 
-// ── THE FOOT ── what the operator is looking at, and the blocking count.
+// ── THE FOOT ── only while the terminal is blank: what it is waiting on.
 
 function mirrorFoot(board, t, status) {
   const painted = terminalHasPainted(t, status);
-  const feed = painted ? null : startupFeed(board);
+  // A painted terminal needs no caption: the foot is for what a blank one is waiting on.
+  if (painted) return "";
+  const feed = startupFeed(board);
   const blocking = feed?.blocking?.length ?? 0;
   return `
     <div class="tui-foot">
@@ -123,11 +125,7 @@ function mirrorFoot(board, t, status) {
         : feed
           ? `<span class="tui-ready">${esc("startup: ready")}</span>`
           : ""}
-      <span class="note">${esc(
-        painted
-          ? "xterm.js · one character cell = one grid cell · the font size is solved so 130 columns fill this card exactly, so nothing is scaled, reflowed or clipped · colour is carried through as truecolor · nothing here accepts a keystroke"
-          : "no live terminal frame yet — this space reports the background processes a benchmark start depends on, and yields to the terminal the moment it paints",
-      )}</span>
+      <span class="note">${esc("no live terminal frame yet — this space reports the background processes a benchmark start depends on, and yields to the terminal the moment it paints")}</span>
     </div>`;
 }
 
@@ -292,10 +290,12 @@ const FIT_STEP = 0.1;
 let fittedFor = -1;
 /** Advance width per character, per px of font size. Measured once, cached. */
 let advanceRatio = 0;
+/** Row height per px of font size (xterm's cell height at lineHeight 1). */
+let heightRatio = 0;
 
 /**
- * Measure the resolved font's advance with a DOM span, as xterm does, at a large
- * probe size.
+ * Measure the resolved font's advance and row height with a DOM span, as xterm
+ * does, at a large probe size. Returns the advance ratio (0 when unmeasurable).
  */
 function measureAdvance() {
   if (advanceRatio) return advanceRatio;
@@ -304,14 +304,27 @@ function measureAdvance() {
   el.style.cssText =
     `position:absolute;left:-9999px;top:0;visibility:hidden;white-space:pre;`
     + `font-family:${(getComputedStyle(document.documentElement).getPropertyValue("--font") || "monospace").trim()};`
-    + `font-size:${probeSize}px;line-height:1;letter-spacing:0`;
+    + `font-size:${probeSize}px;line-height:normal;letter-spacing:0`;
   el.textContent = "M".repeat(TUI_COLS);
   document.body.appendChild(el);
-  const w = el.getBoundingClientRect().width;
+  const box = el.getBoundingClientRect();
   el.remove();
-  if (!w) return 0;
-  advanceRatio = w / TUI_COLS / probeSize;
+  if (!box.width) return 0;
+  advanceRatio = box.width / TUI_COLS / probeSize;
+  heightRatio = box.height / probeSize;
   return advanceRatio;
+}
+
+/**
+ * The host width, in px, at which the font that fits the HEIGHT (all 40 rows in
+ * `hostHeightPx`) is also the font that fits the WIDTH — so the card can be sized
+ * from its height and the terminal fills it both ways. Null before the font can
+ * be measured. Pure given the measured ratios; exported for tests.
+ */
+export function tuiHostWidthForHeight(hostHeightPx, adv = measureAdvance(), rowRatio = heightRatio) {
+  if (!(hostHeightPx > 0) || !(adv > 0) || !(rowRatio > 0)) return null;
+  const font = Math.min(FONT_MAX, Math.max(FONT_MIN, hostHeightPx / (TUI_ROWS * rowRatio)));
+  return Math.ceil((TUI_COLS * adv * font) / FIT_MARGIN);
 }
 
 /**
