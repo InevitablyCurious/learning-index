@@ -26,6 +26,7 @@ import { refuse } from "./contract.mjs";
 import { sendJson } from "./lib/http.mjs";
 import { args, BENCH_ROOT, RUNS_ROOT, PYTHON, initState } from "./state.mjs";
 import { startChainLoop } from "./continuous.mjs";
+import { startLivebuildLoop } from "./livebuild.mjs";
 import { routes as metaRoutes } from "./routes/meta.mjs";
 import { routes as rosterRoutes } from "./routes/roster.mjs";
 import { routes as snapshotRoutes } from "./routes/snapshots.mjs";
@@ -88,6 +89,8 @@ server.listen(args.port, "127.0.0.1", () => {
   startBoardLoops();
   // Continuous mode drives this server's own routes, so it starts once they answer.
   startChainLoop({ benchRoot: BENCH_ROOT, runsRoot: RUNS_ROOT, port: args.port });
+  // The cell in flight keeps its build running for the board to frame.
+  startLivebuildLoop({ benchRoot: BENCH_ROOT, runsRoot: RUNS_ROOT });
   console.log(`bench control plane → http://127.0.0.1:${args.port}`);
   console.log(`  bench root : ${BENCH_ROOT}`);
   console.log(`  python     : ${PYTHON}${existsSync(PYTHON) ? "" : "  (MISSING)"}`);

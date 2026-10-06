@@ -2,8 +2,9 @@
 //
 // The operator question this panel answers: do the grader's complaints match
 // what is actually rendered? Top: the benchmark model's own backgammon app,
-// booted by POST /api/play/start on a free port when — and only when — the
-// operator clicks "load build", and framed here. Below: the
+// booted by POST /api/play/start on a free port — for the cell in flight by the
+// control plane itself (control/livebuild.mjs), for any other run when the
+// operator clicks "load build" — and framed here. Below: the
 // numbered "user prose" the grader fed the model in its last failing round —
 // GET /api/feedback, the LAST kind:"feedback" message (kind:"chunk" is the
 // initial GOAL, not "what's still wrong").
@@ -182,6 +183,30 @@ function onBuildClick(e) {
   }
 }
 
+/** A follow read is in flight; the tick never starts a second. */
+let followBusy = false;
+
+/** Frame the live cell's running build, and re-frame when the control plane
+ *  boots a newer one (a new pid). Read-only: GET /api/play only. */
+async function followLive(card, key) {
+  if (followBusy || busy) return;
+  followBusy = true;
+  try {
+    const p = await fetchPlaying();
+    if (!p?.url || p.run !== card.benchmark_id || p.cell !== card.cell) return;
+    if (!currentCard || `${currentCard.run_dir}::${currentCard.sequence_index}` !== key || activeTab !== "live") return;
+    if (p.pid === pid && p.url === playUrl && key === loadedKey) return;
+    pid = p.pid ?? null;
+    port = p.port ?? null;
+    playUrl = p.url;
+    paintFrame(p.url);
+    loadedKey = key;
+    bootedAt = Date.now();
+  } finally {
+    followBusy = false;
+  }
+}
+
 /** GET /api/play → the current running play server {pid,port,url,…}, or null.
  *  Same-origin literal (panel-fetch-wiring); read-only, cache-control no-store. */
 async function fetchPlaying() {
@@ -335,6 +360,11 @@ export function paintBuild(view) {
     }
     renderWrong();
   }
+
+  // The cell in flight: the control plane keeps its build running (and boots
+  // it again as the source changes), so the panel only READS the registry and
+  // frames whatever is there — no click, no write.
+  if (card.status === "live" && (key === preparedKey || key === loadedKey)) void followLive(card, key);
 
   // Same selection as the booted run: idempotent. NEVER re-POST play/start
   // here — startPlay reaps-then-spawns and would kill the game every 2s.

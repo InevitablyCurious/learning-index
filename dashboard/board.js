@@ -151,7 +151,7 @@ function connect() {
   // tests import under Node, where setTuiCell still runs.
   if (typeof EventSource === "undefined") return;
   // Resume from the cursor; the subscription carries the TUI tab and the cell.
-  stream = new EventSource(streamUrl(eventCursor, curveTab() === "tui", selectedTuiCell));
+  stream = new EventSource(streamUrl(eventCursor, true, selectedTuiCell));
 
   stream.addEventListener("board", (msg) => {
     try {
@@ -294,7 +294,7 @@ import {
   clearSelection,
   isRestoreOpen,
 } from "./panels/restore.js";
-import { renderCurve, setCurveMetric, setCurveTab, curveTab } from "./panels/curve.js";
+import { renderLiveView } from "./panels/liveview.js";
 import { clearGatePin, fitGateCard, refitGateCard, renderWall, setGateHover, toggleGatePin } from "./panels/wall.js";
 import { renderBuild, paintBuild } from "./panels/build.js";
 import { fitTopRow } from "./panels/fit.js";
@@ -346,7 +346,6 @@ import {
 } from "./panels/tui.js";
 import { paintTicks, snapTicks } from "./panels/tick.js";
 import { armSnapshot } from "./panels/snapshot.js";
-import { setLearningView } from "./panels/learning.js";
 import { renderOverlay } from "./overlay.js";
 import { patch } from "./dom.js";
 // Network acts live in board-actions.js; state and render stay here.
@@ -404,7 +403,7 @@ function render() {
       ${renderHold(view)}
       ${renderCells(view)}
       <div class="axes-row">
-        ${renderCurve(view)}
+        ${renderLiveView(view)}
         ${renderBuild(view)}
       </div>
       ${renderWall(view)}
@@ -567,7 +566,7 @@ export function followActiveCell(b, repaint) {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-metric],[data-gate-id],[data-curve-tab],[data-learn-view],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-continuous-end],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-continuous],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
+  const t = e.target.closest("[data-gate-id],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-continuous-end],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-continuous],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
   if (!t) return;
 
   if (t.dataset.gateId) {
@@ -575,16 +574,6 @@ function onClick(e) {
     return;
   }
 
-  if (t.dataset.metric) { setCurveMetric(t.dataset.metric); render(); return; }
-  // Selecting or leaving TUI MIRROR changes the subscription; other tabs don't.
-  if (t.dataset.curveTab) {
-    const wasTui = curveTab() === "tui";
-    setCurveTab(t.dataset.curveTab);
-    if (wasTui !== (curveTab() === "tui")) resubscribe();
-    render();
-    return;
-  }
-  if (t.dataset.learnView) { setLearningView(t.dataset.learnView); render(); return; }
   if (t.dataset.feedtab) { setFeedTab(t.dataset.feedtab); render(); return; }
   if (t.dataset.bsource) { toggleBackendSource(t.dataset.bsource); render(); return; }
   if (t.dataset.blevel) { toggleBackendLevel(t.dataset.blevel); render(); return; }
