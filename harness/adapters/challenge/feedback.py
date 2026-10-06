@@ -319,7 +319,7 @@ _SETUP_HTTP_RE = re.compile(r"answered HTTP (?P<code>\d{3})")
 # (grader lib/harness.ts assertRollTook). A roll has no fields to read back, so
 # it gets its own sentence: what was queued, and what came up.
 _SETUP_ROLL_RE = re.compile(
-    r"/api/debug/roll did not take dice \(sent (?P<sent>[^)]*)\) \[rolled (?P<rolled>[^\]]*)\]"
+    r"/api/debug/roll did not take dice \(sent (?P<sent>[^)]*)\) \[rolled (?P<rolled>.*)\]"
 )
 _ROLL_LINE_FIRST = "They queued a roll of {sent} through your app's debug endpoint, and the roll that followed came up {rolled}."
 _ROLL_LINE_REPEAT = "They queued {sent} through your debug endpoint again, and the roll that followed still came up {rolled}."
@@ -327,6 +327,17 @@ _ROLL_LINE_REPEAT = "They queued {sent} through your debug endpoint again, and t
 
 def _dice_words(text: str) -> str:
     """'3, 5' -> '3 and 5'; '4, 4, 4, 4' -> '4, 4, 4 and 4'."""
+    if "[" in str(text):
+        # Not a plain list of dice (e.g. [[6,5],6]): said as the answer carried it,
+        # without the extra die, which differs every time and would repeat the line.
+        try:
+            parsed = json.loads(str(text))
+        except ValueError:
+            return str(text).strip()
+        inner = parsed[0] if isinstance(parsed, list) and parsed and isinstance(parsed[0], list) else None
+        if inner is not None:
+            return f"a list holding the list [{', '.join(str(n) for n in inner)}] instead of the dice themselves"
+        return str(text).strip()
     nums = [n.strip() for n in str(text).split(",") if n.strip()]
     return nums[0] if len(nums) == 1 else ", ".join(nums[:-1]) + " and " + nums[-1]
 

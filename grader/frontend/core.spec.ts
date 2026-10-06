@@ -377,6 +377,15 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
       dice.has("3") && dice.has("5"),
       `[aspect: perdie] after rolling 3-5 the back piece on 13 shows hints for: ${[...dice].join(", ")}`,
     ).toBe(true);
+    // Only the piece picked up shows its moves (the build prompt: picking up a
+    // piece "shows its hints"). The back piece's two numbers are two hints; a
+    // board that shows the moves of every piece at once (run 1791304274's, which
+    // showed them before anything was picked up) leaves the player unable to tell
+    // which piece a hint belongs to. Judged on the piece on 13, as above.
+    expect(
+      hintTexts.length <= 2,
+      `[aspect: others] after picking up the back piece on 13 there are ${hintTexts.length} hints on the board`,
+    ).toBe(true);
   }
 });
 

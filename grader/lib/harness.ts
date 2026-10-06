@@ -434,6 +434,14 @@ export function assertRollTook(sent: number[], rolled: unknown): void {
   // answers (run 1791204055's cp-02; snapshot 1791210678406). Only dice seen, and
   // different, are a refusal; a queue ignored without a trace is the pre-gate's
   // REQ-DEBUG/debug.roll finding, told before any of these.
+  if (got === null && Array.isArray(rolled) && rolled.length > 0) {
+    // Dice that are not a flat list of numbers ([[6, 5], 1]: the whole queued entry
+    // taken as one die) are dice SEEN and wrong, not an answer with none: passing
+    // them let every check riding on this roll tell the player their pieces showed
+    // no moves, when the roll the check set up never gave them the dice (run
+    // 1791304274: F03, F04, F25, F45, F58, F60 and the pre-gate's hint check).
+    throw new Error(`${SETUP_REFUSED}: /api/debug/roll did not take dice (sent ${sent.join(", ")}) [rolled ${JSON.stringify(rolled)}]`);
+  }
   if (got === null || got.length === 0) return;
   const double = want !== null && want.length === 2 && want[0] === want[1];
   // A double may come back as its two dice or as the four moves it gives.

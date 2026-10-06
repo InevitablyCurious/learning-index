@@ -635,37 +635,61 @@ export async function runPreGate(): Promise<PreGateResult> {
       // told "no checker I could pick up" by a page whose pieces picked up).
       // dispatchEvent fires the click handler even for a checker scrolled
       // outside this browser's default viewport.
-      let hintCount = await page.locator('[data-testid="hint"]').count();
-      if (hintCount < 1) {
-        const whiteCheckers = page.locator(
-          '[data-testid="checker"][data-color="white"]',
-        );
-        const whiteCount = await whiteCheckers.count();
-        for (let i = 0; i < whiteCount; i++) {
-          try {
-            await whiteCheckers.nth(i).dispatchEvent("click");
-          } catch {
-            // Keep probing other white checkers.
-          }
+      // The turn is the player's own: the click above was the OPENING roll, and a
+      // build whose computer won it (or that handles the queued dice another way,
+      // F63's finding) leaves the player holding no dice, so no piece could show a
+      // hint yet. A player then waits for the computer and rolls again, so this does
+      // too — up to three more rolls, stopping when a piece shows hints or the Roll
+      // button will not click (the player then holds dice, and no hints is the
+      // finding). Run 1791304274: the player's next Roll showed hints, and the line
+      // told the model they never appeared.
+      let ordinaryRoll = rolled;
+      let hintCount = 0;
+      for (let turn = 0; turn < 4 && hintCount < 1; turn++) {
+        if (turn > 0) {
+          await debugRoll([3, 1]);
+          const again = await page
+            .locator('[data-testid="rollBtn"]')
+            .click({ timeout: 2_000 })
+            .then(() => true, () => false);
+          if (!again) break;
+          ordinaryRoll = true;
           await page
-            .waitForFunction(
-              () => document.querySelectorAll('[data-testid="hint"]').length > 0,
-              undefined,
-              { timeout: 250 },
-            )
+            .waitForFunction(() => document.querySelectorAll('[data-testid="die"]').length >= 2, undefined, {
+              timeout: 2_000,
+            })
             .catch(() => undefined);
-          hintCount = await page.locator('[data-testid="hint"]').count();
-          if (hintCount > 0) {
-            break;
+        }
+        hintCount = await page.locator('[data-testid="hint"]').count();
+        if (hintCount < 1) {
+          const whiteCheckers = page.locator('[data-testid="checker"][data-color="white"]');
+          const whiteCount = await whiteCheckers.count();
+          for (let i = 0; i < whiteCount; i++) {
+            try {
+              await whiteCheckers.nth(i).dispatchEvent("click");
+            } catch {
+              // Keep probing other white checkers.
+            }
+            await page
+              .waitForFunction(() => document.querySelectorAll('[data-testid="hint"]').length > 0, undefined, {
+                timeout: 250,
+              })
+              .catch(() => undefined);
+            hintCount = await page.locator('[data-testid="hint"]').count();
+            if (hintCount > 0) {
+              break;
+            }
           }
         }
+        // The computer may be moving: give it time before the player rolls again.
+        if (hintCount < 1) await page.waitForTimeout(1_500);
       }
 
       if (hintCount < 1) {
         add(
           "REQ-HINT/hint — selecting a movable checker shows move hints",
           "hints appear after selecting a movable checker",
-          rolled ? "none" : "never evaluated — the Roll button could not be clicked at the start of a game",
+          ordinaryRoll ? "none" : "never evaluated — the Roll button could not be clicked at the start of a game",
         );
       }
 

@@ -247,6 +247,10 @@
       "first": "When I pick up a piece, its move hints show more than the number on the die — I expect each one to show just the die it uses.",
       "repeat": "The move hints still show more than the number on the die — I expect each one to show just the die it uses."
     },
+    "F04.others": {
+      "first": "When I pick up a piece, hints show up for my other pieces as well — I expect only the moves of the piece I picked up.",
+      "repeat": "I picked up a piece again and hints for my other pieces still show — I expect only the piece I picked up to show its moves."
+    },
     "F05": {
       "first": "When I have no moves, the game doesn't tell me 'No moves available'.",
       "repeat": "Stuck again with no move to play, and it still doesn't say 'No moves available'."
