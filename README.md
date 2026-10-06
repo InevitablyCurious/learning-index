@@ -7,6 +7,8 @@ helping to hurting, and what the memory does when the job changes.
 > **Status: proof of concept.** The no-memory baseline runs today, on a local model. There are no
 > memory-on results yet — see [where things stand](#where-things-stand).
 
+How it was built, and the choices behind it: [notes from the operator](docs/operator-notes.md).
+
 ## Why it exists
 
 People change what they want, and memory turns each change into confident wrong advice: a fix
@@ -215,7 +217,7 @@ dashboard/   The read-only board.
 images/      Worker and grader Dockerfiles; the egress and loop-kill sidecar.
 scripts/     Entrypoints: run_cumulative.py, image rebuilds, preflight.
 config/      bench.env and the benchmark's environment settings (see ENV-VARS.md).
-docs/        Methodology, related work, memory systems, and the system map.
+docs/        Methodology, related work, memory systems, the operator's notes, and the system map.
 memory-systems/
              One kit per memory system: its settings and its ready and cost commands.
 data/        How each arm's memory-extraction state is stored.
