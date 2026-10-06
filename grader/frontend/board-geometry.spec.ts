@@ -24,6 +24,7 @@ import {
   sampleTriangleOrientation,
   splitRows,
   type PointBox,
+  sampleBoardColour,
 } from "./board-geometry.ts";
 
 // The shared opening: load the app, start a fresh game through the API, reload
@@ -378,6 +379,16 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   // drawn beside the bottom one was told "The triangles point outward").
   const needsRows = splitRows(points).separated ? "" : "[needs: F28] ";
 
+  // The board is one plain colour with the points drawn on it (the build prompt):
+  // the strips beside the triangles show that one colour. A board whose point
+  // columns are painted in stripes behind black triangles (run 1791318365) shows
+  // two, and its real triangles read as nothing against the felt this check reads.
+  const boardColour = await sampleBoardColour(page, points);
+  expect(
+    boardColour.share >= 0.9,
+    `${needsRows}[aspect: boardcolours] the colours beside the points are not one board colour (the commonest is ${Math.round(boardColour.share * 100)}% of them)`,
+  ).toBe(true);
+
   // A point with no triangle: nothing painted at its rim or its inner end (run
   // 1790381377: every point a transparent box, told "The triangles point
   // outward"), or paint right across it at both ends — a block or a band, no
@@ -522,6 +533,13 @@ test("[F42] REQ-GEOMETRY — the points alternate in colour", async ({ page }) =
     );
   };
   const judgedPairs = neighbours.filter(([a, b]) => !covered.has(a) && !covered.has(b) && !splitByBar(a, b));
+  // Two colours, not more: the triangles' own colours fall into at most two groups.
+  const groups: number[][] = [];
+  for (const s of samples) {
+    if (covered.has(s.num) || !s.colour) continue;
+    if (!groups.some((g) => Math.hypot(g[0] - s.colour![0], g[1] - s.colour![1], g[2] - s.colour![2]) < 40)) groups.push(s.colour);
+  }
+  expect(groups.length, `[aspect: morecolours] [needs: F28 F30] the points are drawn in ${groups.length} different colours`).toBeLessThanOrEqual(2);
   const matching = judgedPairs.filter(([a, b]) => same(a, b));
   // The quarters are found by number, and the colours are read off the
   // triangles: an out-of-order board is F28's complaint, a missing or

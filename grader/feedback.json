@@ -851,6 +851,10 @@
       "first": "The triangles point outward, away from the middle of the board — I expect each triangle's wide end at the edge and its tip pointing toward the middle.",
       "repeat": "Looked at the triangles again and they still point outward, away from the middle — I expect each triangle's wide end at the edge and its tip pointing toward the middle."
     },
+    "F30.boardcolours": {
+      "first": "The board isn't one plain colour behind the points — I expect one board colour, with the points drawn on it as triangles in two other colours that alternate.",
+      "repeat": "The board is still not one plain colour behind the points — I expect one board colour, with the points drawn on it as triangles in two other colours that alternate."
+    },
     "F30.offscreen": {
       "first": "Part of the board runs off the edge of the screen.",
       "repeat": "Part of the board still runs off the edge of the screen."
@@ -1166,6 +1170,10 @@
     "F42.onecolour": {
       "first": "The points are all one colour — I expect them to alternate between two colours.",
       "repeat": "The points are still all one colour — I expect them to alternate between two colours."
+    },
+    "F42.morecolours": {
+      "first": "The points use more than two colours — I expect them to alternate between just two colours.",
+      "repeat": "The points still use more than two colours — I expect them to alternate between just two colours."
     },
     "F43": {
       "first": "I can't see the pieces properly — some are hidden or cut off.",

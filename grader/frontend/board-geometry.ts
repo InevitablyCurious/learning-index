@@ -690,3 +690,69 @@ export async function boardGeometryDrawn(page: Page): Promise<boolean> {
   const samples = await sampleTriangleOrientation(page, points);
   return samples.some((sample) => sample.shape !== "none");
 }
+
+
+/**
+ * What colours show beside the triangles. The board is one plain colour and the
+ * points are drawn on it, so the strips either side of every point's box (a half to
+ * three quarters of the way in from its rim, where a triangle has narrowed away) are all the
+ * board's colour. `share` is the part of those samples within 45 of the
+ * commonest colour: the reference reads 100%, a board whose point columns are
+ * painted in stripes behind black triangles (run 1791318365) reads 50%.
+ */
+export async function sampleBoardColour(
+  page: Page,
+  points: PointBox[],
+): Promise<{ share: number; colours: number[][] }> {
+  const hideStyle = await page.addStyleTag({
+    content: '[data-testid="checker"], [data-testid="hint"] { visibility: hidden !important; }',
+  });
+  try {
+    const buf = await page.screenshot({ type: "png" });
+    const dataUrl = "data:image/png;base64," + buf.toString("base64");
+    return await page.evaluate(
+      async ({ dataUrl, points }) => {
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
+          img.src = dataUrl;
+        });
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas 2d context unavailable");
+        ctx.drawImage(img, 0, 0);
+        const dpr = img.naturalWidth / window.innerWidth;
+        const at = (x: number, y: number): number[] => {
+          const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+          return [d[0], d[1], d[2]];
+        };
+        // Where a triangle has narrowed away: a half to three quarters of the way in
+        // from its rim, at the very sides of its box. Nearer the rim a wide triangle
+        // fills the box and shows its own colour there.
+        const midY = points.reduce((sum, p) => sum + p.y + p.height / 2, 0) / points.length;
+        const samples: number[][] = [];
+        for (const p of points) {
+          const top = p.y + p.height / 2 < midY;
+          for (const depth of [0.55, 0.65, 0.75]) {
+            const y = top ? p.y + p.height * depth : p.y + p.height * (1 - depth);
+            for (const fx of [0.04, 0.96]) samples.push(at(p.x + p.width * fx, y));
+          }
+        }
+        const clusters: { c: number[]; n: number }[] = [];
+        for (const c of samples) {
+          const k = clusters.find((k) => Math.hypot(k.c[0] - c[0], k.c[1] - c[1], k.c[2] - c[2]) < 45);
+          if (k) k.n += 1;
+          else clusters.push({ c, n: 1 });
+        }
+        clusters.sort((a, b) => b.n - a.n);
+        return { share: samples.length ? clusters[0].n / samples.length : 0, colours: clusters.slice(0, 3).map((k) => k.c) };
+      },
+      { dataUrl, points },
+    );
+  } finally {
+    await hideStyle.evaluate((el) => (el as HTMLElement).remove()).catch(() => undefined);
+  }
+}
