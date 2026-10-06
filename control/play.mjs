@@ -54,7 +54,9 @@ export function freePort() {
 
 /** The play server running right now, or null. Read from the registry. */
 export function playStatus(benchRoot) {
-  const rows = listServers(benchRoot).filter((r) => r.kind === PLAY_KIND);
+  // A server is reported only once it has answered: one still booting is not yet
+  // something to frame, and the one it replaces keeps running until it does.
+  const rows = listServers(benchRoot).filter((r) => r.kind === PLAY_KIND && r.ready === true);
   if (rows.length === 0) return null;
   // Newest wins; startPlay reaps before spawning.
   rows.sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)));
@@ -149,9 +151,8 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
     return refuse("no_entrypoint", String(err?.message ?? err), 422);
   }
 
-  // One at a time; reaping first keeps playStatus honest.
-  await stopPlay(benchRoot);
-
+  // One at a time, but the one running keeps running until the new one answers:
+  // a build that will not boot must not take the working one down with it.
   const port = await freePort();
   // The artifact's own start command, the same one the grader uses, with the
   // loopback shim preloaded so a host-less listen(PORT) binds 127.0.0.1 only.
@@ -174,16 +175,18 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
   });
   child.stdout?.resume();
 
+  const reapSelf = () => reapServers({ kind: PLAY_KIND, only: child.pid }, benchRoot);
+  const record_ = {
+    pid: child.pid,
+    port,
+    kind: PLAY_KIND,
+    label: `${run}::${cell}`,
+    cwd: worktree,
+    entrypoint,
+  };
   if (child.pid) {
     const record = registerServer(
-      {
-        pid: child.pid,
-        port,
-        kind: PLAY_KIND,
-        label: `${run}::${cell}`,
-        cwd: worktree,
-        entrypoint,
-      },
+      record_,
       benchRoot,
     );
     if (record === null) {
@@ -204,7 +207,7 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
-      await stopPlay(benchRoot);
+      await reapSelf();
       return refuse(
         "boot_failed",
         `the build exited immediately (code ${child.exitCode}). stderr:\n${stderr.trim() || "<empty>"}`,
@@ -219,6 +222,9 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
         // reported, never refused.
         const page = await probePage(url);
         const seam = await probeDebugSeam(url);
+        // Answering: mark it ready, then retire every other play server.
+        registerServer({ ...record_, ready: true }, benchRoot);
+        await reapServers({ kind: PLAY_KIND, except: child.pid }, benchRoot);
         return { ok: true, url, port, pid: child.pid, run, cell, ...page, ...seam };
       }
     } catch {
@@ -231,7 +237,7 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
   // have taken 8002. Say which, and take it down either way.
   const holders = await portHolders(8002);
   const squatting = holders.some((h) => h.pid === child.pid);
-  await stopPlay(benchRoot);
+  await reapSelf();
 
   if (squatting) {
     return refuse(

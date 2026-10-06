@@ -17,14 +17,14 @@ import { existsSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import { startPlay, playStatus } from "./play.mjs";
+import { startPlay, playStatus, stopPlay } from "./play.mjs";
 import { cellDirForRun, readRunState } from "./runstate.mjs";
 
 export const LIVEBUILD_TICK_MS = 4_000;
 /** The source must have been still this long before it is booted again. */
-export const QUIET_MS = 8_000;
+export const QUIET_MS = 3_000;
 /** Never boot more often than this, whatever changed. */
-export const MIN_BOOT_GAP_MS = 20_000;
+export const MIN_BOOT_GAP_MS = 6_000;
 
 const SKIP_DIRS = new Set(["node_modules", ".git", "test-results"]);
 
@@ -61,7 +61,19 @@ export async function newestSourceMtime(worktree) {
  */
 export async function livebuildTick(deps, memo) {
   const live = await deps.liveCell();
-  if (!live) return "idle";
+  if (!live) {
+    // The cell ended: the build this loop started goes with it (a build a person
+    // started by hand is not ours to stop). The final build stays playable from
+    // the run's history.
+    if (memo.ok === true && memo.key !== null) {
+      const playing = deps.playing();
+      if (playing && `${playing.run}::${playing.cell}` === memo.key) await deps.stop();
+      deps.log(`[livebuild] ${memo.key} ended; its build was stopped`);
+    }
+    memo.key = null;
+    memo.ok = false;
+    return "idle";
+  }
 
   const key = `${live.benchmarkId}::${live.cell}`;
   const now = deps.now();
@@ -87,7 +99,10 @@ export async function livebuildTick(deps, memo) {
   memo.mtime = mtime;
   const r = await deps.boot({ run: live.benchmarkId, cell: live.cell });
   memo.ok = r?.ok === true;
-  if (memo.ok) return "booted";
+  if (memo.ok) {
+    deps.log(`[livebuild] ${key} booted on port ${r.port}`);
+    return "booted";
+  }
   deps.log(`[livebuild] ${key} did not boot (${r?.code ?? "unknown"}); waiting for the next change`);
   return "failed";
 }
@@ -101,6 +116,7 @@ export function startLivebuildLoop({ benchRoot, runsRoot }) {
     hasSource: (worktree) => existsSync(join(worktree, "src")),
     playing: () => playStatus(benchRoot),
     boot: (args) => startPlay({ runsRoot, benchRoot, ...args }),
+    stop: () => stopPlay(benchRoot),
     liveCell: async () => {
       const state = await readRunState({ runsRoot });
       const run = (state.runs ?? [])[0];

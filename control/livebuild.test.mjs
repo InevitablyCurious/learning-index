@@ -16,6 +16,10 @@ function rig({ mtime = 5_000, now = 100_000, playing = null, live = LIVE, bootOk
     log: () => {},
     liveCell: async () => r.live,
     sourceMtime: async () => r.mtime,
+    stop: async () => {
+      calls.push({ stop: true });
+      r.playing = null;
+    },
     hasSource: () => true,
     playing: () => r.playing,
     boot: async (a) => {
@@ -77,4 +81,20 @@ test("a build that died is booted again", async () => {
   r.playing = null;
   r.now += MIN_BOOT_GAP_MS + 1;
   assert.equal(await livebuildTick(r.deps, memo), "booted");
+});
+
+test("when the cell ends, the build this loop started is stopped; a hand-started one is not", async () => {
+  const r = rig();
+  const memo = { key: null, at: 0, mtime: 0 };
+  await livebuildTick(r.deps, memo);
+  r.live = null;
+  assert.equal(await livebuildTick(r.deps, memo), "idle");
+  assert.equal(r.calls.filter((c) => c.stop).length, 1);
+  assert.equal(memo.key, null);
+
+  const hand = rig({ playing: { run: "x", cell: "y", started_at: new Date(50_000).toISOString() } });
+  const m2 = { key: null, at: 0, mtime: 0 };
+  hand.live = null;
+  await livebuildTick(hand.deps, m2);
+  assert.equal(hand.calls.length, 0);
 });

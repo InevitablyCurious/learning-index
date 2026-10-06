@@ -51,6 +51,7 @@ export function registerServer(rec, benchRoot = BENCH_ROOT) {
     port: Number(rec?.port) || null,
     kind: String(rec?.kind ?? "unknown"),
     label: rec?.label == null ? null : String(rec.label),
+    ready: rec?.ready === true,
     cwd: rec?.cwd == null ? null : String(rec.cwd),
     started_at: new Date().toISOString(),
   };
@@ -156,7 +157,8 @@ async function killPid(pid) {
 
 /**
  * Kill every server this bench started and left behind, and prune the
- * records. `kind` narrows it ("gate", "play"). Returns a report: reaped and
+ * records. `kind` narrows it ("gate", "play"); `only` reaps that one pid,
+ * `except` spares that one pid. Returns a report: reaped and
  * pruned are different facts. A record is dropped only once its process is
  * confirmed gone; one that survives the kill is left for a later reap.
  */
@@ -166,6 +168,14 @@ export async function reapServers(opts = {}, benchRoot = BENCH_ROOT) {
 
   for (const rec of listServers(benchRoot)) {
     if (wanted != null && rec.kind !== wanted) {
+      report.left.push(rec);
+      continue;
+    }
+    if (opts.except != null && rec.pid === opts.except) {
+      report.left.push(rec);
+      continue;
+    }
+    if (opts.only != null && rec.pid !== opts.only) {
       report.left.push(rec);
       continue;
     }
