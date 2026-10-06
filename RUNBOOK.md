@@ -168,7 +168,9 @@ sed -n 's/^attach_cmd=//p' runs/*/*/*/*/*/memory*/cell-*/live-view.txt
 #    (equivalently, from the launch log — in-tree for control-plane starts:)
 grep -E 'attach_cmd|session_id' runs/<tree>/<arm>-cell-<stamp>-s<NNNN>.log | tail -5
 #    then attach to the cell's live worker serve — the id is per-run, e.g.:
-opencode attach http://127.0.0.1:<port> --session ses_00b54ddb7ffemO5eRSBu0ni034
+#    with the bench's own client (the worker's pinned version — a host opencode 2.x
+#    has no `attach`; install it once with scripts/install_attach_client.py):
+.attach-client/opencode attach http://127.0.0.1:<port> --session ses_00b54ddb7ffemO5eRSBu0ni034
 #    Each cell's live view is published on its OWN host port — free-port allocated
 #    per run-instance (2026-09-22; supersedes the fixed :8719). Read the port from
 #    the cell's `cell.start` record (surfaced on the board) or the attach_cmd in

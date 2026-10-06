@@ -82,6 +82,7 @@ from preflight.disk import check_disk  # noqa: E402
 from preflight.feedback import check_feedback_completeness  # noqa: E402
 from preflight.grader_tools import check_grader_tools  # noqa: E402
 from preflight.images import (  # noqa: E402
+    check_attach_client,
     check_grader_image,
     check_grader_resources,
     check_image,
@@ -187,6 +188,7 @@ def main() -> int:
     check_ports(c)
     check_image(c)
     check_serve_drive_image(c)
+    check_attach_client(c)
     check_grader_image(c)
     check_grader_resources(c)
     check_grader_tools(c)

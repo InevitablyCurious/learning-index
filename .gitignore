@@ -75,6 +75,9 @@ task/**/.last-run.json
 /AGENTS.md
 !**/prompts/AGENTS.md
 
+# The host-side opencode attach client (scripts/install_attach_client.py).
+/.attach-client/
+
 # Local bench env
 .env
 .env.*.local

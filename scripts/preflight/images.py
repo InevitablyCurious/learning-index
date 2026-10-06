@@ -363,3 +363,42 @@ def check_serve_drive_image(c: Check) -> None:
             "predates the sidecar-ingress fix (137b025); " + REBUILD_CMD,
             remedy=TOOL_WORKER_REBUILD,
         )
+
+
+def check_attach_client(c: Check) -> None:
+    """Does the board's terminal mirror have an attach client of the worker's version?
+
+    The mirror runs `opencode attach` on the host. The host's own opencode is the
+    operator's (2.x dropped `attach`), so the bench installs its own. Not
+    blocking: the mirror is a view; the run and its measurement never use it.
+    """
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from harness.worker_image import ATTACH_CLIENT_BIN, pinned_opencode_version
+
+    want = pinned_opencode_version(REPO / "images" / "worker")
+    fix = ".venv/bin/python scripts/install_attach_client.py"
+    if not ATTACH_CLIENT_BIN.exists():
+        c.add(
+            "attach client",
+            False,
+            f"not installed — the terminal mirror cannot attach — {fix}",
+            blocking=False,
+        )
+        return
+    proc = subprocess.run(
+        [str(ATTACH_CLIENT_BIN), "--version"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    got = proc.stdout.strip()
+    ok = proc.returncode == 0 and got == want
+    c.add(
+        "attach client",
+        ok,
+        f"opencode {got}, the worker's version"
+        if ok
+        else f"opencode {got or '?'} but the worker pins {want} — {fix}",
+        blocking=False,
+    )

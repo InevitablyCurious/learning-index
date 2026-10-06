@@ -207,6 +207,24 @@ def source_digest(worker_dir: Path, plugin_dir: Path | None = None) -> str:
     return h.hexdigest()
 
 
+#: THE HOST'S ATTACH CLIENT. The board's terminal mirror runs `opencode attach`
+#: on the host against a cell's serve, so the client must speak the worker's
+#: opencode version: 2.x dropped `attach` entirely, and a host-wide opencode is
+#: the operator's own, upgraded on its own schedule. The bench installs its own
+#: client, at the version the worker Dockerfile pins, into this repo-local dir.
+ATTACH_CLIENT_DIR = Path(__file__).resolve().parents[1] / ".attach-client"
+ATTACH_CLIENT_BIN = ATTACH_CLIENT_DIR / "opencode"
+_OPENCODE_ARG = "ARG OPENCODE_VERSION="
+
+
+def pinned_opencode_version(worker_dir: Path) -> str:
+    """The opencode version the worker Dockerfile pins — the one source of it."""
+    for line in (worker_dir / "Dockerfile").read_text(encoding="utf-8").splitlines():
+        if line.startswith(_OPENCODE_ARG):
+            return line[len(_OPENCODE_ARG) :].strip()
+    raise ValueError(f"{worker_dir / 'Dockerfile'} pins no {_OPENCODE_ARG.strip()}")
+
+
 def image_digest(image: str = IMAGE) -> str | None:
     """The digest baked into `image`, or None if the image is absent.
 

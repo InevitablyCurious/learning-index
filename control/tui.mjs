@@ -10,6 +10,8 @@
 // demand and stops itself when nothing has polled it for a while.
 
 import { spawn } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /** Fixed grid, so the board gets a predictable frame shape. */
 const TUI_ROWS = 40;
@@ -44,7 +46,12 @@ export const TUI_RETRY_DELAYS_MS = [2000, 4000, 8000, 16000, 30000];
  */
 export const MAX_CAPTURES = 16;
 
-const DEFAULT_ATTACH_BIN = "opencode";
+// The bench's own attach client, at the worker's pinned opencode version
+// (scripts/install_attach_client.py). Never the host's `opencode`: that is the
+// operator's, upgraded on its own schedule, and 2.x has no `attach` at all.
+const DEFAULT_ATTACH_BIN = join(
+  dirname(fileURLToPath(import.meta.url)), "..", ".attach-client", "opencode",
+);
 
 // ── the screen ───────────────────────────────────────────────────────────────
 
