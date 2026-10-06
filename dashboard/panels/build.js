@@ -523,9 +523,11 @@ function renderWrong() {
 // ── fit ── the card's geometry, solved from its height. Called by panels/fit.js
 // after every patch and on resize; reads layout, writes only sizes.
 
-/** The operator's own screen: the game is laid out at its shape, never stretched. */
+/** The size the grader lays the game out at (and captures it at), so what is
+ *  framed here is the layout its complaints describe — never the operator's own
+ *  screen, which would show a different layout from the saved capture. */
 function screenSize() {
-  return { w: window.screen?.width || 1920, h: window.screen?.height || 1080 };
+  return { w: 1280, h: 800 };
 }
 
 const PROBLEM_FONT_MIN = 9;
