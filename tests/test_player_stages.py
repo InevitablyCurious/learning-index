@@ -425,6 +425,14 @@ def test_every_aspect_marker_has_its_gates_first_and_repeat_lines() -> None:
         "F33.nomove" in aspects and "G03.plainmoves" in aspects
     )  # the scan sees the suite
     assert sorted(a for a in aspects if a not in lines) == []
+    # The runtime reads an aspect name as letters only (feedback.py _ASPECT_RE): a
+    # name with a hyphen or digit is not seen, and the player is told the gate's
+    # general line instead (run 1791314511: "someundrawn-left" told "the triangles
+    # point outward").
+    unreadable = sorted(
+        {v for _, _, kind, v in _suite_markers() if kind == "aspect" and not re.fullmatch(r"[a-z]+", v)}
+    )
+    assert unreadable == []
 
 
 def test_a_needed_check_exists_in_the_same_or_an_earlier_stage_and_never_in_a_cycle() -> (

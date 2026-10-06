@@ -389,9 +389,28 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   // whole height of the board holds its own triangle and the one opposite, not
   // "no triangle" — the order check, and the point-column check it waits on,
   // tell that.
+  // Told where, when it is a whole half: every judged point right of the bar (or
+  // left of it) shows no triangle. A half of dark triangles on a dark board is a
+  // place a player can point at; run 1791314511's model was told "some of the
+  // points" three runs in a row and never found which.
+  const middle = bar ? bar.x + bar.width / 2 : (Math.min(...points.map((p) => p.x)) + Math.max(...points.map((p) => p.x + p.width))) / 2;
+  const half = (side: "left" | "right") =>
+    judged.filter((s) => (points.find((p) => p.num === s.num)?.centerX ?? 0) > middle === (side === "right"));
+  const wholeHalf = (side: "left" | "right") => {
+    const members = half(side);
+    return members.length > 0 && members.every((s) => noTriangle.includes(s.num));
+  };
+  const spread =
+    noTriangle.length === judged.length
+      ? "[aspect: undrawn]"
+      : wholeHalf("right")
+        ? "[aspect: someundrawnright]"
+        : wholeHalf("left")
+          ? "[aspect: someundrawnleft]"
+          : "[aspect: someundrawn]";
   expect(
     noTriangle,
-    `${needsRows}${noTriangle.length === judged.length ? "[aspect: undrawn]" : "[aspect: someundrawn]"} no triangle drawn on points: ${noTriangle.join(", ")}`,
+    `${needsRows}${spread} no triangle drawn on points: ${noTriangle.join(", ")}`,
   ).toEqual([]);
 
   // Pointing outward: wider further in than at the rim, however short it is.

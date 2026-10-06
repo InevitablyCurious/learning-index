@@ -10,6 +10,7 @@ import {
   emptyPoints,
   makeState,
   openingPoints,
+  ordinaryTurn,
 } from "../lib/harness.ts";
 import {
   DOUBLE_WINDOW,
@@ -169,7 +170,7 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
   it("[G21] REQ-CUBE-STATE — illegal double in move phase must not mutate cube", async () => {
     // An ordinary turn from the opening position: a new game starts with the
     // opening roll (G31), which is not this check's subject.
-    await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll" }));
+    await ordinaryTurn();
     await debugRollVerified([3, 1]);
 
     const before = await getState();

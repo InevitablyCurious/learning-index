@@ -406,6 +406,18 @@ export async function debugSetState(partial: Record<string, any>): Promise<any> 
   return echo;
 }
 
+/**
+ * An ordinary turn from the opening position: a FRESH game first, then the seeded
+ * position. Tests share one server, and a build can keep state from an earlier test
+ * that the debug seam never resets (run 1791304274: after the doubles hunt, G23's
+ * roll left no legal move and the player was told "no checker I could pick up").
+ * `extra` carries the fields a test sets on top (difficulty, ...).
+ */
+export async function ordinaryTurn(extra: Record<string, any> = {}): Promise<any> {
+  await api("/api/new", {});
+  return debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll", ...extra }));
+}
+
 export async function debugRoll(dice: number[]): Promise<any> {
   return api("/api/debug/roll", { dice });
 }

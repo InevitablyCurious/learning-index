@@ -11,6 +11,7 @@ import {
   openingPoints,
   startServer,
   stopServer,
+  ordinaryTurn,
 } from "../lib/harness.ts";
 
 type Move = { from: number; to: number; die: number };
@@ -106,7 +107,7 @@ describe("Backgammon backend server-path integrity", () => {
   it("[G23] REQ-UNDO — undo restores the board exactly", async () => {
     // An ordinary turn from the opening position: a new game starts with the
     // opening roll (G31), which is not this check's subject.
-    await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll" }));
+    await ordinaryTurn();
     const before = await debugRollVerified([3, 1]);
     // No move to undo is not an undo finding: the movable-checker gates report
     // a roll that leaves no move when they fail too (a needs marker,

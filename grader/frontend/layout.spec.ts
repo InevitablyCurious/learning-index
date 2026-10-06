@@ -247,7 +247,7 @@ test("[F35] REQ-LAYOUT — board and controls placement", async ({ page }) => {
     const board = drawnBoard(layout);
     expect(
       board.x <= 0.1 * layout.vw,
-      `at ${layout.size} the board starts at x=${Math.round(board.x)}, not at the left`,
+      `[aspect: leftedge] at ${layout.size} the board starts at x=${Math.round(board.x)}, too far in from the left edge`,
     ).toBeTruthy();
     for (const [id, c] of Object.entries(layout.controls)) {
       // Missing is the testid check's finding; not showing is F38's; an empty
@@ -255,7 +255,7 @@ test("[F35] REQ-LAYOUT — board and controls placement", async ({ page }) => {
       if (!c || !c.shown || c.empty) continue;
       expect(
         c.x >= board.x + board.w - 2,
-        `at ${layout.size} ${id} (x=${Math.round(c.x)}) is not right of the board (it ends at x=${Math.round(board.x + board.w)})`,
+        `[aspect: controls] at ${layout.size} ${id} (x=${Math.round(c.x)}) is not right of the board (it ends at x=${Math.round(board.x + board.w)})`,
       ).toBeTruthy();
     }
   }

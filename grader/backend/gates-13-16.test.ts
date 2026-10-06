@@ -16,6 +16,7 @@ import {
   resolveStartCommand,
   startServer,
   stopServer,
+  ordinaryTurn,
 } from "../lib/harness.ts";
 
 type Player = "white" | "black";
@@ -108,7 +109,7 @@ describe("Backgammon backend gates 13-16", () => {
     it("[G13] REQ-TURN — no die reuse after consumption", async () => {
       // An ordinary turn from the opening position: a new game starts with the
       // opening roll (G31), which is not this check's subject.
-      await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll", difficulty: "easy" }));
+      await ordinaryTurn({ difficulty: "easy" });
       let state = await debugRollVerified([3, 1]);
       expect(state.phase).toBe("move");
       expect(sortedDice(state.remainingDice)).toEqual([1, 3]);
@@ -135,7 +136,7 @@ describe("Backgammon backend gates 13-16", () => {
     it("[G25] REQ-TURN — the computer takes its turn", async () => {
       // An ordinary turn from the opening position: a new game starts with the
       // opening roll (G31), which is not this check's subject.
-      await debugSetState(makeState({ points: openingPoints(), turn: "white", phase: "roll", difficulty: "easy" }));
+      await ordinaryTurn({ difficulty: "easy" });
       let state = await debugRollVerified([4, 2]);
       // No move after the roll is not the computer's finding: the
       // movable-checker gate reports it when an ordinary roll gives none either
