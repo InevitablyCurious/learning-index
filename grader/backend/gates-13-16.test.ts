@@ -185,6 +185,14 @@ describe("Backgammon backend gates 13-16", () => {
       let guard = 0;
       while (state.turn !== "white" && guard < 12) {
         state = state.turn === "black" ? await api("/api/ai", {}) : await getState();
+        // The computer moved and then stopped to offer a double, with moves still
+        // to play: the player watches it play once and wait on an answer, not
+        // "never take its turn" (run 1791385175: the offer came after its first
+        // move, on easy, which never offers). Told as what was seen.
+        expect(
+          state.phase === "doubleOffered" && blackOf(state) !== blackBefore,
+          "[aspect: offered] the computer moved, then stopped partway through its turn to offer a double",
+        ).toBe(false);
         guard++;
       }
 

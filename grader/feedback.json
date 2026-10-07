@@ -179,6 +179,10 @@
       "first": "When I end my turn the computer doesn't move — it's straight back to my roll.",
       "repeat": "I ended my turn again and the computer still didn't move — straight back to my roll."
     },
+    "G25.offered": {
+      "first": "The computer moved once, then stopped in the middle of its turn to offer me a double — I expect it to finish its turn first.",
+      "repeat": "The computer again stopped in the middle of its turn to offer me a double — I expect it to finish its turn first."
+    },
     "G25.nomove": {
       "first": "After I rolled, there was no checker I could pick up to move.",
       "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
