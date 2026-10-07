@@ -26,6 +26,7 @@ import {
   type PointBox,
   sampleBoardColour,
   sampleBoxColours,
+  standsOutFromBoard,
 } from "./board-geometry.ts";
 
 // The shared opening: load the app, start a fresh game through the API, reload
@@ -131,17 +132,17 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
     bar.width,
     `[aspect: thin] the bar is ${bar.width.toFixed(0)} px wide; a piece that has been hit needs ${pieceForBar.toFixed(0)} px`,
   ).toBeGreaterThanOrEqual(pieceForBar - 2);
-  // And a bar a player can SEE: its colour differs from the board's. A bar painted
-  // the colour of the board is a gap down the middle, wide enough to pass the width
-  // above and invisible (run 1791368504: #2d1b0e on a #2d1b0e board). The felt is
-  // read as the F30 check reads it; a board that is not one colour is F30's finding.
+  // And a bar a player can SEE: it stands out from the board by its fill, its
+  // outline or both (how is the builder's choice). A bar that is the colour of the
+  // board with no edge of its own is a gap down the middle, wide enough to pass the
+  // width above and invisible (run 1791368504: #2d1b0e on a #2d1b0e board). The
+  // board's colour is read as the F30 check reads it; a board that is not one colour
+  // is F30's finding.
   const feltForBar = await sampleBoardColour(page, points);
-  const [barColour] = await sampleBoxColours(page, [bar]);
-  const farFromFelt = (c: number[] | null) =>
-    !!c && Math.hypot(c[0] - feltForBar.colours[0][0], c[1] - feltForBar.colours[0][1], c[2] - feltForBar.colours[0][2]) > 45;
+  const [barLook] = await standsOutFromBoard(page, [bar], feltForBar.colours[0]);
   expect(
-    farFromFelt(barColour),
-    `[aspect: blend] [needs: F30] the bar is the colour of the board (bar ${barColour?.join(",")} against the board's ${feltForBar.colours[0].join(",")})`,
+    barLook.fill || barLook.outline,
+    `[aspect: blend] [needs: F30] the bar does not stand out from the board — its middle is ${barLook.centre?.join(",")} against the board's ${feltForBar.colours[0].join(",")} and it has no edge of its own`,
   ).toBeTruthy();
 });
 
@@ -315,20 +316,14 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
     tray.width,
     `[aspect: wide] the off tray is ${tray.width.toFixed(0)} px wide; a point is ${pointWidth(points).toFixed(0)} px`,
   ).toBeLessThanOrEqual(1.5 * pointWidth(points));
-  // And a tray a player can see: its colour differs from the board's, as the bar's
-  // does (F29). A tray the colour of the board is a strip of nothing at the end.
+  // And a tray a player can see: it stands out from the board by its fill, its
+  // outline or both, as the bar does (F29). A tray with the board's colour and no
+  // edge of its own is a strip of nothing at the end.
   const feltForTray = await sampleBoardColour(page, points);
-  const [trayColour] = await sampleBoxColours(page, [tray]);
-  const trayFar =
-    !!trayColour &&
-    Math.hypot(
-      trayColour[0] - feltForTray.colours[0][0],
-      trayColour[1] - feltForTray.colours[0][1],
-      trayColour[2] - feltForTray.colours[0][2],
-    ) > 45;
+  const [trayLook] = await standsOutFromBoard(page, [tray], feltForTray.colours[0]);
   expect(
-    trayFar,
-    `[aspect: blend] [needs: F30] the off tray is the colour of the board (tray ${trayColour?.join(",")} against the board's ${feltForTray.colours[0].join(",")})`,
+    trayLook.fill || trayLook.outline,
+    `[aspect: blend] [needs: F30] the off tray does not stand out from the board — its middle is ${trayLook.centre?.join(",")} against the board's ${feltForTray.colours[0].join(",")} and it has no edge of its own`,
   ).toBeTruthy();
 });
 

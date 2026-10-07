@@ -840,8 +840,8 @@
       "repeat": "The bar down the middle is still just a thin line — I expect it wide enough for a piece that's been hit to sit on it."
     },
     "F29.blend": {
-      "first": "The bar down the middle is the same colour as the board, so I can't see it — I expect the bar in a colour of its own, different from the board.",
-      "repeat": "The bar down the middle is still the same colour as the board, so I still can't see it — I expect the bar in a colour of its own, different from the board."
+      "first": "The bar down the middle blends into the board, so I can't pick it out — I expect it to stand out from the board.",
+      "repeat": "The bar down the middle still blends into the board, so I still can't pick it out — I expect it to stand out from the board."
     },
     "F29.overlap": {
       "first": "The bar cuts across some of the points.",
@@ -912,8 +912,8 @@
       "repeat": "The off tray is still far too wide — I expect it no wider than about one and a half points."
     },
     "F32.blend": {
-      "first": "The off tray is the same colour as the board, so I can't see where it is — I expect the tray in a colour of its own, different from the board.",
-      "repeat": "The off tray is still the same colour as the board, so I still can't see where it is — I expect the tray in a colour of its own, different from the board."
+      "first": "The off tray blends into the board, so I can't tell where it is — I expect it to stand out from the board.",
+      "repeat": "The off tray still blends into the board, so I still can't tell where it is — I expect it to stand out from the board."
     },
     "F32.overlap": {
       "first": "The off tray cuts across some of the points.",

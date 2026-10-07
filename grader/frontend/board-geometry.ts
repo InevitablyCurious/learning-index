@@ -805,3 +805,74 @@ export async function sampleBoxColours(
     await hideStyle.evaluate((el) => (el as HTMLElement).remove()).catch(() => undefined);
   }
 }
+
+
+/**
+ * Does each box stand out from the board? By its FILL (the middle of the box is a
+ * different colour from the board's) or by an OUTLINE (the box's own edge is), or
+ * both: how it stands apart is the builder's choice, that it does is the
+ * requirement. Read from a screenshot with the checkers and hints hidden.
+ *
+ * Fill: the mean of three samples down the centre line, more than 45 away from the
+ * board's colour (the distance the grader uses everywhere for "painted"). Outline:
+ * along the box's left and right edges, in the outermost 3 px, a pixel more than 45
+ * away from the board's colour on at least 60% of ten spots (five heights, two
+ * sides), so a one-pixel border is found and a stray anti-aliased pixel is not.
+ */
+export async function standsOutFromBoard(
+  page: Page,
+  boxes: ({ x: number; y: number; width: number; height: number } | null)[],
+  board: number[],
+): Promise<{ fill: boolean; outline: boolean; centre: number[] | null }[]> {
+  const hideStyle = await page.addStyleTag({
+    content: '[data-testid="checker"], [data-testid="hint"] { visibility: hidden !important; }',
+  });
+  try {
+    const buf = await page.screenshot({ type: "png" });
+    const dataUrl = "data:image/png;base64," + buf.toString("base64");
+    return await page.evaluate(
+      async ({ dataUrl, boxes, board }) => {
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
+          img.src = dataUrl;
+        });
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas 2d context unavailable");
+        ctx.drawImage(img, 0, 0);
+        const dpr = img.naturalWidth / window.innerWidth;
+        const at = (x: number, y: number): number[] => {
+          const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+          return [d[0], d[1], d[2]];
+        };
+        const far = (c: number[]) => Math.hypot(c[0] - board[0], c[1] - board[1], c[2] - board[2]) > 45;
+        return boxes.map((b) => {
+          if (!b) return { fill: false, outline: false, centre: null };
+          const samples = [0.2, 0.5, 0.8].map((f) => at(b.x + b.width / 2, b.y + b.height * f));
+          const centre = [0, 1, 2].map((i) => Math.round(samples.reduce((sum, c) => sum + c[i], 0) / samples.length));
+          let hits = 0;
+          let spots = 0;
+          for (const fy of [0.15, 0.3, 0.5, 0.7, 0.85]) {
+            for (const side of ["left", "right"]) {
+              spots += 1;
+              const y = b.y + b.height * fy;
+              const found = [0.5, 1.5, 2.5].some((inset) => {
+                const x = side === "left" ? b.x + inset : b.x + b.width - inset;
+                return far(at(x, y));
+              });
+              if (found) hits += 1;
+            }
+          }
+          return { fill: far(centre), outline: hits / spots >= 0.6, centre };
+        });
+      },
+      { dataUrl, boxes, board },
+    );
+  } finally {
+    await hideStyle.evaluate((el) => (el as HTMLElement).remove()).catch(() => undefined);
+  }
+}
