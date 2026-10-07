@@ -295,7 +295,7 @@ import {
   isRestoreOpen,
 } from "./panels/restore.js";
 import { renderLiveView } from "./panels/liveview.js";
-import { clearGatePin, fitGateCard, refitGateCard, renderWall, setGateHover, toggleGatePin } from "./panels/wall.js";
+import { clearGatePin, fitGateCard, onWallViewChange, refitGateCard, renderWall, setGateHover, toggleGatePin } from "./panels/wall.js";
 import { renderBuild, paintBuild } from "./panels/build.js";
 import { fitTopRow } from "./panels/fit.js";
 import { renderLedger, toggleBaselineRow, toggleSuperseded } from "./panels/ledger.js";
@@ -370,6 +370,10 @@ import {
 } from "./board-actions.js";
 
 function render() {
+  // The wall's attempt-tab view redraws through here. Registered on every draw
+  // (idempotent) rather than at import: board.js and the panels import each
+  // other, and the panel's state does not exist yet while board.js loads.
+  onWallViewChange(render);
   const root = document.getElementById("root");
 
   if (!board) {

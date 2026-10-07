@@ -7,12 +7,14 @@
 
 import { esc, clip } from "../board.js";
 import { provisional, spine } from "./live.js";
+import { activeCell } from "./cells.js";
 
 /**
  * Server facts → visual class; the only place this mapping exists.
  *   green      passed on the first attempt and never broke
  *   recovered  passing now, but not from the start (red rim, digit = attempt)
  *   red        failing in the last completed run
+ *   regressed  failing now, but it passed earlier (red fill, green rim, digit = attempt it broke)
  *   unobserved no result yet
  *   instrument no result because the runner's worker died (amber, stated cause)
  * `state` stays the sole verdict. `instrument` is not a verdict and moves no
@@ -23,7 +25,9 @@ export function gateVisual(g) {
     case "passing":
       return g.ever_failed === true || (g.first_pass_attempt ?? 1) > 1 ? "recovered" : "green";
     case "failing":
-      return "red";
+      // It passed earlier and broke: the inverse of `recovered` (red fill, green
+      // rim, the attempt it broke on). A missing trajectory degrades to plain red.
+      return g.ever_passed === true ? "regressed" : "red";
     default:
       // A cause is only ever stated by the server (not_run_cause), never inferred.
       return g.unmeasured_cause ? "instrument" : "unobserved";
@@ -192,17 +196,24 @@ export function refitGateCard(doc = globalThis.document) {
 }
 
 export function renderWall(board) {
-  // An archived run whose view is still loading, or could not be fetched.
-  if (board.run_view) return runViewWall(board.run_view);
-  const suite = board.suite ?? null;
-  const gates = overlayLive(suite?.gates ?? [], board.live ?? null);
+  const past = pastView(board);
+  // An archived run whose view is still loading, or could not be fetched — unless
+  // an attempt tab is showing that run's wall as it stood.
+  if (board.run_view && past?.state !== "ready") return runViewWall(board.run_view);
+  // An attempt tab is selected on the LIVE BUILD panel and its wall has arrived:
+  // draw the wall as it stood after that attempt, with no live overlay — it is
+  // history, and says so in the header.
+  const suite = past?.state === "ready" ? past.data : (board.suite ?? null);
+  const gates =
+    past?.state === "ready" ? (suite?.gates ?? []) : overlayLive(suite?.gates ?? [], board.live ?? null);
 
   return `
     <section class="panel wall">
       <div class="phead">
         <span class="ttl">GATE WALL</span>
         ${headline(suite, gates)}
-        ${attemptTag(suite, board.live ?? null)}
+        ${past?.state === "ready" ? pastTag(past.attempt) : attemptTag(suite, board.live ?? null)}
+        ${past && past.state !== "ready" ? pastNote(past) : ""}
         ${runTag(suite)}
       </div>
       ${gates.length ? grid(gates) : empty(suite)}
@@ -364,6 +375,10 @@ function overlayLive(gates, live) {
       // Trajectory facts (earliest passing attempt, ever failed) come folded from
       // the source; the panel derives nothing.
       ever_failed: g.ever_failed === true || r.ever_failed === true,
+      // A live failure of a gate the fold had passing is a regression, broken on
+      // the attempt the live row names.
+      ever_passed: g.ever_passed === true || g.state === "passing" || passing,
+      broke_attempt: !passing && g.state === "passing" ? (r.attempt ?? null) : passing ? null : (g.broke_attempt ?? null),
       first_pass_attempt: Number.isFinite(g.first_pass_attempt)
         ? g.first_pass_attempt
         : Number.isFinite(r.first_pass_attempt)
@@ -382,14 +397,18 @@ function grid(gates) {
       const when =
         st === "recovered" && Number.isFinite(g.first_pass_attempt)
           ? ` (first passed on attempt ${g.first_pass_attempt})`
-          : "";
+          : st === "regressed" && Number.isFinite(g.broke_attempt)
+            ? ` (broke on attempt ${g.broke_attempt})`
+            : "";
       // Marks in the square: a digit on recovered (how many attempts), the gate's
       // own label on red (the same string the card heading uses, always visible),
       // nothing on first-try green.
       const mark =
         st === "recovered" && Number.isFinite(g.first_pass_attempt)
           ? esc(String(g.first_pass_attempt))
-          : st === "red"
+          : st === "regressed"
+            ? esc(Number.isFinite(g.broke_attempt) ? String(g.broke_attempt) : (g.gate_token ?? g.id))
+            : st === "red"
             ? esc(g.gate_token ?? g.id)
             : // AN INSTRUMENT FAULT IS MARKED, NOT JUST TINTED. Colour alone
               // fails an operator who cannot separate amber from red at a
@@ -413,6 +432,7 @@ const VISUAL_WORD = {
   green: "passing — green on the first attempt",
   recovered: "passing — but not on the first attempt",
   red: "failing",
+  regressed: "failing — it passed earlier and broke again",
   unobserved: "not yet tested",
   // Names the cause, then denies the verdict.
   instrument: "not measured — the runner's worker died before this gate reported; this is NOT a failure",
@@ -425,6 +445,7 @@ function legend(suite) {
       <span><span class="gcell green sm"></span> passed first attempt</span>
       <span><span class="gcell recovered sm"></span> passed on a later attempt</span>
       <span><span class="gcell red sm"></span> failing</span>
+      <span><span class="gcell regressed sm"></span> passed, then broke</span>
       <span><span class="gcell unobserved sm"></span> not yet tested</span>
       <span><span class="gcell instrument sm"></span> not measured — instrument fault</span>
       ${suite?.gradable === false ? `<span class="note">${esc(gradabilityNote(suite))}</span>` : ""}
@@ -475,3 +496,83 @@ function runTag(suite) {
   return `<span class="tag dim" title="${esc(`runs/${dir} · graded against that run's own pinned roster`)}">${esc(clip(shown, 34))}</span>`;
 }
 
+
+
+// ── THE ATTEMPT IN VIEW ─────────────────────────────────────────────────────
+//
+// The LIVE BUILD panel's attempt tabs (1..N, live) drive the wall: picking
+// attempt N shows the wall as it stood after that attempt (GET /api/wall with
+// attempt=N, folded by the control plane — this file derives nothing), and the
+// live tab puts the live wall back. One read-only GET per pick, cached by
+// (run, cell, attempt) for as long as that pick stays selected.
+
+/** @type {{key: string, attempt: number, runDir: string, seq: number, state: "loading"|"ready"|"failed", data: any, reason: string|null} | null} */
+let view = null;
+/** board.js registers its redraw here; this file never calls render itself. */
+let repaint = null;
+
+export function onWallViewChange(fn) {
+  repaint = typeof fn === "function" ? fn : null;
+}
+
+/** Called by the LIVE BUILD panel. `attempt` null = back to the live wall. */
+export function setWallAttempt(card, attempt) {
+  if (attempt === null || attempt === undefined || !card) {
+    if (view !== null) {
+      view = null;
+      repaint?.();
+    }
+    return;
+  }
+  const key = `${card.run_dir}::${card.sequence_index}::${attempt}`;
+  if (view?.key === key) return;
+  const v = { key, attempt, runDir: card.run_dir, seq: card.sequence_index, state: "loading", data: null, reason: null };
+  view = v;
+  repaint?.();
+  void fetchPast(v);
+}
+
+async function fetchPast(v) {
+  try {
+    const res = await fetch(
+      `/api/wall?run_dir=${encodeURIComponent(v.runDir)}&sequence_index=${v.seq}&attempt=${v.attempt}`,
+    );
+    const data = res.ok ? await res.json().catch(() => null) : null;
+    if (view !== v) return; // the pick moved on while this was in flight
+    if (data?.ok === true && Number(data.attempt) === v.attempt) {
+      v.state = "ready";
+      v.data = data;
+    } else if (data?.ok === true) {
+      // An older control plane ignores ?attempt= and answers with the latest wall;
+      // drawing that under "as it stood after attempt N" would be a false history.
+      v.state = "failed";
+      v.reason = `the control plane answered for attempt ${data.attempt ?? "?"}, not ${v.attempt} — refresh it`;
+    } else {
+      v.state = "failed";
+      v.reason = data?.reason ?? `GET /api/wall → ${res.status}`;
+    }
+  } catch (err) {
+    if (view !== v) return;
+    v.state = "failed";
+    v.reason = String(err?.message ?? err);
+  }
+  repaint?.();
+}
+
+/** The pick, only while the wall still belongs to the cell it was picked on. */
+function pastView(board) {
+  if (!view) return null;
+  const card = activeCell(board);
+  if (!card || `${card.run_dir}::${card.sequence_index}` !== `${view.runDir}::${view.seq}`) return null;
+  return view;
+}
+
+function pastTag(attempt) {
+  return `<span class="tag" title="The wall as it stood after this attempt. Pick LIVE on the build panel to return.">ATTEMPT ${esc(String(attempt))} · AS IT STOOD — NOT LIVE</span>`;
+}
+
+function pastNote(past) {
+  return past.state === "loading"
+    ? `<span class="tag">LOADING ATTEMPT ${esc(String(past.attempt))}…</span>`
+    : `<span class="tag bad">ATTEMPT ${esc(String(past.attempt))} UNAVAILABLE — ${esc(clip(String(past.reason ?? ""), 80))}</span>`;
+}

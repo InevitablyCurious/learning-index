@@ -167,6 +167,11 @@ export function foldGateStates({ roster, attempts }) {
   // (any outright failure; not_run excluded — unmeasured is not failed).
   const firstPass = new Map();
   const everFailed = new Map();
+  // A regression: a gate that passed and then failed. `broke` is the attempt of
+  // the LATEST pass-to-fail turn and clears when the gate passes again, so a gate
+  // that is failing now and passed before carries the attempt it broke on.
+  const everPassed = new Map();
+  const broke = new Map();
   // Why a gate went unmeasured, when the runner stated a cause.
   const unmeasuredCause = new Map();
   let anyOutcomesPublished = false;
@@ -177,6 +182,7 @@ export function foldGateStates({ roster, attempts }) {
     anyOutcomesPublished = true;
     for (const result of results) {
       if (!result?.id) continue;
+      const before = latest.get(result.id);
       latest.set(result.id, result.status);
 
       // A later attempt that measured normally clears an earlier cause.
@@ -188,8 +194,13 @@ export function foldGateStates({ roster, attempts }) {
 
       if (result.status === "pass") {
         if (!firstPass.has(result.id)) firstPass.set(result.id, record.attempt);
+        everPassed.set(result.id, true);
+        broke.delete(result.id);
       } else if (result.status !== "not_run" && result.status !== undefined && result.status !== null) {
         everFailed.set(result.id, true);
+        // Measured failing right after a measured pass: it broke on this attempt.
+        // (A not_run in between is unmeasured, not a failure, and does not move it.)
+        if (before === "pass") broke.set(result.id, record.attempt);
       }
     }
   }
@@ -213,6 +224,10 @@ export function foldGateStates({ roster, attempts }) {
       // Published for every gate, so the board never infers a missing field.
       first_pass_attempt: firstPass.get(gate.id) ?? null,
       ever_failed: everFailed.get(gate.id) === true,
+      // Passed at some point, and the attempt it last broke on (null while it
+      // passes, or when it never passed). Failing + ever_passed is a regression.
+      ever_passed: everPassed.get(gate.id) === true,
+      broke_attempt: broke.get(gate.id) ?? null,
       // Non-null only where the runner blamed the instrument.
       unmeasured_cause: unmeasuredCause.get(gate.id) ?? null,
     };
@@ -246,7 +261,7 @@ export function foldGateStates({ roster, attempts }) {
  * grade a gate paint it, so the wall showed no cell at all. No cell given =
  * the roster with no outcomes (every gate untested), never a mix.
  */
-export async function readWall({ runsRoot, runDir, sequenceIndex = null, benchRoot = null }) {
+export async function readWall({ runsRoot, runDir, sequenceIndex = null, benchRoot = null, upToAttempt = null }) {
   const target = resolveRunDir(runsRoot, runDir);
   if (!target) {
     return {
@@ -266,7 +281,12 @@ export async function readWall({ runsRoot, runDir, sequenceIndex = null, benchRo
   const cell = Number.isInteger(sequenceIndex) && sequenceIndex >= 0 ? sequenceIndex : null;
   // A missing status file reads null: no attempt yet, never an error.
   const records = cell === null ? [] : ((await readStatusRecords(join(target.path, "manifest.status.jsonl"))) ?? []);
-  const attempts = attemptRecords(records.filter((r) => Number(r?.sequence_index) === cell));
+  // The wall AS IT STOOD after attempt N, when asked (the board's attempt tabs):
+  // the same fold over the attempts up to N, never a mix with later ones.
+  const upTo = Number.isInteger(upToAttempt) && upToAttempt >= 1 ? upToAttempt : null;
+  const attempts = attemptRecords(records.filter((r) => Number(r?.sequence_index) === cell)).filter(
+    (a) => upTo === null || a.attempt <= upTo,
+  );
 
   const unwired = [];
   const reasons = {};

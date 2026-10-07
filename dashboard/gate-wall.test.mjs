@@ -117,8 +117,9 @@ test("passing is green, failing is red, untested is the uncoloured square", () =
   assert.equal(gateVisual({ state: "untested" }), "unobserved");
 });
 
-test("only the five published visual classes can ever reach a square", () => {
-  // Was three, then four. `recovered` splits the PASSING square by trajectory;
+test("only the six published visual classes can ever reach a square", () => {
+  // Was three, then four, then five; `regressed` (failing now, passed earlier) is
+  // the sixth. `recovered` splits the PASSING square by trajectory;
   // `instrument` splits the UNMEASURED square by whether the runner stated a
   // cause. NEITHER is a new verdict — `state` is still the only thing that
   // decides pass/fail, and an instrument-faulted gate has neither passed nor
@@ -130,7 +131,7 @@ test("only the five published visual classes can ever reach a square", () => {
   ];
   const html = renderWall(boardWith(suiteWith(gates)));
   const classes = new Set(cellClassList(html).map((c) => c.replace(/\s*sm\s*/, "")));
-  assert.deepEqual([...classes].sort(), ["green", "instrument", "recovered", "red", "unobserved"]);
+  assert.deepEqual([...classes].sort(), ["green", "instrument", "recovered", "red", "regressed", "unobserved"]);
 });
 
 test("an instrument fault is drawn apart from a gate nobody reached", () => {
@@ -255,7 +256,7 @@ test("THE GRID never mentions a phase", () => {
 
   // And the squares themselves are still a pure function of gate state: every
   // class on every cell comes from `gateVisual`, nothing else.
-  const allowed = new Set(["green", "recovered", "red", "unobserved", "instrument", "sm"]);
+  const allowed = new Set(["green", "recovered", "red", "regressed", "unobserved", "instrument", "sm"]);
   for (const cls of cellClassList(html).flatMap((c) => c.split(/\s+/)).filter(Boolean)) {
     assert.ok(allowed.has(cls), `unexpected class on a gate square: ${cls}`);
   }
@@ -361,7 +362,7 @@ test("the grid is fixed-size squares that wrap, whatever the suite size", () => 
     const gates = Array.from({ length: n }, (_, i) => ({ ...GATES[0], id: `C:${i}` }));
     const html = renderWall(boardWith(suiteWith(gates)));
     assert.ok(html.includes('class="gwall"'));
-    assert.equal(html.match(/class="gcell /g).length, n + 5 /* the legend's five swatches */);
+    assert.equal(html.match(/class="gcell /g).length, n + 6 /* the legend's six swatches */);
     assert.doesNotMatch(html, /--wall-cols|repeat\(/);
   }
 });
@@ -771,4 +772,30 @@ test("a timed-out file's gates read as not measured, and say it was the build's 
   assert.equal(gateVisual({ state: "untested", unmeasured_cause: "timed_out" }), "instrument");
   assert.match(unmeasuredText("timed_out"), /build's code did not return/);
   assert.match(unmeasuredText("runner_died"), /the runner died, not the code/);
+});
+
+test("a gate that passed and then failed is drawn as a regression, the inverse of a recovery", () => {
+  assert.equal(gateVisual({ state: "failing", ever_passed: true, broke_attempt: 3 }), "regressed");
+  // No trajectory (an older payload): plain red, never a guess.
+  assert.equal(gateVisual({ state: "failing" }), "red");
+  assert.equal(gateVisual({ state: "failing", ever_passed: false }), "red");
+  // A cause or a pass never turns into a regression.
+  assert.equal(gateVisual({ state: "passing", ever_passed: true, first_pass_attempt: 1 }), "green");
+  const html = renderWall(
+    boardWith(
+      suiteWith([
+        ...GATES,
+        { id: "C:r", req: "REQ-REG", title: "broke again", state: "failing", ever_passed: true, broke_attempt: 4, gate_token: "R" },
+      ]),
+    ),
+  );
+  assert.match(html, /gcell regressed[^>]*>4</, "the square carries the attempt it broke on");
+  assert.match(html, /passed, then broke/, "the legend says what it is");
+});
+
+test("a failing gate that never passed stays plain red, with its own label", () => {
+  const html = renderWall(
+    boardWith(suiteWith([...GATES, { id: "C:s", req: "REQ-R", title: "never passed", state: "failing", ever_passed: false, gate_token: "S" }])),
+  );
+  assert.match(html, /gcell red[^>]*>S</);
 });

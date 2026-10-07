@@ -19,11 +19,14 @@ export const routes = [
       // the cell log (activeRunDir). ?sequence_index= names the one cell folded;
       // absent, the roster is returned with no outcomes.
       const seqRaw = url.searchParams.get("sequence_index");
+      // ?attempt=N: the wall as it stood after attempt N (the board's attempt tabs).
+      const attemptRaw = url.searchParams.get("attempt");
       const wall = await readWall({
         runsRoot: RUNS_ROOT,
         runDir: url.searchParams.get("run_dir") ?? (await activeRunDir()),
         sequenceIndex: seqRaw !== null && /^\d+$/.test(seqRaw) ? Number(seqRaw) : null,
         benchRoot: BENCH_ROOT,
+        upToAttempt: attemptRaw !== null && /^\d+$/.test(attemptRaw) ? Number(attemptRaw) : null,
       });
       sendJson(res, wall.ok ? 200 : 400, wall);
       return;

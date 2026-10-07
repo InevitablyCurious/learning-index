@@ -61,6 +61,7 @@
 import { esc } from "../board.js";
 import { activeCell } from "./cells.js";
 import { paintWrong, promptForTab } from "./build-prose.js";
+import { setWallAttempt } from "./wall.js";
 
 // ── state ── module-level, persists across ticks. The boot guard is
 // loadedKey: play/start fires once per explicit load click, never per tick.
@@ -129,6 +130,9 @@ function onBuildClick(e) {
     // never touches requestLoad, loadedKey or busy.
     if (tab.disabled !== true) {
       activeTab = tab.getAttribute("data-build-tab");
+      // The gate wall follows the tab: attempt N shows the wall as it stood after
+      // attempt N, and live puts the live wall back (panels/wall.js).
+      setWallAttempt(currentCard, activeTab === "live" ? null : Number(activeTab));
       for (const b of document.querySelectorAll("[data-build-tab]")) {
         b.classList.toggle("active", b.getAttribute("data-build-tab") === activeTab);
       }
@@ -338,6 +342,7 @@ export function paintBuild(view) {
   // Nothing bootable: the designed absence, and teardown of whatever was up.
   if (!card || !card.benchmark_id || !card.cell) {
     activeTab = "live"; // run-switch reset: nothing here has attempts to show
+    setWallAttempt(null, null);
     preparedKey = null; // a returning card must re-prepare
     feedbackMsgs = null;
     feedbackAtDone = null;
@@ -390,6 +395,7 @@ export function paintBuild(view) {
     // covers the unbooted path. Availability re-derives next tick from the
     // new cell's own live.attempts.
     activeTab = "live";
+    setWallAttempt(null, null);
     try {
       if (loadedKey !== null) await teardown();
       else abort?.abort(); // kill the previous selection's in-flight prose fetch

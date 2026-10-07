@@ -1324,6 +1324,7 @@ a:hover{color:var(--type)}
      green      solid check     — passing, green on the FIRST attempt
      recovered  check + danger rim — passing, but not from the first attempt
      red        solid danger + ✕  — failing in the last completed test run
+     regressed  danger core + check rim — failing now, but it passed earlier
      unobserved dashed, no fill   — no result yet; NOT a weaker pass
 
    The two fills differ in luminance (#6dff9e check · #ff6b6b danger) so a
@@ -1382,6 +1383,21 @@ a:hover{color:var(--type)}
    digit, so it falls back to a plain green chip with a thin rim. A smudge is
    worse than a clean fill, and the words beside it do the work. */
 .gcell.recovered.sm{font-size:0;display:inline-block;border-width:2px;box-shadow:none}
+/* REGRESSED — the inverse of `recovered`. It passed earlier and is failing now:
+   a RED core with a GREEN rim, the digit being the attempt it broke on. The fill
+   still carries the verdict (failing) and the rim carries the trajectory (it was
+   once green), exactly as recovered carries "passing, but not from the start".
+   Same three bands, same proportions, same digit as recovered, so the two read
+   as one system turned inside out. */
+.gcell.regressed{
+  background:var(--danger);
+  border:clamp(2px, calc(var(--wall-cell) * 0.079), 7px) solid var(--check);
+  box-shadow:inset 0 0 0 clamp(1.5px, calc(var(--wall-cell) * 0.043), 4px) var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--bg);letter-spacing:-0.05em;overflow:hidden;
+  font:700 clamp(8px, calc(var(--wall-cell) * 0.34), 42px)/1 var(--font);
+}
+.gcell.regressed.sm{font-size:0;display:inline-block;border-width:2px;box-shadow:none}
 /* FAILING. Fill plus an X, so failure is legible by SHAPE and not by hue alone
    — the one state a colour-blind or greyscale reader must never miss.
    IT IS A GLYPH, NOT A DRAWING. Two rotated pseudo-elements used to draw it,
