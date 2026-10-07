@@ -489,33 +489,35 @@ def test_the_conformance_phase_has_no_fabricated_fallback() -> None:
 # A deadline is a different fact: the code under test did not return, and a
 # freeze is the most player-visible symptom there is.
 
-STALL_AREAS = (
-    "startup",
-    "moving",
-    "bearingoff",
-    "aiturn",
-    "awkwardroll",
-    "playing",
-)
+# The two a player meets in the browser (the page never loads; the page freezes
+# while played) are the player's. The four backend areas are the integrating
+# team's automated tests of the engine — a test no player runs — so a deadline
+# there is told by the team (Jerry, 2026-10-07: the player hands the product to
+# the team for integration testing, and that is where it shows). Their stages
+# in grader/checks.json are unchanged.
+PLAYER_STALL_AREAS = ("startup", "playing")
+TEAM_STALL_AREAS = ("moving", "bearingoff", "aiturn", "awkwardroll")
+STALL_AREAS = PLAYER_STALL_AREAS + TEAM_STALL_AREAS
 
 
 @pytest.mark.parametrize("area", STALL_AREAS)
-def test_a_stall_reaches_the_model_in_the_players_voice(area: str) -> None:
+def test_a_stall_reaches_the_model(area: str) -> None:
     check = f"REQ-RESPONSIVE/{area} — the game keeps responding"
     assert not R._is_harness_infra_check(check), (
         "a deadline is the candidate's code not returning, not harness "
         "infrastructure — dropping it is how a hang went unreported for a whole run"
     )
-    assert R.feedback_channel(check) == "tester", (
-        "a freeze is what a person playing sees; an integrator reading API "
-        "responses would never phrase it"
+    expected = "tester" if area in PLAYER_STALL_AREAS else "team"
+    assert R.feedback_channel(check) == expected, (
+        "a freeze in the browser is what a person playing sees; a deadline in a "
+        "backend file is the team's automated test, which a player never runs"
     )
     line = R._humanize_check(check, pass_kind="first")
     assert line, f"{area} has no symptom line"
 
 
-@pytest.mark.parametrize("area", STALL_AREAS)
-def test_a_stall_line_says_it_froze_and_nothing_about_why(area: str) -> None:
+@pytest.mark.parametrize("area", PLAYER_STALL_AREAS)
+def test_a_player_stall_line_says_it_froze_and_nothing_about_why(area: str) -> None:
     for kind in ("first", "repeat"):
         line = R._humanize_check(f"REQ-RESPONSIVE/{area}", pass_kind=kind).lower()
         # The symptom, in words a player would use. Deliberately broad: a hang
@@ -539,17 +541,25 @@ def test_a_stall_line_says_it_froze_and_nothing_about_why(area: str) -> None:
                 "seized up",
             )
         ), f"{area}/{kind} does not describe a freeze: {line}"
-        # And never the cause. Naming a loop, a function or a file would hand
-        # over the fix — finding it is the work being measured.
-        for leak in (
-            "loop",
-            "infinite",
-            "recurs",
-            "function",
-            "timeout",
-            "hang detected",
-        ):
-            assert leak not in line, f"{area}/{kind} names the cause: {leak}"
+        _assert_no_cause(line, area, kind)
+
+
+@pytest.mark.parametrize("area", TEAM_STALL_AREAS)
+def test_a_team_stall_line_is_the_teams_test_not_finishing_and_nothing_about_why(
+    area: str,
+) -> None:
+    for kind in ("first", "repeat"):
+        line = R._humanize_check(f"REQ-RESPONSIVE/{area}", pass_kind=kind).lower()
+        assert line.startswith("their automated test"), f"{area}/{kind}: {line}"
+        assert "never finished" in line and "force-stop" in line, f"{area}/{kind}: {line}"
+        _assert_no_cause(line, area, kind)
+
+
+def _assert_no_cause(line: str, area: str, kind: str) -> None:
+    # Never the cause. Naming a loop, a function or a file would hand over the
+    # fix — finding it is the work being measured.
+    for leak in ("loop", "infinite", "recurs", "function", "timeout", "hang detected"):
+        assert leak not in line, f"{area}/{kind} names the cause: {leak}"
 
 
 def test_the_infra_check_is_still_dropped() -> None:
@@ -577,7 +587,7 @@ def test_one_hang_is_reported_once_not_once_per_unmeasured_gate() -> None:
         checks=None,
         repeat_complaints=set(),
     )
-    assert msg.lower().count("locked up") == 1
+    assert msg.lower().count("never finished") == 1
     # And the unmeasured gates say nothing at all — they were not measured, so
     # there is no finding to report, and inventing one would be fabrication.
     assert "edge-gates" not in msg

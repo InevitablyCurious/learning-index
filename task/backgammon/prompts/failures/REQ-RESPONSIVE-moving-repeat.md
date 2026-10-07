@@ -1,1 +1,1 @@
-Froze on me again partway through moving my pieces. Same dead stop, and this time I sat through {seconds} before closing it.
+Their automated test of the moves your game offers never finished again — after {seconds} they had to force-stop it.

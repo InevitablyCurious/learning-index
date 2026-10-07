@@ -1,1 +1,1 @@
-It locked up on an awkward roll — I'd rolled doubles and had a piece on the bar. Everything stopped and never came back; I waited {seconds}.
+Their automated test of an awkward roll — doubles with a piece on the bar — never finished: they waited {seconds} and had to force-stop it.

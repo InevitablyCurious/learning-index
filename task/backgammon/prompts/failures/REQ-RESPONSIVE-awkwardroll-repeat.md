@@ -1,1 +1,1 @@
-Froze on me again on one of those messy rolls, doubles with a piece stuck on the bar. Same dead stop, another {seconds} of nothing.
+Their automated test of an awkward roll — doubles with a piece on the bar — never finished again: after {seconds} they had to force-stop it.

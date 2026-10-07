@@ -940,28 +940,28 @@
       "repeat": "Rolled another double and could still only make three moves."
     },
     "REQ-RESPONSIVE/startup": {
-      "repeat": "Tried opening it again and it hung on me the same way. Nothing ever appears, it just sits — {seconds} of it before I gave up.",
-      "first": "The game never finished loading — it just sat there and nothing ever came up. I gave it {seconds} and then force-quit it."
+      "first": "The game never finished loading — it just sat there and nothing ever came up. I gave it {seconds} and then force-quit it.",
+      "repeat": "Tried opening it again and it hung on me the same way. Nothing ever appears, it just sits — {seconds} of it before I gave up."
     },
     "REQ-RESPONSIVE/moving": {
-      "repeat": "Froze on me again partway through moving my pieces. Same dead stop, and this time I sat through {seconds} before closing it.",
-      "first": "It locked up on me while I was moving my pieces around — everything stopped and it never came back. I waited {seconds}."
+      "first": "Their automated test of the moves your game offers never finished — they waited {seconds} and had to force-stop it.",
+      "repeat": "Their automated test of the moves your game offers never finished again — after {seconds} they had to force-stop it."
     },
     "REQ-RESPONSIVE/bearingoff": {
-      "repeat": "Same freeze again at the end of a game — bearing off, doubling, and then it just stops responding. I waited {seconds} again.",
-      "first": "It locked up on me near the end of the game, around when I was taking pieces off and the stakes went up. It never came back — {seconds} and nothing."
+      "first": "Their automated test of bearing off never finished — they waited {seconds} and had to force-stop it.",
+      "repeat": "Their automated test of bearing off never finished again — after {seconds} they had to force-stop it."
     },
     "REQ-RESPONSIVE/aiturn": {
-      "repeat": "Again: the computer took its turn, and that was that. It never handed back and after {seconds} I had to force it closed.",
-      "first": "It locked up while it was the computer's turn — I handed over and it never came back to me. {seconds} and it was still sitting there."
+      "first": "Their automated test of the computer's move choice, where it plays whole games against itself, never finished — they waited {seconds} and had to force-stop it.",
+      "repeat": "Their automated test of the computer's move choice never finished again — after {seconds} they had to force-stop it."
     },
     "REQ-RESPONSIVE/awkwardroll": {
-      "repeat": "Froze on me again on one of those messy rolls, doubles with a piece stuck on the bar. Same dead stop, another {seconds} of nothing.",
-      "first": "It locked up on an awkward roll — I'd rolled doubles and had a piece on the bar. Everything stopped and never came back; I waited {seconds}."
+      "first": "Their automated test of an awkward roll — doubles with a piece on the bar — never finished: they waited {seconds} and had to force-stop it.",
+      "repeat": "Their automated test of an awkward roll — doubles with a piece on the bar — never finished again: after {seconds} they had to force-stop it."
     },
     "REQ-RESPONSIVE/playing": {
-      "repeat": "It seized up on me again mid-game. Everything on screen just stops reacting, and {seconds} later it still hadn't moved.",
-      "first": "It locked up on me while I was playing — the whole page stopped responding and nothing I clicked did anything after that. I gave it {seconds}."
+      "first": "It locked up on me while I was playing — the whole page stopped responding and nothing I clicked did anything after that. I gave it {seconds}.",
+      "repeat": "It seized up on me again mid-game. Everything on screen just stops reacting, and {seconds} later it still hadn't moved."
     },
     "G01.pieces": {
       "first": "Fresh game again, The pieces are not in their correct starting positions. A game starts with 2 of mine on point 24, 5 on 13, 3 on 8 and 5 on 6, and black's the mirror: 2 on point 1, 5 on 12, 3 on 17 and 5 on 19.",

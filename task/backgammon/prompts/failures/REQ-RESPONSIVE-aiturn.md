@@ -1,1 +1,1 @@
-It locked up while it was the computer's turn — I handed over and it never came back to me. {seconds} and it was still sitting there.
+Their automated test of the computer's move choice, where it plays whole games against itself, never finished — they waited {seconds} and had to force-stop it.

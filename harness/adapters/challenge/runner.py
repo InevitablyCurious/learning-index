@@ -2481,7 +2481,11 @@ class ChallengeRunner(
     # tester's by default — the team is an addition, never a reclassification.
     # REQ-RESPONSIVE is a FREEZE — the most player-visible symptom there is, and
     # one an integrator reading API responses would never phrase. Tester, always.
-    _TESTER_CONF_PREFIXES = ("REQ-RENDER/", "REQ-HINT/", "REQ-RESPONSIVE/")
+    # REQ-RESPONSIVE: only the two a player meets in the browser (the page never
+    # loads, the page freezes while played). The backend files' deadlines
+    # (moving, awkwardroll, bearingoff, aiturn) are the team's automated tests of
+    # the engine — a test a player never runs — told by the integrating team.
+    _TESTER_CONF_PREFIXES = ("REQ-RENDER/", "REQ-HINT/")
 
     @classmethod
     def _player_stages(cls) -> list[Stage]:
@@ -2492,7 +2496,7 @@ class ChallengeRunner(
             cls._PLAYER_STAGES_CACHE = cached
         return cached
 
-    _TESTER_CONF_EXACT = ("REQ-BIND/boot",)
+    _TESTER_CONF_EXACT = ("REQ-BIND/boot", "REQ-RESPONSIVE/playing", "REQ-RESPONSIVE/startup")
 
     # Numbered gates a player cannot observe: they call the engine's named
     # functions (contract, like the API), so only an integrating team sees the

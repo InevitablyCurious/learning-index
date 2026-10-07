@@ -1,1 +1,1 @@
-It locked up on me near the end of the game, around when I was taking pieces off and the stakes went up. It never came back — {seconds} and nothing.
+Their automated test of bearing off never finished — they waited {seconds} and had to force-stop it.
