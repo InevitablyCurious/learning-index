@@ -1556,20 +1556,20 @@
       "repeat": "They read your pip counts again, and pipWhite and pipBlack still don't hold a bare number."
     },
     "F70": {
-      "first": "The triangles across the middle leave the wrong gap — I expect their tips to leave a gap of about 24% of half the board's height.",
-      "repeat": "The triangles across the middle still leave the wrong gap — I expect their tips to leave a gap of about 24% of half the board's height."
+      "first": "The triangles across the middle leave the wrong gap — I expect the gap between each top triangle's tip and the tip of the one straight across from it to be about 24% of half the board's height.",
+      "repeat": "The triangles across the middle still leave the wrong gap — I expect the gap between each top triangle's tip and the tip of the one straight across from it to be about 24% of half the board's height."
     },
     "F70.touching": {
-      "first": "The triangles on the two sides of the middle touch or overlap — I expect their tips to leave a gap of about 24% of half the board's height.",
-      "repeat": "The triangles on the two sides of the middle still touch or overlap — I expect their tips to leave a gap of about 24% of half the board's height."
+      "first": "The triangles on the two sides of the middle touch or overlap — I expect the gap between each top triangle's tip and the tip of the one straight across from it to be about 24% of half the board's height.",
+      "repeat": "The triangles on the two sides of the middle still touch or overlap — I expect the gap between each top triangle's tip and the tip of the one straight across from it to be about 24% of half the board's height."
     },
     "F70.tooclose": {
-      "first": "The triangles on the two sides of the middle nearly meet — I expect their tips to leave a gap of about 24% of half the board's height.",
-      "repeat": "The triangles on the two sides of the middle still nearly meet — I expect their tips to leave a gap of about 24% of half the board's height."
+      "first": "The triangles on the two sides of the middle nearly meet — I expect the gap between each top triangle's tip and the tip of the one straight across from it to be about 24% of half the board's height.",
+      "repeat": "The triangles on the two sides of the middle still nearly meet — I expect the gap between each top triangle's tip and the tip of the one straight across from it to be about 24% of half the board's height."
     },
     "F70.toowide": {
-      "first": "The triangles stop well short of the middle, leaving too much open space between them — I expect their tips to leave a gap of about 24% of half the board's height.",
-      "repeat": "The triangles still stop well short of the middle, leaving too much open space between them — I expect their tips to leave a gap of about 24% of half the board's height."
+      "first": "The triangles stop well short of the middle, leaving too much open space between each top tip and the tip straight across from it — I expect that gap to be about 24% of half the board's height.",
+      "repeat": "The triangles still stop well short of the middle, leaving too much open space between each top tip and the tip straight across from it — I expect that gap to be about 24% of half the board's height."
     },
     "F71": {
       "first": "The checkers on a point aren't spaced evenly — I expect a point's checkers evenly apart, and a stack of six a little tighter than the rest.",
