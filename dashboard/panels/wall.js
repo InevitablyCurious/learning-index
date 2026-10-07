@@ -57,11 +57,22 @@ export function clearGatePin() {
   return true;
 }
 
+/** What a stated cause means for the reader. Only the server states one. */
+export function unmeasuredText(cause) {
+  if (cause === "runner_died") return "NOT MEASURED — the runner died, not the code";
+  if (cause === "timed_out") {
+    return "NOT MEASURED — the build's code did not return before the deadline, so the tests after the hang never ran";
+  }
+  return `NOT MEASURED — ${String(cause)}`;
+}
+
 function statusLine(g) {
   const rounds = g.detail?.rounds ?? [];
   const failedRounds = rounds.filter((r) => r.status === "fail").map((r) => r.attempt);
+  // A stated cause first: the runner gave a reason this gate has no result, so it
+  // is not "not yet tested" — and the reason differs in whose fault it is.
+  if (g.unmeasured_cause) return { cls: "amber", text: unmeasuredText(g.unmeasured_cause) };
   if (g.state === "untested") return { cls: "dim", text: "NOT YET TESTED" };
-  if (g.unmeasured_cause) return { cls: "amber", text: "NOT MEASURED — the runner died, not the code" };
   if (g.state === "passing") {
     if (!g.ever_failed) return { cls: "ok", text: "PASSED — round 1" };
     const span = failedRounds.length ? `after failing round${failedRounds.length > 1 ? "s" : ""} ${failedRounds.join(", ")}` : "";

@@ -210,7 +210,8 @@ export async function spawnPhase(phase, cmd, args) {
 //   conformance     65 tests, work in beforeAll, 30s   ->  ~60s
 //   gates-01-08      8 tests x 60s (vitest testTimeout) ->  480s
 //   gates-09-12     14 tests x 60s                      ->  840s   <- the max
-//   gates-13-16      7 tests x 60s                      ->  420s
+//   gates-13-16      4 tests x 60s (the server gates)    ->  240s (300s with the allowance)
+//   gates-14-30      3 tests x 60s (the engine, self-play) -> 180s
 //   backend/edge     9 tests x 60s                      ->  540s
 //   frontend        15 tests x 30s (playwright default) ->  465s
 //
@@ -286,6 +287,28 @@ const GOLDEN_TIMINGS = (() => {
   }
 })();
 
+// ── A FILE CANNOT LEGITIMATELY TAKE LONGER THAN ITS TESTS' OWN LIMITS ───────
+//
+// Every test has the vitest `testTimeout` (60s), and the file runs serially, so
+// a file of N tests cannot take longer than the startup allowance plus N x 60s
+// without a test being stuck past its own limit. That is the ceiling for the
+// file, and it is far below the flat 900s for a small file: gates-14-30 (the
+// engine's self-play, the gates that hang) holds 3 tests, 240s; gates-13-16
+// holds 4, 300s. gates-09-12 holds 14, so it keeps its full 840s + allowance
+// (still clamped to the flat ceiling). Counted from the file itself, so a gate
+// added to a file raises its own ceiling and nothing has to be kept in step.
+const VITEST_TEST_TIMEOUT_MS = 60_000;
+
+function testCountOf(file) {
+  try {
+    const src = fs.readFileSync(path.join(GATES_DIR, file), "utf8");
+    const n = (src.match(/\b(?:it|test)\(\s*["'`]/g) ?? []).length;
+    return n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The deadline for one runner, from the reference time of the file it runs. */
 export function runnerBudgetMs(label) {
   const s = String(label ?? "");
@@ -293,7 +316,9 @@ export function runnerBudgetMs(label) {
     if (!s.includes(file)) continue;
     const scaled = RUNNER_STARTUP_ALLOWANCE_MS + Number(goldenMs) * RUNNER_GOLDEN_MULTIPLIER;
     if (!Number.isFinite(scaled) || scaled <= 0) break;
-    return Math.min(RUNNER_TIMEOUT_MS, Math.round(scaled));
+    const n = testCountOf(file);
+    const ceiling = n === null ? RUNNER_TIMEOUT_MS : RUNNER_STARTUP_ALLOWANCE_MS + n * VITEST_TEST_TIMEOUT_MS;
+    return Math.min(RUNNER_TIMEOUT_MS, ceiling, Math.round(scaled));
   }
   return RUNNER_TIMEOUT_MS;
 }
@@ -724,6 +749,7 @@ async function main() {
     matcher: MATCHER,
     observed: [...conformance.gateResults, ...backend.gateResults, ...frontend.gateResults],
     phaseRan,
+    timedOutFiles: new Set(backend.timedOutFiles ?? []),
   });
 
   const report = {

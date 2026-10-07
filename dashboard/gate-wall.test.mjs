@@ -765,3 +765,10 @@ test("gate card: placement is measured so the whole card fits the window — it 
   assert.equal(fitGateCard(fakeCard(), view), false, "a settled card does not redraw again");
   setGateHover(null, null);
 });
+
+test("a timed-out file's gates read as not measured, and say it was the build's code", async () => {
+  const { unmeasuredText } = await import("./panels/wall.js");
+  assert.equal(gateVisual({ state: "untested", unmeasured_cause: "timed_out" }), "instrument");
+  assert.match(unmeasuredText("timed_out"), /build's code did not return/);
+  assert.match(unmeasuredText("runner_died"), /the runner died, not the code/);
+});

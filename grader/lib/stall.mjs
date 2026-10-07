@@ -29,6 +29,7 @@ const AREA_BY_RUNNER = [
   ["gates-01-08", "moving"],
   ["gates-09-12", "bearingoff"],
   ["gates-13-16", "aiturn"],
+  ["gates-14-30", "aiturn"],
   ["edge", "awkwardroll"],
   ["frontend", "playing"],
   ["conformance", "startup"],

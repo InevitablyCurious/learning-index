@@ -61,8 +61,10 @@ describe("the per-file budget is scaled to the reference time", () => {
     // The worst measured legitimate slowdowns are in the tens: gates-13-16
     // went 1.63s -> 74.9s on the 2026-08-17 minimax-m3 cell, and G14's two
     // gates took 87s and 151s on another candidate.
-    const heavy = timings["backend/gates-13-16.test.ts"];
-    expect(budget(heavy)).toBeGreaterThan(300_000);
+    // The heavy engine file holds 3 tests x the 60s per-test limit + startup = 240s,
+    // well over the 151s worst gate measured; the server file holds 4 = 300s.
+    const heavy = timings["backend/gates-14-30.test.ts"];
+    expect(Math.min(budget(heavy), 60_000 + 3 * 60_000)).toBeGreaterThan(200_000);
     for (const [file, goldenMs] of Object.entries(timings)) {
       expect(budget(goldenMs) / Math.max(goldenMs, 1)).toBeGreaterThan(1000);
       expect(budget(goldenMs), `${file} exceeds the flat ceiling`).toBeLessThanOrEqual(FLAT_MS);
