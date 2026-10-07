@@ -119,6 +119,17 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
     bar.height >= 1.8 * avgPointHeight,
     `[aspect: short] [needs: REQ-TESTID/point-column] expected the bar to span both board rows, found bar height=${bar.height.toFixed(1)} vs average point height=${avgPointHeight.toFixed(1)}`,
   ).toBeTruthy();
+  // And wide enough to hold a piece that has been hit (the build prompt): a
+  // hairline down the middle passed the position and the height above (run
+  // 1791358018: a 2 px bar). The piece it must hold is the one on the board, as
+  // the off tray's check reads it.
+  const shapesForBar = await readCheckerShapes(page);
+  expect(shapesForBar.length, "[needs: REQ-RENDER/checker] expected the checkers on the points to read").toBeGreaterThan(0);
+  const pieceForBar = Math.min(typicalWidth(shapesForBar), 0.9 * pointWidth(points));
+  expect(
+    bar.width,
+    `[aspect: thin] the bar is ${bar.width.toFixed(0)} px wide; a piece that has been hit needs ${pieceForBar.toFixed(0)} px`,
+  ).toBeGreaterThanOrEqual(pieceForBar - 2);
 });
 
 test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) => {
@@ -284,6 +295,13 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
     tray.width,
     `[aspect: narrow] the off tray is ${tray.width.toFixed(0)} px wide; a checker lying on its side needs ${piece.toFixed(0)} px`,
   ).toBeGreaterThanOrEqual(piece - 2);
+  // And no wider than one and a half points (the build prompt): a tray that wide
+  // takes the board's room (run 1791358018: 124 px beside 76 px points). The
+  // reference's is 1.28 points at both sizes.
+  expect(
+    tray.width,
+    `[aspect: wide] the off tray is ${tray.width.toFixed(0)} px wide; a point is ${pointWidth(points).toFixed(0)} px`,
+  ).toBeLessThanOrEqual(1.5 * pointWidth(points));
 });
 
 test("[F41] REQ-GEOMETRY — checkers drawn as circles sized to their points", async ({ page }) => {

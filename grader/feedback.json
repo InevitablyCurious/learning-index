@@ -835,6 +835,10 @@
       "first": "The bar sits out at the edge of the board, not between the two halves.",
       "repeat": "Looked again and the bar is still sitting out at the edge, not in the middle of the board."
     },
+    "F29.thin": {
+      "first": "The bar down the middle is just a thin line — I expect it wide enough for a piece I've hit to sit on it.",
+      "repeat": "The bar down the middle is still just a thin line — I expect it wide enough for a piece that's been hit to sit on it."
+    },
     "F29.overlap": {
       "first": "The bar cuts across some of the points.",
       "repeat": "The bar still cuts across some of the points."
@@ -898,6 +902,10 @@
     "F32": {
       "first": "The off tray isn't showing — there's no place on the board for pieces that have been taken off.",
       "repeat": "Looked again and the off tray still isn't there, still no place for taken-off pieces."
+    },
+    "F32.wide": {
+      "first": "The off tray is far too wide — I expect it no wider than about one and a half points.",
+      "repeat": "The off tray is still far too wide — I expect it no wider than about one and a half points."
     },
     "F32.overlap": {
       "first": "The off tray cuts across some of the points.",
