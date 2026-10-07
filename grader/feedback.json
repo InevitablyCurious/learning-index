@@ -880,12 +880,12 @@
       "repeat": "Some of the points, including every one on the left half of the board, still don't show a clear triangle — I expect each point drawn as a triangle that stands out from the board."
     },
     "F30.short": {
-      "first": "The triangles only stand out from the board in the half nearest the edge — I expect each one to stand out most of the way to the middle of the board.",
-      "repeat": "The triangles still only stand out from the board in the half nearest the edge — I expect each one to stand out most of the way to the middle of the board."
+      "first": "The triangles stop well short of the middle — I expect the tip of each top triangle and the tip of the one straight across from it to leave a gap of about 24% of half the board's height.",
+      "repeat": "The triangles still stop well short of the middle — I expect the tip of each top triangle and the tip of the one straight across from it to leave a gap of about 24% of half the board's height."
     },
     "F30.someshort": {
-      "first": "Some of the triangles only stand out from the board in the half nearest the edge — I expect each one to stand out most of the way to the middle of the board.",
-      "repeat": "Some of the triangles still only stand out from the board in the half nearest the edge — I expect each one to stand out most of the way to the middle of the board."
+      "first": "Some of the triangles stop well short of the middle — I expect the tip of each top triangle and the tip of the one straight across from it to leave a gap of about 24% of half the board's height.",
+      "repeat": "Some of the triangles still stop well short of the middle — I expect the tip of each top triangle and the tip of the one straight across from it to leave a gap of about 24% of half the board's height."
     },
     "F30.float": {
       "first": "The triangles don't sit at the edge of the board — I expect each triangle's wide end right at the edge.",
