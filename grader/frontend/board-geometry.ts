@@ -756,3 +756,52 @@ export async function sampleBoardColour(
     await hideStyle.evaluate((el) => (el as HTMLElement).remove()).catch(() => undefined);
   }
 }
+
+
+/**
+ * The colour a player sees in the middle of each box (a bar, an off tray), read
+ * from a screenshot with the checkers and hints hidden: the mean of three samples
+ * down the box's centre line, so a gradient reads as the colour it averages to.
+ * null for a box that is not there.
+ */
+export async function sampleBoxColours(
+  page: Page,
+  boxes: ({ x: number; y: number; width: number; height: number } | null)[],
+): Promise<(number[] | null)[]> {
+  const hideStyle = await page.addStyleTag({
+    content: '[data-testid="checker"], [data-testid="hint"] { visibility: hidden !important; }',
+  });
+  try {
+    const buf = await page.screenshot({ type: "png" });
+    const dataUrl = "data:image/png;base64," + buf.toString("base64");
+    return await page.evaluate(
+      async ({ dataUrl, boxes }) => {
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
+          img.src = dataUrl;
+        });
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas 2d context unavailable");
+        ctx.drawImage(img, 0, 0);
+        const dpr = img.naturalWidth / window.innerWidth;
+        const at = (x: number, y: number): number[] => {
+          const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+          return [d[0], d[1], d[2]];
+        };
+        return boxes.map((b) => {
+          if (!b) return null;
+          const samples = [0.2, 0.5, 0.8].map((f) => at(b.x + b.width / 2, b.y + b.height * f));
+          return [0, 1, 2].map((i) => Math.round(samples.reduce((sum, c) => sum + c[i], 0) / samples.length));
+        });
+      },
+      { dataUrl, boxes },
+    );
+  } finally {
+    await hideStyle.evaluate((el) => (el as HTMLElement).remove()).catch(() => undefined);
+  }
+}
