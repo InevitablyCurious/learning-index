@@ -633,8 +633,8 @@ export async function runPreGate(): Promise<PreGateResult> {
       // checker is tried until one does. The build prompt names no class for
       // a movable piece, so none is looked for (FIX-26: run 1790414346 was
       // told "no checker I could pick up" by a page whose pieces picked up).
-      // dispatchEvent fires the click handler even for a checker scrolled
-      // outside this browser's default viewport.
+      // Each piece is scrolled into view first, so one outside this browser's
+      // default viewport is still pressed where a player would press it.
       // The turn is the player's own: the click above was the OPENING roll, and a
       // build whose computer won it (or that handles the queued dice another way,
       // F63's finding) leaves the player holding no dice, so no piece could show a
@@ -666,7 +666,15 @@ export async function runPreGate(): Promise<PreGateResult> {
           const whiteCount = await whiteCheckers.count();
           for (let i = 0; i < whiteCount; i++) {
             try {
-              await whiteCheckers.nth(i).dispatchEvent("click");
+              // A player's click: bring the piece into view and press the mouse on
+              // it. A synthetic click event reaches only pages that listen for
+              // "click"; run 1791381075's page listened for the mouse itself, showed
+              // hints to every player, and was told "nothing shows me where it can
+              // go" because the grader pressed nothing.
+              const piece = whiteCheckers.nth(i);
+              await piece.scrollIntoViewIfNeeded({ timeout: 1_000 });
+              const box = await piece.boundingBox();
+              if (box) await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
             } catch {
               // Keep probing other white checkers.
             }
