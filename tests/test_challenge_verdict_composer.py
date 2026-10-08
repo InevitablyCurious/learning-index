@@ -115,7 +115,7 @@ def test_build_pass_verdict_hard_fails_on_an_uncovered_gate() -> None:
 def test_build_feedback_prompt_openers_and_invariants() -> None:
     g01 = _override("G01")
     g02 = _override("G02")
-    g03 = _override("G03")
+    g04 = _override("G04")
 
     FIRST = (
         "I've checked your work thoroughly, and I want to list the issues that "
@@ -165,7 +165,7 @@ def test_build_feedback_prompt_openers_and_invariants() -> None:
             "[G01] REQ-INIT — initial position\nignored second line",
             "[G01] REQ-INIT — same gate, duplicate",
             "[G02] REQ-PIP — pip count",
-            "[G03] REQ-DICE — dice to moves",
+            "[G04] REQ-MOVE — moves",
         ],
     )
     lines = prompt.splitlines()
@@ -176,7 +176,7 @@ def test_build_feedback_prompt_openers_and_invariants() -> None:
     assert lines[4:] == [
         f"1) {g01}",
         f"2) {g02}",
-        f"3) {g03}",
+        f"3) {g04}",
         "",
         *_CONSTRAINTS.splitlines(),
     ]

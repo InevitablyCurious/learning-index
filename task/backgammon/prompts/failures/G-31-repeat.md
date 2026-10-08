@@ -1,1 +1,1 @@
-I started another new game and the roll to see who begins still didn't work right.
+They start another new game through your API and the opening roll still doesn't work right.

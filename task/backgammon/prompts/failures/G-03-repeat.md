@@ -1,1 +1,1 @@
-Rolled several times and the number of moves I get still doesn't match the dice.
+When they roll against your API again, the numbers that come back still don't match.

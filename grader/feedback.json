@@ -76,8 +76,8 @@
       "repeat": "Fresh game again, before I'd even rolled, and the pip counts still don't add up."
     },
     "G03": {
-      "first": "When I roll, the number of moves I get doesn't match the dice.",
-      "repeat": "Rolled several times and the number of moves I get still doesn't match the dice."
+      "first": "When they roll against your app's API, the numbers that come back don't match: a double doesn't give four moves, or two different numbers don't give two.",
+      "repeat": "When they roll against your API again, the numbers that come back still don't match."
     },
     "G04": {
       "first": "Sometimes the game offers me moves that land on a spot my opponent has stacked with pieces",
@@ -1076,20 +1076,20 @@
       "repeat": "Rolled two different numbers again and still got the wrong number of moves."
     },
     "G03.doubles": {
-      "first": "I rolled a double and couldn't play all of it.",
-      "repeat": "Rolled another double and still couldn't play all of it."
+      "first": "They roll a double through your app's API and the dice it sends back never list four numbers.",
+      "repeat": "They roll a double through your API again and the dice it sends back still never list four numbers."
     },
     "G03.nomove": {
-      "first": "I rolled a double and couldn't make a single move with it.",
-      "repeat": "Rolled another double and still couldn't make a single move with it."
+      "first": "They roll a double through your app's API and it gives them no move to make.",
+      "repeat": "They roll a double through your API again and it still gives them no move to make."
     },
     "G03.doublemoves": {
-      "first": "I rolled doubles and got the wrong number of moves.",
-      "repeat": "Rolled doubles again and still got the wrong number of moves."
+      "first": "They roll a double through your app's API and the number of moves it gives them is wrong.",
+      "repeat": "They roll a double through your API again and the number of moves it gives them is still wrong."
     },
     "G03.plainmoves": {
-      "first": "I rolled two different numbers and got the wrong number of moves.",
-      "repeat": "Rolled two different numbers again and still got the wrong number of moves."
+      "first": "They roll two different numbers through your app's API and the number of moves it gives them is wrong.",
+      "repeat": "They roll two different numbers through your API again and the number of moves it gives them is still wrong."
     },
     "G26": {
       "first": "On a new game the cube isn't showing one, or it already sits in a corner, not the middle.",
@@ -1288,52 +1288,52 @@
       "repeat": "It still plays the smaller die when only one of the two dice can be used."
     },
     "G31": {
-      "first": "When I start a new game, the roll to see who begins didn't work right.",
-      "repeat": "I started another new game and the roll to see who begins still didn't work right."
+      "first": "They start a new game through your app's API and the opening roll doesn't work right.",
+      "repeat": "They start another new game through your API and the opening roll still doesn't work right."
     },
     "G31.won": {
-      "first": "I threw a 6 against the computer's 5 to see who begins, and the first move wasn't mine.",
-      "repeat": "I threw higher than the computer again to see who begins, and the first move still wasn't mine."
+      "first": "They throw higher than the computer in the opening roll through your app's API, and the first move isn't theirs.",
+      "repeat": "They throw higher than the computer in the opening roll through your API again, and the first move still isn't theirs."
     },
     "G31.dice": {
-      "first": "I won the throw to see who begins, but I didn't get both numbers to move with.",
-      "repeat": "I won the throw to see who begins again, and still didn't get both numbers to move with."
+      "first": "They win the opening throw through your app's API, but what comes back doesn't give them both numbers to move with.",
+      "repeat": "They win the opening throw through your API again, and what comes back still doesn't give them both numbers to move with."
     },
     "G31.first": {
-      "first": "I threw a 3 against the computer's 5 to see who begins, and the first move wasn't the computer's.",
-      "repeat": "The computer threw higher to see who begins again, and it still didn't get the first move."
+      "first": "They throw lower than the computer in the opening roll through your app's API, and the first move isn't the computer's.",
+      "repeat": "They throw lower than the computer in the opening roll through your API again, and the first move still isn't the computer's."
     },
     "G31.numbers": {
-      "first": "The computer won the throw to see who begins, but its first move didn't use the two numbers we threw.",
-      "repeat": "The computer won the throw to see who begins again, and its first move still didn't use the two numbers we threw."
+      "first": "The computer wins the opening throw through your app's API, but its first move doesn't use the two numbers thrown.",
+      "repeat": "The computer wins the opening throw through your API again, and its first move still doesn't use the two numbers thrown."
     },
     "G31.handback": {
-      "first": "The computer made its first move after winning the throw to see who begins, and the play never came back to me.",
-      "repeat": "Again the computer made its first move and the play never came back to me."
+      "first": "The computer makes its first move after winning the opening throw through your app's API, and the turn never comes back to them.",
+      "repeat": "The computer makes its first move through your API again, and the turn still never comes back to them."
     },
     "G31.tie": {
-      "first": "We both threw a 4 to see who begins, and the game carried on as if one of us had won.",
-      "repeat": "We threw the same number again to see who begins, and the game still carried on as if one of us had won."
+      "first": "They throw the same number in the opening roll through your app's API, and the game carries on as if one side had won.",
+      "repeat": "They throw the same number in the opening roll through your API again, and the game still carries on as if one side had won."
     },
     "G31.cube": {
-      "first": "Before the first move of the game, I was allowed to double.",
-      "repeat": "Again I was allowed to double before the first move of the game."
+      "first": "They start a new game through your app's API and it says they may double before the first move.",
+      "repeat": "They start another new game through your API and it still says they may double before the first move."
     },
     "G31.cubemoved": {
-      "first": "I doubled before the first move of the game, and the game took my double.",
-      "repeat": "Again I doubled before the first move of the game, and the game took my double."
+      "first": "They double through your app's API before the first move of a new game, and it takes the double.",
+      "repeat": "They double through your API again before the first move of a new game, and it takes the double."
     },
     "G32": {
-      "first": "When the computer couldn't move, the game just stopped and never explained what happened.",
-      "repeat": "It happened again — the computer couldn't move and the game just stopped with no explanation."
+      "first": "They leave the computer on the bar with every way in held, and your app's reply to its turn neither says so nor gives them the turn back.",
+      "repeat": "They leave the computer on the bar with every way in held again, and your app's reply still neither says so nor gives them the turn back."
     },
     "G32.pass": {
-      "first": "The computer couldn't move, and the play never came back to me — it just sat there.",
-      "repeat": "Again the computer couldn't move and the play never came back to me."
+      "first": "They leave the computer on the bar with every way in held, and your app never gives them the turn back.",
+      "repeat": "They leave the computer on the bar with every way in held again, and your app still never gives them the turn back."
     },
     "G32.wording": {
-      "first": "The computer couldn't move, and the play never told me there were no moves available.",
-      "repeat": "Again the computer couldn't move and the play still never told me there were no moves available."
+      "first": "They leave the computer on the bar with every way in held, and your app's message for it doesn't contain the words \"No moves available\".",
+      "repeat": "They leave the computer on the bar with every way in held again, and your app's message still doesn't contain the words \"No moves available\"."
     },
     "F46": {
       "first": "When the computer turns down my double, the pop-up's title doesn't say I won.",

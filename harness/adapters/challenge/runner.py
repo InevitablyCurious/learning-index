@@ -2509,8 +2509,11 @@ class ChallengeRunner(
     # data-owner marks, the page loading the difficulty the game runs at, the pip elements holding
     # just the number) — are
     # told by the integrating team, in their voice.
+    # G03 (the dice a roll sends back), G31 (the opening roll's fields) and G32 (the
+    # message when the computer cannot move) read the API's reply, not the screen: a
+    # player sees the moves play out fine while the reply is wrong (WO-STUCK23-WHY).
     # Every other gate token is the tester's.
-    _TEAM_GATE_TOKENS = ("E08", "G27", "G28", "G29", "F63", "F68", "F69")
+    _TEAM_GATE_TOKENS = ("E08", "G03", "G27", "G28", "G29", "G31", "G32", "F63", "F68", "F69")
 
     # HARNESS-INFRA CHECK NAMES (WO-FEEDBACK-VOICE-3 follow-up, 2026-08-30).
     # These are born only when a RUNNER DIES mid-run —
