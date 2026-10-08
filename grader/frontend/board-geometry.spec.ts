@@ -488,7 +488,20 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   // flush base reads 0.05 and a base floating off the edge reads deeper than
   // the 10% step. An undrawn point has no paint to place (`first` null) — the
   // undrawn check tells that.
-  const floating = judged.filter((s) => s.first !== null && s.first > 0.10).map((s) => s.num);
+  const floatingPaint = judged.filter((s) => s.first !== null && s.first > 0.10).map((s) => s.num);
+  // `first` reads inside the point's own box, so a point box that stops short of
+  // the board (run 1791445179's bottom row ended 92 px above the bar's end, 30% of
+  // a triangle's height) always reads flush. The bar runs the board's whole inner
+  // height, so a row whose base sits more than 10% of a triangle's height inside
+  // the bar's extent is floating off the edge. A bar shorter than the rows says
+  // nothing here, so only the inside direction counts.
+  const floatingBase: number[] = [];
+  const rows = splitRows(points);
+  if (bar && rows.separated) {
+    for (const p of rows.top) if (p.y - bar.y > 0.10 * p.height) floatingBase.push(p.num);
+    for (const p of rows.bottom) if (bar.y + bar.height - (p.y + p.height) > 0.10 * p.height) floatingBase.push(p.num);
+  }
+  const floating = [...new Set([...floatingPaint, ...floatingBase])].sort((a, b) => a - b);
   expect(
     floating,
     `${needsRows}[aspect: float] triangles whose wide end doesn't sit at the edge of the board on points: ${floating.join(", ")}`,
