@@ -876,3 +876,56 @@ export async function standsOutFromBoard(
     await hideStyle.evaluate((el) => (el as HTMLElement).remove()).catch(() => undefined);
   }
 }
+
+
+/**
+ * What a player sees of each box: the colour in its middle (three samples down
+ * the centre line) and the colour of its own edge (eight spots two pixels inside
+ * the border, away from the corners). Read from a screenshot, so a fill, a
+ * gradient or an outline all show up as what they look like. null for a box that
+ * is not there.
+ */
+export async function sampleBoxLooks(
+  page: Page,
+  boxes: ({ x: number; y: number; width: number; height: number } | null)[],
+): Promise<({ centre: number[]; edge: number[] } | null)[]> {
+  const buf = await page.screenshot({ type: "png" });
+  const dataUrl = "data:image/png;base64," + buf.toString("base64");
+  return page.evaluate(
+    async ({ dataUrl, boxes }) => {
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
+        img.src = dataUrl;
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas 2d context unavailable");
+      ctx.drawImage(img, 0, 0);
+      const dpr = img.naturalWidth / window.innerWidth;
+      const at = (x: number, y: number): number[] => {
+        const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+        return [d[0], d[1], d[2]];
+      };
+      const mean = (cs: number[][]): number[] =>
+        [0, 1, 2].map((i) => Math.round(cs.reduce((sum, c) => sum + c[i], 0) / cs.length));
+      return boxes.map((b) => {
+        if (!b) return null;
+        const centre = mean([0.2, 0.5, 0.8].map((f) => at(b.x + b.width / 2, b.y + b.height * f)));
+        const inset = 2;
+        const spots: number[][] = [];
+        for (const f of [0.3, 0.7]) {
+          spots.push(at(b.x + b.width * f, b.y + inset));
+          spots.push(at(b.x + b.width * f, b.y + b.height - inset));
+          spots.push(at(b.x + inset, b.y + b.height * f));
+          spots.push(at(b.x + b.width - inset, b.y + b.height * f));
+        }
+        return { centre, edge: mean(spots) };
+      });
+    },
+    { dataUrl, boxes },
+  );
+}

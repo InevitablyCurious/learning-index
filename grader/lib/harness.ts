@@ -516,6 +516,9 @@ export function makeState(partial: Record<string, any>): Record<string, any> {
     pointsWon: 0,
     doubleOfferedBy: null as "white" | "black" | null,
     message: "",
+    // A position starts mid-turn. Without this the debug route keeps the previous
+    // test's turnOver (G28 sets it true), so G32 read "the game just stopped".
+    turnOver: false,
   };
 
   return {

@@ -1,4 +1,5 @@
 import { type Page } from "@playwright/test";
+import { waitForBoardSettled } from "./board-geometry.ts";
 import { expect, pickUpAPiece, playerClick, rollAndCheck, setupState, test } from "./fixtures.ts";
 
 // [F33] REQ-DOUBLES — a double lets the player make FOUR MOVES.
@@ -93,6 +94,12 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
         // Clicked where it shows: a pulsing hint on top of a stack (fixtures.ts).
         await playerClick(hints.first());
         await expect.poll(() => remainingDiceCount(page), "die not consumed").toBe(4 - played);
+        // The server holds the move a few milliseconds before the page has drawn it,
+        // and a click in that gap is ignored or wiped by the redraw. A player only
+        // ever sees the page, so the next pick-up waits until what is drawn holds
+        // still (run 1791403718's build, told "could only make one move" for
+        // twelve rounds while four moves played by hand).
+        await waitForBoardSettled(page).catch(() => undefined);
       });
     } catch (err) {
       // Whichever step stopped this move, what the player saw is how many

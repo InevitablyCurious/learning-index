@@ -132,6 +132,7 @@ describe("Backgammon backend server-path integrity", () => {
   it("[G24] REQ-CUBE-ACCEPT — accepting the computer's double makes the cube 2", async () => {
     await debugSetState(
       makeState({
+        points: openingPoints(),
         cube: { value: 1, owner: null },
         phase: "doubleOffered",
         doubleOfferedBy: "black",
@@ -295,5 +296,36 @@ describe("Backgammon backend server-path integrity", () => {
     const state = await api("/api/ai", {});
     expect(state.turn, "[aspect: pass] [needs: G25]").toBe("white");
     expect(state.message, "[aspect: wording] [needs: F05]").toMatch(/no moves available/i);
+  });
+
+  // The computer offers a double when it is well ahead, not after every turn: from
+  // the even opening position its first turn at any difficulty offers nothing
+  // (run 1791408711's build offered after every computer turn, on medium too,
+  // so the player was answering a double before the game had begun).
+  it("[G33] REQ-CUBE-AI — the computer does not offer a double at an even start", async () => {
+    for (const difficulty of ["easy", "medium", "hard"]) {
+      await api("/api/new", {});
+      await debugSetState(
+        makeState({
+          points: openingPoints(),
+          turn: "black",
+          phase: "move",
+          dice: [3, 1],
+          remainingDice: [3, 1],
+          difficulty,
+          cube: { value: 1, owner: null },
+        }),
+      );
+      let state = await getState();
+      let guard = 0;
+      while (state.turn !== "white" && guard < 12) {
+        state = await api("/api/ai", {});
+        guard++;
+      }
+      expect(
+        state.phase === "doubleOffered" || Boolean(state.doubleOfferedBy),
+        `[aspect: early] the computer offered a double after its first turn on ${difficulty}`,
+      ).toBe(false);
+    }
   });
 });

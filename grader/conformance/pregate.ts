@@ -678,9 +678,12 @@ export async function runPreGate(): Promise<PreGateResult> {
             } catch {
               // Keep probing other white checkers.
             }
+            // A player waits to see the hints come up. Hints that appear after a
+            // short pause were read as none, and the next press on another piece
+            // then put them away (WO-AUDIT-A class a).
             await page
               .waitForFunction(() => document.querySelectorAll('[data-testid="hint"]').length > 0, undefined, {
-                timeout: 250,
+                timeout: 900,
               })
               .catch(() => undefined);
             hintCount = await page.locator('[data-testid="hint"]').count();

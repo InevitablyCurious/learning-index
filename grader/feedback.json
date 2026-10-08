@@ -1622,6 +1622,42 @@
     "F71.cascade": {
       "first": "The pieces of a stack cascade off to the side — I expect each stack to stand as a single straight column.",
       "repeat": "The pieces of a stack still cascade off to the side — I expect each stack to stand as a single straight column."
+    },
+    "F61.alike": {
+      "first": "At the start, the two dice look exactly the same, so I can't tell which one is mine and which is the computer's.",
+      "repeat": "I still can't tell my die from the computer's at the start. They look the same."
+    },
+    "F61.again": {
+      "first": "When we tied on the opening roll, the game just sat there until I rolled again myself. I expected it to roll again on its own.",
+      "repeat": "After a tie on the opening roll, the game still just waited for me to roll again."
+    },
+    "G33": {
+      "first": "The computer offered me a double right after its very first turn, when nobody was ahead.",
+      "repeat": "The computer is still offering me a double straight after its first turn."
+    },
+    "G33.early": {
+      "first": "The computer offered me a double right after its very first turn, when nobody was ahead.",
+      "repeat": "The computer is still offering me a double straight after its first turn."
+    },
+    "F72": {
+      "first": "While the computer's double was waiting for my answer, pressing End Turn just made the computer play again.",
+      "repeat": "I still get the computer playing again, not my own turn, when I press End Turn with its double waiting."
+    },
+    "F72.endturn": {
+      "first": "While the computer's double was waiting for my answer, pressing End Turn just made the computer play again.",
+      "repeat": "I still get the computer playing again, not my own turn, when I press End Turn with its double waiting."
+    },
+    "F73": {
+      "first": "I rolled two numbers I could play in either order, but the game only let me play the bigger one first. Clicking the other number's move did nothing.",
+      "repeat": "I still can't play the smaller number first when I could play both."
+    },
+    "F74": {
+      "first": "Every time I move a piece, the dice tumble again as if I had just rolled.",
+      "repeat": "The dice still roll again after every move I make."
+    },
+    "F74.again": {
+      "first": "Every time I move a piece, the dice tumble again as if I had just rolled.",
+      "repeat": "The dice still roll again after every move I make."
     }
   }
 }

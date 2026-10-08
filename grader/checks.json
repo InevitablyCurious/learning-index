@@ -267,7 +267,7 @@
     "F11": {
       "name": "Borne-off checkers in the tray",
       "what": "Borne-off checkers appear in the player's off tray.",
-      "how": "Sets a position with 3 white checkers borne off: the player's tray must be visible with exactly 3 white checkers in it."
+      "how": "Sets a position with 3 white checkers borne off: the player's tray must be visible with exactly 3 white checkers in it. The checkers must be drawn in the tray, not only tagged off."
     },
     "F12": {
       "name": "Win announced",
@@ -437,7 +437,7 @@
     "F47": {
       "name": "The turn waits for End Turn",
       "what": "The player's turn never ends by itself; it waits for the End Turn click, and Undo keeps working until then.",
-      "how": "Sets a position white can move in, forces 6-5, plays every die by clicking until the turn is over, then waits 1.6 s: the turn must still be white's in the move phase. Undo must be available and give a die back ([aspect: undo]); after replaying, End Turn must hand the turn to the computer ([aspect: endturn])."
+      "how": "Sets a position white can move in, forces 6-5, plays every die by clicking until the turn is over, then waits 1.6 s: the turn must still be white's in the move phase. Undo must be available and give a die back ([aspect: undo]); after replaying, End Turn must hand the turn to the computer ([aspect: endturn]). It waits four seconds (what a player takes to find the button) before checking the turn is still the player's."
     },
     "F48": {
       "name": "A no-move roll passes by itself",
@@ -507,7 +507,7 @@
     "F61": {
       "name": "The opening roll on screen",
       "what": "On the opening roll the page shows both dice; equal dice tie and say to roll again; and when the computer's die is higher it makes the first move and hands the turn back.",
-      "how": "In a browser: first requires the Roll button to be clickable at the start of a new game ([aspect: roll]); then fixes the opening roll to 6-5, clicks Roll, and requires at least two dice on screen once they rest ([aspect: dice]); fixes 4-4 and requires the words \"Tie — roll again\" (any dash) somewhere on the page, again with two dice resting on screen ([aspect: tie], [aspect: dice]); fixes 3-5 and requires the state to show the computer's pieces moved and the turn back with the player ([aspect: computer]). The player's own first move with both numbers is F03's and F04's, which open with a roll the player wins."
+      "how": "In a browser: first requires the Roll button to be clickable at the start of a new game ([aspect: roll]); then fixes the opening roll to 6-5, clicks Roll, and requires at least two dice on screen once they rest ([aspect: dice]); fixes 4-4 and requires the words \"Tie — roll again\" (any dash) somewhere on the page, again with two dice resting on screen ([aspect: tie], [aspect: dice]); fixes 3-5 and requires the state to show the computer's pieces moved and the turn back with the player ([aspect: computer]). The player's own first move with both numbers is F03's and F04's, which open with a roll the player wins. The two opening dice must look different from each other, and a tie must roll again by itself without a click on Roll."
     },
     "F62": {
       "name": "The computer's turn pacing on screen",
@@ -558,6 +558,26 @@
       "name": "Checkers on a point stack evenly, tighter at six",
       "what": "The checkers on a point stack evenly apart (two to five pieces), and a full stack of six sits a little tighter.",
       "how": "Reads checker boxes by data-loc, sorts by centre y, and compares consecutive pitch: even within a stack for two to five pieces, and a six-piece stack's pitch at least ~3% tighter than the even pitch. Also measures each stack's extent — the mean pitch against the median checker width — flagging stacks squeezed together at the edge (crowded) or spread apart along the point (spread), each told with the row the stack is drawn in, and requiring a six-stack to compress. Also checks horizontal alignment — a stack's pieces share one x, and a stack whose centres fan out more than a tenth of a checker width drifts sideways (cascades) instead of standing in a single straight column over its point."
+    },
+    "G33": {
+      "name": "The computer does not offer a double at an even start",
+      "what": "From the even opening position the computer's first turn, at any difficulty, offers no double.",
+      "how": "Through the running server: a game at the standard opening position with the computer to play 3-1 at easy, medium and hard; after its turn no double may be on offer."
+    },
+    "F72": {
+      "name": "The computer's double waits for an answer",
+      "what": "While the computer's double waits for the player's answer, End Turn does not hand the turn back to the computer.",
+      "how": "A race the hard computer doubles on: once the offer shows, End Turn is pressed if it can be; the computer must not take another turn."
+    },
+    "F73": {
+      "name": "Either number can be played first",
+      "what": "When two numbers can be played in either order, the smaller number's move can be played first.",
+      "how": "Fixes the roll to 3-5, clicks the piece on 13 and then the hint at point 10 (the 3's move); the piece must arrive on 10."
+    },
+    "F74": {
+      "name": "The dice do not roll again after a move",
+      "what": "The dice stay still when a piece moves; they only roll when they are rolled.",
+      "how": "Plays one move by clicking a piece and a hint and reads the browser's animation events: no die may start an animation afterwards."
     }
   },
   "setup": [
@@ -849,7 +869,11 @@
         "REQ-TESTID/die",
         "REQ-HINT/",
         "REQ-RESPONSIVE/moving",
-        "REQ-RESPONSIVE/playing"
+        "REQ-RESPONSIVE/playing",
+        "G33",
+        "F72",
+        "F73",
+        "F74"
       ]
     },
     {

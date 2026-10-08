@@ -1,0 +1,1 @@
+I still get the computer playing again, not my own turn, when I press End Turn with its double waiting.

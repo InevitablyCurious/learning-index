@@ -140,8 +140,12 @@ def player_view(
     checks the grader never reached, or that stopped at a step another failing
     check reports, are told to no one."""
     records = [p for p in problems if isinstance(p, dict)]
+    # A check the grader never reached is not a failure a player met, so it cannot
+    # excuse another check from being told: both would reach no one.
     failed = {
-        ident for p in records if (ident := check_id(str(p.get("check", "")).strip()))
+        ident
+        for p in records
+        if not is_unevaluated(p) and (ident := check_id(str(p.get("check", "")).strip()))
     }
     staged: list[tuple[Stage, dict[str, Any]]] = []
     unevaluated: list[str] = []

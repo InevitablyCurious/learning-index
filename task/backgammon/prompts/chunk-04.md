@@ -40,7 +40,7 @@ Required `data-testid` hooks (EXACT — the UI automation selects on these; stat
 - Each move hint: `data-testid="hint"`.
 - Each die: `data-testid="die"`, nested inside the `dice` container.
 - After a roll, exactly two dice are visible, a double too — a double still gives four moves.
-- During the opening roll the page shows BOTH dice — the player's die and the computer's die — each marked with a `data-owner` of `you` (the player's) or `ai` (the computer's) so the player can tell whose is whose. The tie message contains the words `Tie — roll again`. The winner of the opening plays those two numbers: the player's hints use them, and the computer's first move uses them.
+- During the opening roll the page shows BOTH dice — the player's die and the computer's die — each marked with a `data-owner` of `you` (the player's) or `ai` (the computer's) so the player can tell whose is whose. The tie message contains the words `Tie — roll again`; after showing it for about a second the page rolls both dice again by itself, and keeps doing so until they differ — the player never presses Roll for a tie. The winner of the opening plays those two numbers: the player's hints use them, and the computer's first move uses them.
 - The bar: `data-testid="bar"`.
 - The off tray: `data-testid="off-tray"`, containing `data-testid="off-you"`, where your borne-off checkers go.
 

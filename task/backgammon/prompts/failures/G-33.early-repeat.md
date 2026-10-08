@@ -1,0 +1,1 @@
+The computer is still offering me a double straight after its first turn.

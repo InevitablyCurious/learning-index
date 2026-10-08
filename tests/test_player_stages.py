@@ -188,6 +188,21 @@ def test_a_stuck_check_is_told_when_the_step_failed_only_in_its_own_situation() 
     assert label == ChallengeRunner._feedback_overrides()["F33.nomove"]["first"]
 
 
+def test_a_stuck_check_is_told_when_the_check_it_needs_was_never_evaluated() -> None:
+    # The needed check never ran, so no player complaint stands in for this one:
+    # withholding both would tell nobody (WO-AUDIT-A class g, S4).
+    problems = [
+        _doubles("Error: move 1: no hint appeared [aspect: nomove] [needs: F03]"),
+        {
+            "check": "[F03] REQ-HINT — clicking a piece shows its moves",
+            "observed": "never evaluated — an earlier step failed and skipped it",
+        },
+    ]
+    view = player_view(problems, STAGES, is_infra=_infra)
+    assert [p["check"][:5] for p in view.visible] == ["[F33]"]
+    assert [c[:5] for c in view.unevaluated] == ["[F03]"]
+
+
 def test_a_chain_of_stuck_checks_is_told_as_the_one_step_that_failed() -> None:
     problems = [
         _doubles("move 1: no checker to pick up [aspect: nomove] [needs: F25]"),

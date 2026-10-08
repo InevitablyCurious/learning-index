@@ -171,9 +171,30 @@ test("[F11] REQ-BEAROFF — bear-off visual", async ({ page }) => {
   // three discs there untagged and was told they "don't show up in the off
   // tray". A tray with nothing drawn in it is this gate's finding.
   const shownOff = async () => {
-    const tagged = await page
-      .locator('[data-testid="checker"][data-color="white"][data-loc="off"]')
-      .count();
+    // Tagged AND drawn in the tray: a piece tagged off but drawn somewhere else
+    // (run 1791408711's build put them in the bar's column, x 480 against a tray
+    // at x 956) is not in the tray a player looks at. The tray may be a little
+    // short for a tall stack, so a piece counts when its centre is within half
+    // a piece of the tray's box.
+    const tagged = await page.evaluate(() => {
+      const tray = document.querySelector('[data-testid="off-you"]');
+      if (!tray) return 0;
+      const t = tray.getBoundingClientRect();
+      return [
+        ...document.querySelectorAll<HTMLElement>('[data-testid="checker"][data-color="white"][data-loc="off"]'),
+      ].filter((el) => {
+        const r = el.getBoundingClientRect();
+        const x = r.left + r.width / 2;
+        const y = r.top + r.height / 2;
+        return (
+          r.width > 0 &&
+          x >= t.left - r.width / 2 &&
+          x <= t.right + r.width / 2 &&
+          y >= t.top - r.height / 2 &&
+          y <= t.bottom + r.height / 2
+        );
+      }).length;
+    });
     if (tagged >= 3) return tagged;
     return page.evaluate(() => {
       const tray = document.querySelector('[data-testid="off-you"]');
