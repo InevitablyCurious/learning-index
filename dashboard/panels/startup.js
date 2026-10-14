@@ -194,13 +194,13 @@ function tuiMirror(b) {
     t.reason ?? "no session observed yet — the mirror attaches when a run opens one");
 }
 
-/** A hold blocks the run by design and must never look like a crash. */
+/** A pause after a grade blocks the run on purpose — it must never look like a crash. */
 function holdGate(b) {
   const h = b.hold ?? null;
-  const why = "a deliberate stop the harness places on a run — it blocks progress on purpose and waits for a human.";
+  const why = "a pause the run takes after a grade so the operator can play the game and read what the model will be told before anything is sent.";
   if (!h) return proc("hold-gate", "hold gate", "idle", "no hold", null, why);
-  return proc("hold-gate", "hold gate", "bad", "HELD", null, why,
-    (h.reason ?? "a hold is in place") + " — the run is stopped on purpose and will not continue until it is released.");
+  return proc("hold-gate", "hold gate", "bad", "PAUSED", null, why,
+    (h.reason ?? "the run is paused") + " — paused on purpose after a grade, waiting for the operator, and will not continue until released.");
 }
 
 function proc(id, name, state, detail, _unused, why, reason = null) {

@@ -714,8 +714,43 @@ a:hover{color:var(--type)}
 .ledger-lead{display:flex;flex-direction:column;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--hairline)}
 .big{display:flex;flex-direction:column;gap:4px;font:700 13px var(--font)}
 .hold{gap:10px}
-.hold.lan,.hold.dead{border-color:var(--danger)}
-.hold-url,.hold-actions,.hold-diag{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.hold.error{border-color:var(--danger)}
+.hold-actions,.hold-diag{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+/* ── THE PAUSE PANEL (panels/hold.js) ──────────────────────────────────────
+   The pause surface the operator meets when the run stops after a grade. The
+   told-text block is model-facing prose (~2 KB), so it is pre-wrapped and
+   scrollable once it outgrows its box. The note is a 4000-char textarea with a
+   live count; the error a release refusal shown where it happened. */
+.hold-pre{
+  white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:220px;
+  font:400 12px/1.6 var(--font);color:var(--fg);background:var(--bg);
+  border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;
+  margin:4px 0 2px;
+}
+.hold-told{display:flex;flex-direction:column;gap:6px}
+.hold-note{display:flex;flex-direction:column;gap:6px}
+.hold-note-ta{
+  font:400 12px/1.6 var(--font);color:var(--type);background:var(--bg);
+  border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+  padding:9px 11px;resize:vertical;min-height:64px;
+}
+.hold-note-ta:focus-visible{outline:2px solid var(--check);outline-offset:1px}
+.hold-err{
+  font:400 12px/1.5 var(--font);color:var(--danger);
+  border:1px solid var(--danger);border-radius:var(--radius-sm);padding:8px 11px;
+  white-space:pre-line;
+}
+/* ── PAUSE-AFTER-EACH-GRADE TOGGLE (panels/create.js confirm step, dev mode) ──
+   A row with an on/off toggle and one plain line under it. Mirrors the
+   continuous control's shape so the confirm step reads as one surface. */
+.cpause{display:flex;flex-direction:column;gap:6px;margin-top:2px}
+.cpause-btn{
+  font:700 12px var(--font);letter-spacing:.12em;color:var(--fg);
+  background:transparent;border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+  padding:8px 14px;cursor:pointer;text-align:left;align-self:flex-start;
+}
+.cpause-btn:hover:not(:disabled){color:var(--type);border-color:var(--fg)}
+.cpause-btn[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
 /* CONTINUOUS MODE — the chain's banner (panels/continuous.js): accent while it
    runs, plain once it ended, ok-green when the model passed everything. */
 .cont{background:var(--surface-raised);border:1px solid var(--accent);border-radius:var(--radius-xl);padding:var(--pad);display:flex;flex-direction:column;gap:10px;min-width:0}

@@ -45,6 +45,10 @@ const ui = {
   // snapshot (control/continuous.mjs). One cell at a time, so it and concurrency
   // turn each other off.
   continuous: false,
+  // Pause after each grade, default ON (the row is only shown in dev mode and
+  // is only ever sent then). The run stops after a grade so the operator can
+  // play the game and read what the model will be told before anything is sent.
+  pauseAfterGrade: true,
 
   // "Working" and "refused" are different facts; never shown as each other.
   pending: false,
@@ -78,6 +82,7 @@ export function openCreate() {
   ui.concurrency = false;
   ui.concurrencyN = "8";
   ui.continuous = false;
+  ui.pauseAfterGrade = true;
   ui.pending = false;
   ui.refusal = null;
   ui.launch = null;
@@ -188,6 +193,11 @@ export function toggleCreateConcurrency() {
 export function toggleCreateContinuous() {
   ui.continuous = !ui.continuous;
   if (ui.continuous) ui.concurrency = false;
+}
+
+/** Flip the pause-after-each-grade toggle relative to what is shown. */
+export function toggleCreatePause() {
+  ui.pauseAfterGrade = !ui.pauseAfterGrade;
 }
 
 export function setCreateConcurrencyN(v) {
@@ -541,6 +551,7 @@ function baselineConfirm(ledger, board) {
     ${compactOn ? "" : compactOffWarning(compactDefault)}
     ${isOn ? "" : concurrencyControl()}
     ${isOn ? "" : continuousControl(isDevModeOn(board))}
+    ${isDevModeOn(board) ? pauseControl() : ""}
     ${seedWarning()}`;
 
   return shell({
@@ -635,6 +646,21 @@ function continuousControl(devOn) {
       CONTINUOUS: ${ui.continuous ? "ON" : "OFF"}
     </button>
     ${note}`;
+}
+
+/**
+ * Pause after each grade — dev mode only. Shown as a row with an on/off toggle
+ * (default ON) and one plain line under it. Hidden entirely when dev mode is
+ * off, and never sent then (see launchCell).
+ */
+function pauseControl() {
+  return `
+    <div class="cpause">
+      <button class="cpause-btn" data-create-pause="${ui.pauseAfterGrade ? "on" : "off"}" aria-pressed="${ui.pauseAfterGrade}">
+        PAUSE AFTER EACH GRADE: ${ui.pauseAfterGrade ? "ON" : "OFF"}
+      </button>
+      <div class="note">The run stops after every grade so you can play the game and read what the model will be told, before anything is sent.</div>
+    </div>`;
 }
 
 /**
@@ -734,12 +760,13 @@ export function openCellConfirm({ model, kind, arm = "off", org = null } = {}) {
   ui.compact = null;
   ui.concurrency = false;
   ui.continuous = false;
+  ui.pauseAfterGrade = true;
   ui.refusal = null;
   ui.launch = null;
   ui.step = "b3";
 }
 
-export async function launchCell({ model, kind, arm = null, org = null } = {}) {
+export async function launchCell({ model, kind, arm = null, org = null, devOn = false } = {}) {
   // The [+ run] path: the selection comes from a baseline row.
   if (model) { ui.model = model; ui.kind = kind ?? ui.kind; }
   ui.open = true;
@@ -793,6 +820,10 @@ export async function launchCell({ model, kind, arm = null, org = null } = {}) {
     // Sent only when on, and only on the baseline arm; it is in the confirmation
     // token, so the server never starts a chain the operator did not confirm.
     if (ui.continuous && (ui.arm ?? "off") !== "on") payload.continuous = true;
+    // Pause after each grade is dev-mode only: the toggle is hidden (and the
+    // state is default-on) when dev mode is off, so it is sent only when dev
+    // mode is actually on and the operator left the pause on.
+    if (devOn && ui.pauseAfterGrade) payload.pauseAfterGrade = true;
     // The challenge: the server refuses an unknown one, or a second challenge on a
     // baseline that already built another.
     if (ui.challenge) payload.challenge = ui.challenge;

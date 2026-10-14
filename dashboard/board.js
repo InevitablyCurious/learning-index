@@ -313,7 +313,7 @@ import {
   feedExportText,
   feedExportLabel,
 } from "./panels/live.js";
-import { renderHold } from "./panels/hold.js";
+import { renderHold, setHoldNote } from "./panels/hold.js";
 import { renderContinuous } from "./panels/continuous.js";
 import { renderCells, setSelectedCell, selectedCell, observeCellStrip, activeCell } from "./panels/cells.js";
 import { renderRail } from "./panels/rail.js";
@@ -333,6 +333,7 @@ import {
   toggleCreateCompact,
   toggleCreateConcurrency,
   toggleCreateContinuous,
+  toggleCreatePause,
   setCreateConcurrencyN,
   openCellConfirm,
   setCreateQuery,
@@ -358,7 +359,7 @@ import {
   doLaunchBaseline,
   doLoadTools,
   doRunTool,
-  releaseHold,
+  doContinueHold,
   doEndContinuous,
   detachTui,
   doLoadBackups,
@@ -438,6 +439,20 @@ function render() {
   // Counters animate to the value already in the markup; a throw costs motion only.
   try { paintTicks(root); } catch (err) { console.error("tick paint failed:", err); }
   try { paintBuild(view); } catch (err) { console.error("build paint failed:", err); }
+
+  paintTitle();
+}
+
+/**
+ * The browser tab title, per frame: while a pause hold is shown, prefix it so
+ * the operator notices when the board is waiting on them. Restored when the
+ * hold ends. No timer — this rides the board's own render.
+ */
+function paintTitle() {
+  if (typeof document === "undefined") return;
+  const h = board?.hold;
+  const paused = Boolean(h && !h.released && (h.kind === "round" || h.kind === "final"));
+  document.title = paused ? "⏸ Paused — your turn · Bench Board v2" : "Bench Board v2";
 }
 
 /**
@@ -570,7 +585,7 @@ export function followActiveCell(b, repaint) {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-gate-id],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-hold-release],[data-continuous-end],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-continuous],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
+  const t = e.target.closest("[data-gate-id],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-continuous-end],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-continuous],[data-create-pause],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
   if (!t) return;
 
   if (t.dataset.gateId) {
@@ -589,7 +604,7 @@ function onClick(e) {
   if (t.hasAttribute("data-tui-detach")) { askDetach(); render(); return; }
   if (t.hasAttribute("data-tui-detach-yes")) { void detachTui(); return; }
   if (t.hasAttribute("data-tui-cancel")) { cancelDetach(); render(); return; }
-  if (t.hasAttribute("data-hold-release")) { void releaseHold(); return; }
+  if (t.hasAttribute("data-hold-continue")) { void doContinueHold(); return; }
   if (t.hasAttribute("data-continuous-end")) { void doEndContinuous(); return; }
 
   // ── [+ BASELINE] ── pure selection held in panels/create.js; only launch
@@ -623,6 +638,7 @@ function onClick(e) {
   if (t.dataset.createCompact) { toggleCreateCompact(t.dataset.createCompact === "on"); render(); return; }
   if (t.dataset.createConcurrency) { toggleCreateConcurrency(); render(); return; }
   if (t.dataset.createContinuous) { toggleCreateContinuous(); render(); return; }
+  if (t.dataset.createPause) { toggleCreatePause(); render(); return; }
   if (t.hasAttribute("data-create-baseline-continue")) {
     // Runs preflight, preview and start; results land on BASELINE · 4.
     void doLaunchBaseline();
@@ -807,6 +823,9 @@ function onRunSel(e) {
   if (e.target.closest("[data-create-query]")) { setCreateQuery(e.target.value); render(); return; }
   if (e.target.closest("[data-create-provider]")) { setCreateProvider(e.target.value); render(); }
   if (e.target.closest("[data-create-concurrency-n]")) { setCreateConcurrencyN(e.target.value); render(); return; }
+  // The pause-panel note: kept in JS state so a poll never erases it, and the
+  // live count re-renders with it.
+  if (e.target.closest("[data-hold-note]")) { setHoldNote(e.target.value); render(); return; }
 }
 
 function onGateHover(e) {

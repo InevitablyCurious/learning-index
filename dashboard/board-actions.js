@@ -7,9 +7,10 @@
 // dom-patch.test.mjs pins that.
 
 import { board, render, controlReachability, nul } from "./board.js";
+import { setHoldBusy, setHoldError, setHoldNote, holdNoteValue } from "./panels/hold.js";
 import { armReset, commitReset } from "./panels/treereset.js";
 import { loadRouters, saveRouterKey } from "./panels/routers.js";
-import { setDevMode, isDevModeBusy } from "./panels/devmode.js";
+import { setDevMode, isDevModeBusy, isDevModeOn } from "./panels/devmode.js";
 import { launchCell } from "./panels/create.js";
 import { loadTools, runTool } from "./panels/tools.js";
 import { pickRun } from "./panels/batch.js";
@@ -70,7 +71,7 @@ export async function doLaunchBaseline(opts) {
   // The launch frame is switched before the first await, so the checklist shows
   // while preflight runs.
   render();
-  await launchCell(opts);
+  await launchCell({ ...opts, devOn: isDevModeOn(board) });
   render();
 }
 
@@ -93,20 +94,63 @@ export async function doRunTool(id) {
   render();
 }
 
-/** Release a hold (same-origin, relayed). */
-export async function releaseHold() {
+/**
+ * Pure: the JSON body for a hold release — carries {note} ONLY when the note
+ * is non-empty (whitespace counts as empty). null = send no body at all.
+ */
+export function releaseBody(note) {
+  const trimmed = String(note ?? "").trim();
+  return trimmed ? { note: trimmed } : null;
+}
+
+/**
+ * Release a hold (same-origin, relayed). An optional note is sent with the
+ * release only when it is non-empty (a 4000-char cap is enforced by the
+ * control plane and the textarea). Returns {ok, reason} so the pause panel can
+ * keep the note and show the server's reason on a refusal.
+ */
+export async function releaseHold(note = null) {
   const reach = controlReachability(board);
   if (!reach.ok) {
-    console.error(`hold release unavailable — ${reach.code}: ${reach.reason}`);
-    return;
+    return { ok: false, reason: `${reach.code}: ${reach.reason}` };
+  }
+  const body = releaseBody(note);
+  const init = { method: "POST" };
+  if (body) {
+    init.headers = { "content-type": "application/json" };
+    init.body = JSON.stringify(body);
   }
   try {
-    const res = await fetch(`/api/hold/release`, { method: "POST" });
-    if (!res.ok) console.error(`hold release refused: HTTP ${res.status}`);
-    // The next poll sees the hold file vanish: that is the success signal.
+    const res = await fetch(`/api/hold/release`, init);
+    if (res.ok) return { ok: true };
+    let reason = `HTTP ${res.status}`;
+    try {
+      const d = await res.json();
+      if (d?.reason) reason = (d.code ? `${d.code}: ` : "") + d.reason;
+    } catch {
+      /* keep the HTTP status */
+    }
+    return { ok: false, reason };
   } catch (err) {
-    console.error("hold release failed:", err);
+    return { ok: false, reason: String(err?.message ?? err) };
   }
+}
+
+/**
+ * CONTINUE from the pause panel: send the note (if any) with the release. The
+ * note box text is kept unless the release succeeds; a refusal is shown in the
+ * panel, not swallowed. The next poll seeing the hold vanish is the success
+ * signal.
+ */
+export async function doContinueHold() {
+  setHoldBusy(true);
+  setHoldError(null);
+  render();
+  const result = await releaseHold(holdNoteValue());
+  if (result.ok) setHoldNote("");
+  else setHoldError(result.reason);
+  setHoldBusy(false);
+  render();
 }
 
 /**
