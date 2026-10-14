@@ -41,6 +41,10 @@ export async function validateStart(
     payload?.compact === true ? true : payload?.compact === false ? false : null;
   // Plain boolean: no server default, so absent means off.
   const requireTodos = payload?.requireTodos === true;
+  // Operator pause between grades (WO-PAUSE-AFTER-GRADE): a dev-mode capability,
+  // refused below (finishValidate) when dev mode is off — same shape as
+  // continuous. Absent means off.
+  const pauseAfterGrade = payload?.pauseAfterGrade === true;
   // Absent = the installation's default challenge. Named, it must exist and be
   // runnable.
   const challengeId = typeof payload?.challenge === "string" ? payload.challenge.trim() : "";
@@ -116,7 +120,7 @@ export async function validateStart(
       retired_reason: null,
     };
     return await finishValidate(
-      { model, arm, org, context, kind, entry: cloudEntry, cloud, compactRequested, requireTodos, graderWorkerTarget, challengeId },
+      { model, arm, org, context, kind, entry: cloudEntry, cloud, compactRequested, requireTodos, graderWorkerTarget, challengeId, pauseAfterGrade },
       { requireConfirm, runsRoot, payload },
     );
   }
@@ -142,7 +146,7 @@ export async function validateStart(
   }
 
   return await finishValidate(
-    { model, arm, org, context, kind, entry, cloud: null, compactRequested, requireTodos, challengeId },
+    { model, arm, org, context, kind, entry, cloud: null, compactRequested, requireTodos, challengeId, pauseAfterGrade },
     { requireConfirm, runsRoot, payload },
   );
 }
@@ -167,7 +171,7 @@ export function compactDefaultFor(entry) {
 }
 
 export async function finishValidate(
-  { model, arm, org, context, kind, entry, cloud, compactRequested = null, requireTodos = false, graderWorkerTarget = null, challengeId = "" },
+  { model, arm, org, context, kind, entry, cloud, compactRequested = null, requireTodos = false, graderWorkerTarget = null, challengeId = "", pauseAfterGrade = false },
   { requireConfirm, runsRoot, payload },
 ) {
   // The org is an optional label on an ON cell (the memory system's own settings
@@ -259,7 +263,17 @@ export async function finishValidate(
     }
   }
 
-  const expected = confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous });
+  // ── OPERATOR PAUSE BETWEEN GRADES (WO-PAUSE-AFTER-GRADE) ── a dev-mode
+  // capability, gated exactly like continuous: it halts the run for a human
+  // every grade, which is not a scorable automated measurement.
+  if (pauseAfterGrade && !devMode.enabled) {
+    return refuse("dev_mode_off",
+      "pause-after-grade holds the run after every graded pass so an operator can review " +
+        "what the model is about to be told — a development capability, not an unattended " +
+        "measurement — turn dev mode on in SETTINGS first");
+  }
+
+  const expected = confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous, pauseAfterGrade });
   if (requireConfirm && payload?.confirm !== expected) {
     return refuse(
       "bad_confirmation",
@@ -267,7 +281,7 @@ export async function finishValidate(
         "preview was shown. Review the restatement and confirm again.",
       {
         expected_token: expected,
-        restatement: restatement({ model, arm, org, context, kind, cloud, compact, continuous }),
+        restatement: restatement({ model, arm, org, context, kind, cloud, compact, continuous, pauseAfterGrade }),
       },
     );
   }
@@ -285,5 +299,5 @@ export async function finishValidate(
     }
   }
 
-  return { ok: true, model, arm, org, context, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous };
+  return { ok: true, model, arm, org, context, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous, pauseAfterGrade };
 }

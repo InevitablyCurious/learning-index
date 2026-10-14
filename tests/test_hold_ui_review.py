@@ -1,14 +1,19 @@
-"""WO-HOLD-UI-1 hold-for-UI-review tests.
+"""WO-PAUSE-AFTER-GRADE operator-pause tests.
 
-The hold boots a REAL node server from a stub worktree on the real :8002,
+The pause boots a REAL node server from a stub worktree on the real :8002,
 waits on the real RELEASE_HOLD sentinel, and must leave no listener behind
 (the ProcessReaper does not watch 8002 — the hold cleans up after itself).
+
+Replaces the old WO-HOLD-UI-1 env-gated end-only hold contract: the pause is
+now driven by the runner's `pause_after_grade` flag (never by env), writes
+hold-ui.json schema_version 2 (kind/attempt/told_text/grade), honours an
+operator note in the release file (journaled to operator-notes.jsonl, never to
+user-events or the worktree), and returns the seconds held.
 """
 
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 import shutil
 import socket
@@ -20,10 +25,9 @@ import pytest
 
 from harness.adapters import challenge as challenge_mod
 from harness.adapters.challenge import (
-    _HOLD_UI_ENV,
     _HOLD_UI_RELEASE_FILE,
     _HOLD_UI_STATE_FILE,
-    _hold_for_ui_review,
+    _hold_for_operator,
     _resolve_hold_ui_entrypoint,
 )
 
@@ -70,7 +74,7 @@ def _mk_worktree(tmp_path: Path, port: int) -> Path:
 
 def _stub_server_port_env() -> str:
     """Stub that honors the PORT env (unlike _stub_server, which bakes the
-    port in) — the auto-allocation test needs it to prove the hold passes its
+    port in) — the auto-allocation test needs it to prove the pause passes its
     allocated port through to the artifact."""
     return (
         "const http = require('http');\n"
@@ -105,22 +109,32 @@ def _hold_kwargs(tmp_path: Path, worktree: Path, lines: list[str]) -> dict:
         "container_name": "test-container",
         "live_view_url": "http://127.0.0.1:4096",
         "progress": lines.append,
+        "kind": "round",
+        "attempt": 1,
+        "max_attempts": 5,
+        "told_text": "I'm still seeing the off tray drawn over some points.",
+        "grade": {
+            "report_path": str(tmp_path / "attempt-1-report.json"),
+            "verdict": "FAIL",
+            "conformed": False,
+            "failed_gates": ["F01"],
+            "n_problems": 3,
+            "results": {"conformance": False, "backend": True, "frontend": False},
+        },
     }
 
 
-def _release_when_held(run_dir: Path) -> threading.Thread:
-    """Write the release sentinel once the hold's state file exists (the hold
+def _release_when_held(run_dir: Path, content: str = "release\n") -> threading.Thread:
+    """Write the release sentinel once the pause's state file exists (the pause
     consumes stale sentinels before waiting, so the sentinel must land AFTER
-    the state file). On timeout the hold hangs and pytest-timeout fails loud."""
+    the state file). On timeout the pause hangs and pytest-timeout fails loud."""
 
     def _release() -> None:
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             if (run_dir / _HOLD_UI_STATE_FILE).exists():
                 time.sleep(0.5)
-                (run_dir / _HOLD_UI_RELEASE_FILE).write_text(
-                    "release\n", encoding="utf-8"
-                )
+                (run_dir / _HOLD_UI_RELEASE_FILE).write_text(content, encoding="utf-8")
                 return
             time.sleep(0.2)
 
@@ -129,35 +143,24 @@ def _release_when_held(run_dir: Path) -> threading.Thread:
     return releaser
 
 
-def test_hold_disabled_is_noop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(_HOLD_UI_ENV, raising=False)
-    lines: list[str] = []
-    _hold_for_ui_review(
-        **_hold_kwargs(tmp_path, _mk_worktree(tmp_path, _BOOT_TEST_PORT), lines)
-    )
-    assert lines == []
-    assert not (tmp_path / _HOLD_UI_STATE_FILE).exists()
-
-
 def test_hold_boots_real_ui_and_release_tears_it_down(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(_HOLD_UI_ENV, "1")
     monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", _BOOT_TEST_PORT)
     assert _port_free(_BOOT_TEST_PORT), "test requires a free boot-test port"
     worktree = _mk_worktree(tmp_path, _BOOT_TEST_PORT)
     lines: list[str] = []
 
     releaser = _release_when_held(tmp_path)
-    _hold_for_ui_review(**_hold_kwargs(tmp_path, worktree, lines))
+    _hold_for_operator(**_hold_kwargs(tmp_path, worktree, lines))
     releaser.join(timeout=25)
 
     joined = "\n".join(lines)
     assert "step=hold-ui boot=ok" in joined
     assert "step=hold-ui waiting" in joined
     assert "step=hold-ui released" in joined
-    assert "action=proceed-to-teardown" in joined
-    assert _port_free(_BOOT_TEST_PORT), "hold must leave no listener behind"
+    assert "action=proceed-to-next-round" in joined
+    assert _port_free(_BOOT_TEST_PORT), "pause must leave no listener behind"
     assert not (tmp_path / _HOLD_UI_STATE_FILE).exists(), (
         "state file consumed at release"
     )
@@ -176,7 +179,6 @@ def test_hold_auto_allocates_a_free_port_and_passes_it_as_port_env(
     held cells boot host-side at once. The stub listens ONLY on the PORT env
     value, so boot=ok on a non-8002 port proves the env reached the artifact
     (the grader boots the same way: grader/lib/harness.ts)."""
-    monkeypatch.setenv(_HOLD_UI_ENV, "1")
     monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", 0)
     worktree = _mk_worktree_port_env(tmp_path)
     lines: list[str] = []
@@ -199,31 +201,30 @@ def test_hold_auto_allocates_a_free_port_and_passes_it_as_port_env(
     grabber = threading.Thread(target=_capture_then_release, daemon=True)
     grabber.start()
 
-    _hold_for_ui_review(**_hold_kwargs(tmp_path, worktree, lines))
+    _hold_for_operator(**_hold_kwargs(tmp_path, worktree, lines))
     grabber.join(timeout=25)
 
     joined = "\n".join(lines)
     assert "step=hold-ui boot=ok" in joined
-    assert captured, "hold never published its state file"
+    assert captured, "pause never published its state file"
     assert captured["ui_healthy"] is True
     port = int(captured["url"].rsplit(":", 1)[1])
-    assert port != 8002, "hold must auto-allocate, not fall back to the spec port"
+    assert port != 8002, "pause must auto-allocate, not fall back to the spec port"
     # The url the operator is handed (the waiting banner) carries the same port.
     assert f"url=http://localhost:{port}" in joined
-    assert _port_free(port), "hold must leave no listener behind"
+    assert _port_free(port), "pause must leave no listener behind"
 
 
 def test_hold_survives_unresolvable_entrypoint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(_HOLD_UI_ENV, "1")
     monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", _UNRESOLVABLE_TEST_PORT)
     worktree = tmp_path / "worktree"
     worktree.mkdir()
     lines: list[str] = []
 
     releaser = _release_when_held(tmp_path)
-    _hold_for_ui_review(**_hold_kwargs(tmp_path, worktree, lines))
+    _hold_for_operator(**_hold_kwargs(tmp_path, worktree, lines))
     releaser.join(timeout=25)
 
     joined = "\n".join(lines)
@@ -253,51 +254,49 @@ def test_resolve_entrypoint_throws_loudly(tmp_path: Path) -> None:
         _resolve_hold_ui_entrypoint(worktree)
 
 
-# ── Operator close-out + the consumable release contract ────────────────────
-#
-# The hold is what the operator SEES at the end of a run and what the dashboard
-# LATER consumes to release it. Both are contracts, so both are asserted here.
+# ── The v2 contract: schema, kind/attempt/told_text/grade, and the note ──────
 
 _RELEASE_CONTRACT_PORT = 18313
 
 
-def test_state_file_carries_the_consumable_release_contract(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """A consumer (the dashboard, a separate agent's work) must be able to
-    release the hold from hold-ui.json ALONE, without reading this source."""
-    monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", _RELEASE_CONTRACT_PORT)
-    monkeypatch.setenv(_HOLD_UI_ENV, "1")
-    worktree = _mk_worktree(tmp_path, _RELEASE_CONTRACT_PORT)
-    lines: list[str] = []
-    # The state file is deliberately UNLINKED on release (a stale "held" file
-    # would tell the dashboard a finished cell is still waiting), so it must be
-    # captured DURING the hold, not after.
-    captured: dict = {}
-
-    def _capture_then_release() -> None:
+def _capture_state_then_release(tmp_path: Path, captured: dict, content: str = "release\n") -> threading.Thread:
+    def _run() -> None:
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
             state_file = tmp_path / _HOLD_UI_STATE_FILE
             if state_file.exists():
                 time.sleep(0.5)
                 captured.update(json.loads(state_file.read_text(encoding="utf-8")))
-                (tmp_path / _HOLD_UI_RELEASE_FILE).write_text(
-                    "release\n", encoding="utf-8"
-                )
+                (tmp_path / _HOLD_UI_RELEASE_FILE).write_text(content, encoding="utf-8")
                 return
             time.sleep(0.2)
 
-    grabber = threading.Thread(target=_capture_then_release, daemon=True)
+    grabber = threading.Thread(target=_run, daemon=True)
     grabber.start()
+    return grabber
 
-    _hold_for_ui_review(**_hold_kwargs(tmp_path, worktree, lines))
+
+def test_state_file_carries_the_v2_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A consumer (the dashboard, a separate agent's work) must be able to
+    release the pause from hold-ui.json ALONE, without reading this source.
+    schema_version is 2 and carries kind/attempt/max_attempts/told_text/grade."""
+    monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", _RELEASE_CONTRACT_PORT)
+    worktree = _mk_worktree(tmp_path, _RELEASE_CONTRACT_PORT)
+    lines: list[str] = []
+    # The state file is deliberately UNLINKED on release, so it must be
+    # captured DURING the hold, not after.
+    captured: dict = {}
+
+    grabber = _capture_state_then_release(tmp_path, captured)
+    _hold_for_operator(**_hold_kwargs(tmp_path, worktree, lines))
     grabber.join(timeout=25)
 
     state = captured
-    assert state, "hold never published its state file"
+    assert state, "pause never published its state file"
     assert state["status"] == "held"
-    assert state["schema_version"] == 1
+    assert state["schema_version"] == 2
 
     release = state["release"]
     assert release["method"] == "touch_file"
@@ -310,6 +309,19 @@ def test_state_file_carries_the_consumable_release_contract(
     assert state["url"].endswith(f":{_RELEASE_CONTRACT_PORT}")
     assert state["ui_healthy"] is True
 
+    # ── WO-PAUSE-AFTER-GRADE v2 fields ──
+    assert state["kind"] == "round"
+    assert state["attempt"] == 1
+    assert state["max_attempts"] == 5
+    assert state["told_text"] == "I'm still seeing the off tray drawn over some points."
+    grade = state["grade"]
+    assert grade["verdict"] == "FAIL"
+    assert grade["conformed"] is False
+    assert grade["failed_gates"] == ["F01"]
+    assert grade["n_problems"] == 3
+    assert grade["results"] == {"conformance": False, "backend": True, "frontend": False}
+    assert grade["report_path"] == str(tmp_path / "attempt-1-report.json")
+
     # Loopback claim is MEASURED, and the stub binds 0.0.0.0 — so if this host
     # has a LAN address the exposure must be REPORTED, never assumed away.
     assert state["bind"]["expected_host"] == "127.0.0.1"
@@ -319,7 +331,7 @@ def test_state_file_carries_the_consumable_release_contract(
     assert "game is finished" in out
     assert state["url"] in out
     assert f"touch {tmp_path / _HOLD_UI_RELEASE_FILE}" in out
-    assert _port_free(_RELEASE_CONTRACT_PORT), "hold left a listener behind"
+    assert _port_free(_RELEASE_CONTRACT_PORT), "pause left a listener behind"
 
 
 def test_no_url_is_offered_when_the_ui_never_booted(
@@ -328,35 +340,68 @@ def test_no_url_is_offered_when_the_ui_never_booted(
     """Handing the operator a link to a dead server is worse than saying
     nothing — the close-out must say the UI failed and name the log."""
     monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", 18314)
-    monkeypatch.setenv(_HOLD_UI_ENV, "1")
     worktree = tmp_path / "worktree"
     worktree.mkdir()  # no entrypoint -> boot fails
     lines: list[str] = []
     captured: dict = {}
 
-    def _capture_then_release() -> None:
-        deadline = time.monotonic() + 20
-        while time.monotonic() < deadline:
-            state_file = tmp_path / _HOLD_UI_STATE_FILE
-            if state_file.exists():
-                time.sleep(0.5)
-                captured.update(json.loads(state_file.read_text(encoding="utf-8")))
-                (tmp_path / _HOLD_UI_RELEASE_FILE).write_text(
-                    "release\n", encoding="utf-8"
-                )
-                return
-            time.sleep(0.2)
-
-    grabber = threading.Thread(target=_capture_then_release, daemon=True)
-    grabber.start()
-
-    _hold_for_ui_review(**_hold_kwargs(tmp_path, worktree, lines))
+    grabber = _capture_state_then_release(tmp_path, captured)
+    _hold_for_operator(**_hold_kwargs(tmp_path, worktree, lines))
     grabber.join(timeout=25)
 
     out = capsys.readouterr().out
     assert "did NOT boot" in out
     assert "you can view it here" not in out
-    assert captured, "hold never published its state file"
+    assert captured, "pause never published its state file"
     assert captured["ui_healthy"] is False
     # No UI booted, so nothing can be LAN-reachable.
     assert captured["bind"]["lan_reachable"] is False
+
+
+def test_operator_note_is_journaled_and_never_reaches_worktree_or_user_events(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A release file carrying `{"note": "..."}` appends one line to
+    operator-notes.jsonl beside hold-ui.json — and nothing is written into the
+    worktree (the only place the model could see it)."""
+    monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", 18315)
+    worktree = _mk_worktree(tmp_path, 18315)
+    lines: list[str] = []
+
+    releaser = _release_when_held(
+        tmp_path, content=json.dumps({"note": "off tray looks fixed now"}) + "\n"
+    )
+    _hold_for_operator(**_hold_kwargs(tmp_path, worktree, lines))
+    releaser.join(timeout=25)
+
+    notes = tmp_path / "operator-notes.jsonl"
+    assert notes.is_file(), "operator note must be journaled"
+    row = json.loads(notes.read_text(encoding="utf-8").strip().splitlines()[-1])
+    assert row["kind"] == "round"
+    assert row["attempt"] == 1
+    assert row["note"] == "off tray looks fixed now"
+    assert "released_at" in row
+
+    # The note must never reach the model: nothing in the worktree, nothing in
+    # a user-events file. The worktree's only files are the stub server.
+    assert "off tray looks fixed now" not in (worktree / "server.js").read_text(
+        encoding="utf-8"
+    )
+    assert not (tmp_path / "worktree.user-events.jsonl").exists(), (
+        "the note must never be appended to user-events"
+    )
+
+
+def test_plain_release_writes_no_operator_note(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty release file (plain touch) journals no operator note."""
+    monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", 18316)
+    worktree = _mk_worktree(tmp_path, 18316)
+    lines: list[str] = []
+
+    releaser = _release_when_held(tmp_path, content="")
+    _hold_for_operator(**_hold_kwargs(tmp_path, worktree, lines))
+    releaser.join(timeout=25)
+
+    assert not (tmp_path / "operator-notes.jsonl").exists(), (
+        "a plain release must not journal a note"
+    )

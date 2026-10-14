@@ -69,7 +69,6 @@ from .constants import (
     _EXCUSE_ELIMINATOR,
     _FINALIZE_RECOVERY_NUDGE,
     _HARNESS_LIMIT_REASONS,
-    _HOLD_UI_ENV,
     _HOLD_UI_HEALTH_TIMEOUT_S,
     _HOLD_UI_HEARTBEAT_S,
     _HOLD_UI_POLL_S,
@@ -129,14 +128,14 @@ from .transport import (
 # .hold_ui / .worker_config, re-exported here so every name stays resolvable as
 # harness.adapters.challenge.<name>. _HOLD_UI_PORT stays a PACKAGE global (from
 # .constants above) that tests monkeypatch; hold_ui late-binds it at CALL time
-# (a local read of the package attribute inside _hold_for_ui_review) instead
+# (a local read of the package attribute inside _hold_for_operator) instead
 # of importing it.
 from .hold_ui import (
     _resolve_hold_ui_entrypoint,
     _hold_ui_port_listeners,
     _hold_ui_healthy,
     _hold_ui_lan_exposed,
-    _hold_for_ui_review,
+    _hold_for_operator,
 )
 from .worker_config import (
     build_worker_opencode_config,

@@ -65,6 +65,8 @@ a breaking change; readers must tolerate both.
 | `phase.start` | a build chunk or feedback round opens | `phase` |
 | `gate.result` | **one gate produces a verdict, at the moment it does** | `id`, `status`, `attempt`, `duration_ms` |
 | `attempt.end` | a feedback round closes | `attempt`, `verdict`, `conformed`, `failed`, `told`, `withheld`, `unevaluated`, `stage`, `stage_name` |
+| `pause.start` | an operator pause opens (WO-PAUSE-AFTER-GRADE) | `pause_kind` (`round`\|`final`), `attempt`, `max_attempts` |
+| `pause.end` | an operator pause is released | `pause_kind`, `attempt`, `held_s` (this pause's seconds) |
 | `cell.end` | cell reaches a terminal state | `verdict`, `terminal_reason` |
 | `backend` | a backend announces itself | `ns`, `name`, `version` |
 | `heartbeat` | **every 15s while a cell is live** | `phase`, `attempt`, `since_ms` |
@@ -80,6 +82,12 @@ end.
 > → `GET /api/play`) after an operator clicks Play. Do not wire "view the built
 > app" to `cell.serve_url`. (And `attempt.end`'s `told`/`withheld`/`unevaluated`
 > are the three repair counts; the board surfaces only `withheld`.)
+
+> **`pause.start`/`pause.end` are the operator pause (WO-PAUSE-AFTER-GRADE), a
+> dev-mode-only feature.** They bracket each hold: `round` fires after a graded
+> pass (before the feedback is sent), `final` fires once at run end. They are
+> emitted only when the run's `pause_after_grade` flag is on, so a normal run
+> never sees them.
 
 ## Liveness comes from `heartbeat`, and from nothing else
 

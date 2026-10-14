@@ -186,16 +186,19 @@ A CLOUD cell (OrcaRouter, BILLED) takes the main-parser flags `--cloud --router 
 --provider <vendor> --model <model>` (e.g. `--provider deepseek --model deepseek-chat` = DeepSeek
 V3); the local `--model <bench-alias>` shape above does NOT apply to cloud.
 
-**Optional — hold the stack for UI review.** Set `BENCH_HOLD_UI=1` on the
-run environment. At benchmark end (all attempts + gates done) the cell is NOT torn down: the
-artifact's server boots host-side from the bind-mounted worktree on `http://localhost:8002` —
-the exact code the model wrote, via the same boot the gates perform — and the run waits. The log
+**Optional — pause after each grade (dev mode only).** Pass `--pause-after-grade` on the
+run (the control plane only allows it when DEV MODE is on). The cell is then held after EVERY
+graded pass — before the model is told anything — and once more at the end, so you can play the
+app as it stands and read the exact lines the model is about to be told. During each pause the
+artifact's server boots host-side from the bind-mounted worktree on a per-cell free port — the
+exact code the model wrote, via the same boot the gates perform — and the run waits. The log
 carries a loud `HOLD-UI ACTIVE` line with the URL, the held container name, and the release
-command; machine-readable state is `<run_dir>/hold-ui.json`. Browse the UI (the live view
-also stays up), then release: `touch <run_dir>/RELEASE_HOLD`. Teardown + reap then run
-unconditionally as always (RC-6); heartbeat progress lines keep the status stream live during
-the wait (rule 5.15 is not tripped). Never set this on an unattended cell — the run waits until
-released or killed, and a kill still tears the stack down.
+command; machine-readable state is `<run_dir>/hold-ui.json` (schema_version 2, with `kind`,
+`attempt`, `told_text` and `grade`). Browse the UI (the live view also stays up), then release:
+`touch <run_dir>/RELEASE_HOLD` (or write `{"note": "..."}` to that file to journal a note that
+never reaches the model). Paused time is excluded from the cell's `wall_seconds` and recorded
+separately as `paused_seconds`. This replaced the old `BENCH_HOLD_UI` env hold. Never set this
+on an unattended cell — the run waits until released or killed, and a kill still tears the stack down.
 
 **Recovery — "roster hash drift detected ... start a fresh run":** the manifest pins the
 model roster; a provider/model migration invalidates it. Archive (never delete) via the

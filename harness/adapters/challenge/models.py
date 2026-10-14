@@ -221,6 +221,10 @@ class ChallengeCellResult:
     observation_lost_turns: int = 0
     unmetered_turns: int = 0
     unmetered_turn_wall_s: float = 0.0
+    # WO-PAUSE-AFTER-GRADE: seconds the cell was HELD for operator review,
+    # already excluded from `wall_seconds` above. Zero for a run with the
+    # pause flag off, or one that never paused.
+    paused_seconds: float = 0.0
     contention: ContentionCovariates | None = None
     worker_image_fingerprint: ImageFingerprint | None = None
     # WO-STRIP-2b: deterministic title the cell gave its OpenCode session(s),

@@ -7,7 +7,8 @@
 //                        log instead
 //   lan_reachable true   the artifact bound beyond loopback: shown as a finding
 //   vanished mid-render  released (the file is removed on release)
-//   feature off          BENCH_HOLD_UI unset, phrased as a choice
+// The panel tolerates the v2 fields (kind/attempt/told_text/grade) but renders
+// no new UI for them — a later work order owns the pause panel.
 // Release is available in every held state, whatever the artifact's health.
 
 import { esc, nul, dur } from "../board.js";
@@ -17,13 +18,6 @@ export function renderHold(board) {
 
   // No hold: nothing at all.
   if (!h) return "";
-
-  if (h.feature_off) {
-    return band("off", "HOLD FOR REVIEW — OPT-IN, CURRENTLY OFF", [
-      `<div class="hold-line">Hold-for-review is opt-in and is currently off.</div>`,
-      `<div class="note">Set <span class="bright">BENCH_HOLD_UI=1</span> before the run to stop the harness at session end so you can test the artifact before the cell closes.</div>`,
-    ]);
-  }
 
   if (h.released) {
     // The file vanished between poll and render: released.

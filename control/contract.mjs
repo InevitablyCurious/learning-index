@@ -127,7 +127,7 @@ export const STALL_THRESHOLD_S = 900;
  * The confirmation token is a pure function of the submitted parameters, so a
  * preview for one configuration cannot confirm a different one.
  */
-export function confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous = false }) {
+export function confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous = false, pauseAfterGrade = false }) {
   const parts = [
     `model=${model ?? ""}`,
     `arm=${arm ?? ""}`,
@@ -144,6 +144,10 @@ export function confirmationToken({ model, arm, org, context, kind, compact, sna
   // Continuous mode keeps starting runs after this one, so a confirmation for a
   // single run must not start a chain. Present only when on.
   if (continuous === true) parts.push("continuous=on");
+  // Operator pause between grades (WO-PAUSE-AFTER-GRADE) changes what the run
+  // does (halts for a human every grade), so it is bound into the token: a
+  // preview shown without it must not start a run that pauses. Present only when on.
+  if (pauseAfterGrade === true) parts.push("pauseAfterGrade=on");
   return parts.join("|");
 }
 
@@ -151,7 +155,7 @@ export function confirmationToken({ model, arm, org, context, kind, compact, sna
  * The restatement shown before START, composed by the server so the words read
  * are the words acted on.
  */
-export function restatement({ model, arm, org, context, kind, cloud = null, compact = false, continuous = false }) {
+export function restatement({ model, arm, org, context, kind, cloud = null, compact = false, continuous = false, pauseAfterGrade = false }) {
   const armWord = arm === "on" ? "MEMORY ON" : arm === "off" ? "CONTROL" : "UNKNOWN ARM";
   const isCloud = kind === "cloud";
   return [
@@ -177,6 +181,12 @@ export function restatement({ model, arm, org, context, kind, cloud = null, comp
     ...(continuous
       ? ["continuous: ON — when this run ends the tree is reset and the next run starts from its end " +
           "snapshot, and so on until the model passes everything"]
+      : []),
+    // Stated only when on: the run halts for a human after every grade.
+    ...(pauseAfterGrade
+      ? ["pause after each grade: ON — the run stops after every graded pass (and once at " +
+          "the end) so you can play the app and read what the model is about to be told before " +
+          "anything is sent; release each pause to continue"]
       : []),
   ].join("\n");
 }

@@ -102,7 +102,7 @@ from .feedback import (
     build_chunk_completion,
 )
 from .grading import GradingMixin
-from .hold_ui import _hold_for_ui_review
+from .hold_ui import _hold_for_operator
 from .memory_record import MemoryRecordMixin
 from .models import (
     ChallengeCellResult,
@@ -208,6 +208,24 @@ def _regressed_checks(
     }
 
 
+def _pause_grade(report: dict[str, Any], report_path: Path) -> dict[str, Any]:
+    """The grade an operator pause shows (WO-PAUSE-AFTER-GRADE): values the
+    attempt's report already carries, plus its path. Nothing is re-derived."""
+    gates = report.get("failed_gates")
+    problems = report.get("problems")
+    grade: dict[str, Any] = {
+        "report_path": str(report_path),
+        "verdict": report.get("verdict"),
+        "conformed": report.get("conformed"),
+        "failed_gates": [str(g) for g in gates] if isinstance(gates, list) else [],
+        "n_problems": len(problems) if isinstance(problems, list) else 0,
+    }
+    results = report.get("results")
+    if isinstance(results, dict):
+        grade["results"] = {str(k): bool(v) for k, v in results.items()}
+    return grade
+
+
 class ChallengeRunner(
     UtilsMixin,
     PricingMixin,
@@ -253,6 +271,7 @@ class ChallengeRunner(
         gate_roster_path: Path | str | None = None,
         compact: bool = False,
         require_todos: bool = False,
+        pause_after_grade: bool = False,
         chunk_plan_hash: str | None = None,
         template_hash: str | None = None,
         source_commit: str | None = None,
@@ -292,6 +311,13 @@ class ChallengeRunner(
         self.compact = bool(compact)
         # Benchmark run-condition, off unless the operator asked for it.
         self.require_todos = bool(require_todos)
+        # Operator pause between grades (WO-PAUSE-AFTER-GRADE). Off by default:
+        # the loop then behaves exactly as before — no hold file, no extra wait,
+        # no new output. When on, the runner holds the cell after every graded
+        # pass (round) and again at the very end (final), calling
+        # `_hold_for_operator`. Decided entirely by this flag; the harness never
+        # reads an env var for it (BENCH_HOLD_UI is deleted).
+        self.pause_after_grade = bool(pause_after_grade)
         self.memory_mode = str(memory_mode)
         # Bench identity for session titling (WO-STRIP-2b). Empty is legitimate
         # (mock/unit callers); the title then uses the "org" fallback component.
@@ -906,6 +932,10 @@ class ChallengeRunner(
         worker_image_fingerprint = _pkg.worker_image_fingerprint
 
         started = time.monotonic()
+        # WO-PAUSE-AFTER-GRADE: seconds the cell spent HELD for operator review.
+        # Accumulated across every round + final pause and excluded from
+        # `wall_seconds`; also recorded beside it as `paused_seconds`.
+        paused_seconds = 0.0
         # WO-STRIP-2b: capture the cell epoch ONCE so every surface of this
         # cell (serve session, first-run argv, result, status stream) carries
         # the identical deterministic title, stable across attempts/resumes.
@@ -2050,6 +2080,26 @@ class ChallengeRunner(
 
                 self._write_worker_permission_config(worktree=worktree)
 
+                # WO-PAUSE-AFTER-GRADE: ROUND pause. Reaching this point means
+                # this graded pass (attempt `attempt`) is NOT the final one and
+                # the loop WILL drive `next_attempt` below — so this is exactly
+                # one pause per non-final graded pass. The told lines for the
+                # next round are already on disk (`_append_user_event` above),
+                # and nothing has been sent to the model yet. Hold for the
+                # operator; released seconds are excluded from wall time.
+                if self.pause_after_grade:
+                    paused_seconds += self._run_operator_pause(
+                        run_label=run_label,
+                        run_dir=run_dir,
+                        worktree=worktree,
+                        active_cell=active_cell,
+                        session_id=session_id,
+                        kind="round",
+                        attempt=attempt,
+                        told_text=feedback,
+                        grade=_pause_grade(report, report_json),
+                    )
+
                 self._mark_harness_resume(prev_run_stats)
                 feedback_run = self._run_cell_attempt(
                     active_cell=active_cell,
@@ -2145,18 +2195,31 @@ class ChallengeRunner(
                     termination_reason = "harness_error"
                     break
 
-            # WO-HOLD-UI-1: benchmark end, stack held for operator UI review.
-            # Every loop-exit path converges here; this is the last statement
-            # inside the cell context, so release resumes into the normal
-            # unconditional teardown (RC-6). No-op unless BENCH_HOLD_UI=1.
-            if active_cell is not None:
-                _hold_for_ui_review(
+            # WO-PAUSE-AFTER-GRADE: FINAL pause. Every normal loop-exit path
+            # converges here; this is the last statement inside the cell
+            # context, so release resumes into the normal unconditional
+            # teardown (RC-6). Replaces the deleted env gate (BENCH_HOLD_UI):
+            # the pause fires ONLY when `pause_after_grade` is on. kind="final",
+            # told_text is None (nothing further is being sent).
+            if self.pause_after_grade and active_cell is not None:
+                final_attempt = attempt_reports[-1]["attempt"] if attempt_reports else None
+                paused_seconds += self._run_operator_pause(
                     run_label=run_label,
                     run_dir=run_dir,
                     worktree=worktree,
-                    container_name=active_cell.container_name,
-                    live_view_url=f"http://127.0.0.1:{self.serve_host_port}",
-                    progress=self._progress,
+                    active_cell=active_cell,
+                    session_id=session_id,
+                    kind="final",
+                    attempt=final_attempt,
+                    told_text=None,
+                    grade=(
+                        None
+                        if final_attempt is None
+                        else _pause_grade(
+                            final_report,
+                            run_dir / f"attempt-{final_attempt}-report.json",
+                        )
+                    ),
                 )
 
         if termination_reason == "pending":
@@ -2164,7 +2227,7 @@ class ChallengeRunner(
             attempts_to_green = "FAIL"
             termination_reason = "harness_error"
 
-        wall_seconds = time.monotonic() - started
+        wall_seconds = time.monotonic() - started - paused_seconds
         problems_final = self._normalize_problems(final_report.get("problems"))
         failed_gates_final = self._normalize_string_list(
             final_report.get("failed_gates")
@@ -2292,6 +2355,7 @@ class ChallengeRunner(
             cache_write_tokens=cache_write_total,
             turns=turns_total,
             wall_seconds=wall_seconds,
+            paused_seconds=round(paused_seconds, 3),
             delivery=delivery,
             failed_gates=failed_gates_final,
             problems_final=problems_final,
@@ -2368,6 +2432,65 @@ class ChallengeRunner(
             unmetered_turn_wall_s=unmetered_turn_wall_total,
             worker_image_fingerprint=worker_image_identity,
         )
+
+    def _run_operator_pause(
+        self,
+        *,
+        run_label: str,
+        run_dir: Path,
+        worktree: Path,
+        active_cell: DockerCell,
+        session_id: str | None,
+        kind: str,
+        attempt: int | None,
+        told_text: str | None,
+        grade: dict[str, Any] | None,
+    ) -> float:
+        """Run ONE operator pause (WO-PAUSE-AFTER-GRADE).
+
+        Holds the cell stack via `_hold_for_operator` (which boots the artifact
+        host-side and blocks until the operator releases it), brackets it with
+        `pause.start`/`pause.end` live events, and returns the seconds this
+        pause took — the artifact boot included — so the caller can exclude
+        them from wall time. `kind` is "round" (a graded pass, feedback not yet
+        sent) or "final" (run end).
+        """
+        live = getattr(self, "_live", None)
+        cell_seq = getattr(self, "_cell_seq", None)
+        if live is not None:
+            live.emit(
+                "pause.start",
+                cell_seq=cell_seq,
+                session_id=session_id,
+                pause_kind=kind,
+                attempt=attempt,
+                max_attempts=self.max_attempts,
+            )
+        started = time.monotonic()
+        _hold_for_operator(
+            run_label=run_label,
+            run_dir=run_dir,
+            worktree=worktree,
+            container_name=active_cell.container_name,
+            live_view_url=f"http://127.0.0.1:{self.serve_host_port}",
+            progress=self._progress,
+            kind=kind,
+            attempt=attempt,
+            max_attempts=self.max_attempts,
+            told_text=told_text,
+            grade=grade,
+        )
+        held_s = time.monotonic() - started
+        if live is not None:
+            live.emit(
+                "pause.end",
+                cell_seq=cell_seq,
+                session_id=session_id,
+                pause_kind=kind,
+                attempt=attempt,
+                held_s=round(held_s, 3),
+            )
+        return held_s
 
     def _run_cell_attempt(
         self,

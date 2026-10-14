@@ -78,6 +78,15 @@ test("CONTINUOUS: the chained payload drops the confirmation, the flag and the c
   assert.deepEqual(chainPayload({ ...PAYLOAD, confirm: "x", continuous: true, concurrency: 1 }), PAYLOAD);
 });
 
+test("CONTINUOUS: pause-after-grade rides the chain payload unchanged (every link inherits it)", () => {
+  // The operator pause (WO-PAUSE-AFTER-GRADE) is not one-time, so it must
+  // survive chainPayload and be re-posted by every chained link's preview and
+  // start — it is part of `state.payload`, which the tick reuses verbatim.
+  const p = { ...PAYLOAD, pauseAfterGrade: true };
+  const stripped = chainPayload({ ...p, confirm: "x", continuous: true, concurrency: 1 });
+  assert.equal(stripped.pauseAfterGrade, true, "pause-after-grade must not be stripped by chainPayload");
+});
+
 test("CONTINUOUS: a chain begins at run 1 and ends with its reason, once", async () => {
   const io = sandbox();
   assert.equal(await readChain(io), null, "no chain was ever started");

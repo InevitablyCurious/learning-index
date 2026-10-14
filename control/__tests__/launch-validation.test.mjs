@@ -1,10 +1,12 @@
 // Extracted verbatim from control/control.test.mjs — WO-LI18 split A.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { confirmationToken, restatement, refuse } from "../contract.mjs";
+import { finishValidate } from "../lib/validate.mjs";
 import { RETIRED_ALIASES, readRoster } from "../roster.mjs";
 import { COMPACT_DEFAULT_CEILING, CONTEXT_ADVISORY_FLOOR } from "../cloud.mjs";
 
@@ -241,6 +243,58 @@ test("REQUIRE TODOS: the preflight handler does NOT pass a flag preflight cannot
     !body.includes("--require-todos"),
     "the preflight argv must not carry a flag bench_preflight.py does not define",
   );
+});
+
+test("PAUSE AFTER GRADE: validateStart accepts it, refuses it with dev mode off, and returns it", async () => {
+  // WO-PAUSE-AFTER-GRADE — the dev-mode-gated operator pause. It must be
+  // accepted (and returned) when dev mode is on, refused with dev_mode_off when
+  // it is off, and bound into the confirmation token so preview and start agree.
+  const saved = { ...process.env };
+  delete process.env.BENCH_SEED_SNAPSHOT;
+  // Never read this machine's armed snapshot: an operator's armed seed would
+  // otherwise turn this into a seeded start for a model it does not match.
+  process.env.BENCH_SEED_SNAPSHOT_FILE = join(mkdtempSync(join(tmpdir(), "okp-pause-")), "armed-snapshot.json");
+  try {
+    process.env.BENCH_DEV_MODE = "on";
+    const ok = await finishValidate(
+      { model: "m-a", arm: "off", org: null, context: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: true },
+      { requireConfirm: false, runsRoot: null, payload: { pauseAfterGrade: true } },
+    );
+    assert.equal(ok.ok, true);
+    assert.equal(ok.pauseAfterGrade, true);
+
+    process.env.BENCH_DEV_MODE = "off";
+    const off = await finishValidate(
+      { model: "m-a", arm: "off", org: null, context: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: true },
+      { requireConfirm: false, runsRoot: null, payload: { pauseAfterGrade: true } },
+    );
+    assert.equal(off.ok, false);
+    assert.equal(off.code, "dev_mode_off");
+
+    // Without the flag, dev mode off is not an obstacle.
+    const noFlag = await finishValidate(
+      { model: "m-a", arm: "off", org: null, context: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: false },
+      { requireConfirm: false, runsRoot: null, payload: {} },
+    );
+    assert.equal(noFlag.ok, true);
+  } finally {
+    process.env = saved;
+  }
+});
+
+test("PAUSE AFTER GRADE: the flag is bound into the confirmation token and the argv push exists", () => {
+  const p = { model: "m", arm: "off", org: null, context: null, kind: "local", compact: false, snapshotId: null };
+  assert.equal(confirmationToken(p), confirmationToken({ ...p, pauseAfterGrade: false }), "off leaves the token as it was");
+  assert.notEqual(confirmationToken({ ...p, pauseAfterGrade: true }), confirmationToken(p));
+  assert.match(confirmationToken({ ...p, pauseAfterGrade: true }), /pauseAfterGrade=on/);
+
+  // The launch argv must carry the flag when the operator asked for it.
+  const src = readFileSync(join(BENCH, "control", "routes", "run.mjs"), "utf8");
+  assert.match(src, /if \(pauseAfterGrade\) argv\.push\("--pause-after-grade"\)/);
+  // The preview/start destructures must carry pauseAfterGrade too.
+  const destructures = src.match(/const \{ model, arm, org, context, kind, cloud, compact[^}]*\} = check;/g) ?? [];
+  assert.ok(destructures.length >= 2, "expected the preview and launch destructures");
+  for (const d of destructures) assert.match(d, /pauseAfterGrade/);
 });
 
 test("every refusal carries a human-readable reason", () => {

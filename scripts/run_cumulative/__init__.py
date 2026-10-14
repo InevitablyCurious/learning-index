@@ -363,6 +363,24 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Let the agent work without planning first (the default).",
     )
 
+    # ── OPERATOR PAUSE BETWEEN GRADES (WO-PAUSE-AFTER-GRADE) ────────────────
+    #
+    # DEV MODE ONLY — the CONTROL PLANE refuses this option when dev mode is
+    # off, and the harness knows nothing about dev mode: the control plane
+    # decides and the harness obeys this flag. Off by default: the loop then
+    # behaves exactly as before (no hold file, no extra wait, no new output).
+    run_parser.add_argument(
+        "--pause-after-grade",
+        dest="pause_after_grade",
+        action="store_true",
+        default=False,
+        help=(
+            "Hold the cell after EVERY graded pass (and once at the end) so an "
+            "operator can play the app and read the exact lines the model is "
+            "about to be told before anything is sent. Dev mode only."
+        ),
+    )
+
     # ── MACHINE SHARE FOR GRADING ──────────────────────────────────────────
     #
     # NOT a measurement variable, unlike everything around it: it changes how

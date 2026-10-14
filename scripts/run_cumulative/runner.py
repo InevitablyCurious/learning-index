@@ -182,6 +182,7 @@ class RealSessionRunner:
         cloud_slug: str | None = None,
         compact: bool = False,
         require_todos: bool = False,
+        pause_after_grade: bool = False,
         grader_worker_target: float | None = None,
         seed_snapshot: str | None = None,
         run_identity: str | None = None,
@@ -207,6 +208,10 @@ class RealSessionRunner:
         # reason as compaction: a campaign whose arms disagree about it measures
         # the planning change, not memory.
         self._require_todos = bool(require_todos)
+        # Operator pause between grades (WO-PAUSE-AFTER-GRADE), declared at
+        # launch and threaded to the adapter. Campaign-wide for the same reason
+        # as the flags above.
+        self._pause_after_grade = bool(pause_after_grade)
         self._grader_worker_target = (
             None if grader_worker_target is None else float(grader_worker_target)
         )
@@ -730,6 +735,10 @@ class RealSessionRunner:
             "unmetered_turn_wall_s": float(
                 getattr(result, "unmetered_turn_wall_s", 0.0) or 0.0
             ),
+            # WO-PAUSE-AFTER-GRADE: seconds the cell spent HELD for operator
+            # review, already excluded from the wall_seconds inside `progress`. Recorded
+            # so the scorecard can see it.
+            "paused_seconds": float(getattr(result, "paused_seconds", 0.0) or 0.0),
             "session_fp": session_fp,
             "session_id": session_id,
             # WO-STRIP-2b: the deterministic title the cell gave its OpenCode
@@ -1120,6 +1129,7 @@ class RealSessionRunner:
             # one place this decision is made.
             "compact": bool(getattr(self, "_compact", False)),
             "require_todos": bool(getattr(self, "_require_todos", False)),
+            "pause_after_grade": bool(getattr(self, "_pause_after_grade", False)),
             "grader_worker_target": getattr(self, "_grader_worker_target", None),
             # WO-SNAP-02: corpus identity for snapshot provenance. The
             # producer states these; the runner/snapshot consumer must never
@@ -1335,6 +1345,7 @@ def _build_real_runner(
         # flag), and absent means OFF — the pre-compaction behaviour.
         compact=bool(getattr(args, "compact", False)),
         require_todos=bool(getattr(args, "require_todos", False)),
+        pause_after_grade=bool(getattr(args, "pause_after_grade", False)),
         grader_worker_target=getattr(args, "grader_worker_target", None),
         # WO-SNAP-04: declared on the MAIN parser (every subcommand parses it;
         # only `run` builds a real runner). Absent/empty means no seeding —

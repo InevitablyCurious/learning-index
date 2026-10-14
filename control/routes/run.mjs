@@ -99,16 +99,17 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous } = check;
+      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous, pauseAfterGrade } = check;
       sendJson(res, 200, {
         ok: true,
-        token: confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous }),
-        restatement: restatement({ model, arm, org, context, kind, cloud, compact, continuous }),
+        token: confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous, pauseAfterGrade }),
+        restatement: restatement({ model, arm, org, context, kind, cloud, compact, continuous, pauseAfterGrade }),
         continuous: continuous === true,
         // The resolved compaction answer, so the frame shows what the token was
         // minted for.
         compact: compact === true,
         requireTodos: requireTodos === true,
+        pauseAfterGrade: pauseAfterGrade === true,
         challenge: challenge?.id ?? null,
         graderWorkerTarget: graderWorkerTarget ?? null,
         // The machine form of what the operator is committing to (substrate, vendor,
@@ -172,7 +173,7 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous } = check;
+      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous, pauseAfterGrade } = check;
 
       // Argv array, no shell — the SHARED argv, identical for every cell of
       // the batch except the per-cell --sequence-index spliced in below.
@@ -226,6 +227,7 @@ export const routes = [
       const subcommandAt = argv.length;
       argv.push("run", "--mode", arm, compact ? "--compact" : "--no-compact");
       if (requireTodos) argv.push("--require-todos");
+      if (pauseAfterGrade) argv.push("--pause-after-grade");
       if (graderWorkerTarget != null) {
         argv.push("--grader-worker-target", String(graderWorkerTarget));
       }
@@ -674,22 +676,41 @@ export const routes = [
     method: "GET",
     path: "/api/hold",
     async handle(req, res, url) {
-      sendJson(res, 200, await readHold({ runsRoot: RUNS_ROOT }));
+      sendJson(res, 200, await readHold({ runsRoot: RUNS_ROOT, runDirs: await liveRunDirs() }));
       return;
     },
   },
 
   {
-    // ── POST /api/hold/release ── idempotent.
+    // ── POST /api/hold/release ── idempotent. Optional JSON body `{note}`: the
+    // harness journals the note with the release; it never reaches the model.
+    // A body that is not that shape is refused, so a note is never lost quietly.
     method: "POST",
     path: "/api/hold/release",
     async handle(req, res, url) {
-      const result = await releaseHold({ runsRoot: RUNS_ROOT });
-      sendJson(res, result.ok ? 200 : 409, result);
+      let body;
+      try {
+        body = JSON.parse((await readBody(req)) || "{}");
+      } catch {
+        sendJson(res, 400, { ok: false, code: "bad_body", reason: "the release body must be JSON: {\"note\"?: string}" });
+        return;
+      }
+      if (body?.note != null && typeof body.note !== "string") {
+        sendJson(res, 400, { ok: false, code: "bad_body", reason: "note must be a string" });
+        return;
+      }
+      const result = await releaseHold({ runsRoot: RUNS_ROOT, runDirs: await liveRunDirs(), note: body?.note ?? null });
+      sendJson(res, result.ok ? 200 : result.code === "note_too_long" ? 400 : 409, result);
       return;
     },
   },
 ];
+
+/** The run directories (relative to RUNS_ROOT) of the runs in flight — the only runs a hold can belong to. */
+async function liveRunDirs() {
+  const state = await readRunState({ runsRoot: RUNS_ROOT });
+  return (state.runs ?? []).filter((r) => r.running && r.run_dir).map((r) => r.run_dir);
+}
 
 /** The challenge this campaign started on (from the run manifest), or null. */
 async function pinnedChallengeFor(manifestArg) {

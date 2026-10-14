@@ -1,4 +1,4 @@
-"""Hold-UI leaves for the challenge adapter.
+"""Operator-pause leaves for the challenge adapter (WO-PAUSE-AFTER-GRADE).
 
 Extracted verbatim from harness/adapters/challenge/__init__.py
 (WO-LI15-I1C STAGE 1C) and re-exported there, so every name stays
@@ -6,12 +6,12 @@ resolvable as harness.adapters.challenge.<name>.
 
 THE LATE-BOUND _HOLD_UI_PORT SEAM. tests/test_hold_ui_review.py patches
 the port via monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", port)
-on the PACKAGE, and _hold_for_ui_review consumes it in seven places.
+on the PACKAGE, and _hold_for_operator consumes it in seven places.
 This module therefore must NOT bind _HOLD_UI_PORT at import time: an
 import-time binding would freeze the default (0 = auto-allocate) and
 silently ignore the patch, and a module-level __getattr__ cannot help —
 PEP 562 fires only on attribute access, never on the bare LOAD_GLOBAL
-references inside a function. Instead, _hold_for_ui_review reads the package
+references inside a function. Instead, _hold_for_operator reads the package
 attribute ONCE at call time into a local of the same name, so the
 monkeypatched value is what the hold sees. The other _HOLD_UI_*
 constants are not patched anywhere, so importing them directly from
@@ -19,6 +19,13 @@ constants are not patched anywhere, so importing them directly from
 backgammon.subprocess.run, which mutates the stdlib subprocess
 singleton this module also holds a reference to — no late binding
 needed.
+
+WO-PAUSE-AFTER-GRADE: this was `_hold_for_ui_review`, a benchmark-end-only,
+env-gated (BENCH_HOLD_UI) hold. It is now `_hold_for_operator`, driven by the
+runner's `pause_after_grade` flag (never by env), and can fire per-grade
+(`kind="round"`) or at run end (`kind="final"`). It writes hold-ui.json with
+schema_version 2 and honours an operator note carried in the release file. The
+runner times each pause itself and excludes it from wall time.
 """
 
 from __future__ import annotations
@@ -37,7 +44,6 @@ import urllib.error
 import urllib.request
 
 from .constants import (
-    _HOLD_UI_ENV,
     _HOLD_UI_HEALTH_TIMEOUT_S,
     _HOLD_UI_HEARTBEAT_S,
     _HOLD_UI_POLL_S,
@@ -46,6 +52,14 @@ from .constants import (
     _HOLD_UI_STATE_FILE,
 )
 from harness.free_port import allocate_free_host_port
+
+# The schema_version this module writes. v1 (the env-gated end-only hold) is
+# no longer produced; readHold on the control plane accepts v2 only.
+_HOLD_UI_SCHEMA_VERSION = 2
+# The operator-note journal, written beside hold-ui.json when a release carries
+# a note. NEVER into the worktree and never into user-events: the note must
+# never reach the model.
+_OPERATOR_NOTES_FILE = "operator-notes.jsonl"
 
 
 def _resolve_hold_ui_entrypoint(worktree: Path) -> Path:
@@ -141,7 +155,68 @@ def _hold_ui_lan_exposed(port: int) -> str | None:
     return None
 
 
-def _hold_for_ui_review(
+def _read_operator_note(
+    release_path: Path, progress: Callable[[str], None]
+) -> str | None:
+    """Read the operator note from a release file.
+
+    Empty file = plain release (no note). Otherwise the file must be JSON
+    `{"note": "<text>"}`; a non-empty note string is returned trimmed. A file
+    that cannot be read or parsed still releases the cell, but the lost note
+    is reported loudly — never dropped in silence.
+    """
+    try:
+        content = release_path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        progress(f"PROGRESS step=hold-ui operator-note LOST reason=unreadable error={exc}")
+        return None
+    if not content:
+        return None
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError as exc:
+        progress(f"PROGRESS step=hold-ui operator-note LOST reason=not-json error={exc}")
+        return None
+    note = parsed.get("note") if isinstance(parsed, dict) else None
+    if isinstance(note, str) and note.strip():
+        return note.strip()
+    progress("PROGRESS step=hold-ui operator-note LOST reason=no-note-string")
+    return None
+
+
+def _append_operator_note(
+    run_dir: Path,
+    *,
+    kind: str,
+    attempt: int | None,
+    note: str,
+    progress: Callable[[str], None],
+) -> None:
+    """Append one journal line to operator-notes.jsonl in `run_dir`.
+
+    The note is operator telemetry only: it is written OUTSIDE the worktree
+    (beside hold-ui.json) and never touches user-events or the opencode
+    session, so it can never reach the model. A write failure is reported
+    loudly and does not fail the cell.
+    """
+    payload = {
+        "attempt": attempt,
+        "kind": kind,
+        "note": note,
+        "released_at": _dt.datetime.now(tz=_dt.timezone.utc).isoformat(),
+    }
+    notes_path = run_dir / _OPERATOR_NOTES_FILE
+    try:
+        with notes_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(payload, separators=(",", ":")) + "\n")
+    except OSError as exc:
+        progress(
+            f"PROGRESS step=hold-ui operator-note LOST reason=write-failed "
+            f"path={notes_path} error={exc}"
+        )
+
+
+def _hold_for_operator(
     *,
     run_label: str,
     run_dir: Path,
@@ -149,23 +224,34 @@ def _hold_for_ui_review(
     container_name: str,
     live_view_url: str,
     progress: Callable[[str], None],
+    kind: str = "final",
+    attempt: int | None = None,
+    max_attempts: int | None = None,
+    told_text: str | None = None,
+    grade: dict[str, Any] | None = None,
 ) -> None:
-    """Hold the cell stack for operator UI review until released.
+    """Hold the cell stack for operator review until released.
 
-    No-op unless BENCH_HOLD_UI=1. Boots the artifact's server host-side
+    Called by the runner ONLY when `pause_after_grade` is on — there is no env
+    gate here (BENCH_HOLD_UI is deleted). Boots the artifact's server host-side
     from the worktree on a per-cell FREE port passed to it as PORT (the
     gate's assigned-port boot, minus Playwright), then waits on the
     RELEASE_HOLD sentinel. Never fails the cell: boot problems are logged
     and the hold still proceeds (container + worktree stay inspectable). The
     UI server is killed in a finally — the ProcessReaper does not watch it.
+
+    Writes hold-ui.json with schema_version 2, carrying `kind`, `attempt`,
+    `max_attempts`, `told_text` (the exact feedback about to be sent, round
+    pauses only) and `grade` (values the attempt's grade report already
+    carries, plus the report path). If the release file carries a JSON
+    `{"note": "<text>"}`, the note is appended to operator-notes.jsonl beside
+    hold-ui.json — never reaching the model.
     """
     import harness.adapters.challenge as _pkg
 
     _HOLD_UI_PORT = (
         _pkg._HOLD_UI_PORT
     )  # late-bound: tests monkeypatch the package attr; read it once at call time
-    if (os.environ.get(_HOLD_UI_ENV) or "").strip() != "1":
-        return
 
     # Per-cell free port: a fixed 8002 would collide when N held cells boot
     # host-side at once. A positive value is a pin (tests monkeypatch it);
@@ -276,7 +362,12 @@ def _hold_for_ui_review(
         # one page. A file works from the dashboard, a script, or a shell, needs
         # no auth story, and cannot be reached from off-box at all.
         "status": "held",
-        "schema_version": 1,
+        "schema_version": _HOLD_UI_SCHEMA_VERSION,
+        "kind": kind,
+        "attempt": attempt,
+        "max_attempts": max_attempts,
+        "told_text": told_text,
+        "grade": grade,
         "release": {
             "method": "touch_file",
             "path": str(release_path),
@@ -334,6 +425,8 @@ def _hold_for_ui_review(
             f"{reach_lines}\n"
             f"  When you are done looking, release it with:\n"
             f"      touch {release_path}\n"
+            f"  (or write {{'note': 'your words'}} to that file to journal a note\n"
+            f"   with the release — it never reaches the model)\n"
             f"{'=' * 72}\n"
         )
     else:
@@ -352,6 +445,7 @@ def _hold_for_ui_review(
 
     held_at = time.monotonic()
     last_heartbeat = 0.0
+    note: str | None = None
     try:
         while not release_path.exists():
             now = time.monotonic()
@@ -364,6 +458,8 @@ def _hold_for_ui_review(
                     f"server_alive={server_alive}"
                 )
             time.sleep(_HOLD_UI_POLL_S)
+        # Released: read any operator note BEFORE the finally unlinks the file.
+        note = _read_operator_note(release_path, progress)
     finally:
         if proc is not None and proc.poll() is None:
             try:
@@ -392,11 +488,26 @@ def _hold_for_ui_review(
             state_path.unlink(missing_ok=True)
         except OSError:
             pass
+        # A round pause continues to the next round; only the final pause (or
+        # an interrupt) leads to teardown.
+        after = "next-round" if kind == "round" else "teardown"
         progress(
             f"PROGRESS run_label={run_label} step=hold-ui released "
-            f"held_s={time.monotonic() - held_at:.0f} action=proceed-to-teardown"
+            f"kind={kind} attempt={attempt} "
+            f"held_s={time.monotonic() - held_at:.0f} action=proceed-to-{after}"
         )
         print(
-            f"HOLD-UI RELEASED run_label={run_label} — teardown proceeding\n",
+            f"HOLD-UI RELEASED run_label={run_label} kind={kind} attempt={attempt} "
+            f"— {after.replace('-', ' ')} proceeding\n",
             flush=True,
+        )
+
+    if note is not None:
+        progress(
+            f"PROGRESS run_label={run_label} step=hold-ui operator-note "
+            f"kind={kind} attempt={attempt} chars={len(note)} "
+            f"path={run_dir / _OPERATOR_NOTES_FILE}"
+        )
+        _append_operator_note(
+            run_dir, kind=kind, attempt=attempt, note=note, progress=progress
         )

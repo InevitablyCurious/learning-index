@@ -16,7 +16,6 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 ## read+documented
 | Name | Default | Controls | Override |
 |---|---|---|---|
-| BENCH_HOLD_UI | off | post-cell UI hold window | env BENCH_HOLD_UI=1 |
 | BENCH_LEADER_MCP_URL | http://127.0.0.1:4550 | leader MCP endpoint | env |
 | BENCH_LEADER_KEYSTORE | ~/.okp/bench/leader-keystore | leader keystore dir | env |
 | BENCH_RUN_TIMEOUT_S | (optional) | run-level timeout | env |
