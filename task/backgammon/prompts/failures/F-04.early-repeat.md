@@ -1,0 +1,1 @@
+The hints still show up before I've picked a piece.

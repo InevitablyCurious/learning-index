@@ -112,6 +112,60 @@ function hintWords(raw: string): string[] {
   return normalizeHint(raw).split(/[^0-9a-z]+/).filter(Boolean);
 }
 
+// Wait until the hint count inside pointHints has been unchanged for a full
+// window, then return it. The roll's client-side handling renders dice, then
+// runs its roll-time hint logic a moment later; this waits past that, so a
+// build that paints hints right after the roll shows a non-zero count here.
+async function waitForEarlyHintsStable(page: Page): Promise<number> {
+  const deadline = Date.now() + 3000;
+  const windowMs = 600;
+  let previous = -1;
+  let unchangedSince = Date.now();
+  let last = 0;
+  while (Date.now() < deadline) {
+    last = await page.getByTestId("pointHints").getByTestId("hint").count();
+    if (last === previous) {
+      if (Date.now() - unchangedSince >= windowMs) return last;
+    } else {
+      previous = last;
+      unchangedSince = Date.now();
+    }
+    await page.waitForTimeout(100);
+  }
+  return last;
+}
+
+// Where the visible move hints sit on screen, as a list of their centres.
+// Two selections with different destinations place their hints in different
+// spots, so a change of piece is a change of these — read from the page, not
+// from any server-side source.
+async function hintPositions(page: Page): Promise<{ x: number; y: number }[]> {
+  return page.getByTestId("hint").evaluateAll((els) =>
+    els.map((el) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }),
+  );
+}
+
+// True when the hints on screen have genuinely relocated to a DIFFERENT set of
+// points: every current hint sits more than a point-width away from every
+// first hint. A switch from one piece to another moves each hint to a
+// different destination point (tens of pixels), while a re-render that keeps
+// the same piece shifts everything by a few pixels — which must not count as a
+// change. A hint that is still in its old spot (the first piece's hints never
+// cleared) fails this, as does no hint at all.
+function hintsMovedAway(
+  first: { x: number; y: number }[],
+  now: { x: number; y: number }[],
+): boolean {
+  if (now.length === 0) return false;
+  const MIN_DIST = 40; // a full point is ~68px across; 40px is a clear relocation
+  return now.every((n) =>
+    first.every((f) => Math.hypot(n.x - f.x, n.y - f.y) > MIN_DIST),
+  );
+}
+
 function expectOwnerLabelToMatchState(ownerText: string, owner: Player | null): void {
   const normalized = ownerText.trim().toLowerCase();
   if (owner === null) {
@@ -321,6 +375,25 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
     .toBeGreaterThanOrEqual(2);
 
+  // (early) nothing is hinted before any piece is picked up. Jerry, playing run
+  // 1792044236's round-2 build, saw green hint dots on 7 points the moment the
+  // roll landed — before he'd selected anything — and clicking a checker changed
+  // nothing. The hints live in the pointHints layer (the build prompt tags the
+  // move-hint container pointHints); before any click there must be no hint in
+  // it. A roll that never landed defers to the roll gates through the die-count
+  // check above. This line needs only the dice drawn, never F61 as a whole: a
+  // roll that landed but looks wrong (F61's colour aspect) changes nothing about
+  // whether hints show before a pick, and a player meets both at once (run
+  // 1792044236, round 2 — masking it on F61 kept this complaint from the model).
+  // The roll's effects land on the client after the roll response: the page
+  // animates the dice, re-renders, and only then runs any roll-time hint logic
+  // (~500ms later). Wait until the hint count is STABLE — no change across a
+  // window — so a build that paints hints shortly after the roll is caught
+  // here, not passed on a board still mid-roll. A `toBe(0)` poll alone would
+  // pass on the first 0 before that logic fired.
+  const earlyHints = await waitForEarlyHintsStable(page);
+  expect(earlyHints, "[aspect: early] [needs: REQ-RENDER/die] move hints are shown before any piece is selected").toBe(0);
+
   const state = await readState(page);
   // A roll that leaves no move, or a checker that shows no hints, is the
   // complaint of the gates that test those steps when they fail too
@@ -351,12 +424,70 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   const hintTexts = (await hints.allInnerTexts()).map(normalizeHint).filter(Boolean);
   expect(hintTexts.length).toBeGreaterThan(0);
 
+  // Only the piece picked up shows its moves (the build prompt: picking up a
+  // piece "shows its hints"). The back piece's two numbers are two hints; a
+  // board that shows the moves of every piece at once (run 1791304274's, which
+  // showed them before anything was picked up) leaves the player unable to tell
+  // which piece a hint belongs to. Judged on the piece on 13, as above.
+  if (on13) {
+    expect(
+      hintTexts.length <= 2,
+      `[aspect: others] after picking up the back piece on 13 there are ${hintTexts.length} hints on the board`,
+    ).toBe(true);
+    // A hint for each die the piece can use (the build prompt, chunk-04: "A
+    // hint appears for each playable die when a movable checker is selected").
+    // Run 1790414346's game offered its first die only: the piece on 13 showed
+    // a 3, and its 5 came up only once the 3 was played. Judged on the piece on
+    // 13 only, whose two moves are open on every board.
+    const dice = new Set(hintTexts.flatMap((text) => hintWords(text)));
+    expect(
+      dice.has("3") && dice.has("5"),
+      `[aspect: perdie] after rolling 3-5 the back piece on 13 shows hints for: ${[...dice].join(", ")}`,
+    ).toBe(true);
+
+    // (switch) selecting a DIFFERENT piece must update the hints to that piece
+    // immediately. Jerry: "i want to see the hints appear as soon as i select
+    // any piece and update IMMEDIATELY when i select another piece." A second
+    // movable source is taken from the server's own legal-move list — never a
+    // destination of the first (so the click is a pick-up, not a move), and
+    // never the computer's choice. The hints move to a different set of
+    // destination points, so the change is judged from where the hints sit on
+    // screen, not from die labels (every piece uses the same 3 and 5).
+    const firstPositions = await hintPositions(page);
+    const firstSource = on13 ? 13 : state.legalMoves[0]?.from;
+    const firstDests = new Set(
+      state.legalMoves.filter((m) => m.from === firstSource).map((m) => m.to),
+    );
+    const secondSource = state.legalMoves
+      .map((m) => m.from)
+      .find((f) => f !== firstSource && !firstDests.has(f));
+    if (secondSource !== undefined) {
+      const secondTop = page.locator(
+        `[data-testid="checker"][data-color="white"][data-loc="${locAttr(secondSource)}"]`,
+      );
+      const secondCount = await secondTop.count();
+      if (secondCount > 0) {
+        await playerClick(secondTop.nth(secondCount - 1));
+        await expect
+          .poll(
+            async () => hintsMovedAway(firstPositions, await hintPositions(page)),
+            {
+              message:
+                "[aspect: switch] [needs: REQ-RENDER/die] the hints did not update to the newly selected piece within 1000ms",
+              timeout: 1000,
+            },
+          )
+          .toBe(true);
+      }
+    }
+  }
+
   // Each hint's text is the die it uses (the build prompt: "a hint's visible
   // text is the die value it would use, or "off" for bearing off"). A label
   // with no 3 or 5 in it (run 1790641632's "10" and "8", the landing points)
   // tells the player nothing. One that says more than its die is its own
   // complaint: Jerry, playing run 1790661859's build, found its "2→11" very
-  // confusing.
+  // confusing. Judged on the back piece's hints, as above.
   for (const text of hintTexts) {
     if (text === "off") continue;
     expect(
@@ -364,28 +495,6 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
       `hint "${text}" names no die it uses`,
     ).toBe(true);
     expect(text === "3" || text === "5", `[aspect: extra] hint "${text}" says more than its die`).toBe(true);
-  }
-
-  // A hint for each die the piece can use (the build prompt, chunk-04: "A hint
-  // appears for each playable die when a movable checker is selected"). Run
-  // 1790414346's game offered its first die only: the piece on 13 showed a 3,
-  // and its 5 came up only once the 3 was played. Judged on the piece on 13
-  // only, whose two moves are open on every board.
-  if (on13) {
-    const dice = new Set(hintTexts.flatMap((text) => hintWords(text)));
-    expect(
-      dice.has("3") && dice.has("5"),
-      `[aspect: perdie] after rolling 3-5 the back piece on 13 shows hints for: ${[...dice].join(", ")}`,
-    ).toBe(true);
-    // Only the piece picked up shows its moves (the build prompt: picking up a
-    // piece "shows its hints"). The back piece's two numbers are two hints; a
-    // board that shows the moves of every piece at once (run 1791304274's, which
-    // showed them before anything was picked up) leaves the player unable to tell
-    // which piece a hint belongs to. Judged on the piece on 13, as above.
-    expect(
-      hintTexts.length <= 2,
-      `[aspect: others] after picking up the back piece on 13 there are ${hintTexts.length} hints on the board`,
-    ).toBe(true);
   }
 });
 
