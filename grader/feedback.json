@@ -911,6 +911,18 @@
       "first": "The checkers don't sit on their points — they're drawn off to the side or floating in the wrong place; I expect each stack to stand as a single straight column of pieces on its point.",
       "repeat": "Fresh game again, and the checkers still don't sit on their points — still drawn off to the side or floating in the wrong place; I expect each stack to stand as a single straight column of pieces on its point."
     },
+    "F31.offboard": {
+      "first": "Some of my pieces are drawn off the edge of the board.",
+      "repeat": "Some of my pieces are still drawn off the edge of the board."
+    },
+    "F31.side": {
+      "first": "Some pieces aren't centred on their point — they sit off to one side of it.",
+      "repeat": "Some pieces still aren't centred on their point."
+    },
+    "F31.away": {
+      "first": "Some pieces aren't on their point — they're drawn too far up or down the board from it.",
+      "repeat": "Some pieces are still drawn too far up or down the board from their point."
+    },
     "F31.rim": {
       "first": "Some of the stacks don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point.",
       "repeat": "Some of the stacks still don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point."

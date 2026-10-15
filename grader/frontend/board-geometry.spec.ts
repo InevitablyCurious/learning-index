@@ -151,6 +151,35 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
 
   const points = await readPointBoxes(page);
   const checkers = await readCheckerBoxes(page);
+  // [aspect: offboard] FIRST — over every checker, white and black: one whose
+  // centre lies outside the visible board fails. The visible board is the
+  // [data-testid="board"] box clipped to the viewport: a piece drawn below the
+  // screen's edge is not "off to the side or floating", it is off the board
+  // entirely (run 1792066151 drew every bottom-half stack below the board's
+  // bottom edge). This is the first thing a player notices, so it is told
+  // before any side/away/rim guess. A piece past the edge of the WINDOW is
+  // F37's complaint ("run off the bottom of the screen"), so this one waits on
+  // F37: one fault, one line. What reaches the model from here is a piece
+  // outside the board that the player can still see on the page.
+  const board = await page.locator('[data-testid="board"]').first().boundingBox();
+  expect(board, "[needs: F01] expected the board to read").not.toBeNull();
+  const vp = page.viewportSize() ?? { width: 1280, height: 800 };
+  const visX = Math.max(0, board!.x);
+  const visY = Math.max(0, board!.y);
+  const visRight = Math.min(board!.x + board!.width, vp.width);
+  const visBottom = Math.min(board!.y + board!.height, vp.height);
+  const offboard = checkers.filter(
+    (c) =>
+      c.centerX < visX ||
+      c.centerX > visRight ||
+      c.centerY < visY ||
+      c.centerY > visBottom,
+  );
+  expect(
+    offboard.map((c) => c.loc),
+    `[aspect: offboard] [needs: REQ-RENDER/checker F37] checkers drawn off the board: loc ${offboard.map((c) => c.loc).join(", ")} (centre outside the visible board, clipped to the viewport)`,
+  ).toEqual([]);
+
   // Each checker is found by its point's NUMBER, so this waits on the order
   // check: with the numbers wrong, a checker drawn where a player expects it
   // sits over the wrong number (a needs marker; stage 1 since Jerry's "first
@@ -175,12 +204,12 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
     const dx = Math.abs(checker.centerX - point.centerX);
     expect(
       dx < tolerance,
-      `[needs: F28 F43] expected checker loc=${checker.loc} drawn centered over point ${point.num}, found checker centerX=${checker.centerX.toFixed(1)} vs point centerX=${point.centerX.toFixed(1)} (off by ${dx.toFixed(1)}, tolerance ${tolerance.toFixed(1)})`,
+      `[aspect: side] [needs: F28 F43] expected checker loc=${checker.loc} drawn centered over point ${point.num}, found checker centerX=${checker.centerX.toFixed(1)} vs point centerX=${point.centerX.toFixed(1)} (off by ${dx.toFixed(1)}, tolerance ${tolerance.toFixed(1)})`,
     ).toBeTruthy();
 
     expect(
       checker.centerY >= point.y - 1 && checker.centerY <= point.y + point.height + 1,
-      `[needs: F28] expected checker loc=${checker.loc} drawn within point ${point.num}'s vertical band, found checker centerY=${checker.centerY.toFixed(1)} vs band ${point.y.toFixed(1)}..${(point.y + point.height).toFixed(1)}`,
+      `[aspect: away] [needs: F28] expected checker loc=${checker.loc} drawn within point ${point.num}'s vertical band, found checker centerY=${checker.centerY.toFixed(1)} vs band ${point.y.toFixed(1)}..${(point.y + point.height).toFixed(1)}`,
     ).toBeTruthy();
   }
 
