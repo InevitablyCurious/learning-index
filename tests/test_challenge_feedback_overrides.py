@@ -176,6 +176,37 @@ def _line_ids() -> list[str]:
     return [f"{gate}:{kind}" for gate, kind, _ in _lines()]
 
 
+def _channel_lines(channel: str) -> list:
+    """The lines one person speaks: a voice rule is generated only for the lines it
+    governs, so the suite reports what it checked rather than skipping the rest."""
+    return [
+        pytest.param(gate, kind, text, id=f"{gate}:{kind}")
+        for gate, kind, text in _lines()
+        if _channel(gate) == channel
+    ]
+
+
+def _test_titles(key: str) -> list[str]:
+    """The lines of the gate files that carry `[key]` — the check's own title."""
+    return [
+        line
+        for path in (GATES / "backend", GATES / "frontend", GATES / "conformance")
+        if path.is_dir()
+        for file in path.rglob("*.ts")
+        for line in file.read_text(encoding="utf-8").splitlines()
+        if f"[{key}]" in line
+    ]
+
+
+def _titled_lines() -> list:
+    """The lines whose key is a check's bracket token, so a title exists to compare."""
+    return [
+        pytest.param(gate, kind, text, id=f"{gate}:{kind}")
+        for gate, kind, text in _lines()
+        if _test_titles(gate)
+    ]
+
+
 def test_the_file_parses_and_the_loader_reads_it() -> None:
     assert FEEDBACK.is_file(), "grader/feedback.json is missing"
     json.loads(FEEDBACK.read_text(encoding="utf-8"))
@@ -291,7 +322,7 @@ def test_no_override_states_what_should_happen(key: str, kind: str, text: str) -
     )
 
 
-@pytest.mark.parametrize("key,kind,text", _lines(), ids=_line_ids())
+@pytest.mark.parametrize("key,kind,text", _channel_lines("tester"))
 def test_no_override_speaks_in_developer_voice(key: str, kind: str, text: str) -> None:
     """The TESTER is a player, not a reviewer with the source open.
 
@@ -308,10 +339,6 @@ def test_no_override_speaks_in_developer_voice(key: str, kind: str, text: str) -
     and `test_team_line_is_not_the_graders_voice` still hold them, and every
     other guard in this file runs on both channels unchanged.
     """
-    if _channel(key) != "tester":
-        pytest.skip(
-            f"{key} is the software team's line — see test_team_line_is_not_the_graders_voice"
-        )
     lowered = text.lower()
     found = [noun for noun in _DEVELOPER_NOUNS if noun in lowered]
     assert not found, (
@@ -339,7 +366,7 @@ _GRADER_VOCABULARY = (
 )
 
 
-@pytest.mark.parametrize("key,kind,text", _lines(), ids=_line_ids())
+@pytest.mark.parametrize("key,kind,text", _channel_lines("team"))
 def test_team_line_is_not_the_graders_voice(key: str, kind: str, text: str) -> None:
     """The software team is a customer, not the thing measuring the model.
 
@@ -347,8 +374,6 @@ def test_team_line_is_not_the_graders_voice(key: str, kind: str, text: str) -> N
     "conformance check", which is the harness's own word for the gate and tells
     the model it is being measured.
     """
-    if _channel(key) != "team":
-        pytest.skip(f"{key} is the tester's line")
     lowered = text.lower()
     found = [word for word in _GRADER_VOCABULARY if word in lowered]
     assert not found, (
@@ -358,7 +383,7 @@ def test_team_line_is_not_the_graders_voice(key: str, kind: str, text: str) -> N
     )
 
 
-@pytest.mark.parametrize("key,kind,text", _lines(), ids=_line_ids())
+@pytest.mark.parametrize("key,kind,text", _titled_lines())
 def test_no_override_restates_its_own_test_title(
     key: str, kind: str, text: str
 ) -> None:
@@ -367,16 +392,7 @@ def test_no_override_restates_its_own_test_title(
     Copying the title in is the easy mistake — it reads like a description of
     the problem because it IS one, stated as the rule.
     """
-    titles = [
-        line
-        for path in (GATES / "backend", GATES / "frontend", GATES / "conformance")
-        if path.is_dir()
-        for file in path.rglob("*.ts")
-        for line in file.read_text(encoding="utf-8").splitlines()
-        if f"[{key}]" in line
-    ]
-    if not titles:
-        pytest.skip(f"{key} is not a bracket-token key")
+    titles = _test_titles(key)
 
     def significant(s: str) -> set[str]:
         words = re.findall(r"[a-z]{4,}", s.lower())
