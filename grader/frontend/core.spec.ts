@@ -698,11 +698,41 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
     .click({ trial: true, timeout: 5_000 })
     .then(() => true, () => false);
   expect(canRoll, "[aspect: roll] [needs: F38] the Roll button could not be clicked at the start of a game").toBe(true);
+  // Watch the dice from the moment Roll is pressed (chunk-04: "dice visibly roll").
+  // Jerry, run 1792176130 round 3: "when i open the game i never see the first roll
+  // that the player and computer makes to determine who moves first" — the page
+  // drew the result at once. A roll is seen when the dice animate (a CSS animation
+  // or transition on a die or the dice tray) or their faces change before they rest.
+  await page.evaluate(() => {
+    const w = window as unknown as { __openingRoll: { moves: number; faces: string[] } };
+    w.__openingRoll = { moves: 0, faces: [] };
+    const onDice = (t: EventTarget | null) =>
+      !!(t as Element | null)?.closest?.('[data-testid="die"], [data-testid="dice"]');
+    for (const type of ["animationstart", "transitionstart"]) {
+      document.addEventListener(type, (e) => { if (onDice(e.target)) w.__openingRoll.moves += 1; }, true);
+    }
+    const timer = setInterval(() => {
+      const shown = [...document.querySelectorAll('[data-testid="die"]')]
+        .filter((el) => (el as HTMLElement).checkVisibility())
+        .map((el) => `${el.textContent?.trim() ?? ""}#${el.querySelectorAll("*").length}`)
+        .join("|");
+      const faces = w.__openingRoll.faces;
+      if (shown && faces[faces.length - 1] !== shown) faces.push(shown);
+    }, 40);
+    setTimeout(() => clearInterval(timer), 8_000);
+  });
   await rollAndCheck(page, [6, 5], () => page.getByTestId("rollBtn").click());
   expect(
     await restingDice(),
     "[aspect: dice] [needs: REQ-RENDER/die REQ-TESTID/die] the opening roll left fewer than two dice on screen",
   ).toBeGreaterThanOrEqual(2);
+  const watched = await page.evaluate(
+    () => (window as unknown as { __openingRoll: { moves: number; faces: string[] } }).__openingRoll,
+  );
+  expect(
+    watched.moves > 0 || watched.faces.length >= 2,
+    `[aspect: rolls] [needs: REQ-RENDER/die REQ-TESTID/die] the opening dice never visibly rolled: ${watched.moves} animations, ${watched.faces.length} distinct faces before they rested`,
+  ).toBe(true);
 
   // Whose die is whose, at a glance: the dice match the pieces — one drawn like the
   // computer's (black) pieces, the other like the player's (white) ones. Jerry, run
