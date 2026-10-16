@@ -207,9 +207,22 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
       `[aspect: side] [needs: F28 F43] expected checker loc=${checker.loc} drawn centered over point ${point.num}, found checker centerX=${checker.centerX.toFixed(1)} vs point centerX=${point.centerX.toFixed(1)} (off by ${dx.toFixed(1)}, tolerance ${tolerance.toFixed(1)})`,
     ).toBeTruthy();
 
+    // Outside its point's vertical band but still on the board, a piece can only
+    // be on one side of it: a bottom point's band runs to the bottom edge and a
+    // top point's to the top edge, so anything past those is `offboard` above.
+    // So the direction is exact, and each gets its own line — "up or down" was a
+    // guess Jerry rejected (run 1792089895, round 2: every bottom-point piece
+    // drawn up in the top half, under the top stacks).
+    const inBand = checker.centerY >= point.y - 1 && checker.centerY <= point.y + point.height + 1;
+    const bottomPoint = point.y + point.height / 2 > board!.y + board!.height / 2;
+    const band = `centerY=${checker.centerY.toFixed(1)} vs band ${point.y.toFixed(1)}..${(point.y + point.height).toFixed(1)}`;
     expect(
-      checker.centerY >= point.y - 1 && checker.centerY <= point.y + point.height + 1,
-      `[aspect: away] [needs: F28] expected checker loc=${checker.loc} drawn within point ${point.num}'s vertical band, found checker centerY=${checker.centerY.toFixed(1)} vs band ${point.y.toFixed(1)}..${(point.y + point.height).toFixed(1)}`,
+      inBand || !bottomPoint,
+      `[aspect: up] [needs: F28] checker loc=${checker.loc} of bottom point ${point.num} drawn above its point: ${band}`,
+    ).toBeTruthy();
+    expect(
+      inBand || bottomPoint,
+      `[aspect: down] [needs: F28] checker loc=${checker.loc} of top point ${point.num} drawn below its point: ${band}`,
     ).toBeTruthy();
   }
 

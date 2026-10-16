@@ -919,9 +919,13 @@
       "first": "Some pieces aren't centred on their point — they sit off to one side of it.",
       "repeat": "Some pieces still aren't centred on their point."
     },
-    "F31.away": {
-      "first": "Some pieces aren't on their point — they're drawn too far up or down the board from it.",
-      "repeat": "Some pieces are still drawn too far up or down the board from their point."
+    "F31.up": {
+      "first": "Some pieces for the bottom points are drawn too far up the board, away from their point.",
+      "repeat": "Some pieces for the bottom points are still drawn too far up the board."
+    },
+    "F31.down": {
+      "first": "Some pieces for the top points are drawn too far down the board, away from their point.",
+      "repeat": "Some pieces for the top points are still drawn too far down the board."
     },
     "F31.rim": {
       "first": "Some of the stacks don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point.",
