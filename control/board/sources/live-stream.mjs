@@ -9,7 +9,8 @@
 // backend-specific logic lives here.
 
 import { int, str } from "../contract.mjs";
-import { readTail, parseJsonl, cellLiveStreamPath } from "./_runtime.mjs";
+import { dirname } from "node:path";
+import { readTail, parseJsonl, cellLiveStreamPath, readAttemptGateResults } from "./_runtime.mjs";
 
 export const id = "live-stream";
 export const fields = ["live", "run.phase", "run.chunk"];
@@ -64,6 +65,48 @@ export async function readCell(ctx) {
   const byNs = new Map();
   let backends = new Map();
 
+  // One gate verdict into the fold: the newest verdict (the square's colour) and
+  // the trajectory — the earliest passing attempt and whether any attempt failed.
+  function foldGate(gid, a, status, phase, ts) {
+    if (a !== null) attempt = Math.max(attempt ?? 0, a);
+    const prev = gates.get(gid) ?? {
+      id: gid,
+      status: null,
+      phase: null,
+      attempt: null,
+      ts: null,
+      first_pass_attempt: null,
+      ever_failed: false,
+    };
+    // Newest by attempt, then ts (never rely on file order).
+    const newer =
+      prev.attempt === null ||
+      (a !== null && a > prev.attempt) ||
+      (a === prev.attempt && (ts ?? 0) >= (prev.ts ?? 0));
+    if (newer) {
+      prev.status = status;
+      prev.phase = phase ?? prev.phase;
+      prev.attempt = a ?? prev.attempt;
+      prev.ts = ts ?? prev.ts;
+    }
+    if (status === "pass" && a !== null) {
+      prev.first_pass_attempt =
+        prev.first_pass_attempt === null ? a : Math.min(prev.first_pass_attempt, a);
+    }
+    if (status === "fail") prev.ever_failed = true;
+    if (a !== null && status) {
+      if (!byAttempt.has(a)) byAttempt.set(a, new Map());
+      byAttempt.get(a).set(gid, status);
+    }
+    gates.set(gid, prev);
+  }
+
+  // Every graded attempt from its report first: the tail below loses earlier
+  // attempts' gate.result rows as the next round writes (readAttemptGateResults).
+  for (const row of await readAttemptGateResults(dirname(path))) {
+    foldGate(row.id, row.attempt, row.status, row.phase, null);
+  }
+
   for (const r of recs) {
     if (!r || typeof r !== "object") continue;
     const kind = str(r.kind);
@@ -86,47 +129,10 @@ export async function readCell(ctx) {
     if (kind === "gate.result") {
       const gid = str(r.id);
       if (!gid) continue;
-      const a = int(r.attempt);
-      const status = str(r.status);
-      if (a !== null) attempt = Math.max(attempt ?? 0, a);
-
-      // The runner re-grades the whole suite every attempt, so two facts are kept:
-      // the newest verdict (the square's colour) and the trajectory — the earliest
-      // passing attempt and whether any attempt failed. Keeping only the newest drew a
-      // "2" on every gate that had passed first try.
-      const prev = gates.get(gid) ?? {
-        id: gid,
-        status: null,
-        phase: null,
-        attempt: null,
-        ts: null,
-        first_pass_attempt: null,
-        ever_failed: false,
-      };
-
-      // Newest by attempt, then ts (never rely on file order).
-      const newer =
-        prev.attempt === null ||
-        (a !== null && a > prev.attempt) ||
-        (a === prev.attempt && (int(r.ts) ?? 0) >= (prev.ts ?? 0));
-      if (newer) {
-        prev.status = status;
-        prev.phase = str(r.phase) ?? prev.phase;
-        prev.attempt = a ?? prev.attempt;
-        prev.ts = int(r.ts) ?? prev.ts;
-      }
-
-      if (status === "pass" && a !== null) {
-        prev.first_pass_attempt =
-          prev.first_pass_attempt === null ? a : Math.min(prev.first_pass_attempt, a);
-      }
-      if (status === "fail") prev.ever_failed = true;
-      if (a !== null && status) {
-        if (!byAttempt.has(a)) byAttempt.set(a, new Map());
-        byAttempt.get(a).set(gid, status);
-      }
-
-      gates.set(gid, prev);
+      // The runner re-grades the whole suite every attempt; foldGate keeps the
+      // newest verdict and the trajectory (keeping only the newest drew a "2" on
+      // every gate that had passed first try).
+      foldGate(gid, int(r.attempt), str(r.status), str(r.phase), int(r.ts));
       continue;
     }
     if (kind === "phase.start") {

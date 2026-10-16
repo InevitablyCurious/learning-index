@@ -23,6 +23,7 @@ import {
   listDir,
   statOrNull,
   cellLiveStreamPath,
+  readAttemptGateResults,
 } from "./_runtime.mjs";
 import { cellDirForRun } from "../../runstate.mjs";
 import { join } from "node:path";
@@ -61,7 +62,16 @@ export async function readCell(ctx) {
   // post-mortem file stays authoritative and overwrites per (gate, attempt).
   const livePath = await cellLiveStreamPath(ctx.runsRoot, ctx.cell);
   const liveRecs = livePath ? parseJsonl(await readTail(livePath)) : [];
-  const liveOutcomes = [];
+  // Every graded attempt from its report first: the tail loses earlier attempts'
+  // gate.result rows once the next round's activity pushes them out
+  // (readAttemptGateResults). Same rows, same verdicts — the tail adds only an
+  // attempt still grading.
+  const liveOutcomes = (await readAttemptGateResults(cellDir)).map((row) => ({
+    gate_id: row.id,
+    attempt: row.attempt,
+    predicate_outcome: row.status,
+    session_id: null,
+  }));
   let liveSession = null;
   let liveArm = null;
   for (const r of liveRecs) {

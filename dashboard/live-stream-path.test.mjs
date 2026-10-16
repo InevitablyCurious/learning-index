@@ -254,3 +254,58 @@ test("attempt.end carries render_blocked through to the feed; absence reads null
   const hattempt = (await liveStream.readCell(healthy.ctx)).patch.live.attempts.find((a) => a.attempt === 1);
   assert.equal(hattempt.render_blocked, null, "absence on the wire means healthy — normalized to null");
 });
+
+// ── A GRADED ATTEMPT NEVER SCROLLS AWAY ──────────────────────────────────────
+// The sources read live.jsonl by its tail. In run 1792089895 round 1's 217
+// gate.result rows sat ~550 KB back once round 2's activity was written after
+// them, and the wall showed 114 gates "not yet tested" mid-round. Each graded
+// attempt's verdicts are also in attempt-<n>-report.json in the cell directory,
+// which the sources now read first.
+
+test("a graded attempt's verdicts come from its report when the stream's tail no longer holds them", async () => {
+  // The stream as a long round leaves it: no gate.result rows in reach.
+  const tailOnly = [
+    { v: 1, ts: 1, kind: "cell.start", session_id: "ses_LIVE", cell_seq: 0, arm: "off" },
+    { v: 1, ts: 9, kind: "phase.start", session_id: "ses_LIVE", phase: "feedback-1" },
+  ];
+  const { ctx, cell } = await fixture({ stream: tailOnly });
+  await writeFile(
+    join(cell, "attempt-1-report.json"),
+    JSON.stringify({
+      verdict: "FAIL",
+      gate_results: [
+        { id: "CONF", status: "pass", phase: "conformance", duration_ms: 2 },
+        { id: "backend/a.test.ts::alpha", status: "fail", phase: "backend", duration_ms: 5 },
+        { id: "frontend/b.test.ts::beta", status: "pass", phase: "frontend", duration_ms: 7 },
+      ],
+    }),
+  );
+
+  const { live } = (await liveStream.readCell(ctx)).patch;
+  assert.equal(live.attempt, 1);
+  assert.deepEqual(live.gate_counts, { pass: 2, fail: 1, other: 0 }, "every graded gate is on the wall");
+  assert.equal(live.gates.find((g) => g.id === "backend/a.test.ts::alpha").status, "fail");
+
+  const { learning: L } = (await learning.readCell(ctx)).patch;
+  const byId = new Map(L.matrix.gates.map((g) => [g.id, g.outcomes]));
+  assert.deepEqual(byId.get("frontend/b.test.ts::beta"), ["pass", null, null, null, null]);
+  assert.deepEqual(byId.get("backend/a.test.ts::alpha"), ["fail", null, null, null, null]);
+});
+
+test("the tail still adds an attempt that is grading now, over the reports", async () => {
+  const { ctx, cell } = await fixture(); // stream: attempt 1 rows, then attempt 2 alpha=pass
+  await writeFile(
+    join(cell, "attempt-1-report.json"),
+    JSON.stringify({ gate_results: [
+      { id: "CONF", status: "pass" },
+      { id: "backend/a.test.ts::alpha", status: "fail" },
+      { id: "frontend/b.test.ts::beta", status: "fail" },
+    ] }),
+  );
+  const { live } = (await liveStream.readCell(ctx)).patch;
+  const alpha = live.gates.find((g) => g.id === "backend/a.test.ts::alpha");
+  assert.equal(alpha.status, "pass", "attempt 2's live row supersedes attempt 1's report");
+  assert.equal(alpha.first_pass_attempt, 2);
+  assert.equal(alpha.ever_failed, true);
+  assert.equal(live.gates.find((g) => g.id === "frontend/b.test.ts::beta").status, "fail", "report-only gate shown");
+});

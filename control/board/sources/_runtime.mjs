@@ -170,6 +170,49 @@ export async function cellLiveStreamPath(runsRoot, cell) {
   return found ? join(runsRoot, found.cellDir, LIVE_STREAM_FILENAME) : null;
 }
 
+// ── EVERY GRADED ATTEMPT'S VERDICTS ── the harness writes
+// attempt-<n>-report.json into the cell directory the moment attempt n is graded,
+// with one gate_results row per gate. A live stream read by its tail loses the
+// gate.result rows of earlier attempts once the next round's activity pushes
+// them out (run 1792089895: round 1's 217 rows sat ~550 KB back, and the wall
+// showed 114 gates "not yet tested"). These files never scroll, so a graded
+// attempt is read from its report; the tail adds only an attempt still grading.
+const ATTEMPT_REPORT_RE = /^attempt-(\d+)-report\.json$/;
+const attemptReportCache = new Map(); // path -> { mtimeMs, rows }
+
+export async function readAttemptGateResults(cellDir) {
+  if (!cellDir) return [];
+  const rows = [];
+  for (const ent of await listDir(cellDir)) {
+    const m = ATTEMPT_REPORT_RE.exec(ent.name);
+    if (!m || !ent.isFile()) continue;
+    const attempt = Number(m[1]);
+    const path = join(cellDir, ent.name);
+    const st = await statOrNull(path);
+    if (!st?.isFile()) continue;
+    let cached = attemptReportCache.get(path);
+    if (!cached || cached.mtimeMs !== st.mtimeMs) {
+      let parsed = null;
+      try {
+        parsed = JSON.parse(await fs.readFile(path, "utf8"));
+      } catch {
+        // Written as one file when grading ends; a read mid-write is retried on the next poll.
+        continue;
+      }
+      const results = Array.isArray(parsed?.gate_results) ? parsed.gate_results : [];
+      cached = {
+        mtimeMs: st.mtimeMs,
+        rows: results
+          .filter((r) => r && typeof r.id === "string" && (r.status === "pass" || r.status === "fail"))
+          .map((r) => ({ attempt, id: r.id, status: r.status, phase: typeof r.phase === "string" ? r.phase : null })),
+      };
+      attemptReportCache.set(path, cached);
+    }
+    rows.push(...cached.rows);
+  }
+  return rows.sort((a, b) => a.attempt - b.attempt);
+}
+
 /** Is `a` more current than `b`? Declared start, then attempt data, then mtime. */
 function newerRun(a, b) {
   if (a.declared !== null && b.declared !== null) {
