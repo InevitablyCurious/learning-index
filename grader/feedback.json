@@ -1652,8 +1652,8 @@
       "repeat": "I still never see the opening roll that decides who moves first."
     },
     "F61.match": {
-      "first": "At the start, the dice don't match our pieces — I expect my die white like my pieces and the computer's die black like its pieces.",
-      "repeat": "At the start, the dice still don't match our pieces."
+      "first": "On the opening sequence, when the two players roll, their dice don't match the colours of our pieces — I expect my die white like my pieces and the computer's die black like its pieces.",
+      "repeat": "On the opening sequence, when the two players roll, their dice still don't match the colours of our pieces."
     },
     "F61.again": {
       "first": "When we tied on the opening roll, the game just sat there until I rolled again myself. I expected it to roll again on its own.",

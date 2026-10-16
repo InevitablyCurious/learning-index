@@ -308,3 +308,9 @@ test("paintTitle prefixes while a pause hold is shown and restores after", async
   assert.match(src, /Bench Board v2" ?:/, "the restored (non-paused) title is the board name");
   assert.match(src, /function paintTitle/, "it rides the board's own render (no new timer)");
 });
+test("the pause says whether the dice are fixed, and why not when they aren't", () => {
+  const fixed = renderHold(board({ ...ROUND.hold, dice: { fixed: true, queued: 60, opening: [5, 3], detail: null } }));
+  assert.match(fixed, /The dice are fixed for this pause: you open with <span class="bright">5<\/span> against the computer's <span class="bright">3<\/span>/);
+  const random = renderHold(board({ ...ROUND.hold, started_at: "x2", dice: { fixed: false, queued: 0, opening: [5, 3], detail: "/api/debug/roll failed: HTTP 404" } }));
+  assert.match(random, /The dice are random this time — fixing them failed: \/api\/debug\/roll failed: HTTP 404/);
+});

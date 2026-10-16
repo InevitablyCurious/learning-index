@@ -1056,17 +1056,17 @@ test("[F62] REQ-PACING — the computer's turn is paced so its dice and moves ca
     seen = await piecesSettled(page, clickAt);
   }
   const frames = await stopFrames(page);
-  expect(seen, "[aspect: drawn] [needs: REQ-RENDER/checker F02] the computer's pieces never moved on screen").not.toBe("still");
+  expect(seen, "[aspect: drawn] [needs: REQ-RENDER/checker F02 F03 F45] the computer's pieces never moved on screen").not.toBe("still");
 
   const { starts, first: firstMove } = moveStarts(frames, clickAt);
   const { shown, readable } = readableDice(frames, clickAt, firstMove, atClick);
-  expect(shown, "[aspect: dice] [needs: REQ-RENDER/die REQ-TESTID/die] the computer's dice never showed before its first move").toBe(true);
-  expect(readable, `[aspect: first] the computer's roll was up ${readable.toFixed(0)} ms before its first move`).toBeGreaterThanOrEqual(800);
+  expect(shown, "[aspect: dice] [needs: REQ-RENDER/die REQ-TESTID/die F03 F45] the computer's dice never showed before its first move").toBe(true);
+  expect(readable, `[aspect: first] [needs: F03 F45] the computer's roll was up ${readable.toFixed(0)} ms before its first move`).toBeGreaterThanOrEqual(800);
 
   const gaps = starts.slice(1).map((t, i) => t - starts[i]);
   expect(
     starts.length >= 2 && gaps.every((gap) => gap >= 350),
-    `[aspect: between] the computer's moves started ${starts.length < 2 ? "together" : gaps.map((g) => `${g.toFixed(0)} ms`).join(", ") + " apart"}`,
+    `[aspect: between] [needs: F03 F45] the computer's moves started ${starts.length < 2 ? "together" : gaps.map((g) => `${g.toFixed(0)} ms`).join(", ") + " apart"}`,
   ).toBe(true);
 });
 
@@ -1162,8 +1162,8 @@ test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {
   // they should (G06): run 1790633807's entered at the wrong end.
   const message = page.getByTestId("message");
   await expect(message).toBeVisible();
-  await expect(message, "[needs: G06]").not.toHaveText(/^\s*$/);
-  await expect(message, "[needs: G06]").toContainText(/no moves available/i);
+  await expect(message, "[needs: G06 F03 F45]").not.toHaveText(/^\s*$/);
+  await expect(message, "[needs: G06 F03 F45]").toContainText(/no moves available/i);
   // The player's own notice: shown while the page still says it is the
   // player's turn. Run 1791204055's build wiped the player's notice and handed
   // over at once; the computer's random 6-5 then printed "AI rolled [6, 5] — No
@@ -1177,7 +1177,7 @@ test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {
     turnAtNotice !== yourTurn &&
     !turnAtNotice.startsWith(yourTurn) &&
     /\b(ai|computer|black|opponent|cpu)\b/i.test(turnAtNotice);
-  expect(handedOver, "[needs: G06] the notice showed only after the turn indicator moved on from the player").toBe(false);
+  expect(handedOver, "[needs: G06 F03 F45] the notice showed only after the turn indicator moved on from the player").toBe(false);
 });
 
 test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
@@ -1366,17 +1366,17 @@ test("[F48] REQ-TURN — a no-move roll passes by itself", async ({ page }) => {
 
   // …and the notice says "No moves available".
   const message = page.getByTestId("message");
-  await expect(message, "[aspect: notice] the no-move notice did not say 'No moves available'").toContainText(
+  await expect(message, "[aspect: notice] [needs: F03 F45] the no-move notice did not say 'No moves available'").toContainText(
     /no moves available/i,
   );
 
   // It holds for about a second: wait, then the same words are still up and the
   // turn is still white's (it has not passed yet).
   await page.waitForTimeout(1000);
-  await expect(message, "[aspect: notice] the no-move notice did not stay up for a second").toContainText(
+  await expect(message, "[aspect: notice] [needs: F03 F45] the no-move notice did not stay up for a second").toContainText(
     /no moves available/i,
   );
-  expect((await readState(page)).turn, "[aspect: notice] the turn passed before the notice had been up for a second").toBe(
+  expect((await readState(page)).turn, "[aspect: notice] [needs: F03 F45] the turn passed before the notice had been up for a second").toBe(
     "white",
   );
 
@@ -1390,7 +1390,7 @@ test("[F48] REQ-TURN — a no-move roll passes by itself", async ({ page }) => {
         if (s.turn === "black") sawBlack = true;
         return sawBlack;
       },
-      { message: "the no-move turn never passed to the computer by itself", timeout: 6000 },
+      { message: "[needs: F03 F45] the no-move turn never passed to the computer by itself", timeout: 6000 },
     )
     .toBe(true);
 });

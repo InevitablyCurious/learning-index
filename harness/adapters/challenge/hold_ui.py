@@ -108,6 +108,47 @@ def _hold_ui_port_listeners(port: int) -> list[int]:
     return [int(tok) for tok in (out.stdout or "").split() if tok.strip().isdigit()]
 
 
+# The dice an operator plays with during a pause. A pause boots the artifact with
+# DEBUG_API=1, so its /api/debug/roll queue (chunk-03: "the next dice-roll consumes
+# this queue instead of Math.random") is open. Random dice meant the operator never
+# met the positions the grader judged (Jerry, run 1792183915: "the dice are not
+# deterministic … which is messing me up seeing what the grader is showing to the
+# model"). The opening is the one F04 plays — the player's 5 against the
+# computer's 3, so the player moves first with 5 and 3 — then a fixed list from a
+# fixed seed; a double is queued as four dice, as the debug route expects.
+def _pause_dice() -> list[list[int]]:
+    import random
+
+    rng = random.Random(20261017)
+    rolls: list[list[int]] = [[5, 3]]
+    while len(rolls) < 60:
+        a, b = rng.randint(1, 6), rng.randint(1, 6)
+        rolls.append([a, a, a, a] if a == b else [a, b])
+    return rolls
+
+
+PAUSE_DICE = _pause_dice()
+
+
+def _queue_pause_dice(port: int) -> dict[str, Any]:
+    """Queue PAUSE_DICE in the artifact's debug roll queue. Reported, never assumed:
+    a build without the route says so on the pause panel and plays random dice."""
+    for n, dice in enumerate(PAUSE_DICE):
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/debug/roll",
+            data=json.dumps({"dice": dice}).encode(),
+            headers={"content-type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status >= 400:
+                    raise urllib.error.HTTPError(req.full_url, resp.status, "refused", resp.headers, None)
+        except (urllib.error.URLError, OSError) as exc:
+            return {"fixed": False, "queued": n, "opening": PAUSE_DICE[0], "detail": f"/api/debug/roll failed: {exc}"}
+    return {"fixed": True, "queued": len(PAUSE_DICE), "opening": PAUSE_DICE[0], "detail": None}
+
+
 def _hold_ui_healthy(port: int) -> bool:
     try:
         with urllib.request.urlopen(
@@ -326,6 +367,14 @@ def _hold_for_operator(
                 f"boot={'ok' if ui_healthy else 'fail'} {boot_detail}"
             )
 
+    dice = _queue_pause_dice(port) if ui_healthy else {
+        "fixed": False, "queued": 0, "opening": PAUSE_DICE[0], "detail": "the game did not start",
+    }
+    progress(
+        f"PROGRESS run_label={run_label} step=hold-ui dice "
+        f"fixed={dice['fixed']} queued={dice['queued']} detail={dice['detail']}"
+    )
+
     # Consume any stale sentinel from a prior hold in this run_dir BEFORE waiting.
     try:
         release_path.unlink(missing_ok=True)
@@ -368,6 +417,7 @@ def _hold_for_operator(
         "max_attempts": max_attempts,
         "told_text": told_text,
         "grade": grade,
+        "dice": dice,
         "release": {
             "method": "touch_file",
             "path": str(release_path),

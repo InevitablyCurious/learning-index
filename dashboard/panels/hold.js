@@ -111,6 +111,8 @@ function renderPause(h) {
 
   parts.push(playBox(h, healthy));
 
+  parts.push(diceLine(h.dice));
+
   if (!final) parts.push(toldBlock(h));
 
   parts.push(noteBox(final));
@@ -152,6 +154,16 @@ function playBox(h, healthy) {
       <a class="btn primary" href="${esc(url)}" target="_blank" rel="noreferrer noopener">▶ Play the game as it is now</a>
       <span class="note">opens in a new tab</span>
     </div>`;
+}
+
+/** Whether the dice in this pause are the fixed sequence, so the player meets what the grader judged. */
+function diceLine(d) {
+  if (!d) return "";
+  if (d.fixed) {
+    const [you, ai] = Array.isArray(d.opening) ? d.opening : [];
+    return `<div class="hold-line">The dice are fixed for this pause: you open with <span class="bright">${esc(String(you))}</span> against the computer's <span class="bright">${esc(String(ai))}</span>, and every roll after follows the same sequence each time.</div>`;
+  }
+  return `<div class="hold-line">The dice are random this time — fixing them failed: ${esc(d.detail ?? "unknown reason")}</div>`;
 }
 
 /** The exact message about to be sent — escaped, in a readable pre-wrapped block. */
