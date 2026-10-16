@@ -1,6 +1,6 @@
 import { type Locator, type Page } from "@playwright/test";
 import { expect, pickUpAPiece, playerClick, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
-import { readColumnBox, sampleBoxLooks, waitForBoardSettled } from "./board-geometry.ts";
+import { readColumnBox, sampleBoxBrightness, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
 type Difficulty = "easy" | "medium" | "hard";
@@ -704,11 +704,14 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
     "[aspect: dice] [needs: REQ-RENDER/die REQ-TESTID/die] the opening roll left fewer than two dice on screen",
   ).toBeGreaterThanOrEqual(2);
 
-  // The player tells the two dice apart by eye (chunk-04: "so the player can tell
-  // whose is whose"). How they differ — fill, outline or both — is the builder's
-  // choice; that they do is the requirement. The distance the grader uses
-  // everywhere for "painted" is 45 in RGB. The data-owner tags are the team's (F63),
-  // so the pair is read by position, not by tag.
+  // Whose die is whose, at a glance: the dice match the pieces — one drawn like the
+  // computer's (black) pieces, the other like the player's (white) ones. Jerry, run
+  // 1792139998 round 3, of two white dice told apart by a green and a red outline:
+  // "there STILL is no black and white die difference for the first roll (comp vs
+  // player)". Judged by each die's median brightness against a white and a black
+  // piece read the same way, so a fill, a gradient or an image all count and an
+  // outline does not. The data-owner tags are the team's (F63), so the pair is read
+  // by colour, not by tag.
   await waitForBoardSettled(page).catch(() => undefined);
   const dieBoxes = await page.locator('[data-testid="die"]').evaluateAll((els) =>
     els
@@ -720,11 +723,18 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
       }),
   );
   if (dieBoxes.length === 2) {
-    const [a, b] = await sampleBoxLooks(page, dieBoxes);
-    const dist = (p: number[], q: number[]) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+    const pieceBox = (color: "white" | "black") =>
+      page.locator(`[data-testid="checker"][data-color="${color}"]`).first().boundingBox();
+    const [a, b, white, black] = await sampleBoxBrightness(page, [
+      ...dieBoxes,
+      await pieceBox("white"),
+      await pieceBox("black"),
+    ]);
+    expect(white !== null && black !== null, "[needs: REQ-RENDER/checker] expected a white and a black piece to read").toBe(true);
+    const likeBlack = (v: number) => Math.abs(v - black!) < Math.abs(v - white!);
     expect(
-      !!a && !!b && (dist(a.centre, b.centre) > 45 || dist(a.edge, b.edge) > 45),
-      "[aspect: alike] [needs: REQ-RENDER/die REQ-TESTID/die] the two opening dice look the same",
+      a !== null && b !== null && likeBlack(a) !== likeBlack(b),
+      `[aspect: match] [needs: REQ-RENDER/die REQ-TESTID/die] the opening dice do not match the pieces: die brightness ${a?.toFixed(2)} and ${b?.toFixed(2)} against white pieces ${white?.toFixed(2)} and black pieces ${black?.toFixed(2)}`,
     ).toBe(true);
   }
 

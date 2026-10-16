@@ -1647,9 +1647,9 @@
       "first": "The pieces of a stack cascade off to the side — I expect each stack to stand as a single straight column.",
       "repeat": "The pieces of a stack still cascade off to the side — I expect each stack to stand as a single straight column."
     },
-    "F61.alike": {
-      "first": "At the start, the two dice look exactly the same, so I can't tell which one is mine and which is the computer's.",
-      "repeat": "I still can't tell my die from the computer's at the start. They look the same."
+    "F61.match": {
+      "first": "At the start, the dice don't match our pieces — I expect my die white like my pieces and the computer's die black like its pieces.",
+      "repeat": "At the start, the dice still don't match our pieces."
     },
     "F61.again": {
       "first": "When we tied on the opening roll, the game just sat there until I rolled again myself. I expected it to roll again on its own.",
