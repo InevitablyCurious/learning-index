@@ -384,3 +384,35 @@ test("[F44] REQ-LAYOUT — the buttons carry their names", async ({ page }) => {
     .map(([id]) => `${id} reads "${labels[id]}"`);
   expect(unnamed, `buttons whose label lacks their name: ${unnamed.join("; ")}`).toEqual([]);
 });
+
+// [F82] REQ-LAYOUT — the buttons match. Jerry, run 1792248731 round 2, on a
+// board that looked wonky: "the triangles, the bar, the bear off, and the
+// buttons". Roll, Double, Undo and End Turn are one set and are drawn the same
+// size; any other button stacked in line with them (sharing their column or
+// their row) is the same size as them too — New Game in a header of its own
+// is not part of the set. Grader only: the model knows a tidy control panel
+// from its training (owner, 2026-10-17).
+test("[F82] REQ-LAYOUT — the buttons match", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  const box = async (id: string) => page.getByTestId(id).first().boundingBox();
+  const set: { id: string; x: number; y: number; width: number; height: number }[] = [];
+  for (const id of ["rollBtn", "doubleBtn", "undoBtn", "endTurnBtn"]) {
+    const b = await box(id);
+    expect(b, "[needs: F38]").not.toBeNull();
+    set.push({ id, ...b! });
+  }
+  const others: typeof set = [];
+  const ng = await box("newGameBtn");
+  if (ng) {
+    const inLine = set.some((b) => Math.abs(b.x - ng.x) <= 2 || Math.abs(b.y - ng.y) <= 2);
+    if (inLine) others.push({ id: "newGameBtn", ...ng });
+  }
+  const all = [...set, ...others];
+  const ratio = (xs: number[]) => Math.max(...xs) / Math.min(...xs);
+  const sizes = all.map((b) => `${b.id} ${Math.round(b.width)}×${Math.round(b.height)}`).join(", ");
+  expect(
+    ratio(all.map((b) => b.width)) <= 1.05 && ratio(all.map((b) => b.height)) <= 1.05,
+    `[needs: F38 F44] the buttons are different sizes: ${sizes}`,
+  ).toBeTruthy();
+});

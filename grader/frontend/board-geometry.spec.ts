@@ -578,9 +578,8 @@ test("[F40] REQ-GEOMETRY — the two rows line up", async ({ page }) => {
 // board: side-by-side neighbours within each quarter differ. Judged on the
 // triangles' own colours against each other, never on which colours they are
 // (the F30 colour trap). Across the bar is not judged (the reference repeats
-// its colour there), wherever the bar is drawn; nor is the point straight
-// across the board: the build prompt says nothing about point colours, and a
-// board whose facing triangles match looks right to a player (FIX-22 M61).
+// its colour there), wherever the bar is drawn. The point straight across the
+// board is F83's.
 // Run 1790400113 drew every triangle one colour and every other check passed.
 test("[F42] REQ-GEOMETRY — the points alternate in colour", async ({ page }) => {
   await openFreshBoard(page);
@@ -723,4 +722,101 @@ test("[F70] REQ-GEOMETRY — the points' tips stand clear of the middle", async 
     toowide.length === 0,
     `[needs: F30] [aspect: toowide] expected the tips to stand off the middle by a readable gap, found the gap too wide on columns: ${toowide.map((g) => `${g.col} (gap ${g.gap.toFixed(1)} px, ${Math.round(g.fraction * 100)}% of a point's height)`).join(", ")}`,
   ).toBe(true);
+});
+
+// ── THE BOARD IS EVEN (Jerry, run 1792248731 round 2: "triangles are bigger on
+// one side of the board than they are on the other… the board looks wonky") ──
+// Every other geometry check reads one part on its own — a point points
+// inward, a piece fits its own point, the bar lies between the halves — so a
+// board whose left half was drawn 25% wider than its right passed them all
+// (points 60 px on the left, 48 px on the right). These compare the parts with
+// each other, as a player's eye does. The model knows a real board is even
+// from its training; the build prompt does not say it (owner, 2026-10-17).
+const EVEN = 1.05; // a part at most 5% bigger than its match
+
+test("[F79] REQ-GEOMETRY — every point is the same size", async ({ page }) => {
+  await openFreshBoard(page);
+  const points = await readPointBoxes(page);
+  expect(points.length, "[needs: REQ-RENDER/point]").toBe(24);
+  const widths = points.map((p) => p.width);
+  const lengths = points.map((p) => p.height);
+  const spread = (xs: number[]) => Math.max(...xs) / Math.min(...xs);
+  const widest = points.reduce((a, b) => (b.width > a.width ? b : a));
+  const narrowest = points.reduce((a, b) => (b.width < a.width ? b : a));
+  expect(
+    spread(widths) <= EVEN,
+    `[aspect: width] [needs: F28 F40] point ${widest.num} is ${widest.width.toFixed(0)} px wide and point ${narrowest.num} ${narrowest.width.toFixed(0)} px`,
+  ).toBeTruthy();
+  const longest = points.reduce((a, b) => (b.height > a.height ? b : a));
+  const shortest = points.reduce((a, b) => (b.height < a.height ? b : a));
+  expect(
+    spread(lengths) <= EVEN,
+    `[aspect: length] [needs: F28 F40] point ${longest.num} is ${longest.height.toFixed(0)} px long and point ${shortest.num} ${shortest.height.toFixed(0)} px`,
+  ).toBeTruthy();
+});
+
+test("[F80] REQ-GEOMETRY — the bar is in the middle", async ({ page }) => {
+  await openFreshBoard(page);
+  const bar = await readBarBox(page);
+  expect(bar, "[needs: REQ-RENDER/bar]").not.toBeNull();
+  const points = await readPointBoxes(page);
+  expect(points.length, "[needs: REQ-RENDER/point]").toBe(24);
+  // The two halves as the points span them: the far edge of the outermost
+  // point on each side to the bar's own edge.
+  const left = bar!.x - Math.min(...points.map((p) => p.x));
+  const right = Math.max(...points.map((p) => p.x + p.width)) - (bar!.x + bar!.width);
+  expect(
+    Math.max(left, right) / Math.min(left, right) <= EVEN,
+    `[needs: F29 F28 F40] the half left of the bar is ${left.toFixed(0)} px wide and the half right of it ${right.toFixed(0)} px`,
+  ).toBeTruthy();
+});
+
+test("[F81] REQ-GEOMETRY — the off tray sits right beside points 1 and 24", async ({ page }) => {
+  await openFreshBoard(page);
+  const tray = await readOffTray(page);
+  expect(tray.exists && tray.visible, "[needs: F32]").toBeTruthy();
+  const points = await readPointBoxes(page);
+  expect(points.length, "[needs: REQ-RENDER/point]").toBe(24);
+  // The build prompt puts the tray at the right-hand end, beside points 1 and
+  // 24; a tray elsewhere is F32's finding. Beside means no strip of empty board
+  // between the last points and the tray wider than a quarter of a point (a
+  // thin frame line between them is fine).
+  const end = Math.max(...points.filter((p) => p.num === 1 || p.num === 24).map((p) => p.x + p.width));
+  const gap = tray.x - end;
+  expect(
+    gap <= 0.25 * pointWidth(points),
+    `[needs: F32 F28 F40] ${gap.toFixed(0)} px of empty board between points 1 and 24 and the off tray`,
+  ).toBeTruthy();
+});
+
+// [F83] REQ-GEOMETRY — facing points differ in colour. Jerry, run 1792248731
+// round 3, comparing the golden with the model's board: the colours are "not
+// alternating correctly" — every top triangle was the colour of the one
+// straight across from it (13 light facing 12 light), where the golden pairs
+// light with dark (13 dark facing 12 light). This overturns FIX-22 M61's "a
+// board whose facing triangles match looks right to a player". Judged as F42
+// judges: the triangles' own colours against each other, points the bar or
+// tray is drawn over left out. A board in one colour is F42's.
+test("[F83] REQ-GEOMETRY — facing points differ in colour", async ({ page }) => {
+  await openFreshBoard(page);
+  const points = await readPointBoxes(page);
+  expect(points.length, "[needs: REQ-RENDER/point]").toBe(24);
+  const bar = await readBarBox(page);
+  const tray = await readOffTray(page);
+  const covered = new Set(
+    points
+      .filter((p) => (bar !== null && overlaps(bar, p)) || (tray.exists && tray.painted && overlaps(tray, p)))
+      .map((p) => p.num),
+  );
+  const samples = await sampleTriangleOrientation(page, points);
+  const colourOf = new Map(samples.map((x) => [x.num, x.colour]));
+  const matching: string[] = [];
+  for (let top = 13; top <= 24; top++) {
+    const across = 25 - top;
+    if (covered.has(top) || covered.has(across)) continue;
+    const a = colourOf.get(top);
+    const b = colourOf.get(across);
+    if (a && b && Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 40) matching.push(`${top}/${across}`);
+  }
+  expect(matching, `[needs: F28 F30 F42] points straight across from each other in the same colour: ${matching.join(", ")}`).toEqual([]);
 });

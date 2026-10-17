@@ -1734,6 +1734,34 @@
     "F78.grey": {
       "first": "After I move a piece, the die I used looks the same as the one I haven't played yet. I expect it greyed out slightly so I can see it's been played.",
       "repeat": "The die I used still looks the same as the unplayed one after I move."
+    },
+    "F79": {
+      "first": "The triangles on one side of the board are bigger than on the other — I expect them all to match.",
+      "repeat": "The triangles still don't all match."
+    },
+    "F79.width": {
+      "first": "The triangles on one side of the board are bigger than on the other — I expect them all to match.",
+      "repeat": "The triangles still don't all match."
+    },
+    "F79.length": {
+      "first": "Some of the triangles are longer than others — I expect every point the same length.",
+      "repeat": "The triangles still aren't all the same length."
+    },
+    "F80": {
+      "first": "The bar isn't in the middle — one half of the board is wider than the other.",
+      "repeat": "The bar still isn't in the middle; one half of the board is still wider."
+    },
+    "F81": {
+      "first": "There's an empty gap between the last points and the bear-off area — I expect them to touch.",
+      "repeat": "There's still an empty gap before the bear-off area."
+    },
+    "F82": {
+      "first": "The buttons aren't all the same size — I expect them to match.",
+      "repeat": "The buttons still aren't all the same size."
+    },
+    "F83": {
+      "first": "The triangles facing each other across the board are the same colour — I expect light to face dark.",
+      "repeat": "The triangles facing each other are still the same colour."
     }
   }
 }

@@ -1,0 +1,1 @@
+The bar still isn't in the middle; one half of the board is still wider.

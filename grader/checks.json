@@ -598,6 +598,31 @@
       "name": "A played die stays on screen, greyed",
       "what": "After a move, the die it used stays on screen and is drawn visibly fainter.",
       "how": "In a browser: the opening layout with a 3-5 to play; reads the two dice's pixel contrast (90th minus 10th percentile brightness), picks up the piece on 13 and clicks a hint, waits 1.5 s, then requires two dice still on screen ([aspect: gone]) and the faintest of them at most 0.8 of the faintest contrast before the move ([aspect: grey])."
+    },
+    "F79": {
+      "name": "Every point is the same size",
+      "what": "All 24 points are drawn the same width and the same length.",
+      "how": "On a fresh board reads every tagged point's box: the widest at most 5% wider than the narrowest ([aspect: width]) and the longest at most 5% longer than the shortest ([aspect: length])."
+    },
+    "F80": {
+      "name": "The bar is in the middle",
+      "what": "The bar splits the board into two halves of the same width.",
+      "how": "On a fresh board measures each half from the outer edge of its outermost point to the bar's edge: the wider at most 5% wider than the other."
+    },
+    "F81": {
+      "name": "The off tray sits right beside points 1 and 24",
+      "what": "No strip of empty board between the last points and the off tray.",
+      "how": "On a fresh board: the gap from the right edge of points 1 and 24 to the off tray at most a quarter of a point's width."
+    },
+    "F82": {
+      "name": "The buttons match",
+      "what": "Roll, Double, Undo and End Turn are the same size, and so is any other button stacked in line with them.",
+      "how": "Reads the four buttons' boxes, plus New Game when it shares their column or row: widths and heights each within 5% of one another."
+    },
+    "F83": {
+      "name": "Facing points differ in colour",
+      "what": "Each point is a different colour from the point straight across the board from it.",
+      "how": "On a fresh board samples each triangle's own colour; for every top point and the bottom point straight across (13/12 … 24/1), not covered by the bar or tray, the two colours must differ."
     }
   },
   "setup": [
@@ -821,6 +846,7 @@
         "F29",
         "F30",
         "F42",
+        "F83",
         "F32",
         "F41",
         "F43",
@@ -849,12 +875,16 @@
         "F54",
         "F68",
         "F70",
+        "F79",
+        "F80",
+        "F81",
+        "F82",
         "F71"
       ]
     },
     {
       "stage": 2,
-      "name": "Rolling and moving",
+      "name": "Rolling, moving and getting hit",
       "checks": [
         "G03",
         "E01",
@@ -897,23 +927,23 @@
         "F72",
         "F73",
         "F74",
-        "F78"
-      ]
-    },
-    {
-      "stage": 3,
-      "name": "Hitting and the bar",
-      "checks": [
+        "F78",
         "G07",
         "F09",
         "G06",
         "E05",
         "F10",
+        "E06"
+      ]
+    },
+    {
+      "stage": 3,
+      "name": "When you can't move",
+      "checks": [
         "E04",
         "G13",
         "F05",
         "F24",
-        "E06",
         "E07",
         "F16",
         "REQ-RESPONSIVE/awkwardroll"

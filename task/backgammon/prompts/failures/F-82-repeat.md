@@ -1,0 +1,1 @@
+The buttons still aren't all the same size.

@@ -1,0 +1,1 @@
+The triangles facing each other are still the same colour.
