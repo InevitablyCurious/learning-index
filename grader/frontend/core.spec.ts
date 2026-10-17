@@ -422,7 +422,9 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
     .toBeGreaterThan(0);
 
   const hintTexts = (await hints.allInnerTexts()).map(normalizeHint).filter(Boolean);
-  expect(hintTexts.length).toBeGreaterThan(0);
+  // The hints are there but carry no number: a player sees dots and cannot tell
+  // which die each one uses (run 1792224699, round 3: two bare green dots).
+  expect(hintTexts.length, "[aspect: label] the hints show no die number").toBeGreaterThan(0);
 
   // Only the piece picked up shows its moves (the build prompt: picking up a
   // piece "shows its hints"). The back piece's two numbers are two hints; a

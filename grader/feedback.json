@@ -243,6 +243,10 @@
       "first": "When I click a piece, the suggested moves don't tell me which die they use — or nothing shows up at all.",
       "repeat": "The suggestions still don't say which of my numbers each one uses, or they still don't appear."
     },
+    "F04.label": {
+      "first": "When I click a piece, the suggested moves don't tell me which die they use.",
+      "repeat": "The suggestions still don't say which of my numbers each one uses."
+    },
     "F04.perdie": {
       "first": "When I pick up a piece that can move with either number, only one of its moves shows — I expect a hint for each number it can use.",
       "repeat": "When I pick up a piece that can move with either number, still only one of its moves shows — I expect a hint for each number it can use."
