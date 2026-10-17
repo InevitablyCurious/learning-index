@@ -1,1 +1,1 @@
-Their automated test of the computer's move choice never finished again — after {seconds} they had to force-stop it.
+The computer's turn locked up again, and {seconds} later it still hadn't finished.

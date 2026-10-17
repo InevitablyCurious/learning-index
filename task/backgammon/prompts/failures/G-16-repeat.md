@@ -1,1 +1,1 @@
-Started a second copy again and it still either hangs or closes without saying the port is taken.
+They started a second copy again, and it still doesn't stop with an error saying the port is in use.

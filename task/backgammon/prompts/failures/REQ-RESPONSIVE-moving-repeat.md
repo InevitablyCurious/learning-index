@@ -1,1 +1,1 @@
-Their automated test of the moves your game offers never finished again — after {seconds} they had to force-stop it.
+It locked up again while I was moving my pieces, and {seconds} later it still hadn't come back.

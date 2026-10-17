@@ -1,1 +1,1 @@
-Their automated test of an awkward roll — doubles with a piece on the bar — never finished again: after {seconds} they had to force-stop it.
+I rolled a double with a piece on the bar again and it locked up again; {seconds} later it still hadn't come back.

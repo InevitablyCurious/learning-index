@@ -1,1 +1,1 @@
-Opened it fresh again and it still throws errors behind the scenes.
+They loaded your page again, and it still logs errors in the browser console.

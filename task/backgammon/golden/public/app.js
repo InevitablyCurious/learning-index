@@ -443,7 +443,7 @@ async function doUndo() {
 
 function maybeAutoEnd() {
   if (state && state.turn === "white" && state.phase === "move" && state.turnOver) {
-    endTimer = setTimeout(() => doEndTurn(), 1500);
+    endTimer = setTimeout(() => doEndTurn(), 1000); // no move: the dimmed dice hold a second, then the turn passes
   }
 }
 function cancelAutoEnd() { if (endTimer) { clearTimeout(endTimer); endTimer = null; } }
@@ -747,7 +747,7 @@ function updateUI() {
   // in the move phase; on a tie remainingDice is empty and must not dim.
   if (state.turn === "white" && (openingDiceActive || state.phase === "openingRoll")) {
     renderOpeningDice(state.dice, state.phase === "move" ? state.remainingDice : null);
-  } else if (state.phase === "move" && state.turn === "white") renderDice(state.dice, state.remainingDice);
+  } else if (state.phase === "move" && state.turn === "white") renderDice(state.dice, state.turnOver ? [] : state.remainingDice); // a die that can't be played is dimmed
   else if (state.phase !== "move" && state.turn === "white" && (!state.dice || state.dice.length === 0)) $("dice").innerHTML = "";
 
   // buttons

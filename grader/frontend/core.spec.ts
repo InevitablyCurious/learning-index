@@ -187,10 +187,11 @@ async function readInt(locator: Locator): Promise<number> {
   // reading it at that instant failed F06 for three rounds in two runs
   // (1789664067, 1789712833) while the page showed the right number.
   // A number inside a label ("Pips: 167") breaks the prompt's contract, not the
-  // player's reading: that is F69's, the team's, finding.
-  await expect(locator, "[aspect: format] [needs: F69]").toHaveText(/^\s*-?\d+\s*$/);
+  // player's reading: that is F69's, the team's, finding — the player reads
+  // the number wherever it sits. No number at all is what a player sees.
+  await expect(locator, "[aspect: format] the pip counter shows no number").toHaveText(/-?\d+/);
   const text = (await locator.innerText()).trim();
-  return Number.parseInt(text, 10);
+  return Number.parseInt(text.match(/-?\d+/)![0], 10);
 }
 
 function emptyPoints(): number[] {
@@ -247,6 +248,16 @@ test("[F27] REQ-RENDER — no console or page errors on load", async ({ page }) 
   });
 
   await page.goto("/");
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  // The other host name too (127.0.0.1 for localhost): errors only that
+  // address brings were F15's, told in the player's voice — but no player
+  // sees the browser console, so they are the team's, here (Jerry, 2026-10-17:
+  // team prose is for what a player would NEVER see).
+  const other = new URL(page.url()).origin.replace("localhost", "127.0.0.1");
+  if (other !== new URL(page.url()).origin) {
+    await page.goto(`${other}/`);
+    await expect(page.getByTestId("board"), "[needs: F01 F15]").toBeVisible();
+  }
 
   expect(consoleErrors).toEqual([]);
   expect(pageErrors).toEqual([]);
@@ -1461,18 +1472,52 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
 });
 
 test("[F48] REQ-TURN — a no-move roll passes by itself", async ({ page }) => {
-  // A roll with no legal move shows the dice and "No moves available" for about
-  // a second, then hands the turn to the computer on its own — no End Turn
-  // click. White's whole stack on 12 with black holding 6 and 7 blocks both a
-  // 6 (12->6) and a 5 (12->7), so a forced [6,5] leaves white nothing, off the bar.
+  // Jerry, 2026-10-17: "if no dice can be played, dim them, pause for 1
+  // second. then progress to the next players turn." The dimmed dice are how
+  // the player sees why they could not move; the pause is the moment to take it
+  // in. Judged on screen: the same 6-5 is rolled once where it plays (the dice
+  // as they look live) and once where it cannot (white's whole stack on 12,
+  // black holding 6 and 7: neither 12->6 nor 12->7, off the bar), and the
+  // no-move dice must be visibly fainter than the live ones — dimmed or greyed,
+  // whatever colours the dice use. Then the turn holds about a second and
+  // passes to the computer with no End Turn click.
+  test.setTimeout(60_000);
   await openApp(page);
+  const shownDice = async () =>
+    page.getByTestId("die").evaluateAll((els) =>
+      els
+        .filter((el) => (el as HTMLElement).checkVisibility())
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        }),
+    );
 
+  // The live 6-5: the opening layout, where both numbers play.
+  await setupState(page, {
+    points: startingPoints(),
+    bar: { white: 0, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "roll",
+    dice: [],
+    remainingDice: [],
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
+  await rollAndCheck(page, [6, 5], () => page.getByTestId("rollBtn").click());
+  await expect.poll(async () => (await shownDice()).length, "[needs: REQ-RENDER/die F39]").toBe(2);
+  await page.waitForTimeout(1_000);
+  const live = (await sampleBoxContrast(page, await shownDice())) as number[];
+
+  // The no-move 6-5.
   const points = emptyPoints();
   points[12] = 15;
   points[6] = -2;
   points[7] = -2;
   points[24] = -11;
-
   await setupState(page, {
     points,
     bar: { white: 0, black: 0 },
@@ -1485,40 +1530,43 @@ test("[F48] REQ-TURN — a no-move roll passes by itself", async ({ page }) => {
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-
+  const before = await readState(page);
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
   await rollAndCheck(page, [6, 5], () => page.getByTestId("rollBtn").click());
+  const rolledAt = Date.now();
 
-  // The dice stay up…
-  await expect
-    .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die]")
-    .toBeGreaterThan(0);
+  // The dice stay up, dimmed: read half a second after the roll lands, inside
+  // the second the turn must hold.
+  await page.waitForTimeout(500);
+  const dead = await shownDice();
+  expect(dead.length, "[aspect: dim] [needs: REQ-RENDER/die F39 F03 F45] the dice of a roll with no move left the screen").toBeGreaterThan(0);
+  const deadContrast = (await sampleBoxContrast(page, dead)) as number[];
+  const brightest = Math.max(...deadContrast);
+  const liveFaintest = Math.min(...live);
+  expect(
+    brightest <= 0.8 * liveFaintest,
+    `[aspect: dim] [needs: F03 F45] the dice of a roll with no move stand out ${brightest.toFixed(2)} against ${liveFaintest.toFixed(2)} for a live roll`,
+  ).toBe(true);
 
-  // …and the notice says "No moves available".
-  const message = page.getByTestId("message");
-  await expect(message, "[aspect: notice] [needs: F03 F45] the no-move notice did not say 'No moves available'").toContainText(
-    /no moves available/i,
-  );
-
-  // It holds for about a second: wait, then the same words are still up and the
-  // turn is still white's (it has not passed yet).
-  await page.waitForTimeout(1000);
-  await expect(message, "[aspect: notice] [needs: F03 F45] the no-move notice did not stay up for a second").toContainText(
-    /no moves available/i,
-  );
-  expect((await readState(page)).turn, "[aspect: notice] [needs: F03 F45] the turn passed before the notice had been up for a second").toBe(
-    "white",
-  );
+  // It holds for about a second: the turn is still white's.
+  await page.waitForTimeout(Math.max(0, 900 - (Date.now() - rolledAt)));
+  expect((await readState(page)).turn, "[aspect: pause] [needs: F03 F45] the turn passed before a second had gone by").toBe("white");
 
   // Then it passes by itself: without touching End Turn, the computer's turn
-  // begins. Sticky, so a quick computer turn cannot slip between polls.
-  let sawBlack = false;
+  // happens — black shows in a poll, or the computer's pieces have moved, or
+  // the turn is back to white for a new roll (a server that plays the whole
+  // computer turn in one request never shows black; F47, run 1792224699).
+  const blackAt = (s: ApiState): string =>
+    JSON.stringify([s.points.map((n) => Math.min(n, 0)), s.bar.black, s.off.black]);
+  let passed = false;
   await expect
     .poll(
       async () => {
         const s = await readState(page);
-        if (s.turn === "black") sawBlack = true;
-        return sawBlack;
+        if (s.turn === "black" || blackAt(s) !== blackAt(before) || (s.turn === "white" && s.phase === "roll")) {
+          passed = true;
+        }
+        return passed;
       },
       { message: "[needs: F03 F45] the no-move turn never passed to the computer by itself", timeout: 6000 },
     )

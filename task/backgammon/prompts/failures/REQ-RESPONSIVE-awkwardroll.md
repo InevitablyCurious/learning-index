@@ -1,1 +1,1 @@
-Their automated test of an awkward roll — doubles with a piece on the bar — never finished: they waited {seconds} and had to force-stop it.
+It locked up on me when I rolled a double with a piece on the bar — nothing responded after that. I gave it {seconds}.

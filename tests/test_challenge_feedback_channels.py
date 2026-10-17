@@ -489,15 +489,13 @@ def test_the_conformance_phase_has_no_fabricated_fallback() -> None:
 # A deadline is a different fact: the code under test did not return, and a
 # freeze is the most player-visible symptom there is.
 
-# The two a player meets in the browser (the page never loads; the page freezes
-# while played) are the player's. The four backend areas are the integrating
-# team's automated tests of the engine — a test no player runs — so a deadline
-# there is told by the team (Jerry, 2026-10-07: the player hands the product to
-# the team for integration testing, and that is where it shows). Their stages
-# in grader/checks.json are unchanged.
-PLAYER_STALL_AREAS = ("startup", "playing")
-TEAM_STALL_AREAS = ("moving", "bearingoff", "aiturn", "awkwardroll")
-STALL_AREAS = PLAYER_STALL_AREAS + TEAM_STALL_AREAS
+# Every deadline is the player's. A backend file's deadline (moving,
+# bearingoff, aiturn, awkwardroll) is the engine not returning, and an engine
+# that never returns freezes the game a person is playing. Jerry, 2026-10-07,
+# had these told by the integrating team; Jerry, 2026-10-17, overturned it:
+# "the team prose should be for things i would NEVER see" — and a frozen game
+# is seen. Their stages in grader/checks.json are unchanged.
+STALL_AREAS = ("startup", "playing", "moving", "bearingoff", "aiturn", "awkwardroll")
 
 
 @pytest.mark.parametrize("area", STALL_AREAS)
@@ -507,16 +505,14 @@ def test_a_stall_reaches_the_model(area: str) -> None:
         "a deadline is the candidate's code not returning, not harness "
         "infrastructure — dropping it is how a hang went unreported for a whole run"
     )
-    expected = "tester" if area in PLAYER_STALL_AREAS else "team"
-    assert R.feedback_channel(check) == expected, (
-        "a freeze in the browser is what a person playing sees; a deadline in a "
-        "backend file is the team's automated test, which a player never runs"
+    assert R.feedback_channel(check) == "tester", (
+        "a freeze is what a person playing sees, wherever the grader caught it"
     )
     line = R._humanize_check(check, pass_kind="first")
     assert line, f"{area} has no symptom line"
 
 
-@pytest.mark.parametrize("area", PLAYER_STALL_AREAS)
+@pytest.mark.parametrize("area", STALL_AREAS)
 def test_a_player_stall_line_says_it_froze_and_nothing_about_why(area: str) -> None:
     for kind in ("first", "repeat"):
         line = R._humanize_check(f"REQ-RESPONSIVE/{area}", pass_kind=kind).lower()
@@ -541,17 +537,6 @@ def test_a_player_stall_line_says_it_froze_and_nothing_about_why(area: str) -> N
                 "seized up",
             )
         ), f"{area}/{kind} does not describe a freeze: {line}"
-        _assert_no_cause(line, area, kind)
-
-
-@pytest.mark.parametrize("area", TEAM_STALL_AREAS)
-def test_a_team_stall_line_is_the_teams_test_not_finishing_and_nothing_about_why(
-    area: str,
-) -> None:
-    for kind in ("first", "repeat"):
-        line = R._humanize_check(f"REQ-RESPONSIVE/{area}", pass_kind=kind).lower()
-        assert line.startswith("their automated test"), f"{area}/{kind}: {line}"
-        assert "never finished" in line and "force-stop" in line, f"{area}/{kind}: {line}"
         _assert_no_cause(line, area, kind)
 
 
@@ -587,7 +572,7 @@ def test_one_hang_is_reported_once_not_once_per_unmeasured_gate() -> None:
         checks=None,
         repeat_complaints=set(),
     )
-    assert msg.lower().count("never finished") == 1
+    assert msg.lower().count("locked up") == 1
     # And the unmeasured gates say nothing at all — they were not measured, so
     # there is no finding to report, and inventing one would be fabrication.
     assert "edge-gates" not in msg
@@ -740,7 +725,7 @@ def test_f06_aspects_resolve_to_three_distinct_complaints() -> None:
     fmt = R._humanize_check(
         check, observed="AssertionError: [aspect: format]: expected '208' to match"
     )
-    assert "aren't readable" in fmt and "plain numbers" in fmt  # not a plain number
+    assert "don't show a number" in fmt  # no number on the counter at all
 
     # Three causes, three different lines.
     assert len({value, sync, fmt}) == 3

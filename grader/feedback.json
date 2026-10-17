@@ -132,8 +132,8 @@
       "repeat": "Switched between the levels again: the top setting still isn't any stronger, or it slips in a move that isn't allowed."
     },
     "G16": {
-      "first": "When I start the game a second time while it's already running, it hangs silently — or dies without telling me the port is in use.",
-      "repeat": "Started a second copy again and it still either hangs or closes without saying the port is taken."
+      "first": "They start a second copy of your server while one is already running, and it doesn't stop with an error saying the port is in use.",
+      "repeat": "They started a second copy again, and it still doesn't stop with an error saying the port is in use."
     },
     "G17": {
       "first": "When my opponent has a single checker on a point, the game won't let me land there and hit it.",
@@ -156,8 +156,8 @@
       "repeat": "Tried doubling mid-turn again and it still lets me."
     },
     "G22": {
-      "first": "The computer's win chance doesn't go up as it gets further ahead.",
-      "repeat": "Checked more positions and its win chance still doesn't rise as it pulls ahead."
+      "first": "Their tools read your computer's win-chance estimate, and it doesn't go up as the computer gets further ahead.",
+      "repeat": "They checked more positions, and the computer's win-chance estimate still doesn't rise as it pulls ahead."
     },
     "G23": {
       "first": "I made a move, hit undo, and the board didn't go back to how it was — a checker stayed where it had moved to or went missing.",
@@ -288,8 +288,8 @@
       "repeat": "Stuck again with no move to play, and it still doesn't say 'No moves available'."
     },
     "F06": {
-      "first": "The pip numbers on screen don't match the game — they're wrong at the start, drift after a change, or aren't readable as numbers.",
-      "repeat": "Those pip counters still don't agree with the board — wrong, or not readable as numbers."
+      "first": "The pip numbers on screen don't match the game — they're wrong at the start or drift after a change.",
+      "repeat": "Those pip counters still don't agree with the board."
     },
     "F07": {
       "first": "After I double, the cube on screen doesn't show the new value, or it doesn't show who owns it.",
@@ -804,8 +804,8 @@
       "repeat": "I picked a piece up again after your fix and still nothing shows me where it can go."
     },
     "F15": {
-      "first": "I opened the game from a different address than usual and got a dead board — it loads but nothing appears on it, or it throws errors behind the scenes.",
-      "repeat": "Same thing again: reaching the game by its other address still gives me an empty board or errors."
+      "first": "I opened the game from a different address than usual and got a dead board — it loads but nothing appears on it.",
+      "repeat": "Same thing again: reaching the game by its other address still gives me an empty board."
     },
     "F16": {
       "first": "I reload in the middle of my turn and the game comes back saying it isn't my turn anymore.",
@@ -852,8 +852,8 @@
       "repeat": "The hints still pop in instantly with no animation."
     },
     "F27": {
-      "first": "When I open the game, it throws errors in the background.",
-      "repeat": "Opened it fresh again and it still throws errors behind the scenes."
+      "first": "Their monitoring shows your page logging errors in the browser console when it loads.",
+      "repeat": "They loaded your page again, and it still logs errors in the browser console."
     },
     "F28": {
       "first": "The points aren't laid out in the right order — I expect 13 to 24 running left to right along the top, and 12 down to 1 running left to right along the bottom.",
@@ -1008,20 +1008,20 @@
       "repeat": "Tried opening it again and it hung on me the same way. Nothing ever appears, it just sits — {seconds} of it before I gave up."
     },
     "REQ-RESPONSIVE/moving": {
-      "first": "Their automated test of the moves your game offers never finished — they waited {seconds} and had to force-stop it.",
-      "repeat": "Their automated test of the moves your game offers never finished again — after {seconds} they had to force-stop it."
+      "first": "It locked up on me while I was moving my pieces — nothing responded after that. I gave it {seconds}.",
+      "repeat": "It locked up again while I was moving my pieces, and {seconds} later it still hadn't come back."
     },
     "REQ-RESPONSIVE/bearingoff": {
-      "first": "Their automated test of bearing off never finished — they waited {seconds} and had to force-stop it.",
-      "repeat": "Their automated test of bearing off never finished again — after {seconds} they had to force-stop it."
+      "first": "It locked up on me while I was bearing off — nothing responded after that. I gave it {seconds}.",
+      "repeat": "It locked up again while I was bearing off, and {seconds} later it still hadn't come back."
     },
     "REQ-RESPONSIVE/aiturn": {
-      "first": "Their automated test of the computer's move choice, where it plays whole games against itself, never finished — they waited {seconds} and had to force-stop it.",
-      "repeat": "Their automated test of the computer's move choice never finished again — after {seconds} they had to force-stop it."
+      "first": "It locked up on me while the computer was taking its turn — it never finished. I gave it {seconds}.",
+      "repeat": "The computer's turn locked up again, and {seconds} later it still hadn't finished."
     },
     "REQ-RESPONSIVE/awkwardroll": {
-      "first": "Their automated test of an awkward roll — doubles with a piece on the bar — never finished: they waited {seconds} and had to force-stop it.",
-      "repeat": "Their automated test of an awkward roll — doubles with a piece on the bar — never finished again: after {seconds} they had to force-stop it."
+      "first": "It locked up on me when I rolled a double with a piece on the bar — nothing responded after that. I gave it {seconds}.",
+      "repeat": "I rolled a double with a piece on the bar again and it locked up again; {seconds} later it still hadn't come back."
     },
     "REQ-RESPONSIVE/playing": {
       "first": "It locked up on me while I was playing — the whole page stopped responding and nothing I clicked did anything after that. I gave it {seconds}.",
@@ -1048,8 +1048,8 @@
       "repeat": "The pip numbers on screen still disagree with the game."
     },
     "F06.format": {
-      "first": "The pip counts on screen aren't readable as plain numbers.",
-      "repeat": "The pip counts still aren't plain numbers."
+      "first": "The pip counters on screen don't show a number.",
+      "repeat": "The pip counters still don't show a number."
     },
     "F26.present": {
       "first": "I picked a piece and no hint appeared showing where it could move.",
@@ -1206,6 +1206,10 @@
     "F39.extra": {
       "first": "After I rolled, there were more than two dice on the screen.",
       "repeat": "Rolled again and there were still more than two dice on the screen."
+    },
+    "F39.double": {
+      "first": "When I rolled a double, there were more than two dice on the screen.",
+      "repeat": "Rolled a double again and there were still more than two dice on the screen."
     },
     "F39.moves": {
       "first": "I rolled two different numbers and got the wrong number of moves.",
@@ -1599,9 +1603,13 @@
       "first": "When I've finished my moves, End Turn doesn't hand the turn to the computer.",
       "repeat": "End Turn still doesn't hand the turn to the computer after I finish my moves."
     },
-    "F48.notice": {
-      "first": "When I roll and can't move, 'No moves available' doesn't stay on screen with my dice for a second.",
-      "repeat": "Rolled with no move again, and 'No moves available' still doesn't stay up with my dice for a second."
+    "F48.dim": {
+      "first": "When I roll and can't move, my dice don't dim to show me none of them can be played.",
+      "repeat": "Rolled with no move again, and my dice still don't dim."
+    },
+    "F48.pause": {
+      "first": "When I roll and can't move, the turn passes straight away. I want a second's pause with my dice up so I can see why.",
+      "repeat": "Rolled with no move again, and the turn still passes straight away."
     },
     "F49.shown": {
       "first": "The computer's double offer never shows up on screen — nothing tells me it wants to double.",

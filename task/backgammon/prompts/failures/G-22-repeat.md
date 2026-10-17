@@ -1,1 +1,1 @@
-Checked more positions and its win chance still doesn't rise as it pulls ahead.
+They checked more positions, and the computer's win-chance estimate still doesn't rise as it pulls ahead.

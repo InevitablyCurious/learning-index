@@ -247,7 +247,7 @@
     "F06": {
       "name": "Pip counts on screen",
       "what": "The pip counts on screen match the game.",
-      "how": "On a new game the displayed counts must match the server and the pieces on the board, counted by the grader (a wrong opening is the setup check's complaint, a wrong formula the pip check's). A custom position is then set, and the displayed counts must match the server again."
+      "how": "On a new game the displayed counts must show a number ([aspect: format]) that matches the server and the pieces on the board, counted by the grader (a wrong opening is the setup check's complaint, a wrong formula the pip check's). A custom position is then set, and the displayed counts must match the server again."
     },
     "F07": {
       "name": "The cube after a double",
@@ -292,7 +292,7 @@
     "F15": {
       "name": "Works on either host name",
       "what": "The game works whether it's opened at localhost or 127.0.0.1.",
-      "how": "Loads the page at both addresses: each must show the board with 24 points and 30 checkers and no errors."
+      "how": "Loads the page at both addresses: each must show the board with 24 points and 30 checkers. Console errors at either address are F27's."
     },
     "F16": {
       "name": "The player's turn survives a reload",
@@ -352,7 +352,7 @@
     "F27": {
       "name": "Page loads cleanly",
       "what": "The game page loads without errors.",
-      "how": "Opens the page in a browser and requires no console errors and no page errors."
+      "how": "Opens the page in a browser at its usual address and at the other host name (127.0.0.1 for localhost) and requires no console errors and no page errors. Told by the integrating team: no player sees the console."
     },
     "F28": {
       "name": "Points in board order",
@@ -407,7 +407,7 @@
     "F39": {
       "name": "Two dice, two moves",
       "what": "After any roll exactly two dice are on screen, and two different numbers give exactly two moves (a double's four are F33).",
-      "how": "Fixes the roll to 6-5 — the player's die first, so the player wins the opening roll and plays both numbers (a forced 5-6 would hand the turn to the computer) — and clicks Roll: two dice on screen, two moves playable by clicking, no third; then seeds a later turn in the move phase with a double already rolled, since an opening roll is one die per side and can no longer be a double (G31): still two dice on screen."
+      "how": "Fixes the roll to 6-5 — the player's die first, so the player wins the opening roll and plays both numbers (a forced 5-6 would hand the turn to the computer) — and clicks Roll: two dice on screen ([aspect: extra]), two moves playable by clicking, no third; then seeds a later turn in the move phase with a double already rolled, since an opening roll is one die per side and can no longer be a double (G31): still two dice on screen ([aspect: double])."
     },
     "F40": {
       "name": "Rows line up",
@@ -450,9 +450,9 @@
       "how": "Sets a position white can move in, forces 6-5, plays every die by clicking until the turn is over, then waits 1.6 s: the turn must still be white's in the move phase. Undo must be available and give a die back ([aspect: undo]); after replaying, End Turn must hand the turn to the computer ([aspect: endturn]). It waits four seconds (what a player takes to find the button) before checking the turn is still the player's."
     },
     "F48": {
-      "name": "A no-move roll passes by itself",
-      "what": "A roll with no possible move shows the dice and 'No moves available' for about a second, then passes to the computer on its own.",
-      "how": "Blocks both of white's numbers with nothing on the bar, forces 6-5 and clicks Roll: the dice and a notice saying \"No moves available\" must be up for a second with the turn still white's ([aspect: notice]), and then the turn must pass to the computer without End Turn."
+      "name": "A roll with no move passes by itself",
+      "what": "When the player rolls and no die can be played, the dice stay up dimmed for about a second, then the turn passes to the computer with no End Turn click.",
+      "how": "In a browser: rolls a fixed 6-5 on the opening layout and reads the two dice's pixel contrast (90th minus 10th percentile brightness) a second after they land; then sets white's whole stack on 12 with black holding 6 and 7 and rolls the same 6-5. Requires the dice still on screen half a second later, the brightest no more than 0.8 of the faintest live die ([aspect: dim]); the turn still white's about a second after the roll ([aspect: pause]); and then, with no click, the computer's turn happening (black shows, or its pieces moved, or the turn is back to white for a roll)."
     },
     "F49": {
       "name": "Plain double offer",

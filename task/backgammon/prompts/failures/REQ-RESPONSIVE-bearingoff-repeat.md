@@ -1,1 +1,1 @@
-Their automated test of bearing off never finished again — after {seconds} they had to force-stop it.
+It locked up again while I was bearing off, and {seconds} later it still hadn't come back.

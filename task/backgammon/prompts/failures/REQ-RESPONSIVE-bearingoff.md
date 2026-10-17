@@ -1,1 +1,1 @@
-Their automated test of bearing off never finished — they waited {seconds} and had to force-stop it.
+It locked up on me while I was bearing off — nothing responded after that. I gave it {seconds}.

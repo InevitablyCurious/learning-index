@@ -2604,11 +2604,11 @@ class ChallengeRunner(
     # tester's by default — the team is an addition, never a reclassification.
     # REQ-RESPONSIVE is a FREEZE — the most player-visible symptom there is, and
     # one an integrator reading API responses would never phrase. Tester, always.
-    # REQ-RESPONSIVE: only the two a player meets in the browser (the page never
-    # loads, the page freezes while played). The backend files' deadlines
-    # (moving, awkwardroll, bearingoff, aiturn) are the team's automated tests of
-    # the engine — a test a player never runs — told by the integrating team.
-    _TESTER_CONF_PREFIXES = ("REQ-RENDER/", "REQ-HINT/")
+    # All of REQ-RESPONSIVE, the backend files' deadlines too (moving,
+    # awkwardroll, bearingoff, aiturn): an engine that never returns freezes the
+    # game a player is playing (Jerry, 2026-10-17: team prose is only for what a
+    # player would NEVER see; a frozen game is seen).
+    _TESTER_CONF_PREFIXES = ("REQ-RENDER/", "REQ-HINT/", "REQ-RESPONSIVE/")
 
     @classmethod
     def _player_stages(cls) -> list[Stage]:
@@ -2619,7 +2619,7 @@ class ChallengeRunner(
             cls._PLAYER_STAGES_CACHE = cached
         return cached
 
-    _TESTER_CONF_EXACT = ("REQ-BIND/boot", "REQ-RESPONSIVE/playing", "REQ-RESPONSIVE/startup")
+    _TESTER_CONF_EXACT = ("REQ-BIND/boot",)
 
     # Numbered gates a player cannot observe: they call the engine's named
     # functions (contract, like the API), so only an integrating team sees the
@@ -2635,8 +2635,11 @@ class ChallengeRunner(
     # G03 (the dice a roll sends back), G31 (the opening roll's fields) and G32 (the
     # message when the computer cannot move) read the API's reply, not the screen: a
     # player sees the moves play out fine while the reply is wrong (WO-STUCK23-WHY).
+    # F27 (errors in the browser console), G16 (a second server copy's exit) and
+    # G22 (the win-chance estimate, never displayed) are faults no player ever
+    # sees (Jerry, 2026-10-17; audit WO-LI-NEVER-SEE-VOICE-AUDIT).
     # Every other gate token is the tester's.
-    _TEAM_GATE_TOKENS = ("E08", "G03", "G27", "G28", "G29", "G31", "G32", "F63", "F68", "F69")
+    _TEAM_GATE_TOKENS = ("E08", "G03", "G16", "G22", "G27", "G28", "G29", "G31", "G32", "F27", "F63", "F68", "F69")
 
     # HARNESS-INFRA CHECK NAMES (WO-FEEDBACK-VOICE-3 follow-up, 2026-08-30).
     # These are born only when a RUNNER DIES mid-run —
