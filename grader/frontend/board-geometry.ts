@@ -927,3 +927,48 @@ export async function sampleBoxBrightness(
     { dataUrl, boxes },
   );
 }
+
+// How much a box's drawing stands out from itself: the spread between its dark
+// and light pixels (90th minus 10th percentile of brightness) on a 15x15 grid.
+// A die dimmed or greyed out loses that spread — its face and pips draw closer
+// together — whatever colour either is. null for a missing box.
+export async function sampleBoxContrast(
+  page: Page,
+  boxes: ({ x: number; y: number; width: number; height: number } | null)[],
+): Promise<(number | null)[]> {
+  const buf = await page.screenshot({ type: "png" });
+  const dataUrl = "data:image/png;base64," + buf.toString("base64");
+  return page.evaluate(
+    async ({ dataUrl, boxes }) => {
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
+        img.src = dataUrl;
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas 2d context unavailable");
+      ctx.drawImage(img, 0, 0);
+      const dpr = img.naturalWidth / window.innerWidth;
+      const brightness = (x: number, y: number): number => {
+        const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+        return (0.2126 * d[0] + 0.7152 * d[1] + 0.0722 * d[2]) / 255;
+      };
+      return boxes.map((b) => {
+        if (!b) return null;
+        const values: number[] = [];
+        for (let i = 0; i < 15; i++) {
+          for (let j = 0; j < 15; j++) {
+            values.push(brightness(b.x + b.width * (0.1 + (0.8 * i) / 14), b.y + b.height * (0.1 + (0.8 * j) / 14)));
+          }
+        }
+        values.sort((p, q) => p - q);
+        return values[Math.floor(values.length * 0.9)] - values[Math.floor(values.length * 0.1)];
+      });
+    },
+    { dataUrl, boxes },
+  );
+}

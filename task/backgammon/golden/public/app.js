@@ -491,7 +491,7 @@ function showAiDoubleOffer(s) {
 async function runAi() {
   busy = true;
   updateUI();
-  await sleep(500);
+  await sleep(1000); // a second after End Turn before the computer rolls, so the player can follow
   const s = await api("/api/ai");
 
   if (s.aiDoubled) {

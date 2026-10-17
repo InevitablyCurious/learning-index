@@ -1,0 +1,1 @@
+The die I used still disappears after I move.

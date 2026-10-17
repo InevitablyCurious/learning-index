@@ -520,9 +520,14 @@
       "how": "In a browser: first requires the Roll button to be clickable at the start of a new game ([aspect: roll]); then fixes the opening roll to 6-5, clicks Roll, and requires at least two dice on screen once they rest ([aspect: dice]); fixes 4-4 and requires the words \"Tie — roll again\" (any dash) somewhere on the page, again with two dice resting on screen ([aspect: tie], [aspect: dice]); fixes 3-5 and requires the state to show the computer's pieces moved and the turn back with the player ([aspect: computer]). The player's own first move with both numbers is F03's and F04's, which open with a roll the player wins. The two opening dice must look different from each other, and a tie must roll again by itself without a click on Roll."
     },
     "F62": {
-      "name": "The computer's turn pacing on screen",
-      "what": "When the computer takes its turn, its dice stay readable for about a second before its first piece moves, then each further move follows about half a second after the last.",
-      "how": "In a browser: sets the opening position with the player's roll used up, easy difficulty and the computer's roll fixed to 6-5, records every frame (the visible dice drawn, the black pieces' centres relative to the board, and their data-loc tags), and clicks End Turn. Requires End Turn available and the state to show the computer moved and the turn back ([aspect: turn]); the black pieces to move on screen ([aspect: drawn]); a new dice drawing before the first move ([aspect: dice]) that stayed unchanged at least 0.8 s ([aspect: first]); and at least two move starts, each at least 0.35 s after the last ([aspect: between]); moves are timed from the pieces' tags, or from their drawing when the tags show fewer than two moves."
+      "name": "The computer's dice on screen",
+      "what": "When the computer takes its turn, its pieces move on the board, and its dice come up about a second after End Turn and stay readable for about a second before its first piece moves.",
+      "how": "In a browser: sets the opening position with the player's roll used up, easy difficulty and the computer's roll fixed to 6-5, records every frame (the visible dice drawn and the black pieces' centres and data-loc tags), and clicks End Turn. Requires End Turn available and the state to show the computer moved and the turn back ([aspect: turn]); a new dice drawing before the first move ([aspect: dice]), first drawn at least 0.8 s after the click ([aspect: wait]), that stayed unchanged at least 0.8 s ([aspect: first]). Also requires the black pieces to move on screen ([aspect: drawn])."
+    },
+    "F77": {
+      "name": "The computer moves one piece at a time",
+      "what": "When the computer takes its turn, its pieces move on the board one after another, each about half a second after the last.",
+      "how": "In a browser, the same computer turn as F62 (opening position, easy, roll fixed to 6-5, End Turn clicked, every frame recorded). Requires at least two move starts, each at least 0.35 s after the last ([aspect: between]); moves are timed from the pieces' tags, or from their drawing when the tags show fewer than two moves. A turn that never went through or never moved on screen is F62's."
     },
     "F63": {
       "name": "The opening dice carry whose they are",
@@ -588,6 +593,11 @@
       "name": "The dice do not roll again after a move",
       "what": "The dice stay still when a piece moves; they only roll when they are rolled.",
       "how": "Plays one move by clicking a piece and a hint and reads the browser's animation events: no die may start an animation afterwards."
+    },
+    "F78": {
+      "name": "A played die stays on screen, greyed",
+      "what": "After a move, the die it used stays on screen and is drawn visibly fainter.",
+      "how": "In a browser: the opening layout with a 3-5 to play; reads the two dice's pixel contrast (90th minus 10th percentile brightness), picks up the piece on 13 and clicks a hint, waits 1.5 s, then requires two dice still on screen ([aspect: gone]) and the faintest of them at most 0.8 of the faintest contrast before the move ([aspect: grey])."
     }
   },
   "setup": [
@@ -859,6 +869,7 @@
         "F60",
         "F61",
         "F62",
+        "F77",
         "F63",
         "G31",
         "G04",
@@ -885,7 +896,8 @@
         "G33",
         "F72",
         "F73",
-        "F74"
+        "F74",
+        "F78"
       ]
     },
     {

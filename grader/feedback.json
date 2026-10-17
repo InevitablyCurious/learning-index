@@ -1487,7 +1487,15 @@
       "first": "The computer's first move came less than a second after its dice showed, too soon for me to read them.",
       "repeat": "Again the computer's first move came less than a second after its dice showed."
     },
-    "F62.between": {
+    "F62.wait": {
+      "first": "When I click End Turn, the computer rolls straight away. I expect a pause of about a second first, so I can follow what it's doing.",
+      "repeat": "The computer still rolls straight away after I click End Turn."
+    },
+    "F77": {
+      "first": "I couldn't keep up with what the computer did.",
+      "repeat": "Again I couldn't keep up with what the computer did."
+    },
+    "F77.between": {
       "first": "The computer's moves came less than half a second apart, too quick to watch one at a time.",
       "repeat": "The computer's moves again came less than half a second apart."
     },
@@ -1706,6 +1714,18 @@
     "F74.again": {
       "first": "Every time I move a piece, the dice tumble again as if I had just rolled.",
       "repeat": "The dice still roll again after every move I make."
+    },
+    "F78": {
+      "first": "After I move a piece, the die I used disappears. It should grey out slightly to signal it's been played.",
+      "repeat": "The die I used still disappears after I move."
+    },
+    "F78.gone": {
+      "first": "After I move a piece, the die I used disappears. It should grey out slightly to signal it's been played.",
+      "repeat": "The die I used still disappears after I move."
+    },
+    "F78.grey": {
+      "first": "After I move a piece, the die I used looks the same as the one I haven't played yet. I expect it greyed out slightly so I can see it's been played.",
+      "repeat": "The die I used still looks the same as the unplayed one after I move."
     }
   }
 }

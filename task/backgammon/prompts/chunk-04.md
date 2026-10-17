@@ -13,7 +13,7 @@ What the game should feel like to play:
 - Hitting sends the opponent's checker to the bar, and you can see it land there; a checker re-entering from the bar travels back onto the board; a checker borne off appears in the off tray.
 - Pip counts, cube value, cube owner, score and whose turn it is are all on screen and match the API.
 - When you have no legal move, the dice stay up for a second showing "No moves available", then play passes to the other side.
-- The computer's turn is paced so a player can follow it: its dice appear and stay readable for about a second before the first move, then each further move follows about half a second after the last.
+- The computer's turn is paced so a player can follow it: about a second after you click End Turn its dice roll, they stay readable for about a second before the first move, then each further move follows about half a second after the last.
 - Your turn never ends by itself. After you've played every die you can, the game waits for you to click End Turn to hand the turn over. Until you click End Turn, Undo keeps working and steps your moves back one at a time.
 - Fast Forward: a button `data-testid="fastForwardBtn"` appears only on your turn in a race — when neither side has a checker on the bar and every one of your checkers has passed every one of the computer's, so neither side can hit the other anymore. The button reads "Fast Forward" normally and "Pause" while it is running. Clicking it plays out the rest of the game for both you and the computer, at the computer's own pace — the dice stay readable about a second, then each move follows about half a second after the last, a double's four moves the same — until someone wins. Clicking "Pause" stops it and the button reads "Fast Forward" again; clicking that carries on. If the computer offers a double while it is running, it stops and stays stopped until you answer the double, and you click "Fast Forward" again to continue. It never offers a double of your own.
 - The board should be on the left and fill the screen, with all the roll, double and other buttons and game info on the right — about 80% of the width for the board and 20% for the buttons. That's on an ordinary laptop screen, 1280×800 or 1440×900, with nothing to scroll.
@@ -40,6 +40,7 @@ Required `data-testid` hooks (EXACT — the UI automation selects on these; stat
 - Each move hint: `data-testid="hint"`.
 - Each die: `data-testid="die"`, nested inside the `dice` container.
 - After a roll, exactly two dice are visible, a double too — a double still gives four moves.
+- A die that has been played stays on screen, greyed out — visibly fainter than a die not yet played.
 - During the opening roll the page shows BOTH dice — the player's die and the computer's die — each marked with a `data-owner` of `you` (the player's) or `ai` (the computer's) so the player can tell whose is whose. The tie message contains the words `Tie — roll again`; after showing it for about a second the page rolls both dice again by itself, and keeps doing so until they differ — the player never presses Roll for a tie. The winner of the opening plays those two numbers: the player's hints use them, and the computer's first move uses them.
 - The bar: `data-testid="bar"`.
 - The off tray: `data-testid="off-tray"`, containing `data-testid="off-you"`, where your borne-off checkers go.

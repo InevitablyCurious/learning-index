@@ -1,6 +1,6 @@
 import { type Locator, type Page } from "@playwright/test";
 import { expect, pickUpAPiece, playerClick, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
-import { readColumnBox, readPointBoxes, sampleBoxBrightness, waitForBoardSettled } from "./board-geometry.ts";
+import { readColumnBox, readPointBoxes, sampleBoxBrightness, sampleBoxContrast, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
 type Difficulty = "easy" | "medium" | "hard";
@@ -989,22 +989,23 @@ function readableDice(
   return { shown, readable };
 }
 
-test("[F62] REQ-PACING — the computer's turn is paced so its dice and moves can be followed", async ({ page }) => {
-  test.setTimeout(120_000);
-  // A computer that plays instantly is a computer the player cannot follow:
-  // its roll must stay on screen about a second before its first move, and
-  // each move must follow the last by about half a second. Judged on what is
-  // drawn, frame by frame, through the tags the build prompt names only — the
-  // dice and the black pieces — whatever the page's structure: pieces in a
-  // layer or inside their points, moved or redrawn, dice as numbers or as
-  // pips. Positions are read against the board, so a page that shifts as a
-  // whole is not a move. The turn comes the ordinary way — End Turn with
-  // nothing left to play — at easy, which never doubles, with the computer's
-  // roll fixed to 6-5 (two moves, always open at the opening, no hit).
-  //
-  // The server hands the turn back BEFORE the page has finished showing it
-  // (grader/meta/README.md "gate on the screen"), so the state only says the
-  // turn happened; the frames say how it looked.
+// The computer's turn as the player watches it, from End Turn: the opening
+// position with the player's roll used up, easy (never doubles), the
+// computer's roll fixed to 6-5 (two moves, always open, no hit). Shared by F62
+// (its dice) and F77 (its moves): a player watching an instant computer sees
+// both at once — no dice and every piece jumping together — so each is told
+// on its own (run 1792224699, round 3: Jerry saw both, the model heard only
+// the dice).
+//
+// The server hands the turn back BEFORE the page has finished showing it
+// (grader/meta/README.md "gate on the screen"), so the state only says the
+// turn happened; the frames say how it looked.
+async function watchComputerTurn(page: Page, turnNeeds: string): Promise<{
+  clickAt: number;
+  atClick: string;
+  seen: string;
+  frames: PaceFrame[];
+}> {
   await openApp(page);
   await setupState(page, {
     points: startingPoints(),
@@ -1029,7 +1030,7 @@ test("[F62] REQ-PACING — the computer's turn is paced so its dice and moves ca
   // End Turn live and the pieces held still, so the frames before the click
   // are a still picture of the player's finished turn.
   const endTurn = page.getByTestId("endTurnBtn");
-  await expect(endTurn, "[aspect: turn] [needs: F47 G25] End Turn was not available with nothing left to play").toBeEnabled();
+  await expect(endTurn, `${turnNeeds} End Turn was not available with nothing left to play`).toBeEnabled();
   await waitForBoardSettled(page);
 
   // Record every frame: the dice drawn and where the black pieces sit.
@@ -1046,7 +1047,7 @@ test("[F62] REQ-PACING — the computer's turn is paced so its dice and moves ca
         const state = await readState(page);
         return state.turn === "white" && blackOf(state) !== blackOf(before);
       },
-      { message: "[aspect: turn] [needs: F47 G25] after End Turn the computer never moved and handed the turn back", timeout: 20_000 },
+      { message: `${turnNeeds} after End Turn the computer never moved and handed the turn back`, timeout: 20_000 },
     )
     .toBe(true);
 
@@ -1057,14 +1058,47 @@ test("[F62] REQ-PACING — the computer's turn is paced so its dice and moves ca
     await page.waitForTimeout(250);
     seen = await piecesSettled(page, clickAt);
   }
-  const frames = await stopFrames(page);
+  return { clickAt, atClick, seen, frames: await stopFrames(page) };
+}
+
+// When the computer's dice first come up after `since`: the first frame drawing
+// dice that are something, and not `before` (the player's dice still up at the
+// click). Infinity when none ever do.
+function diceUpAt(frames: PaceFrame[], since: number, before: string): number {
+  return frames.find((f) => f.t > since && f.dice !== "" && f.dice !== before)?.t ?? Infinity;
+}
+
+test("[F62] REQ-PACING — the computer's turn is paced so its dice and moves can be followed", async ({ page }) => {
+  test.setTimeout(120_000);
+  // A computer that plays instantly is a computer the player cannot follow.
+  // Jerry, run 1792224699 round 3: "there should be 1 sec pause after i click
+  // 'end turn' then followed by dice rolled. then wait one second again. then
+  // ai moves one piece." This gate is the dice: they come up, about a second
+  // after End Turn, and stay readable about a second before the first move.
+  // The spacing of the moves is F77's.
+  const { clickAt, atClick, seen, frames } = await watchComputerTurn(page, "[aspect: turn] [needs: F47 G25]");
+  // Dice before a first move only mean something once a move was drawn.
   expect(seen, "[aspect: drawn] [needs: REQ-RENDER/checker F02 F03 F45] the computer's pieces never moved on screen").not.toBe("still");
 
-  const { starts, first: firstMove } = moveStarts(frames, clickAt);
+  const { first: firstMove } = moveStarts(frames, clickAt);
   const { shown, readable } = readableDice(frames, clickAt, firstMove, atClick);
   expect(shown, "[aspect: dice] [needs: REQ-RENDER/die REQ-TESTID/die F03 F45] the computer's dice never showed before its first move").toBe(true);
+  const upAfter = diceUpAt(frames, clickAt, atClick) - clickAt;
+  expect(upAfter, `[aspect: wait] [needs: F03 F45] the computer's dice came up ${upAfter.toFixed(0)} ms after End Turn`).toBeGreaterThanOrEqual(800);
   expect(readable, `[aspect: first] [needs: F03 F45] the computer's roll was up ${readable.toFixed(0)} ms before its first move`).toBeGreaterThanOrEqual(800);
+});
 
+test("[F77] REQ-PACING — the computer moves one piece at a time", async ({ page }) => {
+  test.setTimeout(120_000);
+  // The computer's moves as the player watches them: drawn on the board, one
+  // after another, each about half a second after the last (the build prompt,
+  // chunk-04). Its dice are F62's. A turn that never went through, or whose
+  // pieces never moved on screen, is F62's too (its [aspect: turn] and
+  // [aspect: drawn]): both fail together on either, and only F62 tells it.
+  const { clickAt, seen, frames } = await watchComputerTurn(page, "[needs: F62]");
+  expect(seen, "[needs: F62] the computer's pieces never moved on screen").not.toBe("still");
+
+  const { starts } = moveStarts(frames, clickAt);
   const gaps = starts.slice(1).map((t, i) => t - starts[i]);
   expect(
     starts.length >= 2 && gaps.every((gap) => gap >= 350),
@@ -2474,6 +2508,77 @@ test("[F73] REQ-DIE-ORDER — the smaller number can be played first", async ({ 
 // player sees a new roll where there was none. Read through the browser's own
 // animation events, so however the dice are drawn and moved, a die that starts an
 // animation after the roll is a die that rolled again.
+test("[F78] REQ-DICE-USED — a played die stays on screen, greyed", async ({ page }) => {
+  test.setTimeout(60_000);
+  // Jerry, run 1792224699 round 3: "the die disappears after i move it. what?
+  // ... it should grey out the die slightly to signal it has been played." A
+  // non-double 3-5 on the opening layout, the back piece on 13 moved by
+  // clicking it and a hint as a player does; then the dice on screen are read
+  // against themselves before the move: still two, and the faintest of them
+  // visibly fainter than either was (its dark and light pixels drawn closer
+  // together — dimmed or greyed, whatever colours the dice use).
+  await openApp(page);
+  const points = emptyPoints();
+  points[24] = 2;
+  points[13] = 5;
+  points[8] = 3;
+  points[6] = 5;
+  points[1] = -2;
+  points[12] = -5;
+  points[17] = -3;
+  points[19] = -5;
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "move",
+    dice: [3, 5],
+    remainingDice: [3, 5],
+    cube: { value: 1, owner: null },
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await waitForBoardSettled(page).catch(() => undefined);
+
+  const shownDice = async () =>
+    page.getByTestId("die").evaluateAll((els) =>
+      els
+        .filter((el) => (el as HTMLElement).checkVisibility())
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        }),
+    );
+  const before = await shownDice();
+  expect(before.length, "[needs: REQ-RENDER/die REQ-TESTID/die F39] the 3-5 roll did not show two dice").toBe(2);
+  const contrastBefore = (await sampleBoxContrast(page, before)) as number[];
+
+  const hints = page.getByTestId("hint");
+  const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
+  const backCount = await back.count();
+  expect(backCount, "[needs: F03 F25] no piece on 13 to pick up").toBeGreaterThan(0);
+  await playerClickUntilShown(back.nth(backCount - 1), hints);
+  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]").toBeGreaterThan(0);
+  await playerClick(hints.first());
+  await expect
+    .poll(async () => (await readState(page)).remainingDice.length, "[needs: F25 F45] the move did not use up a die")
+    .toBe(1);
+  // Any fade or slide the page plays on a used die has finished by now.
+  await page.waitForTimeout(1_500);
+
+  const after = await shownDice();
+  expect(after.length, `[aspect: gone] after a move ${after.length} of the two dice are left on screen`).toBe(2);
+  const contrastAfter = (await sampleBoxContrast(page, after)) as number[];
+  const faintest = Math.min(...contrastAfter);
+  const was = Math.min(...contrastBefore);
+  expect(
+    faintest <= 0.8 * was,
+    `[aspect: grey] after a move the faintest die stands out ${faintest.toFixed(2)} against ${was.toFixed(2)} before it`,
+  ).toBe(true);
+});
+
 test("[F74] REQ-DICE-STILL — a move leaves the dice alone", async ({ page }) => {
   test.setTimeout(60_000);
   await openApp(page);
