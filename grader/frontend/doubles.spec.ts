@@ -246,5 +246,5 @@ test("[F39] REQ-DICE — a roll shows two dice, and two different numbers give t
   });
   await page.reload();
   await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
-  expect(await landedDice(page), "[aspect: double] more than two dice on screen after rolling a double").toBeLessThanOrEqual(2);
+  expect(await landedDice(page), "[aspect: double] [needs: F45] more than two dice on screen after rolling a double").toBeLessThanOrEqual(2);
 });

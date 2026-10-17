@@ -370,6 +370,33 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
   expect(after.remainingDice.length, "[aspect: consume]").toBe(expectedRemaining);
 });
 
+test("[F84] REQ-HINT — a roll alone draws no hints", async ({ page }) => {
+  // Jerry, playing run 1792044236's round-2 build, saw green hint dots on 7
+  // points the moment the roll landed — before he'd selected anything — and
+  // clicking a checker changed nothing. The hints live in the pointHints layer
+  // (the build prompt tags the move-hint container pointHints); before any
+  // click there must be no hint in it. Its own gate (was F04's [aspect: early]):
+  // a board hinting everything at once leaves a player unable to tell which
+  // hints belong to the piece they pick, so F75 waits on it (Jerry, run
+  // 1792253230 round 3: "hints appear for everything").
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [5, 3] });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await rollAndCheck(page, [5, 3], () => clickOpeningRoll(page));
+  await expect
+    .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
+    .toBeGreaterThanOrEqual(2);
+  // The roll's effects land on the client after the roll response: the page
+  // animates the dice, re-renders, and only then runs any roll-time hint logic
+  // (~500ms later). Wait until the hint count is STABLE — no change across a
+  // window — so a build that paints hints shortly after the roll is caught
+  // here, not passed on a board still mid-roll.
+  const earlyHints = await waitForEarlyHintsStable(page);
+  expect(earlyHints, "[needs: REQ-RENDER/die] move hints are shown before any piece is selected").toBe(0);
+});
+
 test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page }) => {
   await openApp(page);
 
@@ -386,24 +413,10 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
     .poll(async () => page.getByTestId("die").count(), "[needs: REQ-RENDER/die F61]")
     .toBeGreaterThanOrEqual(2);
 
-  // (early) nothing is hinted before any piece is picked up. Jerry, playing run
-  // 1792044236's round-2 build, saw green hint dots on 7 points the moment the
-  // roll landed — before he'd selected anything — and clicking a checker changed
-  // nothing. The hints live in the pointHints layer (the build prompt tags the
-  // move-hint container pointHints); before any click there must be no hint in
-  // it. A roll that never landed defers to the roll gates through the die-count
-  // check above. This line needs only the dice drawn, never F61 as a whole: a
-  // roll that landed but looks wrong (F61's colour aspect) changes nothing about
-  // whether hints show before a pick, and a player meets both at once (run
-  // 1792044236, round 2 — masking it on F61 kept this complaint from the model).
-  // The roll's effects land on the client after the roll response: the page
-  // animates the dice, re-renders, and only then runs any roll-time hint logic
-  // (~500ms later). Wait until the hint count is STABLE — no change across a
-  // window — so a build that paints hints shortly after the roll is caught
-  // here, not passed on a board still mid-roll. A `toBe(0)` poll alone would
-  // pass on the first 0 before that logic fired.
-  const earlyHints = await waitForEarlyHintsStable(page);
-  expect(earlyHints, "[aspect: early] [needs: REQ-RENDER/die] move hints are shown before any piece is selected").toBe(0);
+  // The roll's effects land on the client after the roll response; wait until
+  // the board has settled before picking a piece up. Hints shown before any
+  // pick are F84's.
+  await waitForEarlyHintsStable(page);
 
   const state = await readState(page);
   // A roll that leaves no move, or a checker that shows no hints, is the
@@ -1212,8 +1225,8 @@ test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ p
       else if (at === null || !legalTo.has(at)) astray.push(`${from}→${at ?? "no point"}`);
     }
   }
-  expect(behind, `[aspect: backwards] [needs: REQ-HINT/hint F03] hints drawn behind the picked piece: ${behind.join(", ")}`).toEqual([]);
-  expect(astray, `[aspect: astray] [needs: REQ-HINT/hint F03] hints on points the picked piece can't reach: ${astray.join(", ")}`).toEqual([]);
+  expect(behind, `[aspect: backwards] [needs: REQ-HINT/hint F03 F84] hints drawn behind the picked piece: ${behind.join(", ")}`).toEqual([]);
+  expect(astray, `[aspect: astray] [needs: REQ-HINT/hint F03 F84] hints on points the picked piece can't reach: ${astray.join(", ")}`).toEqual([]);
 
 });
 
@@ -1250,7 +1263,7 @@ test("[F76] REQ-HINT — clicking a hint moves the piece that was picked up", as
           .map((d) => d.pt);
         expect(
           left.includes(13),
-          `[needs: REQ-HINT/hint F03] picked up the piece on 13, clicked its hint, and a piece left ${left.join(", ") || "nowhere"}`,
+          `[needs: REQ-HINT/hint F03 F45] picked up the piece on 13, clicked its hint, and a piece left ${left.join(", ") || "nowhere"}`,
         ).toBe(true);
       }
     }
@@ -1392,7 +1405,7 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   await expect
     .poll(
       async () => (await readState(page)).legalMoves.length,
-      "[needs: F03] [needs: F25] the forced [6,5] roll gave white no move",
+      "[needs: F03] [needs: F25] [needs: F45] the forced [6,5] roll gave white no move",
     )
     .toBeGreaterThan(0);
 
@@ -1404,18 +1417,18 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
       const s = await readState(page);
       if (s.turnOver) return;
       const picked = await pickUpAPiece(page, hints);
-      expect(picked, `[needs: F03] [needs: F25] ${told}: no checker could be picked up`).toBe(true);
+      expect(picked, `[needs: F03] [needs: F25] [needs: F45] ${told}: no checker could be picked up`).toBe(true);
       await expect(hints.first(), "[needs: F03]").toBeVisible();
       await playerClick(hints.first());
       await expect
         .poll(
           async () => (await readState(page)).remainingDice.length,
-          `[needs: F25] ${told}: a move did not consume a die`,
+          `[needs: F25 F45] ${told}: a move did not consume a die`,
         )
         .toBeLessThan(s.remainingDice.length);
     }
     await expect
-      .poll(async () => (await readState(page)).turnOver, `[needs: F25] ${told}: white could not finish the roll's moves`)
+      .poll(async () => (await readState(page)).turnOver, `[needs: F25 F45] ${told}: white could not finish the roll's moves`)
       .toBe(true);
   };
   await playUntilTurnOver("playing the roll");
@@ -1426,17 +1439,17 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   // exactly 2 s, pass; a player reading "End your turn" takes longer than that.
   await page.waitForTimeout(4000);
   const held = await readState(page);
-  expect(held.turn, "the turn ended by itself before End Turn was clicked").toBe("white");
-  expect(held.phase, "the turn left the move phase by itself").toBe("move");
+  expect(held.turn, "[needs: F45] the turn ended by itself before End Turn was clicked").toBe("white");
+  expect(held.phase, "[needs: F45] the turn left the move phase by itself").toBe("move");
 
   // Undo still works while the turn waits: the button is live and clicking it
   // gives a die back.
   const undoBtn = page.getByTestId("undoBtn");
-  await expect(undoBtn, "[aspect: undo] [needs: G23] Undo was not available while the turn waited").toBeEnabled();
+  await expect(undoBtn, "[aspect: undo] [needs: G23 F45] Undo was not available while the turn waited").toBeEnabled();
   const beforeUndo = (await readState(page)).remainingDice.length;
   await undoBtn.click();
   await expect
-    .poll(async () => (await readState(page)).remainingDice.length, "[aspect: undo] [needs: G23] Undo did not give a die back")
+    .poll(async () => (await readState(page)).remainingDice.length, "[aspect: undo] [needs: G23 F45] Undo did not give a die back")
     .toBeGreaterThan(beforeUndo);
 
   // Undo cleared turnOver, so play the die back to finish the turn again — then
@@ -1444,7 +1457,7 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   await playUntilTurnOver("after Undo");
 
   const endTurnBtn = page.getByTestId("endTurnBtn");
-  await expect(endTurnBtn, "[aspect: endturn] End Turn was not available once the moves were done").toBeEnabled();
+  await expect(endTurnBtn, "[aspect: endturn] [needs: F45] End Turn was not available once the moves were done").toBeEnabled();
   const beforeEnd = await readState(page);
   const blackAt = (s: ApiState): string =>
     JSON.stringify([s.points.map((n) => Math.min(n, 0)), s.bar.black, s.off.black]);
@@ -1466,7 +1479,7 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
         }
         return sawBlack;
       },
-      { message: "[aspect: endturn] the turn did not hand over to the computer after End Turn", timeout: 6000 },
+      { message: "[aspect: endturn] [needs: F45] the turn did not hand over to the computer after End Turn", timeout: 6000 },
     )
     .toBe(true);
 });
@@ -2617,13 +2630,13 @@ test("[F78] REQ-DICE-USED — a played die stays on screen, greyed", async ({ pa
   await page.waitForTimeout(1_500);
 
   const after = await shownDice();
-  expect(after.length, `[aspect: gone] after a move ${after.length} of the two dice are left on screen`).toBe(2);
+  expect(after.length, `[aspect: gone] [needs: F45] after a move ${after.length} of the two dice are left on screen`).toBe(2);
   const contrastAfter = (await sampleBoxContrast(page, after)) as number[];
   const faintest = Math.min(...contrastAfter);
   const was = Math.min(...contrastBefore);
   expect(
     faintest <= 0.8 * was,
-    `[aspect: grey] after a move the faintest die stands out ${faintest.toFixed(2)} against ${was.toFixed(2)} before it`,
+    `[aspect: grey] [needs: F45] after a move the faintest die stands out ${faintest.toFixed(2)} against ${was.toFixed(2)} before it`,
   ).toBe(true);
 });
 
@@ -2679,5 +2692,5 @@ test("[F74] REQ-DICE-STILL — a move leaves the dice alone", async ({ page }) =
     .toBeLessThan(before);
   await page.waitForTimeout(1_500);
   const started = await page.evaluate(() => (window as unknown as { __diceAnim: string[] }).__diceAnim);
-  expect(started, `[aspect: again] [needs: F25] the dice animated again after a move (${started.join(", ")})`).toEqual([]);
+  expect(started, `[aspect: again] [needs: F25 F45] the dice animated again after a move (${started.join(", ")})`).toEqual([]);
 });

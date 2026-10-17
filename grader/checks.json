@@ -623,6 +623,11 @@
       "name": "Facing points differ in colour",
       "what": "Each point is a different colour from the point straight across the board from it.",
       "how": "On a fresh board samples each triangle's own colour; for every top point and the bottom point straight across (13/12 … 24/1), not covered by the bar or tray, the two colours must differ."
+    },
+    "F84": {
+      "name": "A roll alone draws no hints",
+      "what": "After a roll, no move hint shows until the player picks a piece up.",
+      "how": "Rolls a fixed 5-3 opening, waits until the hint count is stable after the dice land, and requires no hint on the board."
     }
   },
   "setup": [
@@ -890,6 +895,7 @@
         "E01",
         "F03",
         "F25",
+        "F84",
         "F04",
         "F75",
         "F76",
