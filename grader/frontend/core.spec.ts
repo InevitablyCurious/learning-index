@@ -1,6 +1,6 @@
 import { type Locator, type Page } from "@playwright/test";
 import { expect, pickUpAPiece, playerClick, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
-import { readColumnBox, sampleBoxBrightness, waitForBoardSettled } from "./board-geometry.ts";
+import { readColumnBox, readPointBoxes, sampleBoxBrightness, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
 type Difficulty = "easy" | "medium" | "hard";
@@ -420,6 +420,31 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   await expect
     .poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]")
     .toBeGreaterThan(0);
+
+  // (where) Each hint sits on a point the piece can move to. Jerry, run 1792190110
+  // round 3: "i click upper left stack. i get hints that are BEFORE the stack
+  // (suggesting to move backwards)" — the piece on 13 (legal to 10 and 8) showed
+  // its hints on 20 and 22, while a click on 10 or 8 still moved it, so no check
+  // saw it. Judged by the point under each hint's centre against the server's
+  // own legal destinations for that piece; white travels down the numbers, so a
+  // hint on a higher number than the piece is behind it.
+  if (on13) {
+    const legalTo = new Set(state.legalMoves.filter((m) => m.from === 13).map((m) => m.to));
+    const points = await readPointBoxes(page);
+    const under = (h: { x: number; y: number }) =>
+      points.find((pt) => h.x >= pt.x && h.x <= pt.x + pt.width && h.y >= pt.y && h.y <= pt.y + pt.height)?.num ?? null;
+    const placed = (await hintPositions(page)).map(under);
+    const behind = placed.filter((n) => n !== null && n > 13);
+    expect(
+      behind,
+      `[aspect: backwards] [needs: REQ-HINT/hint F03] the piece on 13 (legal to ${[...legalTo].join(", ")}) shows hints behind it on ${behind.join(", ")}`,
+    ).toEqual([]);
+    const astray = placed.filter((n) => n === null || !legalTo.has(n));
+    expect(
+      astray,
+      `[aspect: astray] [needs: REQ-HINT/hint F03] the piece on 13 (legal to ${[...legalTo].join(", ")}) shows hints on ${astray.map((n) => n ?? "no point").join(", ")}`,
+    ).toEqual([]);
+  }
 
   const hintTexts = (await hints.allInnerTexts()).map(normalizeHint).filter(Boolean);
   expect(hintTexts.length).toBeGreaterThan(0);

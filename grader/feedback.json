@@ -255,6 +255,14 @@
       "first": "When I pick up a piece, hints show up for my other pieces as well — I expect only the moves of the piece I picked up.",
       "repeat": "I picked up a piece again and hints for my other pieces still show — I expect only the piece I picked up to show its moves."
     },
+    "F04.backwards": {
+      "first": "When I pick up a piece, the hints show up behind it, as if it could move backwards.",
+      "repeat": "I picked up a piece again and the hints still show up behind it."
+    },
+    "F04.astray": {
+      "first": "When I pick up a piece, some hints sit on points it can't move to.",
+      "repeat": "I picked up a piece again and some hints still sit on points it can't move to."
+    },
     "F04.early": {
       "first": "The move hints show up straight after I roll, before I've picked a piece, which is confusing. I want to see them as soon as I select a piece.",
       "repeat": "The hints still show up before I've picked a piece."
