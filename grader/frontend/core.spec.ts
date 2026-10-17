@@ -421,31 +421,6 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
     .poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]")
     .toBeGreaterThan(0);
 
-  // (where) Each hint sits on a point the piece can move to. Jerry, run 1792190110
-  // round 3: "i click upper left stack. i get hints that are BEFORE the stack
-  // (suggesting to move backwards)" — the piece on 13 (legal to 10 and 8) showed
-  // its hints on 20 and 22, while a click on 10 or 8 still moved it, so no check
-  // saw it. Judged by the point under each hint's centre against the server's
-  // own legal destinations for that piece; white travels down the numbers, so a
-  // hint on a higher number than the piece is behind it.
-  if (on13) {
-    const legalTo = new Set(state.legalMoves.filter((m) => m.from === 13).map((m) => m.to));
-    const points = await readPointBoxes(page);
-    const under = (h: { x: number; y: number }) =>
-      points.find((pt) => h.x >= pt.x && h.x <= pt.x + pt.width && h.y >= pt.y && h.y <= pt.y + pt.height)?.num ?? null;
-    const placed = (await hintPositions(page)).map(under);
-    const behind = placed.filter((n) => n !== null && n > 13);
-    expect(
-      behind,
-      `[aspect: backwards] [needs: REQ-HINT/hint F03] the piece on 13 (legal to ${[...legalTo].join(", ")}) shows hints behind it on ${behind.join(", ")}`,
-    ).toEqual([]);
-    const astray = placed.filter((n) => n === null || !legalTo.has(n));
-    expect(
-      astray,
-      `[aspect: astray] [needs: REQ-HINT/hint F03] the piece on 13 (legal to ${[...legalTo].join(", ")}) shows hints on ${astray.map((n) => n ?? "no point").join(", ")}`,
-    ).toEqual([]);
-  }
-
   const hintTexts = (await hints.allInnerTexts()).map(normalizeHint).filter(Boolean);
   expect(hintTexts.length).toBeGreaterThan(0);
 
@@ -1148,6 +1123,91 @@ test("[G05] REQ-HIGHER-DIE — use higher die", async ({ page }) => {
     expect(played, "the game played the smaller number").toBe(false);
   }
   expect(smaller === undefined, "[aspect: offered] the game showed a hint for the smaller number").toBe(true);
+});
+
+test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ page }) => {
+  // Every hint a player meets after picking up a piece is a move of THAT piece.
+  // Jerry, run 1792221909 round 2: "i click on piece on top right. it shows hints
+  // as if i rolled 2, 4 … i tried to move a piece and a completely different piece
+  // than what i clicked moved instead." Run 1792190110 round 3: the piece on 13
+  // (legal to 10 and 8) drew its hints on 20 and 22. Its own check, apart from
+  // F04, so these are told in the same round as hints shown before a pick.
+  // Judged by the point under each hint's centre against the server's own legal
+  // moves; white travels down the numbers, so a higher number is behind a piece.
+  test.setTimeout(150_000);
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [5, 3] });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await rollAndCheck(page, [5, 3], () => clickOpeningRoll(page));
+  const state = await readState(page);
+  expect(state.legalMoves.length, "[needs: REQ-HINT/hint]").toBeGreaterThan(0);
+
+  const sources = [...new Set(state.legalMoves.map((m) => m.from))].filter((f) => typeof f === "number") as number[];
+  const behind: string[] = [];
+  const astray: string[] = [];
+  for (const from of sources) {
+    // A fresh page per piece, so picking one is never read as a move of another.
+    await page.reload();
+    await waitForBoardSettled(page).catch(() => undefined);
+    const top = page.locator(`[data-testid="checker"][data-color="white"][data-loc="${locAttr(from)}"]`);
+    const n = await top.count();
+    if (n === 0) continue;
+    await playerClick(top.nth(n - 1));
+    await page.waitForTimeout(600);
+    const legalTo = new Set(state.legalMoves.filter((m) => m.from === from).map((m) => m.to));
+    const points = await readPointBoxes(page);
+    const under = (h: { x: number; y: number }) =>
+      points.find((pt) => h.x >= pt.x && h.x <= pt.x + pt.width && h.y >= pt.y && h.y <= pt.y + pt.height)?.num ?? null;
+    for (const at of (await hintPositions(page)).map(under)) {
+      if (at !== null && at > from) behind.push(`${from}→${at}`);
+      else if (at === null || !legalTo.has(at)) astray.push(`${from}→${at ?? "no point"}`);
+    }
+  }
+  expect(behind, `[aspect: backwards] [needs: REQ-HINT/hint F03] hints drawn behind the picked piece: ${behind.join(", ")}`).toEqual([]);
+  expect(astray, `[aspect: astray] [needs: REQ-HINT/hint F03] hints on points the picked piece can't reach: ${astray.join(", ")}`).toEqual([]);
+
+});
+
+test("[F76] REQ-HINT — clicking a hint moves the piece that was picked up", async ({ page }) => {
+  // Jerry, run 1792221909 round 2: "i tried to move a piece and a completely
+  // different piece than what i clicked moved instead." Its own check, so it is
+  // told in the same round as hints drawn in the wrong places (F75).
+  test.setTimeout(90_000);
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [5, 3] });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await rollAndCheck(page, [5, 3], () => clickOpeningRoll(page));
+  await waitForBoardSettled(page).catch(() => undefined);
+  const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
+  const backCount = await back.count();
+  if (backCount > 0) {
+    await playerClick(back.nth(backCount - 1));
+    await page.waitForTimeout(600);
+    const hints = page.getByTestId("hint");
+    if ((await hints.count()) > 0) {
+      const before = await readState(page);
+      await playerClick(hints.first());
+      const moved = await expect
+        .poll(async () => JSON.stringify((await readState(page)).points), { timeout: 3_000 })
+        .not.toBe(JSON.stringify(before.points))
+        .then(() => true, () => false);
+      if (moved) {
+        const after = await readState(page);
+        const left = after.points
+          .map((count, pt) => ({ pt, lost: (before.points[pt] ?? 0) - (count ?? 0) }))
+          .filter((d) => d.pt >= 1 && d.pt <= 24 && d.lost > 0 && (before.points[d.pt] ?? 0) > 0)
+          .map((d) => d.pt);
+        expect(
+          left.includes(13),
+          `[needs: REQ-HINT/hint F03] picked up the piece on 13, clicked its hint, and a piece left ${left.join(", ") || "nowhere"}`,
+        ).toBe(true);
+      }
+    }
+  }
 });
 
 test("[F05] REQ-TURN — no-legal-move notice", async ({ page }) => {

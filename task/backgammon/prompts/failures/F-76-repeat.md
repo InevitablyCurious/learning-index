@@ -1,0 +1,1 @@
+I tried to move a piece again and a different piece than the one I clicked still moved.

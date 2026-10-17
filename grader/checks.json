@@ -229,6 +229,16 @@
       "what": "Move hints show which die each move uses.",
       "how": "Fixes the roll to 5-3 — the player's die first, so the player wins the opening roll and plays both numbers (a forced 3-5 would hand the turn to the computer) — clicks Roll and the back checker on 13 (another movable checker if it shows nothing): every hint's text must be 3 or 5 (or \"off\"), and the checker on 13 must show a hint for each die, 3 and 5, both open from it on every board."
     },
+    "F75": {
+      "name": "Hints are the piece's own moves",
+      "what": "After picking up a piece, every hint is a move of that piece, and clicking it moves that piece.",
+      "how": "Fixes the opening to 5-3 (the player moves first) and, for each movable piece on a fresh page, picks it up: no hint may sit behind it (white travels down the numbers) or on a point it cannot reach, by the point under each hint's centre against the server's legal moves."
+    },
+    "F76": {
+      "name": "A hint moves the picked piece",
+      "what": "Clicking a hint moves the piece that was picked up, not another one.",
+      "how": "Fixes the opening to 5-3, picks up the piece on 13, clicks its first hint, and when the board changes requires the piece that left to be the one on 13."
+    },
     "F05": {
       "name": "No-move notice",
       "what": "When the player can't move, the page says so.",
@@ -841,6 +851,8 @@
         "F03",
         "F25",
         "F04",
+        "F75",
+        "F76",
         "F45",
         "F58",
         "F59",
