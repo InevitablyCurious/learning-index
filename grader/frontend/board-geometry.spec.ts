@@ -780,12 +780,14 @@ test("[F81] REQ-GEOMETRY — the off tray sits right beside points 1 and 24", as
   // The build prompt puts the tray at the right-hand end, beside points 1 and
   // 24; a tray elsewhere is F32's finding. Beside means no strip of empty board
   // between the last points and the tray wider than a quarter of a point (a
-  // thin frame line between them is fine).
+  // thin frame line between them is fine). A half squeezed narrow leaves this
+  // strip as a side effect, so it waits on F79 and F80 (Jerry, 2026-10-17:
+  // "isn't this redundant… if the space is all accounted for").
   const end = Math.max(...points.filter((p) => p.num === 1 || p.num === 24).map((p) => p.x + p.width));
   const gap = tray.x - end;
   expect(
     gap <= 0.25 * pointWidth(points),
-    `[needs: F32 F28 F40] ${gap.toFixed(0)} px of empty board between points 1 and 24 and the off tray`,
+    `[needs: F32 F28 F40 F79 F80] ${gap.toFixed(0)} px of empty board between points 1 and 24 and the off tray`,
   ).toBeTruthy();
 });
 

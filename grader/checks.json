@@ -612,7 +612,7 @@
     "F81": {
       "name": "The off tray sits right beside points 1 and 24",
       "what": "No strip of empty board between the last points and the off tray.",
-      "how": "On a fresh board: the gap from the right edge of points 1 and 24 to the off tray at most a quarter of a point's width."
+      "how": "On a fresh board: the gap from the right edge of points 1 and 24 to the off tray at most a quarter of a point's width. Waits on F79 and F80: a half squeezed narrow leaves this strip as a side effect."
     },
     "F82": {
       "name": "The buttons match",
