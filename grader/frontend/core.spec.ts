@@ -1400,16 +1400,25 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
 
   const endTurnBtn = page.getByTestId("endTurnBtn");
   await expect(endTurnBtn, "[aspect: endturn] End Turn was not available once the moves were done").toBeEnabled();
+  const beforeEnd = await readState(page);
+  const blackAt = (s: ApiState): string =>
+    JSON.stringify([s.points.map((n) => Math.min(n, 0)), s.bar.black, s.off.black]);
   await endTurnBtn.click();
 
   // The turn hands over: the server shows black (the computer) at some point
-  // after End Turn. Sticky, so a quick computer turn cannot slip between polls.
+  // after End Turn, or the computer's turn has already been played — its pieces
+  // moved, or the turn is back to white for a new roll. Run 1792224699's build
+  // plays the whole computer turn inside the End Turn request, so black never
+  // shows in a poll; Jerry played it and End Turn handed over fine (round 3).
+  // Too fast a computer turn is F62's complaint, never this one.
   let sawBlack = false;
   await expect
     .poll(
       async () => {
         const s = await readState(page);
-        if (s.turn === "black") sawBlack = true;
+        if (s.turn === "black" || blackAt(s) !== blackAt(beforeEnd) || (s.turn === "white" && s.phase === "roll")) {
+          sawBlack = true;
+        }
         return sawBlack;
       },
       { message: "[aspect: endturn] the turn did not hand over to the computer after End Turn", timeout: 6000 },
