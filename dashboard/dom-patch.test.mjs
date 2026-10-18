@@ -187,7 +187,6 @@ test("every control write path is gated on reachability", async () => {
   // went with it; `doLaunchBaseline` is the single write path that replaced
   // them, and it carries the same gate.
   const paths = [
-    "releaseHold",
     "detachTui",
     "doLaunchBaseline",
     "doCommitStop",

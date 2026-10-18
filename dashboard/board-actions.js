@@ -1,5 +1,5 @@
 // BENCH BOARD — ACTIONS: every operator act that reaches the control plane
-// (stop, launch, tool run, router key, dev mode, restore, reset, hold release,
+// (stop, launch, tool run, router key, dev mode, restore, reset,
 // TUI detach). State and render live
 // in board.js; the import cycle is safe because everything here is deferred
 // inside handlers. Each write path re-checks controlReachability(board) when
@@ -7,7 +7,6 @@
 // dom-patch.test.mjs pins that.
 
 import { board, render, controlReachability, nul } from "./board.js";
-import { setHoldBusy, setHoldError, setHoldNote, holdNoteValue } from "./panels/hold.js";
 import { armReset, commitReset } from "./panels/treereset.js";
 import { loadRouters, saveRouterKey } from "./panels/routers.js";
 import { setDevMode, isDevModeBusy, isDevModeOn } from "./panels/devmode.js";
@@ -91,65 +90,6 @@ export async function doRunTool(id) {
   // Re-read the registry after every run: a tool can change the others. A
   // failed re-read keeps the rows and says they may be stale.
   await loadTools();
-  render();
-}
-
-/**
- * Pure: the JSON body for a hold release — carries {note} ONLY when the note
- * is non-empty (whitespace counts as empty). null = send no body at all.
- */
-export function releaseBody(note) {
-  const trimmed = String(note ?? "").trim();
-  return trimmed ? { note: trimmed } : null;
-}
-
-/**
- * Release a hold (same-origin, relayed). An optional note is sent with the
- * release only when it is non-empty (a 4000-char cap is enforced by the
- * control plane and the textarea). Returns {ok, reason} so the pause panel can
- * keep the note and show the server's reason on a refusal.
- */
-export async function releaseHold(note = null) {
-  const reach = controlReachability(board);
-  if (!reach.ok) {
-    return { ok: false, reason: `${reach.code}: ${reach.reason}` };
-  }
-  const body = releaseBody(note);
-  const init = { method: "POST" };
-  if (body) {
-    init.headers = { "content-type": "application/json" };
-    init.body = JSON.stringify(body);
-  }
-  try {
-    const res = await fetch(`/api/hold/release`, init);
-    if (res.ok) return { ok: true };
-    let reason = `HTTP ${res.status}`;
-    try {
-      const d = await res.json();
-      if (d?.reason) reason = (d.code ? `${d.code}: ` : "") + d.reason;
-    } catch {
-      /* keep the HTTP status */
-    }
-    return { ok: false, reason };
-  } catch (err) {
-    return { ok: false, reason: String(err?.message ?? err) };
-  }
-}
-
-/**
- * CONTINUE from the pause panel: send the note (if any) with the release. The
- * note box text is kept unless the release succeeds; a refusal is shown in the
- * panel, not swallowed. The next poll seeing the hold vanish is the success
- * signal.
- */
-export async function doContinueHold() {
-  setHoldBusy(true);
-  setHoldError(null);
-  render();
-  const result = await releaseHold(holdNoteValue());
-  if (result.ok) setHoldNote("");
-  else setHoldError(result.reason);
-  setHoldBusy(false);
   render();
 }
 

@@ -313,7 +313,6 @@ import {
   feedExportText,
   feedExportLabel,
 } from "./panels/live.js";
-import { renderHold, setHoldNote } from "./panels/hold.js";
 import { renderContinuous } from "./panels/continuous.js";
 import { renderCells, setSelectedCell, selectedCell, observeCellStrip, activeCell } from "./panels/cells.js";
 import { renderRail } from "./panels/rail.js";
@@ -359,7 +358,6 @@ import {
   doLaunchBaseline,
   doLoadTools,
   doRunTool,
-  doContinueHold,
   doEndContinuous,
   detachTui,
   doLoadBackups,
@@ -397,7 +395,7 @@ function render() {
   // laid over it. The board itself carries no cell's state.
   const view = cellView(board);
 
-  // Panel order is the board's argument: hold (a blocked run) first; the curve
+  // Panel order is the board's argument: the curve
   // and the gate wall side by side; the batches (their cells, their floor and
   // its ON runs); the live cell; recall; the honesty rail; provenance.
   // patch() morphs the tree in place, so scroll, focus and selection survive.
@@ -405,7 +403,6 @@ function render() {
     <div class="shell">
       ${renderTopbar(view, { stale: consecutiveErrors > 0, lastError })}
       ${renderContinuous(view)}
-      ${renderHold(view)}
       ${renderCells(view)}
       <div class="axes-row">
         ${renderLiveView(view)}
@@ -440,19 +437,6 @@ function render() {
   try { paintTicks(root); } catch (err) { console.error("tick paint failed:", err); }
   try { paintBuild(view); } catch (err) { console.error("build paint failed:", err); }
 
-  paintTitle();
-}
-
-/**
- * The browser tab title, per frame: while a pause hold is shown, prefix it so
- * the operator notices when the board is waiting on them. Restored when the
- * hold ends. No timer — this rides the board's own render.
- */
-function paintTitle() {
-  if (typeof document === "undefined") return;
-  const h = board?.hold;
-  const paused = Boolean(h && !h.released && (h.kind === "round" || h.kind === "final"));
-  document.title = paused ? "⏸ Paused — your turn · Bench Board v2" : "Bench Board v2";
 }
 
 /**
@@ -604,7 +588,6 @@ function onClick(e) {
   if (t.hasAttribute("data-tui-detach")) { askDetach(); render(); return; }
   if (t.hasAttribute("data-tui-detach-yes")) { void detachTui(); return; }
   if (t.hasAttribute("data-tui-cancel")) { cancelDetach(); render(); return; }
-  if (t.hasAttribute("data-hold-continue")) { void doContinueHold(); return; }
   if (t.hasAttribute("data-continuous-end")) { void doEndContinuous(); return; }
 
   // ── [+ BASELINE] ── pure selection held in panels/create.js; only launch
@@ -823,9 +806,6 @@ function onRunSel(e) {
   if (e.target.closest("[data-create-query]")) { setCreateQuery(e.target.value); render(); return; }
   if (e.target.closest("[data-create-provider]")) { setCreateProvider(e.target.value); render(); }
   if (e.target.closest("[data-create-concurrency-n]")) { setCreateConcurrencyN(e.target.value); render(); return; }
-  // The pause-panel note: kept in JS state so a poll never erases it, and the
-  // live count re-renders with it.
-  if (e.target.closest("[data-hold-note]")) { setHoldNote(e.target.value); render(); return; }
 }
 
 function onGateHover(e) {

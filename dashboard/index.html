@@ -49,8 +49,6 @@
    provenance: { attestation, gate_mode, gate_mode_source, policy_version,
                  policy_anchor_status, worker_image_fp, leader_fp, corpus, seed }
    wall:       { gates:[{id,req,title,a,b,...}], totals:{a,b} }
-   hold:       null | { url, ui_healthy, boot_detail, server_log, started_at,
-                        held_seconds, release{path,...}, bind{...}, ... }
    honesty:    { … the rail … }
    sources:    [{ id, ok, fields[], reason, provenance, ms }]
  }
@@ -608,7 +606,7 @@ a:hover{color:var(--type)}
 /* THE PANEL. 12px radius + --border (not --hairline) is the artifact's own
    §8.1 measurement; the rewrite had flattened every panel to a 4px box with
    box-shadow:none, which read as a wireframe rather than a raised surface. */
-.curve,.wall,.ledger,.live,.hold,.rail,.build{background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);padding:var(--pad);display:flex;flex-direction:column;gap:12px;min-width:0}
+.curve,.wall,.ledger,.live,.rail,.build{background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);padding:var(--pad);display:flex;flex-direction:column;gap:12px;min-width:0}
 /* ── BUILD PANEL ── split down the middle: the game on the left, the problems
    on the right. The game is laid out at the operator's own screen size and
    scaled evenly to fit (panels/build.js fitStage), so it is never stretched.
@@ -663,7 +661,7 @@ a:hover{color:var(--type)}
 .build-tab{font:400 11px var(--font);background:transparent;color:var(--dim);border:0;border-bottom:2px solid transparent;border-radius:0;padding:3px 8px;cursor:pointer}
 .build-tab.active{color:var(--fg);border-bottom-color:var(--fg)}
 .build-tab:disabled{color:var(--dim);border-color:var(--hairline);cursor:not-allowed}
-.curve-frame,.curve-foot,.hold-line,.hold-diag,.tui-head,.tui-foot,.ledger-head,.axis,.big,.prov,.feed-head{font-family:var(--font)}
+.curve-frame,.curve-foot,.tui-head,.tui-foot,.ledger-head,.axis,.big,.prov,.feed-head{font-family:var(--font)}
 .curve-frame{padding:22px;border:1px solid var(--border);border-radius:var(--radius-md);background:linear-gradient(180deg,color-mix(in srgb,var(--bg-2) 85%, transparent),var(--bg-2))}
 .curve-svg{overflow:visible}
 .c-axis,.c-legend,.c-note,.c-base-lbl,.c-annot,.c-val,.c-delta,.c-gate{fill:var(--dim);font-size:11px}
@@ -713,33 +711,6 @@ a:hover{color:var(--type)}
 
 .ledger-lead{display:flex;flex-direction:column;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--hairline)}
 .big{display:flex;flex-direction:column;gap:4px;font:700 13px var(--font)}
-.hold{gap:10px}
-.hold.error{border-color:var(--danger)}
-.hold-actions,.hold-diag{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-/* ── THE PAUSE PANEL (panels/hold.js) ──────────────────────────────────────
-   The pause surface the operator meets when the run stops after a grade. The
-   told-text block is model-facing prose (~2 KB), so it is pre-wrapped and
-   scrollable once it outgrows its box. The note is a 4000-char textarea with a
-   live count; the error a release refusal shown where it happened. */
-.hold-pre{
-  white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:220px;
-  font:400 12px/1.6 var(--font);color:var(--fg);background:var(--bg);
-  border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;
-  margin:4px 0 2px;
-}
-.hold-told{display:flex;flex-direction:column;gap:6px}
-.hold-note{display:flex;flex-direction:column;gap:6px}
-.hold-note-ta{
-  font:400 12px/1.6 var(--font);color:var(--type);background:var(--bg);
-  border:1px solid var(--border-strong);border-radius:var(--radius-sm);
-  padding:9px 11px;resize:vertical;min-height:64px;
-}
-.hold-note-ta:focus-visible{outline:2px solid var(--check);outline-offset:1px}
-.hold-err{
-  font:400 12px/1.5 var(--font);color:var(--danger);
-  border:1px solid var(--danger);border-radius:var(--radius-sm);padding:8px 11px;
-  white-space:pre-line;
-}
 /* ── PAUSE-AFTER-EACH-GRADE TOGGLE (panels/create.js confirm step, dev mode) ──
    A row with an on/off toggle and one plain line under it. Mirrors the
    continuous control's shape so the confirm step reads as one surface. */

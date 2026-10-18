@@ -117,10 +117,6 @@ export function emptyBoard() {
       phases_per_cell: PHASES_PER_CELL,
     },
 
-    // ── HOLD FOR REVIEW ── null = no hold: render nothing. Release is always
-    // offered, even when the UI link is dead (then no link is shown).
-    hold: null,
-
     // ── CONTINUOUS MODE ── owned by sources/continuous.mjs: the chain as
     // control/continuous.mjs keeps it (active, its runs, why it ended). null =
     // no chain was ever started: the banner renders nothing.
