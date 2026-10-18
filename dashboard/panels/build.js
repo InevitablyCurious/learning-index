@@ -179,9 +179,12 @@ function onBuildClick(e) {
     return;
   }
   if (t.closest("[data-build-open]")) {
+    // During a pause the game to play is the paused build (fixed dice), not
+    // the model's working copy (Jerry, 2026-10-18: with the pause panel gone,
+    // OPEN is how he reaches it).
     void (async () => {
-      const playing = await fetchPlaying();
-      if (playing?.url) window.open(playing.url, "_blank", "noopener");
+      const url = (await fetchHeld()) ?? (await fetchPlaying())?.url;
+      if (url) window.open(url, "_blank", "noopener");
     })();
     return;
   }
@@ -213,6 +216,18 @@ async function followLive(card, key) {
 
 /** GET /api/play → the current running play server {pid,port,url,…}, or null.
  *  Same-origin literal (panel-fetch-wiring); read-only, cache-control no-store. */
+/** GET /api/hold → the paused build's url while a pause is held, else null.
+ *  Same-origin literal (panel-fetch-wiring); read-only. */
+async function fetchHeld() {
+  try {
+    const res = await fetch("/api/hold");
+    const data = res.ok ? await res.json().catch(() => null) : null;
+    return data?.status === "held" && data.url ? data.url : null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchPlaying() {
   try {
     const res = await fetch("/api/play");

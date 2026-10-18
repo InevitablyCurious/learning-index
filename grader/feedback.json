@@ -1688,8 +1688,8 @@
       "repeat": "On the opening sequence, when the two players roll, their dice still don't match the colours of our pieces."
     },
     "F61.again": {
-      "first": "When we tied on the opening roll, the game just sat there until I rolled again myself. I expected it to roll again on its own.",
-      "repeat": "After a tie on the opening roll, the game still just waited for me to roll again."
+      "first": "When we tied on the opening roll, the game didn't roll again on its own — it just sat there. I expected it to roll again by itself.",
+      "repeat": "After a tie on the opening roll, the game still didn't roll again on its own."
     },
     "G33": {
       "first": "The computer offered me a double right after its very first turn, when nobody was ahead.",

@@ -113,14 +113,17 @@ def _hold_ui_port_listeners(port: int) -> list[int]:
 # this queue instead of Math.random") is open. Random dice meant the operator never
 # met the positions the grader judged (Jerry, run 1792183915: "the dice are not
 # deterministic … which is messing me up seeing what the grader is showing to the
-# model"). The opening is the one F04 plays — the player's 5 against the
-# computer's 3, so the player moves first with 5 and 3 — then a fixed list from a
-# fixed seed; a double is queued as four dice, as the debug route expects.
+# model"). The opening always starts with a tie, 2 against 2, so every pause
+# meets the tie path first (Jerry, 2026-10-18: "the opening roll sequence should
+# ALWAYS start from two of the same die first"); the re-roll is the one F04 plays
+# — the player's 5 against the computer's 3, so the player moves first with 5 and
+# 3 — then a fixed list from a fixed seed; a double is queued as four dice, as
+# the debug route expects.
 def _pause_dice() -> list[list[int]]:
     import random
 
     rng = random.Random(20261017)
-    rolls: list[list[int]] = [[5, 3]]
+    rolls: list[list[int]] = [[2, 2], [5, 3]]
     while len(rolls) < 60:
         a, b = rng.randint(1, 6), rng.randint(1, 6)
         rolls.append([a, a, a, a] if a == b else [a, b])
@@ -150,13 +153,13 @@ def _queue_pause_dice(port: int) -> dict[str, Any]:
             return {
                 "fixed": False,
                 "queued": n,
-                "opening": PAUSE_DICE[0],
+                "opening": PAUSE_DICE[:2],
                 "detail": f"/api/debug/roll failed: {exc}",
             }
     return {
         "fixed": True,
         "queued": len(PAUSE_DICE),
-        "opening": PAUSE_DICE[0],
+        "opening": PAUSE_DICE[:2],
         "detail": None,
     }
 
@@ -389,7 +392,7 @@ def _hold_for_operator(
         else {
             "fixed": False,
             "queued": 0,
-            "opening": PAUSE_DICE[0],
+            "opening": PAUSE_DICE[:2],
             "detail": "the game did not start",
         }
     )
