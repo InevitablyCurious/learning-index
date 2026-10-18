@@ -259,7 +259,9 @@ def test_resolve_entrypoint_throws_loudly(tmp_path: Path) -> None:
 _RELEASE_CONTRACT_PORT = 18313
 
 
-def _capture_state_then_release(tmp_path: Path, captured: dict, content: str = "release\n") -> threading.Thread:
+def _capture_state_then_release(
+    tmp_path: Path, captured: dict, content: str = "release\n"
+) -> threading.Thread:
     def _run() -> None:
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
@@ -319,7 +321,11 @@ def test_state_file_carries_the_v2_contract(
     assert grade["conformed"] is False
     assert grade["failed_gates"] == ["F01"]
     assert grade["n_problems"] == 3
-    assert grade["results"] == {"conformance": False, "backend": True, "frontend": False}
+    assert grade["results"] == {
+        "conformance": False,
+        "backend": True,
+        "frontend": False,
+    }
     assert grade["report_path"] == str(tmp_path / "attempt-1-report.json")
 
     # Loopback claim is MEASURED, and the stub binds 0.0.0.0 — so if this host
@@ -392,7 +398,9 @@ def test_operator_note_is_journaled_and_never_reaches_worktree_or_user_events(
     )
 
 
-def test_plain_release_writes_no_operator_note(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_plain_release_writes_no_operator_note(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """An empty release file (plain touch) journals no operator note."""
     monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", 18316)
     worktree = _mk_worktree(tmp_path, 18316)

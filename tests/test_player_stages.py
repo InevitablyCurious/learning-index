@@ -445,7 +445,11 @@ def test_every_aspect_marker_has_its_gates_first_and_repeat_lines() -> None:
     # general line instead (run 1791314511: "someundrawn-left" told "the triangles
     # point outward").
     unreadable = sorted(
-        {v for _, _, kind, v in _suite_markers() if kind == "aspect" and not re.fullmatch(r"[a-z]+", v)}
+        {
+            v
+            for _, _, kind, v in _suite_markers()
+            if kind == "aspect" and not re.fullmatch(r"[a-z]+", v)
+        }
     )
     assert unreadable == []
 

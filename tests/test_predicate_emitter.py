@@ -30,7 +30,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # `client` checkout (it moved out of `okp-mcp/`, so this test had silently stopped
 # running). BENCH_WALK_TS points elsewhere; a standalone clone without the client
 # skips this one test and says why.
-TS_WALK = Path(os.environ.get("BENCH_WALK_TS") or REPO_ROOT / "client" / "packages" / "core" / "dist" / "gstv" / "walk.js")
+TS_WALK = Path(
+    os.environ.get("BENCH_WALK_TS")
+    or REPO_ROOT / "client" / "packages" / "core" / "dist" / "gstv" / "walk.js"
+)
 
 
 class TestStatusMapping:
@@ -103,7 +106,10 @@ class TestWalkV1:
         with pytest.raises(NotImplementedError):
             walk_manifest(tmp_path)
 
-    @pytest.mark.skipif(not TS_WALK.exists(), reason=f"the OKP client's walk-v1 is not built at {TS_WALK} (set BENCH_WALK_TS)")
+    @pytest.mark.skipif(
+        not TS_WALK.exists(),
+        reason=f"the OKP client's walk-v1 is not built at {TS_WALK} (set BENCH_WALK_TS)",
+    )
     def test_agrees_with_the_typescript_implementation(self, tmp_path):
         # Two implementations of walk-v1 exist (this one and gstv/walk.ts). If
         # they disagree, a state hash means different things on either side and

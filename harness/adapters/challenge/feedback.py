@@ -334,7 +334,11 @@ def _dice_words(text: str) -> str:
             parsed = json.loads(str(text))
         except ValueError:
             return str(text).strip()
-        inner = parsed[0] if isinstance(parsed, list) and parsed and isinstance(parsed[0], list) else None
+        inner = (
+            parsed[0]
+            if isinstance(parsed, list) and parsed and isinstance(parsed[0], list)
+            else None
+        )
         if inner is not None:
             return f"a list holding the list [{', '.join(str(n) for n in inner)}] instead of the dice themselves"
         return str(text).strip()

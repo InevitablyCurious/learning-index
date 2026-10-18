@@ -145,7 +145,8 @@ def player_view(
     failed = {
         ident
         for p in records
-        if not is_unevaluated(p) and (ident := check_id(str(p.get("check", "")).strip()))
+        if not is_unevaluated(p)
+        and (ident := check_id(str(p.get("check", "")).strip()))
     }
     staged: list[tuple[Stage, dict[str, Any]]] = []
     unevaluated: list[str] = []

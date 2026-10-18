@@ -143,10 +143,22 @@ def _queue_pause_dice(port: int) -> dict[str, Any]:
         try:
             with urllib.request.urlopen(req, timeout=5) as resp:
                 if resp.status >= 400:
-                    raise urllib.error.HTTPError(req.full_url, resp.status, "refused", resp.headers, None)
+                    raise urllib.error.HTTPError(
+                        req.full_url, resp.status, "refused", resp.headers, None
+                    )
         except (urllib.error.URLError, OSError) as exc:
-            return {"fixed": False, "queued": n, "opening": PAUSE_DICE[0], "detail": f"/api/debug/roll failed: {exc}"}
-    return {"fixed": True, "queued": len(PAUSE_DICE), "opening": PAUSE_DICE[0], "detail": None}
+            return {
+                "fixed": False,
+                "queued": n,
+                "opening": PAUSE_DICE[0],
+                "detail": f"/api/debug/roll failed: {exc}",
+            }
+    return {
+        "fixed": True,
+        "queued": len(PAUSE_DICE),
+        "opening": PAUSE_DICE[0],
+        "detail": None,
+    }
 
 
 def _hold_ui_healthy(port: int) -> bool:
@@ -209,14 +221,18 @@ def _read_operator_note(
     try:
         content = release_path.read_text(encoding="utf-8").strip()
     except OSError as exc:
-        progress(f"PROGRESS step=hold-ui operator-note LOST reason=unreadable error={exc}")
+        progress(
+            f"PROGRESS step=hold-ui operator-note LOST reason=unreadable error={exc}"
+        )
         return None
     if not content:
         return None
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError as exc:
-        progress(f"PROGRESS step=hold-ui operator-note LOST reason=not-json error={exc}")
+        progress(
+            f"PROGRESS step=hold-ui operator-note LOST reason=not-json error={exc}"
+        )
         return None
     note = parsed.get("note") if isinstance(parsed, dict) else None
     if isinstance(note, str) and note.strip():
@@ -367,9 +383,16 @@ def _hold_for_operator(
                 f"boot={'ok' if ui_healthy else 'fail'} {boot_detail}"
             )
 
-    dice = _queue_pause_dice(port) if ui_healthy else {
-        "fixed": False, "queued": 0, "opening": PAUSE_DICE[0], "detail": "the game did not start",
-    }
+    dice = (
+        _queue_pause_dice(port)
+        if ui_healthy
+        else {
+            "fixed": False,
+            "queued": 0,
+            "opening": PAUSE_DICE[0],
+            "detail": "the game did not start",
+        }
+    )
     progress(
         f"PROGRESS run_label={run_label} step=hold-ui dice "
         f"fixed={dice['fixed']} queued={dice['queued']} detail={dice['detail']}"

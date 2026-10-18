@@ -55,7 +55,14 @@ def _make_runner(
     )
 
 
-def _stats(*, session_id: str = "sess-1", exit_code: int | None = 0, cost_usd: float = 0.0, killed_reason: str | None = None, **kwargs: Any) -> _OpencodeRunStats:
+def _stats(
+    *,
+    session_id: str = "sess-1",
+    exit_code: int | None = 0,
+    cost_usd: float = 0.0,
+    killed_reason: str | None = None,
+    **kwargs: Any,
+) -> _OpencodeRunStats:
     return _OpencodeRunStats(
         input_tokens=10,
         output_tokens=20,
@@ -108,14 +115,18 @@ def _patch_fake_docker(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         challenge_mod,
         "worker_image_fingerprint",
-        lambda: ImageFingerprint(image_id="sha256:fake-test-worker", created="2026-07-31T01:25:11Z"),
+        lambda: ImageFingerprint(
+            image_id="sha256:fake-test-worker", created="2026-07-31T01:25:11Z"
+        ),
     )
     real_run = challenge_mod.subprocess.run
 
     def _run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
         cmd = args[0] if args else kwargs.get("args")
         if isinstance(cmd, list) and cmd and cmd[0] == "docker":
-            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="No such container")
+            return subprocess.CompletedProcess(
+                cmd, 1, stdout="", stderr="No such container"
+            )
         return real_run(*args, **kwargs)
 
     monkeypatch.setattr(challenge_mod.subprocess, "run", _run)
@@ -143,7 +154,12 @@ def _gate_sequence(max_attempts: int):
     def _fake_gate(**kwargs: Any) -> dict[str, Any]:
         calls["count"] += 1
         if calls["count"] >= max_attempts:
-            return {"verdict": "PASS", "conformed": True, "problems": [], "failed_gates": []}
+            return {
+                "verdict": "PASS",
+                "conformed": True,
+                "problems": [],
+                "failed_gates": [],
+            }
         return {
             "verdict": "FAIL",
             "conformed": True,
@@ -187,7 +203,11 @@ def test_round_pause_happens_after_told_lines_and_before_next_drive(
         # Snapshot, at the moment of the pause, what is on disk and what the
         # model has been sent.
         rows = (
-            [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            [
+                json.loads(line)
+                for line in events_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
             if events_path.exists()
             else []
         )
@@ -343,6 +363,7 @@ def test_keyboard_interrupt_during_round_pause_ends_cell_as_stopped(
             task_id="backgammon",
         )
 
+
 def test_each_pause_reports_its_own_length_boot_included(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -390,4 +411,9 @@ def test_each_pause_reports_its_own_length_boot_included(
     ends = [fields for kind, fields in events if kind == "pause.end"]
     assert [e["held_s"] for e in ends] == [round(first, 3), round(second, 3)]
     assert [kind for kind, _ in events] == ["pause.start", "pause.end"] * 2
-    assert [fields["pause_kind"] for _, fields in events] == ["round", "round", "final", "final"]
+    assert [fields["pause_kind"] for _, fields in events] == [
+        "round",
+        "round",
+        "final",
+        "final",
+    ]

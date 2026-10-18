@@ -2202,7 +2202,9 @@ class ChallengeRunner(
             # the pause fires ONLY when `pause_after_grade` is on. kind="final",
             # told_text is None (nothing further is being sent).
             if self.pause_after_grade and active_cell is not None:
-                final_attempt = attempt_reports[-1]["attempt"] if attempt_reports else None
+                final_attempt = (
+                    attempt_reports[-1]["attempt"] if attempt_reports else None
+                )
                 paused_seconds += self._run_operator_pause(
                     run_label=run_label,
                     run_dir=run_dir,
@@ -2639,7 +2641,21 @@ class ChallengeRunner(
     # G22 (the win-chance estimate, never displayed) are faults no player ever
     # sees (Jerry, 2026-10-17; audit WO-LI-NEVER-SEE-VOICE-AUDIT).
     # Every other gate token is the tester's.
-    _TEAM_GATE_TOKENS = ("E08", "G03", "G16", "G22", "G27", "G28", "G29", "G31", "G32", "F27", "F63", "F68", "F69")
+    _TEAM_GATE_TOKENS = (
+        "E08",
+        "G03",
+        "G16",
+        "G22",
+        "G27",
+        "G28",
+        "G29",
+        "G31",
+        "G32",
+        "F27",
+        "F63",
+        "F68",
+        "F69",
+    )
 
     # HARNESS-INFRA CHECK NAMES (WO-FEEDBACK-VOICE-3 follow-up, 2026-08-30).
     # These are born only when a RUNNER DIES mid-run —
