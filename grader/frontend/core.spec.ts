@@ -681,9 +681,9 @@ test("[F85] REQ-OPENING — a tied opening never freezes the game", async ({ pag
   // player cannot get through the opening sequence". Every pause now opens on a
   // tie (hold_ui.py), so a game that freezes there blocks everything a player
   // could meet. Stage 1, so it is told before anything past the opening. Not
-  // stuck: the page rolls again by itself, or — failing that — a press of Roll,
-  // as the tie message invites, gets past it (rolling by itself is F61's
-  // [aspect: again]).
+  // stuck: a press of Roll, as the tie message invites, gets past it. A page
+  // that rolls again by itself is not stuck either — that it should wait for
+  // the press is F61's [aspect: self].
   await openApp(page);
   await postJson<ApiState>(page, "/api/new", {});
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 2] });
@@ -830,11 +830,9 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
   }
 
   // ── A tie: 4 and 4. The page says to roll again, anywhere a player can read
-  // it, with any dash; both dice stay up. ──
+  // it, with any dash; both dice stay up, and the page waits for the player to
+  // press Roll (chunk-04; Jerry, 2026-10-18: manual). ──
   await openWith([4, 4]);
-  // The roll the page makes by itself after the tie is a random one (the queue
-  // holds the tie only): the player never presses Roll for it (chunk-04), and
-  // however it falls, the opening is over once the dice differ.
   await rollAndCheck(page, [4, 4], () => page.getByTestId("rollBtn").click());
   await expect
     .poll(async () => (await page.locator("body").innerText()).replace(/\s+/g, " "), {
@@ -846,12 +844,14 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
     await restingDice(),
     "[aspect: dice] [needs: REQ-RENDER/die REQ-TESTID/die] the tied opening roll left fewer than two dice on screen",
   ).toBeGreaterThanOrEqual(2);
-  await expect
-    .poll(async () => (await readState(page)).phase, {
-      message: "[aspect: again] the tied opening roll waited for the player to roll again",
-      timeout: 10_000,
-    })
-    .not.toBe("openingRoll");
+  // It waits: three seconds on, still the opening roll, still the tie. Whether
+  // a press of Roll then gets past it is F85's.
+  await page.waitForTimeout(3_000);
+  const afterTie = await readState(page);
+  expect(
+    afterTie.phase === "openingRoll" && JSON.stringify(afterTie.dice) === "[4,4]",
+    "[aspect: self] the tied opening roll rolled again by itself",
+  ).toBe(true);
 
   // ── The computer's die is higher: 3 against 5. It makes the first move and
   // the turn comes back, as the state records it: its pieces moved and the

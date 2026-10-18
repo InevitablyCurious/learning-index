@@ -384,13 +384,9 @@ async function doRoll() {
   busy = false;
   updateUI();
   clearHints();
-  // A tied opening roll rolls itself again after a moment, until the dice differ:
-  // the player never has to press Roll for a tie.
-  if (wasOpening && state.turn === "white" && state.phase === "openingRoll") {
-    await sleep(1000);
-    await doRoll();
-    return;
-  }
+  // A tied opening roll waits for the player to press Roll again (Jerry,
+  // 2026-10-18: manual, "it keeps the testing clean").
+  if (wasOpening && state.turn === "white" && state.phase === "openingRoll") return;
   // Opening roll: if the computer won, it plays its opening move right away
   // (the backend already set turn "black" / phase "move" with the opening dice).
   if (state.turn === "black") {

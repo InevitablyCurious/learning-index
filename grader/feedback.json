@@ -1687,9 +1687,9 @@
       "first": "On the opening sequence, when the two players roll, their dice don't match the colours of our pieces — I expect my die white like my pieces and the computer's die black like its pieces.",
       "repeat": "On the opening sequence, when the two players roll, their dice still don't match the colours of our pieces."
     },
-    "F61.again": {
-      "first": "When we tied on the opening roll, the game didn't roll again on its own — it just sat there. I expected it to roll again by itself.",
-      "repeat": "After a tie on the opening roll, the game still didn't roll again on its own."
+    "F61.self": {
+      "first": "When we tied on the opening roll, the game rolled again by itself — I expect it to wait for me to press Roll.",
+      "repeat": "After a tie on the opening roll, the game still rolled again without waiting for me to press Roll."
     },
     "G33": {
       "first": "The computer offered me a double right after its very first turn, when nobody was ahead.",
