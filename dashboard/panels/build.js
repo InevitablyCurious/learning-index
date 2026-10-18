@@ -525,6 +525,10 @@ function completedAttempts(view) {
  * (feedbackMsgs, activeTab, lastView): skipped when nothing it reads changed,
  * so the 2s tick neither flickers nor collapses an open "full prompt".
  */
+/** The readout last painted, and what it was painted with. */
+let wrongEl = null;
+let wrongSig = null;
+
 function renderWrong() {
   const el = document.querySelector(".build-wrong");
   if (!el) return;
@@ -535,8 +539,13 @@ function renderWrong() {
         max: lastView?.max_attempts ?? 5,
       });
   const sig = JSON.stringify([activeTab, shown.empty ?? null, shown.meta ?? null, shown.text ?? null]);
-  if (el.dataset.sig === sig) return;
-  el.dataset.sig = sig;
+  // Kept here, not on the element: the board's patch syncs a preserved
+  // element's attributes to the template every tick, so a data-sig on it was
+  // wiped each 2s and the readout repainted — losing any text the operator had
+  // selected (Jerry, 2026-10-18).
+  if (el === wrongEl && sig === wrongSig) return;
+  wrongEl = el;
+  wrongSig = sig;
   paintWrong(el, shown);
   fitProblems();
 }
