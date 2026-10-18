@@ -651,8 +651,9 @@ export const routes = [
       }
       const sessionId = await cellSessionId(RUNS_ROOT, cell.runDir, cell.sequenceIndex);
       const serveUrl = await cellServeUrl(RUNS_ROOT, cell.runDir, cell.sequenceIndex);
+      const running = (await liveRunDirs()).includes(cell.runDir);
       sendJson(res, 200, {
-        ...tui.pollFor(cell.key, sessionId, serveUrl),
+        ...(running ? tui.pollFor(cell.key, sessionId, serveUrl) : tui.notRunning(cell.key, sessionId)),
         // Stated on the surface: this is a second client, not a screen-share.
         note: "second attach client — same session, independent scroll position",
       });

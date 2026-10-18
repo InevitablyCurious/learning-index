@@ -41,7 +41,7 @@ test("GET /api/tui with no cell, or a malformed one → 400, never a newest-cell
   }
 });
 
-test("GET /api/tui?cell=<a cell that has not started> → 200 keyed on the cell, session unresolved", async () => {
+test("GET /api/tui?cell=<a cell that is not running> → 200 keyed on the cell, nothing attached", async () => {
   mkdirSync(RUNS_ROOT, { recursive: true });
   const runDir = relative(RUNS_ROOT, mkdtempSync(join(RUNS_ROOT, "tui-route-")));
   const cell = `${runDir}::0`;
@@ -52,5 +52,8 @@ test("GET /api/tui?cell=<a cell that has not started> → 200 keyed on the cell,
   assert.equal(res.body.cell, cell, "response is keyed on the cell address");
   assert.equal(res.body.running, false);
   assert.equal(res.body.session_id, null);
-  assert.match(res.body.reason, /no session observed yet/);
+  // Not a running run: nothing to attach to, so no capture is started (an
+  // attach to a dead serve address failed and retried five times — Jerry,
+  // 2026-10-18).
+  assert.match(res.body.reason, /not running/);
 });

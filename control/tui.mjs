@@ -536,6 +536,27 @@ export class TuiMirror {
     return { ...capture.read(), cell: key };
   }
 
+  /**
+   * A cell that is not running has no session to attach to: its serve address
+   * outlives it on the cell.start record, and attaching to the dead address
+   * failed and retried five times, the mirror flickering throughout (Jerry,
+   * 2026-10-18). Stop any capture of it and say so.
+   */
+  notRunning(key, sessionId) {
+    const capture = this.captures.get(key);
+    if (capture) {
+      capture.stop();
+      this.captures.delete(key);
+    }
+    return {
+      running: false,
+      cell: key ?? null,
+      session_id: sessionId ?? null,
+      frame: null,
+      reason: "this cell is not running — there is no session to attach to",
+    };
+  }
+
   /** Enforce MAX_CAPTURES by stopping the least-recently-polled captures. */
   evict() {
     while (this.captures.size > MAX_CAPTURES) {

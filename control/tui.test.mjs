@@ -141,3 +141,15 @@ test("a capture torn down with its cell is never restarted", (t) => {
   assert.equal(c.retryIfDue(10_000_000), false);
   assert.equal(c.read().status, "detached");
 });
+
+test("a cell that is not running is never attached, and an old capture of it stops", (t) => {
+  const m = makeMirror();
+  t.after(() => m.shutdown());
+  m.pollFor("run-a", "ses_a", "http://127.0.0.1:9001");
+  assert.equal(m.captures.size, 1);
+  const res = m.notRunning("run-a", "ses_a");
+  assert.equal(res.running, false);
+  assert.equal(res.frame, null);
+  assert.match(res.reason, /not running/);
+  assert.equal(m.captures.size, 0, "the capture of a finished cell is stopped, not retried");
+});
