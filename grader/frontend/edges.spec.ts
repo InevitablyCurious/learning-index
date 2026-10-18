@@ -354,14 +354,19 @@ test("[F14] REQ-ANIM — checker motion is animated", async ({ page }) => {
   expect(checkerAnimates(checkerMotion)).toBe(true);
 });
 
-test("[F26] REQ-ANIM — hint animation", async ({ page }) => {
+// [F86] REQ-HINT — a move hint looks like a faint green piece. Jerry,
+// 2026-10-18, on the old hint-animation check: "remove that requirement … if
+// anything the hints should be piece sized and dimmed and light green or
+// something. no animation." Read from the hint's own computed style: its box
+// against the pieces on the board, a light-green paint (its fill, border or
+// text), dimmed (that paint, or the hint, see-through), and no animation.
+test("[F86] REQ-HINT — a move hint looks like a faint green piece", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
 
   const points = emptyPts();
   points[6] = 15;
   points[13] = -15;
-
   await postDebugState(page, {
     points,
     bar: { white: 0, black: 0 },
@@ -371,25 +376,39 @@ test("[F26] REQ-ANIM — hint animation", async ({ page }) => {
     dice: [3, 5],
     remainingDice: [3, 5],
   });
-
   await page.reload();
-  // Pick up an ordinary movable piece, as a player does (fixtures.ts
-  // pickUpAPiece). No piece to pick up, or no hint for it, is not an animation
-  // finding: the gates that look for those after an ordinary roll report it
-  // when they fail too (a needs marker, harness/adapters/challenge/stages.py).
   const pickedUp = await pickUpAPiece(page, page.locator('[data-testid="hint"]'));
-  expect(pickedUp, "[aspect: nopiece] [needs: REQ-HINT/hint F03]").toBeTruthy();
-
+  expect(pickedUp, "[needs: REQ-HINT/hint F03]").toBeTruthy();
   const hint = page.locator('[data-testid="hint"]').first();
-  await expect(hint, "[aspect: present] [needs: REQ-HINT/hint F03 F25]").toBeVisible();
-  const hintAnimation = await hint.evaluate((el) => {
+  await expect(hint, "[needs: REQ-HINT/hint F03 F25]").toBeVisible();
+
+  const look = await hint.evaluate((el) => {
     const css = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    const rgba = (c: string) => (c.match(/[\d.]+/g) ?? []).map(Number);
+    const paints = [css.backgroundColor, css.borderTopColor, css.color]
+      .map(rgba)
+      .filter((v) => v.length >= 3 && (v.length < 4 || v[3] > 0));
+    const green = paints.filter(([R, G, B]) => G >= 150 && G > R + 30 && G > B + 30);
     return {
+      size: Math.max(r.width, r.height),
+      green: green.length > 0,
+      dim: Number(css.opacity) < 1 || green.some((v) => v.length >= 4 && v[3] < 1),
       animationName: css.animationName,
       animationDuration: css.animationDuration,
     };
   });
-  expect(hintAnimates(hintAnimation), "[aspect: animates]").toBe(true);
+  const piece = await page
+    .locator('[data-testid="checker"][data-loc="6"]')
+    .first()
+    .evaluate((el) => el.getBoundingClientRect().width);
+  expect(
+    look.size >= 0.7 * piece && look.size <= 1.3 * piece,
+    `[aspect: size] [needs: F41] a hint is ${Math.round(look.size)} px across and a piece ${Math.round(piece)} px`,
+  ).toBe(true);
+  expect(look.green, "[aspect: green] the hint is not light green").toBe(true);
+  expect(look.dim, "[aspect: dim] the hint is drawn solid, not dimmed").toBe(true);
+  expect(hintAnimates(look), "[aspect: still] the hint animates").toBe(false);
 });
 
 // The page must work on whichever host name the user reached it by. `localhost`

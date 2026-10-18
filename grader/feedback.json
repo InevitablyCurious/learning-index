@@ -843,10 +843,6 @@
       "first": "When I click a move, the game doesn't register it — the dice don't get used up.",
       "repeat": "Clicked a move again and the dice still aren't used up after."
     },
-    "F26": {
-      "first": "The move hints don't animate — they just pop in with no motion.",
-      "repeat": "The hints still pop in instantly with no animation."
-    },
     "F27": {
       "first": "Their monitoring shows your page logging errors in the browser console when it loads.",
       "repeat": "They loaded your page again, and it still logs errors in the browser console."
@@ -1046,18 +1042,6 @@
     "F06.format": {
       "first": "The pip counters on screen don't show a number.",
       "repeat": "The pip counters still don't show a number."
-    },
-    "F26.present": {
-      "first": "I picked a piece and no hint appeared showing where it could move.",
-      "repeat": "Picked a piece again and still no hint appeared for where it could move."
-    },
-    "F26.animates": {
-      "first": "The move hints show up but they don't animate — they just pop in with no motion.",
-      "repeat": "The hints still show up but still don't animate, still popping in with no motion."
-    },
-    "F26.nopiece": {
-      "first": "After I rolled, there was no checker I could pick up to move.",
-      "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
     },
     "F10.hints": {
       "first": "I clicked my checker on the bar and no hints appeared showing where it could come back in.",
@@ -1766,6 +1750,26 @@
     "F85": {
       "first": "When we tied on the opening roll, the game froze — I pressed Roll like it told me and nothing happened.",
       "repeat": "We tied on the opening roll again and the game froze again; pressing Roll still did nothing."
+    },
+    "F86": {
+      "first": "The move hints don't look right — I expect each one to be a dimmed, light-green marker the size of a piece.",
+      "repeat": "The move hints still look wrong — I still expect a dimmed, light-green marker as big as a piece."
+    },
+    "F86.size": {
+      "first": "The move hints aren't the size of a piece — I expect each one as big as a piece.",
+      "repeat": "The move hints still aren't the size of a piece."
+    },
+    "F86.green": {
+      "first": "The move hints aren't light green — I expect a light-green marker.",
+      "repeat": "The move hints still aren't light green."
+    },
+    "F86.dim": {
+      "first": "The move hints are drawn solid — I expect them dimmed, so the board shows through.",
+      "repeat": "The move hints are still solid, not dimmed."
+    },
+    "F86.still": {
+      "first": "The move hints move about — I expect them to sit still.",
+      "repeat": "The move hints still move about."
     }
   }
 }

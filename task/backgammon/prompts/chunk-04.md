@@ -9,7 +9,8 @@ What the game should feel like to play:
 
 - Clicks work anywhere in a point's column — the upright rectangle the point's triangle stands in, from the board's edge to the middle. Clicking anywhere in the column of a point holding one of your movable pieces picks up that point's top piece and shows its hints; with a piece picked up, clicking anywhere in the column of a point it can move to plays that move.
 - A hint appears for each playable die; when you must enter from the bar, the bar entry hints appear as soon as the dice have rolled, with no click on the bar piece, one hint per playable entry die. Clicking a hint executes that move, consuming the hint's die.
-- Checkers slide between points rather than jumping; dice visibly roll; hints catch the eye. Animate with CSS transitions and CSS animations — each checker animates position changes through a `transition` covering `transform` (or `all`) with a non-zero duration, or through a CSS `animation`; each hint uses a CSS `animation`.
+- Checkers slide between points rather than jumping; dice visibly roll. Animate with CSS transitions and CSS animations — each checker animates position changes through a `transition` covering `transform` (or `all`) with a non-zero duration, or through a CSS `animation`.
+- A move hint is a dimmed, light-green marker the size of a piece, and it does not animate.
 - Hitting sends the opponent's checker to the bar, and you can see it land there; a checker re-entering from the bar travels back onto the board; a checker borne off appears in the off tray.
 - Pip counts, cube value, cube owner, score and whose turn it is are all on screen and match the API.
 - When you have no legal move, your dice stay up dimmed for about a second — that is how you see why you can't move — then play passes to the other side by itself.

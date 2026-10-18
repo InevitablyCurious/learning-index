@@ -1,0 +1,1 @@
+The move hints still look wrong — I still expect a dimmed, light-green marker as big as a piece.
