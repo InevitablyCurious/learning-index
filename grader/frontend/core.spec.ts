@@ -674,6 +674,41 @@ function startingPoints(): number[] {
   return points;
 }
 
+test("[F85] REQ-OPENING — a tied opening never freezes the game", async ({ page }) => {
+  // Jerry, run 1792269501 round 3: the opening tied 2-2, the page said "Tie —
+  // roll again", he pressed Roll "like it tells me. nothing happens … game is
+  // left in a frozen state" — and "no other problems would appear because the
+  // player cannot get through the opening sequence". Every pause now opens on a
+  // tie (hold_ui.py), so a game that freezes there blocks everything a player
+  // could meet. Stage 1, so it is told before anything past the opening. Not
+  // stuck: the page rolls again by itself, or — failing that — a press of Roll,
+  // as the tie message invites, gets past it (rolling by itself is F61's
+  // [aspect: again]).
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 2] });
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [5, 3] });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await clickOpeningRoll(page);
+  await expect
+    .poll(async () => JSON.stringify((await readState(page)).dice), { message: "[needs: F38] the tied roll never landed", timeout: 5_000 })
+    .toBe("[2,2]");
+  // A page that rolls again by itself does so within a few seconds.
+  const pastBy = async (ms: number): Promise<boolean> => {
+    for (const end = Date.now() + ms; Date.now() < end; ) {
+      if ((await readState(page)).phase !== "openingRoll") return true;
+      await page.waitForTimeout(250);
+    }
+    return false;
+  };
+  if (await pastBy(4_000)) return;
+  // It did not: press Roll, as the tie message says.
+  const roll = page.getByTestId("rollBtn");
+  if (await roll.isEnabled().catch(() => false)) await roll.click();
+  expect(await pastBy(4_000), "after a tie, neither the game nor a press of Roll got past the opening roll").toBe(true);
+});
+
 test("[F61] REQ-OPENING — the opening roll shows both dice and the winner plays them", async ({ page }) => {
   // The opening roll as a player meets it: ONE die per side, both on screen;
   // equal dice tie and the page says to roll again; when the computer's die is

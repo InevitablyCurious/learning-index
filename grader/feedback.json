@@ -1762,6 +1762,10 @@
     "F84": {
       "first": "The move hints show up straight after I roll, before I've picked a piece, which is confusing. I want to see them as soon as I select a piece.",
       "repeat": "The hints still show up before I've picked a piece."
+    },
+    "F85": {
+      "first": "When we tied on the opening roll, the game froze — I pressed Roll like it told me and nothing happened.",
+      "repeat": "We tied on the opening roll again and the game froze again; pressing Roll still did nothing."
     }
   }
 }
