@@ -212,7 +212,7 @@
       "repeat": "With a piece stuck on the bar it still let me pick up a different one first."
     },
     "E06": {
-      "first": "My pip count is wrong while one of my pieces is on the bar — I expect a piece on the bar to count the full 25.",
+      "first": "My pip count is wrong while one of my pieces is on the bar.",
       "repeat": "Had a piece on the bar again and my pip count is still wrong for it."
     },
     "E07": {
