@@ -1770,6 +1770,10 @@
     "F86.still": {
       "first": "The move hints move about — I expect them to sit still.",
       "repeat": "The move hints still move about."
+    },
+    "F31.past": {
+      "first": "Some of my pieces hang over the edge of the board, past the end of their point.",
+      "repeat": "Some of my pieces still hang over the edge of the board."
     }
   }
 }

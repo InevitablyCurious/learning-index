@@ -207,22 +207,31 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
       `[aspect: side] [needs: F28 F43] expected checker loc=${checker.loc} drawn centered over point ${point.num}, found checker centerX=${checker.centerX.toFixed(1)} vs point centerX=${point.centerX.toFixed(1)} (off by ${dx.toFixed(1)}, tolerance ${tolerance.toFixed(1)})`,
     ).toBeTruthy();
 
-    // Outside its point's vertical band but still on the board, a piece can only
-    // be on one side of it: a bottom point's band runs to the bottom edge and a
-    // top point's to the top edge, so anything past those is `offboard` above.
-    // So the direction is exact, and each gets its own line — "up or down" was a
-    // guess Jerry rejected (run 1792089895, round 2: every bottom-point piece
-    // drawn up in the top half, under the top stacks).
-    const inBand = checker.centerY >= point.y - 1 && checker.centerY <= point.y + point.height + 1;
+    // Outside its point's vertical band, a piece is on one side of it, read from
+    // where it sits — "up or down" was a guess Jerry rejected (run 1792089895,
+    // round 2: every bottom-point piece drawn up in the top half, under the top
+    // stacks). Toward the middle is `up` (a bottom point) or `down` (a top
+    // point). Past the board end of its point is `past`: the board's box runs
+    // beyond the points (its frame), so a piece can hang there and still be on
+    // the board — run 1792485561 round 2 hung its bottom stacks past their
+    // points and off the window, and this line used to say "too far up". Past
+    // the window it is F37's complaint, so `past` waits on F37: one fault, one
+    // line.
+    const above = checker.centerY < point.y - 1;
+    const below = checker.centerY > point.y + point.height + 1;
     const bottomPoint = point.y + point.height / 2 > board!.y + board!.height / 2;
     const band = `centerY=${checker.centerY.toFixed(1)} vs band ${point.y.toFixed(1)}..${(point.y + point.height).toFixed(1)}`;
     expect(
-      inBand || !bottomPoint,
+      !(bottomPoint && above),
       `[aspect: up] [needs: F28] checker loc=${checker.loc} of bottom point ${point.num} drawn above its point: ${band}`,
     ).toBeTruthy();
     expect(
-      inBand || bottomPoint,
+      !(!bottomPoint && below),
       `[aspect: down] [needs: F28] checker loc=${checker.loc} of top point ${point.num} drawn below its point: ${band}`,
+    ).toBeTruthy();
+    expect(
+      !((bottomPoint && below) || (!bottomPoint && above)),
+      `[aspect: past] [needs: F28 F37] checker loc=${checker.loc} of point ${point.num} hangs past the board end of its point: ${band}`,
     ).toBeTruthy();
   }
 

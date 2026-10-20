@@ -367,7 +367,7 @@
     "F31": {
       "name": "Checkers over their own points",
       "what": "Every checker is drawn over the point it belongs to, not offset to a neighbour.",
-      "how": "Measures each checker's centre against its point's centre and vertical band: each sits within a quarter of a point's width of its own point's centre, inside its band. Then each stack must start at the edge of the board: the piece nearest its point's rim within half a piece of it. Judged only once the points are numbered in order (F28): with the numbers wrong, a checker drawn where a player expects it can sit over the wrong number."
+      "how": "Measures each checker's centre against its point's centre and vertical band: each sits within a quarter of a point's width of its own point's centre, inside its band — toward the middle is [aspect: up] (bottom points) or [aspect: down] (top points), past the board end of its point is [aspect: past], which waits on F37. Then each stack must start at the edge of the board: the piece nearest its point's rim within half a piece of it. Judged only once the points are numbered in order (F28): with the numbers wrong, a checker drawn where a player expects it can sit over the wrong number."
     },
     "F32": {
       "name": "Off tray visible",
