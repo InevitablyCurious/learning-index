@@ -293,21 +293,64 @@ test("[F03] REQ-HINT — clicking a piece shows its moves", async ({ page }) => 
   // A roll that leaves no move is the movable-checker gate's complaint when it
   // fails too (a needs marker, harness/adapters/challenge/stages.py).
   expect(state.legalMoves.length, "[needs: REQ-HINT/hint]").toBeGreaterThan(0);
+  // What the click itself did, judged on what the hints look like before and
+  // after it. A board that already shows hints before any pick (F84's
+  // complaint) passed here on its stray hints alone, and every gate waiting on
+  // this one was told as if picking a piece up worked: run 1792491065 round 3
+  // and run 1792503711 round 4 — the layer holding the pieces took no mouse
+  // events, so no click ever picked a piece up, the model was told "when I
+  // click a piece / pick up a piece …", believed picking up worked, and gated
+  // hints on a selection that could never happen (WO-LI-HINT-DELETION-WHY).
+  const hints = page.getByTestId("hint");
+  const where = async () =>
+    JSON.stringify(
+      (
+        await hints.evaluateAll((els) =>
+          els
+            .filter((el) => (el as HTMLElement).checkVisibility())
+            .map((el) => {
+              const r = el.getBoundingClientRect();
+              return `${Math.round(r.x + r.width / 2)},${Math.round(r.y + r.height / 2)}`;
+            }),
+        )
+      ).sort(),
+    );
+  await waitForEarlyHintsStable(page);
+  const before = await where();
+  const beforeCount = (await hints.count()) > 0;
+  try {
+    await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
+  } catch {
+    // Judged below, with its marker.
+  }
   // No hints for any piece is the setup check's complaint too (REQ-HINT/hint,
   // "selecting a movable checker shows move hints"): when both fail it is one
   // fault, told once, by the setup check (run 1792491065 round 4 told the model
   // the same thing twice). This gate tells it when only the played-game path
   // shows nothing.
-  try {
-    await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
-  } catch {
-    // Judged on the hint count below, with its marker.
-  }
-
-  const hints = page.getByTestId("hint");
   await expect
     .poll(async () => hints.count(), "[needs: REQ-HINT/hint] clicking a movable piece showed no hints")
     .toBeGreaterThan(0);
+  // Hints were up before the click: the click must have changed them to the
+  // picked piece's own — otherwise nothing was picked up.
+  // The hints up before the click could be the very piece's own: then a second,
+  // different piece is clicked, whose moves cannot be the same set.
+  if (beforeCount) {
+    const changedWithin = async (ms: number) => {
+      for (const end = Date.now() + ms; Date.now() < end; ) {
+        if ((await where()) !== before) return true;
+        await page.waitForTimeout(150);
+      }
+      return false;
+    };
+    let changed = await changedWithin(1_500);
+    if (!changed) {
+      const froms = [...new Set(state.legalMoves.map((m) => m.from))];
+      const other = froms.find((f) => f !== (state.legalMoves[0]?.from ?? -1));
+      if (other !== undefined && (await clickTopWhiteChecker(page, other))) changed = await changedWithin(1_500);
+    }
+    expect(changed, "[aspect: nochange] clicking a piece left the hints exactly as they were before the click").toBe(true);
+  }
 });
 
 test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
@@ -459,7 +502,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   const hintTexts = (await hints.allInnerTexts()).map(normalizeHint).filter(Boolean);
   // The hints are there but carry no number: a player sees dots and cannot tell
   // which die each one uses (run 1792224699, round 3: two bare green dots).
-  expect(hintTexts.length, "[aspect: label] the hints show no die number").toBeGreaterThan(0);
+  expect(hintTexts.length, "[aspect: label] [needs: F03] the hints show no die number").toBeGreaterThan(0);
 
   // Only the piece picked up shows its moves (the build prompt: picking up a
   // piece "shows its hints"). The back piece's two numbers are two hints; a
@@ -469,7 +512,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   if (on13) {
     expect(
       hintTexts.length <= 2,
-      `[aspect: others] after picking up the back piece on 13 there are ${hintTexts.length} hints on the board`,
+      `[aspect: others] [needs: F03] after picking up the back piece on 13 there are ${hintTexts.length} hints on the board`,
     ).toBe(true);
     // A hint for each die the piece can use (the build prompt, chunk-04: "A
     // hint appears for each playable die when a movable checker is selected").
@@ -479,7 +522,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
     const dice = new Set(hintTexts.flatMap((text) => hintWords(text)));
     expect(
       dice.has("3") && dice.has("5"),
-      `[aspect: perdie] after rolling 3-5 the back piece on 13 shows hints for: ${[...dice].join(", ")}`,
+      `[aspect: perdie] [needs: F03] after rolling 3-5 the back piece on 13 shows hints for: ${[...dice].join(", ")}`,
     ).toBe(true);
 
     // (switch) selecting a DIFFERENT piece must update the hints to that piece
@@ -510,7 +553,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
             async () => hintsMovedAway(firstPositions, await hintPositions(page)),
             {
               message:
-                "[aspect: switch] [needs: REQ-RENDER/die] the hints did not update to the newly selected piece within 1000ms",
+                "[aspect: switch] [needs: REQ-RENDER/die F03] the hints did not update to the newly selected piece within 1000ms",
               timeout: 1000,
             },
           )
@@ -531,7 +574,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
       hintWords(text).some((word) => word === "3" || word === "5"),
       `hint "${text}" names no die it uses`,
     ).toBe(true);
-    expect(text === "3" || text === "5", `[aspect: extra] hint "${text}" says more than its die`).toBe(true);
+    expect(text === "3" || text === "5", `[aspect: extra] [needs: F03] hint "${text}" says more than its die`).toBe(true);
   }
 });
 
@@ -583,13 +626,13 @@ test("[F45] REQ-HINT — clicking where a piece can go plays the move", async ({
     // (box.y, the triangle's tip) down to the board's edge (box.y + box.height,
     // where the stack and the hint token sit).
     const box = await readColumnBox(page, 11);
-    expect(box, "[needs: REQ-TESTID/point REQ-TESTID/checker]").not.toBeNull();
+    expect(box, "[needs: REQ-TESTID/point REQ-TESTID/checker F03]").not.toBeNull();
     await page.mouse.click(box!.centerX, box!.y + box!.height * f);
 
     // A game whose hints play no move either is told that first (F25).
     await expect
       .poll(async () => (await readState(page)).points[11], {
-        message: "[needs: F25] the piece did not go to 11",
+        message: "[needs: F25 F03] the piece did not go to 11",
         timeout: 3_000,
       })
       .toBeGreaterThan(0);

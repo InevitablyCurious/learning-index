@@ -222,7 +222,7 @@
     "F03": {
       "name": "Clicking shows the moves",
       "what": "Clicking a checker that can move shows where it can go.",
-      "how": "Fixes the next roll to 6-5, clicks Roll, clicks a movable checker, and requires at least one move hint to appear."
+      "how": "Fixes the next roll to 6-5, clicks Roll, waits for the board to settle, clicks a movable checker, and requires at least one move hint to appear; when hints were already up before the click, the click must change them within 1.5 s ([aspect: nochange]) — stray hints alone never pass it."
     },
     "F04": {
       "name": "Hints show which die",

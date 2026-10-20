@@ -404,11 +404,11 @@ test("[F86] REQ-HINT — a move hint looks like a faint green piece", async ({ p
     .evaluate((el) => el.getBoundingClientRect().width);
   expect(
     look.size >= 0.7 * piece && look.size <= 1.3 * piece,
-    `[aspect: size] [needs: F41] a hint is ${Math.round(look.size)} px across and a piece ${Math.round(piece)} px`,
+    `[aspect: size] [needs: F41 F03] a hint is ${Math.round(look.size)} px across and a piece ${Math.round(piece)} px`,
   ).toBe(true);
-  expect(look.green, "[aspect: green] the hint is not light green").toBe(true);
-  expect(look.dim, "[aspect: dim] the hint is drawn solid, not dimmed").toBe(true);
-  expect(hintAnimates(look), "[aspect: still] the hint animates").toBe(false);
+  expect(look.green, "[aspect: green] [needs: F03] the hint is not light green").toBe(true);
+  expect(look.dim, "[aspect: dim] [needs: F03] the hint is drawn solid, not dimmed").toBe(true);
+  expect(hintAnimates(look), "[aspect: still] [needs: F03] the hint animates").toBe(false);
 });
 
 // The page must work on whichever host name the user reached it by. `localhost`
