@@ -1,0 +1,1 @@
+Resized my window again and the game still doesn't keep up.

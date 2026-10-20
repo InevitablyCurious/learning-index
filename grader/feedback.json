@@ -1774,6 +1774,22 @@
     "F31.past": {
       "first": "Some of my pieces hang over the edge of the board, past the end of their point.",
       "repeat": "Some of my pieces still hang over the edge of the board."
+    },
+    "F87": {
+      "first": "When I change the size of my browser window, the game doesn't keep up.",
+      "repeat": "Resized my window again and the game still doesn't keep up."
+    },
+    "F87.fit": {
+      "first": "When my browser window is a bit shorter — a banner or toolbar taking some of the height — the board runs off the screen.",
+      "repeat": "With a shorter window the board still runs off the screen."
+    },
+    "F87.overlap": {
+      "first": "When my browser window is a bit shorter — a banner or toolbar taking some of the height — pieces from different points run into each other.",
+      "repeat": "With a shorter window, pieces from different points still run into each other."
+    },
+    "F87.stale": {
+      "first": "When I squeeze my browser window and then make it bigger again, the board is left a mess — old copies of parts of the board stay drawn over the game.",
+      "repeat": "Squeezed and re-expanded the window again, and old copies of the board are still left drawn over the game."
     }
   }
 }

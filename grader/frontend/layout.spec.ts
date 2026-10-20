@@ -416,3 +416,109 @@ test("[F82] REQ-LAYOUT — the buttons match", async ({ page }) => {
     `[needs: F38 F44] the buttons are different sizes: ${sizes}`,
   ).toBeTruthy();
 });
+
+// [F87] REQ-LAYOUT — the game follows the window as it changes size. Jerry,
+// run 1792491065's final build: "the pieces were overlapping because i had a
+// banner inside my chrome browser that was pushing those pieces down … if the
+// users viewport is different sized the board and the elements should be
+// responsive", then "i squeezed and then re-expanded the game" — and was left
+// with copies of the bar and tray drawn over the board. Played as he did, on
+// one live page: full size, then 150 px of height taken (a banner or toolbar),
+// then full size again — narrower too, as a squeeze by hand is: a build that
+// redraws on resize without clearing leaves its old bar and tray where the
+// smaller board put them (run 1792491065's buildBoard appended a new bar and
+// tray to the board on every resize). Shorter, nothing may scroll or leave the window and
+// pieces of different points may not run into each other; back at full size,
+// the board must look as it did before (the reference keeps its shape and
+// shrinks its pieces: 46 px at 1280×600, stacks 45 px apart).
+const FULL = { width: 1440, height: 900 };
+const SHORT = { width: 1180, height: 750 };
+
+/** The page as pixels: a screenshot decoded in the page, reduced to luminance. */
+async function boardPixels(page: Page): Promise<string> {
+  return (await page.screenshot({ type: "png" })).toString("base64");
+}
+
+test("[F87] REQ-LAYOUT — the game follows the window as it changes size", async ({ page }) => {
+  await openAt(page, FULL);
+  await page.waitForTimeout(800);
+  const before = await boardPixels(page);
+
+  await page.setViewportSize(SHORT);
+  await page.waitForTimeout(800);
+  const fit = await page.evaluate(() => {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const cs = [...document.querySelectorAll<HTMLElement>('[data-testid="checker"]')]
+      .filter((c) => c.checkVisibility())
+      .map((c) => {
+        const r = c.getBoundingClientRect();
+        return { loc: c.dataset.loc ?? "", x: r.x + r.width / 2, y: r.y + r.height / 2, w: Math.min(r.width, r.height), r };
+      });
+    const off = cs.filter((c) => c.r.bottom > vh + 0.1 * c.w || c.r.top < -0.1 * c.w || c.r.right > vw + 0.1 * c.w || c.r.left < -0.1 * c.w).length;
+    const clashes: string[] = [];
+    for (let i = 0; i < cs.length; i++)
+      for (let j = i + 1; j < cs.length; j++) {
+        const a = cs[i];
+        const b = cs[j];
+        if (a.loc !== b.loc && Math.hypot(a.x - b.x, a.y - b.y) < 0.9 * Math.min(a.w, b.w)) clashes.push(`${a.loc}/${b.loc}`);
+      }
+    const el = document.scrollingElement ?? document.documentElement;
+    return { scrolls: el.scrollWidth > vw + 2 || el.scrollHeight > vh + 2, off, pieces: cs.length, clashes };
+  });
+  expect(
+    !fit.scrolls && fit.off === 0,
+    `[aspect: fit] [needs: F37] with the window squeezed to ${SHORT.width}×${SHORT.height} the page ${fit.scrolls ? "scrolls" : "fits"} and ${fit.off} of ${fit.pieces} pieces run past the window`,
+  ).toBeTruthy();
+  expect(fit.clashes, `[aspect: overlap] [needs: F31] with the window squeezed to ${SHORT.width}×${SHORT.height}, pieces of different points run into each other: ${fit.clashes.join(", ")}`).toEqual([]);
+
+  await page.setViewportSize(FULL);
+  await page.waitForTimeout(800);
+  const after = await boardPixels(page);
+  // Back at the size it started: one bar and one tray, and the same picture.
+  // The stale copies a redraw leaves are near the board's own colour (run
+  // 1792491065's bar: about a sixth darker), so the picture is compared at a
+  // twelfth of brightness: the share of pixels that moved by more than that.
+  const parts = await page.evaluate(() => ({
+    bars: [...document.querySelectorAll<HTMLElement>('[data-testid="bar"]')].filter((e) => e.checkVisibility()).length,
+    trays: [...document.querySelectorAll<HTMLElement>('[data-testid="off-tray"]')].filter((e) => e.checkVisibility()).length,
+  }));
+  expect(
+    parts.bars <= 1 && parts.trays <= 1,
+    `[aspect: stale] after the window was squeezed and made full size again there are ${parts.bars} bars and ${parts.trays} off trays drawn`,
+  ).toBe(true);
+  const changed = await page.evaluate(
+    async ({ a, b }) => {
+      const load = (src: string) =>
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
+          img.src = `data:image/png;base64,${src}`;
+        });
+      const [ia, ib] = await Promise.all([load(a), load(b)]);
+      const lum = (img: HTMLImageElement) => {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        const d = ctx.getImageData(0, 0, c.width, c.height).data;
+        const out = new Float32Array(c.width * c.height);
+        for (let i = 0; i < out.length; i++) out[i] = (0.2126 * d[i * 4] + 0.7152 * d[i * 4 + 1] + 0.0722 * d[i * 4 + 2]) / 255;
+        return out;
+      };
+      const la = lum(ia);
+      const lb = lum(ib);
+      if (la.length !== lb.length) return 1;
+      let n = 0;
+      for (let i = 0; i < la.length; i += 4) if (Math.abs(la[i] - lb[i]) > 0.08) n++;
+      return n / (la.length / 4);
+    },
+    { a: before, b: after },
+  );
+  expect(
+    changed <= 0.02,
+    `[aspect: stale] after the window was squeezed and made full size again, ${(changed * 100).toFixed(1)}% of the screen looks different from before`,
+  ).toBe(true);
+});

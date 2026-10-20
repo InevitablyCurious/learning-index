@@ -633,6 +633,11 @@
       "name": "A move hint looks like a faint green piece",
       "what": "A move hint is a dimmed, light-green marker the size of a piece, and it does not animate.",
       "how": "Picks up a piece on a 3-5 and reads the first hint's own style: its box between 0.7 and 1.3 of a piece's width ([aspect: size]); a fill, border or text colour that is light green ([aspect: green]); that green, or the hint, see-through ([aspect: dim]); no running CSS animation ([aspect: still])."
+    },
+    "F87": {
+      "name": "The game follows the window as it changes size",
+      "what": "On one live page the window is squeezed narrower and 150 px shorter and then made full size again: squeezed, the game still fits with its pieces apart; back at full size it looks as it did.",
+      "how": "Opens at 1440×900, then resizes the same page to 1180×750 (narrower and shorter, as a squeeze by hand): no scrolling and no piece past the window ([aspect: fit], waits on F37), no two pieces of different points closer than nine tenths of a piece ([aspect: overlap], waits on F31); then back to 1440×900, where exactly one bar and one off tray are drawn and at most 2% of the screen's pixels differ in brightness by more than a twelfth from before ([aspect: stale])."
     }
   },
   "setup": [
@@ -890,7 +895,8 @@
         "F81",
         "F82",
         "F71",
-        "F85"
+        "F85",
+        "F87"
       ]
     },
     {
