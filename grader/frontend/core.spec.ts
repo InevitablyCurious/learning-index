@@ -293,10 +293,21 @@ test("[F03] REQ-HINT — clicking a piece shows its moves", async ({ page }) => 
   // A roll that leaves no move is the movable-checker gate's complaint when it
   // fails too (a needs marker, harness/adapters/challenge/stages.py).
   expect(state.legalMoves.length, "[needs: REQ-HINT/hint]").toBeGreaterThan(0);
-  await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
+  // No hints for any piece is the setup check's complaint too (REQ-HINT/hint,
+  // "selecting a movable checker shows move hints"): when both fail it is one
+  // fault, told once, by the setup check (run 1792491065 round 4 told the model
+  // the same thing twice). This gate tells it when only the played-game path
+  // shows nothing.
+  try {
+    await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
+  } catch {
+    // Judged on the hint count below, with its marker.
+  }
 
   const hints = page.getByTestId("hint");
-  await expect.poll(async () => hints.count()).toBeGreaterThan(0);
+  await expect
+    .poll(async () => hints.count(), "[needs: REQ-HINT/hint] clicking a movable piece showed no hints")
+    .toBeGreaterThan(0);
 });
 
 test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
