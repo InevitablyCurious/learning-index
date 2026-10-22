@@ -1447,10 +1447,6 @@
       "first": "We threw the same number to see who goes first, and nothing on screen said \"Tie — roll again\".",
       "repeat": "We threw the same number again to see who goes first, and still nothing on screen said \"Tie — roll again\"."
     },
-    "F61.computer": {
-      "first": "The computer's number was higher at the start, and its first turn never finished.",
-      "repeat": "The computer's number was higher at the start again, and its first turn still never finished."
-    },
     "F62": {
       "first": "I couldn't keep up with what the computer did.",
       "repeat": "Again I couldn't keep up with what the computer did."
@@ -1794,6 +1790,10 @@
     "F03.nochange": {
       "first": "When I click one of my pieces, the hints don't change to show that piece's moves — it doesn't seem to get picked up.",
       "repeat": "Clicked my pieces again and the hints still don't change — the piece still doesn't get picked up."
+    },
+    "F88": {
+      "first": "When the computer won the opening roll, it never made its move — the game just sat there and I couldn't do anything.",
+      "repeat": "The computer won the opening roll again and still never made its move."
     }
   }
 }

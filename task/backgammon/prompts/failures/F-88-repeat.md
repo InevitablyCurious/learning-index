@@ -1,0 +1,1 @@
+The computer won the opening roll again and still never made its move.

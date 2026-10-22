@@ -512,7 +512,7 @@
     "F61": {
       "name": "The opening roll on screen",
       "what": "On the opening roll the page shows both dice; equal dice tie and say to roll again; and when the computer's die is higher it makes the first move and hands the turn back.",
-      "how": "In a browser: first requires the Roll button to be clickable at the start of a new game ([aspect: roll]); then fixes the opening roll to 6-5, clicks Roll, and requires at least two dice on screen once they rest ([aspect: dice]); fixes 4-4 and requires the words \"Tie — roll again\" (any dash) somewhere on the page, again with two dice resting on screen ([aspect: tie], [aspect: dice]); fixes 3-5 and requires the state to show the computer's pieces moved and the turn back with the player ([aspect: computer]). The player's own first move with both numbers is F03's and F04's, which open with a roll the player wins. The two opening dice must look different from each other, and a tie must wait for the player to press Roll: three seconds after the tie lands, still the opening roll and still the tie ([aspect: self])."
+      "how": "In a browser: first requires the Roll button to be clickable at the start of a new game ([aspect: roll]); then fixes the opening roll to 6-5, clicks Roll, and requires at least two dice on screen once they rest ([aspect: dice]); fixes 4-4 and requires the words \"Tie — roll again\" (any dash) somewhere on the page, again with two dice resting on screen ([aspect: tie], [aspect: dice]); The computer winning the opening is F88's. The player's own first move with both numbers is F03's and F04's, which open with a roll the player wins. The two opening dice must look different from each other, and a tie must wait for the player to press Roll: three seconds after the tie lands, still the opening roll and still the tie ([aspect: self])."
     },
     "F62": {
       "name": "The computer's dice on screen",
@@ -638,6 +638,11 @@
       "name": "The game follows the window as it changes size",
       "what": "On one live page the window is squeezed narrower and 150 px shorter and then made full size again: squeezed, the game still fits with its pieces apart; back at full size it looks as it did.",
       "how": "Opens at 1440×900, then resizes the same page to 1180×750 (narrower and shorter, as a squeeze by hand): no scrolling and no piece past the window ([aspect: fit], waits on F37), no two pieces of different points closer than nine tenths of a piece ([aspect: overlap], waits on F31); then back to 1440×900, where exactly one bar and one off tray are drawn and at most 2% of the screen's pixels differ in brightness by more than a twelfth from before ([aspect: stale])."
+    },
+    "F88": {
+      "name": "The computer plays when it wins the opening",
+      "what": "When the computer's opening die is higher, it makes its first move and the turn comes back to the player.",
+      "how": "Queues a 3-5 opening, clicks Roll, and within 20 s requires the state to show the computer's pieces moved and the turn back with white."
     }
   },
   "setup": [
@@ -896,7 +901,9 @@
         "F82",
         "F71",
         "F85",
-        "F87"
+        "F87",
+        "G31",
+        "F88"
       ]
     },
     {
@@ -919,7 +926,6 @@
         "F62",
         "F77",
         "F63",
-        "G31",
         "G04",
         "G17",
         "G18",

@@ -763,6 +763,39 @@ test("[F85] REQ-OPENING — a tied opening never freezes the game", async ({ pag
   expect(await pastBy(4_000), "after a tie, neither the game nor a press of Roll got past the opening roll").toBe(true);
 });
 
+test("[F88] REQ-OPENING — the computer plays when it wins the opening", async ({ page }) => {
+  // Jerry, run 1792517825's final build: "we roll, i get 4 ai gets 6, ai goes
+  // first. ok. ai never moves. broken … unplayable." The check for it sat in
+  // F61 after the dice-colour assertion, so a build with white-and-white dice
+  // never reached it and the model was told only the colours. A game that
+  // freezes the moment the computer wins the opening — about half of all games
+  // — blocks everything after it, as F85's tie freeze does: its own gate, in
+  // stage 1. The computer's die is higher (3 against 5); it makes the first
+  // move and the turn comes back to the player, as the state records it. The
+  // server can do this when asked (G31); a failure here is the page never
+  // letting the computer take that turn.
+  test.setTimeout(60_000);
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [3, 5] });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  const before = await readState(page);
+  await clickOpeningRoll(page);
+  await expect
+    .poll(
+      async () => {
+        const state = await readState(page);
+        return state.turn === "white" && blackOf(state) !== blackOf(before);
+      },
+      {
+        message: "[needs: G31] after a 3-5 opening the computer never made its first move and handed the turn back",
+        timeout: 20_000,
+      },
+    )
+    .toBe(true);
+});
+
 test("[F61] REQ-OPENING — the opening roll shows both dice and the winner plays them", async ({ page }) => {
   // The opening roll as a player meets it: ONE die per side, both on screen;
   // equal dice tie and the page says to roll again; when the computer's die is
@@ -907,24 +940,8 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
     "[aspect: self] the tied opening roll rolled again by itself",
   ).toBe(true);
 
-  // ── The computer's die is higher: 3 against 5. It makes the first move and
-  // the turn comes back, as the state records it: its pieces moved and the
-  // turn is the player's. The server can do this when asked (G31); a
-  // failure here is the page never letting the computer take that turn. ──
-  const before = await openWith([3, 5]);
-  await page.getByTestId("rollBtn").click();
-  await expect
-    .poll(
-      async () => {
-        const state = await readState(page);
-        return state.turn === "white" && blackOf(state) !== blackOf(before);
-      },
-      {
-        message: "[aspect: computer] [needs: G31] after a 3-5 opening the computer never made its first move and handed the turn back",
-        timeout: 20_000,
-      },
-    )
-    .toBe(true);
+  // The computer winning the opening is F88's: a game that freezes there blocks
+  // everything after it, so it is its own stage-1 gate.
 });
 
 test("[F63] REQ-OPENING — the opening dice carry whose they are", async ({ page }) => {
