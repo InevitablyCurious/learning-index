@@ -10,6 +10,7 @@
 //
 // Safety properties:
 //  - Binds 127.0.0.1 and has no --host flag; the dashboard is what may face a LAN.
+//  - Refuses writes from web pages and non-loopback Host names (lib/browser-guard.mjs).
 //  - No shell: every process is spawned from an argv array.
 //  - One run at a time, refused with a reason, never queued.
 //  - Only bench-eligible models (interactive proxy slots are refused).
@@ -24,6 +25,7 @@ import { existsSync } from "node:fs";
 
 import { refuse } from "./contract.mjs";
 import { sendJson } from "./lib/http.mjs";
+import { refuseBrowser } from "./lib/browser-guard.mjs";
 import { args, BENCH_ROOT, RUNS_ROOT, PYTHON, initState } from "./state.mjs";
 import { startChainLoop } from "./continuous.mjs";
 import { startLivebuildLoop } from "./livebuild.mjs";
@@ -69,7 +71,10 @@ const server = createServer(async (req, res) => {
 
   // No CORS headers, on purpose: browsers reach this only through the
   // dashboard's same-origin relay, and wildcard CORS would let any page on this
-  // machine drive it. OPTIONS falls through to the 404.
+  // machine drive it. OPTIONS falls through to the 404. No CORS does not stop a
+  // page SENDING a write, or a rebound domain reading replies: lib/browser-guard.mjs.
+  const refusal = refuseBrowser(req);
+  if (refusal) return sendJson(res, 403, refusal);
 
   try {
     const h = routes[req.method + " " + path];

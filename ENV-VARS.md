@@ -36,6 +36,7 @@ Config-surface reference (dead bucket re-verified and resolved). Every env var t
 | OKP_DASH_HOST | 127.0.0.1 (image 0.0.0.0) | dashboard bind addr | env or --host |
 | OKP_DASH_PORT | 8717 | dashboard port | env or --port |
 | OKP_DASH_CONTROL_URL | http://127.0.0.1:8718 | the same-origin relay's upstream control plane (always loopback) | env |
+| OKP_DASH_ALLOWED_HOSTS | (none) | extra host names the board may be opened by, comma-separated; IP addresses and localhost always pass (DNS-rebinding guard) | env or dashboard/.env |
 | OKP_LOG_DIR | ~/.okp/logs | plugin log dir | env |
 | BENCH_SELF_COMPACT | off | benchmark-native worker-side self-fire compaction (`images/worker/self-compact.ts`, baked into every worker image at /opt/bench/self-compact.ts) | env =1, exported by the harness per cell when launched with --compact |
 | BENCH_COMPACT_PHASE_FILE | (none) | path to the A2 phase sentinel the compaction arm reads on every session.idle; only `build` may fire, and unset/unreadable never fires | env, set to /okp-compact/phase by the harness per cell when launched with --compact (read-only bind mount, both arms) |

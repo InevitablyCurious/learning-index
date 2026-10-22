@@ -4,6 +4,8 @@
 //     link-local peers are served; anything internet-routable is refused.
 //   isSameOrigin: writes must come from the dashboard's own origin, or from no
 //     browser at all.
+//   isAllowedHost: the Host must be an address, not a name some other site
+//     controls (DNS rebinding).
 // Fail-closed: anything unparseable or ambiguous is refused.
 
 import { isIP } from "node:net";
@@ -96,6 +98,29 @@ export function isSameOrigin(originHeader, hostHeader) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Host check, against DNS rebinding: a page on an attacker's domain that is
+ * re-resolved to this machine is same-origin with itself, so isSameOrigin
+ * passes it and the browser is a loopback peer, so guardPeer passes it too.
+ * Only the Host header still names the attacker's domain.
+ *   an IP literal or localhost → true (no DNS lookup to rebind)
+ *   a name in `extraHosts` (OKP_DASH_ALLOWED_HOSTS) → true
+ *   anything else, missing or unparseable → false
+ */
+export function isAllowedHost(hostHeader, extraHosts = []) {
+  if (typeof hostHeader !== "string" || hostHeader === "") return false;
+  let hostname;
+  try {
+    hostname = new URL(`http://${hostHeader}`).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (hostname.startsWith("[") && hostname.endsWith("]")) hostname = hostname.slice(1, -1);
+  if (isIP(hostname) !== 0) return true;
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) return true;
+  return extraHosts.some((h) => h.toLowerCase() === hostname);
 }
 
 /**

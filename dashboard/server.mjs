@@ -12,6 +12,8 @@
 //
 //   - Every request passes the peer check (lib/net-policy.mjs): public
 //     addresses get nothing, even if the port is published wide.
+//   - Every request passes the host check (lib/net-policy.mjs): a Host that
+//     is a domain name is refused unless OKP_DASH_ALLOWED_HOSTS lists it.
 //   - Writes must be same-origin (lib/control-relay.mjs).
 //   - Static files come from a fixed list, so no path can reach anything else.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,7 +25,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { guardPeer } from "./lib/net-policy.mjs";
+import { guardPeer, isAllowedHost } from "./lib/net-policy.mjs";
 import { createControlRelay } from "./lib/control-relay.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -33,6 +35,12 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const HOST = process.env.OKP_DASH_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.OKP_DASH_PORT ?? 8717);
 const CONTROL_URL = process.env.OKP_DASH_CONTROL_URL ?? "http://127.0.0.1:8718";
+// Host names the board may be opened by, beyond IP addresses and localhost
+// (e.g. "studio.local" for an iPad on the LAN). Comma-separated.
+const ALLOWED_HOSTS = (process.env.OKP_DASH_ALLOWED_HOSTS ?? "")
+  .split(",")
+  .map((h) => h.trim())
+  .filter(Boolean);
 
 const STATIC = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
@@ -117,6 +125,16 @@ const server = createServer(async (req, res) => {
   if (!peer.ok) {
     res.writeHead(403, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: false, code: "untrusted_peer", reason: peer.reason }));
+    return;
+  }
+
+  if (!isAllowedHost(req.headers.host, ALLOWED_HOSTS)) {
+    res.writeHead(403, { "content-type": "application/json" });
+    res.end(JSON.stringify({
+      ok: false,
+      code: "untrusted_host",
+      reason: `Host ${req.headers.host ?? "(none)"} is not an address of this board; add it to OKP_DASH_ALLOWED_HOSTS`,
+    }));
     return;
   }
 

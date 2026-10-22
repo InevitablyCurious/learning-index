@@ -10,7 +10,14 @@
 # Delete both lines and redeploy to turn it off. The board still refuses
 # peers outside the private network ranges, and the control plane itself
 # never leaves this Mac's loopback — the board relays to it.
+#
+# Open it by the IP address. To open it by a name instead (studio.local),
+# add OKP_DASH_ALLOWED_HOSTS=studio.local to the same file: the board refuses
+# host names it was not told about, so a site re-resolved to this Mac cannot
+# drive it.
 services:
   learning-index-dashboard:
+    environment:
+      OKP_DASH_ALLOWED_HOSTS: "${OKP_DASH_ALLOWED_HOSTS:-}"
     ports:
       - "${LAN_ADDRESS:?set LAN_ADDRESS in dashboard/.env to this Mac's LAN address}:8717:8717"

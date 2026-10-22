@@ -15,6 +15,7 @@ import test from "node:test";
 import {
   classifyAddress,
   guardPeer,
+  isAllowedHost,
   isSameOrigin,
 } from "./lib/net-policy.mjs";
 
@@ -107,6 +108,35 @@ test('isSameOrigin: the sandboxed "null" origin must never write', () => {
 
 test("isSameOrigin: an unparseable Origin is refused, not errored past", () => {
   assert.equal(isSameOrigin("not a url", "192.168.1.10:8717"), false);
+});
+
+// ── isAllowedHost ───────────────────────────────────────────────────────────
+
+test("isAllowedHost: IP literals and localhost, the ways the board is opened → true", () => {
+  assert.equal(isAllowedHost("127.0.0.1:8717"), true);
+  assert.equal(isAllowedHost("localhost:8717"), true);
+  assert.equal(isAllowedHost("192.168.50.140:8717"), true);
+  assert.equal(isAllowedHost("[::1]:8717"), true);
+  assert.equal(isAllowedHost("[fd00::5]:8717"), true);
+});
+
+test("isAllowedHost: a rebinding page's own domain is refused even though it is same-origin", () => {
+  // The attack: evil.example re-resolves to 127.0.0.1. Origin and Host agree,
+  // and the peer is this machine's own browser.
+  assert.equal(isSameOrigin("http://evil.example:8717", "evil.example:8717"), true);
+  assert.equal(isAllowedHost("evil.example:8717"), false);
+  assert.equal(isAllowedHost("localhost.evil.example:8717"), false);
+});
+
+test("isAllowedHost: a LAN name passes only when OKP_DASH_ALLOWED_HOSTS lists it", () => {
+  assert.equal(isAllowedHost("studio.local:8717"), false);
+  assert.equal(isAllowedHost("studio.local:8717", ["Studio.local"]), true);
+});
+
+test("isAllowedHost: a missing or unparseable Host is refused", () => {
+  assert.equal(isAllowedHost(undefined), false);
+  assert.equal(isAllowedHost(""), false);
+  assert.equal(isAllowedHost("bad host:x"), false);
 });
 
 // ── guardPeer ───────────────────────────────────────────────────────────────
