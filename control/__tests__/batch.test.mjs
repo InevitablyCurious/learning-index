@@ -23,8 +23,10 @@ import {
   readBatch,
   writeBatch,
 } from "../batch.mjs";
+import { BENCH } from "./_shared.mjs";
 
-const ROOT = "/Users/jerrysmith/Desktop/TOKProject/Learning-Index";
+// The repo root, wherever it is checked out (CI included).
+const ROOT = BENCH;
 // Frozen by the Python compute_task_template_hash over task/backgammon/scaffold
 // and declared by the challenge (challenge.json scaffold_hash, which the Python
 // freeze guard pins) — read from there, the one place a re-freeze changes.

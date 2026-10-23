@@ -20,10 +20,11 @@ import { BENCH, FIXTURE_FP, setFixtureCode } from "./_shared.mjs";
 const FROZEN_SCAFFOLD_HASH = JSON.parse(
   await fs.readFile(path.join(BENCH, "task", "backgammon", "challenge.json"), "utf8"),
 ).scaffold_hash;
-// Re-pinned 2026-09-25: the reference draws two dice on a double (Jerry: "only 2
-// dice should be visible on the front end"). Prior 312720b5….
+// Re-pinned 2026-10-23 to the golden as of ca84fef (2026-10-18); Python's
+// harness/fingerprint.py dir_hash gives the same value. Prior 942369b1… (2026-09-25,
+// two dice on a double), before that 312720b5….
 const FROZEN_GOLDEN_HASH =
-  "942369b106ab0f2e02dcfadb4c8554bf6c440b57db107cd07f62e4aa9f4d00f7";
+  "75273d00d9a9c4ff00d1ccef2c51ecd4e6dbe0f920fe551fd46cd4e64ecbea08";
 
 const INPUT_NAMES = FINGERPRINT_INPUTS.map((i) => i.name);
 

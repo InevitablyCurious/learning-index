@@ -170,9 +170,22 @@ test("WALL: a gate row carries NO phase and no live signal", () => {
   // attempts on disk like the two trajectory facts beside it, so it cannot
   // reintroduce an in-flight state. An earlier attempt at this put a derived
   // count on the row that no surface read; that one was rightly rejected.
+  // `ever_passed` / `broke_attempt` (aebe760) are the same kind: folded from
+  // completed attempts, read by the board's gateVisual to draw a regression.
   assert.deepEqual(
     Object.keys(row).sort(),
-    ["ever_failed", "first_pass_attempt", "gate_token", "id", "req", "state", "title", "unmeasured_cause"],
+    [
+      "broke_attempt",
+      "ever_failed",
+      "ever_passed",
+      "first_pass_attempt",
+      "gate_token",
+      "id",
+      "req",
+      "state",
+      "title",
+      "unmeasured_cause",
+    ],
   );
 
   // THE ACTUAL PROHIBITION, stated as itself rather than as a key count.
