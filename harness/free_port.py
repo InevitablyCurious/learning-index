@@ -1,7 +1,6 @@
-"""Free-port allocation for the per-run live-view serve.
+"""Free-port allocation for the per-run live-view serve and play containers.
 
-Python mirror of control/play.mjs freePort(): bind port 0, read the
-OS-assigned port, close. Two independent env readers (RunConfig and
+Bind port 0, read the OS-assigned port, close. Two independent env readers (RunConfig and
 ChallengeRunner) both default BENCH_SERVE_HOST_PORT to 8719, so two
 concurrent cells collide on 127.0.0.1:8719; this module is the shared
 allocation seam both resolve through.
@@ -20,8 +19,7 @@ _AUTO_SENTINELS = frozenset({"", "0", "auto"})
 def allocate_free_host_port(host: str = "127.0.0.1") -> int:
     """Return a free loopback TCP port assigned by the OS.
 
-    Mirrors control/play.mjs freePort(): bind port 0, read the OS-assigned
-    port, close. The close-before-bind race is accepted — a failed later bind
+    Bind port 0, read the OS-assigned port, close. The close-before-bind race is accepted — a failed later bind
     is loud, never silent.
     """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:

@@ -2,54 +2,91 @@
 // playing the build catches what the gates can't (a run frozen at 95/117 whose
 // page was visibly dead in seconds).
 //
-// The artifact reads PORT (default 8002, the grader's); play assigns a free
-// port, so it never collides with grading. A build that ignores PORT would land
-// on 8002, so startPlay checks the port it asked for is the one answering and
-// kills it otherwise. DEBUG_API is unset: play runs the configuration that
-// ships, which no gate ever exercises.
+// The candidate runs where grading runs it: inside the grader image, started by
+// harness/play_container.py. It used to be a host process — the operator's node,
+// the operator's ~/.ssh, the operator's Docker socket, a writable worktree — and
+// a model-authored start script is untrusted input, so the host is the one place
+// it must never execute. What comes back is one published 127.0.0.1 port to open
+// in a browser and nothing else.
+//
+// DEBUG_API is not passed: play runs the configuration that ships, which no gate
+// ever exercises (they all boot with the seam on).
 
-import { spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import net from "node:net";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
-import { resolveStartCommand } from "../grader/lib/entrypoint.mjs";
 import { resolveCellDir } from "./history.mjs";
 import {
+  deregisterServer,
   listServers,
-  portHolders,
   reapServers,
   registerServer,
 } from "./servers.mjs";
+import { PYTHON } from "./state.mjs";
 
 /** This module's registry kind (grading uses "gate"). */
 export const PLAY_KIND = "play";
 
-/**
- * The loopback-bind shim, preloaded into the child with `--import`. Absolute:
- * the child's cwd is the worktree, and a relative specifier would resolve
- * against it, not against this module.
- */
-const LOOPBACK_SHIM = join(dirname(fileURLToPath(import.meta.url)), "lib", "loopback-shim.mjs");
+/** A container start is a handful of docker calls; this is the leash on a hang. */
+const CLI_TIMEOUT_MS = 120_000;
 
 function refuse(code, reason, status = 400) {
   return { ok: false, code, reason, status };
 }
 
 /**
- * A free port from the OS (listen(0), then close). The race before the child
- * binds is accepted: a failed bind is loud.
+ * harness/play_container.py — one JSON line on stdout, read from the LAST line
+ * even on a non-zero exit: a refusal is written as JSON too, and its code is
+ * the whole point of asking.
  */
-export function freePort() {
-  return new Promise((resolve, reject) => {
-    const srv = net.createServer();
-    srv.once("error", reject);
-    srv.listen(0, "127.0.0.1", () => {
-      const { port } = srv.address();
-      srv.close(() => resolve(port));
-    });
+function cliExec(argv, benchRoot) {
+  return new Promise((resolve) => {
+    execFile(
+      PYTHON,
+      ["-m", "harness.play_container", ...argv],
+      { cwd: benchRoot, timeout: CLI_TIMEOUT_MS },
+      (err, stdout, stderr) => {
+        const lines = String(stdout ?? "")
+          .split("\n")
+          .filter((line) => line.trim().length > 0);
+        const last = lines[lines.length - 1];
+        if (last) {
+          try {
+            resolve(JSON.parse(last));
+            return;
+          } catch {
+            // Not a JSON line: reported as unexpected below.
+          }
+        }
+        const reason =
+          String(err?.message ?? "").trim() ||
+          String(stderr ?? "").trim() ||
+          "no output";
+        resolve({ ok: false, code: "unexpected", reason });
+      },
+    );
   });
+}
+
+/**
+ * The CLI runner. Swappable so tests can exercise the wiring here — refusal
+ * mapping, registry, boot probe — without docker; production never replaces it.
+ */
+let playContainer = cliExec;
+
+/** Replace the CLI runner (tests only; `null` restores the real one). */
+export function setPlayContainer(fn) {
+  playContainer = fn ?? cliExec;
+}
+
+/** Remove every play container and network. Fire-and-forget; never throws. */
+export async function reapPlayContainers(benchRoot) {
+  try {
+    await playContainer(["reap", "--owner", "control"], benchRoot);
+  } catch {
+    // Best effort: an orphaned container is cleaned by the next start or stop.
+  }
 }
 
 /** The play server running right now, or null. Read from the registry. */
@@ -58,7 +95,7 @@ export function playStatus(benchRoot) {
   // something to frame, and the one it replaces keeps running until it does.
   const rows = listServers(benchRoot).filter((r) => r.kind === PLAY_KIND && r.ready === true);
   if (rows.length === 0) return null;
-  // Newest wins; startPlay reaps before spawning.
+  // Newest wins; startPlay reaps before starting.
   rows.sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)));
   const r = rows[0];
   return {
@@ -71,10 +108,24 @@ export function playStatus(benchRoot) {
   };
 }
 
-/** Stop whatever is being played. Idempotent; "nothing was running" is a result. */
+/**
+ * Stop whatever is being played. Idempotent; "nothing was running" is a result.
+ * `stopped` counts containers removed (a session is two: candidate + forwarder),
+ * `pruned` counts registry records dropped.
+ */
 export async function stopPlay(benchRoot) {
-  const report = await reapServers({ kind: PLAY_KIND }, benchRoot);
-  return { ok: true, stopped: report.killed.length, pruned: report.pruned.length };
+  const res = await playContainer(["reap", "--owner", "control"], benchRoot);
+  const pruned = [];
+  for (const rec of listServers(benchRoot)) {
+    if (rec.kind !== PLAY_KIND) continue;
+    deregisterServer(rec.pid, benchRoot);
+    pruned.push(rec);
+  }
+  return {
+    ok: true,
+    stopped: res?.removed_containers?.length ?? 0,
+    pruned: pruned.length,
+  };
 }
 
 function sleep(ms) {
@@ -119,13 +170,17 @@ async function probePage(url) {
 }
 
 /**
- * Boot one built result and return the URL to open. Named refusals:
+ * Boot one built result in the grader image and return the URL to open. Named
+ * refusals:
  *   invalid_run      the identifiers did not resolve inside the runs root
  *   no_build         no worktree, or no src/ in it
  *   no_entrypoint    nothing says how to start it
- *   port_ignored     it bound a port other than the one given
+ *   image_missing    the grader image is not built
+ *   docker_missing   docker is not reachable
  *   boot_failed      it started and never answered
- *   registry_failed  it could not be recorded, so it was killed, not played
+ *   registry_failed  it could not be recorded, so it was stopped, not played
+ *   port_ignored     RETIRED from this path: the candidate binds 8002 inside its
+ *                    own container, so it can no longer squat a host port.
  */
 export async function startPlay({ runsRoot, benchRoot, run, cell }) {
   const cellDir = resolveCellDir(runsRoot, run, cell);
@@ -143,77 +198,59 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
     );
   }
 
-  let entrypoint;
-  let flags;
-  try {
-    ({ entrypoint, flags } = resolveStartCommand(worktree));
-  } catch (err) {
-    return refuse("no_entrypoint", String(err?.message ?? err), 422);
-  }
-
+  // The session identity, and the name the module names everything from: its
+  // containers, its network, and this registry record.
+  const name = `${run}::${cell}`;
   // One at a time, but the one running keeps running until the new one answers:
   // a build that will not boot must not take the working one down with it.
-  const port = await freePort();
-  // The artifact's own start command, the same one the grader uses, with the
-  // loopback shim preloaded so a host-less listen(PORT) binds 127.0.0.1 only.
-  const child = spawn("node", ["--import", LOOPBACK_SHIM, ...flags, entrypoint], {
-    cwd: worktree,
-    env: {
-      ...process.env,
-      PORT: String(port),
-      // Unset, not "0" (a presence check would still see a set variable).
-      DEBUG_API: undefined,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-    detached: false,
-  });
+  const started = await playContainer(
+    ["start", "--name", name, "--worktree", worktree, "--owner", "control", "--cell", cell],
+    benchRoot,
+  );
 
-  let stderr = "";
-  child.stderr?.setEncoding("utf8");
-  child.stderr?.on("data", (c) => {
-    stderr = `${stderr}${c}`.slice(-4000);
-  });
-  child.stdout?.resume();
-
-  const reapSelf = () => reapServers({ kind: PLAY_KIND, only: child.pid }, benchRoot);
-  const record_ = {
-    pid: child.pid,
-    port,
-    kind: PLAY_KIND,
-    label: `${run}::${cell}`,
-    cwd: worktree,
-    entrypoint,
-  };
-  if (child.pid) {
-    const record = registerServer(
-      record_,
-      benchRoot,
-    );
-    if (record === null) {
-      // A live child with no record is unreapable — nothing can find it to
-      // stop it later. Kill it now: there is never a play server running
-      // without a registry record.
-      child.kill("SIGKILL");
-      return refuse(
-        "registry_failed",
-        `the server registry could not record pid ${child.pid}, so it was ` +
-          "killed rather than left running unreapable.",
-        500,
-      );
+  if (!started?.ok) {
+    const reason = String(started?.reason ?? "the play container could not be started");
+    switch (String(started?.code ?? "")) {
+      case "no_entrypoint":
+        return refuse("no_entrypoint", reason, 422);
+      case "image_missing":
+        return refuse("image_missing", reason, 503);
+      case "docker_missing":
+        return refuse("docker_missing", reason, 503);
+      default:
+        // start_failed, unexpected, absent: the candidate did not come up.
+        return refuse("boot_failed", reason, 422);
     }
   }
 
-  const url = `http://localhost:${port}/`;
+  const port = Number(started.host_port);
+  const candidate = String(started.candidate ?? "");
+  const url = String(started.url ?? `http://localhost:${port}/`);
+
+  const record_ = {
+    pid: name,
+    container: candidate,
+    port,
+    kind: PLAY_KIND,
+    label: name,
+    cwd: worktree,
+    entrypoint: candidate,
+  };
+  if (registerServer(record_, benchRoot) === null) {
+    // A running container with no record is unreapable — nothing can find it to
+    // stop it later. Take it down now: there is never a play server running
+    // without a registry record.
+    await playContainer(["stop", "--name", name], benchRoot);
+    return refuse(
+      "registry_failed",
+      `the server registry could not record ${name}, so the container was ` +
+        "stopped rather than left running unreapable.",
+      500,
+    );
+  }
+
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) {
-      await reapSelf();
-      return refuse(
-        "boot_failed",
-        `the build exited immediately (code ${child.exitCode}). stderr:\n${stderr.trim() || "<empty>"}`,
-        422,
-      );
-    }
     try {
       const res = await fetch(`${url}health`, { signal: AbortSignal.timeout(500) });
       if (res.status === 200) {
@@ -224,8 +261,8 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
         const seam = await probeDebugSeam(url);
         // Answering: mark it ready, then retire every other play server.
         registerServer({ ...record_, ready: true }, benchRoot);
-        await reapServers({ kind: PLAY_KIND, except: child.pid }, benchRoot);
-        return { ok: true, url, port, pid: child.pid, run, cell, ...page, ...seam };
+        await reapServers({ kind: PLAY_KIND, except: name }, benchRoot);
+        return { ok: true, url, port, pid: name, run, cell, ...page, ...seam };
       }
     } catch {
       // Not up yet.
@@ -233,23 +270,8 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
     await sleep(150);
   }
 
-  // It never answered on the given port: likely a hardcoded port, which would
-  // have taken 8002. Say which, and take it down either way.
-  const holders = await portHolders(8002);
-  const squatting = holders.some((h) => h.pid === child.pid);
-  await reapSelf();
-
-  if (squatting) {
-    return refuse(
-      "port_ignored",
-      "this build ignores the PORT it is given and binds a fixed port, so it " +
-        "cannot be run alongside a grading pass. It has been stopped.",
-      409,
-    );
-  }
-  return refuse(
-    "boot_failed",
-    `no answer at ${url}health after 10s. stderr:\n${stderr.trim() || "<empty>"}`,
-    504,
-  );
+  // It started and never answered: take it down either way.
+  await playContainer(["stop", "--name", name], benchRoot);
+  deregisterServer(name, benchRoot);
+  return refuse("boot_failed", `no answer at ${url}health after 10s.`, 504);
 }

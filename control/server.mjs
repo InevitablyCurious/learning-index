@@ -27,6 +27,7 @@ import { refuse } from "./contract.mjs";
 import { sendJson } from "./lib/http.mjs";
 import { refuseBrowser } from "./lib/browser-guard.mjs";
 import { args, BENCH_ROOT, RUNS_ROOT, PYTHON, initState } from "./state.mjs";
+import { reapPlayContainers } from "./play.mjs";
 import { startChainLoop } from "./continuous.mjs";
 import { startLivebuildLoop } from "./livebuild.mjs";
 import { routes as metaRoutes } from "./routes/meta.mjs";
@@ -91,6 +92,10 @@ const server = createServer(async (req, res) => {
 
 // 127.0.0.1 only; there is no flag to change this.
 server.listen(args.port, "127.0.0.1", () => {
+  // FIRST: a control plane that crashed left its candidate's containers and
+  // network behind, and nothing else knows they exist. Fire-and-forget: boot
+  // must not wait on docker.
+  reapPlayContainers(BENCH_ROOT);
   startBoardLoops();
   // Continuous mode drives this server's own routes, so it starts once they answer.
   startChainLoop({ benchRoot: BENCH_ROOT, runsRoot: RUNS_ROOT, port: args.port });

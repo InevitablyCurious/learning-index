@@ -26,16 +26,26 @@ runner's `pause_after_grade` flag (never by env), and can fire per-grade
 (`kind="round"`) or at run end (`kind="final"`). It writes hold-ui.json with
 schema_version 2 and honours an operator note carried in the release file. The
 runner times each pause itself and excludes it from wall time.
+
+PLAY-TIME IS THE CONTAINER RECIPE. The hold used to spawn `node <entrypoint>`
+on the HOST with the operator's own environment — untrusted model-authored code
+running as the operator. It now hands the worktree to
+`harness.play_container`, which runs it inside the grader image on an
+`--internal` network and publishes `127.0.0.1:<host port>` through a forwarder
+container. Consequences that shape this module: the candidate ALWAYS sees
+`PORT=8002` internally (the container fixes it) while `_HOLD_UI_PORT` is the
+PUBLISHED host port the operator's browser reaches; the start command and its
+flags are resolved by the module via `grader/lib/entrypoint.mjs`, so the local
+`_resolve_hold_ui_entrypoint` survives only as a docker-free existence gate;
+and teardown is `play_stop(session)`, not a `proc.terminate()` of a host pid.
 """
 
 from __future__ import annotations
 
 import datetime as _dt
 import json
-import os
 from pathlib import Path
 import re
-import signal
 import socket
 import subprocess
 import time
@@ -48,10 +58,10 @@ from .constants import (
     _HOLD_UI_HEARTBEAT_S,
     _HOLD_UI_POLL_S,
     _HOLD_UI_RELEASE_FILE,
-    _HOLD_UI_SERVER_LOG,
     _HOLD_UI_STATE_FILE,
 )
 from harness.free_port import allocate_free_host_port
+from harness.play_container import PlayError, start as play_start, stop as play_stop
 
 # The schema_version this module writes. v1 (the env-gated end-only hold) is
 # no longer produced; readHold on the control plane accepts v2 only.
@@ -66,7 +76,12 @@ def _resolve_hold_ui_entrypoint(worktree: Path) -> Path:
     """Artifact-driven entrypoint resolution — the Python port of
     grader/lib/harness.ts resolveEntrypoint: package.json
     scripts.start first, then src/server.{ts,js,mjs,cjs}, else a loud throw
-    (a distinct failure class, never a silent skip)."""
+    (a distinct failure class, never a silent skip).
+
+    The hold uses this ONLY as a docker-free existence gate (an empty worktree
+    must report `entrypoint_unresolved` without touching docker). The command
+    that actually runs is resolved authoritatively by `harness.play_container`,
+    which keeps the start command's flags — this port drops them."""
     pkg_path = worktree / "package.json"
     if pkg_path.is_file():
         try:
@@ -188,6 +203,10 @@ def _hold_ui_lan_exposed(port: int) -> str | None:
     A failure to determine it returns None (treated as not-exposed) — this is a
     warning surface on an operator-local review feature, and it must never fail
     a finished cell.
+
+    Play-time the check is a second pair of eyes rather than the only guard: the
+    forwarder publishes `127.0.0.1:<port>` only, so a candidate that binds `::`
+    inside its container is unreachable off-box anyway.
     """
     try:
         probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -293,12 +312,15 @@ def _hold_for_operator(
     """Hold the cell stack for operator review until released.
 
     Called by the runner ONLY when `pause_after_grade` is on — there is no env
-    gate here (BENCH_HOLD_UI is deleted). Boots the artifact's server host-side
-    from the worktree on a per-cell FREE port passed to it as PORT (the
-    gate's assigned-port boot, minus Playwright), then waits on the
-    RELEASE_HOLD sentinel. Never fails the cell: boot problems are logged
-    and the hold still proceeds (container + worktree stay inspectable). The
-    UI server is killed in a finally — the ProcessReaper does not watch it.
+    gate here (BENCH_HOLD_UI is deleted). Boots the artifact's server as a play
+    container (`harness.play_container`) — the grader image, an `--internal`
+    network, the worktree mounted read-only — and publishes it on a per-cell
+    FREE host port that the operator's browser reaches. The artifact itself
+    always listens on 8002 inside the container; only the published port
+    varies. Then waits on the RELEASE_HOLD sentinel. Never fails the cell: boot
+    problems are logged and the hold still proceeds (container + worktree stay
+    inspectable). Teardown is `play_stop` in a finally — the ProcessReaper does
+    not watch play containers, and the module's own `reap()` owns orphans.
 
     Writes hold-ui.json with schema_version 2, carrying `kind`, `attempt`,
     `max_attempts`, `told_text` (the exact feedback about to be sent, round
@@ -313,74 +335,60 @@ def _hold_for_operator(
         _pkg._HOLD_UI_PORT
     )  # late-bound: tests monkeypatch the package attr; read it once at call time
 
-    # Per-cell free port: a fixed 8002 would collide when N held cells boot
-    # host-side at once. A positive value is a pin (tests monkeypatch it);
-    # 0 (the default) allocates a free port and passes it to the artifact.
+    # Per-cell free port: the PUBLISHED host port the operator's browser
+    # reaches (the artifact always listens on 8002 inside its container). A
+    # positive value is a pin (tests monkeypatch it); 0 (the default) allocates
+    # a free port and publishes the container there. A take on a taken port
+    # fails loudly inside play_start rather than being silently re-pointed.
     port = int(_HOLD_UI_PORT) if int(_HOLD_UI_PORT) > 0 else allocate_free_host_port()
 
     release_path = run_dir / _HOLD_UI_RELEASE_FILE
     state_path = run_dir / _HOLD_UI_STATE_FILE
-    server_log_path = run_dir / _HOLD_UI_SERVER_LOG
     url = f"http://localhost:{port}"
 
-    proc: subprocess.Popen[str] | None = None
-    log_handle: Any = None
+    # The play session identity: play_container hashes it into every
+    # container/network name, so teardown needs nothing but this string.
+    play_name = f"hold:{container_name}"
+    started = False
     ui_healthy = False
     boot_detail = "not_attempted"
 
-    # A stale listener here is the audit's leaked-gate-server class; the gates
-    # themselves SIGKILL it on every boot (harness.ts freePort). Mirrored.
-    for pid in _hold_ui_port_listeners(port):
-        try:
-            os.kill(pid, signal.SIGKILL)
-            progress(
-                f"PROGRESS run_label={run_label} step=hold-ui killed_stale_listener pid={pid}"
-            )
-        except OSError as exc:
-            progress(
-                f"PROGRESS run_label={run_label} step=hold-ui kill_stale_listener_failed pid={pid} detail={exc}"
-            )
-
     try:
-        entrypoint = _resolve_hold_ui_entrypoint(worktree)
+        # EXISTENCE GATE, not the spawn. Docker-free on purpose: an empty or
+        # entrypoint-less worktree reports entrypoint_unresolved without needing
+        # docker or the grader image. play_start re-resolves authoritatively
+        # (keeping start-command flags), so this Path is deliberately unused.
+        _resolve_hold_ui_entrypoint(worktree)
     except RuntimeError as exc:
         boot_detail = f"entrypoint_unresolved detail={exc}"
         progress(f"PROGRESS run_label={run_label} step=hold-ui boot=fail {boot_detail}")
     else:
         try:
-            log_handle = server_log_path.open("w", encoding="utf-8")
-            proc = subprocess.Popen(
-                ["node", str(entrypoint)],
-                cwd=str(worktree),
-                env={**os.environ, "DEBUG_API": "1", "PORT": str(port)},
-                stdout=log_handle,
-                stderr=subprocess.STDOUT,
-                text=True,
-                start_new_session=True,
+            result = play_start(
+                name=play_name,
+                worktree=str(worktree),
+                owner="hold",
+                cell=container_name,
+                debug_api=True,
+                host_port=port,
             )
-        except OSError as exc:
-            boot_detail = f"spawn_failed detail={exc}"
+        except PlayError as exc:
+            boot_detail = f"container_start_failed code={exc.code} detail={exc.reason}"
             progress(
                 f"PROGRESS run_label={run_label} step=hold-ui boot=fail {boot_detail}"
             )
-            proc = None
         else:
+            started = True
             deadline = time.monotonic() + _HOLD_UI_HEALTH_TIMEOUT_S
             while time.monotonic() < deadline:
-                if proc.poll() is not None:
-                    break
                 if _hold_ui_healthy(port):
                     ui_healthy = True
                     break
                 time.sleep(0.25)
             if ui_healthy:
-                boot_detail = f"healthy pid={proc.pid} entrypoint={entrypoint}"
-            elif proc.poll() is not None:
-                boot_detail = (
-                    f"server_exited exit={proc.returncode} log={server_log_path}"
-                )
+                boot_detail = f"healthy container={result['candidate']}"
             else:
-                boot_detail = f"health_timeout log={server_log_path}"
+                boot_detail = f"health_timeout container={result['candidate']}"
             progress(
                 f"PROGRESS run_label={run_label} step=hold-ui "
                 f"boot={'ok' if ui_healthy else 'fail'} {boot_detail}"
@@ -419,12 +427,14 @@ def _hold_for_operator(
         "url": url,
         "ui_healthy": ui_healthy,
         "boot_detail": boot_detail,
-        "ui_pid": proc.pid if (proc is not None and proc.poll() is None) else None,
+        "ui_pid": result["candidate"] if (started and ui_healthy) else None,
         "container_name": container_name,
         "worktree": str(worktree),
         "live_view_url": live_view_url,
         "release_cmd": f"touch {release_path}",
-        "server_log": str(server_log_path),
+        # The candidate's output lives in its container, not in a host file.
+        "server_log": None,
+        "logs_cmd": f"docker logs {result['candidate']}" if started else None,
         "started_at": _dt.datetime.now(tz=_dt.timezone.utc).isoformat(),
         # ── CONSUMABLE RELEASE CONTRACT (for the dashboard/control plane) ────
         # Deliberately NOT wired into the dashboard here — a separate agent owns
@@ -511,8 +521,8 @@ def _hold_for_operator(
             f"  game is finished, but the UI did NOT boot: {boot_detail}\n"
             f"{'=' * 72}\n"
             f"  No URL is offered because nothing is listening on {url}.\n"
-            f"  Server log: {server_log_path}\n"
-            f"  The container and worktree are still up for inspection.\n\n"
+            f"  Candidate output is in `docker logs` on its play container.\n"
+            f"  The worktree is still on disk for inspection.\n\n"
             f"  Release the hold with:\n"
             f"      touch {release_path}\n"
             f"{'=' * 72}\n"
@@ -527,7 +537,7 @@ def _hold_for_operator(
             now = time.monotonic()
             if now - last_heartbeat >= _HOLD_UI_HEARTBEAT_S:
                 last_heartbeat = now
-                server_alive = proc is not None and proc.poll() is None
+                server_alive = started
                 progress(
                     f"PROGRESS run_label={run_label} step=hold-ui heartbeat "
                     f"held_s={now - held_at:.0f} url={url} healthy={_hold_ui_healthy(port)} "
@@ -537,27 +547,25 @@ def _hold_for_operator(
         # Released: read any operator note BEFORE the finally unlinks the file.
         note = _read_operator_note(release_path, progress)
     finally:
-        if proc is not None and proc.poll() is None:
+        # Teardown is the recipe's: remove the candidate, the forwarder and the
+        # network, and stop publishing the host port. Idempotent, and it must
+        # never fail a finished cell.
+        if started:
             try:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=1.5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                    proc.wait(timeout=1.5)
-            except OSError:
-                pass
-        if log_handle is not None:
-            try:
-                log_handle.close()
-            except OSError:
-                pass
+                play_stop(play_name)
+            except Exception as exc:  # noqa: BLE001 - teardown must not raise
+                code = getattr(exc, "code", "stop_failed")
+                reason = getattr(exc, "reason", str(exc))
+                progress(
+                    f"PROGRESS run_label={run_label} step=hold-ui "
+                    f"container_stop_failed code={code} detail={reason}"
+                )
         remaining = _hold_ui_port_listeners(port)
         if remaining:
             progress(
                 f"PROGRESS run_label={run_label} step=hold-ui "
                 f"port_still_occupied port={port} pids={remaining} "
-                "detail=not-our-server; left running"
+                "detail=survived_play_stop"
             )
         try:
             release_path.unlink(missing_ok=True)

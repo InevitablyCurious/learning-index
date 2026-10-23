@@ -114,7 +114,6 @@ _REASONING_EFFORT_ENV = "BENCH_REASONING_EFFORT"
 _HOLD_UI_PORT = 0  # auto-allocate a free per-cell port; no longer spec.app_port
 _HOLD_UI_RELEASE_FILE = "RELEASE_HOLD"
 _HOLD_UI_STATE_FILE = "hold-ui.json"
-_HOLD_UI_SERVER_LOG = "hold-ui-server.log"
 _HOLD_UI_HEALTH_TIMEOUT_S = 15.0
 _HOLD_UI_POLL_S = 2.0
 _HOLD_UI_HEARTBEAT_S = 30.0
