@@ -100,14 +100,16 @@ export function backendTestFiles() {
  *
  * ── WHY NOT ONE INVOCATION FOR THE WHOLE SUITE ──────────────────────────────
  *
- * `vitest.config.ts` pins `fileParallelism:false` + `singleFork:true` because
+ * `vitest.config.ts` pins `fileParallelism:false` + one fork (`maxWorkers:1`) because
  * every backend file binds the fixed port 8002 and they must not overlap. That
  * is correct and is preserved here: the loop `await`s each runner before
  * starting the next, so these run strictly one at a time, exactly as before.
  *
  * What is NOT preserved is the blast radius. In a single invocation all seven
  * files share one worker fork, and that fork's RPC to the vitest main process
- * has a fixed timeout which is NOT configurable in vitest 2.1.9. A test that
+ * has a fixed timeout, which was NOT configurable in vitest 2.1.9 (measured
+ * below). The grader is on vitest 4 since 2026-10-23 and keeps the per-file
+ * loop, so the same stall still costs only its own file. A test that
  * blocks the worker's event loop long enough kills the RPC —
  *
  *   Error: [vitest-worker]: Timeout calling "onTaskUpdate"

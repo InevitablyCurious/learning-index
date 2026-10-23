@@ -15,6 +15,9 @@ export default defineConfig({
     // strictly serially so they never contend for the port.
     fileParallelism: false,
     pool: "forks",
-    poolOptions: { forks: { singleFork: true } },
+    // vitest 4 spelling of v2's `poolOptions.forks.singleFork`: one fork, and the
+    // module isolation singleFork already turned off (vitest 4 migration guide).
+    maxWorkers: 1,
+    isolate: false,
   },
 });
