@@ -107,3 +107,10 @@ auto-play is used again; not a drop-in, so it is a separate change.
 `node --test` 414/414; control `node --test` 528/528 (three stale pins fixed:
 the golden hash, the wall row's keys, a hard-coded checkout path); grader
 `test:meta` 84/84; backend vs golden 50/50.
+
+On the rebuilt images: the worker runs Node v22.23.4 and Playwright 1.64.1,
+and its Chromium (156) launches; the grader runs Node v22.23.4 and vitest
+4.1.12, and its build-time proof passes the reference on every check
+(frontend 87/87); `tests/test_docker_isolation.py` 19/19 against the new
+worker; board preflight passes both images. CI is green on the new install
+path.
