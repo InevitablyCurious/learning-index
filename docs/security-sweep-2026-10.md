@@ -1,96 +1,109 @@
 # Security sweep, October 2026
 
 A sweep against the week of 2026-10-19's advisories and supply-chain
-incidents. The fixes in the first table are merged on this branch. The
-second table lists changes that alter what the benchmark measures, held for
-an impact assessment (opencode on DeepSeek) before they land.
+incidents. The first pass (2026-10-22) fixed what does not touch the
+measurement and held six changes that do. An impact assessment (opencode on
+DeepSeek, 2026-10-22) judged the six; the ones it cleared landed on
+2026-10-23, adjusted where the assessment or a measurement said so. One is
+still held.
 
-## Fixed
+## Fixed, 2026-10-22
 
 | What | Why |
 |---|---|
-| `litellm!=1.107.0` in `requirements.txt` | Backdoored on PyPI 2026-10-21 (credential stealer + hourly loader). Reaches us via `mini-swe-agent`. CI did not run in the exposure window. |
-| certifi 2026.10.19, cryptography 50, urllib3 2.8.0, aiohttp 3.14.5, multidict 6.9.1 | GHSA-6q48-6c7w-9gw2 (emSign roots with compromised intermediates), CVE-2026-69247, CVE-2026-97687/97689, aiohttp and multidict advisories. Floors in `requirements.txt`, upgrades in `uv.lock`. |
-| grader `source-map-js` 1.2.2 | CVE-2026-93749, inside the existing range. |
 | Control plane refuses writes carrying an `Origin`, and non-loopback `Host` names | Any web page on the operator's machine could POST to 127.0.0.1:8718 (no preflight for text/plain; routes parse any body as JSON): start runs, delete history, reset the tree, replace the router key. |
 | Dashboard refuses `Host` names that are not an IP or localhost (`OKP_DASH_ALLOWED_HOSTS` to add one) | DNS rebinding: a page whose domain re-resolves to 127.0.0.1 passed both the peer and the same-origin check. |
 | CI: `permissions: contents: read`, `persist-credentials: false` | A compromised dependency installed by CI finds no token that can push. |
+| grader `source-map-js` 1.2.2 | CVE-2026-93749, inside the existing range. |
 
 Checked and clean: no planted workflows, `.claude/settings.json` or
 `.vscode/tasks.json` (GhostAction, Shai-Hulud/tensorlake), no MALFEX or
 SAP-worm packages, no secrets in history, no `curl | sh`, vendored xterm.js
 6.0.0 and diff2html have no advisories.
 
-## Held for assessment
+The same day's `litellm!=1.107.0` guard and transitive floors (certifi,
+cryptography, urllib3, aiohttp, multidict) lived in `requirements.txt`, which
+is now gone; see change 4.
 
-Each changes the runtime or the instrument a benchmark run is measured with,
-so runs before and after are not directly comparable.
+## Landed, 2026-10-23
 
-### 1. Worker and grader Node: 22.12.0 → 22.23.4
+Changes 1–3 each move the fingerprint (`worker_image` for 1 and 3,
+`grader_hash` for 2), so they landed together: one supersession, one fresh
+baseline. 4 and 6 do not touch the measurement.
 
-- Why: the 2026-10-21 Node release (CVE-2026-111497 Brotli decoder, possible
-  RCE; TLS hostname bypasses CVE-2026-105483/106069; DNS truncation
-  CVE-2026-105482; permission-model bypass in `fs.realpathSync`), plus every
-  22.x fix since 22.12.0.
-- Image: `node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d`
-  in both `images/worker/Dockerfile` and `images/grader/Dockerfile` (a meta
-  test requires the two to match).
-- Measured on 22.23.4: grader meta 83/83, backend gates vs golden 50/50,
-  dashboard 414/414, control plane same as on 22.22.0, Python 4834 passed.
-- Behaviour change: 22.18+ strips TypeScript without a flag, so a candidate
-  that forgets `--experimental-strip-types` boots in the worker where it
-  used to fail. `grader/lib/entrypoint.mjs`, `grader/meta/runtime-contract.test.ts`,
-  `harness/grader_image.py` and `docs/system-map.md` name 22.12.0 and reason
-  about the flag; they need the same update.
-- Residual risk if held: low in practice. Candidate code is untrusted and
-  already sandboxed; nothing feeds it outside Brotli input.
+### 1. Worker and grader Node 22.12.0 → 22.23.4
 
-### 2. Grader vitest: 2.1.9 → 4.1.12
+- `node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d`
+  in `images/worker/Dockerfile` and `images/grader/Dockerfile` (digest checked
+  against Docker Hub). Fixes the 2026-10-21 Node release (CVE-2026-111497
+  Brotli decoder RCE, CVE-2026-105483/106069 TLS hostname bypasses,
+  CVE-2026-105482 DNS truncation, and every 22.x fix since 22.12.0).
+- `HOST_NODE_FLOOR` is 22.23.4. `--experimental-strip-types` stays in the
+  start command: it is the published contract and is accepted (redundant) on
+  22.18+.
+- Effect on what is measured: one-directional. A candidate that forgets the
+  flag now boots where it used to fail; no gate, told line or prompt depends on
+  that failure.
+- The first pass said a meta test kept the two Dockerfiles equal. None did;
+  `grader/meta/runtime-contract.test.ts` now does ("the grader image runs the
+  same Node as the worker, digest and all").
 
-- Why: GHSA-5xrq-8626-4rwp (critical, UI server), GHSA-5gmw-xhrv-c9v3 and
-  GHSA-85c8-ppgw-ccpr (critical, tinypool), GHSA-82fw-gwwq-j7x9,
-  GHSA-qxg6-89mg-rqv8, eight vite advisories, esbuild GHSA-67mh-4wv8-2f99.
-  None is reachable by `vitest run` in the sealed grader container.
-- Measured with 4.1.12 (lock resolved with npm 11; npm 10.9 crashes in
-  arborist's peer-set loading): 0 advisories across 73 packages; meta 83/83;
-  backend vs golden 50/50; backend vs scaffold 1 pass / 49 fail under both
-  versions with **zero per-gate differences** and the same JSON report shape.
-- Required with it: vitest 4 removed `poolOptions`, so
-  `vitest.config.ts`'s `poolOptions.forks.singleFork` would be silently
-  ignored. Migrate to the v4 top-level equivalent (`maxWorkers: 1`,
-  `isolate: false`) and update the RPC-timeout note in `grader/lib/backend.mjs`.
+### 2. Grader vitest 2.1.9 → 4.1.12
 
-### 3. Worker Playwright: 1.48.0 → current
+- Clears GHSA-5xrq-8626-4rwp, GHSA-5gmw-xhrv-c9v3, GHSA-85c8-ppgw-ccpr,
+  GHSA-82fw-gwwq-j7x9, GHSA-qxg6-89mg-rqv8, the vite and esbuild advisories:
+  `npm audit` reports 0. Lock resolved with npm 11.21.1 (npm 10.9 crashes in
+  arborist) and `--before=2026-10-21`.
+- vitest 4 removed `poolOptions`. Both `vitest.config.ts` and
+  `vitest.quarantine.config.ts` (the first pass missed the second) now say
+  `maxWorkers: 1, isolate: false`, the migration guide's equivalent of v2's
+  `singleFork`, which per the v2 docs already disabled module isolation.
+- Measured, gate for gate (title, status, first line of the failure):
+  golden 50/50 and scaffold 1 pass / 49 fail under 2.1.9 and 4.1.12, zero
+  differences; the same with `isolate` on. Meta 84/84. The grader still runs
+  each backend file as its own vitest process (`grader/lib/backend.mjs`).
+- Stayed on 4.x: 4.1.12 clears every advisory; 5.x is a further major (its
+  json reporter changes defaults) with nothing more to fix.
 
-- GHSA-7mvr-c777-76hp affects only the macOS `*_mac.sh` reinstall scripts;
-  the worker is Linux and installs Chromium only, so it is not exploitable
-  there. Bumping changes the browser the model verifies with.
+### 3. Worker Playwright 1.48.0 → 1.64.1
 
-### 4. CI installs from a hash-locked set
+- GHSA-7mvr-c777-76hp affects only macOS; the worker is Linux, so this is
+  currency, not a fix. It changes the browser the model checks its own work
+  with, which is why it rode the same supersession.
 
-- CI runs `pip install -r requirements.txt` unpinned, so any future
-  backdoored release lands in CI the moment it is published. `uv.lock`
-  still locks the pre-rename "bench" definition while `pyproject.toml`
-  declares only psycopg; reconcile the two, then install with
-  `uv sync --locked` (or hashed requirements).
+### 4. Python: one dependency truth, CI installs from the lock
+
+- `pyproject.toml` is the truth (`harness`: psycopg, plus the `test` extra).
+  `uv.lock` described the pre-rename `bench` project and `requirements.txt`
+  listed eight packages nothing imports (mini-swe-agent, and through it
+  litellm). The lock was regenerated for `harness` (19 packages, hash-pinned,
+  newest upload 2026-08-27) and `requirements.txt` was deleted, so litellm is
+  no longer installed by this repo at all.
+- CI: `uv sync --locked --extra test` (uv 0.10.12 via `astral-sh/setup-uv`
+  v10.3.0 by SHA), then `.venv/bin/ruff` and `.venv/bin/python -m pytest`. A
+  newly published release cannot reach CI until the lock moves.
+
+### 6. GitHub Actions to current majors, by SHA
+
+- checkout v7.0.1 (`3d3c42e5…`), setup-python v7.0.0 (`5fda3b95…`; v7.1.0 was
+  under a day old), setup-node v7.1.0 (`949feb24…`). All three still declare
+  the inputs the workflow passes (`persist-credentials`, `python-version`,
+  `node-version`).
+
+## Still held
 
 ### 5. Play runs candidate code on the host
 
-- `/api/play/start` spawns the candidate's server with the operator's
-  permissions; the loopback shim limits only network exposure. Running it
-  inside the grader image would contain it.
+`/api/play/start` (`control/play.mjs`) spawns the candidate's server as the
+operator, with the control plane's full environment and no container; the
+loopback shim limits only network exposure. The candidate's code can read
+whatever the operator can. The assessment's verdict: contain it inside the
+sealed grader image (`--network none`) before Play or the live build's
+auto-play is used again; not a drop-in, so it is a separate change.
 
-### 6. GitHub Actions on Node 20
+## Verified on 2026-10-23
 
-- `actions/checkout`, `setup-python` and `setup-node` are pinned to
-  Node-20 releases that the runner now forces onto Node 24. Not a
-  vulnerability; move to current majors by SHA.
-
-## Running the assessment
-
-```sh
-npm i -g opencode-ai@1.18.20
-# DEEPSEEK_API_KEY set as an environment secret, never on the command line
-opencode run -m deepseek/deepseek-v4-pro \
-  "Read docs/security-sweep-2026-10.md and the files it names. For each held change, assess what could break in the benchmark and in comparability with past runs, and recommend land / land with changes / hold."
-```
+`ruff format --check .` clean; `pytest -m "not slow"` 4840 passed; dashboard
+`node --test` 414/414; control `node --test` 528/528 (three stale pins fixed:
+the golden hash, the wall row's keys, a hard-coded checkout path); grader
+`test:meta` 84/84; backend vs golden 50/50.
