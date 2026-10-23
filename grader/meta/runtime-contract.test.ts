@@ -10,7 +10,7 @@
 //
 //   The start script's flags were dropped from every spawn, so grading ran
 //   `node <entrypoint>` flagless and worked only because the operator's host
-//   Node (22.23.2) strips types natively. The worker image is node:22.12.0,
+//   Node (22.23.2) strips types natively. The worker image was node:22.12.0,
 //   which does not — so on any host below 22.18 every candidate's server fails
 //   to boot, `REQ-BIND/boot` is recorded as the CANDIDATE's failure, and 118
 //   false capability deficits are certified in the tester's voice.
@@ -48,7 +48,7 @@ describe("the start command travels with its runtime flags", () => {
     // It did not, and nothing caught it. CONTRACT.md and chunk-01 both publish
     // `node --experimental-strip-types src/server.ts`; the scaffold shipped
     // exactly that; the golden shipped `node src/server.ts`. The worker image
-    // (node:22.12.0) cannot run a .ts entrypoint without the flag, so the
+    // (then node:22.12.0) could not run a .ts entrypoint without the flag, so the
     // MEASUREMENT STANDARD could not run in the runtime candidates are built in.
     // It worked only because grading happened on a newer host Node — the exact
     // blind spot `01` warns about: what the golden satisfies incidentally.
@@ -131,6 +131,16 @@ describe("the host must be able to run what the container built", () => {
     const m = /FROM node:(\d+)\.(\d+)\.(\d+)/.exec(dockerfile);
     expect(m, "worker Dockerfile no longer pins a node:X.Y.Z base").toBeTruthy();
     expect([Number(m![1]), Number(m![2]), Number(m![3])]).toEqual(HOST_NODE_FLOOR);
+  });
+
+  it("the grader image runs the same Node as the worker, digest and all", () => {
+    const base = (image: string) => {
+      const dockerfile = fs.readFileSync(path.join(BENCH, "images", image, "Dockerfile"), "utf-8");
+      return /^FROM (node:\S+)/m.exec(dockerfile)?.[1];
+    };
+    expect(base("worker"), "worker Dockerfile no longer pins a node base").toBeTruthy();
+    expect(base("grader"), "the grader would run the candidate on a different Node than it was built on")
+      .toBe(base("worker"));
   });
 
   it("refuses a host below the floor, and says what it would otherwise do", () => {

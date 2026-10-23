@@ -99,8 +99,8 @@ benchmark names no backend and is agnostic to which plugin is plugged in.
 2. **No internet.** `harness/egress.py` declares `bench-internal`; the worker
    cell runs `--internal` with a fixed sidecar allowlist (4545/8443/4550/4440);
    the grader runs `--network none`.
-3. **Full tooling.** `images/worker/Dockerfile`: Node 22.12.0, opencode + SDK,
-   Playwright 1.48.0 + Chromium, git / ca-certificates / procps / curl. Only the
+3. **Full tooling.** `images/worker/Dockerfile`: Node 22.23.4, opencode + SDK,
+   Playwright 1.64.1 + Chromium, git / ca-certificates / procps / curl. Only the
    answer is withheld.
 4. **One-way observability.** Host→cell SSE + sidecar ingress; the cell cannot
    reach out (permission denies, no outbound route).

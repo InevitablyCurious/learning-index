@@ -19,9 +19,10 @@ import path from "node:path";
 // ── THE RUNTIME FLAGS TRAVEL WITH THE FILE ──────────────────────────────────
 //
 // The scaffold's start command is `node --experimental-strip-types src/server.ts`,
-// and the flag is not decoration: the worker image is node:22.12.0, and flagless
-// TypeScript stripping needs >= 22.18. The model builds and self-verifies inside
-// that container, so without the flag its own server does not start.
+// and the flag is part of the published contract (chunk-01). Flagless TypeScript
+// stripping needs >= 22.18; the worker image was node:22.12.0 until 2026-10-23,
+// where a candidate's own server did not start without the flag. On today's
+// node:22.23.4 the flag is accepted and redundant, so the contract still holds.
 //
 // Grading then ran `node <entrypoint>` with the flags DISCARDED, and worked only
 // because the operator's host Node (22.23.2) is past the threshold and strips
@@ -35,8 +36,9 @@ import path from "node:path";
 // then starts the artifact the way the ARTIFACT says to start itself — the
 // producer-states principle — and one command works on 22.12 and 22.23 alike.
 //
-// This does NOT close the deeper gap: the model still verifies on 22.12 and is
-// graded on 22.23. Only grading inside the same image closes that.
+// The worker and grader images pin the same node:22.23.4 digest, so a candidate
+// is verified and graded on one runtime; a host-side grade still has to clear
+// the floor below.
 
 /** The start command an artifact declares: `{ entrypoint, flags }`.
  *
@@ -80,7 +82,7 @@ const RUNTIMES = new Set(["node", "tsx", "deno", "bun", "next", "ts-node", "esru
 //
 // The floor is the worker image's own version (images/worker/Dockerfile), since
 // the host has to be at least as capable as the runtime the model built in.
-export const HOST_NODE_FLOOR = [22, 12, 0];
+export const HOST_NODE_FLOOR = [22, 23, 4];
 
 export function assertHostNodeFloor(version = process.version) {
   const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(String(version));
@@ -93,7 +95,7 @@ export function assertHostNodeFloor(version = process.version) {
     if (got[i] < HOST_NODE_FLOOR[i]) {
       throw new Error(
         `oracle: host Node ${version} is below the floor v${HOST_NODE_FLOOR.join(".")} — `
-          + "the candidate is built inside node:22.12.0 and graded here, so this host must be "
+          + "the candidate is built inside node:22.23.4 and graded here, so this host must be "
           + "at least as capable. Grading now would fail every candidate's server to boot and "
           + "record it as the candidate's failure. Upgrade Node and re-run.",
       );

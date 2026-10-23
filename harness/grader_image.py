@@ -2,7 +2,7 @@
 
 WHY THIS MODULE EXISTS
 ----------------------
-The candidate is BUILT inside the worker image (node:22.12.0, digest-pinned)
+The candidate is BUILT inside the worker image (node:22.23.4, digest-pinned)
 and used to be GRADED on whatever the operator had installed. Four things
 differed — Node, Playwright, Chromium, and vitest, the last of which was
 declared as a RANGE (``^2.1.0``) and so could change itself on a reinstall.

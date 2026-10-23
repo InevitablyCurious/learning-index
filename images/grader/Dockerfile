@@ -4,7 +4,7 @@
 #
 # ── WHY THIS EXISTS ─────────────────────────────────────────────────────────
 #
-# The candidate is BUILT inside bench-worker (node:22.12.0, digest-pinned)
+# The candidate is BUILT inside bench-worker (node:22.23.4, digest-pinned)
 # and used to be GRADED on whatever the operator had installed. Four things
 # differed: Node, Playwright, Chromium, and vitest — the last declared as
 # `^2.1.0`, a RANGE, so a reinstall could silently swap the test runner. And
@@ -23,7 +23,7 @@
 # FIXED, but free to differ from the worker: Playwright, Chromium, vitest.
 # These are measuring tools, not the game's runtime. They only have to be
 # identical across runs — the artifact never calls them.
-FROM node:22.12.0-bookworm-slim@sha256:35531c52ce27b6575d69755c73e65d4468dba93a25644eed56dc12879cae9213
+FROM node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
 
 # Content-addressed identity, baked at build time by scripts/rebuild_grader_image.py.
 # Freshness is asked the way docker answers it — same bytes in the image as on
