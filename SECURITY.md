@@ -54,7 +54,8 @@ Out of scope:
 - Findings that depend on the documented development defaults (the local
   `docker compose` stack ships deliberately weak credentials and is bound to
   loopback by default; LAN exposure is opt-in, per the dashboard README's
-  "Remote viewing" section). The dashboard's play preview — which boots an
-  untrusted model build — is likewise loopback-bound by default since 2026-10-02
-  (`control/lib/loopback-shim.mjs` patches the app's host-less `listen` to
-  `127.0.0.1`).
+  "Remote viewing" section). The dashboard's play preview and the hold-review
+  OPEN — which boot an untrusted model build — run it inside the grader image
+  since 2026-10-23 (`harness/play_container.py`): an `--internal` network (no
+  internet, no host), no host environment, files or Docker socket, a read-only
+  worktree, and only a `127.0.0.1` port published by a forwarder.

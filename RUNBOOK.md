@@ -190,8 +190,9 @@ V3); the local `--model <bench-alias>` shape above does NOT apply to cloud.
 run (the control plane only allows it when DEV MODE is on). The cell is then held after EVERY
 graded pass — before the model is told anything — and once more at the end, so you can play the
 app as it stands and read the exact lines the model is about to be told. During each pause the
-artifact's server boots host-side from the bind-mounted worktree on a per-cell free port — the
-exact code the model wrote, via the same boot the gates perform — and the run waits. The log
+artifact's server boots inside the grader image (no host, no internet; `harness/play_container.py`)
+from a read-only copy of the worktree on a per-cell free `127.0.0.1` port — the exact code the
+model wrote, via the same boot the gates perform — and the run waits. The log
 carries a loud `HOLD-UI ACTIVE` line with the URL, the held container name, and the release
 command; machine-readable state is `<run_dir>/hold-ui.json` (schema_version 2, with `kind`,
 `attempt`, `told_text` and `grade`). Browse the UI (the live view also stays up), then release:

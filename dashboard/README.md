@@ -276,11 +276,11 @@ but anyone who can reach that address is trusted, and in a container the
 source the board sees is Docker's own gateway, so the publish address is the
 real boundary. Writes must also be same-origin (no cross-site posts).
 
-A **play preview** runs the built game on a separate port; since 2026-10-02
-(`91ceeb1`) the play server is forced to bind loopback via
-`control/lib/loopback-shim.mjs` (it previously bound every interface). It runs
-for as long as it is left running — there is no reaper — so the LIVE BUILD panel
-stops it (`POST /api/play/stop`) on teardown.
+A **play preview** runs the built game on a separate port. Since 2026-10-23 it
+runs inside the grader image (`harness/play_container.py`) with no route to the
+host or the internet, published on `127.0.0.1` only. It lives until stopped or
+for 6 h at most; the LIVE BUILD panel stops it (`POST /api/play/stop`) on
+teardown, and the control plane reaps leftovers when it starts.
 
 ---
 

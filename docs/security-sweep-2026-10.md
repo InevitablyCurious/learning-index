@@ -4,8 +4,8 @@ A sweep against the week of 2026-10-19's advisories and supply-chain
 incidents. The first pass (2026-10-22) fixed what does not touch the
 measurement and held six changes that do. An impact assessment (opencode on
 DeepSeek, 2026-10-22) judged the six; the ones it cleared landed on
-2026-10-23, adjusted where the assessment or a measurement said so. One is
-still held.
+2026-10-23, adjusted where the assessment or a measurement said so; the one
+it held (Play on the host) landed the same day, contained in the grader image.
 
 ## Fixed, 2026-10-22
 
@@ -90,16 +90,21 @@ baseline. 4 and 6 do not touch the measurement.
   the inputs the workflow passes (`persist-credentials`, `python-version`,
   `node-version`).
 
-## Still held
+### 5. Play runs inside the grader image (landed 2026-10-23)
 
-### 5. Play runs candidate code on the host
-
-`/api/play/start` (`control/play.mjs`) spawns the candidate's server as the
-operator, with the control plane's full environment and no container; the
-loopback shim limits only network exposure. The candidate's code can read
-whatever the operator can. The assessment's verdict: contain it inside the
-sealed grader image (`--network none`) before Play or the live build's
-auto-play is used again; not a drop-in, so it is a separate change.
+`/api/play/start`, the live build's auto-play and the hold-review OPEN used to
+start the candidate's server on the host, as the operator, with the control
+plane's full environment: it could read `~/.ssh`, the model keys and the Docker
+socket. All three now go through `harness/play_container.py`: the candidate runs
+in the grader image as uid 1000 on a per-session `--internal` network (no
+internet, no host gateway), from a read-only worktree copied into tmpfs, with no
+host environment, caps dropped, PID/memory/CPU limits and a 6 h lifetime; a
+forwarder container publishes `127.0.0.1:<port>` and nothing else. The board
+reaps only its own sessions, so its Stop never ends a hold review a run still
+serves. `control/lib/loopback-shim.mjs` is gone. Proven: an integration test
+boots the golden and shows the control plane, the LLM proxy and the internet
+unreachable from inside, the worktree read-only and nothing left after stop;
+a past cell played from the board's route renders and responds to Roll Dice.
 
 ## Verified on 2026-10-23
 

@@ -345,12 +345,13 @@ feedback (`GET /api/feedback?run_dir=<arm-level>`), with attempt-snapshot tabs
 dashboard can `POST /api/play/start {run, cell}` straight from a card. Archived
 rows carry `benchmark_id:"backups"` (a literal — never the inner `tree_id`).
 
-**Play-server hardening.** The untrusted app hardcodes `server.listen(PORT)` (no
-host, reads only `PORT`), so there is no env/arg lever; the control plane
-preloads `control/lib/loopback-shim.mjs` via `node --import`, which patches
-`net.Server.prototype.listen` to splice `"127.0.0.1"` into host-less
-`listen(port[, cb])` calls. The play server is now loopback-bound — supersedes
-the prior "binds all interfaces" posture (see SECURITY.md).
+**Play containment.** The untrusted app never runs on the host. Play, the live
+build's auto-play and the hold-review OPEN all go through `harness/play_container.py`
+(the control plane calls its CLI): the candidate runs in the grader image as uid
+1000 on a per-session `--internal` network (no internet, no host gateway), with a
+read-only worktree copied into tmpfs, no host env, files or Docker socket, caps
+dropped and a 6 h lifetime; a forwarder container publishes `127.0.0.1:<port>`
+only. Supersedes the host spawn with `loopback-shim.mjs` (removed 2026-10-23).
 
 **Per-attempt screenshots.** The grader captures a non-gating viewport PNG once
 per graded attempt (`attempt-<N>-board.png`, 1280×800, best-effort — absent is
