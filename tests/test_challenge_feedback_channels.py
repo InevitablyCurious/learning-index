@@ -753,3 +753,20 @@ def test_a_press_of_roll_that_rolled_nothing_is_told_as_that_in_any_gate() -> No
         assert first == "I pressed Roll and nothing happened." and voice == "tester"
         repeat, _ = R._told_label(record, pass_kind="repeat")
         assert repeat == "I pressed Roll again and still nothing happened."
+
+
+def test_a_board_that_never_settles_is_told_as_that_once_whatever_gates_met_it() -> (
+    None
+):
+    # WO-LI-HIDDEN-FREEZE-SWEEP: a settle timeout used to be told as the gate's
+    # own drawing complaint; now it is what the player sees, once.
+    from harness.adapters.challenge import ChallengeRunner as R
+
+    observed = "Error: [needs: REQ-RENDER/point] BOARD RESTLESS: board never settled: the pieces and points kept moving"
+    problems = [
+        {"check": "[F28] REQ-GEOMETRY — points in board order", "observed": observed},
+        {"check": "[F30] REQ-GEOMETRY — triangles point inward", "observed": observed},
+    ]
+    msg = R._build_feedback_prompt(problems=problems)
+    assert msg.count("The board never stops moving") == 1
+    assert "right order" not in msg

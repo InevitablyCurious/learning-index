@@ -417,6 +417,18 @@ _ROLL_DEAD_FIRST = "I pressed Roll and nothing happened."
 _ROLL_DEAD_REPEAT = "I pressed Roll again and still nothing happened."
 
 
+BOARD_RESTLESS = "BOARD RESTLESS"
+_RESTLESS_FIRST = "The board never stops moving — the pieces keep shifting on their own, even when I'm not doing anything."
+_RESTLESS_REPEAT = "The board still keeps shifting on its own; the pieces never settle."
+
+
+def restless_line(observed: str, *, pass_kind: str) -> str | None:
+    """The true line for a board whose pieces never hold still, or None."""
+    if BOARD_RESTLESS not in str(observed or ""):
+        return None
+    return _RESTLESS_REPEAT if pass_kind == "repeat" else _RESTLESS_FIRST
+
+
 def roll_dead_line(observed: str, *, pass_kind: str) -> str | None:
     """The true line for a press of Roll that rolled nothing, or None."""
     if ROLL_DEAD not in str(observed or ""):
@@ -635,7 +647,9 @@ class FeedbackMixin:
         """
         raw_check = str(record.get("check", "")).strip()
         observed = str(record.get("observed", "") or "")
-        roll_line = roll_dead_line(observed, pass_kind=pass_kind)
+        roll_line = roll_dead_line(observed, pass_kind=pass_kind) or restless_line(
+            observed, pass_kind=pass_kind
+        )
         if roll_line:
             return roll_line, "tester"
         setup_line = setup_refusal_line(

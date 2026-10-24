@@ -1972,13 +1972,25 @@ test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", a
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await page.getByTestId("doubleBtn").click();
-  await expect
-    .poll(async () => TAKE.test(await shownDoubleText(page)), {
-      message: "[aspect: shown] [needs: F01] [needs: F07] nothing on screen said the computer took the double",
-      timeout: 10_000,
-    })
-    .toBe(true);
+  // Read what the page said first, then ask whether the game carries on, then
+  // judge the words: a frozen page used to be told as wording, or not at all
+  // (WO-LI-HIDDEN-FREEZE-SWEEP).
+  const sawTake = await expect
+    .poll(async () => TAKE.test(await shownDoubleText(page)), { timeout: 10_000 })
+    .toBe(true)
+    .then(() => true, () => false);
   const accepted = await shownDoubleText(page);
+  // The game carries on after the computer takes: dismiss whatever the page put
+  // up, as a player does, and press Roll. Only once the take has happened (the
+  // cube moved to 2): no take is the cube's own finding.
+  const took = (await readState(page)).cube.value === 2;
+  if (took) {
+    const answer = page.locator('[data-testid="modalBtns"] button:visible');
+    if ((await answer.count()) > 0) await playerClick(answer.first());
+    await postJson<ApiState>(page, "/api/debug/roll", { dice: [3, 1] });
+    await rollAndCheck(page, [3, 1], () => page.getByTestId("rollBtn").click());
+  }
+  expect(sawTake, "[aspect: shown] [needs: F01] [needs: F07] nothing on screen said the computer took the double").toBe(true);
   expect(
     accepted,
     `[needs: F01] [needs: F07] the accept showed internal math: "${accepted}"`,
@@ -2336,6 +2348,11 @@ test("[F16] REQ-RELOAD — whose turn survives a reload", async ({ page }) => {
   await expect(page.getByTestId("checker")).toHaveCount(30);
   const state = await readState(page);
   expect(state.turn).toBe("white");
+  // And the turn can be played: a page redrawn after a reload but dead answered
+  // every state read above (WO-LI-HIDDEN-FREEZE-SWEEP). Pressing Roll must roll;
+  // when it does not, the ROLL DEAD marker tells it as what happened.
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
+  await rollAndCheck(page, [6, 5], () => page.getByTestId("rollBtn").click());
 });
 
 test("[F17] REQ-RELOAD — match score survives a reload", async ({ page }) => {

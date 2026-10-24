@@ -297,7 +297,7 @@
     "F16": {
       "name": "The player's turn survives a reload",
       "what": "Reloading during the player's turn leaves it the player's turn.",
-      "how": "Reloads a fresh game at the player's turn and requires the reported turn to still be the player's."
+      "how": "Reloads a fresh game at the player's turn and requires the reported turn to still be the player's. Then presses Roll: the turn must still be playable (a dead page is the ROLL DEAD line)."
     },
     "F17": {
       "name": "Match score survives a reload",
@@ -402,7 +402,7 @@
     "F39": {
       "name": "Two dice, two moves",
       "what": "After any roll exactly two dice are on screen, and two different numbers give exactly two moves (a double's four are F33).",
-      "how": "Fixes the roll to 6-5 — the player's die first, so the player wins the opening roll and plays both numbers (a forced 5-6 would hand the turn to the computer) — and clicks Roll: two dice on screen ([aspect: extra]), two moves playable by clicking, no third; then seeds a later turn in the move phase with a double already rolled, since an opening roll is one die per side and can no longer be a double (G31): still two dice on screen ([aspect: double])."
+      "how": "Fixes the roll to 6-5 — the player's die first, so the player wins the opening roll and plays both numbers (a forced 5-6 would hand the turn to the computer) — and clicks Roll: two dice on screen ([aspect: extra]), two moves playable by clicking, no third; then seeds a later turn in the move phase with a double already rolled, since an opening roll is one die per side and can no longer be a double (G31): still two dice on screen ([aspect: double]). A third click that never comes back within 25 s is a frozen game ([aspect: frozen]), not 'no third move'."
     },
     "F40": {
       "name": "Rows line up",
@@ -457,7 +457,7 @@
     "F50": {
       "name": "Plain double answer",
       "what": "When the computer answers the player's double it says accept or decline in plain words, not its win percentage or pip counts.",
-      "how": "The player doubles from an even position (the medium computer takes) and from a hopeless one (it passes): each time something on screen must say what it did ([aspect: shown]), without win chances, pip counts or reasoning."
+      "how": "The player doubles from an even position (the medium computer takes) and from a hopeless one (it passes): each time something on screen must say what it did ([aspect: shown]), without win chances, pip counts or reasoning. Once the computer has taken (the cube reads 2) it dismisses the page's pop-up and presses Roll: the game must carry on (a stuck game is the ROLL DEAD line)."
     },
     "F51": {
       "name": "End pop-up names the winner and points",

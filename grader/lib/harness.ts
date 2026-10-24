@@ -365,6 +365,13 @@ export const SETUP_REFUSED = "SETUP REFUSED";
 // own, so a Roll dead everywhere is told once.
 export const ROLL_DEAD = "ROLL DEAD";
 
+// A BOARD THAT NEVER HOLDS STILL (WO-LI-HIDDEN-FREEZE-SWEEP). Every check waits
+// for the pieces to stop moving before it measures; when they never do, the throw
+// used to be told as whatever the check measured next ("points aren't laid out in
+// the right order"). It is told as what the player sees, in any gate
+// (harness/adapters/challenge/feedback.py).
+export const BOARD_RESTLESS = "BOARD RESTLESS";
+
 // Display text the app may legitimately rewrite as the state changes.
 const SETUP_UNCHECKED = new Set(["message"]);
 

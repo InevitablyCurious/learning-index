@@ -1798,6 +1798,10 @@
     "F89": {
       "first": "I pressed Roll and nothing happened.",
       "repeat": "I pressed Roll again and still nothing happened."
+    },
+    "F39.frozen": {
+      "first": "After I played both my numbers, clicking a piece again locked the game up.",
+      "repeat": "After both my numbers, clicking a piece again still locks the game up."
     }
   }
 }

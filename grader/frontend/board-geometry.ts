@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { type Locator, type Page } from "@playwright/test";
+import { BOARD_RESTLESS } from "../lib/harness.ts";
 
 export interface PointBox {
   num: number;
@@ -376,7 +377,7 @@ export async function isPainted(target: Locator): Promise<boolean> {
  * before it was drawn. Throws when the board never settles.
  */
 export async function waitForBoardSettled(page: Page): Promise<void> {
-  await page.evaluate(async () => {
+  const settled = await page.evaluate(async () => {
     const TIMEOUT_MS = 5000;
     // Must exceed the checker's 340ms transform transition (golden
     // style.css:134 `transition: transform .34s cubic-bezier(.34,.9,.4,1)`,
@@ -439,12 +440,33 @@ export async function waitForBoardSettled(page: Page): Promise<void> {
         unchangedSince = now;
         continue;
       }
-      if (unchangedSince !== null && now - unchangedSince >= SETTLE_MS) return;
+      if (unchangedSince !== null && now - unchangedSince >= SETTLE_MS) return true;
     }
-    throw new Error(
-      `board never settled: the checker and point rects never held identical for ${SETTLE_MS}ms within ${TIMEOUT_MS}ms`,
-    );
+    // Never identical to the hundredth of a pixel. A player only sees whole
+    // pixels: one more second at that grain decides whether anything moves.
+    const coarse = () =>
+      [
+        ...placedCheckers(),
+        ...Array.from(document.querySelectorAll<HTMLElement>('[data-testid="point"]')),
+      ]
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return [rect.x, rect.y, rect.width, rect.height].map((v) => Math.round(v)).join(",");
+        })
+        .join("|");
+    const first = coarse();
+    const until = performance.now() + 1000;
+    while (performance.now() < until) {
+      await frame();
+      if (coarse() !== first) return false;
+    }
+    return true;
   });
+  if (!settled) {
+    throw new Error(
+      `${BOARD_RESTLESS}: board never settled: the pieces and points kept moving on screen for more than 5 s`,
+    );
+  }
 }
 
 export interface TriangleSample {

@@ -219,7 +219,13 @@ test("[F39] REQ-DICE — a roll shows two dice, and two different numbers give t
   const later = "[aspect: moves] [needs: G04]";
   expect(await move(later), `${later} rolled 5-6 and could make only one move`).toBe(true);
   // A third: a click that is not a move, or a checker gone mid-click, is no move.
-  const third = await withinSeconds(25, tryMove).catch(() => false);
+  // A click that never comes back is not "no move": the game froze on it, and a
+  // frozen page used to pass here (WO-LI-HIDDEN-FREEZE-SWEEP).
+  const third = await withinSeconds(25, tryMove).catch((err: Error) => err);
+  expect(
+    third instanceof Error,
+    `[aspect: frozen] [needs: F45] after two moves of a 5-6, clicking a piece again ${third instanceof Error ? third.message : ""}`,
+  ).toBe(false);
   expect(third, `${later} rolled 5-6 and could make a third move`).toBe(false);
 
   // A double: still only two dice on screen (its four moves are F33's). An
