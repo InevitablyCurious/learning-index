@@ -409,6 +409,21 @@ def http_error_line(observed: str, *, pass_kind: str) -> str | None:
     return None
 
 
+# ── A PRESS OF ROLL THAT ROLLED NOTHING ─────────────────────────────────────
+# The grader marks it (grader/lib/harness.ts ROLL_DEAD) wherever it happens; the
+# gate's own line would describe a later step the player never reached.
+ROLL_DEAD = "ROLL DEAD"
+_ROLL_DEAD_FIRST = "I pressed Roll and nothing happened."
+_ROLL_DEAD_REPEAT = "I pressed Roll again and still nothing happened."
+
+
+def roll_dead_line(observed: str, *, pass_kind: str) -> str | None:
+    """The true line for a press of Roll that rolled nothing, or None."""
+    if ROLL_DEAD not in str(observed or ""):
+        return None
+    return _ROLL_DEAD_REPEAT if pass_kind == "repeat" else _ROLL_DEAD_FIRST
+
+
 def setup_refusal_line(observed: str, *, pass_kind: str) -> str | None:
     """The true line for a refused setup, or None when the gate's setup took."""
     text = str(observed or "")
@@ -620,6 +635,9 @@ class FeedbackMixin:
         """
         raw_check = str(record.get("check", "")).strip()
         observed = str(record.get("observed", "") or "")
+        roll_line = roll_dead_line(observed, pass_kind=pass_kind)
+        if roll_line:
+            return roll_line, "tester"
         setup_line = setup_refusal_line(
             observed, pass_kind=pass_kind
         ) or http_error_line(observed, pass_kind=pass_kind)

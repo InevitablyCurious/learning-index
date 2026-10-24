@@ -643,6 +643,11 @@
       "name": "The computer plays when it wins the opening",
       "what": "When the computer's opening die is higher, it makes its first move and the turn comes back to the player.",
       "how": "Queues a 3-5 opening, clicks Roll, and within 20 s requires the state to show the computer's pieces moved and the turn back with white."
+    },
+    "F89": {
+      "name": "Pressing Roll rolls the dice",
+      "what": "A press of Roll makes a roll — at the start of a game and on the player's turn later on.",
+      "how": "Starts a new game and presses Roll, then sets a standard position on white's turn in the roll phase and presses Roll again: each press must make a POST /api/roll within 8 s. The roll helper every other gate uses fails with the ROLL DEAD marker (told 'I pressed Roll and nothing happened') when a press makes no roll, and waits on this gate."
     }
   },
   "setup": [
@@ -900,6 +905,7 @@
         "F81",
         "F82",
         "F71",
+        "F89",
         "F85",
         "F87",
         "G31",

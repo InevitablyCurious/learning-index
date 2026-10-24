@@ -733,3 +733,23 @@ def test_f06_aspects_resolve_to_three_distinct_complaints() -> None:
     plain = R._humanize_check(check, observed="Error: x")
     assert "drift after a change" in plain  # the gate-level fallback
     assert plain not in (value, sync, fmt)
+
+
+def test_a_press_of_roll_that_rolled_nothing_is_told_as_that_in_any_gate() -> None:
+    # WO-LI-HIDDEN-FREEZE-SWEEP: the roll helper used to pass a dead Roll, so the
+    # player heard whatever the gate checked next. Now the ROLL DEAD marker is
+    # told as what happened, whichever gate met it, and never as the gate's line.
+    from harness.adapters.challenge import ChallengeRunner as R
+
+    for check in (
+        "[F48] REQ-TURN — a no-move roll passes by itself",
+        "[F10] REQ-BAR — bar re-entry visual",
+    ):
+        record = {
+            "check": check,
+            "observed": "Error: ROLL DEAD [needs: F89]: pressing Roll made no roll",
+        }
+        first, voice = R._told_label(record, pass_kind="first")
+        assert first == "I pressed Roll and nothing happened." and voice == "tester"
+        repeat, _ = R._told_label(record, pass_kind="repeat")
+        assert repeat == "I pressed Roll again and still nothing happened."

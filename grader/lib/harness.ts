@@ -355,6 +355,16 @@ export async function getState(): Promise<any> {
 // (harness/adapters/challenge/feedback.py SETUP_REFUSED), never the gate's own.
 export const SETUP_REFUSED = "SETUP REFUSED";
 
+// A PRESS OF ROLL THAT ROLLED NOTHING (WO-LI-HIDDEN-FREEZE-SWEEP). The roll helper
+// used to wait for the /api/roll a press makes and, finding none, carry on as if
+// all were well — so "I pressed Roll and nothing happened" reached the model as
+// whatever the gate checked next ("my dice didn't render", "my turn ends by
+// itself"). A press that makes no roll fails with this marker, which
+// harness/adapters/challenge/feedback.py tells as that, in the player's voice,
+// whatever gate it happened in; it waits on F89, the gate that presses Roll on its
+// own, so a Roll dead everywhere is told once.
+export const ROLL_DEAD = "ROLL DEAD";
+
 // Display text the app may legitimately rewrite as the state changes.
 const SETUP_UNCHECKED = new Set(["message"]);
 

@@ -290,6 +290,27 @@ _STATIC_TESTIDS = (
     "modalBtns",
 )
 _HELPER_MARKERS = {
+    # rollAndCheck (fixtures.ts): a press of Roll that made no roll waits on F89.
+    ("frontend/fixtures.ts", "[needs: F89]"): (
+        "F03",
+        "F04",
+        "F05",
+        "F10",
+        "F24",
+        "F25",
+        "F33",
+        "F39",
+        "F45",
+        "F47",
+        "F48",
+        "F58",
+        "F60",
+        "F61",
+        "F63",
+        "F75",
+        "F76",
+        "F84",
+    ),
     ("frontend/core.spec.ts", "[aspect: format]"): ("F06",),  # readInt
     ("frontend/core.spec.ts", "[needs: F69]"): ("F06",),  # readInt
     # bearOffTheLastPiece: the player's own last bear-off, shared by the end-of-game checks.

@@ -728,6 +728,51 @@ function startingPoints(): number[] {
   return points;
 }
 
+test("[F89] REQ-ROLL — pressing Roll rolls the dice", async ({ page }) => {
+  // WO-LI-HIDDEN-FREEZE-SWEEP: a Roll that does nothing was told as whatever the
+  // gate checked next, in seven places, because the roll helper took "no roll
+  // made" for fine. Roll is pressed in nearly every game the grader plays, so a
+  // dead Roll is its own stage-1 gate; the helper's own finding waits on this
+  // one (fixtures.ts rollAndCheck, the ROLL DEAD marker). Pressed twice, as a
+  // player meets it: at the start of a game, and on the player's turn later on.
+  test.setTimeout(60_000);
+  await openApp(page);
+  const pressRoll = async (when: string) => {
+    const answered = page
+      .waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/api/roll", { timeout: 8_000 })
+      .catch(() => null);
+    let pressed = true;
+    try {
+      await page.getByTestId("rollBtn").click({ timeout: 5_000 });
+    } catch {
+      pressed = false;
+    }
+    const response = await answered;
+    expect(
+      response !== null,
+      pressed ? `${when}, pressing Roll made no roll` : `[needs: REQ-TESTID/testid.rollBtn] ${when}, Roll could not be pressed`,
+    ).toBe(true);
+  };
+  await postJson<ApiState>(page, "/api/new", {});
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await pressRoll("at the start of a game");
+
+  await setupState(page, {
+    points: startingPoints(),
+    bar: { white: 0, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "roll",
+    dice: [],
+    remainingDice: [],
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await pressRoll("on my turn later in the game");
+});
+
 test("[F85] REQ-OPENING — a tied opening never freezes the game", async ({ page }) => {
   // Jerry, run 1792269501 round 3: the opening tied 2-2, the page said "Tie —
   // roll again", he pressed Roll "like it tells me. nothing happens … game is
@@ -746,7 +791,7 @@ test("[F85] REQ-OPENING — a tied opening never freezes the game", async ({ pag
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await clickOpeningRoll(page);
   await expect
-    .poll(async () => JSON.stringify((await readState(page)).dice), { message: "[needs: F38] the tied roll never landed", timeout: 5_000 })
+    .poll(async () => JSON.stringify((await readState(page)).dice), { message: "[needs: F89] the tied roll never landed", timeout: 5_000 })
     .toBe("[2,2]");
   // A page that rolls again by itself does so within a few seconds.
   const pastBy = async (ms: number): Promise<boolean> => {
@@ -789,7 +834,7 @@ test("[F88] REQ-OPENING — the computer plays when it wins the opening", async 
         return state.turn === "white" && blackOf(state) !== blackOf(before);
       },
       {
-        message: "[needs: G31] after a 3-5 opening the computer never made its first move and handed the turn back",
+        message: "[needs: F89] after a 3-5 opening the computer never made its first move and handed the turn back",
         timeout: 20_000,
       },
     )

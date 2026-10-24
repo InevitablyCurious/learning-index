@@ -1794,6 +1794,10 @@
     "F88": {
       "first": "When the computer won the opening roll, it never made its move — the game just sat there and I couldn't do anything.",
       "repeat": "The computer won the opening roll again and still never made its move."
+    },
+    "F89": {
+      "first": "I pressed Roll and nothing happened.",
+      "repeat": "I pressed Roll again and still nothing happened."
     }
   }
 }

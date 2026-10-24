@@ -36,7 +36,7 @@
 
 import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
-import { BASE_URL, PORT, SETUP_REFUSED, assertRollTook, assertSetupTook, startServer, stopServer, type ServerHandle } from "../lib/harness.ts";
+import { BASE_URL, PORT, ROLL_DEAD, SETUP_REFUSED, assertRollTook, assertSetupTook, startServer, stopServer, type ServerHandle } from "../lib/harness.ts";
 import { boardGeometryDrawn, waitForBoardSettled } from "./board-geometry.ts";
 
 export const test = base.extend<{ gameServer: ServerHandle }>({
@@ -139,9 +139,17 @@ export async function rollAndCheck(page: Page, dice: number[], click: () => Prom
       timeout: 15_000,
     })
     .catch(() => null);
-  await click();
+  let pressed = true;
+  try {
+    await click();
+  } catch {
+    pressed = false;
+  }
   const response = await answered;
-  const body = response ? await response.json().catch(() => null) : null;
+  if (!response) {
+    throw new Error(`${ROLL_DEAD} [needs: F89]: ${pressed ? "pressing Roll made no roll" : "Roll could not be pressed"}`);
+  }
+  const body = await response.json().catch(() => null);
   assertRollTook(dice, body?.dice);
   return body;
 }
