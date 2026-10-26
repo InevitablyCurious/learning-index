@@ -431,8 +431,13 @@ test("[F82] REQ-LAYOUT — the buttons match", async ({ page }) => {
 // pieces of different points may not run into each other; back at full size,
 // the board must look as it did before (the reference keeps its shape and
 // shrinks its pieces: 46 px at 1280×600, stacks 45 px apart).
+// The squeeze takes height only, at full width: 1180×750 keeps the board's
+// shape, so a build whose pieces size from the width alone still fit there,
+// and Jerry met run 1793021515's final build with 5- and 4-stacks running
+// into each other on a short, wide window (it clashes from 1440×700; the
+// reference at 1440×650 shrinks its pieces to 51 px and stays clear).
 const FULL = { width: 1440, height: 900 };
-const SHORT = { width: 1180, height: 750 };
+const SHORT = { width: 1440, height: 650 };
 
 /** The page as pixels: a screenshot decoded in the page, reduced to luminance. */
 async function boardPixels(page: Page): Promise<string> {
