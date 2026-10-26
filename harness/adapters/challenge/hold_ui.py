@@ -179,6 +179,68 @@ def _queue_pause_dice(port: int) -> dict[str, Any]:
     }
 
 
+def _restart_hold_game(
+    *,
+    play_name: str,
+    worktree: Path,
+    container_name: str,
+    port: int,
+    run_label: str,
+    progress: Callable[[str], None],
+    state: dict[str, Any],
+    state_path: Path,
+) -> bool:
+    """Start a paused game again after its container stopped; True when it answers.
+
+    The state file follows what happened: a game that came back carries its new
+    container and freshly queued dice; one that did not is marked unhealthy, so no
+    surface offers a dead address as a working one."""
+    progress(f"PROGRESS run_label={run_label} step=hold-ui restart reason=game_stopped")
+    try:
+        play_stop(play_name)
+    except Exception as exc:  # noqa: BLE001 - a stale container must not block the restart
+        progress(
+            f"PROGRESS run_label={run_label} step=hold-ui restart stop_failed detail={exc}"
+        )
+    healthy = False
+    detail = "restart_failed"
+    try:
+        result = play_start(
+            name=play_name,
+            worktree=str(worktree),
+            owner="hold",
+            cell=container_name,
+            debug_api=True,
+            host_port=port,
+        )
+    except PlayError as exc:
+        detail = f"restart_failed code={exc.code} detail={exc.reason}"
+    else:
+        deadline = time.monotonic() + _HOLD_UI_HEALTH_TIMEOUT_S
+        while time.monotonic() < deadline:
+            if _hold_ui_healthy(port):
+                healthy = True
+                break
+            time.sleep(0.25)
+        detail = f"{'restarted' if healthy else 'restart_health_timeout'} container={result['candidate']}"
+        if healthy:
+            state["dice"] = _queue_pause_dice(port)
+            state["ui_pid"] = result["candidate"]
+    state["ui_healthy"] = healthy
+    state["boot_detail"] = detail
+    state["restarts"] = int(state.get("restarts", 0)) + 1
+    try:
+        state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    except OSError as exc:
+        progress(
+            f"PROGRESS run_label={run_label} step=hold-ui state_write_failed detail={exc}"
+        )
+    progress(
+        f"PROGRESS run_label={run_label} step=hold-ui restart={'ok' if healthy else 'fail'} {detail}"
+    )
+    return healthy
+
+
 def _hold_ui_healthy(port: int) -> bool:
     try:
         with urllib.request.urlopen(
@@ -538,9 +600,27 @@ def _hold_for_operator(
             if now - last_heartbeat >= _HOLD_UI_HEARTBEAT_S:
                 last_heartbeat = now
                 server_alive = started
+                healthy_now = _hold_ui_healthy(port)
+                # The game's container has a hard lifetime (play_container,
+                # DEFAULT_MAX_SECONDS) and a pause can outlast it: run
+                # 1792973701's final pause was held 12 h and its game died at 6 h
+                # while the pause still offered the dead address as healthy
+                # (Jerry: "shows no connection"). Start it again on the same
+                # address, with the fixed dice queued afresh.
+                if started and ui_healthy and not healthy_now:
+                    healthy_now = _restart_hold_game(
+                        play_name=play_name,
+                        worktree=worktree,
+                        container_name=container_name,
+                        port=port,
+                        run_label=run_label,
+                        progress=progress,
+                        state=state,
+                        state_path=state_path,
+                    )
                 progress(
                     f"PROGRESS run_label={run_label} step=hold-ui heartbeat "
-                    f"held_s={now - held_at:.0f} url={url} healthy={_hold_ui_healthy(port)} "
+                    f"held_s={now - held_at:.0f} url={url} healthy={healthy_now} "
                     f"server_alive={server_alive}"
                 )
             time.sleep(_HOLD_UI_POLL_S)

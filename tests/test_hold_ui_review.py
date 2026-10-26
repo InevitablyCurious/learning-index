@@ -445,3 +445,65 @@ def test_plain_release_writes_no_operator_note(
     assert not (tmp_path / "operator-notes.jsonl").exists(), (
         "a plain release must not journal a note"
     )
+
+
+def test_a_stopped_game_is_started_again_and_the_state_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Run 1792973701: the pause outlived its game's 6 h container lifetime and
+    kept offering the dead address as healthy. The heartbeat restarts it on the
+    same port, queues the fixed dice afresh, and records it in the state file;
+    a restart that fails marks the pause unhealthy."""
+    import harness.adapters.challenge.hold_ui as hold
+
+    calls: list[str] = []
+    monkeypatch.setattr(hold, "play_stop", lambda name: calls.append(f"stop {name}"))
+    monkeypatch.setattr(
+        hold,
+        "play_start",
+        lambda **kw: (
+            calls.append(f"start port={kw['host_port']}") or {"candidate": "cand-2"}
+        ),
+    )
+    monkeypatch.setattr(hold, "_hold_ui_healthy", lambda port: True)
+    monkeypatch.setattr(
+        hold, "_queue_pause_dice", lambda port: {"fixed": True, "queued": 60}
+    )
+    state: dict = {"ui_healthy": True, "boot_detail": "healthy container=cand-1"}
+    state_path = tmp_path / "hold-ui.json"
+    lines: list[str] = []
+    ok = hold._restart_hold_game(
+        play_name="hold:x",
+        worktree=tmp_path,
+        container_name="x",
+        port=61234,
+        run_label="t",
+        progress=lines.append,
+        state=state,
+        state_path=state_path,
+    )
+    assert ok and calls == ["stop hold:x", "start port=61234"]
+    written = json.loads(state_path.read_text())
+    assert written["ui_healthy"] is True and written["restarts"] == 1
+    assert (
+        written["boot_detail"] == "restarted container=cand-2"
+        and written["dice"]["fixed"] is True
+    )
+
+    def _refuse(**kw):
+        raise hold.PlayError("start_failed", "no image")
+
+    monkeypatch.setattr(hold, "play_start", _refuse)
+    ok = hold._restart_hold_game(
+        play_name="hold:x",
+        worktree=tmp_path,
+        container_name="x",
+        port=61234,
+        run_label="t",
+        progress=lines.append,
+        state=state,
+        state_path=state_path,
+    )
+    written = json.loads(state_path.read_text())
+    assert not ok and written["ui_healthy"] is False and written["restarts"] == 2
+    assert any("restart=fail" in line for line in lines)
