@@ -62,7 +62,18 @@ let timedOut = false;
 // and process-group leader and `-child.pid` names the WHOLE group (bash plus
 // every descendant) on both macOS and Linux. stdio:'inherit' is the
 // byte-transparent pass-through for stdout/stderr/stdin.
-const child = spawn('bash', args, { detached: true, stdio: 'inherit' });
+//
+// GATE. bash first waits for one line on fd 3 and only then execs the real
+// `bash <args>` (same pid, so the same group). The line is written once the
+// watchdog below exists, so the command never runs unguarded: killed before
+// that, the wrapper closes fd 3, the read hits EOF and the command never
+// starts. Without it a kill in that window (wider on a loaded Linux host,
+// where forking node is slow) orphaned the group with no watchdog at all.
+const GATE = 'read -r -u 3 _ || exit 1; exec 3<&-; exec bash "$@"';
+const child = spawn('bash', ['-c', GATE, 'bash', ...args], {
+  detached: true,
+  stdio: ['inherit', 'inherit', 'inherit', 'pipe'],
+});
 
 // Out-of-process backstop (see WATCHDOG in the header). Argv: <pgid> <deadline
 // epoch ms>. EPERM means the group exists but is not ours to signal — alive.
@@ -86,6 +97,8 @@ if (child.pid) {
     ['-e', WATCHDOG_SRC, String(child.pid), String(Date.now() + timeoutMs + WATCHDOG_GRACE_MS)],
     { detached: true, stdio: 'ignore' }
   ).unref();
+  // spawn() returns after the watchdog has exec'd: it exists, so open the gate.
+  child.stdio[3].end('\n');
 }
 
 function killGroup() {
