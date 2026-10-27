@@ -1772,16 +1772,28 @@
       "repeat": "Some of my pieces still hang over the edge of the board."
     },
     "F87": {
-      "first": "When I change the size of my browser window, the game doesn't keep up.",
+      "first": "When I change the size or shape of my browser window, the game doesn't keep up.",
       "repeat": "Resized my window again and the game still doesn't keep up."
     },
     "F87.fit": {
-      "first": "When my browser window is a bit shorter — a banner or toolbar taking some of the height — the board runs off the screen.",
-      "repeat": "With a shorter window the board still runs off the screen."
+      "first": "When I change the shape of my browser window — shorter, narrower or bigger — the board runs off the screen.",
+      "repeat": "Changed my window's shape again and the board still runs off the screen."
     },
     "F87.overlap": {
-      "first": "When my browser window is a bit shorter — a banner or toolbar taking some of the height — pieces from different points run into each other.",
-      "repeat": "With a shorter window, pieces from different points still run into each other."
+      "first": "When I change the shape of my browser window — shorter, narrower or bigger — pieces from different points run into each other.",
+      "repeat": "Changed my window's shape again, and pieces from different points still run into each other."
+    },
+    "F87.ratio": {
+      "first": "The board isn't shaped like a real board. I expect it about 1.4 times as wide as it is tall.",
+      "repeat": "The board still isn't shaped like a real board."
+    },
+    "F87.shape": {
+      "first": "When I change the shape of my browser window, the board stretches out of shape. I expect it to keep its proportions and just get bigger or smaller.",
+      "repeat": "Changed my window's shape again and the board still stretches out of shape."
+    },
+    "F87.size": {
+      "first": "When I change the size of my browser window, the pieces don't stay in proportion with the points — they come out too big or too small for the board.",
+      "repeat": "Resized my window again and the pieces still don't stay in proportion with the points."
     },
     "F87.stale": {
       "first": "When I squeeze my browser window and then make it bigger again, the board is left a mess — old copies of parts of the board stay drawn over the game.",

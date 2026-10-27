@@ -417,43 +417,62 @@ test("[F82] REQ-LAYOUT — the buttons match", async ({ page }) => {
   ).toBeTruthy();
 });
 
-// [F87] REQ-LAYOUT — the game follows the window as it changes size. Jerry,
+// [F87] REQ-LAYOUT — the board keeps its shape as the window changes. Jerry,
 // run 1792491065's final build: "the pieces were overlapping because i had a
 // banner inside my chrome browser that was pushing those pieces down … if the
 // users viewport is different sized the board and the elements should be
 // responsive", then "i squeezed and then re-expanded the game" — and was left
 // with copies of the bar and tray drawn over the board. Played as he did, on
-// one live page: full size, then 150 px of height taken (a banner or toolbar),
-// then full size again — narrower too, as a squeeze by hand is: a build that
-// redraws on resize without clearing leaves its old bar and tray where the
-// smaller board put them (run 1792491065's buildBoard appended a new bar and
-// tray to the board on every resize). Shorter, nothing may scroll or leave the window and
-// pieces of different points may not run into each other; back at full size,
-// the board must look as it did before (the reference keeps its shape and
-// shrinks its pieces: 46 px at 1280×600, stacks 45 px apart).
-// The squeeze takes height only, at full width: 1180×750 keeps the board's
-// shape, so a build whose pieces size from the width alone still fit there,
-// and Jerry met run 1793021515's final build with 5- and 4-stacks running
-// into each other on a short, wide window (it clashes from 1440×700; the
-// reference at 1440×650 shrinks its pieces to 51 px and stays clear).
+// one live page: full size, then each window shape below, then full size
+// again: a build that redraws on resize without clearing leaves its old bar
+// and tray where the smaller board put them (run 1792491065's buildBoard
+// appended a new bar and tray to the board on every resize). At every shape
+// nothing may scroll or leave the window and pieces of different points may
+// not run into each other; back at full size, the board must look as it did
+// before.
+// The board keeps one shape at any window size (Jerry, 2026-10-27: "the board
+// layout and piece sizing should render against a fixed ratio using
+// percentage calculation … px count is wrong here"): the drawn board — the
+// span of its points, bar and tray — is 1.4 times as wide as it is tall, and
+// a piece stays the same share of a point's width. The window shapes are
+// fractions of the full window, named for what a player does to it: run
+// 1793021515's final build, fine at 1180×750, ran its 5- and 4-stacks into
+// each other once a banner took some height, because it stretched its board
+// to the window. With the shape held, stacks cannot meet at any size. The
+// reference reads 1.400 and 0.86 of a point at every shape below.
 const FULL = { width: 1440, height: 900 };
-const SHORT = { width: 1440, height: 650 };
+const BOARD_SHAPE = 1.4;
+const SHAPE_SLACK = 0.03;
+const PIECE_SLACK = 0.05;
+const SHAPES = [
+  { name: "a banner taking a quarter of its height", w: 1, h: 0.72 },
+  { name: "a fifth smaller both ways", w: 0.8, h: 0.8 },
+  { name: "narrower, at full height", w: 0.7, h: 1 },
+  { name: "bigger", w: 1.6, h: 1.6 },
+];
 
 /** The page as pixels: a screenshot decoded in the page, reduced to luminance. */
 async function boardPixels(page: Page): Promise<string> {
   return (await page.screenshot({ type: "png" })).toString("base64");
 }
 
-test("[F87] REQ-LAYOUT — the game follows the window as it changes size", async ({ page }) => {
-  await openAt(page, FULL);
-  await page.waitForTimeout(800);
-  const before = await boardPixels(page);
-
-  await page.setViewportSize(SHORT);
-  await page.waitForTimeout(800);
-  const fit = await page.evaluate(() => {
+/** The drawn board's shape, where the pieces sit, and how big a piece is against a point. */
+async function readWindowFit(page: Page) {
+  return page.evaluate(() => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    const boxes = (sel: string) =>
+      [...document.querySelectorAll<HTMLElement>(sel)]
+        .filter((e) => e.checkVisibility())
+        .map((e) => e.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.height > 0);
+    const drawn = boxes('[data-testid="point"],[data-testid="bar"],[data-testid="off-tray"]');
+    const x0 = Math.min(...drawn.map((r) => r.left));
+    const x1 = Math.max(...drawn.map((r) => r.right));
+    const y0 = Math.min(...drawn.map((r) => r.top));
+    const y1 = Math.max(...drawn.map((r) => r.bottom));
+    const points = boxes('[data-testid="point"]').map((r) => r.width).sort((p, q) => p - q);
+    const pointW = points[Math.floor(points.length / 2)] ?? 0;
     const cs = [...document.querySelectorAll<HTMLElement>('[data-testid="checker"]')]
       .filter((c) => c.checkVisibility())
       .map((c) => {
@@ -468,14 +487,52 @@ test("[F87] REQ-LAYOUT — the game follows the window as it changes size", asyn
         const b = cs[j];
         if (a.loc !== b.loc && Math.hypot(a.x - b.x, a.y - b.y) < 0.9 * Math.min(a.w, b.w)) clashes.push(`${a.loc}/${b.loc}`);
       }
+    const pieceW = cs.map((c) => c.w).sort((p, q) => p - q)[Math.floor(cs.length / 2)] ?? 0;
     const el = document.scrollingElement ?? document.documentElement;
-    return { scrolls: el.scrollWidth > vw + 2 || el.scrollHeight > vh + 2, off, pieces: cs.length, clashes };
+    return {
+      size: `${vw}×${vh}`,
+      shape: drawn.length ? (x1 - x0) / (y1 - y0) : 0,
+      boardPast: drawn.length > 0 && (x0 < -2 || y0 < -2 || x1 > vw + 2 || y1 > vh + 2),
+      scrolls: el.scrollWidth > vw + 2 || el.scrollHeight > vh + 2,
+      off,
+      pieces: cs.length,
+      clashes,
+      piece: pointW ? pieceW / pointW : 0,
+    };
   });
+}
+
+test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", async ({ page }) => {
+  test.setTimeout(60_000);
+  await openAt(page, FULL);
+  await page.waitForTimeout(800);
+  const before = await boardPixels(page);
+  const full = await readWindowFit(page);
+  const shapeOk = (v: number) => Math.abs(v / BOARD_SHAPE - 1) <= SHAPE_SLACK;
   expect(
-    !fit.scrolls && fit.off === 0,
-    `[aspect: fit] [needs: F37] with the window squeezed to ${SHORT.width}×${SHORT.height} the page ${fit.scrolls ? "scrolls" : "fits"} and ${fit.off} of ${fit.pieces} pieces run past the window`,
-  ).toBeTruthy();
-  expect(fit.clashes, `[aspect: overlap] [needs: F31] with the window squeezed to ${SHORT.width}×${SHORT.height}, pieces of different points run into each other: ${fit.clashes.join(", ")}`).toEqual([]);
+    shapeOk(full.shape),
+    `[aspect: ratio] [needs: F37] at ${full.size} the board is ${full.shape.toFixed(2)} times as wide as it is tall, not ${BOARD_SHAPE}`,
+  ).toBe(true);
+
+  for (const shape of SHAPES) {
+    await page.setViewportSize({ width: Math.round(FULL.width * shape.w), height: Math.round(FULL.height * shape.h) });
+    await page.waitForTimeout(800);
+    const fit = await readWindowFit(page);
+    const where = `with the window ${shape.name} (${fit.size})`;
+    expect(
+      !fit.scrolls && fit.off === 0 && !fit.boardPast,
+      `[aspect: fit] [needs: F37] ${where} the page ${fit.scrolls ? "scrolls" : "fits"}, the board ${fit.boardPast ? "runs past" : "stays inside"} the window and ${fit.off} of ${fit.pieces} pieces run past it`,
+    ).toBeTruthy();
+    expect(fit.clashes, `[aspect: overlap] [needs: F31] ${where}, pieces of different points run into each other: ${fit.clashes.join(", ")}`).toEqual([]);
+    expect(
+      shapeOk(fit.shape),
+      `[aspect: shape] [needs: F37] ${where} the board is ${fit.shape.toFixed(2)} times as wide as it is tall, not ${BOARD_SHAPE}`,
+    ).toBe(true);
+    expect(
+      Math.abs(fit.piece / full.piece - 1) <= PIECE_SLACK,
+      `[aspect: size] [needs: F41] ${where} a piece is ${fit.piece.toFixed(2)} of a point's width, against ${full.piece.toFixed(2)} at full size`,
+    ).toBe(true);
+  }
 
   await page.setViewportSize(FULL);
   await page.waitForTimeout(800);
@@ -490,7 +547,7 @@ test("[F87] REQ-LAYOUT — the game follows the window as it changes size", asyn
   }));
   expect(
     parts.bars <= 1 && parts.trays <= 1,
-    `[aspect: stale] after the window was squeezed and made full size again there are ${parts.bars} bars and ${parts.trays} off trays drawn`,
+    `[aspect: stale] after the window changed shape and was made full size again there are ${parts.bars} bars and ${parts.trays} off trays drawn`,
   ).toBe(true);
   const changed = await page.evaluate(
     async ({ a, b }) => {
@@ -524,6 +581,6 @@ test("[F87] REQ-LAYOUT — the game follows the window as it changes size", asyn
   );
   expect(
     changed <= 0.02,
-    `[aspect: stale] after the window was squeezed and made full size again, ${(changed * 100).toFixed(1)}% of the screen looks different from before`,
+    `[aspect: stale] after the window changed shape and was made full size again, ${(changed * 100).toFixed(1)}% of the screen looks different from before`,
   ).toBe(true);
 });

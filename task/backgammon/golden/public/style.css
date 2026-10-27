@@ -63,13 +63,13 @@ select:hover, .btn:not(:disabled):hover { background: #2c4763; }
 
 /* ---------- table layout ---------- */
 #tablewrap { flex: 1; display: flex; gap: 14px; min-height: 0; align-items: stretch; }
-#board { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; }
+#board { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; container-type: size; }
 .frame {
   position: relative;
-  aspect-ratio: 15 / 10;
-  height: 100%;
-  max-height: 100%;
-  max-width: 100%;
+  /* The board keeps one shape, 1.4 : 1, at any window size: the largest
+     box of that shape that fits the space, never stretched to fill it. */
+  aspect-ratio: 14 / 10;
+  width: min(100cqw, 140cqh);
   background: linear-gradient(160deg, var(--wood), var(--wood2));
   border-radius: 12px;
   padding: 1.4%;
