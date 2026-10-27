@@ -750,7 +750,11 @@ test("[F89] REQ-ROLL — pressing Roll rolls the dice", async ({ page }) => {
     const response = await answered;
     expect(
       response !== null,
-      pressed ? `${when}, pressing Roll made no roll` : `[needs: REQ-TESTID/testid.rollBtn] ${when}, Roll could not be pressed`,
+      // Roll that could not be pressed because it is hidden or covered is F38's
+      // "I can't find the Roll button", never "I pressed Roll and nothing
+      // happened" (run 1793119227 round 4: the board covered the panel and
+      // both were told).
+      pressed ? `${when}, pressing Roll made no roll` : `[needs: REQ-TESTID/testid.rollBtn F38] ${when}, Roll could not be pressed`,
     ).toBe(true);
   };
   await postJson<ApiState>(page, "/api/new", {});
@@ -2228,8 +2232,18 @@ test("[F54] REQ-RELOAD — the difficulty control shows the level you're playing
     const isSelect = await tagged.evaluate((el) => el.tagName === "SELECT").catch(() => false);
     return isSelect ? tagged : tagged.locator("select").first();
   };
-  await (await control()).selectOption("hard");
-  await page.getByTestId("newGameBtn").click();
+  // A control the player cannot reach — hidden, or covered by the board — is
+  // F38's "isn't showing" (and New Game's own is F08's); it timed out here with
+  // no message and was told as a level lost on reload, a reload this check
+  // never got to (run 1793119227 round 4).
+  let chose = true;
+  try {
+    await (await control()).selectOption("hard", { timeout: 5_000 });
+    await page.getByTestId("newGameBtn").click({ timeout: 5_000 });
+  } catch {
+    chose = false;
+  }
+  expect(chose, "[needs: F38 F08] the difficulty control or New Game could not be used").toBe(true);
   await expect
     .poll(async () => (await readState(page)).difficulty, { message: "[needs: F08] New Game did not start a Hard game", timeout: 5_000 })
     .toBe("hard");
