@@ -506,7 +506,7 @@ async function readWindowFit(page: Page) {
 
 test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", async ({ page }) => {
   // Measured at every window shape first, then told worst first: copies of
-  // the board left behind, the board or pieces off the window, pieces running
+  // the board left behind, pieces gone, the board or pieces off the window, pieces running
   // into each other, and only then the board's proportions. Run 1793119227's
   // round 3 build (a fresh board at 1.28) piled up a new bar and tray at every
   // resize — six of each after five — and was told only that its board was
@@ -572,6 +572,14 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
     changed <= 0.02,
     `[aspect: stale] after the window changed shape and was made full size again, ${(changed * 100).toFixed(1)}% of the screen looks different from before`,
   ).toBe(true);
+  // Every piece still shows: run 1793183074's round 3 build cleared its
+  // collisions in the banner window by hiding the fifth piece of each 5-stack.
+  for (const { where, fit } of seen) {
+    expect(
+      fit.pieces >= full.pieces,
+      `[aspect: missing] [needs: F41] ${where} only ${fit.pieces} of the ${full.pieces} pieces shown at full size are showing`,
+    ).toBe(true);
+  }
   for (const { where, fit } of seen) {
     expect(
       !fit.scrolls && fit.off === 0 && !fit.boardPast,

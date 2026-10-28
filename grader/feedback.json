@@ -1779,6 +1779,10 @@
       "first": "When I change the shape of my browser window — shorter, narrower or bigger — the board runs off the screen.",
       "repeat": "Changed my window's shape again and the board still runs off the screen."
     },
+    "F87.missing": {
+      "first": "When I change the shape of my browser window, some of my pieces disappear from the board.",
+      "repeat": "Changed my window's shape again and pieces still disappear from the board."
+    },
     "F87.overlap": {
       "first": "When I change the shape of my browser window — shorter, narrower or bigger — pieces from different points run into each other.",
       "repeat": "Changed my window's shape again, and pieces from different points still run into each other."
