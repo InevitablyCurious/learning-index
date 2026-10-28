@@ -89,11 +89,11 @@ def test_the_graders_observed_format_is_parseable_here() -> None:
     "area,expected_stage",
     [
         ("startup", 1),
-        ("moving", 2),
-        ("playing", 2),
-        ("awkwardroll", 3),
-        ("bearingoff", 4),
-        ("aiturn", 7),
+        ("moving", 3),
+        ("playing", 3),
+        ("awkwardroll", 4),
+        ("bearingoff", 5),
+        ("aiturn", 8),
     ],
 )
 def test_a_stall_speaks_only_when_its_situation_is_reachable(

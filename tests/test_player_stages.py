@@ -54,7 +54,7 @@ def test_every_complaint_key_and_every_drawn_or_tagged_element_has_a_stage() -> 
 
 
 def test_the_most_specific_key_wins() -> None:
-    assert stage_of("conformance:REQ-TESTID/die — dice tagged", STAGES).number == 2
+    assert stage_of("conformance:REQ-TESTID/die — dice tagged", STAGES).number == 3
     assert stage_of("conformance:REQ-TESTID/testid.board — tagged", STAGES).number == 1
 
 
@@ -65,15 +65,31 @@ def test_an_undeclared_check_is_refused_not_guessed() -> None:
 
 def test_only_the_earliest_failing_stage_is_told() -> None:
     problems = [
-        {"check": "[G08] REQ-BEAROFF — bear-off"},  # stage 4
+        {"check": "[G08] REQ-BEAROFF — bear-off"},  # stage 5
         {"check": "[G01] REQ-INIT — initial position"},  # stage 1
         {"check": "[F06] REQ-PIPUI — pips on screen"},  # stage 1
-        {"check": "[G14] REQ-AISTRENGTH — hard beats easy"},  # stage 7
+        {"check": "[G14] REQ-AISTRENGTH — hard beats easy"},  # stage 8
     ]
     view = player_view(problems, STAGES, is_infra=_infra)
     assert view.stage is not None and view.stage.number == 1
     assert [p["check"][:5] for p in view.visible] == ["[G01]", "[F06]"]
     assert len(view.withheld) == 2
+
+
+def test_the_board_as_it_opens_is_told_before_anything_played() -> None:
+    # Jerry, 2026-10-28: run 1793189038 round 3 told "the computer never made
+    # its move" beside "pieces still run into each other" when the window
+    # changes. The opening look, layout and resize come first, alone.
+    view = player_view(
+        [
+            {"check": "[F88] REQ-OPENING — the computer plays when it wins the opening"},
+            {"check": "[F87] REQ-LAYOUT — the board keeps its shape as the window changes"},
+        ],
+        STAGES,
+        is_infra=_infra,
+    )
+    assert view.stage is not None and view.stage.number == 1
+    assert [p["check"][:5] for p in view.visible] == ["[F87]"]
 
 
 def test_a_clean_stage_unlocks_the_next_failing_one_skipping_clean_stages() -> None:
@@ -82,7 +98,7 @@ def test_a_clean_stage_unlocks_the_next_failing_one_skipping_clean_stages() -> N
         STAGES,
         is_infra=_infra,
     )
-    assert view.stage is not None and view.stage.number == 5
+    assert view.stage is not None and view.stage.number == 6
 
 
 def test_runner_deaths_are_never_staged_or_told() -> None:
@@ -174,13 +190,13 @@ def test_a_stuck_check_is_not_told_when_the_check_for_that_step_failed_too() -> 
 
 def test_a_stuck_check_is_told_when_the_step_failed_only_in_its_own_situation() -> None:
     # Hints vanish only on a double: every ordinary-roll check passes, so the
-    # double's own line is what the player saw — hiding it would skip stage 2.
+    # double's own line is what the player saw — hiding it would skip stage 3.
     view = player_view(
         [_doubles("Error: move 1: no hint appeared [aspect: nomove] [needs: F25]")],
         STAGES,
         is_infra=_infra,
     )
-    assert view.stage is not None and view.stage.number == 2
+    assert view.stage is not None and view.stage.number == 3
     assert [p["check"][:5] for p in view.visible] == [
         "[F33]"
     ] and view.unevaluated == []
