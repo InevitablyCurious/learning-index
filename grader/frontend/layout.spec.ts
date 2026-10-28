@@ -498,57 +498,39 @@ async function readWindowFit(page: Page) {
       pieces: cs.length,
       clashes,
       piece: pointW ? pieceW / pointW : 0,
+      bars: boxes('[data-testid="bar"]').length,
+      trays: boxes('[data-testid="off-tray"]').length,
     };
   });
 }
 
 test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", async ({ page }) => {
+  // Measured at every window shape first, then told worst first: copies of
+  // the board left behind, the board or pieces off the window, pieces running
+  // into each other, and only then the board's proportions. Run 1793119227's
+  // round 3 build (a fresh board at 1.28) piled up a new bar and tray at every
+  // resize — six of each after five — and was told only that its board was
+  // not 1.4 times as wide as it is tall, the first thing this check asked.
   test.setTimeout(60_000);
   await openAt(page, FULL);
   await page.waitForTimeout(800);
   const before = await boardPixels(page);
   const full = await readWindowFit(page);
-  const shapeOk = (v: number) => Math.abs(v / BOARD_SHAPE - 1) <= SHAPE_SLACK;
-  expect(
-    shapeOk(full.shape),
-    `[aspect: ratio] [needs: F37] at ${full.size} the board is ${full.shape.toFixed(2)} times as wide as it is tall, not ${BOARD_SHAPE}`,
-  ).toBe(true);
-
+  const seen: { where: string; fit: Awaited<ReturnType<typeof readWindowFit>> }[] = [];
   for (const shape of SHAPES) {
     await page.setViewportSize({ width: Math.round(FULL.width * shape.w), height: Math.round(FULL.height * shape.h) });
     await page.waitForTimeout(800);
     const fit = await readWindowFit(page);
-    const where = `with the window ${shape.name} (${fit.size})`;
-    expect(
-      !fit.scrolls && fit.off === 0 && !fit.boardPast,
-      `[aspect: fit] [needs: F37] ${where} the page ${fit.scrolls ? "scrolls" : "fits"}, the board ${fit.boardPast ? "runs past" : "stays inside"} the window and ${fit.off} of ${fit.pieces} pieces run past it`,
-    ).toBeTruthy();
-    expect(fit.clashes, `[aspect: overlap] [needs: F31] ${where}, pieces of different points run into each other: ${fit.clashes.join(", ")}`).toEqual([]);
-    expect(
-      shapeOk(fit.shape),
-      `[aspect: shape] [needs: F37] ${where} the board is ${fit.shape.toFixed(2)} times as wide as it is tall, not ${BOARD_SHAPE}`,
-    ).toBe(true);
-    expect(
-      Math.abs(fit.piece / full.piece - 1) <= PIECE_SLACK,
-      `[aspect: size] [needs: F41] ${where} a piece is ${fit.piece.toFixed(2)} of a point's width, against ${full.piece.toFixed(2)} at full size`,
-    ).toBe(true);
+    seen.push({ where: `with the window ${shape.name} (${fit.size})`, fit });
   }
-
   await page.setViewportSize(FULL);
   await page.waitForTimeout(800);
   const after = await boardPixels(page);
+  const back = await readWindowFit(page);
   // Back at the size it started: one bar and one tray, and the same picture.
   // The stale copies a redraw leaves are near the board's own colour (run
   // 1792491065's bar: about a sixth darker), so the picture is compared at a
   // twelfth of brightness: the share of pixels that moved by more than that.
-  const parts = await page.evaluate(() => ({
-    bars: [...document.querySelectorAll<HTMLElement>('[data-testid="bar"]')].filter((e) => e.checkVisibility()).length,
-    trays: [...document.querySelectorAll<HTMLElement>('[data-testid="off-tray"]')].filter((e) => e.checkVisibility()).length,
-  }));
-  expect(
-    parts.bars <= 1 && parts.trays <= 1,
-    `[aspect: stale] after the window changed shape and was made full size again there are ${parts.bars} bars and ${parts.trays} off trays drawn`,
-  ).toBe(true);
   const changed = await page.evaluate(
     async ({ a, b }) => {
       const load = (src: string) =>
@@ -579,8 +561,41 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
     },
     { a: before, b: after },
   );
+
+  for (const { where, fit } of [...seen, { where: "after the window was made full size again", fit: back }]) {
+    expect(
+      fit.bars <= 1 && fit.trays <= 1,
+      `[aspect: stale] ${where} there are ${fit.bars} bars and ${fit.trays} off trays drawn`,
+    ).toBe(true);
+  }
   expect(
     changed <= 0.02,
     `[aspect: stale] after the window changed shape and was made full size again, ${(changed * 100).toFixed(1)}% of the screen looks different from before`,
   ).toBe(true);
+  for (const { where, fit } of seen) {
+    expect(
+      !fit.scrolls && fit.off === 0 && !fit.boardPast,
+      `[aspect: fit] [needs: F37] ${where} the page ${fit.scrolls ? "scrolls" : "fits"}, the board ${fit.boardPast ? "runs past" : "stays inside"} the window and ${fit.off} of ${fit.pieces} pieces run past it`,
+    ).toBeTruthy();
+  }
+  for (const { where, fit } of seen) {
+    expect(fit.clashes, `[aspect: overlap] [needs: F31] ${where}, pieces of different points run into each other: ${fit.clashes.join(", ")}`).toEqual([]);
+  }
+  const shapeOk = (v: number) => Math.abs(v / BOARD_SHAPE - 1) <= SHAPE_SLACK;
+  expect(
+    shapeOk(full.shape),
+    `[aspect: ratio] [needs: F37] at ${full.size} the board is ${full.shape.toFixed(2)} times as wide as it is tall, not ${BOARD_SHAPE}`,
+  ).toBe(true);
+  for (const { where, fit } of seen) {
+    expect(
+      shapeOk(fit.shape),
+      `[aspect: shape] [needs: F37] ${where} the board is ${fit.shape.toFixed(2)} times as wide as it is tall, not ${BOARD_SHAPE}`,
+    ).toBe(true);
+  }
+  for (const { where, fit } of seen) {
+    expect(
+      Math.abs(fit.piece / full.piece - 1) <= PIECE_SLACK,
+      `[aspect: size] [needs: F41] ${where} a piece is ${fit.piece.toFixed(2)} of a point's width, against ${full.piece.toFixed(2)} at full size`,
+    ).toBe(true);
+  }
 });

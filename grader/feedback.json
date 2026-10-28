@@ -1796,8 +1796,8 @@
       "repeat": "Resized my window again and the pieces still don't stay in proportion with the points."
     },
     "F87.stale": {
-      "first": "When I squeeze my browser window and then make it bigger again, the board is left a mess — old copies of parts of the board stay drawn over the game.",
-      "repeat": "Squeezed and re-expanded the window again, and old copies of the board are still left drawn over the game."
+      "first": "When I change the size of my browser window, the board is left a mess — old copies of parts of the board stay drawn over the game.",
+      "repeat": "Resized my window again, and old copies of the board are still left drawn over the game."
     },
     "F03.nochange": {
       "first": "When I click one of my pieces, the hints don't change to show that piece's moves — it doesn't seem to get picked up.",
