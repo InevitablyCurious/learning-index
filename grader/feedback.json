@@ -1776,12 +1776,20 @@
       "repeat": "Resized my window again and the game still doesn't keep up."
     },
     "F87.fit": {
-      "first": "When I change the shape of my browser window — shorter, narrower or bigger — the board runs off the screen.",
-      "repeat": "Changed my window's shape again and the board still runs off the screen."
+      "first": "When I change the shape of my browser window — shorter, narrower or bigger — part of the game runs off the screen.",
+      "repeat": "Changed my window's shape again and part of the game still runs off the screen."
     },
     "F87.missing": {
       "first": "When I change the shape of my browser window, some of my pieces disappear from the board.",
       "repeat": "Changed my window's shape again and pieces still disappear from the board."
+    },
+    "F87.place": {
+      "first": "When I change the shape of my browser window, the pieces don't move with the board — they end up away from their points.",
+      "repeat": "Changed my window's shape again and the pieces still end up away from their points."
+    },
+    "F87.small": {
+      "first": "When I change the shape of my browser window, the board shrinks far smaller than the window has room for.",
+      "repeat": "Changed my window's shape again and the board still shrinks far smaller than it has room for."
     },
     "F87.overlap": {
       "first": "When I change the shape of my browser window — shorter, narrower or bigger — pieces from different points run into each other.",

@@ -837,9 +837,13 @@ export async function sampleBoxColours(
  *
  * Fill: the mean of three samples down the centre line, more than 45 away from the
  * board's colour (the distance the grader uses everywhere for "painted"). Outline:
- * along the box's left and right edges, in the outermost 3 px, a pixel more than 45
- * away from the board's colour on at least 60% of ten spots (five heights, two
- * sides), so a one-pixel border is found and a stray anti-aliased pixel is not.
+ * down either side, 1 to 4 px inside the box, a pixel more than 45 away from the
+ * board's colour at four of five heights: one clear edge is enough, as on a tray
+ * at the board's end whose only edge faces the points, and a stray anti-aliased
+ * pixel is not. Sampled a whole pixel in, never half: a half-pixel inset rounded
+ * onto the dark panel beside run 1793183074's round-2 tray and counted as its edge,
+ * while the same tray beside the board's rim in round 3 had only its real line and
+ * failed (5 of 10 spots under the old both-sides rule).
  */
 export async function standsOutFromBoard(
   page: Page,
@@ -876,20 +880,13 @@ export async function standsOutFromBoard(
           if (!b) return { fill: false, outline: false, centre: null };
           const samples = [0.2, 0.5, 0.8].map((f) => at(b.x + b.width / 2, b.y + b.height * f));
           const centre = [0, 1, 2].map((i) => Math.round(samples.reduce((sum, c) => sum + c[i], 0) / samples.length));
-          let hits = 0;
-          let spots = 0;
-          for (const fy of [0.15, 0.3, 0.5, 0.7, 0.85]) {
-            for (const side of ["left", "right"]) {
-              spots += 1;
+          const sideHits = (side: "left" | "right") =>
+            [0.15, 0.3, 0.5, 0.7, 0.85].filter((fy) => {
               const y = b.y + b.height * fy;
-              const found = [0.5, 1.5, 2.5].some((inset) => {
-                const x = side === "left" ? b.x + inset : b.x + b.width - inset;
-                return far(at(x, y));
-              });
-              if (found) hits += 1;
-            }
-          }
-          return { fill: far(centre), outline: hits / spots >= 0.6, centre };
+              return [1, 2, 3].some((inset) => far(at(side === "left" ? b.x + inset : b.x + b.width - 1 - inset, y)));
+            }).length;
+          const outline = Math.max(sideHits("left"), sideHits("right")) >= 4;
+          return { fill: far(centre), outline, centre };
         });
       },
       { dataUrl, boxes, board },

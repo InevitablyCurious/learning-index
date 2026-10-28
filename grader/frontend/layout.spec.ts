@@ -444,6 +444,7 @@ const FULL = { width: 1440, height: 900 };
 const BOARD_SHAPE = 1.4;
 const SHAPE_SLACK = 0.03;
 const PIECE_SLACK = 0.05;
+const SMALLEST_FILL = 0.65;
 const SHAPES = [
   { name: "a banner taking a quarter of its height", w: 1, h: 0.72 },
   { name: "a fifth smaller both ways", w: 0.8, h: 0.8 },
@@ -488,6 +489,25 @@ async function readWindowFit(page: Page) {
         if (a.loc !== b.loc && Math.hypot(a.x - b.x, a.y - b.y) < 0.9 * Math.min(a.w, b.w)) clashes.push(`${a.loc}/${b.loc}`);
       }
     const pieceW = cs.map((c) => c.w).sort((p, q) => p - q)[Math.floor(cs.length / 2)] ?? 0;
+    // Pieces a player can tell apart: one drawn on the same spot as another of
+    // its point (centres under a third of a piece apart) is a piece gone.
+    let piled = 0;
+    const byLoc = new Map<string, typeof cs>();
+    for (const c of cs) byLoc.set(c.loc, [...(byLoc.get(c.loc) ?? []), c]);
+    for (const group of byLoc.values())
+      group.forEach((c, i) => {
+        if (group.slice(0, i).some((o) => Math.hypot(o.x - c.x, o.y - c.y) < c.w / 3)) piled++;
+      });
+    // Each piece on a numbered point sits over that point's column.
+    const columns = new Map(
+      [...document.querySelectorAll<HTMLElement>('[data-testid="point"]')].map((e) => [e.dataset.point ?? "", e.getBoundingClientRect()]),
+    );
+    const astray = cs
+      .filter((c) => {
+        const col = columns.get(c.loc);
+        return !!col && (c.x < col.left - 0.1 * c.w || c.x > col.right + 0.1 * c.w || c.y < col.top - 0.5 * c.w || c.y > col.bottom + 0.5 * c.w);
+      })
+      .map((c) => c.loc);
     const el = document.scrollingElement ?? document.documentElement;
     return {
       size: `${vw}×${vh}`,
@@ -498,6 +518,9 @@ async function readWindowFit(page: Page) {
       pieces: cs.length,
       clashes,
       piece: pointW ? pieceW / pointW : 0,
+      seen: cs.length - piled,
+      astray,
+      fills: drawn.length ? Math.max((x1 - x0) / vw, (y1 - y0) / vh) : 0,
       bars: boxes('[data-testid="bar"]').length,
       trays: boxes('[data-testid="off-tray"]').length,
     };
@@ -506,8 +529,9 @@ async function readWindowFit(page: Page) {
 
 test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", async ({ page }) => {
   // Measured at every window shape first, then told worst first: copies of
-  // the board left behind, pieces gone, the board or pieces off the window, pieces running
-  // into each other, and only then the board's proportions. Run 1793119227's
+  // the board left behind, pieces gone, pieces running into each other or off
+  // their points, a board shrunk below the room it has, the board or pieces off
+  // the window, and only then the board's proportions. Run 1793119227's
   // round 3 build (a fresh board at 1.28) piled up a new bar and tray at every
   // resize — six of each after five — and was told only that its board was
   // not 1.4 times as wide as it is tall, the first thing this check asked.
@@ -568,26 +592,42 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
       `[aspect: stale] ${where} there are ${fit.bars} bars and ${fit.trays} off trays drawn`,
     ).toBe(true);
   }
-  expect(
-    changed <= 0.02,
-    `[aspect: stale] after the window changed shape and was made full size again, ${(changed * 100).toFixed(1)}% of the screen looks different from before`,
-  ).toBe(true);
   // Every piece still shows: run 1793183074's round 3 build cleared its
   // collisions in the banner window by hiding the fifth piece of each 5-stack.
   for (const { where, fit } of seen) {
     expect(
-      fit.pieces >= full.pieces,
-      `[aspect: missing] [needs: F41] ${where} only ${fit.pieces} of the ${full.pieces} pieces shown at full size are showing`,
+      fit.seen >= full.seen,
+      `[aspect: missing] [needs: F41 F43] ${where} only ${fit.seen} of the ${full.seen} pieces shown at full size can be seen (${fit.pieces - fit.seen} drawn on top of another)`,
     ).toBe(true);
   }
+  for (const { where, fit } of seen) {
+    expect(fit.clashes, `[aspect: overlap] [needs: F31] ${where}, pieces of different points run into each other: ${fit.clashes.join(", ")}`).toEqual([]);
+  }
+  // Each piece stays over its own point: a page that resizes its board but not
+  // its pieces leaves them where the old board put them (a dodge tried on the
+  // reference, 2026-10-28: told "the board runs off the screen" of a board that
+  // fit).
+  for (const { where, fit } of seen) {
+    expect(fit.astray, `[aspect: place] [needs: F31] ${where}, pieces sit away from their points: ${fit.astray.join(", ")}`).toEqual([]);
+  }
+  // And the board uses the room it has: at least 65% of the window across or
+  // down (the reference: 71% at its tightest). A board that shrank on resize was
+  // told "old copies stay drawn" by the picture compared below.
+  for (const { where, fit } of [...seen, { where: "after the window was made full size again", fit: back }]) {
+    expect(
+      fit.fills >= SMALLEST_FILL,
+      `[aspect: small] [needs: F35] ${where} the board fills ${Math.round(fit.fills * 100)}% of the window at most, either way`,
+    ).toBe(true);
+  }
+  expect(
+    changed <= 0.02,
+    `[aspect: stale] after the window changed shape and was made full size again, ${(changed * 100).toFixed(1)}% of the screen looks different from before`,
+  ).toBe(true);
   for (const { where, fit } of seen) {
     expect(
       !fit.scrolls && fit.off === 0 && !fit.boardPast,
       `[aspect: fit] [needs: F37] ${where} the page ${fit.scrolls ? "scrolls" : "fits"}, the board ${fit.boardPast ? "runs past" : "stays inside"} the window and ${fit.off} of ${fit.pieces} pieces run past it`,
     ).toBeTruthy();
-  }
-  for (const { where, fit } of seen) {
-    expect(fit.clashes, `[aspect: overlap] [needs: F31] ${where}, pieces of different points run into each other: ${fit.clashes.join(", ")}`).toEqual([]);
   }
   const shapeOk = (v: number) => Math.abs(v / BOARD_SHAPE - 1) <= SHAPE_SLACK;
   expect(
