@@ -91,6 +91,8 @@ export function registerServer(rec, benchRoot = BENCH_ROOT) {
     label: rec?.label == null ? null : String(rec.label),
     ready: rec?.ready === true,
     cwd: rec?.cwd == null ? null : String(rec.cwd),
+    // A play server's graded round (control/play.mjs latestGraded).
+    attempt: Number.isInteger(rec?.attempt) ? rec.attempt : null,
     started_at: new Date().toISOString(),
   };
 

@@ -23,17 +23,34 @@ const CELL = "local/prov/campaign/memoryOFF/cell-0000";
 const NAME = `${RUN}::${CELL}`;
 const CANDIDATE = "okp-play-0123456789ab-cand";
 
-/** A runs root holding one cell, with a worktree that has a src/ (or has not). */
-function fixture({ build = true } = {}) {
+/**
+ * A runs root holding one cell with a working copy and, unless `graded` is
+ * false, two graded rounds in its checkpoint index (cp-03 is copied but not
+ * yet indexed, so it must never be served). The build served is the newest
+ * indexed round, never the working copy.
+ */
+function fixture({ build = true, graded = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okp-play-"));
   const cellDir = path.join(root, "runs", RUN, CELL);
   fs.mkdirSync(cellDir, { recursive: true });
+  const write = (dir) => {
+    fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "src", "server.ts"), "// the build under play\n");
+  };
   if (build) {
-    const src = path.join(cellDir, "worktree", "src");
-    fs.mkdirSync(src, { recursive: true });
-    fs.writeFileSync(path.join(src, "server.ts"), "// the build under play\n");
+    write(path.join(cellDir, "worktree"));
+    if (graded) {
+      for (const n of ["01", "02", "03"]) write(path.join(cellDir, "checkpoints", `cp-${n}`, "tree"));
+      const checkpoints = [1, 2].map((a) => ({ id: `cp-0${a}`, attempt: a, tree_path: `checkpoints/cp-0${a}/tree` }));
+      fs.writeFileSync(path.join(cellDir, "checkpoints", "index.json"), JSON.stringify({ run_id: "r", checkpoints, diffs: [] }));
+    }
   }
-  return { root, runsRoot: path.join(root, "runs"), worktree: path.join(cellDir, "worktree") };
+  return {
+    root,
+    runsRoot: path.join(root, "runs"),
+    worktree: path.join(cellDir, "worktree"),
+    tree: path.join(cellDir, "checkpoints", "cp-02", "tree"),
+  };
 }
 
 const args = (f, cell = CELL) => ({
@@ -115,7 +132,15 @@ test("a cell with no worktree is refused as no_build, naming the path", async (t
   const r = await startPlay(args(f));
   assert.equal(r.code, "no_build");
   assert.equal(r.status, 404);
-  assert.match(r.reason, /aborted before writing files|run tree has been reset/);
+  assert.match(r.reason, /aborted before its first grade|run tree has been reset/);
+});
+
+test("a working copy with no graded round is refused, never served", async (t) => {
+  const f = fixture({ graded: false });
+  cliForbidden(t);
+  const r = await startPlay(args(f));
+  assert.equal(r.code, "no_build");
+  assert.match(r.reason, /no round has been graded yet/);
 });
 
 test("a build that boots plays, reports its published URL, and is registered", async (t) => {
@@ -134,15 +159,17 @@ test("a build that boots plays, reports its published URL, and is registered", a
   assert.equal(r.page_status, 200);
   assert.equal(r.page_excerpt, "board ok");
   assert.equal(r.debug_seam_open, false);
+  assert.equal(r.attempt, 2, "the newest indexed round, not the unindexed cp-03");
 
   // The argv is the contract with the module. No entrypoint travels from here:
-  // the module resolves the start command itself.
+  // the module resolves the start command itself. The tree is the graded
+  // round's checkpoint, never the working copy.
   assert.deepEqual(calls[0].argv, [
     "start",
     "--name",
     NAME,
     "--worktree",
-    f.worktree,
+    f.tree,
     "--owner",
     "control",
     "--cell",
@@ -158,6 +185,7 @@ test("a build that boots plays, reports its published URL, and is registered", a
   assert.equal(rows[0].port, site.port);
   assert.equal(rows[0].ready, true);
   assert.equal(rows[0].label, NAME);
+  assert.equal(rows[0].attempt, 2);
   assert.ok(rows[0].started_at, "a record without a timestamp cannot be ordered");
 });
 

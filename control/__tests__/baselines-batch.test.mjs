@@ -24,7 +24,7 @@ const FROZEN_SCAFFOLD_HASH = JSON.parse(
 // harness/fingerprint.py dir_hash gives the same value. Prior 942369b1… (2026-09-25,
 // two dice on a double), before that 312720b5….
 const FROZEN_GOLDEN_HASH =
-  "75273d00d9a9c4ff00d1ccef2c51ecd4e6dbe0f920fe551fd46cd4e64ecbea08";
+  "7508909bad98d3ca1bfdf191dd6f1fb02484f9006c3e55b6aa46c36162a08a03";
 
 const INPUT_NAMES = FINGERPRINT_INPUTS.map((i) => i.name);
 

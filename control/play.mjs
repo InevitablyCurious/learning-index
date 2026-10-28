@@ -13,7 +13,7 @@
 // ever exercises (they all boot with the seam on).
 
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { resolveCellDir } from "./history.mjs";
@@ -104,6 +104,7 @@ export function playStatus(benchRoot) {
     url: `http://localhost:${r.port}/`,
     run: r.label ? String(r.label).split("::")[0] : null,
     cell: r.label ? String(r.label).split("::")[1] ?? null : null,
+    attempt: Number.isInteger(r.attempt) ? r.attempt : null,
     started_at: r.started_at,
   };
 }
@@ -170,10 +171,32 @@ async function probePage(url) {
 }
 
 /**
+ * The build the grader judged last: the newest round in the cell's checkpoint
+ * index, `{ attempt, tree }`, or null when no round has been graded. The index
+ * lists a checkpoint only once its tree is copied, so a half-written one is
+ * never served. Jerry, 2026-10-28: the board shows what the grader saw, never
+ * the model's working copy mid-edit ("i need to be able to see what the grader
+ * and you are seeing").
+ */
+export function latestGraded(cellDir) {
+  let index;
+  try {
+    index = JSON.parse(readFileSync(join(cellDir, "checkpoints", "index.json"), "utf8"));
+  } catch {
+    return null;
+  }
+  const last = (index?.checkpoints ?? []).at(-1);
+  if (!last || typeof last.tree_path !== "string" || !Number.isInteger(last.attempt)) return null;
+  const tree = join(cellDir, last.tree_path);
+  return existsSync(join(tree, "src")) ? { attempt: last.attempt, tree } : null;
+}
+
+/**
  * Boot one built result in the grader image and return the URL to open. Named
  * refusals:
  *   invalid_run      the identifiers did not resolve inside the runs root
- *   no_build         no worktree, or no src/ in it
+ *   no_build         no round has been graded yet (the build served is the
+ *                    newest graded checkpoint, never the working copy)
  *   no_entrypoint    nothing says how to start it
  *   image_missing    the grader image is not built
  *   docker_missing   docker is not reachable
@@ -188,15 +211,16 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
     return refuse("invalid_run", "run or cell identifier is invalid");
   }
 
-  const worktree = join(cellDir, "worktree");
-  if (!existsSync(join(worktree, "src"))) {
+  const graded = latestGraded(cellDir);
+  if (!graded) {
     return refuse(
       "no_build",
-      `no build to play at ${worktree} — this cell produced no source tree ` +
-        "(it aborted before writing files, or the run tree has been reset).",
+      `no graded build to play in ${cellDir} — no round has been graded yet ` +
+        "(or the cell aborted before its first grade, or the run tree has been reset).",
       404,
     );
   }
+  const worktree = graded.tree;
 
   // The session identity, and the name the module names everything from: its
   // containers, its network, and this registry record.
@@ -234,6 +258,7 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
     kind: PLAY_KIND,
     label: name,
     cwd: worktree,
+    attempt: graded.attempt,
     entrypoint: candidate,
   };
   if (registerServer(record_, benchRoot) === null) {
@@ -262,7 +287,7 @@ export async function startPlay({ runsRoot, benchRoot, run, cell }) {
         // Answering: mark it ready, then retire every other play server.
         registerServer({ ...record_, ready: true }, benchRoot);
         await reapServers({ kind: PLAY_KIND, except: name }, benchRoot);
-        return { ok: true, url, port, pid: name, run, cell, ...page, ...seam };
+        return { ok: true, url, port, pid: name, run, cell, attempt: graded.attempt, ...page, ...seam };
       }
     } catch {
       // Not up yet.

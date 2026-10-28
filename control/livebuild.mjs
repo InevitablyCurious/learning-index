@@ -1,62 +1,33 @@
-// LIVE BUILD — the model's own game, kept running for the cell in flight.
+// LIVE BUILD — the build the grader judged last, kept running for the cell in
+// flight.
 //
 // The board's LIVE BUILD panel only frames what the play registry says is
 // running, so it can sit on a screen and stay current with no click. This loop
 // is what keeps the registry current: while a cell is in flight it boots the
-// build (play.mjs, the same boot a person's click made) and boots it again
-// whenever the model's source changes, once the changes have gone quiet. A new
-// run therefore gets its own build on its own, and the previous run's build is
-// replaced.
+// newest GRADED round (play.mjs latestGraded: the round's checkpoint, never
+// the model's working copy) and boots again when a newer round is graded. Jerry,
+// 2026-10-28: the working copy mid-edit showed broken triangles and pieces the
+// grader never saw — "i need to be able to see what the grader and you are
+// seeing". A new run therefore gets its own build once its first round is
+// graded, and the previous run's build is replaced.
 //
 // A build somebody started by hand AFTER this run began is theirs and is left
 // alone; anything started before the run began is a stale leftover and is
-// replaced. A build that will not boot (half-written code) is not retried until
-// the source changes again, so it never spins.
+// replaced. A round whose build will not boot is not retried until a newer
+// round is graded, so it never spins.
 
-import { existsSync } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import { startPlay, playStatus, stopPlay } from "./play.mjs";
+import { latestGraded, startPlay, playStatus, stopPlay } from "./play.mjs";
 import { cellDirForRun, readRunState } from "./runstate.mjs";
 
 export const LIVEBUILD_TICK_MS = 4_000;
-/** The source must have been still this long before it is booted again. */
-export const QUIET_MS = 3_000;
 /** Never boot more often than this, whatever changed. */
 export const MIN_BOOT_GAP_MS = 6_000;
 
-const SKIP_DIRS = new Set(["node_modules", ".git", "test-results"]);
-
-/** Newest modification time (ms) of the build's own files, or 0 when none. */
-export async function newestSourceMtime(worktree) {
-  let newest = 0;
-  async function walk(dir, depth) {
-    let entries;
-    try {
-      entries = await readdir(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      if (e.isDirectory()) {
-        if (!SKIP_DIRS.has(e.name) && depth < 6) await walk(join(dir, e.name), depth + 1);
-      } else if (e.isFile()) {
-        try {
-          newest = Math.max(newest, (await stat(join(dir, e.name))).mtimeMs);
-        } catch {
-          // vanished between listing and stat
-        }
-      }
-    }
-  }
-  await walk(worktree, 0);
-  return newest;
-}
-
 /**
  * One look. `memo` is this loop's own memory: the cell it last booted, when,
- * and the source time that boot saw. Returns what it did, for the test and the
+ * and the graded round that boot served. Returns what it did, for the test and the
  * log: "idle" | "waiting" | "booted" | "failed" | "left_alone".
  */
 export async function livebuildTick(deps, memo) {
@@ -77,8 +48,8 @@ export async function livebuildTick(deps, memo) {
 
   const key = `${live.benchmarkId}::${live.cell}`;
   const now = deps.now();
-  const mtime = await deps.sourceMtime(live.worktree);
-  if (mtime === 0 || !deps.hasSource(live.worktree)) return "idle"; // nothing built yet
+  const graded = deps.graded(live.cellDir);
+  if (!graded) return "idle"; // no round graded yet
 
   const playing = deps.playing();
   const ours = playing && `${playing.run}::${playing.cell}` === key;
@@ -88,32 +59,30 @@ export async function livebuildTick(deps, memo) {
     if (handStarted && memo.key !== `${playing.run}::${playing.cell}`) return "left_alone";
   }
 
-  const changed = memo.key !== key || mtime > memo.mtime;
+  const changed = memo.key !== key || graded.attempt !== memo.attempt;
   const dead = memo.key === key && memo.ok === true && !ours; // we booted it and it is gone
   if (!changed && !dead) return "waiting";
   if (memo.key === key && now - memo.at < MIN_BOOT_GAP_MS) return "waiting";
-  if (memo.key === key && now - mtime < QUIET_MS) return "waiting"; // still being written
 
   memo.key = key;
   memo.at = now;
-  memo.mtime = mtime;
+  memo.attempt = graded.attempt;
   const r = await deps.boot({ run: live.benchmarkId, cell: live.cell });
   memo.ok = r?.ok === true;
   if (memo.ok) {
-    deps.log(`[livebuild] ${key} booted on port ${r.port}`);
+    deps.log(`[livebuild] ${key} round ${graded.attempt} booted on port ${r.port}`);
     return "booted";
   }
-  deps.log(`[livebuild] ${key} did not boot (${r?.code ?? "unknown"}); waiting for the next change`);
+  deps.log(`[livebuild] ${key} round ${graded.attempt} did not boot (${r?.code ?? "unknown"}); waiting for the next graded round`);
   return "failed";
 }
 
 export function startLivebuildLoop({ benchRoot, runsRoot }) {
-  const memo = { key: null, at: 0, mtime: 0, ok: false };
+  const memo = { key: null, at: 0, attempt: null, ok: false };
   const deps = {
     now: () => Date.now(),
     log: (msg) => console.log(msg),
-    sourceMtime: newestSourceMtime,
-    hasSource: (worktree) => existsSync(join(worktree, "src")),
+    graded: latestGraded,
     playing: () => playStatus(benchRoot),
     boot: (args) => startPlay({ runsRoot, benchRoot, ...args }),
     stop: () => stopPlay(benchRoot),
@@ -127,7 +96,7 @@ export function startLivebuildLoop({ benchRoot, runsRoot }) {
       return {
         benchmarkId: segs[0],
         cell: segs.slice(1).join("/"),
-        worktree: join(runsRoot, cell.cellDir, "worktree"),
+        cellDir: join(runsRoot, cell.cellDir),
         startedAt: Number(run.started_at) || 0,
       };
     },

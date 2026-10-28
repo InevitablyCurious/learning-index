@@ -88,6 +88,8 @@ let pid = null;
 let port = null;
 /** The booted game's URL (`http://localhost:<port>/`), from play/start. */
 let playUrl = null;
+/** The graded round the framed build is (control/play.mjs latestGraded). */
+let playAttempt = null;
 /** Kills the sequence's in-flight fetches on teardown. */
 let abort = null;
 /** Interval/timeout ids owned by this panel; teardown clears every one. */
@@ -164,6 +166,7 @@ function onBuildClick(e) {
         pid = playing.pid ?? null;
         port = playing.port ?? null;
         playUrl = playing.url;
+        playAttempt = playing.attempt ?? null;
         paintFrame(playing.url);
       } else {
         // Nothing running: drop the stale frame + boot state so "load build"
@@ -173,6 +176,7 @@ function onBuildClick(e) {
         pid = null;
         port = null;
         playUrl = null;
+        playAttempt = null;
         paintFrameLoad();
       }
     })();
@@ -202,10 +206,11 @@ async function followLive(card, key) {
     const p = await fetchPlaying();
     if (!p?.url || p.run !== card.benchmark_id || p.cell !== card.cell) return;
     if (!currentCard || `${currentCard.run_dir}::${currentCard.sequence_index}` !== key || activeTab !== "live") return;
-    if (p.pid === pid && p.url === playUrl && key === loadedKey) return;
+    if (p.pid === pid && p.url === playUrl && (p.attempt ?? null) === playAttempt && key === loadedKey) return;
     pid = p.pid ?? null;
     port = p.port ?? null;
     playUrl = p.url;
+    playAttempt = p.attempt ?? null;
     paintFrame(p.url);
     loadedKey = key;
     bootedAt = Date.now();
@@ -460,6 +465,7 @@ async function teardown() {
   pid = null;
   port = null;
   playUrl = null;
+  playAttempt = null;
 }
 
 // ── the load click ── the ONLY boot path. Busy-guarded and once-only: a
@@ -639,6 +645,7 @@ async function startGame(card, key, signal) {
     pid = data.pid ?? null;
     port = data.port ?? null;
     playUrl = data.url;
+    playAttempt = data.attempt ?? null;
     paintFrame(data.url);
     loadedKey = key;
     bootedAt = Date.now();
@@ -658,8 +665,12 @@ function paintFrame(url) {
   // innerHTML is safe here: the only dynamic part is the server-given url,
   // and it is escaped. Class names stay double-quoted literals so the
   // style-coverage guard sees them.
+  // Which build this is: always a graded round, never the model's working
+  // copy (Jerry, 2026-10-28: "i need to be able to see what the grader and you
+  // are seeing").
+  const round = Number.isInteger(playAttempt) ? `round ${playAttempt} as graded · ` : "";
   frameEl.innerHTML =
-    `<div class="build-bar"><span class="build-url">${esc(url)}</span>` +
+    `<div class="build-bar"><span class="build-url">${esc(round)}${esc(url)}</span>` +
     `<button type="button" class="build-btn" data-build-reload>reload</button>` +
     `<button type="button" class="build-btn" data-build-open>open ↗</button></div>` +
     `<div class="build-view"><div class="build-host"></div><span class="build-size"></span></div>`;
