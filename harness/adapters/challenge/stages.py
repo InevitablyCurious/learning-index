@@ -113,21 +113,37 @@ def check_id(check: str) -> str | None:
     return None
 
 
-def stage_of(check: str, stages: Iterable[Stage]) -> Stage:
+def _match(check: str, stages: Iterable[Stage]) -> tuple[Stage, int]:
+    """The check's stage and the position of its key in that stage's list."""
     ident = check_id(check)
-    best: tuple[int, Stage] | None = None
+    best: tuple[int, Stage, int] | None = None
     if ident is not None:
         for stage in stages:
-            for key in stage.keys:
+            for index, key in enumerate(stage.keys):
                 matches = ident == key or (key.endswith("/") and ident.startswith(key))
                 if matches and (best is None or len(key) > best[0]):
-                    best = (len(key), stage)
+                    best = (len(key), stage, index)
     if best is None:
         raise UnstagedCheckError(
             f"check {check!r} has no player stage in grader/checks.json — its stage decides "
             "whether the model hears about it, so it must be declared, never guessed"
         )
-    return best[1]
+    return best[1], best[2]
+
+
+def stage_of(check: str, stages: Iterable[Stage]) -> Stage:
+    return _match(check, stages)[0]
+
+
+def player_order(check: str, stages: Iterable[Stage]) -> tuple[int, int]:
+    """Where a player meets this check: its stage, then its place in that stage's
+    list. A stage's list is written in the order a player meets things (Jerry,
+    2026-10-28: app loads → board → pieces → buttons → resizing), and the model
+    reads its problems in that order — never in the grader's file order, which
+    put conformance before backend before frontend whatever the player saw first
+    (WO-LI-GRADER-ORIENTATION: 769 inversions in stage 1)."""
+    stage, index = _match(check, stages)
+    return stage.number, index
 
 
 def player_view(
@@ -162,7 +178,10 @@ def player_view(
         return PlayerView(stage=None, unevaluated=unevaluated)
     first = min(s.number for s, _ in staged)
     stage = next(s for s, _ in staged if s.number == first)
-    visible = [p for s, p in staged if s.number == first]
+    visible = sorted(
+        (p for s, p in staged if s.number == first),
+        key=lambda p: player_order(str(p.get("check", "")).strip(), stages),
+    )
     withheld = [str(p.get("check", "")).strip() for s, p in staged if s.number != first]
     return PlayerView(
         stage=stage, visible=visible, withheld=withheld, unevaluated=unevaluated

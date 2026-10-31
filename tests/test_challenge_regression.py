@@ -159,7 +159,9 @@ def test_previous_withheld_or_unevaluated_is_not_regression() -> None:
 
 def test_regression_opener_heads_the_tester_list() -> None:
     view, msg = _feedback([_problem(PIP), _problem(INIT)], regressions={PIP})
-    assert [p["check"] for p in view.visible] == [PIP, INIT]
+    # Told in the stage's own order (the starting position before the pip
+    # count), whatever order the grader reported them in.
+    assert [p["check"] for p in view.visible] == [INIT, PIP]
     assert _REGRESSION_HEADER in msg
     assert msg.index(_REGRESSION_HEADER) < msg.index(_FEEDBACK_HEADER_FIRST), (
         "the regression opener heads the tester's message, before the "

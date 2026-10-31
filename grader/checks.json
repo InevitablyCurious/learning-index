@@ -851,68 +851,72 @@
   "stages": [
     {
       "stage": 1,
-      "name": "The board as it opens",
+      "name": "First look",
       "checks": [
         "G16",
-        "F01",
-        "F27",
-        "F02",
-        "F08",
-        "F35",
-        "F36",
-        "F37",
-        "F38",
-        "F52",
-        "F44",
-        "F15",
-        "F28",
-        "F40",
-        "F29",
-        "F30",
-        "F42",
-        "F83",
-        "F32",
-        "F41",
-        "F43",
-        "F57",
-        "F31",
-        "G01",
-        "G02",
-        "F06",
-        "F69",
-        "G26",
-        "F34",
-        "G28",
-        "G29",
         "REQ-BIND/",
         "REQ-API/",
         "REQ-STATE/",
         "REQ-DEBUG/",
-        "REQ-TESTID/",
-        "REQ-RENDER/point",
-        "REQ-RENDER/checker",
-        "REQ-RENDER/bar",
-        "REQ-RENDER/off-tray",
+        "REQ-RESPONSIVE/startup",
+        "F01",
+        "F27",
+        "F15",
+        "G29",
+        "G28",
         "REQ-RENDER/blank-board",
         "REQ-RENDER/geometry-not-drawn",
-        "REQ-RESPONSIVE/startup",
+        "F02",
+        "REQ-RENDER/point",
+        "REQ-RENDER/bar",
+        "REQ-RENDER/off-tray",
+        "F28",
+        "F40",
+        "F29",
+        "F80",
+        "F30",
         "F70",
         "F79",
-        "F80",
+        "F42",
+        "F83",
+        "F32",
         "F81",
-        "F82",
+        "F36",
+        "F37",
+        "REQ-RENDER/checker",
+        "F41",
+        "F43",
+        "F31",
         "F71",
+        "G01",
+        "G02",
+        "F06",
+        "F69",
+        "REQ-TESTID/",
+        "F35",
+        "F38",
+        "F44",
+        "F52",
+        "F82",
+        "F08",
+        "G26",
+        "F34",
         "F87"
       ]
     },
     {
       "stage": 2,
-      "name": "Starting a game",
+      "name": "Starting a game: the first roll",
       "checks": [
         "F89",
-        "F85",
+        "REQ-RENDER/die",
+        "REQ-TESTID/die",
         "G31",
+        "F61",
+        "F63",
+        "F85",
         "F88",
+        "F18",
         "F19",
         "F54",
         "F68"
@@ -920,74 +924,110 @@
     },
     {
       "stage": 3,
-      "name": "Rolling, moving and getting hit",
+      "name": "Starting a game: picking up a piece",
       "checks": [
-        "G03",
-        "E01",
-        "F03",
-        "F25",
-        "F84",
-        "F04",
-        "F75",
-        "F76",
-        "F45",
-        "F58",
-        "F59",
-        "F60",
-        "F61",
-        "F62",
-        "F77",
-        "F63",
-        "G04",
-        "G17",
-        "G18",
-        "G05",
-        "G23",
-        "G25",
-        "E09",
-        "F14",
-        "F86",
-        "F18",
-        "F21",
-        "F33",
-        "F39",
-        "F47",
-        "F48",
-        "REQ-RENDER/die",
-        "REQ-RENDER/die-reload",
-        "REQ-TESTID/die",
         "REQ-HINT/",
-        "REQ-RESPONSIVE/moving",
-        "REQ-RESPONSIVE/playing",
-        "G33",
-        "F72",
-        "F73",
-        "F74",
-        "F78",
-        "G07",
-        "F09",
-        "G06",
-        "E05",
-        "F10",
-        "E06"
+        "F03",
+        "F84"
       ]
     },
     {
       "stage": 4,
-      "name": "When you can't move",
+      "name": "Starting a game: the hints",
       "checks": [
-        "E04",
-        "G13",
-        "F05",
-        "F24",
-        "E07",
-        "F16",
-        "REQ-RESPONSIVE/awkwardroll"
+        "F04",
+        "F75"
       ]
     },
     {
       "stage": 5,
-      "name": "Bearing off",
+      "name": "Starting a game: moving a piece",
+      "checks": [
+        "F45",
+        "F76",
+        "F25",
+        "G03",
+        "F60",
+        "F58",
+        "F59",
+        "F14",
+        "G04",
+        "G18",
+        "F73",
+        "E09",
+        "REQ-RESPONSIVE/moving",
+        "G23",
+        "F47",
+        "F16",
+        "F86"
+      ]
+    },
+    {
+      "stage": 6,
+      "name": "Starting a game: using the dice",
+      "checks": [
+        "F39",
+        "E01",
+        "F33",
+        "F74",
+        "F78",
+        "G05",
+        "REQ-RENDER/die-reload",
+        "F21",
+        "F48",
+        "REQ-RESPONSIVE/awkwardroll"
+      ]
+    },
+    {
+      "stage": 7,
+      "name": "Playing: the computer's turn",
+      "checks": [
+        "G25",
+        "F62",
+        "F77",
+        "REQ-RESPONSIVE/playing",
+        "F55",
+        "REQ-RESPONSIVE/aiturn",
+        "G14",
+        "G30",
+        "E08"
+      ]
+    },
+    {
+      "stage": 8,
+      "name": "Playing: hitting",
+      "checks": [
+        "G07",
+        "G17",
+        "F09"
+      ]
+    },
+    {
+      "stage": 9,
+      "name": "Playing: the bar",
+      "checks": [
+        "G06",
+        "F05",
+        "G32",
+        "F24",
+        "G13",
+        "F10",
+        "E05",
+        "E06",
+        "E04",
+        "E07"
+      ]
+    },
+    {
+      "stage": 10,
+      "name": "Playing: tall stacks",
+      "checks": [
+        "F57"
+      ]
+    },
+    {
+      "stage": 11,
+      "name": "Playing: bearing off",
       "checks": [
         "G09",
         "G19",
@@ -1001,24 +1041,11 @@
       ]
     },
     {
-      "stage": 6,
-      "name": "Winning",
+      "stage": 12,
+      "name": "Playing: the doubling cube",
       "checks": [
-        "G10",
-        "F12",
-        "F51",
-        "F22",
-        "F23",
-        "F17",
-        "F53",
-        "F65",
-        "G27"
-      ]
-    },
-    {
-      "stage": 7,
-      "name": "The doubling cube",
-      "checks": [
+        "G33",
+        "F72",
         "G11",
         "G20",
         "G21",
@@ -1035,17 +1062,26 @@
       ]
     },
     {
-      "stage": 8,
-      "name": "Playing the computer",
+      "stage": 13,
+      "name": "Finished: game over",
       "checks": [
-        "G14",
-        "E08",
-        "REQ-RESPONSIVE/aiturn",
-        "G30",
-        "F55",
-        "G32"
+        "G10",
+        "F53",
+        "F12",
+        "F51",
+        "F65"
+      ]
+    },
+    {
+      "stage": 14,
+      "name": "Finished: playing again",
+      "checks": [
+        "F22",
+        "F23",
+        "F17",
+        "G27"
       ]
     }
   ],
-  "stages_note": "Player order. The model hears only the failing checks of the earliest stage that has any: a player cannot reach a later stage past an earlier one that is broken. Every check is still graded every round. A key ending in / matches every setup check under it; the most specific key wins. Jerry, 2026-10-28: the board as it opens — its look, its layout and how it follows the window — is told before anything a player does with it, so no message ever mixes a look problem with a play problem; the first play (Roll, the opening roll, difficulty) is the next stage, and the looks met during play (hints, dice, pacing) come after that."
+  "stages_note": "Player order. The model hears only the failing checks of the earliest stage that has any, listed in the order of that stage's list: a player cannot reach a later step past an earlier one that is broken. Every check is still graded every round. A key ending in / matches every setup check under it; the most specific key wins. Jerry, 2026-10-28: FIRST LOOK (app loads → board → pieces → buttons → resizing, one stage: a player sees the first screen at once) → STARTING A GAME (first roll → picking up a piece → hints → moving → using the dice) → PLAYING (the computer's turn → hitting → the bar → tall stacks → bearing off → the doubling cube) → FINISHED (game over → playing again), each step after the first look its own stage. The first roll holds the dice look because every dice check needs Roll to work."
 }

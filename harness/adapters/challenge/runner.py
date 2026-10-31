@@ -72,7 +72,7 @@ from ..docker_worker import (
 from ..mapping import write_session_mapping
 from ..transcript import write_session_transcript
 from .bootstrap import BootstrapMixin
-from .stages import Stage, load_stages, player_view
+from .stages import Stage, load_stages, player_order, player_view
 from .constants import (
     _GRADER_DIR,
     _HARNESS_LIMIT_REASONS,
@@ -1950,8 +1950,12 @@ class ChallengeRunner(
                     for p in problems
                     if isinstance(p, dict)
                 }
+                # In the order a player meets them, like the problems
+                # themselves — not alphabetically, which put a setup check
+                # after every bracketed gate (WO-LI-GRADER-ORIENTATION).
                 newly_passing = sorted(
-                    c for c in told_last_round if c not in now_failing
+                    (c for c in told_last_round if c not in now_failing),
+                    key=lambda c: player_order(c, self._player_stages()),
                 )
                 still_failing = sorted(set(attempt_reports[-1]["failed_gates"]))
                 self._progress(

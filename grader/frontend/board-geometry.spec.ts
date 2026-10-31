@@ -739,8 +739,9 @@ test("[F70] REQ-GEOMETRY — the points' tips stand clear of the middle", async 
 // inward, a piece fits its own point, the bar lies between the halves — so a
 // board whose left half was drawn 25% wider than its right passed them all
 // (points 60 px on the left, 48 px on the right). These compare the parts with
-// each other, as a player's eye does. The model knows a real board is even
-// from its training; the build prompt does not say it (owner, 2026-10-17).
+// each other, as a player's eye does. The build prompt says it too since
+// 2026-10-31 (chunk-04: the halves the same width, all 24 points the same size,
+// the buttons the same size), so no check asks for what the spec never did.
 const EVEN = 1.05; // a part at most 5% bigger than its match
 
 test("[F79] REQ-GEOMETRY — every point is the same size", async ({ page }) => {

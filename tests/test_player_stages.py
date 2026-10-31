@@ -54,7 +54,7 @@ def test_every_complaint_key_and_every_drawn_or_tagged_element_has_a_stage() -> 
 
 
 def test_the_most_specific_key_wins() -> None:
-    assert stage_of("conformance:REQ-TESTID/die — dice tagged", STAGES).number == 3
+    assert stage_of("conformance:REQ-TESTID/die — dice tagged", STAGES).number == 2
     assert stage_of("conformance:REQ-TESTID/testid.board — tagged", STAGES).number == 1
 
 
@@ -65,10 +65,10 @@ def test_an_undeclared_check_is_refused_not_guessed() -> None:
 
 def test_only_the_earliest_failing_stage_is_told() -> None:
     problems = [
-        {"check": "[G08] REQ-BEAROFF — bear-off"},  # stage 5
+        {"check": "[G08] REQ-BEAROFF — bear-off"},  # stage 11
         {"check": "[G01] REQ-INIT — initial position"},  # stage 1
         {"check": "[F06] REQ-PIPUI — pips on screen"},  # stage 1
-        {"check": "[G14] REQ-AISTRENGTH — hard beats easy"},  # stage 8
+        {"check": "[G14] REQ-AISTRENGTH — hard beats easy"},  # stage 7
     ]
     view = player_view(problems, STAGES, is_infra=_infra)
     assert view.stage is not None and view.stage.number == 1
@@ -82,8 +82,12 @@ def test_the_board_as_it_opens_is_told_before_anything_played() -> None:
     # changes. The opening look, layout and resize come first, alone.
     view = player_view(
         [
-            {"check": "[F88] REQ-OPENING — the computer plays when it wins the opening"},
-            {"check": "[F87] REQ-LAYOUT — the board keeps its shape as the window changes"},
+            {
+                "check": "[F88] REQ-OPENING — the computer plays when it wins the opening"
+            },
+            {
+                "check": "[F87] REQ-LAYOUT — the board keeps its shape as the window changes"
+            },
         ],
         STAGES,
         is_infra=_infra,
@@ -92,13 +96,37 @@ def test_the_board_as_it_opens_is_told_before_anything_played() -> None:
     assert [p["check"][:5] for p in view.visible] == ["[F87]"]
 
 
+def test_a_stage_is_told_in_the_order_a_player_meets_it() -> None:
+    # Jerry, 2026-10-28: app loads → board → pieces → buttons → resizing. The
+    # grader reports conformance, then backend, then frontend; the model must
+    # read the stage's own order instead (WO-LI-GRADER-ORIENTATION).
+    view = player_view(
+        [
+            {
+                "check": "[F87] REQ-LAYOUT — the board keeps its shape as the window changes"
+            },
+            {"check": "[F82] REQ-LAYOUT — the buttons match"},
+            {"check": "[G01] REQ-INIT — initial position"},
+            {"check": "[F79] REQ-GEOMETRY — every point is the same size"},
+        ],
+        STAGES,
+        is_infra=_infra,
+    )
+    assert [p["check"][:5] for p in view.visible] == [
+        "[F79]",
+        "[G01]",
+        "[F82]",
+        "[F87]",
+    ]
+
+
 def test_a_clean_stage_unlocks_the_next_failing_one_skipping_clean_stages() -> None:
     view = player_view(
         [{"check": "[G10] REQ-WINCLASS — x"}, {"check": "[G14] x"}],
         STAGES,
         is_infra=_infra,
     )
-    assert view.stage is not None and view.stage.number == 6
+    assert view.stage is not None and view.stage.number == 7
 
 
 def test_runner_deaths_are_never_staged_or_told() -> None:
@@ -190,13 +218,13 @@ def test_a_stuck_check_is_not_told_when_the_check_for_that_step_failed_too() -> 
 
 def test_a_stuck_check_is_told_when_the_step_failed_only_in_its_own_situation() -> None:
     # Hints vanish only on a double: every ordinary-roll check passes, so the
-    # double's own line is what the player saw — hiding it would skip stage 3.
+    # double's own line is what the player saw — hiding it would skip stage 6.
     view = player_view(
         [_doubles("Error: move 1: no hint appeared [aspect: nomove] [needs: F25]")],
         STAGES,
         is_infra=_infra,
     )
-    assert view.stage is not None and view.stage.number == 3
+    assert view.stage is not None and view.stage.number == 6
     assert [p["check"][:5] for p in view.visible] == [
         "[F33]"
     ] and view.unevaluated == []
@@ -239,13 +267,18 @@ def test_a_chain_of_stuck_checks_is_told_as_the_one_step_that_failed() -> None:
 
 
 def test_moves_after_the_first_are_the_doubles_checks_own_finding() -> None:
-    # The player has made moves, so how many is the complaint — whatever else fails.
+    # The player has made moves, so how many is the complaint. Moving a piece is
+    # an earlier step than using the dice (Jerry, 2026-10-28), so while F25 fails
+    # the doubles line waits behind it; on its own it is told.
     problems = [
         _doubles("move 3: no hint appeared [aspect: two]"),
         {"check": "[F25] REQ-HINT — x", "observed": "x"},
     ]
     view = player_view(problems, STAGES, is_infra=_infra)
-    assert sorted(p["check"][:5] for p in view.visible) == ["[F25]", "[F33]"]
+    assert [p["check"][:5] for p in view.visible] == ["[F25]"]
+    assert [c[:5] for c in view.withheld] == ["[F33]"]
+    alone = player_view(problems[:1], STAGES, is_infra=_infra)
+    assert [p["check"][:5] for p in alone.visible] == ["[F33]"]
     label, _ = ChallengeRunner._told_label(
         _doubles("move 3: no hint appeared [aspect: two]"), pass_kind="first"
     )
