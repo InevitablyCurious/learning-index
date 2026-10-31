@@ -1779,6 +1779,10 @@
       "first": "When I change the shape of my browser window — shorter, narrower or bigger — part of the game runs off the screen.",
       "repeat": "Changed my window's shape again and part of the game still runs off the screen."
     },
+    "F87.offbuttons": {
+      "first": "When I change the shape of my browser window, some of the buttons end up past the edge of the screen.",
+      "repeat": "Changed my window's shape again and some buttons are still past the edge of the screen."
+    },
     "F87.buttons": {
       "first": "When I change the shape of my browser window, the buttons get squashed and their names are cut off.",
       "repeat": "Changed my window's shape again and the buttons are still squashed, their names cut off."

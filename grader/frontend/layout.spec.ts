@@ -517,18 +517,31 @@ async function readWindowFit(page: Page) {
     // 60×24, the label inside its button, the button inside the window. Run
     // 1793474579's final build squashed them in a short window, every label cut
     // off at its bottom edge, and no check looked.
-    const squashed = ["rollBtn", "doubleBtn", "undoBtn", "endTurnBtn", "newGameBtn"].filter((id) => {
-      const b = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
-      if (!b || b.tagName !== "BUTTON" || !b.checkVisibility()) return false;
-      const r = b.getBoundingClientRect();
-      const clipped = b.scrollWidth > b.clientWidth + 1 || b.scrollHeight > b.clientHeight + 1;
-      const outside = r.left < -1 || r.top < -1 || r.right > vw + 1 || r.bottom > vh + 1;
-      return r.width < 60 || r.height < 24 || clipped || outside;
-    });
+    // Off the window and squashed are two things a player sees differently: run
+    // 1793482090 round 4 pushed New Game below a short window, every button full
+    // size, and was told "the buttons get squashed and their names are cut off".
+    const buttonEls = ["rollBtn", "doubleBtn", "undoBtn", "endTurnBtn", "newGameBtn"]
+      .map((id) => [id, document.querySelector<HTMLElement>(`[data-testid="${id}"]`)] as const)
+      .filter(([, b]) => !!b && b.tagName === "BUTTON" && b.checkVisibility()) as (readonly [string, HTMLElement])[];
+    const offscreen = buttonEls
+      .filter(([, b]) => {
+        const r = b.getBoundingClientRect();
+        return r.left < -1 || r.top < -1 || r.right > vw + 1 || r.bottom > vh + 1;
+      })
+      .map(([id]) => id);
+    const squashed = buttonEls
+      .filter(([id, b]) => {
+        if (offscreen.includes(id)) return false;
+        const r = b.getBoundingClientRect();
+        const clipped = b.scrollWidth > b.clientWidth + 1 || b.scrollHeight > b.clientHeight + 1;
+        return r.width < 60 || r.height < 24 || clipped;
+      })
+      .map(([id]) => id);
     const el = document.scrollingElement ?? document.documentElement;
     return {
       size: `${vw}×${vh}`,
       spread,
+      offscreen,
       squashed,
       shape: drawn.length ? (x1 - x0) / (y1 - y0) : 0,
       boardPast: drawn.length > 0 && (x0 < -2 || y0 < -2 || x1 > vw + 2 || y1 > vh + 2),
@@ -673,7 +686,10 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
     ).toBeTruthy();
   }
   for (const { where, fit } of seen) {
-    expect(fit.squashed, `[aspect: buttons] [needs: F38] ${where} these buttons are squashed or cut off: ${fit.squashed.join(", ")}`).toEqual([]);
+    expect(fit.offscreen, `[aspect: offbuttons] [needs: F38] ${where} these buttons are past the edge of the window: ${fit.offscreen.join(", ")}`).toEqual([]);
+  }
+  for (const { where, fit } of seen) {
+    expect(fit.squashed, `[aspect: buttons] [needs: F38] ${where} these buttons are squashed, their names cut off: ${fit.squashed.join(", ")}`).toEqual([]);
   }
   for (const { where, fit } of seen) {
     expect(
