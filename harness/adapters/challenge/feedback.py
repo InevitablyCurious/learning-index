@@ -619,6 +619,12 @@ class FeedbackMixin:
         return bool(cls._HARNESS_INFRA_CHECK_RE.match(str(check or "").strip()))
 
     @classmethod
+    def _complaint_aspect(cls, record: dict[str, Any]) -> str | None:
+        """The aspect a problem names, or None (the check's general line)."""
+        m = _ASPECT_RE.search(str(record.get("observed", "") or ""))
+        return m.group(1) if m else None
+
+    @classmethod
     def _complaint_id(cls, record: dict[str, Any]) -> str:
         """Which complaint a problem is: its check, plus the aspect it names.
 

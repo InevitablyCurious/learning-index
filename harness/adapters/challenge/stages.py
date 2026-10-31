@@ -186,3 +186,109 @@ def player_view(
     return PlayerView(
         stage=stage, visible=visible, withheld=withheld, unevaluated=unevaluated
     )
+
+
+# WHERE IN ITS TEST A COMPLAINT IS ASKED. A test stops at its first failing
+# assertion, so a check that now fails on an aspect asked LATER in its test than
+# the one the model was told about has passed that earlier one: the told
+# complaint is fixed, and the player can say so. One that fails EARLIER never
+# reached the told assertion, and nothing true can be said about it. Two aspects
+# asked inside one loop are NOT ordered: F31 asks side, up, down and past piece by
+# piece, so "past" failing on one piece says nothing about "up" on another. Read
+# from the graded source: each aspect's first ask in its test body, with the
+# `for` blocks around it.
+_TEST_START_RE = re.compile(r"""^\s*(?:test|it)\(\s*["'`]\[([A-Z]+[0-9]*)\]""", re.M)
+_ASPECT_MARK_RE = re.compile(r"\[aspect: ([a-z]+)\]")
+_FOR_OPEN_RE = re.compile(r"\bfor\s*\([^{]*\)\s*$")
+
+
+@dataclass(frozen=True)
+class AspectAsk:
+    position: int
+    loops: frozenset[int]
+
+
+def _asks(body: str, offset: int) -> dict[str, list[AspectAsk]]:
+    asks: dict[str, list[AspectAsk]] = {}
+    stack: list[tuple[int, bool]] = []  # (open position, is a for-loop block)
+    # Asks, not mentions: a comment naming an aspect is not where it is asked.
+    marks = {
+        m.start(): m.group(1)
+        for m in _ASPECT_MARK_RE.finditer(body)
+        if not body[body.rfind("\n", 0, m.start()) + 1 : m.start()]
+        .lstrip()
+        .startswith(("//", "*"))
+    }
+    for i, ch in enumerate(body):
+        if ch == "{":
+            stack.append((i, bool(_FOR_OPEN_RE.search(body[max(0, i - 200) : i]))))
+        elif ch == "}" and stack:
+            stack.pop()
+        elif i in marks:
+            loops = frozenset(offset + pos for pos, is_for in stack if is_for)
+            asks.setdefault(marks[i], []).append(AspectAsk(offset + i, loops))
+    return asks
+
+
+def aspect_order(grader_dir: Path) -> dict[str, dict[str, list[AspectAsk]]]:
+    """check token -> {aspect: every place its test asks it, and inside which loops}."""
+    order: dict[str, dict[str, list[AspectAsk]]] = {}
+    for path in sorted(
+        [
+            *Path(grader_dir).glob("frontend/*.spec.ts"),
+            *Path(grader_dir).glob("backend/*.test.ts"),
+        ]
+    ):
+        text = path.read_text(encoding="utf-8")
+        starts = list(_TEST_START_RE.finditer(text))
+        for i, m in enumerate(starts):
+            end = starts[i + 1].start() if i + 1 < len(starts) else len(text)
+            seen = order.setdefault(m.group(1), {})
+            for aspect, asks in _asks(text[m.end() : end], m.end()).items():
+                seen.setdefault(aspect, []).extend(asks)
+    return order
+
+
+def asked_after(
+    order: dict[str, dict[str, list[AspectAsk]]], token: str, later: str, earlier: str
+) -> bool:
+    """True only when every ask of `earlier` comes before the first ask of `later`,
+    outside any loop they share — F87 asks "stale" twice, once before "place" and
+    once after it, so a failure on "place" proves nothing about the second."""
+    asks = order.get(token, {})
+    before, after = asks.get(earlier), asks.get(later)
+    if not before or not after:
+        return False
+    first = min(after, key=lambda x: x.position)
+    return all(
+        a.position < first.position and not (a.loops & first.loops) for a in before
+    )
+
+
+def told_complaints_fixed(
+    told: Iterable[tuple[str, str | None]],
+    now: Iterable[tuple[str, str | None]],
+    order: dict[str, dict[str, list[AspectAsk]]],
+) -> list[tuple[str, str | None]]:
+    """Which of last round's told complaints (check, aspect) are gone now.
+
+    Gone when the check passes, or when every way it fails now is asked after
+    the told aspect, outside any loop they share. Run 1793479392 round 3: the
+    collision told in round 2 was fixed and the check failed on uneven pieces,
+    asked after it; acknowledged per check, the model never heard its fix worked.
+    """
+    failing: dict[str, set[str | None]] = {}
+    for check, aspect in now:
+        failing.setdefault(check, set()).add(aspect)
+    fixed = []
+    for check, aspect in told:
+        if check not in failing:
+            fixed.append((check, aspect))
+            continue
+        token = check_id(check) or ""
+        if aspect is not None and all(
+            b is not None and asked_after(order, token, b, aspect)
+            for b in failing[check]
+        ):
+            fixed.append((check, aspect))
+    return fixed

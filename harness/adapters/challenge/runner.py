@@ -72,7 +72,14 @@ from ..docker_worker import (
 from ..mapping import write_session_mapping
 from ..transcript import write_session_transcript
 from .bootstrap import BootstrapMixin
-from .stages import Stage, load_stages, player_order, player_view
+from .stages import (
+    Stage,
+    aspect_order,
+    load_stages,
+    player_order,
+    player_view,
+    told_complaints_fixed,
+)
 from .constants import (
     _GRADER_DIR,
     _HARNESS_LIMIT_REASONS,
@@ -1038,8 +1045,11 @@ class ChallengeRunner(
         # since. "That fixed it" names only checks it was told about; the
         # second-sighting line goes only to a complaint it has heard and that
         # never went away.
-        told_last_round: set[str] = set()
-        # check -> the line the model was first told for it, so "that fixed
+        # Per COMPLAINT — (check, aspect) — so a complaint that is gone can be
+        # reported fixed even while its check still fails on something asked
+        # after it (stages.told_complaints_fixed).
+        told_last_round: dict[str, tuple[str, str | None]] = {}
+        # complaint -> the line the model was first told for it, so "that fixed
         # it" quotes what was actually said (feedback.py _build_pass_verdict).
         told_first_label: dict[str, str] = {}
         told_open: set[str] = set()
@@ -1945,16 +1955,27 @@ class ChallengeRunner(
                 # PLAYER ORDER: only what the player reported last round can be
                 # reported fixed — a check the model never heard about passing
                 # is not news to it.
-                now_failing = set(attempt_reports[-1]["failed_gates"]) | {
-                    str(p.get("check", "")).strip()
+                now_failing = [
+                    (str(p.get("check", "")).strip(), self._complaint_aspect(p))
                     for p in problems
                     if isinstance(p, dict)
-                }
+                ]
+                with_record = {check for check, _ in now_failing}
+                now_failing += [
+                    (str(g).strip(), None)
+                    for g in attempt_reports[-1]["failed_gates"]
+                    if str(g).strip() not in with_record
+                ]
+                fixed = set(
+                    told_complaints_fixed(
+                        told_last_round.values(), now_failing, self._aspect_order()
+                    )
+                )
                 # In the order a player meets them, like the problems
                 # themselves — not alphabetically, which put a setup check
                 # after every bracketed gate (WO-LI-GRADER-ORIENTATION).
                 newly_passing = sorted(
-                    (c for c in told_last_round if c not in now_failing),
+                    (c for c, told in told_last_round.items() if told in fixed),
                     key=lambda c: player_order(c, self._player_stages()),
                 )
                 still_failing = sorted(set(attempt_reports[-1]["failed_gates"]))
@@ -2011,12 +2032,22 @@ class ChallengeRunner(
                     f"unevaluated={len(stage_view.unevaluated)} "
                     f"failing_total={len(feedback_checks)}"
                 )
-                told_last_round = visible_checks
+                told_last_round = {
+                    self._complaint_id(p): (
+                        str(p.get("check", "")).strip(),
+                        self._complaint_aspect(p),
+                    )
+                    for p in stage_view.visible
+                    if str(p.get("check", "")).strip()
+                }
                 told_open |= visible_complaints
                 for p in stage_view.visible:
-                    check = str(p.get("check", "")).strip()
-                    if check and check not in told_first_label:
-                        told_first_label[check] = self._told_label(
+                    complaint = self._complaint_id(p)
+                    if (
+                        str(p.get("check", "")).strip()
+                        and complaint not in told_first_label
+                    ):
+                        told_first_label[complaint] = self._told_label(
                             p, pass_kind="first"
                         )[0]
                 # A check told this round that PASSED the immediately-previous
@@ -2615,6 +2646,15 @@ class ChallengeRunner(
     # game a player is playing (Jerry, 2026-10-17: team prose is only for what a
     # player would NEVER see; a frozen game is seen).
     _TESTER_CONF_PREFIXES = ("REQ-RENDER/", "REQ-HINT/", "REQ-RESPONSIVE/")
+
+    @classmethod
+    def _aspect_order(cls):
+        """Where each check's test asks each aspect (stages.aspect_order), read once."""
+        cached = getattr(cls, "_ASPECT_ORDER_CACHE", None)
+        if cached is None:
+            cached = aspect_order(_GRADER_DIR)
+            cls._ASPECT_ORDER_CACHE = cached
+        return cached
 
     @classmethod
     def _player_stages(cls) -> list[Stage]:
