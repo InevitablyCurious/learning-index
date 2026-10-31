@@ -29,7 +29,7 @@ def test_an_aspect_asked_later_in_its_own_loop_proves_the_earlier_one() -> None:
 def test_an_aspect_asked_twice_is_proved_only_after_its_last_ask() -> None:
     # F87 counts leftover bars before "place" and compares the picture after it.
     assert not asked_after(ORDER, "F87", "place", "stale")
-    assert asked_after(ORDER, "F87", "ratio", "stale")
+    assert asked_after(ORDER, "F87", "size", "stale")
 
 
 def test_aspects_asked_piece_by_piece_in_one_loop_prove_nothing_about_each_other() -> (

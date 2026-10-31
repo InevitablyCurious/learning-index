@@ -547,11 +547,12 @@ async function readWindowFit(page: Page) {
 }
 
 test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", async ({ page }) => {
-  // Measured at every window shape first, then told worst first: copies of
-  // the board left behind, pieces gone, pieces running into each other or off
-  // their points, pieces of different sizes, a board shrunk below the room it
-  // has, the board or pieces off the window, squashed buttons, and only then
-  // the board's proportions. Run 1793119227's
+  // Measured at every window shape first, then told in this order: copies of
+  // the board left behind and pieces gone (faults of their own), then the
+  // board's proportions — at full size and as the window changes — and only
+  // then what a wrong shape brings with it: pieces running into each other or
+  // off their points, pieces of different sizes, a board shrunk below the room
+  // it has, the board or pieces off the window, squashed buttons. Run 1793119227's
   // round 3 build (a fresh board at 1.28) piled up a new bar and tray at every
   // resize — six of each after five — and was told only that its board was
   // not 1.4 times as wide as it is tall, the first thing this check asked.
@@ -620,6 +621,22 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
       `[aspect: missing] [needs: F41 F43] ${where} only ${fit.seen} of the ${full.seen} pieces shown at full size can be seen (${fit.pieces - fit.seen} drawn on top of another)`,
     ).toBe(true);
   }
+  // The board's shape comes before what follows from it. With the shape held,
+  // stacks cannot meet, pieces need not shrink and the panel keeps its room;
+  // told after them, the model fixed one symptom at a time and never heard the
+  // rule (WO-LI-OVERLAP-STUCK-WHY: overlap → uneven → buttons over runs 28–29,
+  // while its board measured 1.31 and 1.83).
+  const shapeOk = (v: number) => Math.abs(v / BOARD_SHAPE - 1) <= SHAPE_SLACK;
+  expect(
+    shapeOk(full.shape),
+    `[aspect: ratio] [needs: F37] at ${full.size} the board is ${full.shape.toFixed(2)} times as wide as it is tall, not ${BOARD_SHAPE}`,
+  ).toBe(true);
+  for (const { where, fit } of seen) {
+    expect(
+      shapeOk(fit.shape),
+      `[aspect: shape] [needs: F37] ${where} the board is ${fit.shape.toFixed(2)} times as wide as it is tall, not ${BOARD_SHAPE}`,
+    ).toBe(true);
+  }
   for (const { where, fit } of seen) {
     expect(fit.clashes, `[aspect: overlap] [needs: F31] ${where}, pieces of different points run into each other: ${fit.clashes.join(", ")}`).toEqual([]);
   }
@@ -657,17 +674,6 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
   }
   for (const { where, fit } of seen) {
     expect(fit.squashed, `[aspect: buttons] [needs: F38] ${where} these buttons are squashed or cut off: ${fit.squashed.join(", ")}`).toEqual([]);
-  }
-  const shapeOk = (v: number) => Math.abs(v / BOARD_SHAPE - 1) <= SHAPE_SLACK;
-  expect(
-    shapeOk(full.shape),
-    `[aspect: ratio] [needs: F37] at ${full.size} the board is ${full.shape.toFixed(2)} times as wide as it is tall, not ${BOARD_SHAPE}`,
-  ).toBe(true);
-  for (const { where, fit } of seen) {
-    expect(
-      shapeOk(fit.shape),
-      `[aspect: shape] [needs: F37] ${where} the board is ${fit.shape.toFixed(2)} times as wide as it is tall, not ${BOARD_SHAPE}`,
-    ).toBe(true);
   }
   for (const { where, fit } of seen) {
     expect(
