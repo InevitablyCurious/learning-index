@@ -529,6 +529,16 @@ async function readWindowFit(page: Page) {
         return r.left < -1 || r.top < -1 || r.right > vw + 1 || r.bottom > vh + 1;
       })
       .map(([id]) => id);
+    // The game's information is read as well as pressed: run 1793488446's final
+    // build cleared every button check while its message box sat below a short
+    // window, a sliver of "New game. White rolls first." showing.
+    const infoPast = ["message", "turnIndicator", "pipWhite", "pipBlack", "cube", "scoreWhite", "scoreBlack", "difficulty"]
+      .filter((id) => {
+        const e = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+        if (!e || !e.checkVisibility() || !(e.textContent ?? "").trim()) return false;
+        const r = e.getBoundingClientRect();
+        return r.width > 0 && (r.left < -1 || r.top < -1 || r.right > vw + 1 || r.bottom > vh + 1);
+      });
     const squashed = buttonEls
       .filter(([id, b]) => {
         if (offscreen.includes(id)) return false;
@@ -542,6 +552,7 @@ async function readWindowFit(page: Page) {
       size: `${vw}×${vh}`,
       spread,
       offscreen,
+      infoPast,
       squashed,
       shape: drawn.length ? (x1 - x0) / (y1 - y0) : 0,
       boardPast: drawn.length > 0 && (x0 < -2 || y0 < -2 || x1 > vw + 2 || y1 > vh + 2),
@@ -687,6 +698,9 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
   }
   for (const { where, fit } of seen) {
     expect(fit.offscreen, `[aspect: offbuttons] [needs: F38] ${where} these buttons are past the edge of the window: ${fit.offscreen.join(", ")}`).toEqual([]);
+  }
+  for (const { where, fit } of seen) {
+    expect(fit.infoPast, `[aspect: info] [needs: F38] ${where} this game information is past the edge of the window: ${fit.infoPast.join(", ")}`).toEqual([]);
   }
   for (const { where, fit } of seen) {
     expect(fit.squashed, `[aspect: buttons] [needs: F38] ${where} these buttons are squashed, their names cut off: ${fit.squashed.join(", ")}`).toEqual([]);
