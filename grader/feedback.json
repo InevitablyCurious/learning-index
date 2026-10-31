@@ -1779,6 +1779,10 @@
       "first": "When I change the shape of my browser window — shorter, narrower or bigger — part of the game runs off the screen.",
       "repeat": "Changed my window's shape again and part of the game still runs off the screen."
     },
+    "F87.buttons": {
+      "first": "When I change the shape of my browser window, the buttons get squashed and their names are cut off.",
+      "repeat": "Changed my window's shape again and the buttons are still squashed, their names cut off."
+    },
     "F87.missing": {
       "first": "When I change the shape of my browser window, some of my pieces disappear from the board.",
       "repeat": "Changed my window's shape again and pieces still disappear from the board."
@@ -1786,6 +1790,10 @@
     "F87.place": {
       "first": "When I change the shape of my browser window, the pieces don't move with the board — they end up away from their points.",
       "repeat": "Changed my window's shape again and the pieces still end up away from their points."
+    },
+    "F87.uneven": {
+      "first": "When I change the shape of my browser window, the pieces on some points come out smaller than the others.",
+      "repeat": "Changed my window's shape again and some pieces still come out smaller than the others."
     },
     "F87.small": {
       "first": "When I change the shape of my browser window, the board shrinks far smaller than the window has room for.",

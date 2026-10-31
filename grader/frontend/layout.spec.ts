@@ -445,6 +445,7 @@ const BOARD_SHAPE = 1.4;
 const SHAPE_SLACK = 0.03;
 const PIECE_SLACK = 0.05;
 const SMALLEST_FILL = 0.65;
+const PIECE_SPREAD = 1.1;
 const SHAPES = [
   { name: "a banner taking a quarter of its height", w: 1, h: 0.72 },
   { name: "a fifth smaller both ways", w: 0.8, h: 0.8 },
@@ -508,9 +509,27 @@ async function readWindowFit(page: Page) {
         return !!col && (c.x < col.left - 0.1 * c.w || c.x > col.right + 0.1 * c.w || c.y < col.top - 0.5 * c.w || c.y > col.bottom + 0.5 * c.w);
       })
       .map((c) => c.loc);
+    // Pieces in one view are one size: run 1793474579 round 4 shrank only the
+    // pieces of its 5-stacks to fit a short window.
+    const onPoints = cs.filter((c) => columns.has(c.loc)).map((c) => c.w);
+    const spread = onPoints.length ? Math.max(...onPoints) / Math.min(...onPoints) : 1;
+    // The buttons by the rule F38 applies at the two laptop sizes: at least
+    // 60×24, the label inside its button, the button inside the window. Run
+    // 1793474579's final build squashed them in a short window, every label cut
+    // off at its bottom edge, and no check looked.
+    const squashed = ["rollBtn", "doubleBtn", "undoBtn", "endTurnBtn", "newGameBtn"].filter((id) => {
+      const b = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+      if (!b || b.tagName !== "BUTTON" || !b.checkVisibility()) return false;
+      const r = b.getBoundingClientRect();
+      const clipped = b.scrollWidth > b.clientWidth + 1 || b.scrollHeight > b.clientHeight + 1;
+      const outside = r.left < -1 || r.top < -1 || r.right > vw + 1 || r.bottom > vh + 1;
+      return r.width < 60 || r.height < 24 || clipped || outside;
+    });
     const el = document.scrollingElement ?? document.documentElement;
     return {
       size: `${vw}×${vh}`,
+      spread,
+      squashed,
       shape: drawn.length ? (x1 - x0) / (y1 - y0) : 0,
       boardPast: drawn.length > 0 && (x0 < -2 || y0 < -2 || x1 > vw + 2 || y1 > vh + 2),
       scrolls: el.scrollWidth > vw + 2 || el.scrollHeight > vh + 2,
@@ -530,8 +549,9 @@ async function readWindowFit(page: Page) {
 test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", async ({ page }) => {
   // Measured at every window shape first, then told worst first: copies of
   // the board left behind, pieces gone, pieces running into each other or off
-  // their points, a board shrunk below the room it has, the board or pieces off
-  // the window, and only then the board's proportions. Run 1793119227's
+  // their points, pieces of different sizes, a board shrunk below the room it
+  // has, the board or pieces off the window, squashed buttons, and only then
+  // the board's proportions. Run 1793119227's
   // round 3 build (a fresh board at 1.28) piled up a new bar and tray at every
   // resize — six of each after five — and was told only that its board was
   // not 1.4 times as wide as it is tall, the first thing this check asked.
@@ -610,6 +630,12 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
   for (const { where, fit } of seen) {
     expect(fit.astray, `[aspect: place] [needs: F31] ${where}, pieces sit away from their points: ${fit.astray.join(", ")}`).toEqual([]);
   }
+  for (const { where, fit } of [{ where: "at full size", fit: full }, ...seen]) {
+    expect(
+      fit.spread <= PIECE_SPREAD,
+      `[aspect: uneven] [needs: F41] ${where} the biggest piece on a point is ${fit.spread.toFixed(2)} times the smallest`,
+    ).toBe(true);
+  }
   // And the board uses the room it has: at least 65% of the window across or
   // down (the reference: 71% at its tightest). A board that shrank on resize was
   // told "old copies stay drawn" by the picture compared below.
@@ -628,6 +654,9 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
       !fit.scrolls && fit.off === 0 && !fit.boardPast,
       `[aspect: fit] [needs: F37] ${where} the page ${fit.scrolls ? "scrolls" : "fits"}, the board ${fit.boardPast ? "runs past" : "stays inside"} the window and ${fit.off} of ${fit.pieces} pieces run past it`,
     ).toBeTruthy();
+  }
+  for (const { where, fit } of seen) {
+    expect(fit.squashed, `[aspect: buttons] [needs: F38] ${where} these buttons are squashed or cut off: ${fit.squashed.join(", ")}`).toEqual([]);
   }
   const shapeOk = (v: number) => Math.abs(v / BOARD_SHAPE - 1) <= SHAPE_SLACK;
   expect(
