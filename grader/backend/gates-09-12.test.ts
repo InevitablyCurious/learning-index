@@ -39,7 +39,13 @@ describe("[G09] REQ-BEAROFF-GATE — bear-off blocked while a checker is outside
     const points = emptyPoints();
     points[3] = 1;
     points[8] = 1; // outside white home
-    const board = bd(points);
+    // A position a game can reach: the rest of each side borne off. Run
+    // 1793573164's engine counted home by its 15 checkers and, on a bare
+    // two-checker board, offered 3 -> off; in any real game it refused it, and
+    // the player was told "the game let me take a piece off" about a game that
+    // never did.
+    points[22] = -1;
+    const board = bd(points, { white: 0, black: 0 }, { white: 13, black: 14 });
 
     expect(game.allInHome(board, "white")).toBe(false);
 

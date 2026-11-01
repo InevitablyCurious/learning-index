@@ -80,6 +80,13 @@ describe("Backgammon edge gates", () => {
     const b = emptyBoard();
     b.points[6] = 1;
     b.points[3] = 1;
+    // A position a game can reach: the rest of each side borne off (run
+    // 1793573164: on a bare two-checker board the engine bore the 3 off; in any
+    // real game it played 6 -> 1, and "it takes one off while a checker sits
+    // further back" was told about a game that never did).
+    b.points[22] = -1;
+    b.off.white = 13;
+    b.off.black = 14;
 
     // Told as the fault it is. Run 1790650821's engine offered to carry the
     // piece on 6 off with a 5 — a number too small to reach off — and refused
@@ -95,6 +102,7 @@ describe("Backgammon edge gates", () => {
     // Remove the higher checker and the SAME die now legitimately bears off —
     // a refusal there is G08's overshoot finding, told once.
     b.points[6] = 0;
+    b.off.white = 14;
     const alone = game.singleMoves(b, "white", 5);
     expect(alone.some((m: any) => m.from === 3 && m.to === 25), "[needs: G08]").toBe(true);
   });

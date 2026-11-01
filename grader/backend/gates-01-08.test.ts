@@ -178,7 +178,10 @@ describe("Backgammon backend gates 01-08", () => {
   it("[G08] REQ-BEAROFF — bear-off incl overshoot", () => {
     const overshootAllowedPts = emptyPoints();
     overshootAllowedPts[3] = 2;
-    const overshootAllowedBoard = bd(overshootAllowedPts, { white: 0, black: 0 }, { white: 13, black: 0 });
+    // A position a game can reach: black too has all 15 (run 1793573164's
+    // engine answered a black-less board differently from any real game).
+    overshootAllowedPts[22] = -1;
+    const overshootAllowedBoard = bd(overshootAllowedPts, { white: 0, black: 0 }, { white: 13, black: 14 });
 
     // Two faults, each told as itself. Refusing a number bigger than the
     // furthest-back piece needs (run 1790650821: pieces only on 3, a 5, no move
