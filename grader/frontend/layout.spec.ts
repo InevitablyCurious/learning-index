@@ -552,6 +552,7 @@ async function readWindowFit(page: Page) {
       size: `${vw}×${vh}`,
       spread,
       offscreen,
+      shownButtons: buttonEls.map(([id]) => id),
       infoPast,
       squashed,
       shape: drawn.length ? (x1 - x0) / (y1 - y0) : 0,
@@ -695,6 +696,13 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
       !fit.scrolls && fit.off === 0 && !fit.boardPast,
       `[aspect: fit] [needs: F37] ${where} the page ${fit.scrolls ? "scrolls" : "fits"}, the board ${fit.boardPast ? "runs past" : "stays inside"} the window and ${fit.off} of ${fit.pieces} pieces run past it`,
     ).toBeTruthy();
+  }
+  // A button showing at full size and gone at a shape is off the screen to the
+  // player as surely as one past the edge (WO-LI-NEWGAME-STUCK-WHY: a button
+  // hidden at a shape was dropped from the read and passed).
+  for (const { where, fit } of seen) {
+    const gone = full.shownButtons.filter((id) => !fit.shownButtons.includes(id));
+    expect(gone, `[aspect: gonebuttons] [needs: F38] ${where} these buttons shown at full size are gone: ${gone.join(", ")}`).toEqual([]);
   }
   for (const { where, fit } of seen) {
     expect(fit.offscreen, `[aspect: offbuttons] [needs: F38] ${where} these buttons are past the edge of the window: ${fit.offscreen.join(", ")}`).toEqual([]);
