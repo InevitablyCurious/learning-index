@@ -290,15 +290,16 @@ describe("Backgammon backend gates 14-30 (the computer's engine)", () => {
           { board: boardA, dice: diceA },
           { board: boardB, dice: diceB },
         ]) {
-          // Setup sanity, not a gate finding: a genuine higher-required case —
-          // exactly one distinct die is playable, and it is the higher one.
+          // The positions are built so only the higher die may be played; the
+          // finding is the computer's own choice. The game's move list may still
+          // name the smaller die's move (a build that keeps the rule in its
+          // move-chooser and server, not its move generator): run 1793570676's
+          // computer played only the 5 in this position at every difficulty, and
+          // a gate that required the generator to drop the 2 told the model
+          // "the computer plays the smaller die".
+          const higher = Math.max(...dice);
           const legal = game.legalMovesNow(board, player, [...dice]) as Move[];
-          const distinctDice = Array.from(new Set(legal.map((m) => m.die)));
-          // The position only tests the computer when the game's own move list
-          // already keeps the higher die; when it does not, the player's
-          // higher-die check (G05) reports it.
-          expect(distinctDice.length, "[needs: G05]").toBe(1);
-          expect(distinctDice[0], "[needs: G05]").toBe(Math.max(...dice));
+          expect(legal.some((m) => m.die === higher), "[needs: G04 G14]").toBe(true);
 
           for (const difficulty of DIFFICULTIES) {
             for (let trial = 0; trial < 40; trial++) {
@@ -309,6 +310,7 @@ describe("Backgammon backend gates 14-30 (the computer's engine)", () => {
               for (const move of result.moves) {
                 const ok = legal.some((candidate) => sameMove(candidate, move));
                 expect(ok, "[needs: G14]").toBe(true);
+                expect(move.die, `the computer played the ${move.die} when only the ${higher} could be used`).toBe(higher);
               }
             }
           }
