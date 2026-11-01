@@ -887,14 +887,46 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
     return readState(page);
   };
 
-  // ── Both dice: 6 against 5. First, the Roll button can be used at all at
-  // the start of a game. ──
-  await openWith([6, 5]);
+  // ── First, the Roll button can be used at all at the start of a game. The
+  // game opens with the tie queued: a debug queue may outlive a new game (the
+  // golden's does), so nothing is queued that this game does not roll. ──
+  await openWith([4, 4]);
   const canRoll = await page
     .getByTestId("rollBtn")
     .click({ trial: true, timeout: 5_000 })
     .then(() => true, () => false);
   expect(canRoll, "[aspect: roll] [needs: F38] the Roll button could not be clicked at the start of a game").toBe(true);
+
+  // ── A tie: 4 and 4. The page says to roll again, anywhere a player can read
+  // it, with any dash; both dice stay up, and the page waits for the player to
+  // press Roll (chunk-04; Jerry, 2026-10-18: manual). ──
+  await rollAndCheck(page, [4, 4], () => page.getByTestId("rollBtn").click());
+  // It waits: three seconds on, still the opening roll, still the tie. Whether
+  // a press of Roll then gets past it is F85's. Asked before the words, which
+  // are only looks: run 1793021515's final build rolled the tie again by itself
+  // and was told only that "Tie — roll again" was missing, so the model never
+  // heard about the roll it made for the player. And before the dice colours:
+  // run 1793525853 round 4 "fixed" a frozen tie by rolling it again by itself
+  // and was told only that its opening dice were the wrong colours.
+  await page.waitForTimeout(3_000);
+  const afterTie = await readState(page);
+  expect(
+    afterTie.phase === "openingRoll" && JSON.stringify(afterTie.dice) === "[4,4]",
+    "[aspect: self] the tied opening roll rolled again by itself",
+  ).toBe(true);
+  await expect
+    .poll(async () => (await page.locator("body").innerText()).replace(/\s+/g, " "), {
+      message: "[aspect: tie] the tied opening roll never showed the words Tie — roll again",
+      timeout: 5_000,
+    })
+    .toMatch(/tie\s*[—–-]\s*roll again/i);
+  expect(
+    await restingDice(),
+    "[aspect: dice] [needs: REQ-RENDER/die REQ-TESTID/die] the tied opening roll left fewer than two dice on screen",
+  ).toBeGreaterThanOrEqual(2);
+
+  // ── Then a fresh game, 6 against 5, for the roll the player watches. ──
+  await openWith([6, 5]);
   // Watch the dice from the moment Roll is pressed (chunk-04: "dice visibly roll").
   // Jerry, run 1792176130 round 3: "when i open the game i never see the first roll
   // that the player and computer makes to determine who moves first" — the page
@@ -964,33 +996,6 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
       `[aspect: match] [needs: REQ-RENDER/die REQ-TESTID/die] the opening dice do not match the pieces: die brightness ${a?.toFixed(2)} and ${b?.toFixed(2)} against white pieces ${white?.toFixed(2)} and black pieces ${black?.toFixed(2)}`,
     ).toBe(true);
   }
-
-  // ── A tie: 4 and 4. The page says to roll again, anywhere a player can read
-  // it, with any dash; both dice stay up, and the page waits for the player to
-  // press Roll (chunk-04; Jerry, 2026-10-18: manual). ──
-  await openWith([4, 4]);
-  await rollAndCheck(page, [4, 4], () => page.getByTestId("rollBtn").click());
-  // It waits: three seconds on, still the opening roll, still the tie. Whether
-  // a press of Roll then gets past it is F85's. Asked before the words, which
-  // are only looks: run 1793021515's final build rolled the tie again by itself
-  // and was told only that "Tie — roll again" was missing, so the model never
-  // heard about the roll it made for the player.
-  await page.waitForTimeout(3_000);
-  const afterTie = await readState(page);
-  expect(
-    afterTie.phase === "openingRoll" && JSON.stringify(afterTie.dice) === "[4,4]",
-    "[aspect: self] the tied opening roll rolled again by itself",
-  ).toBe(true);
-  await expect
-    .poll(async () => (await page.locator("body").innerText()).replace(/\s+/g, " "), {
-      message: "[aspect: tie] the tied opening roll never showed the words Tie — roll again",
-      timeout: 5_000,
-    })
-    .toMatch(/tie\s*[—–-]\s*roll again/i);
-  expect(
-    await restingDice(),
-    "[aspect: dice] [needs: REQ-RENDER/die REQ-TESTID/die] the tied opening roll left fewer than two dice on screen",
-  ).toBeGreaterThanOrEqual(2);
 
   // The computer winning the opening is F88's: a game that freezes there blocks
   // everything after it, so it is its own stage-1 gate.
