@@ -1714,20 +1714,34 @@ test("[F48] REQ-TURN — a no-move roll passes by itself", async ({ page }) => {
   // The dice stay up, dimmed, inside the second the turn must hold. A roll
   // animates before it settles (run 1793559891 round 2: the dice faded in for
   // ~0.6 s, then sat at opacity 0.3 — a single read at 0.5 s caught the fade-in
-  // and told a player "they don't dim" about dice that did). So look for the dim
-  // while the turn is still white, up to 1.5 s after the roll.
+  // and told a player "they don't dim" about dice that did). A fade-in is not a
+  // dim either, so judge the dice once they have settled — no animation running
+  // and the same look twice in a row — while the turn is still white, within
+  // 1.5 s of the roll.
   await page.waitForTimeout(300);
   const dead = await shownDice();
   expect(dead.length, "[aspect: dim] [needs: REQ-RENDER/die F39 F03 F45] the dice of a roll with no move left the screen").toBeGreaterThan(0);
-  const liveFaintest = Math.min(...live);
-  let brightest = Infinity;
+  const diceLook = () =>
+    page.getByTestId("die").evaluateAll((els) =>
+      els
+        .filter((el) => (el as HTMLElement).checkVisibility())
+        .map((el) => {
+          const s = getComputedStyle(el);
+          return el.getAnimations().length > 0 ? "moving" : `${s.opacity} ${s.filter} ${s.backgroundColor} ${s.color}`;
+        })
+        .join("|"),
+    );
+  let look = await diceLook();
   while (Date.now() - rolledAt < 1_500) {
-    const shown = await shownDice();
-    if (shown.length === 0 || (await readState(page)).turn !== "white") break;
-    brightest = Math.max(...((await sampleBoxContrast(page, shown)) as number[]));
-    if (brightest <= 0.8 * liveFaintest) break;
     await page.waitForTimeout(100);
+    if ((await shownDice()).length === 0 || (await readState(page)).turn !== "white") break;
+    const now = await diceLook();
+    if (now === look && !now.includes("moving")) break;
+    look = now;
   }
+  const settled = await shownDice();
+  const liveFaintest = Math.min(...live);
+  const brightest = settled.length ? Math.max(...((await sampleBoxContrast(page, settled)) as number[])) : Infinity;
   expect(
     brightest <= 0.8 * liveFaintest,
     `[aspect: dim] [needs: F03 F45] the dice of a roll with no move stand out ${brightest.toFixed(2)} against ${liveFaintest.toFixed(2)} for a live roll`,
