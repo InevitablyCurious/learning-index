@@ -793,10 +793,11 @@ test("[F85] REQ-OPENING — a tied opening never freezes the game", async ({ pag
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [5, 3] });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await clickOpeningRoll(page);
-  await expect
-    .poll(async () => JSON.stringify((await readState(page)).dice), { message: "[needs: F89] the tied roll never landed", timeout: 5_000 })
-    .toBe("[2,2]");
+  // The tie landed when the page's own roll was answered 2-2. Not a later read
+  // of the state's dice: run 1793564995 round 2's server answered 2-2, then
+  // cleared the dice while it waited on the tie, and a poll for [2,2] there
+  // told "pressing Roll did nothing" about a tie that a press got past.
+  await rollAndCheck(page, [2, 2], () => clickOpeningRoll(page));
   // A page that rolls again by itself does so within a few seconds.
   const pastBy = async (ms: number): Promise<boolean> => {
     for (const end = Date.now() + ms; Date.now() < end; ) {
@@ -908,10 +909,15 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
   // heard about the roll it made for the player. And before the dice colours:
   // run 1793525853 round 4 "fixed" a frozen tie by rolling it again by itself
   // and was told only that its opening dice were the wrong colours.
+  // Rolled again means a new roll: the opening is over, or other dice are up.
+  // Dice cleared while the tie waits are not a roll (run 1793564995 round 2:
+  // they were told "rolled again by itself" about a page that waited) — that
+  // the tied dice stay up is [aspect: dice] below.
   await page.waitForTimeout(3_000);
   const afterTie = await readState(page);
+  const tieDice = JSON.stringify(afterTie.dice ?? []);
   expect(
-    afterTie.phase === "openingRoll" && JSON.stringify(afterTie.dice) === "[4,4]",
+    afterTie.phase === "openingRoll" && (tieDice === "[4,4]" || tieDice === "[]"),
     "[aspect: self] the tied opening roll rolled again by itself",
   ).toBe(true);
   await expect
