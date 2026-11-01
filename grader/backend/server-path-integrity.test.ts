@@ -263,7 +263,14 @@ describe("Backgammon backend server-path integrity", () => {
       expect(state.turn, "[aspect: first]").toBe("black");
       const pipsBefore = blackPips(state);
       await debugRoll([...decoy]);
-      await api("/api/ai", {});
+      // /api/ai advances ONE AI step (chunk-03): a build may play the whole turn
+      // in one call or one move per call. Step it until the turn comes back, as
+      // G33 does (run 1793568361 round 5: shown dice, move 1, move 2 — 3 and 11
+      // pips — and a single call was told "doesn't use the two numbers").
+      for (let guard = 0; guard < 12; guard++) {
+        state = await api("/api/ai", {});
+        if (state.turn !== "black") break;
+      }
       state = await getState();
       expect(pipsBefore - blackPips(state), "[aspect: numbers]").toBe(opening[0] + opening[1]);
       expect(state.turn, "[aspect: handback]").toBe("white");
@@ -293,9 +300,16 @@ describe("Backgammon backend server-path integrity", () => {
         message: "",
       }),
     );
-    const state = await api("/api/ai", {});
+    // One AI step per call (chunk-03): step until the turn comes back, and read
+    // what the game said along the way.
+    let state = await getState();
+    const said: string[] = [];
+    for (let guard = 0; guard < 12 && state.turn === "black"; guard++) {
+      state = await api("/api/ai", {});
+      said.push(String(state.message ?? ""));
+    }
     expect(state.turn, "[aspect: pass] [needs: G25]").toBe("white");
-    expect(state.message, "[aspect: wording] [needs: F05]").toMatch(/no moves available/i);
+    expect(said.join(" | "), "[aspect: wording] [needs: F05]").toMatch(/no moves available/i);
   });
 
   // The computer offers a double when it is well ahead, not after every turn: from
