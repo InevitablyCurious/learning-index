@@ -2552,6 +2552,26 @@ function positionOf(state: ApiState): string {
   return JSON.stringify([state.points, state.bar, state.off]);
 }
 
+// Whether the page still answers: a page whose script has locked up never
+// returns from evaluate. Asked a few times after Fast Forward is clicked so a
+// frozen page fails at once instead of spinning a core for a whole check while
+// the checks beside it time out (run 1793625245 round 1: F09, F10, F33, F39 and
+// F72 timed out beside spinning Fast Forward pages and told false lines).
+async function pageKeepsAnswering(page: Page, message: string): Promise<void> {
+  for (let i = 0; i < 6; i++) {
+    const answered = await Promise.race([
+      page.evaluate(() => true).then(
+        () => true,
+        () => false,
+      ),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1_500)),
+    ]);
+    if (!answered) await page.close().catch(() => undefined);
+    expect(answered, message).toBe(true);
+    await page.waitForTimeout(500);
+  }
+}
+
 test("[F64] REQ-FASTFORWARD-SHOW — the Fast Forward button appears only in a race", async ({ page }) => {
   test.setTimeout(60_000);
   // A new game is no race: the button is not on screen.
@@ -2606,6 +2626,7 @@ test("[F65] REQ-FASTFORWARD-PLAYOUT — Fast Forward plays the race out to a win
   await page.waitForTimeout(200);
   const { at: clickAt, dice: atClick } = await diceNow(page);
   await button.click();
+  await pageKeepsAnswering(page, "[needs: F66] the page stopped answering after Fast Forward was clicked");
 
   await expect
     .poll(async () => (await readState(page)).phase, {
@@ -2656,17 +2677,7 @@ test("[F66] REQ-FASTFORWARD-PAUSE — Pause stops Fast Forward and it carries on
   // locked its script thread about 2 s after the click and then crashed; with
   // nothing answering, the next look timed the test out and its general line
   // ("couldn't pause") was told about a page that had frozen outright.
-  for (let i = 0; i < 6; i++) {
-    const answered = await Promise.race([
-      page.evaluate(() => true).then(
-        () => true,
-        () => false,
-      ),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1_500)),
-    ]);
-    expect(answered, "[aspect: hang] the page stopped answering after Fast Forward was clicked").toBe(true);
-    await page.waitForTimeout(500);
-  }
+  await pageKeepsAnswering(page, "[aspect: hang] the page stopped answering after Fast Forward was clicked");
   await expect(button, "[aspect: running] the running Fast Forward button never read Pause").toHaveText(PAUSE);
 
   // Paused during the player's first roll, the turn stays theirs and the
@@ -2712,6 +2723,7 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
   const button = page.getByTestId("fastForwardBtn");
   await expect(button, "[needs: F64]").toBeVisible();
   await button.click();
+  await pageKeepsAnswering(page, "[needs: F66] the page stopped answering after Fast Forward was clicked");
 
   await expect
     .poll(async () => /double|offer/i.test(await shownDoubleText(page)), {
