@@ -1,0 +1,1 @@
+Accepted the AI's double again and the game froze again.

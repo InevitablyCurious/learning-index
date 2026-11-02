@@ -163,6 +163,10 @@
       "first": "I made a move, hit undo, and the board didn't go back to how it was — a checker stayed where it had moved to or went missing.",
       "repeat": "Tried undo again after another move and the board still didn't come back right — a checker was still missing or still in the wrong place."
     },
+    "G23.hit": {
+      "first": "I hit one of the computer's pieces and pressed Undo, and its piece went back, but it also left extra pieces of the computer's on the bar.",
+      "repeat": "Undid a hit again and the computer still got extra pieces on the bar."
+    },
     "G23.nomove": {
       "first": "After I rolled, there was no checker I could pick up to move.",
       "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
@@ -1838,6 +1842,10 @@
     "F88": {
       "first": "When the computer won the opening roll, it never made its move — the game just sat there and I couldn't do anything.",
       "repeat": "The computer won the opening roll again and still never made its move."
+    },
+    "F90": {
+      "first": "If the AI doubles and I accept, the game is left in a broken frozen state.",
+      "repeat": "Accepted the AI's double again and the game froze again."
     },
     "F89": {
       "first": "I pressed Roll and nothing happened.",

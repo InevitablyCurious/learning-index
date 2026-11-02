@@ -1983,6 +1983,64 @@ test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", asyn
   await expect(answerButton(page, PASS), "[aspect: answer] no button reading Decline or Pass answered the offer").toBeVisible();
 });
 
+test("[F90] REQ-DOUBLE-ACCEPT-PLAYS-ON — taking the computer's double, the game plays on", async ({ page }) => {
+  // Jerry, 2026-11-02, playing run 1793615343's build: "if the ai doubles and i
+  // accept the game is left in a broken frozen state". Its server answered the
+  // take with the computer to move and no dice, leaving the roll to the page,
+  // which never made it. Reached as a player meets it: a turn played through
+  // the page, End Turn, the offer through the page's own computer turn — a page
+  // loaded straight into the offer restarts its loop on load and plays on, and
+  // that build offered only once moves had been made. The computer leads by
+  // about 40 pips, inside the hard doubling window.
+  test.setTimeout(90_000);
+  await openApp(page);
+  const points = emptyPoints();
+  points[24] = 2; points[13] = 5; points[8] = 3; points[6] = 5;
+  points[11] = -2; points[16] = -5; points[17] = -3; points[19] = -5;
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "roll",
+    dice: [],
+    remainingDice: [],
+    cube: { value: 1, owner: null },
+    difficulty: "hard",
+    winner: null,
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 1] });
+  await rollAndCheck(page, [2, 1], () => page.getByTestId("rollBtn").click());
+  const hints = page.getByTestId("hint");
+  for (let i = 0; i < 2; i++) {
+    if ((await readState(page)).turnOver) break;
+    expect(await pickUpAPiece(page, hints), "[needs: F03 F45]").toBe(true);
+    await playerClick(hints.first());
+    await page.waitForTimeout(600);
+  }
+  await expect.poll(async () => (await readState(page)).turnOver, { message: "[needs: F25 F45]" }).toBe(true);
+  await page.getByTestId("endTurnBtn").click();
+  await expect
+    .poll(async () => (await readState(page)).phase, { message: "[needs: F49]", timeout: 10_000 })
+    .toBe("doubleOffered");
+  const take = answerButton(page, TAKE);
+  await expect(take, "[needs: F49]").toBeVisible();
+  await playerClick(take);
+  // The computer, having been taken, plays its turn and hands it back.
+  await expect
+    .poll(
+      async () => {
+        const s = await readState(page);
+        return s.winner != null || (s.turn === "white" && s.phase !== "doubleOffered");
+      },
+      { message: "after the computer's double was taken the game never moved on", timeout: 20_000 },
+    )
+    .toBe(true);
+});
+
 test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", async ({ page }) => {
   // Two answers, both deterministic and both read on screen — the pop-up and
   // the message bar, where the player meets them. From an even position the

@@ -126,6 +126,33 @@ describe("Backgammon backend server-path integrity", () => {
     expect(afterUndo.points).toEqual(beforeBoard.points);
     expect(afterUndo.bar).toEqual(beforeBoard.bar);
     expect(afterUndo.off).toEqual(beforeBoard.off);
+
+    // A hit taken back: the computer's piece returns to its point and leaves the
+    // bar. Jerry, 2026-11-02, playing run 1793615343's build: two black pieces on
+    // the bar and seventeen in all — its undo put a hit piece back AND added one
+    // to the bar.
+    const points = emptyPoints();
+    points[24] = 2; points[13] = 5; points[8] = 3; points[6] = 5;
+    points[10] = -1; points[1] = -2; points[12] = -4; points[17] = -3; points[19] = -5;
+    await debugSetState(
+      makeState({
+        points,
+        bar: { white: 0, black: 0 },
+        off: { white: 0, black: 0 },
+        turn: "white",
+        phase: "move",
+        dice: [3, 1],
+        remainingDice: [3, 1],
+      }),
+    );
+    const hitBefore = await getState();
+    const hitMove = (hitBefore.legalMoves as Move[]).find((m) => m.from === 13 && m.to === 10);
+    expect(hitMove, "[needs: G04]").toBeTruthy();
+    await api("/api/move", { from: 13, to: 10, die: 3 });
+    const hitUndone = await api("/api/undo", {});
+    const hit = "[aspect: hit] after a hit was taken back the board was not as it was";
+    expect(hitUndone.points, hit).toEqual(hitBefore.points);
+    expect(hitUndone.bar, hit).toEqual(hitBefore.bar);
   });
 
   // M24: accepting the computer's double makes the cube 2, owned by the player.

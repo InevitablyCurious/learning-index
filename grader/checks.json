@@ -648,6 +648,11 @@
       "name": "Pressing Roll rolls the dice",
       "what": "A press of Roll makes a roll — at the start of a game and on the player's turn later on.",
       "how": "Starts a new game and presses Roll, then sets a standard position on white's turn in the roll phase and presses Roll again: each press must make a POST /api/roll within 8 s. The roll helper every other gate uses fails with the ROLL DEAD marker (told 'I pressed Roll and nothing happened') when a press makes no roll, and waits on this gate."
+    },
+    "F90": {
+      "name": "Taking the computer's double, the game plays on",
+      "what": "When the computer offers a double during play and the player accepts, the computer plays its turn and the turn comes back to the player.",
+      "how": "In a browser: a position the computer leads by about 40 pips on hard, white to roll; rolls 2-1 through the page, plays it through the hints, clicks End Turn, waits for the page's own computer turn to offer (waits on F49), clicks Accept, and within 20 s requires the turn back with white or the game over."
     }
   },
   "setup": [
@@ -1058,7 +1063,8 @@
         "F49",
         "F50",
         "F56",
-        "F67"
+        "F67",
+        "F90"
       ]
     },
     {
