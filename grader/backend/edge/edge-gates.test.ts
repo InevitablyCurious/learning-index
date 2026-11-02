@@ -111,6 +111,11 @@ describe("Backgammon edge gates", () => {
     const b = emptyBoard();
     b.points[6] = 1;
     b.points[3] = 1;
+    // A position a game can reach, as E02's (run 1793573164's engine counted
+    // home by a side's 15 checkers).
+    b.points[22] = -1;
+    b.off.white = 13;
+    b.off.black = 14;
     // Exact distance is legal even with a higher checker present.
     expect(game.singleMoves(b, "white", 3).some((m: any) => m.from === 3 && m.to === 25)).toBe(true);
   });
