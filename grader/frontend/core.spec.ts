@@ -2492,6 +2492,18 @@ test("[F64] REQ-FASTFORWARD-SHOW — the Fast Forward button appears only in a r
     page.getByTestId("fastForwardBtn"),
     "[aspect: outside] a Fast Forward button showed at the start of a new game",
   ).toBeHidden();
+  // Nor once the opening roll is played: run 1793606131's page showed it in
+  // every move phase, so a look taken only before the first roll passed it.
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await rollAndCheck(page, [6, 5], () => clickOpeningRoll(page));
+  await page.waitForTimeout(1_000);
+  await expect(
+    page.getByTestId("fastForwardBtn"),
+    "[aspect: outside] [needs: F61] a Fast Forward button showed after the opening roll of a new game",
+  ).toBeHidden();
 
   // A race on the player's turn, every piece home on both sides.
   const points = emptyPoints();
