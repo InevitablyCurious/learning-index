@@ -354,8 +354,14 @@ describe("Backgammon backend server-path integrity", () => {
     // what the game said along the way.
     let state = await getState();
     const said: string[] = [];
+    // A double offered on the way is answered as a player would, by taking it:
+    // run 1793637084's computer counted its own bar piece as a lead and doubled
+    // here, and the loop that never answered was told "never gives the turn back".
     for (let guard = 0; guard < 12 && state.turn === "black"; guard++) {
-      state = await api("/api/ai", {});
+      state =
+        state.phase === "doubleOffered"
+          ? await api("/api/double/respond", { accept: true })
+          : await api("/api/ai", {});
       said.push(String(state.message ?? ""));
     }
     expect(state.turn, "[aspect: pass] [needs: G25]").toBe("white");
