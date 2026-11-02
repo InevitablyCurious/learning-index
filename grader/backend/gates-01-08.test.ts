@@ -189,14 +189,18 @@ describe("Backgammon backend gates 01-08", () => {
     // the edge" — the opposite.
     const OVERSHOOT = "[aspect: overshoot]";
     expect(game.allInHome(overshootAllowedBoard, "white"), OVERSHOOT).toBe(true);
-    expect(norm(game.singleMoves(overshootAllowedBoard, "white", 5) as Move[]), OVERSHOOT).toEqual(
+    // The moves on offer, each once: a list naming 3 -> off once per checker on
+    // 3 offers the same move (run 1793579748's engine did; the player saw one
+    // "5" hint and it bore off — and was told the game "won't let me").
+    expect([...new Set(norm(game.singleMoves(overshootAllowedBoard, "white", 5) as Move[]))], OVERSHOOT).toEqual(
       norm([{ from: 3, to: 25, die: 5 }]),
     );
 
     const overshootRejectedPts = emptyPoints();
     overshootRejectedPts[5] = 1;
     overshootRejectedPts[3] = 1;
-    const overshootRejectedBoard = bd(overshootRejectedPts, { white: 0, black: 0 }, { white: 13, black: 0 });
+    overshootRejectedPts[22] = -1;
+    const overshootRejectedBoard = bd(overshootRejectedPts, { white: 0, black: 0 }, { white: 13, black: 14 });
 
     const dieFiveMoves = game.singleMoves(overshootRejectedBoard, "white", 5) as Move[];
     expect(norm(dieFiveMoves)).not.toContain("3-25-5");
