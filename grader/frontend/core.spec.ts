@@ -1885,7 +1885,10 @@ test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
   // finding (run 1793624268 round 2 told four after-the-double lines to a page
   // whose Double button was never enabled).
   expect((await readState(page)).canDouble, "[needs: G11]").toBe(true);
-  await postJson<ApiState>(page, "/api/double", {});
+  const doubled = await postJson<ApiState>(page, "/api/double", {});
+  // A passed double ends the game with nobody taking the cube — G12's take
+  // decision, as in G20 (run 1793659780 passed even doubles).
+  expect(doubled.winner ?? null, "[needs: G12] the computer passed an even double").toBeNull();
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(page.getByTestId("cubeVal")).toHaveText("2");

@@ -170,6 +170,10 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     expect((await getState()).canDouble, "[needs: G11]").toBe(true);
     const res = await api("/api/double");
     const state = await getState();
+    // A double the computer passes ends the game with nobody taking the cube:
+    // that is its take decision (G12), not the cube's (run 1793659780's build
+    // passed even doubles, and the player was told the taker wasn't shown).
+    expect(res.winner ?? null, "[needs: G12] the computer passed an even double").toBeNull();
 
     expect(res.cube.value, VALUE).toBe(2);
     expect(res.cube.owner, OWNER).toBe("black");
