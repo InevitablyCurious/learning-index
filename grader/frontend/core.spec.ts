@@ -2642,6 +2642,21 @@ test("[F66] REQ-FASTFORWARD-PAUSE — Pause stops Fast Forward and it carries on
   const button = page.getByTestId("fastForwardBtn");
   await expect(button, "[needs: F64]").toBeVisible();
   await button.click();
+  // The page keeps answering while Fast Forward runs. Run 1793620683's page
+  // locked its script thread about 2 s after the click and then crashed; with
+  // nothing answering, the next look timed the test out and its general line
+  // ("couldn't pause") was told about a page that had frozen outright.
+  for (let i = 0; i < 6; i++) {
+    const answered = await Promise.race([
+      page.evaluate(() => true).then(
+        () => true,
+        () => false,
+      ),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1_500)),
+    ]);
+    expect(answered, "[aspect: hang] the page stopped answering after Fast Forward was clicked").toBe(true);
+    await page.waitForTimeout(500);
+  }
   await expect(button, "[aspect: running] the running Fast Forward button never read Pause").toHaveText(PAUSE);
 
   // Paused during the player's first roll, the turn stays theirs and the

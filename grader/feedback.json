@@ -1539,6 +1539,10 @@
       "first": "While Fast Forward was running, its button never read Pause.",
       "repeat": "Again, while Fast Forward ran, its button never read Pause."
     },
+    "F66.hang": {
+      "first": "I clicked Fast Forward and the whole page froze — nothing on it responded any more.",
+      "repeat": "Clicked Fast Forward again and the page froze again."
+    },
     "F66.label": {
       "first": "After I clicked Pause, the button never went back to Fast Forward.",
       "repeat": "Again, after Pause, the button never went back to Fast Forward."
