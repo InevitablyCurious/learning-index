@@ -1914,6 +1914,13 @@ test("[F46] REQ-DOUBLE-DECLINE — the decline pop-up says you won", async ({ pa
   // whose Double button was never enabled).
   await expect(page.getByTestId("doubleBtn"), "[needs: G11]").toBeEnabled();
   await page.getByTestId("doubleBtn").click();
+  // Judged once the computer has actually dropped: a computer that takes a
+  // double it should pass is G12's finding (on G22's estimate), not the
+  // drop's wording (run 1793628483: it took when hopeless, and was told the
+  // drop pop-up and the drop message were wrong).
+  await expect
+    .poll(async () => (await readState(page)).winner, { message: "[needs: G12 G22]", timeout: 5_000 })
+    .toBe("white");
   await expect(page.getByTestId("modalTitle"), "[needs: F01] [needs: F07]").toContainText(/win/i);
 });
 
@@ -2104,6 +2111,11 @@ test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", a
     `[needs: F01] [needs: F07] the accept showed internal math: "${accepted}"`,
   ).not.toMatch(REASONING_ARTIFACTS);
 
+  // The second answer in a fresh game, as a player meets it: run 1793628483's
+  // server kept an unexposed "doubled already" flag that a debug position does
+  // not reset, so its Double stayed off here and the player was told the
+  // computer's answer "goes into its working" — a message it never reached.
+  await postJson<ApiState>(page, "/api/new", {});
   const points = emptyPoints();
   points[1] = 1;
   await setupState(page, {
@@ -2121,6 +2133,13 @@ test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", a
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(page.getByTestId("doubleBtn"), "[needs: G11]").toBeEnabled();
   await page.getByTestId("doubleBtn").click();
+  // Judged once the computer has actually dropped: a computer that takes a
+  // double it should pass is G12's finding (on G22's estimate), not the
+  // drop's wording (run 1793628483: it took when hopeless, and was told the
+  // drop pop-up and the drop message were wrong).
+  await expect
+    .poll(async () => (await readState(page)).winner, { message: "[needs: G12 G22]", timeout: 5_000 })
+    .toBe("white");
   await expect
     .poll(async () => PASS.test(await shownDoubleText(page)), {
       message: "[aspect: shown] [needs: F01] [needs: F07] nothing on screen said the computer passed the double",
