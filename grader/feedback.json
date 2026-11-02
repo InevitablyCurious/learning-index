@@ -171,6 +171,10 @@
       "first": "After I rolled, there was no checker I could pick up to move.",
       "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
     },
+    "G24.owner": {
+      "first": "I accepted the computer's double and the cube didn't show me as its owner.",
+      "repeat": "Accepted another double and the cube still didn't show me as its owner."
+    },
     "G24": {
       "first": "I accepted a double and the cube stayed at one, and it didn't mark me as the owner.",
       "repeat": "Accepted another double and the cube still didn't go up to two or show me as the owner."

@@ -2731,9 +2731,14 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
       timeout: 15_000,
     })
     .toBe(true);
-  // Stopped: while the offer waits, nothing plays on — the button does not read Pause.
+  // Stopped: while the offer waits, nothing plays on — a button the player can
+  // see does not read Pause. A hidden button's leftover text is not on screen
+  // (run 1793627441 hid it with "Pause" inside, and the player was told the
+  // button "still read Pause").
   await page.waitForTimeout(1_500);
-  await expect(button, "[aspect: stopped] the button still read Pause while the computer's double waited").not.toHaveText(PAUSE);
+  if (await button.isVisible()) {
+    await expect(button, "[aspect: stopped] the button still read Pause while the computer's double waited").not.toHaveText(PAUSE);
+  }
 
   // The player takes the double; the computer finishes its turn.
   const take = answerButton(page, TAKE);

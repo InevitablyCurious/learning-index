@@ -157,21 +157,44 @@ describe("Backgammon backend server-path integrity", () => {
 
   // M24: accepting the computer's double makes the cube 2, owned by the player.
   it("[G24] REQ-CUBE-ACCEPT — accepting the computer's double makes the cube 2", async () => {
+    // Reached the way a game reaches it: white plays a 2-1 and ends its turn, and
+    // the computer — about 40 pips ahead on hard — offers on its own turn. The
+    // spec does not say whether the cube doubles at the offer or at the take;
+    // an offer injected at cube 1 suits only the second (run 1793627441's server
+    // doubled at the offer, showed 2 after the take, and was told "the cube
+    // stayed at one"). Either way the taken cube is 2 and the player's.
+    const points = emptyPoints();
+    points[24] = 2; points[13] = 5; points[8] = 3; points[6] = 5;
+    points[11] = -2; points[16] = -5; points[17] = -3; points[19] = -5;
     await debugSetState(
       makeState({
-        points: openingPoints(),
+        points,
+        bar: { white: 0, black: 0 },
+        off: { white: 0, black: 0 },
         cube: { value: 1, owner: null },
-        phase: "doubleOffered",
-        doubleOfferedBy: "black",
-        turn: "black",
+        turn: "white",
+        phase: "roll",
+        difficulty: "hard",
         winner: null,
       }),
     );
+    let play = await debugRollVerified([2, 1]);
+    for (let i = 0; i < 2 && (play.legalMoves as Move[]).length > 0; i++) {
+      const m = (play.legalMoves as Move[])[0]!;
+      play = await api("/api/move", { from: m.from, to: m.to, die: m.die });
+    }
+    play = await api("/api/endturn", {});
+    for (let guard = 0; guard < 12 && play.turn === "black" && play.phase !== "doubleOffered"; guard++) {
+      play = await api("/api/ai", {});
+    }
+    expect(play.phase, "[needs: G12 F49] the computer never offered a double").toBe("doubleOffered");
     const res = await api("/api/double/respond", { accept: true });
     expect(res.cube.value).toBe(2);
-    expect(res.cube.owner).toBe("white");
+    const OWNER = "[aspect: owner] the taken cube was not the player's";
+    expect(res.cube.owner, OWNER).toBe("white");
     const state = await getState();
-    expect(state.cube).toEqual({ value: 2, owner: "white" });
+    expect(state.cube.value).toBe(2);
+    expect(state.cube.owner, OWNER).toBe("white");
   });
 
   // A finished game is not the end of the count: /api/new carries gamesPlayed forward.
