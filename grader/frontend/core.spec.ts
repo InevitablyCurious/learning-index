@@ -1868,6 +1868,10 @@ test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
+  // A player who cannot double meets none of what follows: that is G11's
+  // finding (run 1793624268 round 2 told four after-the-double lines to a page
+  // whose Double button was never enabled).
+  expect((await readState(page)).canDouble, "[needs: G11]").toBe(true);
   await postJson<ApiState>(page, "/api/double", {});
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
@@ -1905,6 +1909,10 @@ test("[F46] REQ-DOUBLE-DECLINE — the decline pop-up says you won", async ({ pa
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
+  // A player who cannot double meets none of what follows: that is G11's
+  // finding (run 1793624268 round 2 told four after-the-double lines to a page
+  // whose Double button was never enabled).
+  await expect(page.getByTestId("doubleBtn"), "[needs: G11]").toBeEnabled();
   await page.getByTestId("doubleBtn").click();
   await expect(page.getByTestId("modalTitle"), "[needs: F01] [needs: F07]").toContainText(/win/i);
 });
@@ -2070,6 +2078,7 @@ test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", a
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await expect(page.getByTestId("doubleBtn"), "[needs: G11]").toBeEnabled();
   await page.getByTestId("doubleBtn").click();
   // Read what the page said first, then ask whether the game carries on, then
   // judge the words: a frozen page used to be told as wording, or not at all
@@ -2110,6 +2119,7 @@ test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", a
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await expect(page.getByTestId("doubleBtn"), "[needs: G11]").toBeEnabled();
   await page.getByTestId("doubleBtn").click();
   await expect
     .poll(async () => PASS.test(await shownDoubleText(page)), {

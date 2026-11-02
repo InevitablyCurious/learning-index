@@ -164,6 +164,10 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
         off: { white: 0, black: 0 },
       }),
     );
+    // A double the player is not allowed to offer is G11's finding, not this
+    // one's (run 1793624268: "I doubled and the cube didn't go up" was told to a
+    // player who could never double).
+    expect((await getState()).canDouble, "[needs: G11]").toBe(true);
     const res = await api("/api/double");
     const state = await getState();
 
@@ -224,7 +228,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
 
     expect({ myPip, oppPip }).toEqual({ myPip: 350, oppPip: 2 });
     expect(wp).toBe(0.02);
-    expect(ai.winProbability(board, "black")).toBeLessThan(TAKE_POINT.hard);
+    expect(ai.winProbability(board, "black"), "[needs: G22]").toBeLessThan(TAKE_POINT.hard);
     expect(wp).toBeLessThan(TAKE_POINT.hard);
     expect(ai.shouldAiAccept(board, "black", "hard").action).toBe("no-double");
   });
@@ -274,7 +278,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
 
     expect({ tooGoodMyPip, tooGoodOppPip }).toEqual({ tooGoodMyPip: 1, tooGoodOppPip: 350 });
     expect(tooGoodWp).toBeGreaterThan(DOUBLE_WINDOW.upper);
-    expect(ai.winProbability(tooGoodBoard, "black")).toBeGreaterThan(DOUBLE_WINDOW.upper);
+    expect(ai.winProbability(tooGoodBoard, "black"), "[needs: G22]").toBeGreaterThan(DOUBLE_WINDOW.upper);
     expect(
       ai.shouldAiDouble(tooGoodBoard, "black", { value: 1, owner: null }, "hard")
         .action,
