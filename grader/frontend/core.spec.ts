@@ -1963,6 +1963,45 @@ function answerButton(page: Page, name: RegExp): Locator {
   return page.getByRole("button", { name }).filter({ visible: true }).first();
 }
 
+// The race the hard computer doubles on. The prompt fixes the offer window, not
+// the win-chance formula, so one fixed race sits inside the window for some
+// conforming formulas and above it for others (run 1793645251's build rated
+// black 30 pips with 10 off against 61 with 4 off as certain, held, and the
+// player was told its offer never showed). Each rung white gains a little — a
+// checker from 6 to 1, then one borne off — and the first rung where the build
+// itself offers, through End Turn and its own computer turn, is the race; the
+// first rung is the race these checks always used.
+async function offerRace(page: Page): Promise<{ points: number[]; off: { white: number; black: number } }> {
+  const ladder: { points: number[]; off: { white: number; black: number } }[] = [];
+  let six = 10, one = 1, whiteOff = 4;
+  const rung = () => {
+    const points = emptyPoints();
+    points[6] = six; points[1] = one; points[19] = -5;
+    return { points, off: { white: whiteOff, black: 10 } };
+  };
+  ladder.push(rung());
+  while (six > 0) { six--; one++; ladder.push(rung()); }
+  while (one > 1) { one--; whiteOff++; ladder.push(rung()); }
+  for (const race of ladder) {
+    await postJson(page, "/api/new", {});
+    await setupState(page, {
+      ...race, bar: { white: 0, black: 0 }, turn: "white", phase: "move", dice: [6, 5], remainingDice: [],
+      turnOver: true, cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "",
+    });
+    let state: any = await postJson(page, "/api/endturn", {});
+    for (let guard = 0; guard < 12 && state?.turn === "black" && state?.phase !== "doubleOffered" && !state?.winner; guard++) {
+      state = await postJson(page, "/api/ai", {});
+    }
+    if (state?.phase === "doubleOffered") {
+      // A server remembers it has offered this game; the check starts clean.
+      await postJson(page, "/api/new", {});
+      return race;
+    }
+  }
+  await postJson(page, "/api/new", {});
+  return ladder[0]!;
+}
+
 test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", async ({ page }) => {
   // A race black leads by 31 pips without dominating, so the hard AI's offer is
   // deterministic. It reaches the screen through the page's own handler when End
@@ -1970,15 +2009,13 @@ test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", asyn
   // this gate reads. The off trays pad both sides to fifteen checkers, the
   // count the golden client draws (F05's comment); borne-off checkers add no
   // pips, so the AI's decision is the same as the bare points give.
+  test.setTimeout(90_000);
   await openApp(page);
-  const points = emptyPoints();
-  points[1] = 1;
-  points[6] = 10;
-  points[19] = -5;
+  const { points, off } = await offerRace(page);
   await setupState(page, {
     points,
     bar: { white: 0, black: 0 },
-    off: { white: 4, black: 10 },
+    off,
     turn: "white",
     phase: "move",
     dice: [6, 5],
@@ -2746,10 +2783,9 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
   // computer's turn opens with its offer. The offer is read wherever the page
   // shows it and answered with the page's own button (F49's and F56's reading).
   await openApp(page);
-  const points = emptyPoints();
-  points[1] = 1; points[6] = 10; points[19] = -5;
+  const { points, off } = await offerRace(page);
   await setupState(page, {
-    points, bar: { white: 0, black: 0 }, off: { white: 4, black: 10 },
+    points, bar: { white: 0, black: 0 }, off,
     turn: "white", phase: "move", dice: [6, 5], remainingDice: [], turnOver: true,
     cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "",
   });
@@ -2803,15 +2839,13 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
 // (a lead the hard computer doubles on) puts the offer on screen; then End Turn,
 // if the page lets it be pressed, must not give the computer another turn.
 test("[F72] REQ-DOUBLE-PENDING — the computer's offer holds the game", async ({ page }) => {
+  test.setTimeout(90_000);
   await openApp(page);
-  const points = emptyPoints();
-  points[1] = 1;
-  points[6] = 10;
-  points[19] = -5;
+  const { points, off } = await offerRace(page);
   await setupState(page, {
     points,
     bar: { white: 0, black: 0 },
-    off: { white: 4, black: 10 },
+    off,
     turn: "white",
     phase: "move",
     dice: [6, 5],
