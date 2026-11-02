@@ -2052,10 +2052,13 @@ test("[F90] REQ-DOUBLE-ACCEPT-PLAYS-ON — taking the computer's double, the gam
   await expect.poll(async () => (await readState(page)).turnOver, { message: "[needs: F25 F45]" }).toBe(true);
   await page.getByTestId("endTurnBtn").click();
   await expect
-    .poll(async () => (await readState(page)).phase, { message: "[needs: F49]", timeout: 10_000 })
+    // An offer that never comes is the computer's doubling window (G12), as in
+    // G24: run 1793638605's build raised it to 85%, never doubled here, and was
+    // told the game froze after the player accepted.
+    .poll(async () => (await readState(page)).phase, { message: "[needs: G12 F49]", timeout: 10_000 })
     .toBe("doubleOffered");
   const take = answerButton(page, TAKE);
-  await expect(take, "[needs: F49]").toBeVisible();
+  await expect(take, "[needs: G12 F49]").toBeVisible();
   await playerClick(take);
   // The computer, having been taken, plays its turn and hands it back.
   await expect
