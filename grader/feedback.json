@@ -175,6 +175,10 @@
       "first": "I accepted the computer's double and the cube didn't show me as its owner.",
       "repeat": "Accepted another double and the cube still didn't show me as its owner."
     },
+    "G24.plays": {
+      "first": "After I took the computer's double, it skipped its own turn — it never moved, and it was straight back to me to roll.",
+      "repeat": "Took the computer's double again, and again it skipped its turn and went straight back to me."
+    },
     "G24": {
       "first": "I accepted a double and the cube stayed at one, and it didn't mark me as the owner.",
       "repeat": "Accepted another double and the cube still didn't go up to two or show me as the owner."

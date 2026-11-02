@@ -195,6 +195,18 @@ describe("Backgammon backend server-path integrity", () => {
     const state = await getState();
     expect(state.cube.value).toBe(2);
     expect(state.cube.owner, OWNER).toBe("white");
+
+    // The doubler still plays the turn it doubled on: the computer moves before
+    // the player rolls (run 1793642496's build handed the turn straight back,
+    // and the computer never played).
+    const blackOf = (st: any) =>
+      JSON.stringify([(st.points as number[]).map((v) => (v < 0 ? v : 0)), st.bar.black, st.off.black]);
+    const before = blackOf(state);
+    let after = state;
+    for (let guard = 0; guard < 12 && after.turn === "black"; guard++) {
+      after = await api("/api/ai", {});
+    }
+    expect(blackOf(after), "[aspect: plays] after the take the computer skipped its turn").not.toBe(before);
   });
 
   // A finished game is not the end of the count: /api/new carries gamesPlayed forward.
