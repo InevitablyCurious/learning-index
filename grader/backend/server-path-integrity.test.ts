@@ -390,6 +390,22 @@ describe("Backgammon backend server-path integrity", () => {
         state.phase === "doubleOffered" || Boolean(state.doubleOfferedBy),
         `[aspect: early] the computer offered a double after its first turn on ${difficulty}`,
       ).toBe(false);
+
+      // And through a real opening the computer wins (3 against 5), which is how a
+      // player meets that first turn: run 1793634524's final build offered after
+      // its first opening move, a path the seeded position above never took.
+      await api("/api/new", { difficulty });
+      let opened = await debugRollVerified([3, 5]);
+      let offered = false;
+      for (let g = 0; g < 12 && opened.turn !== "white"; g++) {
+        if (opened.phase === "doubleOffered" || opened.doubleOfferedBy) {
+          offered = true;
+          break;
+        }
+        opened = await api("/api/ai", {});
+      }
+      offered = offered || opened.phase === "doubleOffered" || Boolean(opened.doubleOfferedBy);
+      expect(offered, `[aspect: early] the computer offered a double in its opening turn on ${difficulty}`).toBe(false);
     }
   });
 });

@@ -832,10 +832,23 @@ test("[F88] REQ-OPENING — the computer plays when it wins the opening", async 
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   const before = await readState(page);
   await clickOpeningRoll(page);
+  // A computer that offers a double during that turn has not "sat there": the
+  // player answers it, as a player would, and the turn goes on. Whether it may
+  // double at all is the cube stage's finding (run 1793634524's final build
+  // offered after its first opening move, and "it never made its move" would
+  // have been told about a game waiting on Accept / Decline).
+  let answered = false;
   await expect
     .poll(
       async () => {
         const state = await readState(page);
+        if (state.phase === "doubleOffered" && !answered) {
+          const take = answerButton(page, TAKE);
+          if (await take.isVisible().catch(() => false)) {
+            answered = true;
+            await take.click().catch(() => undefined);
+          }
+        }
         return state.turn === "white" && blackOf(state) !== blackOf(before);
       },
       {
