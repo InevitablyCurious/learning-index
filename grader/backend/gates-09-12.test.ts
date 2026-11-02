@@ -204,7 +204,10 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     const points = emptyPoints();
     points[6] = 5; // white pip 30
     points[19] = -5; // black pip 30
-    const board = bd(points);
+    // Positions a game can reach: the other ten of each side borne off (run
+    // 1793660917's engine counted borne-off checkers, declined this race as five
+    // checkers a side with none off, and took it in every game that reaches it).
+    const board = bd(points, { white: 0, black: 0 }, { white: 10, black: 10 });
 
     const myPip = game.pipCount(board, "black");
     const oppPip = game.pipCount(board, "white");
@@ -224,7 +227,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
   it("[G12] REQ-CUBE-AI — declines when black win chance is below hard take point", () => {
     const points = emptyPoints();
     points[2] = 1; // white pip 2
-    const board = bd(points, { white: 0, black: 14 }); // black pip 350 from bar
+    const board = bd(points, { white: 0, black: 14 }, { white: 14, black: 1 }); // black pip 350 from bar
 
     const myPip = game.pipCount(board, "black");
     const oppPip = game.pipCount(board, "white");
@@ -241,7 +244,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     const anyPoints = emptyPoints();
     anyPoints[6] = 1;
     anyPoints[19] = -1;
-    const anyBoard = bd(anyPoints);
+    const anyBoard = bd(anyPoints, { white: 0, black: 0 }, { white: 14, black: 14 });
     expect(
       ai.shouldAiDouble(anyBoard, "black", { value: 2, owner: "white" }, "hard")
         .action,
@@ -251,7 +254,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     windowPoints[19] = -5; // black pip 30
     windowPoints[6] = 10; // white pip 60
     windowPoints[1] = 1; // white pip +1 => total 61
-    const windowBoard = bd(windowPoints);
+    const windowBoard = bd(windowPoints, { white: 0, black: 0 }, { white: 4, black: 10 });
 
     const windowMyPip = game.pipCount(windowBoard, "black");
     const windowOppPip = game.pipCount(windowBoard, "white");
@@ -274,7 +277,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
 
     const tooGoodPoints = emptyPoints();
     tooGoodPoints[24] = -1; // black pip 1
-    const tooGoodBoard = bd(tooGoodPoints, { white: 14, black: 0 }); // white pip 350 from bar
+    const tooGoodBoard = bd(tooGoodPoints, { white: 14, black: 0 }, { white: 1, black: 14 }); // white pip 350 from bar
 
     const tooGoodMyPip = game.pipCount(tooGoodBoard, "black");
     const tooGoodOppPip = game.pipCount(tooGoodBoard, "white");
