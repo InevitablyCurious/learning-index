@@ -174,6 +174,10 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     // that is its take decision (G12), not the cube's (run 1793659780's build
     // passed even doubles, and the player was told the taker wasn't shown).
     expect(res.winner ?? null, "[needs: G12] the computer passed an even double").toBeNull();
+    // An unanswered double is no take: run 1793709280's server left the
+    // player's double waiting for a reply that never came, and the player was
+    // told the taker wasn't shown as the owner.
+    expect(res.phase, "[needs: F50] the computer never answered the double").not.toBe("doubleOffered");
 
     expect(res.cube.value, VALUE).toBe(2);
     expect(res.cube.owner, OWNER).toBe("black");
