@@ -160,8 +160,8 @@
       "repeat": "They checked more positions, and the computer's win-chance estimate still doesn't rise as it pulls ahead."
     },
     "G34": {
-      "first": "Their tools ask your computer whether it would double or take, and the answers don't come back in the form their tools were written for.",
-      "repeat": "They asked again, and the computer's double-or-take answers still aren't in the form their tools expect."
+      "first": "Their tools call your computer's double and take decisions directly, the way they were laid out for them, and the answers don't match that layout.",
+      "repeat": "They called the computer's double and take decisions directly again, and the answers still don't match how those decisions were laid out."
     },
     "G23": {
       "first": "I made a move, hit undo, and the board didn't go back to how it was — a checker stayed where it had moved to or went missing.",
