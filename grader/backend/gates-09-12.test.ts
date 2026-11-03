@@ -122,8 +122,28 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
 
   it("[G11] REQ-CUBE-STATE — the player may double on their turn with a centered cube", async () => {
     // A fresh game sits in the opening roll, where nobody may double yet
-    // (G31). Seed a LATER turn instead: the human to act, phase "roll", cube
-    // centered, on the standard opening board.
+    // (G31). Reached as a game reaches it: the computer wins the opening (3
+    // against 5), plays, and hands the turn over. A seeded turn read only the
+    // debug route: run 1793713472's server kept a flag only play sets, the
+    // seeded turn read "can't double" while every played turn could, and the
+    // player was told "the game won't let me offer a double".
+    await api("/api/new", {});
+    let played = await debugRollVerified([3, 5]);
+    for (let guard = 0; guard < 12 && played.turn === "black"; guard++) {
+      played = await api("/api/ai", {});
+    }
+    expect(played.turn, "[needs: G31 F88] the computer's opening turn never came back").toBe("white");
+    expect(played.canDouble, "on the player's first turn after the computer's opening, no double").toBe(true);
+  });
+
+  // A turn set up through the debug route plays like the same turn in a game:
+  // the checks that seed a position and double from it lean on this. Run
+  // 1793713472's server kept a flag only play sets, so a seeded turn could
+  // never double while every played one could. The debug route is the team's.
+  it("[G35] REQ-DEBUG-STATE — a seeded turn can double like a played one", async () => {
+    // From a fresh game, as the seeding checks start (a played turn before it
+    // would leave the build's flag set and hide the finding).
+    await api("/api/new", {});
     await debugSetState(
       makeState({
         turn: "white",
@@ -133,9 +153,7 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
         points: game.startingPoints(),
       }),
     );
-    const state = await getState();
-
-    expect(state.canDouble).toBe(true);
+    expect((await getState()).canDouble, "[needs: G11]").toBe(true);
   });
 
   it("[G26] REQ-CUBE-STATE — a new game starts with a centered cube", async () => {
@@ -153,20 +171,14 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     // roll, where a double is refused (G31), so seed a LATER turn: the even
     // opening board, where the AI's win prob is 0.5 >= its take point, so it
     // accepts.
-    await debugSetState(
-      makeState({
-        turn: "white",
-        phase: "roll",
-        cube: { value: 1, owner: null },
-        winner: null,
-        points: game.startingPoints(),
-        bar: { white: 0, black: 0 },
-        off: { white: 0, black: 0 },
-      }),
-    );
-    // A double the player is not allowed to offer is G11's finding, not this
-    // one's (run 1793624268: "I doubled and the cube didn't go up" was told to a
-    // player who could never double).
+    // Reached by play, as G11 is: the computer wins the opening and plays, and
+    // on the player's turn the race is near even (run 1793713472's server kept a
+    // flag only play sets, so a seeded turn could never double).
+    await api("/api/new", {});
+    let played = await debugRollVerified([3, 5]);
+    for (let guard = 0; guard < 12 && played.turn === "black"; guard++) {
+      played = await api("/api/ai", {});
+    }
     expect((await getState()).canDouble, "[needs: G11]").toBe(true);
     const res = await api("/api/double");
     const state = await getState();

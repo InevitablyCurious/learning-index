@@ -1884,7 +1884,7 @@ test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
   // A player who cannot double meets none of what follows: that is G11's
   // finding (run 1793624268 round 2 told four after-the-double lines to a page
   // whose Double button was never enabled).
-  expect((await readState(page)).canDouble, "[needs: G11]").toBe(true);
+  expect((await readState(page)).canDouble, "[needs: G11 G35]").toBe(true);
   const doubled = await postJson<ApiState>(page, "/api/double", {});
   // A passed double ends the game with nobody taking the cube — G12's take
   // decision, as in G20 (run 1793659780 passed even doubles).
@@ -1928,7 +1928,7 @@ test("[F46] REQ-DOUBLE-DECLINE — the decline pop-up says you won", async ({ pa
   // A player who cannot double meets none of what follows: that is G11's
   // finding (run 1793624268 round 2 told four after-the-double lines to a page
   // whose Double button was never enabled).
-  await expect(page.getByTestId("doubleBtn"), "[needs: G11]").toBeEnabled();
+  await expect(page.getByTestId("doubleBtn"), "[needs: G11 G35]").toBeEnabled();
   await page.getByTestId("doubleBtn").click();
   // Judged once the computer has actually dropped: a computer that takes a
   // double it should pass is G12's finding (on G22's estimate), not the
@@ -2141,7 +2141,7 @@ test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", a
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await expect(page.getByTestId("doubleBtn"), "[needs: G11]").toBeEnabled();
+  await expect(page.getByTestId("doubleBtn"), "[needs: G11 G35]").toBeEnabled();
   await page.getByTestId("doubleBtn").click();
   // Read what the page said first, then ask whether the game carries on, then
   // judge the words: a frozen page used to be told as wording, or not at all
@@ -2187,7 +2187,7 @@ test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", a
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await expect(page.getByTestId("doubleBtn"), "[needs: G11]").toBeEnabled();
+  await expect(page.getByTestId("doubleBtn"), "[needs: G11 G35]").toBeEnabled();
   await page.getByTestId("doubleBtn").click();
   // Judged once the computer has actually dropped: a computer that takes a
   // double it should pass is G12's finding (on G22's estimate), not the
