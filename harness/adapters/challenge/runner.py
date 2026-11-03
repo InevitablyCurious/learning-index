@@ -2690,7 +2690,6 @@ class ChallengeRunner(
         "G03",
         "G16",
         "G22",
-        "G34",
         "G35",
         "G27",
         "G28",

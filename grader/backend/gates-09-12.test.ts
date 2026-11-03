@@ -235,9 +235,9 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     expect(wp).toBeGreaterThanOrEqual(TAKE_POINT.easy);
     expect(wp).toBeGreaterThanOrEqual(TAKE_POINT.medium);
     expect(wp).toBeGreaterThanOrEqual(TAKE_POINT.hard);
-    expect(ai.shouldAiAccept(board, "black", "easy").action, "[needs: G34]").toBe("double");
-    expect(ai.shouldAiAccept(board, "black", "medium").action, "[needs: G34]").toBe("double");
-    expect(ai.shouldAiAccept(board, "black", "hard").action, "[needs: G34]").toBe("double");
+    expect(ai.shouldAiAccept(board, "black", "easy").action).toBe("double");
+    expect(ai.shouldAiAccept(board, "black", "medium").action).toBe("double");
+    expect(ai.shouldAiAccept(board, "black", "hard").action).toBe("double");
   });
 
   it("[G12] REQ-CUBE-AI — declines when black win chance is below hard take point", () => {
@@ -253,7 +253,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     expect(wp).toBe(0.02);
     expect(ai.winProbability(board, "black"), "[needs: G22]").toBeLessThan(TAKE_POINT.hard);
     expect(wp).toBeLessThan(TAKE_POINT.hard);
-    expect(ai.shouldAiAccept(board, "black", "hard").action, "[needs: G34]").toBe("no-double");
+    expect(ai.shouldAiAccept(board, "black", "hard").action).toBe("no-double");
   });
 
   it("[G12] REQ-CUBE-AI — offers only inside hard window, never when blocked/easy/too-good", () => {
@@ -263,7 +263,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     const anyBoard = bd(anyPoints, { white: 0, black: 0 }, { white: 14, black: 14 });
     expect(
       ai.shouldAiDouble(anyBoard, "black", { value: 2, owner: "white" }, "hard")
-        .action, "[needs: G34]"
+        .action
     ).toBe("no-double");
 
     const windowPoints = emptyPoints();
@@ -284,11 +284,11 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     // forcing the reference formula's decision on this ambiguous board.
     const windowWpCand = ai.winProbability(windowBoard, "black");
     expect(
-      ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "hard").action, "[needs: G34]"
+      ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "hard").action
     ).toBe(expectedOfferAction(windowWpCand, "hard", true));
     // easy never offers a double, regardless of win probability
     expect(
-      ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "easy").action, "[needs: G34]"
+      ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "easy").action
     ).toBe(expectedOfferAction(windowWpCand, "easy", true));
 
     const tooGoodPoints = emptyPoints();
@@ -304,7 +304,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     expect(ai.winProbability(tooGoodBoard, "black"), "[needs: G22]").toBeGreaterThan(DOUBLE_WINDOW.upper);
     expect(
       ai.shouldAiDouble(tooGoodBoard, "black", { value: 1, owner: null }, "hard")
-        .action, "[needs: G34]"
+        .action
     ).toBe("no-double");
   });
 
@@ -312,9 +312,9 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
   // difficulty) for a take, "double" for take/offer and "no-double" for
   // pass/hold. Run 1793683721's engine answered "accept" and took a cube
   // argument; every game still played right through its own server, and G12's
-  // player line was told for words no player sees. A contract break is the
-  // team's finding.
-  it("[G34] REQ-CUBE-AI — the cube functions answer in the build prompt's words", () => {
+  // player line was told for words no player sees. Told with G12's line (Jerry,
+  // 2026-11-03: fold G34 into G12).
+  it("[G12] REQ-CUBE-AI — the cube functions answer in the build prompt's words", () => {
     const points = emptyPoints();
     points[6] = 5;
     points[19] = -5;

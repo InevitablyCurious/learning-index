@@ -159,10 +159,6 @@
       "first": "Their tools read your computer's win-chance estimate, and it doesn't go up as the computer gets further ahead.",
       "repeat": "They checked more positions, and the computer's win-chance estimate still doesn't rise as it pulls ahead."
     },
-    "G34": {
-      "first": "Their tools load your computer's double and take decisions straight from the app's files, not through the running game, and the answers don't match how those decisions were laid out.",
-      "repeat": "They loaded the computer's double and take decisions from the app's files again, not through the running game, and the answers still don't match how they were laid out."
-    },
     "G35": {
       "first": "They set up a turn through your app's debug setup — their move, the cube in the middle — and it won't let them double, though the same turn in a real game can.",
       "repeat": "They set up that turn through your debug setup again, and it still won't let them double the way a real game does."
@@ -1596,8 +1592,8 @@
       "repeat": "Again, after I took the double, the Fast Forward button didn't come back."
     },
     "F67.stays": {
-      "first": "After I took the double, pieces moved again without my clicking anything.",
-      "repeat": "Again, after I took the double, pieces moved without my clicking anything."
+      "first": "With Fast Forward on, after I took the double it kept playing my moves for me.",
+      "repeat": "Fast Forward was on again, and after I took the double it still played my moves for me."
     },
     "F67.frozen": {
       "first": "With Fast Forward running, I took the computer's double and the game froze — the computer never finished its turn.",
