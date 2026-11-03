@@ -80,3 +80,16 @@ def test_a_general_line_or_an_unaspected_failure_is_never_called_fixed_while_fai
 def test_a_loop_shared_with_the_told_complaint_keeps_it_open() -> None:
     assert told_complaints_fixed([(F31, "up")], [(F31, "past")], ORDER) == []
     assert told_complaints_fixed([(F31, "up")], [(F31, "rim")], ORDER) == [(F31, "up")]
+
+
+def test_a_sibling_check_of_the_same_gate_keeps_its_line_open() -> None:
+    # Run 1793662415 round 3: one G12 check passed while another G12 check still
+    # told the same line; the model heard it fixed and still broken at once.
+    accepts = (
+        "[G12] REQ-CUBE-AI — accepts near-even cube offers across all difficulties"
+    )
+    window = "[G12] REQ-CUBE-AI — offers only inside hard window, never when blocked/easy/too-good"
+    assert told_complaints_fixed([(accepts, None)], [(window, None)], ORDER) == []
+    assert told_complaints_fixed([(accepts, None)], [(F87, None)], ORDER) == [
+        (accepts, None)
+    ]

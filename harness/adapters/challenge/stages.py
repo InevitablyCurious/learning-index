@@ -278,12 +278,19 @@ def told_complaints_fixed(
     asked after it; acknowledged per check, the model never heard its fix worked.
     """
     failing: dict[str, set[str | None]] = {}
+    # A line belongs to a gate id and aspect, not to one check: two checks of
+    # one gate tell the same line, so while either fails it is not fixed (run
+    # 1793662415 round 3: one G12 check passed, the other still told the G12
+    # line, and the model heard it fixed and still broken in one message).
+    open_lines: set[tuple[str, str | None]] = set()
     for check, aspect in now:
         failing.setdefault(check, set()).add(aspect)
+        open_lines.add((check_id(check) or check, aspect))
     fixed = []
     for check, aspect in told:
         if check not in failing:
-            fixed.append((check, aspect))
+            if (check_id(check) or check, aspect) not in open_lines:
+                fixed.append((check, aspect))
             continue
         token = check_id(check) or ""
         if aspect is not None and all(
