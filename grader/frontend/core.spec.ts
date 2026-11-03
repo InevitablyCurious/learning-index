@@ -2838,7 +2838,10 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
   await page.waitForTimeout(3_000);
   expect(positionOf(await readState(page)), "[aspect: stays] pieces moved by themselves after the double was taken").toBe(held);
   await expect(button, "[aspect: back] after the double was taken no Fast Forward button showed").toBeVisible();
-  await expect(button, "[aspect: back] [needs: F64] after the double was taken the button did not read Fast Forward").toHaveText(FAST_FORWARD);
+  // Nothing plays and the button is there, so only its word is wrong: told as
+  // that, not "didn't come back" — run 1793743564 heard that line as "start
+  // playing again" and Fast Forward played the player's moves next round.
+  await expect(button, "[aspect: label] [needs: F64] after the double was taken nothing played, but the button still read Pause").toHaveText(FAST_FORWARD);
 });
 
 // ── F72: an offer is answered with Accept or Decline ──────────────────────────

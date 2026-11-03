@@ -1595,6 +1595,10 @@
       "first": "After I took the double, the Fast Forward button didn't come back.",
       "repeat": "Again, after I took the double, the Fast Forward button didn't come back."
     },
+    "F67.label": {
+      "first": "After I took the double, nothing was playing any more, but the button still read Pause.",
+      "repeat": "Again, after I took the double, nothing was playing, but the button still read Pause."
+    },
     "F67.stays": {
       "first": "With Fast Forward on, after I took the double it kept playing my moves for me.",
       "repeat": "Fast Forward was on again, and after I took the double it still played my moves for me."
