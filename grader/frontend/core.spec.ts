@@ -2873,8 +2873,17 @@ test("[F72] REQ-DOUBLE-PENDING — the computer's offer holds the game", async (
   // player does, if the button can be pressed at all.
   await page.waitForTimeout(2_500);
   const endTurn = page.getByTestId("endTurnBtn");
-  if (await endTurn.isEnabled()) {
-    await endTurn.click();
+  // Enabled is not pressable: run 1793668943's build enabled End Turn under the
+  // offer's pop-up, the click waited out the test, and the timeout was told as
+  // "End Turn made the computer play again". A button the player can't press
+  // leaves the offer holding.
+  const pressed =
+    (await endTurn.isEnabled()) &&
+    (await endTurn.click({ timeout: 3_000 }).then(
+      () => true,
+      () => false,
+    ));
+  if (pressed) {
     let sawBlack = false;
     const deadline = Date.now() + 4_000;
     while (Date.now() < deadline && !sawBlack) {
