@@ -1974,7 +1974,12 @@ function answerButton(page: Page, name: RegExp): Locator {
 // checker from 6 to 1, then one borne off — and the first rung where the build
 // itself offers, through End Turn and its own computer turn, is the race; the
 // first rung is the race these checks always used.
-async function offerRace(page: Page): Promise<{ points: number[]; off: { white: number; black: number } }> {
+// With "middle" the race is the middle of the rungs the build offers on: a check
+// that plays a turn of white's before the offer needs room either side of it.
+async function offerRace(
+  page: Page,
+  pick: "first" | "middle" = "first",
+): Promise<{ points: number[]; off: { white: number; black: number } }> {
   const ladder: { points: number[]; off: { white: number; black: number } }[] = [];
   let six = 10, one = 1, whiteOff = 4;
   const rung = () => {
@@ -1985,6 +1990,7 @@ async function offerRace(page: Page): Promise<{ points: number[]; off: { white: 
   ladder.push(rung());
   while (six > 0) { six--; one++; ladder.push(rung()); }
   while (one > 1) { one--; whiteOff++; ladder.push(rung()); }
+  const offering: typeof ladder = [];
   for (const race of ladder) {
     await postJson(page, "/api/new", {});
     await setupState(page, {
@@ -1996,13 +2002,13 @@ async function offerRace(page: Page): Promise<{ points: number[]; off: { white: 
       state = await postJson(page, "/api/ai", {});
     }
     if (state?.phase === "doubleOffered") {
-      // A server remembers it has offered this game; the check starts clean.
-      await postJson(page, "/api/new", {});
-      return race;
+      offering.push(race);
+      if (pick === "first") break;
     }
   }
+  // A server remembers it has offered this game; the check starts clean.
   await postJson(page, "/api/new", {});
-  return ladder[0]!;
+  return offering[Math.floor((offering.length - 1) / 2)] ?? ladder[0]!;
 }
 
 test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", async ({ page }) => {
@@ -2058,17 +2064,16 @@ test("[F90] REQ-DOUBLE-ACCEPT-PLAYS-ON — taking the computer's double, the gam
   // which never made it. Reached as a player meets it: a turn played through
   // the page, End Turn, the offer through the page's own computer turn — a page
   // loaded straight into the offer restarts its loop on load and plays on, and
-  // that build offered only once moves had been made. The computer leads by
-  // about 40 pips, inside the hard doubling window.
-  test.setTimeout(90_000);
+  // that build offered only once moves had been made. The computer leads a
+  // race the build itself doubles on (offerRace), from the middle of its
+  // offering rungs so white's 2-1 leaves it inside.
+  test.setTimeout(150_000);
   await openApp(page);
-  const points = emptyPoints();
-  points[24] = 2; points[13] = 5; points[8] = 3; points[6] = 5;
-  points[11] = -2; points[16] = -5; points[17] = -3; points[19] = -5;
+  const { points, off } = await offerRace(page, "middle");
   await setupState(page, {
     points,
     bar: { white: 0, black: 0 },
-    off: { white: 0, black: 0 },
+    off,
     turn: "white",
     phase: "roll",
     dice: [],

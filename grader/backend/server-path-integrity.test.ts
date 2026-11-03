@@ -156,38 +156,64 @@ describe("Backgammon backend server-path integrity", () => {
     expect(hitUndone.bar, hit).toEqual(hitBefore.bar);
   });
 
-  // M24: accepting the computer's double makes the cube 2, owned by the player.
-  it("[G24] REQ-CUBE-ACCEPT — accepting the computer's double makes the cube 2", async () => {
-    // Reached the way a game reaches it: white plays a 2-1 and ends its turn, and
-    // the computer — about 40 pips ahead on hard — offers on its own turn. The
-    // spec does not say whether the cube doubles at the offer or at the take;
-    // an offer injected at cube 1 suits only the second (run 1793627441's server
-    // doubled at the offer, showed 2 after the take, and was told "the cube
-    // stayed at one"). Either way the taken cube is 2 and the player's.
-    const points = emptyPoints();
-    points[24] = 2; points[13] = 5; points[8] = 3; points[6] = 5;
-    points[11] = -2; points[16] = -5; points[17] = -3; points[19] = -5;
+  // Races from even to hopeless for black (white falling behind a checker at a
+  // time), each played to the computer's turn through End Turn; the offer from
+  // the middle race the build doubles on, or the last state when none does.
+  const raceLadder = () => {
+    const races: { points: number[]; off: { white: number; black: number } }[] = [];
+    for (let whiteOff = 10; whiteOff >= 0; whiteOff -= 2) {
+      const points = emptyPoints();
+      points[19] = -5; // black 30 pips, ten off
+      points[6] = 15 - whiteOff;
+      races.push({ points, off: { white: whiteOff, black: 10 } });
+    }
+    return races;
+  };
+  const toComputersTurn = async (race: { points: number[]; off: { white: number; black: number } }) => {
+    await api("/api/new", {});
     await debugSetState(
       makeState({
-        points,
+        ...race,
         bar: { white: 0, black: 0 },
-        off: { white: 0, black: 0 },
-        cube: { value: 1, owner: null },
         turn: "white",
-        phase: "roll",
+        phase: "move",
+        dice: [6, 5],
+        remainingDice: [],
+        turnOver: true,
+        cube: { value: 1, owner: null },
         difficulty: "hard",
         winner: null,
       }),
     );
-    let play = await debugRollVerified([2, 1]);
-    for (let i = 0; i < 2 && (play.legalMoves as Move[]).length > 0; i++) {
-      const m = (play.legalMoves as Move[])[0]!;
-      play = await api("/api/move", { from: m.from, to: m.to, die: m.die });
-    }
-    play = await api("/api/endturn", {});
-    for (let guard = 0; guard < 12 && play.turn === "black" && play.phase !== "doubleOffered"; guard++) {
+    let play = await api("/api/endturn", {});
+    for (let guard = 0; guard < 12 && play.turn === "black" && play.phase !== "doubleOffered" && !play.winner; guard++) {
       play = await api("/api/ai", {});
     }
+    return play;
+  };
+  const offeredRace = async () => {
+    const offering = [];
+    let last: any;
+    for (const race of raceLadder()) {
+      last = await toComputersTurn(race);
+      if (last.phase === "doubleOffered") offering.push(race);
+    }
+    if (offering.length === 0) return last;
+    return toComputersTurn(offering[Math.floor((offering.length - 1) / 2)]!);
+  };
+
+  // M24: accepting the computer's double makes the cube 2, owned by the player.
+  it("[G24] REQ-CUBE-ACCEPT — accepting the computer's double makes the cube 2", async () => {
+    // Reached the way a game reaches it: white ends its turn, and the computer,
+    // well ahead in a race on hard, offers on its own turn. The spec does not say whether the cube doubles at the offer or at the take;
+    // an offer injected at cube 1 suits only the second (run 1793627441's server
+    // doubled at the offer, showed 2 after the take, and was told "the cube
+    // stayed at one"). Either way the taken cube is 2 and the player's.
+    // The race is one the build itself doubles on: the win-chance formula is
+    // the build's, so a fixed race sits inside its window for some formulas and
+    // below it for others (run 1793743564 round 4 rated black 0.77 here, held
+    // by its own rule, and the check read that as a lost offer).
+    const play = await offeredRace();
     expect(play.phase, "[needs: G12 F49] the computer never offered a double").toBe("doubleOffered");
     const res = await api("/api/double/respond", { accept: true });
     expect(res.cube.value).toBe(2);
@@ -211,39 +237,13 @@ describe("Backgammon backend server-path integrity", () => {
   });
 
   // The computer doubles before it rolls, as a player may: run 1793672355's build
-  // rolled first and offered with its dice on the table. Races walk from even to
-  // hopeless for black (white falling behind a checker at a time) and the first
-  // one the build offers in is judged; a build that never offers is G12's and
+  // rolled first and offered with its dice on the table. The first race of the
+  // ladder the build offers in is judged; a build that never offers is G12's and
   // F49's finding, not this one's.
   it("[G24] REQ-CUBE-ACCEPT — the computer doubles before it rolls", async () => {
-    const races: { points: number[]; off: { white: number; black: number } }[] = [];
-    for (let whiteOff = 10; whiteOff >= 0; whiteOff -= 2) {
-      const points = emptyPoints();
-      points[19] = -5; // black 30 pips, ten off
-      points[6] = 15 - whiteOff;
-      races.push({ points, off: { white: whiteOff, black: 10 } });
-    }
     const wouldDouble: number[] = [];
-    for (const race of races) {
-      await api("/api/new", {});
-      await debugSetState(
-        makeState({
-          ...race,
-          bar: { white: 0, black: 0 },
-          turn: "white",
-          phase: "move",
-          dice: [6, 5],
-          remainingDice: [],
-          turnOver: true,
-          cube: { value: 1, owner: null },
-          difficulty: "hard",
-          winner: null,
-        }),
-      );
-      let play = await api("/api/endturn", {});
-      for (let guard = 0; guard < 12 && play.turn === "black" && play.phase !== "doubleOffered" && !play.winner; guard++) {
-        play = await api("/api/ai", {});
-      }
+    for (const race of raceLadder()) {
+      const play = await toComputersTurn(race);
       if (play.phase !== "doubleOffered") {
         try {
           if (ai.shouldAiDouble({ ...race, bar: { white: 0, black: 0 } }, "black", { value: 1, owner: null }, "hard")?.action === "double") {
