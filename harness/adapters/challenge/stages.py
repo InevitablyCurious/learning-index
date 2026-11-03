@@ -61,8 +61,18 @@ class PlayerView:
 _UNEVALUATED = "never evaluated"
 
 
+# SCORED, NEVER TOLD (Jerry, 2026-11-03: "leave G12 words untold"). The words a
+# build's cube functions answer in are the build prompt's, and a build that
+# answers in its own words fails for it; but a player never meets those words,
+# and telling them as G12's "the computer takes, refuses, or offers at the wrong
+# moments" sent run 1793744527 round 5 re-tuning a cube that played right. Like
+# a check never reached, it excuses no other check from being told.
+_UNTOLD = "[untold]"
+
+
 def is_unevaluated(problem: dict[str, Any]) -> bool:
-    return str(problem.get("observed", "")).strip().startswith(_UNEVALUATED)
+    observed = str(problem.get("observed", "")).strip()
+    return observed.startswith(_UNEVALUATED) or _UNTOLD in observed
 
 
 # A CHECK THAT CANNOT GET STARTED IS NOT TOLD (Jerry, 2026-09-24). A gate that

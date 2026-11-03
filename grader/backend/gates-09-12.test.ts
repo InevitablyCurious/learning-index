@@ -215,6 +215,21 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
   });
 });
 
+// The computer's take, as its own game asks it: a take function written with
+// the cube before the difficulty is called that way, and its own words for take
+// and pass count as the prompt's. Whether those words and that shape are the
+// prompt's is the last G12 check's, scored and never told (Jerry, 2026-11-03).
+const TAKE_WORDS = new Set(["double", "accept", "take"]);
+const PASS_WORDS = new Set(["no-double", "decline", "pass", "drop"]);
+function takeAnswer(board: unknown, difficulty: "easy" | "medium" | "hard"): string {
+  const answer =
+    ai.shouldAiAccept.length >= 4
+      ? ai.shouldAiAccept(board, "black", { value: 1, owner: null }, difficulty)
+      : ai.shouldAiAccept(board, "black", difficulty);
+  const action = String(answer?.action);
+  return TAKE_WORDS.has(action) ? "double" : PASS_WORDS.has(action) ? "no-double" : action;
+}
+
 describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window thresholds", () => {
   it("[G12] REQ-CUBE-AI — accepts near-even cube offers across all difficulties", () => {
     const points = emptyPoints();
@@ -235,9 +250,9 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     expect(wp).toBeGreaterThanOrEqual(TAKE_POINT.easy);
     expect(wp).toBeGreaterThanOrEqual(TAKE_POINT.medium);
     expect(wp).toBeGreaterThanOrEqual(TAKE_POINT.hard);
-    expect(ai.shouldAiAccept(board, "black", "easy").action).toBe("double");
-    expect(ai.shouldAiAccept(board, "black", "medium").action).toBe("double");
-    expect(ai.shouldAiAccept(board, "black", "hard").action).toBe("double");
+    expect(takeAnswer(board, "easy")).toBe("double");
+    expect(takeAnswer(board, "medium")).toBe("double");
+    expect(takeAnswer(board, "hard")).toBe("double");
   });
 
   it("[G12] REQ-CUBE-AI — declines when black win chance is below hard take point", () => {
@@ -253,7 +268,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     expect(wp).toBe(0.02);
     expect(ai.winProbability(board, "black"), "[needs: G22]").toBeLessThan(TAKE_POINT.hard);
     expect(wp).toBeLessThan(TAKE_POINT.hard);
-    expect(ai.shouldAiAccept(board, "black", "hard").action).toBe("no-double");
+    expect(takeAnswer(board, "hard")).toBe("no-double");
   });
 
   it("[G12] REQ-CUBE-AI — offers only inside hard window, never when blocked/easy/too-good", () => {
@@ -312,18 +327,18 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
   // difficulty) for a take, "double" for take/offer and "no-double" for
   // pass/hold. Run 1793683721's engine answered "accept" and took a cube
   // argument; every game still played right through its own server, and G12's
-  // player line was told for words no player sees. Told with G12's line (Jerry,
-  // 2026-11-03: fold G34 into G12).
+  // player line was told for words no player sees. Scored, never told (Jerry,
+  // 2026-11-03: "leave G12 words untold").
   it("[G12] REQ-CUBE-AI — the cube functions answer in the build prompt's words", () => {
     const points = emptyPoints();
     points[6] = 5;
     points[19] = -5;
     const board = bd(points, { white: 0, black: 0 }, { white: 10, black: 10 });
-    expect(ai.shouldAiAccept.length, "the take function does not take (board, player, difficulty)").toBe(3);
+    expect(ai.shouldAiAccept.length, "[untold] the take function does not take (board, player, difficulty)").toBe(3);
     const words = ["double", "no-double"];
     for (const difficulty of ["easy", "medium", "hard"] as const) {
-      expect(words, "a cube answer outside double / no-double").toContain(ai.shouldAiAccept(board, "black", difficulty).action);
-      expect(words, "a cube answer outside double / no-double").toContain(
+      expect(words, "[untold] a cube answer outside double / no-double").toContain(ai.shouldAiAccept(board, "black", difficulty).action);
+      expect(words, "[untold] a cube answer outside double / no-double").toContain(
         ai.shouldAiDouble(board, "black", { value: 1, owner: null }, difficulty).action,
       );
     }
