@@ -23,10 +23,11 @@ type Board = {
 
 describe("Backgammon backend server-path integrity", () => {
   let game: any;
+  let ai: any;
   let server: Awaited<ReturnType<typeof startServer>>;
 
   beforeAll(async () => {
-    ({ game } = await loadEngine());
+    ({ game, ai } = await loadEngine());
     server = await startServer({ debug: true });
   });
 
@@ -222,6 +223,7 @@ describe("Backgammon backend server-path integrity", () => {
       points[6] = 15 - whiteOff;
       races.push({ points, off: { white: whiteOff, black: 10 } });
     }
+    const wouldDouble: number[] = [];
     for (const race of races) {
       await api("/api/new", {});
       await debugSetState(
@@ -242,10 +244,23 @@ describe("Backgammon backend server-path integrity", () => {
       for (let guard = 0; guard < 12 && play.turn === "black" && play.phase !== "doubleOffered" && !play.winner; guard++) {
         play = await api("/api/ai", {});
       }
-      if (play.phase !== "doubleOffered") continue;
+      if (play.phase !== "doubleOffered") {
+        try {
+          if (ai.shouldAiDouble({ ...race, bar: { white: 0, black: 0 } }, "black", { value: 1, owner: null }, "hard")?.action === "double") {
+            wouldDouble.push(race.off.white);
+          }
+        } catch {}
+        continue;
+      }
       expect(play.remainingDice ?? [], "[aspect: before] the computer rolled before it offered its double").toEqual([]);
       return;
     }
+    // No race drew an offer. When the build's own cube judgement said double in
+    // one of them, the offer was lost on the way to the board — not G12's
+    // finding (run 1793736621 round 2 let the computer double only in a phase
+    // its turn never has, and the player heard only "it doubles at the wrong
+    // moments").
+    expect(wouldDouble, "[aspect: never] the computer, far ahead, never offered a double").toEqual([]);
   });
 
   // A finished game is not the end of the count: /api/new carries gamesPlayed forward.

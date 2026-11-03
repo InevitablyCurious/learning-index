@@ -183,6 +183,10 @@
       "first": "After I took the computer's double, it skipped its own turn — it never moved, and it was straight back to me to roll.",
       "repeat": "Took the computer's double again, and again it skipped its turn and went straight back to me."
     },
+    "G24.never": {
+      "first": "The computer never doubles me, even when it's far ahead in the race.",
+      "repeat": "Played on, and the computer still never doubled, however far ahead it got."
+    },
     "G24.before": {
       "first": "The computer rolled its dice first and only then offered me a double.",
       "repeat": "Again the computer rolled before it offered me the double."
