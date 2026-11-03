@@ -209,6 +209,45 @@ describe("Backgammon backend server-path integrity", () => {
     expect(blackOf(after), "[aspect: plays] after the take the computer skipped its turn").not.toBe(before);
   });
 
+  // The computer doubles before it rolls, as a player may: run 1793672355's build
+  // rolled first and offered with its dice on the table. Races walk from even to
+  // hopeless for black (white falling behind a checker at a time) and the first
+  // one the build offers in is judged; a build that never offers is G12's and
+  // F49's finding, not this one's.
+  it("[G24] REQ-CUBE-ACCEPT — the computer doubles before it rolls", async () => {
+    const races: { points: number[]; off: { white: number; black: number } }[] = [];
+    for (let whiteOff = 10; whiteOff >= 0; whiteOff -= 2) {
+      const points = emptyPoints();
+      points[19] = -5; // black 30 pips, ten off
+      points[6] = 15 - whiteOff;
+      races.push({ points, off: { white: whiteOff, black: 10 } });
+    }
+    for (const race of races) {
+      await api("/api/new", {});
+      await debugSetState(
+        makeState({
+          ...race,
+          bar: { white: 0, black: 0 },
+          turn: "white",
+          phase: "move",
+          dice: [6, 5],
+          remainingDice: [],
+          turnOver: true,
+          cube: { value: 1, owner: null },
+          difficulty: "hard",
+          winner: null,
+        }),
+      );
+      let play = await api("/api/endturn", {});
+      for (let guard = 0; guard < 12 && play.turn === "black" && play.phase !== "doubleOffered" && !play.winner; guard++) {
+        play = await api("/api/ai", {});
+      }
+      if (play.phase !== "doubleOffered") continue;
+      expect(play.remainingDice ?? [], "[aspect: before] the computer rolled before it offered its double").toEqual([]);
+      return;
+    }
+  });
+
   // A finished game is not the end of the count: /api/new carries gamesPlayed forward.
   it("[G27] REQ-NEWGAME-CARRY — a new game keeps gamesPlayed", async () => {
     const points = emptyPoints();
