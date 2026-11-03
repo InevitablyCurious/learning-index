@@ -1595,6 +1595,10 @@
       "first": "After I took the double, pieces moved again without my clicking anything.",
       "repeat": "Again, after I took the double, pieces moved without my clicking anything."
     },
+    "F67.frozen": {
+      "first": "With Fast Forward running, I took the computer's double and the game froze — the computer never finished its turn.",
+      "repeat": "Took the computer's double during Fast Forward again, and the game froze again."
+    },
     "F47.undo": {
       "first": "While my finished turn waits for End Turn, Undo doesn't take my last move back.",
       "repeat": "Undo still doesn't take my last move back while my turn waits for End Turn."

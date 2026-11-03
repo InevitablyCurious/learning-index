@@ -2820,7 +2820,7 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
   await playerClick(take);
   await expect
     .poll(async () => (await readState(page)).turn, {
-      message: "[aspect: back] [needs: G20] after the double was taken the turn never came back to the player",
+      message: "[aspect: frozen] [needs: G20] after the double was taken the turn never came back to the player",
       timeout: 20_000,
     })
     .toBe("white");
