@@ -159,6 +159,10 @@
       "first": "Their tools read your computer's win-chance estimate, and it doesn't go up as the computer gets further ahead.",
       "repeat": "They checked more positions, and the computer's win-chance estimate still doesn't rise as it pulls ahead."
     },
+    "G34": {
+      "first": "Their tools ask your computer whether it would double or take, and the answers don't come back in the form their tools were written for.",
+      "repeat": "They asked again, and the computer's double-or-take answers still aren't in the form their tools expect."
+    },
     "G23": {
       "first": "I made a move, hit undo, and the board didn't go back to how it was — a checker stayed where it had moved to or went missing.",
       "repeat": "Tried undo again after another move and the board still didn't come back right — a checker was still missing or still in the wrong place."

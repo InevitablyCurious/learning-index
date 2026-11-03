@@ -653,6 +653,11 @@
       "name": "Taking the computer's double, the game plays on",
       "what": "When the computer offers a double during play and the player accepts, the computer plays its turn and the turn comes back to the player.",
       "how": "In a browser: a position the computer leads by about 40 pips on hard, white to roll; rolls 2-1 through the page, plays it through the hints, clicks End Turn, waits for the page's own computer turn to offer (waits on F49), clicks Accept, and within 20 s requires the turn back with white or the game over."
+    },
+    "G34": {
+      "name": "The cube functions keep the build prompt's contract",
+      "what": "The take and offer functions take the arguments the build prompt gives and answer with its words.",
+      "how": "Calls shouldAiAccept and shouldAiDouble on a near-even race at every difficulty: the take function has three parameters and every answer is \"double\" or \"no-double\"."
     }
   },
   "setup": [
@@ -1057,6 +1062,7 @@
         "F07",
         "G12",
         "G22",
+        "G34",
         "G24",
         "F20",
         "F46",
