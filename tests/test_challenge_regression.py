@@ -297,3 +297,12 @@ def test_regression_openers_are_not_the_graders_vocabulary() -> None:
             "the regression opener names a requirement id — that is the "
             "grader talking, the same tell the failure-line guards reject"
         )
+
+
+def test_a_line_another_check_kept_failing_is_still_not_regressed() -> None:
+    # Two checks of one gate tell one line: one failed last round, the other
+    # newly fails. The line is still broken, not newly so — told once, as still.
+    old = "[G12] REQ-CUBE-AI — offers only inside hard window"
+    new = "[G12] REQ-CUBE-AI — accepts near-even cube offers"
+    reports = [{"state_hash": "h0", "failed_gates": [old]}, {"state_hash": "h1"}]
+    assert _regressed_checks(reports, [_problem(old), _problem(new)]) == set()

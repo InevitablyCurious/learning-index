@@ -75,6 +75,7 @@ from .bootstrap import BootstrapMixin
 from .stages import (
     Stage,
     aspect_order,
+    check_id,
     load_stages,
     player_order,
     player_view,
@@ -186,6 +187,9 @@ def _code_unchanged_since_last_round(attempt_reports: list[dict[str, Any]]) -> b
     return before is not None and before == after
 
 
+_LINE_ASPECT_RE = re.compile(r"\[aspect: ([a-z]+)\]")
+
+
 def _regressed_checks(
     attempt_reports: list[dict[str, Any]], visible: list[dict[str, Any]]
 ) -> set[str]:
@@ -208,10 +212,33 @@ def _regressed_checks(
     if _code_unchanged_since_last_round(attempt_reports):
         return set()
     prev_failed = {str(g).strip() for g in (prev.get("failed_gates") or [])}
+    checks = [p for p in visible if isinstance(p, dict)]
+    regressed = {
+        str(p.get("check", "")).strip()
+        for p in checks
+        if str(p.get("check", "")).strip() not in prev_failed
+    }
+
+    # A line belongs to a gate id and aspect, not to one check: while another
+    # check of the same line failed last round too, the line is still broken,
+    # not newly so (run 1793747894 round 2 told G12's line under "these were
+    # working last time" and again under "I'm still seeing").
+    def line(p: dict[str, Any]) -> tuple[str, str | None]:
+        check = str(p.get("check", "")).strip()
+        aspect = (
+            m.group(1)
+            if (m := _LINE_ASPECT_RE.search(str(p.get("observed", ""))))
+            else None
+        )
+        return (check_id(check) or check, aspect)
+
+    still = {
+        line(p) for p in checks if str(p.get("check", "")).strip() not in regressed
+    }
     return {
         str(p.get("check", "")).strip()
-        for p in visible
-        if isinstance(p, dict) and str(p.get("check", "")).strip() not in prev_failed
+        for p in checks
+        if str(p.get("check", "")).strip() in regressed and line(p) not in still
     }
 
 
