@@ -2331,6 +2331,13 @@ test("[F52] REQ-BUTTONS — greyed-out buttons look clearly different", async ({
     .then(() => true, () => false);
   const usable = Math.min(await clarity("newGameBtn"), ...(rollClickable ? [await clarity("rollBtn")] : []));
   const unusable = Math.max(await clarity("undoBtn"), await clarity("endTurnBtn"));
+  // Judged at the start of a game only: run 1793695155's page rolled the
+  // opening by itself a second after loading, the computer won it, and End Turn
+  // turned into a bright "play the computer's moves" button — measured as a
+  // greyed button that was not greyed. A game that left its start untouched is
+  // F61's finding.
+  const still = await readState(page);
+  if (still.phase !== "openingRoll" || (still.dice ?? []).length > 0) return;
   // A button cut off or overlapped photographs whatever lies across it — F38's
   // finding, and no reading of how greyed it is (a squeezed panel measured its
   // greyed buttons at 230 against 140 for the usable ones).
