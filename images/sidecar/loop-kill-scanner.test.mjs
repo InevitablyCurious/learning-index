@@ -10,8 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import scannerMod from "./loop-kill-scanner.cjs";
 
-const { LOOP_KILL_SIGNATURES, createLoopKillScanner, writeLoopKillMarker, writeCompactPhaseRepair } =
-  scannerMod;
+const { LOOP_KILL_SIGNATURES, createLoopKillScanner, writeLoopKillMarker } = scannerMod;
 
 function tempMarkerDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "loop-kill-test-"));
@@ -172,59 +171,6 @@ test("(g) writeLoopKillMarker: null sessionId -> unknown, overwrite, falsy marke
     writeLoopKillMarker({ markerDir: "", sessionId: "ses_x", signature: "relay_loop_detected", now: () => 1 });
     writeLoopKillMarker({ markerDir: undefined, sessionId: "ses_x", signature: "relay_loop_detected", now: () => 1 });
     assert.deepEqual(fs.readdirSync(dir), ["loop-kill-unknown.json"]);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("(h) writeCompactPhaseRepair writes exactly 'repair\\n' to the phase file", () => {
-  const dir = tempMarkerDir();
-  try {
-    const phaseFile = path.join(dir, "phase");
-    writeCompactPhaseRepair({ phaseFile });
-    assert.equal(fs.readFileSync(phaseFile, "utf8"), "repair\n");
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("(i) writeCompactPhaseRepair is atomic: no .sidecar.tmp remains", () => {
-  const dir = tempMarkerDir();
-  try {
-    const phaseFile = path.join(dir, "phase");
-    writeCompactPhaseRepair({ phaseFile });
-    // write-then-rename: the sidecar-distinct tmp path must be gone after the
-    // write, and the dir must hold ONLY the sentinel (no torn tmp visible to
-    // the compaction arm's reader).
-    assert.equal(fs.existsSync(`${phaseFile}.sidecar.tmp`), false);
-    assert.deepEqual(fs.readdirSync(dir), ["phase"]);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("(j) writeCompactPhaseRepair is idempotent: repeated calls leave 'repair\\n'", () => {
-  const dir = tempMarkerDir();
-  try {
-    const phaseFile = path.join(dir, "phase");
-    writeCompactPhaseRepair({ phaseFile });
-    writeCompactPhaseRepair({ phaseFile });
-    writeCompactPhaseRepair({ phaseFile });
-    assert.equal(fs.readFileSync(phaseFile, "utf8"), "repair\n");
-    assert.deepEqual(fs.readdirSync(dir), ["phase"]);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("(k) writeCompactPhaseRepair is a no-op when phaseFile is falsy", () => {
-  const dir = tempMarkerDir();
-  try {
-    writeCompactPhaseRepair({ phaseFile: undefined });
-    writeCompactPhaseRepair({ phaseFile: "" });
-    writeCompactPhaseRepair({ phaseFile: null });
-    writeCompactPhaseRepair({});
-    assert.deepEqual(fs.readdirSync(dir), []);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -1,30 +1,30 @@
-"""CONTEXT EXHAUSTED — the point a session has no room left to keep working.
+"""CONTEXT BUDGET — the token line a session compacts at, and the one error
+that still ends a cell.
 
 WHY THIS EXISTS (runs 1789474325, 1789536879, 1789580246). Repair rounds run
 in ONE session, and its context only grows. opencode compacts on its own when
 the context reaches its limit, so three of four Learning-Index runs had their
 repair rounds summarised mid-round — silently, by a mechanism the benchmark
-never chose. The rule has always been that repair never compacts (bench's
-phase sentinel); the old benchmark only kept it because its runs stayed
-11–48k tokens under the line. Nothing enforced it.
+never chose. The old benchmark only kept repair rounds uncompacted because its
+runs stayed 11–48k tokens under the line; nothing enforced it.
 
-Now it is enforced: the worker's opencode.json turns opencode's automatic
-compaction off (the plugin's own build-boundary compaction goes through
-`/summarize`, which that setting does not touch — verified in bench-worker:v1),
-and reaching the limit ENDS THE CELL as ``context_exhausted``.
+WHAT A FULL CONTEXT MEANS NOW. Automatic compaction is ON, and the harness
+drives its own compaction at the boundaries it chooses through
+``/session/{id}/summarize``. So reaching the token threshold is NOT an ending
+of its own: the context gets compacted — by opencode, or by the harness at a
+chunk boundary — and the session continues.
 
-THE LIMIT IS OPENCODE'S OWN. opencode compacts when a finished turn's tokens
-reach ``context - min(output limit, output cap)``, with the cap 32,000 unless
-OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX sets it. Measured on run 1789580246
-(context 262,144, output 32,768): a turn at 229,535 did not compact, the next
-at 230,340 did — 230,144 sits between them. Using the same line means a cell is
-called exhausted exactly where opencode would otherwise have summarised it.
+THE ONE GENUINE ENDING IS ``ContextOverflowError``: the request was too large
+to compact at all, so there is nothing left to continue with. That alone ends
+the cell (``context_exhausted``).
 
-TWO SIGNALS, EITHER IS ENOUGH:
-  - the newest assistant message's tokens reach the limit;
-  - an assistant message carries ``ContextOverflowError`` (the request itself
-    went over; with automatic compaction off opencode records this and goes
-    idle instead of compacting — verified in bench-worker:v1).
+THE LIMIT IS STILL OPENCODE'S OWN. opencode compacts when a finished turn's
+tokens reach ``context - min(output limit, output cap)``, with the cap 32,000
+unless OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX sets it. Measured on run
+1789580246 (context 262,144, output 32,768): a turn at 229,535 did not compact,
+the next at 230,340 did — 230,144 sits between them. :func:`context_limit_tokens`
+still reports that line (it is recorded on the run's stats and shown to the
+operator); it no longer gates a turn.
 """
 
 from __future__ import annotations
@@ -143,10 +143,15 @@ def has_context_overflow(messages: list[Any]) -> bool:
 
 
 def context_exhausted(
-    messages: list[Any], limit_tokens: int | None
+    messages: list[Any], limit_tokens: int | None = None
 ) -> tuple[bool, int]:
-    """(exhausted, newest size) for a message list against a limit."""
+    """(overflowed, newest size): True only on a genuine ContextOverflowError.
+
+    ``limit_tokens`` is no longer consulted: with auto-compaction on, hitting
+    the token threshold is not an ending of its own — opencode compacts and the
+    session continues. The one genuine residual is ContextOverflowError (the
+    conversation is too large to compact at all), which alone still ends the
+    cell.
+    """
     size = latest_context_tokens(messages)
-    if has_context_overflow(messages):
-        return True, size
-    return (limit_tokens is not None and size >= limit_tokens), size
+    return has_context_overflow(messages), size

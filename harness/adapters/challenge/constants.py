@@ -343,54 +343,6 @@ DEFAULT_RUN_TIMEOUT_S = 5400
 # destructive kill that must fire late. Alarm << timeout, by construction.
 DEFAULT_GATE_TIMEOUT_S = 3600
 
-# Ceiling on the bounded wait for the WORKER'S OWN compaction at a chunk
-# boundary. The harness only observes — it never fires a substitute — so a
-# compaction that does not land within this window is no_compaction_evidence
-# and the cell aborts (fail-closed); the bound exists so that abort happens
-# in bounded time rather than hanging.
-_COMPACT_SETTLE_TIMEOUT_S = 300.0
-# How long to wait for it to START. The plugin fires on idle, so there is a gap
-# between this drive returning and the generation appearing. Short: if nothing
-# has begun in this window the plugin did not fire, and the parts check at the
-# end of the wait decides the outcome.
-_COMPACT_SETTLE_GRACE_S = 20.0
-
-
-# ── A2 PHASE SENTINEL — THE ONLY COMPACTION TRIGGER ─────────────────────────
-#
-# The worker plugin fires its own compaction on `session.idle`. WHICH idles it
-# may fire on is decided HERE, by the harness, and published as one file on a
-# read-only bind mount that the plugin re-reads on every idle. The cell env is
-# written once at `docker run` and cannot carry something that changes between
-# phases, so a file is the transport.
-#
-# WHY THE HARNESS OWNS THIS (WO-MARKER-RIP, 2026-09-09). The arm used to ALSO
-# require the model to have printed `CHUNK FINISHED` on the turn that just
-# ended. That was a model-emitted string standing in for a harness-known fact,
-# and it leaked: the instruction lives only in the six build prompts, but repair
-# rounds run in the SAME session, so the convention survived every compaction
-# and the model kept printing it while fixing gate failures — in run 1788462647
-# that fired a compaction ~80s before the end of `feedback-2`. The marker is
-# gone. The sentinel is now the WHOLE gate, which means it has to be exact.
-#
-# EXACTLY ONE BUILD-FLAGGED DRIVE PER CHUNK. The plugin fires at most once per
-# flagged idle and is hard-capped at six fires per session, so the sentinel's
-# job is to make sure the six idles it flags are the six CHUNK BOUNDARIES: the
-# chunk drive itself is flagged build and its idle is the boundary.
-#
-# Recovery nudge re-drives are ALWAYS HELD (repair): a nudge is not a chunk
-# boundary — the boundary idle already fired at the abort that triggered the
-# nudge — so holding the re-drive is what keeps it from double-firing the
-# plugin's six-fire budget.
-#
-# FAIL-CLOSED IN BOTH DIRECTIONS. Everything not named here is repair, and
-# repair is the measurement — it never compacts. An unknown phase name resolves
-# to repair, not build: a phase this function has never heard of is not one that
-# has been shown to be a safe compaction point.
-_COMPACT_PHASE_BUILD = "build"
-_COMPACT_PHASE_REPAIR = "repair"
-_COMPACT_PHASE_FILENAME = "phase"
-
 
 # How many fixed complaints the pass verdict names before it summarises the
 # rest. Naming them is what stops the model undoing its own working changes;

@@ -81,15 +81,24 @@ class _OpencodeRunStats:
     # transient retry. Non-zero means the cell was measured blind and must be
     # gated VOID-INSTRUMENT rather than scored.
     observation_lost_turns: int = 0
-    # CONTEXT EXHAUSTED (harness/context_budget.py): the session reached the
-    # size at which opencode would have compacted, or a request overflowed.
-    # The cell stops here; it is a result, not an instrument fault.
+    # CONTEXT EXHAUSTED (harness/context_budget.py): a genuine
+    # ContextOverflowError — the request was TOO LARGE TO COMPACT, so there was
+    # nothing left to continue with. A context that merely reached the token
+    # threshold does NOT set this: opencode (or the harness at a chunk
+    # boundary) compacts it and the session continues. The cell stops here;
+    # it is a result, not an instrument fault.
     context_exhausted: bool = False
     context_tokens: int = 0
     context_limit_tokens: int | None = None
     # Part D: the largest per-request context (input + cache read + cache write)
     # of this phase. None = not recorded (absent, never 0).
     context_peak_tokens: int | None = None
+    # In-drive compactions-before-grade enforcement: completed compactions the
+    # drive counted since the last grade's watermark. >= 2 means the drive ended
+    # itself mid-round and the runner maps it to the compactions_before_grade
+    # terminal. 0 for the build (which never counts) and for a feedback round
+    # that stayed under the threshold.
+    compactions_since_grade: int = 0
 
 
 @dataclass(frozen=True)

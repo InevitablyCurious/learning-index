@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import shutil
 import subprocess
 import sys
@@ -194,115 +193,130 @@ def check_grader_resources(c: Check) -> None:
 
 
 def check_self_compact_tool(c: Check, args) -> None:
-    """Prove the worker image ACTUALLY wires the self-compact plugin.
+    """Prove the HARNESS owns chunk-boundary compaction, and counts it honestly.
 
-    WHY THIS NEEDS PROVING (2026-09-03). opencode SWALLOWS PLUGIN LOAD ERRORS: a
-    deliberately corrupted `plugin.ts` produces no output at all — the serve
-    starts, answers health, and simply has no plugin. So every negative signal
-    an operator would look for is absent by construction, and a stale or broken
-    image would run a whole cell with the plugin missing and nothing to say so.
-    Every chunk boundary would then abort the cell on no_compaction_evidence
-    with nothing anywhere saying the plugin was the reason.
+    THE CHECK MOVED BECAUSE THE MECHANISM MOVED (2026-11). Compaction used to be
+    fired by a worker-side plugin baked into the image (images/worker/
+    self-compact.ts) and armed by a phase sentinel, and this check proved that
+    wiring BY NAME from the image's own baked config — because opencode SWALLOWS
+    plugin load errors, so a missing plugin was silent by construction. The
+    plugin, its BENCH_SELF_COMPACT switch and the sentinel are gone: the harness
+    asks the serve API to compact the session itself, and opencode's own
+    auto-compaction is left at its DEFAULT in troubleshooting instead of being
+    forced off. So the question is no longer "is the plugin wired in the image".
+    It is "does the harness still own compaction, does it count only compactions
+    that FINISHED, and is nothing still forcing auto-compaction off in the worker
+    config". All of that is a property of REPO SOURCE, so it is answered from
+    source — no docker, and no built image to be stale.
 
-    Liveness is not wiring (AGENTS.md 2.1). The restored mechanism is the
-    worker-side self-fire plugin (self-compact.ts), loaded via the opencode
-    `config.plugin` array baked into the image — so this asserts that wiring
-    BY NAME from the image's own baked config, plus that the file exists at
-    the wired path, rather than inferring it from a clean startup.
+    The counting half is the half that has already lied for real. Of 73
+    compaction-agent messages on run 1788415430, 68 were killed mid-stream by the
+    relay's loop guard and ALL 68 still carried `summary: true`; a flag-keyed
+    count reported 68 compactions where none landed (harness/serve_client.py
+    carries the measurement). A predicate that loses the `finish` receipt reports
+    a cell that compacted when it did not, and nothing in the report can say so.
 
     Only meaningful when the run will actually ask for compaction — checked when
     `--compact` is passed, skipped otherwise with that stated.
     """
     if not getattr(args, "compact", False):
         c.add(
-            "self-compact wiring",
+            "compaction wiring",
             True,
             "not checked — this run does not use compaction (--compact absent)",
         )
         return
-    if shutil.which("docker") is None:
-        c.add("self-compact wiring", False, "docker not on PATH")
+
+    # (a) AUTO-COMPACTION IS NOT FORCED OFF. Asked of the BUILDER, not of the
+    # file's text: the built config is what the worker reads, and a text scan
+    # cannot see a key an early-returning branch would never add. The model is a
+    # synthetic cloud shape because the compaction decision is made at the TOP of
+    # the builder, before any model-specific branch returns — and the run's own
+    # --model may be a bench alias the worker registry does not know.
+    try:
+        if str(REPO) not in sys.path:
+            sys.path.insert(0, str(REPO))
+        from harness.adapters.challenge.worker_config import (
+            build_worker_opencode_config,
+        )
+
+        built = build_worker_opencode_config(
+            model="orcarouter/compaction-probe",
+            reasoning_effort=None,
+            proxy_base_url=None,
+            gates_dir="/gates",
+            golden_dir="/golden",
+        )
+    except Exception as exc:  # noqa: BLE001
+        c.add(
+            "compaction wiring",
+            False,
+            f"could not build the worker opencode config: {exc}",
+        )
+    else:
+        compaction = built.get("compaction")
+        forced_off = isinstance(compaction, dict) and (compaction.get("auto") is False)
+        c.add(
+            "compaction wiring",
+            not forced_off,
+            "the worker config leaves auto-compaction at opencode's default"
+            if not forced_off
+            else (
+                "the worker config still FORCES auto-compaction off "
+                "(compaction.auto: false) -> a troubleshooting session that fills "
+                "its context stalls where it used to compact and continue; leave "
+                "the key out and let the default stand"
+            ),
+        )
+
+    # (b) THE TRIGGER AND ITS RECEIPT PREDICATE. Bounded parse, the way
+    # control/cloud.mjs is read in preflight/cloud.py: from the method to the next
+    # same-indent `def`, so these assertions cannot be satisfied by prose
+    # elsewhere in the file — the docstring and the guard-kill counter next door
+    # both name `summary`, and only the COUNTING ARM may key on `finish` alone.
+    try:
+        source = (REPO / "harness" / "serve_client.py").read_text(encoding="utf-8")
+        start = source.index("def completed_compactions_since(")
+        stop = source.find("\n    def ", start)
+        counting_arm = source[start : stop if stop != -1 else len(source)]
+    except Exception as exc:  # noqa: BLE001
+        c.add(
+            "harness compaction",
+            False,
+            f"could not parse harness/serve_client.py: {exc}",
+        )
         return
 
-    # Function-local: remedy id is a literal in the entry (see check_image).
-    from bench_preflight import TOOL_WORKER_REBUILD
-
-    # Read the image's own baked opencode config and ask it — no serve, no
-    # env: wiring is a property of the image, not of a runtime session.
-    probe = (
-        "const fs=require('fs');"
-        "const cfg=JSON.parse(fs.readFileSync("
-        "'/etc/xdg/opencode/opencode.json','utf8'));"
-        "const plugs=(cfg.plugin||[]).filter(function(p){"
-        "return /self-compact\\.ts$/.test(String(p))});"
-        "const ok=plugs.length>0&&plugs.every(function(p){"
-        "return fs.existsSync(String(p))});"
-        # A2: the wired file must be the PHASE-GATED arm. A stale image can be
-        # correctly wired to the OLD plugin, which fires on the marker alone and
-        # leaks a compaction into the repair phase — the exact defect this
-        # check now has to be able to see. Grep the baked source for the
-        # sentinel env name; wiring alone was never proof of behaviour.
-        "const gated=ok&&plugs.every(function(p){"
-        "return fs.readFileSync(String(p),'utf8')"
-        ".indexOf('BENCH_COMPACT_PHASE_FILE')>=0});"
-        "console.log(JSON.stringify({wired:plugs,exist:ok,gated:gated}))"
-    )
-    proc = subprocess.run(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "--entrypoint",
-            "node",
-            "bench-worker:v1",
-            "-e",
-            probe,
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=180,
-    )
-    tail = (proc.stdout or "").strip().splitlines()
-    wired: list = []
-    exist = False
-    gated = False
-    if tail:
-        try:
-            verdict = json.loads(tail[-1])
-            wired = verdict.get("wired") or []
-            exist = bool(verdict.get("exist"))
-            gated = bool(verdict.get("gated"))
-        except (ValueError, AttributeError):
-            pass
-    present = bool(wired) and exist
-    c.add(
-        "self-compact wiring",
-        present,
-        f"self-compact.ts is wired in the image's opencode config ({wired[0]})"
-        if present
-        else (
-            "self-compact.ts is NOT wired in the image's baked opencode config "
-            "(or the file is missing at the wired path) -> the --compact flag "
-            "arms a plugin that is not loaded, and every chunk boundary will "
-            "abort the cell on no_compaction_evidence. " + REBUILD_CMD
-        ),
-        remedy=TOOL_WORKER_REBUILD,
-    )
-    c.add(
-        "self-compact phase gate",
-        present and gated,
-        "the baked plugin reads the harness phase sentinel "
-        "(BENCH_COMPACT_PHASE_FILE) — repair rounds cannot compact"
-        if (present and gated)
-        else (
-            "the baked self-compact.ts does NOT read BENCH_COMPACT_PHASE_FILE -> "
-            "this image predates the benchmark's current phase-gated compaction "
-            "arm (an older arm leaked a compaction into the repair phase, run "
-            "1788462647). " + REBUILD_CMD
-        ),
-        remedy=TOOL_WORKER_REBUILD,
-    )
+    triggers = "def summarize(" in source
+    keys_on_finish = 'info.get("finish")' in counting_arm
+    keys_on_agent = 'info.get("agent")' in counting_arm
+    ok = triggers and keys_on_finish and not keys_on_agent
+    if ok:
+        detail = (
+            "ServeClient.summarize is the harness's compaction trigger, and the "
+            "count keys only on compactions that FINISHED — a non-empty `finish`, "
+            "never the `summary` flag and never `agent`"
+        )
+    else:
+        missing = []
+        if not triggers:
+            missing.append(
+                "ServeClient.summarize is gone -> nothing can trigger a "
+                "build-chunk compaction"
+            )
+        if not keys_on_finish:
+            missing.append(
+                "completed_compactions_since no longer requires a non-empty "
+                "`finish` -> a compaction killed mid-stream counts as one that "
+                "landed (run 1788415430 reported 68 of those)"
+            )
+        if keys_on_agent:
+            missing.append(
+                "completed_compactions_since still counts on `agent` -> the flag "
+                "marks the rewrite, the finish proves it landed"
+            )
+        detail = "; ".join(missing)
+    c.add("harness compaction", ok, detail)
 
 
 def check_serve_drive_image(c: Check) -> None:

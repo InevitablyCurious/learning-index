@@ -11,13 +11,9 @@ DockerCellConfig, which tests monkeypatch ON THE PACKAGE
 (challenge_mod.DockerCellConfig in test_challenge_budget_stop.py and
 test_snapshot_capture.py), so this module does NOT import DockerCellConfig
 at the top; the method reads the package attribute into a local once per
-call -- same pattern as hold_ui.py's _HOLD_UI_PORT late-bind. DockerCell
-appears only as a parameter annotation (a string under PEP 563, never
-evaluated at runtime), so importing it directly from ..docker_worker is
-correct; the package-attr patch the tests set targets the runtime read in
-_run_cell_impl, which stayed in __init__. The harness.grader_run-style
-names this module needs (compact_phase_for, build_worker_opencode_config,
-the _COMPACT_PHASE_* constants) are not monkeypatched anywhere, so they
+call -- same pattern as hold_ui.py's _HOLD_UI_PORT late-bind. The
+harness.grader_run-style names this module needs
+(build_worker_opencode_config) are not monkeypatched anywhere, so they
 import directly. subprocess is the dual-safe module singleton:
 monkeypatching challenge_mod.subprocess.run patches the same module
 object this module's `import subprocess` resolves to.
@@ -26,94 +22,19 @@ object this module's `import subprocess` resolves to.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
 
-from ..docker_worker import DockerCell
-from .constants import _COMPACT_PHASE_FILENAME, _COMPACT_PHASE_REPAIR, _GRADER_DIR
-from .exceptions import ServeTransportError
+from .constants import _GRADER_DIR
 from harness.adapters.docker_worker import worker_config_host_dir
 from harness.egress import EGRESS_MEMORY_PORT
 from harness.memory_slot import memory_settings, memory_upstream, redacted
 
-from .transport import compact_phase_for
 from .worker_config import build_worker_opencode_config
 
 
 class BootstrapMixin:
-    def _publish_compact_phase(
-        self, *, active_cell: DockerCell, phase: str, held: bool = False
-    ) -> None:
-        """Write the drive phase the worker's compaction arm is allowed to read.
-
-        Only meaningful when the run is compacting; a no-op otherwise, so a
-        non-``--compact`` run neither creates the directory nor pays for it.
-
-        WRITE-THEN-RENAME. The container reads this file on every
-        ``session.idle`` and must never see a half-written value; a rename is
-        atomic on the host and the mount propagates the directory entry, so a
-        reader gets the old phase or the new one and never a truncated one.
-
-        A FAILURE HERE IS AN ABORT. If the sentinel cannot be published, the
-        plugin keeps reading the PREVIOUS phase — which, at the build->repair
-        transition, is exactly the stale `build` that lets a repair-round
-        compaction through. That is the defect this closes, so it must not be
-        possible to continue past it with a warning.
-
-        Since WO-MARKER-RIP the sentinel is the WHOLE gate (there is no longer
-        a model-emitted marker as a second condition), so a stale value is not
-        one signal of two going wrong — it is the only one.
-        """
-        if not self.compact:
-            return
-        host_dir = getattr(active_cell.config, "compact_phase_host_path", None)
-        if host_dir is None:
-            raise ServeTransportError(
-                f"phase {phase}: --compact is armed but this cell has no phase "
-                "sentinel path — the worker could not be told which phase it is "
-                "in, and the sentinel is the ONLY thing that decides whether an "
-                "idle may compact"
-            )
-        value = _COMPACT_PHASE_REPAIR if held else compact_phase_for(phase)
-        target = Path(host_dir).expanduser().resolve() / _COMPACT_PHASE_FILENAME
-        try:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            tmp = target.with_suffix(".tmp")
-            tmp.write_text(f"{value}\n", encoding="utf-8")
-            os.replace(tmp, target)
-        except OSError as exc:
-            raise ServeTransportError(
-                f"phase {phase}: could not publish the compaction phase sentinel "
-                f"to {target} ({exc}) — the worker would keep reading the "
-                "previous phase, which is how a repair-round compaction gets in"
-            ) from exc
-        if held:
-            # A HOLD IS A SENTINEL-VALUE CORRECTION MID-DRIVE, NOT A PHASE
-            # TRANSITION. The drive already announced this phase at its
-            # boundary publish; re-emitting phase.start (or re-setting the
-            # heartbeat's phase) here would falsely announce a restart.
-            return
-        self._progress(f"PROGRESS step=compact-phase phase={phase} sentinel={value}")
-        # THE SAME BOUNDARY, ON THE LIVE STREAM. The log line above is the
-        # operator's record; this is the UI's. They are emitted together so
-        # they can never disagree about which phase is open.
-        #
-        # The heartbeat is told too, so every beat from here until the next
-        # boundary names this phase — that is what turns "something is alive"
-        # into "the build's chunk 5 is alive".
-        live = getattr(self, "_live", None)
-        if live is not None:
-            live.emit(
-                "phase.start",
-                cell_seq=getattr(self, "_cell_seq", None),
-                phase=str(phase),
-            )
-        heartbeat = getattr(self, "_heartbeat", None)
-        if heartbeat is not None:
-            heartbeat.set_phase(str(phase))
-
     def _write_worker_permission_config(self, *, worktree: Path) -> None:
         gates_dir = str(_GRADER_DIR.resolve())
         golden_dir = str((self.task_dir / "golden").resolve())
@@ -187,9 +108,6 @@ class BootstrapMixin:
             container_name=container_name,
         )
         cell_config.session_db_host_path = session_db_dir
-        # A2 phase sentinel: a sibling of the worktree, never inside it — the
-        # model must not see instrument state, and the gates must not score it.
-        cell_config.compact_phase_host_path = worktree.parent / "compact-phase"
         # Must exist before `docker run`, or Docker creates the mount source
         # itself; the file inside is written once the container is up.
         worker_config_host_dir(worktree).mkdir(parents=True, exist_ok=True)
@@ -197,9 +115,6 @@ class BootstrapMixin:
         cell_config.proxy_base_url = self.proxy_base_url
         cell_config.proxy_token = self.proxy_token
         cell_config.cloud = self.cloud
-        # Arms the worker plugin's self-fire (it resolves the model to compact
-        # with from the session itself — the harness passes no model ids).
-        cell_config.self_compact = bool(self.compact)
         cell_config.require_todos = bool(self.require_todos)
         # When set, docker_worker runs this cell on the --internal egress
         # network and launches the sidecar of this name; empty = legacy path.
@@ -331,12 +246,11 @@ class BootstrapMixin:
                 raise RuntimeError(f"chunk prompt empty: {path}")
             chunks.append(text)
 
-        # SELF-COMPACTION IS WORKER-SIDED, AND INVISIBLE TO THESE PROMPTS.
-        # The plugin fires its own summarize on session.idle, gated entirely by
-        # the phase sentinel the harness publishes — so the prompts carry no
-        # compaction instruction, ask the model for no sign-off string, and are
-        # byte-identical whether or not the flag is set. The harness only
-        # observes at the boundary (see _settle_after_chunk).
+        # SELF-COMPACTION IS HARNESS-SIDED, AND INVISIBLE TO THESE PROMPTS.
+        # The harness compacts between chunks on its own side, not inside the
+        # model's turn — so the prompts carry no compaction instruction, ask
+        # the model for no sign-off string, and are byte-identical whether or
+        # not the flag is set.
         return chunks
 
     @staticmethod

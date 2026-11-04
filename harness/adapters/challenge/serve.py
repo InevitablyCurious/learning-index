@@ -14,7 +14,7 @@ tests set (challenge_mod.ServeClient / challenge_mod.DockerCell)
 target runtime reads that stayed in __init__ (the G0/G1 base); G5/G6
 consume the serve_client INSTANCE and the active_cell passed in, never
 the patched classes. Every other name below (the .constants nudges /
-turn-terminal reasons / settle bounds, the serve_client reasons and
+turn-terminal reasons, the serve_client reasons and
 classifiers, LOOP_KILL_MARKER_DIRNAME, _build_truncation_evidence,
 _provider_backoff_seconds, _OpencodeRunStats)
 is not monkeypatched anywhere, so importing them directly is correct
@@ -41,6 +41,7 @@ from harness.context_budget import (
     output_cap,
 )
 from harness.serve_client import (
+    COMPACTIONS_BEFORE_GRADE_WAIT_REASON,
     LOOP_KILL_WAIT_REASON,
     WORKER_DIED,
     REASON_LOOP_GUARD,
@@ -63,8 +64,6 @@ from harness.serve_transport import (
 from ..docker_worker import LOOP_KILL_MARKER_DIRNAME, DockerCell
 from .constants import (
     _CAP_CUTOFF_RECOVERY_NUDGE,
-    _COMPACT_SETTLE_GRACE_S,
-    _COMPACT_SETTLE_TIMEOUT_S,
     _FINALIZE_RECOVERY_NUDGE,
     _LOOP_RECOVERY_NUDGE,
     _MAX_CAP_CUTOFF_NUDGES,
@@ -101,6 +100,7 @@ class ServeMixin:
         timeout_s: float = 5400.0,
         kill_hook: Callable[[], None] | None = None,
         attempt: int | None = None,
+        compaction_watermark: int | None = None,
     ) -> _OpencodeRunStats:
         """Drive ONE scoring attempt through the persistent opencode serve.
 
@@ -130,17 +130,47 @@ class ServeMixin:
         drive ends). A killed turn never reads as completed work because it
         is subtracted from ``turns`` (scoring), not because the phase is
         failed; its tokens stay metered.
+
+        IN-DRIVE COMPACTIONS GATE: when ``compaction_watermark`` is set
+        (feedback rounds only), it is handed to ``wait_idle_detailed``, which
+        counts completed compactions since it ON ITS OWN POLL TICKS -- so a
+        model that never goes idle is covered too -- and returns the
+        ``compactions_before_grade`` reason at the second. The drive maps that
+        reason onto ``compactions_since_grade=2`` and ends; the count has no
+        other source.
         """
         if kill_hook is None:
             kill_hook = active_cell.kill_worker_processes
 
-        # A2: PUBLISH THE PHASE BEFORE THE PROMPT GOES OUT. This is the single
-        # choke point every scoring attempt passes through, so it is the only
-        # place the sentinel needs to be written — build chunks, recording
-        # turns, recovery nudges and feedback rounds all arrive here with their
-        # phase name, and the plugin's next session.idle reads whatever this
-        # wrote.
-        self._publish_compact_phase(active_cell=active_cell, phase=phase)
+        # THE PHASE OPENS HERE, and this is the one place every scoring attempt
+        # passes through. Build chunks and feedback/troubleshoot rounds both
+        # arrive at this method carrying their phase name, so a single re-emit
+        # here keeps the board's phase spine lit for the whole run instead of
+        # only where a chunk happens to close.
+        #
+        # `phase.start` means "a phase OPENED" -- it is published BEFORE this
+        # attempt's prompt goes out, so a reader knows what the cell is about to
+        # do rather than what it just finished. The heartbeat carries the same
+        # phase (Heartbeat.set_phase) so every beat that follows says which
+        # phase the cell is doing; before this site re-emitted, every heartbeat
+        # record omitted its documented `phase` field entirely.
+        #
+        # NOT AT THE COMPACTION BOUNDARY (`_compact_after_chunk`): that site is
+        # where a build chunk CLOSES, so emitting there would name the chunk
+        # that just ended (one-chunk lag), and a feedback round has no harness
+        # compaction boundary at all -- the phases that make up most of a run
+        # would never emit, leaving the board to fall back on a lagging scrape
+        # of the log.
+        live = getattr(self, "_live", None)
+        if live is not None:
+            live.emit(
+                "phase.start",
+                cell_seq=getattr(self, "_cell_seq", None),
+                phase=str(phase),
+            )
+        heartbeat = getattr(self, "_heartbeat", None)
+        if heartbeat is not None:
+            heartbeat.set_phase(str(phase))
 
         # Surface every transient observation-read retry on the progress
         # stream. A retry nobody can see is indistinguishable from a serve that
@@ -239,25 +269,6 @@ class ServeMixin:
         # whole phase, including any recovery re-drives.
         context_peak_watermark = class_watermark
 
-        # A SECOND WATERMARK, TAKEN ONCE AND NEVER MOVED.
-        #
-        # `class_watermark` advances past each classified kill, which is right
-        # for classification and wrong for the question the recovery path has to
-        # answer: has THIS CHUNK already had its compaction? That has to be
-        # measured from the start of the drive, because a compaction landing
-        # anywhere in it is the chunk's one fire. A watermark that advances
-        # would sit past it and report none.
-        #
-        # READ INDEPENDENTLY, FAILING OPEN (WO-25). Copying `class_watermark`
-        # would inherit its `0`-on-failure fallback, and a bogus `0` counts the
-        # WHOLE session as "since" — any past compaction then reads as this
-        # chunk's fire and the hold below never releases. `None` marks the
-        # watermark unknown, and the hold probe fails open on it.
-        try:
-            compact_watermark = len(serve_client.get_messages(session_id))
-        except ServeClientError:
-            compact_watermark = None
-
         # WO-LOOPREC-1/FINALIZE-REC-1 transport recovery: a guard-killed or
         # finalize-killed turn is metered (its tokens burned) but must NOT read
         # as completed work. When the terminal classification is recoverable,
@@ -302,6 +313,12 @@ class ServeMixin:
         context_window = model_limits(self.model)["context"]
         context_hit = False
         context_size = 0
+        # In-drive compactions-before-grade: completed compactions since the
+        # grade watermark. Set to the threshold (2) ONLY when the wait reports
+        # the ``compactions_before_grade`` reason; 0 otherwise. The WAIT owns the
+        # count (it covers a model that never goes idle); this variable only
+        # carries the verdict onto the stats. >= 2 ends the drive.
+        compactions_seen = 0
         # WORKER DIED: asked only when the serve stops answering. A cell with no
         # liveness check (a test fake) never reports a death.
         worker_state = getattr(active_cell, "worker_state", None)
@@ -413,9 +430,31 @@ class ServeMixin:
                     stall_timeout_s=DEFAULT_TURN_STALL_TIMEOUT_S,
                     loop_kill_marker_dir=loop_kill_marker_dir,
                     turn_start_ts_ms=turn_start_ts_ms,
-                    context_limit_tokens=context_limit,
                     worker_alive=_worker_alive,
+                    # Feedback rounds arm the compactions-before-grade rule; the
+                    # chunked build leaves it None, so a build's own compaction
+                    # is never counted (feedback-only BY CONSTRUCTION).
+                    compaction_watermark=compaction_watermark,
                 )
+            # ── TWO COMPACTIONS BEFORE A GRADE ENDS THE CELL (IN-DRIVE) ─────
+            #
+            # The wait counted two completed compactions since the grade
+            # watermark, either while the session stayed BUSY (never idle — the
+            # hole this closes) or on the idle transition. Carry the threshold
+            # count and end the drive: the runner reads
+            # `compactions_since_grade >= 2` and maps it to the
+            # compactions_before_grade terminal (verdict FAIL, reason, notice,
+            # progress line) EXACTLY once — that block is unchanged.
+            #
+            # THIS MUST SIT BEFORE `if not idle:`. The reason is returned with
+            # idle=False, so without this branch it falls into the unrecognized
+            # non-idle arm below, which reads as a budget timeout
+            # (`killed_reason = "run_timeout"`, `exit_code = 1`) and aborts +
+            # kill-hooks a worker that did nothing wrong. The wait SIGNALS, this
+            # drive MAPS, the runner DECIDES.
+            if wait_reason == COMPACTIONS_BEFORE_GRADE_WAIT_REASON:
+                compactions_seen = 2
+                break
             if not idle:
                 # WO-LOOPKILL-1: a fresh loop-kill marker ended the wait. The
                 # turn is wedged exactly like a stall and gets un-stuck the same
@@ -430,7 +469,6 @@ class ServeMixin:
                 # The bound fired with no command running: the model server
                 # sent nothing. Ended the same way as a stall, classified as ours.
                 silent_this_turn = wait_reason == REASON_MODEL_SILENT
-                context_hit = wait_reason == CONTEXT_EXHAUSTED
                 if wait_reason == WORKER_DIED:
                     # Nothing to abort or kill: the container is gone. Say so
                     # and end the phase; the runner ends the cell.
@@ -463,10 +501,6 @@ class ServeMixin:
                     )
                 if loop_killed_this_turn:
                     loop_killed_turns += 1
-                elif context_hit:
-                    # Out of room mid-turn: stop generation (abort below) and
-                    # end the phase. Not a harness limit and not an error.
-                    killed_reason = CONTEXT_EXHAUSTED
                 elif not (stalled_this_turn or silent_this_turn):
                     # Distinguish "the cell's whole budget ran out" from "this
                     # turn stopped progressing". Both end the drive; only the
@@ -478,16 +512,6 @@ class ServeMixin:
                 # as a loop kill — killed_reason/exit_code stay clean so the
                 # recovery gate passes; the classifier forces TURN_TERMINAL_STALLED
                 # below and the stall is counted from its anomaly record.
-                # WO-25 STALL-ABORT HOLD: write `repair` BEFORE the abort. The
-                # abort's own session.idle is not a boundary. A loop-kill is
-                # already covered — the sidecar writes `repair` at its kill —
-                # but a stall has no sidecar, so without this the stall's own
-                # abort idle could fire the summarizer mid-stall. The recovery
-                # probe republishes `build` when the chunk has not compacted.
-                if stalled_this_turn or silent_this_turn:
-                    self._publish_compact_phase(
-                        active_cell=active_cell, phase=phase, held=True
-                    )
                 # WO-WATCH-1F: genuinely stop serve-side generation before teardown.
                 # An abort failure is logged but must NOT mask the timeout outcome.
                 try:
@@ -582,16 +606,20 @@ class ServeMixin:
             # session out of room cannot be nudged back into room, and an
             # overflowed request would otherwise read as a transport error and
             # be re-driven into the same wall.
-            if not context_hit:
-                try:
-                    context_hit, context_size = context_exhausted(
-                        serve_client.get_messages(session_id), context_limit
-                    )
-                except ServeClientError:
-                    context_hit = False
-                if context_hit:
-                    killed_reason = CONTEXT_EXHAUSTED
+            #
+            # THE OVERFLOW-ONLY RESIDUAL. A session that compacts when it needs
+            # to never reaches this check — the summarize rewrites the window
+            # and the turn continues. This is what is left for a context too
+            # large to compact at all: the provider's own ContextOverflowError,
+            # which no nudge and no summarize can clear.
+            try:
+                context_hit, context_size = context_exhausted(
+                    serve_client.get_messages(session_id), context_limit
+                )
+            except ServeClientError:
+                context_hit = False
             if context_hit:
+                killed_reason = CONTEXT_EXHAUSTED
                 if not context_size:
                     try:
                         context_size = latest_context_tokens(
@@ -620,16 +648,17 @@ class ServeMixin:
                 )
                 break
 
-            # ── FAIL-FAST: the worker's own compaction is loop-killing ──────
+            # ── FAIL-FAST: compaction is loop-killing ──────────────────────
             #
-            # When self-compaction is armed, the worker plugin (not the harness)
-            # fires the summarize. If the relay's loop guard kills that
-            # summarize, opencode AUTO-RETRIES it (compaction_restores) — a
-            # self-sustaining storm. The harness must NOT nudge around it: it
-            # does not drive compaction, so a recovery nudge is meaningless
-            # there, and nudging around opencode's retry loop is exactly the
-            # 2026-09-03 10-minute hang (run 1788451466: compact-1 ok, compact-2
-            # relay_loop_detected xN, nudged to the budget).
+            # When self-compaction is armed, the HARNESS drives the summarize at
+            # each chunk boundary (:meth:`_compact_after_chunk`). If the relay's
+            # loop guard kills a compaction, opencode AUTO-RETRIES it
+            # (compaction_restores) — a self-sustaining storm. The harness must
+            # NOT nudge around it: a recovery nudge does not fire a compaction
+            # and only feeds another turn into the storm, and nudging around
+            # opencode's retry loop is exactly the 2026-09-03 10-minute hang
+            # (run 1788451466: compact-1 ok, compact-2 relay_loop_detected xN,
+            # nudged to the budget).
             #
             # DISJOINT FROM THE BUILD-TURN NUDGE: this branch keys on
             # ``agent=compaction`` kills only, and runs BEFORE
@@ -961,79 +990,19 @@ class ServeMixin:
                         class_watermark = len(serve_client.get_messages(session_id))
                     except ServeClientError:
                         pass
-                    # ── THE HOLD IS NOW CONDITIONAL, AND WHY ──────────────
+                    # ── RE-DRIVE. No compaction is involved here. ─────────
                     #
-                    # This used to publish `repair` here, on the reasoning that
-                    # "the boundary idle already fired at the loop-kill abort
-                    # that triggered this nudge". That was TRUE ONLY BECAUSE OF
-                    # A DEFECT: the plugin fired its summarize on the idle that
-                    # a DYING stream emits, which is not a boundary at all. It
-                    # then diverted the agent into the compaction agent and
-                    # stopped the drive (measured, run 1789125594).
-                    #
-                    # The plugin now gates that itself — it records the turn a
-                    # `session.error` killed and refuses to summarize it. So no
-                    # compaction fires on a death, and the re-drive's completion
-                    # IS this chunk's one boundary.
-                    #
-                    # Holding here would therefore leave the sentinel on
-                    # `repair` for the rest of the drive, the real boundary
-                    # could never compact, and `_settle_after_chunk` would abort
-                    # the cell with `no_compaction_evidence`. Measured exactly
-                    # that way on run 1789127719, chunk 5: two nudges, no
-                    # compaction, cell dead.
-                    #
-                    # ── SO ASK, RATHER THAN ASSUME EITHER WAY ─────────────
-                    #
-                    # Unconditionally holding breaks the gated case; never
-                    # holding breaks the un-gated one. Both are real: the
-                    # plugin's gate keys on `session.error`, and not every way a
-                    # turn can die is guaranteed to emit one (a turn that simply
-                    # stops with no signal does not).
-                    #
-                    # The harness can just LOOK. `completed_compactions_since`
-                    # is the same evidence `_settle_after_chunk` requires at the
-                    # boundary, so this asks the one question that decides it:
-                    # has this chunk already had its compaction?
-                    #
-                    #   already fired -> HOLD (`repair`). The re-drive must
-                    #                    not spend a second fire (the chunk-4
-                    #                    double-fire that exhausted the budget
-                    #                    by chunk 6).
-                    #   not fired     -> REPUBLISH `build`. The re-drive's
-                    #                    completion is this chunk's one real
-                    #                    boundary, and holding would make
-                    #                    `_settle_after_chunk` abort the cell
-                    #                    with no_compaction_evidence (measured,
-                    #                    run 1789127719 chunk 5). The republish
-                    #                    is active, not a no-op: the loop-kill
-                    #                    sidecar writes `repair` at its kill,
-                    #                    and the stall-abort hold writes it too
-                    #                    — this is the ONLY place that restores
-                    #                    `build`, so without it the boundary
-                    #                    idle could never summarize.
-                    #
-                    # A read failure — or a watermark never captured (`None`) —
-                    # FAILS OPEN to `build` (WO-25). Holding on a lost read
-                    # strands the sentinel on `repair` for the rest of the
-                    # drive, which kills the cell at the boundary with
-                    # no_compaction_evidence: the exact measured failure above.
-                    # The double-fire a wrong open risks instead is the lesser
-                    # cost — it burns one budget fire, and every later nudge
-                    # re-probes.
-                    try:
-                        already = (
-                            serve_client.completed_compactions_since(
-                                session_id, compact_watermark
-                            )
-                            if compact_watermark is not None
-                            else 0
-                        )
-                    except ServeClientError:
-                        already = 0
-                    self._publish_compact_phase(
-                        active_cell=active_cell, phase=phase, held=bool(already)
-                    )
+                    # The harness used to probe the transcript for "has this
+                    # chunk already compacted?" and hold or release the phase
+                    # sentinel accordingly — the sentinel being what told the
+                    # worker plugin when to summarize. The plugin is gone: the
+                    # harness fires the chunk's one summarize itself, at the
+                    # boundary, AFTER the drive returns (see
+                    # :meth:`_compact_after_chunk`). A recovery re-drive is
+                    # therefore just another turn into the same session;
+                    # whether it lands before or after the boundary changes
+                    # nothing about the compaction, and there is nothing here
+                    # to hold.
                     continue
                 if recoverable and killed_reason is None and exit_code == 0:
                     # BUDGET EXHAUSTED (WO-COMPACTION-RESTORE C5A). The kill is
@@ -1112,11 +1081,19 @@ class ServeMixin:
             baseline.get("cost_usd", 0.0) or 0.0
         )
 
-        if exit_code == 0 and d_turns <= 0 and d_output <= 0 and d_input <= 0:
+        if (
+            exit_code == 0
+            and d_turns <= 0
+            and d_output <= 0
+            and d_input <= 0
+            and compactions_seen < 2
+        ):
             # The phase reached idle but produced NOTHING: the final assistant
             # message was discarded (relay stream-finalize defect, 2026-08-09)
             # or the serve never generated. Loud exit 1 — never a clean zero
             # that lets gates run against a stale worktree.
+            # The compaction rule ends the drive BEFORE the turn is metered, so
+            # that abort is deliberate, not a silent phase, and must stay clean.
             exit_code = 1
             turn_anomalies = turn_anomalies + (
                 {
@@ -1142,7 +1119,7 @@ class ServeMixin:
             f"input={d_input} output={d_output} reasoning={d_reasoning} "
             f"cache_read={d_cache_read} cache_write={d_cache_write} "
             f"session_id={session_id} cost_usd={d_cost:.4f} "
-            f"status={'ok' if idle else 'timeout'}"
+            f"status={'ok' if idle else (COMPACTIONS_BEFORE_GRADE_WAIT_REASON if compactions_seen >= 2 else 'timeout')}"
         )
 
         # The largest context of this phase, counted as opencode counts it
@@ -1193,6 +1170,7 @@ class ServeMixin:
             context_tokens=context_size,
             context_limit_tokens=context_limit,
             context_peak_tokens=context_peak,
+            compactions_since_grade=compactions_seen,
         )
 
     def _run_opencode_serve_chunked(
@@ -1211,8 +1189,8 @@ class ServeMixin:
         """WO-77 chunked first pass: drive the chunk prompts IN ORDER through the
         one serve session.
 
-        PER CHUNK: drive -> settle the worker's own
-        compaction -> next chunk. A drive is over when the session goes IDLE;
+        PER CHUNK: drive -> one summarize (the harness fires
+        it) -> next chunk. A drive is over when the session goes IDLE;
         a non-zero exit ends the whole build there and every later chunk is
         reported ``not_reached``.
 
@@ -1340,11 +1318,6 @@ class ServeMixin:
                 "guard_aborted_turns": 0,
                 "finalize_timeout_turns": 0,
             }
-            # Watermark BEFORE the drive. `_settle_after_chunk` counts the
-            # worker's own compactions since this point, and the fire happens
-            # DURING one of the drives below — a watermark taken afterwards
-            # sits past it and reads zero.
-            watermark = len(serve_client.get_messages(session_id))
             stats = _drive(phase, chunk_prompt)
             report["recovery_nudges"] += stats.recovery_nudges
             report["guard_aborted_turns"] += stats.guard_aborted_turns
@@ -1362,8 +1335,8 @@ class ServeMixin:
             if stats.killed_reason == WORKER_DIED:
                 return _aggregate(exit_code=1, killed_reason=WORKER_DIED)
             if stats.context_exhausted:
-                # The build stops where it ran out of room: no settle, no next
-                # chunk. The runner ends the cell as CONTEXT EXHAUSTED.
+                # The build stops where it ran out of room: no compaction, no
+                # next chunk. The runner ends the cell as CONTEXT EXHAUSTED.
                 return _aggregate(
                     exit_code=0, killed_reason=CONTEXT_EXHAUSTED, context=stats
                 )
@@ -1372,100 +1345,45 @@ class ServeMixin:
                     exit_code=stats.exit_code, killed_reason=stats.killed_reason
                 )
 
-            # ── LET THE WORKER'S OWN COMPACTION SETTLE ──────────────────────
+            # ── THE CHUNK BOUNDARY: COMPACT ONCE, HERE ─────────────────────
             #
-            # The chunk is closed. If self-compaction is armed, the plugin saw
-            # the phase sentinel read `build` on the boundary drive's
-            # session.idle and fired its own summarize — which happens DURING
-            # that drive, not after it: the plugin fires the moment idle is
-            # published, before the drive's stable-idle wait returns, so the
-            # compaction has typically already completed by the time the drive
-            # reports serve-drive-end. Detection therefore uses the PRE-DRIVE
-            # watermark (captured above), not a fresh one taken now — a
-            # post-drive watermark sits PAST the compaction and reports zero.
+            # The chunk is closed, so this is the boundary opencode's own
+            # auto-compaction would fire on — if it fired at every boundary,
+            # which it does not: it fires at a token threshold that a chunk may
+            # reach mid-work and a chunk may never reach at all. The harness now
+            # fires it explicitly, exactly once per chunk, after the drive
+            # returns, and the call blocks until the rewrite is done. The next
+            # chunk's prompt goes into the compacted session.
             #
-            # THE HARNESS OBSERVES, IT DOES NOT DRIVE. It waits (bounded) and
-            # requires the worker's own summarize to have landed a compaction
-            # part since the pre-drive watermark: no part is
-            # no_compaction_evidence and aborts the cell. It never triggers,
-            # never substitutes, never retries — driver-issued compaction is
-            # what turned one killed generation into a 40-minute storm on
-            # 2026-09-03 (68 kills, run 1788415430).
+            # The worker used to do this itself, reading a phase sentinel the
+            # harness wrote, and the harness only observed the result and
+            # aborted the cell when the evidence was missing. That inverted the
+            # responsibility: the component that owns the boundary is the one
+            # that should compact at it.
             if self.compact:
-                self._settle_after_chunk(
+                self._compact_after_chunk(
                     serve_client=serve_client,
                     session_id=session_id,
                     run_label=run_label,
                     chunk=index,
-                    watermark=watermark,
                 )
 
         return _aggregate(exit_code=0, killed_reason=None)
 
-    def _settle_after_chunk(
-        self,
-        *,
-        serve_client: ServeClient,
-        session_id: str,
-        run_label: str,
-        chunk: int,
-        watermark: int,
-    ) -> None:
-        """Bounded wait for the WORKER'S OWN compaction. Fail-closed.
+    def _compact_after_chunk(self, *, serve_client, session_id, run_label, chunk):
+        """Compact the session once, after this build chunk (POST /summarize).
 
-        The worker plugin fires its own summarize on the session.idle of the
-        drive the phase sentinel flagged as the chunk boundary — DURING that
-        drive, so the compaction has usually already completed by the time this
-        is called. The harness only OBSERVES that fire — it never triggers it
-        and never substitutes for it. At the chunk boundary it holds the next
-        prompt back until the session settles (bounded by
-        ``_COMPACT_SETTLE_TIMEOUT_S``, with a short ``_COMPACT_SETTLE_GRACE_S``
-        for the generation to start), then requires at least one COMPLETED
-        compaction part to have landed since ``watermark`` — which MUST be the
-        PRE-DRIVE message count, not a fresh one taken here (a post-drive
-        count sits past the already-completed compaction and reads zero).
-
-        FAIL-CLOSED CONTRACT. Success is: the wait settled AND the worker's
-        own summarize landed at least one compaction part. Anything else —
-        the wait timed out, the plugin never fired, or the generation was
-        killed (a guard-killed compaction still carries ``summary: true`` but
-        an error, and is not counted) — is ``no_compaction_evidence``: the
-        cell ABORTS with :class:`ServeTransportError`. There is no substitute
-        summarize and no "continue uncompacted": a cell that was armed to
-        compact and did not is a broken measurement, not a cheaper one.
+        The harness — not any worker plugin — fires the compaction now, and it
+        is exactly one per chunk boundary. The summarize call blocks until the
+        rewrite completes; ``auto=False`` because that flag means auto-continue
+        AFTER compaction (inject the synthetic continue turn), and the harness
+        drives the next chunk prompt itself.
         """
-        deadline = time.monotonic() + _COMPACT_SETTLE_TIMEOUT_S
-        # The plugin fires on idle, so the session may not be busy YET. Give it a
-        # short grace to go busy before concluding nothing is coming.
-        went_busy = serve_client.wait_busy(
-            session_id, timeout_s=_COMPACT_SETTLE_GRACE_S
+        provider_id, _, model_id = self.model.partition("/")
+        serve_client.summarize(
+            session_id, provider_id=provider_id, model_id=model_id, auto=False
         )
-        settled = True
-        if went_busy:
-            remaining = max(1.0, deadline - time.monotonic())
-            settled = serve_client.wait_idle(session_id, timeout_s=remaining)
-
-        compactions = serve_client.completed_compactions_since(session_id, watermark)
-        if not settled or compactions == 0:
-            # FAIL-CLOSED: the worker's own summarize is the only compaction
-            # there is. No evidence of it within the bounded wait aborts the
-            # cell — never a substitute summarize, never "continue uncompacted".
-            self._progress(
-                f"PROGRESS run_label={run_label} step=self-compact chunk={chunk} "
-                f"status=no_compaction_evidence settled={settled} "
-                f"went_busy={went_busy} compactions={compactions} "
-                f"budget_s={_COMPACT_SETTLE_TIMEOUT_S:.0f}"
-            )
-            raise ServeTransportError(
-                f"no_compaction_evidence: run_label={run_label} chunk={chunk} — "
-                f"the worker's own summarize landed {compactions} compaction "
-                f"part(s) within the bounded wait (settled={settled}, "
-                f"went_busy={went_busy}, "
-                f"budget_s={_COMPACT_SETTLE_TIMEOUT_S:.0f}). The harness "
-                "observes only and never fires a substitute, so the cell "
-                "aborts instead of continuing uncompacted."
-            )
         self._progress(
             f"PROGRESS run_label={run_label} step=self-compact chunk={chunk} "
-            f"status=compacted compactions={compactions}"
+            f"status=compacted compactions=1"
         )

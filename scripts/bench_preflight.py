@@ -151,10 +151,11 @@ def main() -> int:
         "--compact",
         action="store_true",
         help=(
-            "Check the readiness of chunk-boundary self-compaction too. The "
-            "worker image must actually wire the self-compact plugin in its "
-            "opencode config — opencode swallows plugin load errors, so a "
-            "broken image is otherwise silent."
+            "Check the readiness of chunk-boundary compaction too. The harness "
+            "triggers compaction itself after each build chunk — there is no "
+            "worker plugin any more — so this asserts the worker config leaves "
+            "opencode's auto-compaction at its default, and that the harness "
+            "still counts only compactions that actually FINISHED."
         ),
     )
     ap.add_argument("--org", default=None, help="org id (ON cells only)")

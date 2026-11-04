@@ -31,17 +31,11 @@ const fs = require("node:fs");
 const http = require("node:http");
 const https = require("node:https");
 const path = require("node:path");
-const { createLoopKillScanner, writeLoopKillMarker, writeCompactPhaseRepair } =
+const { createLoopKillScanner, writeLoopKillMarker } =
   require("./loop-kill-scanner.cjs");
 
 // Loop-kill marker output dir (empty = disabled); read once at startup.
 const MARKER_DIR = process.env.OKP_LOOP_KILL_MARKER_DIR || "";
-
-// Compaction-phase sentinel file (null = disabled / non-compact run); read
-// once at startup. Set by the harness per cell (ENV-VARS.md) — on a loop kill
-// the sidecar writes `repair` here so the compaction arm sees it before the
-// session idles.
-const COMPACT_PHASE_FILE = process.env.BENCH_COMPACT_PHASE_FILE || null;
 
 // `scan: true` marks a MODEL-WIRE port: only these have their responses
 // observed for relay loop-kill signatures.
@@ -162,11 +156,8 @@ function forward(up, clientReq, clientRes) {
   const scanner = up.scan
     ? createLoopKillScanner({
         onMatch: (sig) => {
-          // Sentinel FIRST: onMatch runs synchronously inside the proxyRes
-          // "data" listener, before pipe() forwards the signature-bearing
-          // chunk — so the repair write completes while the response is
-          // still in flight, never after the session idles.
-          writeCompactPhaseRepair({ phaseFile: COMPACT_PHASE_FILE });
+          // onMatch runs synchronously inside the proxyRes "data" listener,
+          // BEFORE pipe() forwards the signature-bearing chunk.
           writeLoopKillMarker({
             markerDir: MARKER_DIR, sessionId, signature: sig, now: () => Date.now(),
           });

@@ -6,6 +6,16 @@ the canned metrics shapes. The dead ``_FakeServeClient.session_busy`` stub
 was dropped in the move (zero callers); ``guard_killed_compactions_since``
 stays — the harness calls it (harness/adapters/challenge/serve.py).
 
+COMPACTION IS A HARNESS WRITE NOW, so the fake serves it as one. The harness
+compacts a build session itself, after each chunk, with
+``ServeClient.summarize`` — no worker plugin, no phase sentinel, no settle.
+:meth:`_FakeServeClient.summarize` records the call (``summarize_calls``) and
+appends the transcript shape a finished compaction actually leaves behind —
+an assistant message flagged ``summary`` with a non-empty ``finish`` — which
+is exactly what ``completed_compactions_since`` counts. Nothing here models a
+worker-plugin fire: that component does not exist, so the fake has no flag for
+one — a compaction is visible only as the ``summarize`` write above.
+
 Not a test module: the ``_`` prefix and non-``test_`` name keep pytest
 (testpaths=["tests"]) from collecting it.
 """
@@ -13,13 +23,13 @@ Not a test module: the ``_`` prefix and non-``test_`` name keep pytest
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 from harness.adapters.challenge import ChallengeRunner
 from harness.serve_client import (
+    COMPACTIONS_BEFORE_GRADE_WAIT_REASON,
     LOOP_KILL_WAIT_REASON,
     extract_transcript_metrics,
     read_loop_kill_marker,
@@ -31,30 +41,19 @@ TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve
 class _FakeCell:
     """Stand-in for a DockerCell on the serve-drive path.
 
-    Carries a ``config`` with the A2 phase-sentinel directory ONLY. A real cell
-    config has far more, but this path touches exactly two things: the sentinel
-    directory (which the drive publishes the phase to before every prompt) and
-    ``worktree`` (deliberately ABSENT here, so the truncation-evidence fallback
-    to the temp dir stays exercised — see the evidence-path test).
+    Carries a bare ``config``. A real cell config has far more, but this path
+    touches exactly one thing on it: ``worktree``, which is deliberately ABSENT
+    here, so the truncation-evidence fallback to the temp dir stays exercised
+    (see the evidence-path test). ``kill_worker_processes`` is the only other
+    DockerCell surface the drive depends on.
     """
 
-    def __init__(self, compact_phase_dir: Path | None = None) -> None:
+    def __init__(self) -> None:
         self.kill_calls = 0
-        self.config = SimpleNamespace(
-            compact_phase_host_path=Path(
-                compact_phase_dir or tempfile.mkdtemp(prefix="compact-phase-")
-            )
-        )
+        self.config = SimpleNamespace()
 
     def kill_worker_processes(self) -> None:
         self.kill_calls += 1
-
-    def compact_phase(self) -> str | None:
-        """The phase value this cell's worker would currently read, or None."""
-        sentinel = Path(self.config.compact_phase_host_path) / "phase"
-        return (
-            sentinel.read_text(encoding="utf-8").strip() if sentinel.is_file() else None
-        )
 
 
 class _FakeServeClient:
@@ -72,12 +71,13 @@ class _FakeServeClient:
         # [(False, "stalled"), (True, "idle")]. Empty (the default) falls
         # through to wait_result — every existing case unchanged.
         self.wait_script: list[tuple[bool, str]] = []
-        # Settle-only wait override: the chunk-boundary settle waits via the
-        # BARE wait_idle (the drive waits via wait_idle_detailed), so a test
-        # can fail the settle's wait without failing the build turn's wait.
-        # None means "fall through to wait_result".
-        self.settle_wait_result: bool | None = None
         self.wait_timeout_s: float | None = None
+        # The grade waterline the in-wait compaction count runs from: the real
+        # client takes it as a keyword, so a feedback round arms the rule and a
+        # build hands it None (never armed). Recorded like the other wait fields,
+        # so a test can see the drive armed the rule instead of inferring it from
+        # an abort it did not ask for.
+        self.compaction_watermark: int | None = None
         self.busy_result: bool = True
         self.busy_grace_s: float | None = None
         self.metrics_result: dict[str, Any] | None = None
@@ -99,20 +99,11 @@ class _FakeServeClient:
         self.assistant_terminal_script: list[dict[str, str] | None] = []
         self.send_error: Exception | None = None
         self.metrics_error: Exception | None = None
-        # Compaction is fired by the WORKER plugin (never by the harness), so
-        # the fake models what the harness can actually observe: whether a
-        # compaction generation appears on the transcript, and whether it
-        # completed ("ok") or was killed by the relay's loop guard ("killed").
-        # None means the plugin never fired at all.
-        self.compaction_on_idle: str | None = None  # None | "ok" | "killed"
-        # REAL TIMELINE: the plugin fires on the boundary drive's session.idle
-        # DURING the drive (not after it), so the compaction is already in the
-        # transcript when the drive returns and the settle runs. When True, the
-        # compaction message is appended in send_prompt (during the drive) and
-        # the settle's wait_busy reports already-idle. This is the shape the
-        # post-drive-watermark bug (run 1788450605) missed: a fresh watermark
-        # taken after the drive sits past the compaction and reads zero.
-        self.compaction_during_drive: bool = False
+        # THE HARNESS'S OWN COMPACTION, recorded: one entry per
+        # `summarize` call, as (session_id, provider_id, model_id, auto). The
+        # chunked driver fires exactly one per build chunk and none anywhere
+        # else, so a test states that cadence by counting this list.
+        self.summarize_calls: list[tuple[str, str, str, bool]] = []
         # Fails every non-windowed read EXCEPT the phase baseline. The baseline
         # read now aborts the phase outright (there is no degrade-to-cumulative
         # path any more), so a test that needs the POST-drive transcript read to
@@ -125,18 +116,17 @@ class _FakeServeClient:
         # the harness reads it any more (WO-MARKER-RIP) — but a realistic
         # transcript is what the metrics extractor walks.
         self._messages: list[dict[str, Any]] = []
-        # Set when a prompt was just sent and not yet waited on: the NEXT
-        # wait_busy is the drive's busy grace (build turn only — the plugin
-        # fires at session.idle, after the turn). A wait_busy with no prompt
-        # pending is the chunk-boundary settle's wait.
-        self._drive_busy_pending: bool = False
         self.poll_interval: float = 0.0
+        # The model's own auto-compactions DURING a turn, scripted one entry
+        # per send (pop idiom, same as assistant_terminal_script): each entry
+        # is how many FINISHED compactions that turn appends to the transcript
+        # after its user message. Empty (the default) appends none.
+        self.compactions_per_send: list[int] = []
 
     def send_prompt(self, session_id: str, prompt: str) -> None:
         self.sent_prompts.append((session_id, prompt))
         if self.send_error is not None:
             raise self.send_error
-        self._drive_busy_pending = True
         self._messages.append(
             {
                 "info": {
@@ -149,6 +139,25 @@ class _FakeServeClient:
                 "parts": [{"type": "text", "text": prompt}],
             }
         )
+        # The model's own auto-compactions during this turn, scripted
+        # one-entry-per-send (popped like assistant_terminal_script): each
+        # entry is the number of FINISHED compactions to append — the shape
+        # `completed_compactions_since` counts (assistant + summary + a
+        # non-empty finish, no error). Empty (default) appends none. Position
+        # in the transcript is irrelevant to the predicate (it filters by
+        # role/summary/finish, never by index), so this runs before the
+        # terminal shape is applied and is never skipped by the killed-turn
+        # early return.
+        compactions_this_turn = (
+            self.compactions_per_send.pop(0) if self.compactions_per_send else 0
+        )
+        for _ in range(compactions_this_turn):
+            self._messages.append(
+                {
+                    "info": {"role": "assistant", "summary": True, "finish": "stop"},
+                    "parts": [],
+                }
+            )
         terminal = (
             self.assistant_terminal_script.pop(0)
             if self.assistant_terminal_script
@@ -182,63 +191,53 @@ class _FakeServeClient:
                 # CONTEXT EXHAUSTED check reads it (harness/context_budget.py).
                 info_ok["tokens"] = terminal["tokens"]
             self._messages.append({"info": info_ok, "parts": parts})
-        if self.compaction_during_drive and self.compaction_on_idle is not None:
-            info: dict[str, Any] = {
-                "role": "assistant",
-                "agent": "compaction",
-                "summary": True,
-            }
-            if self.compaction_on_idle == "killed":
-                info["error"] = {
-                    "name": "UnknownError",
-                    "data": {"message": "relay: generation loop detected (abc123)"},
-                }
-            self._messages.append({"info": info, "parts": [{"type": "step-start"}]})
 
     def get_messages(self, session_id: str) -> list[dict[str, Any]]:
         return list(self._messages)
 
     def wait_busy(self, session_id: str, *, timeout_s: float) -> bool:
         self.busy_grace_s = timeout_s
-        if self.compaction_on_idle is None:
-            return getattr(self, "busy_result", False)
-        if self._drive_busy_pending:
-            # The drive's busy grace for the prompt just sent: the plugin fires
-            # only at session.idle AFTER the turn completes, so no compaction
-            # generation is busy here — only the build turn is.
-            self._drive_busy_pending = False
-            return True
-        if self.compaction_during_drive:
-            # The compaction already completed during the drive; the session is
-            # idle by the time the settle runs. No new compaction is appended.
-            return False
-        # The settle's wait: the plugin saw the build sentinel on idle and
-        # fired — a compaction message lands on the transcript.
-        info: dict[str, Any] = {
-            "role": "assistant",
-            "agent": "compaction",
-            "summary": True,
-        }
-        if self.compaction_on_idle == "killed":
-            # MEASURED SHAPE (run 1788415430): a guard-killed compaction still
-            # carries summary=True. That is why the receipt keys on the ERROR.
-            info["error"] = {
-                "name": "UnknownError",
-                "data": {"message": "relay: generation loop detected (abc123)"},
+        return self.busy_result
+
+    def summarize(
+        self,
+        session_id: str,
+        *,
+        provider_id: str,
+        model_id: str,
+        auto: bool = False,
+    ) -> None:
+        """The harness's compaction write, recorded — never scripted.
+
+        Mirrors the real POST /session/{sid}/summarize: it BLOCKS and returns
+        only when the rewrite is done, so what the session carries afterwards is
+        a FINISHED compaction — an assistant message flagged ``summary`` with a
+        non-empty ``finish``. That is the shape
+        ``completed_compactions_since`` counts, and the reason a killed one
+        (no finish, or an error) never counts.
+        """
+        self.summarize_calls.append((session_id, provider_id, model_id, auto))
+        self._messages.append(
+            {
+                "info": {"role": "assistant", "summary": True, "finish": "stop"},
+                "parts": [],
             }
-        self._messages.append({"info": info, "parts": [{"type": "step-start"}]})
-        return True
+        )
 
     def completed_compactions_since(self, session_id: str, watermark: int) -> int:
+        """Mirror of the real predicate: assistant + summary + finish, no error."""
         found = 0
         for msg in self._messages[watermark:]:
             info = msg.get("info") if isinstance(msg, dict) else None
             if not isinstance(info, dict) or info.get("role") != "assistant":
                 continue
-            if (
-                info.get("agent") == "compaction" or info.get("summary") is True
-            ) and not info.get("error"):
-                found += 1
+            if info.get("summary") is not True:
+                continue
+            if not isinstance(info.get("finish"), str) or not info.get("finish"):
+                continue
+            if info.get("error"):
+                continue
+            found += 1
         return found
 
     def guard_killed_compactions_since(self, session_id: str, watermark: int) -> int:
@@ -256,6 +255,7 @@ class _FakeServeClient:
             err_text = str(err_data.get("message") or err.get("message") or "").lower()
             if (
                 "relay_loop_detected" in err_text
+                or "loop_detected" in err_text
                 or "generation loop detected" in err_text
             ):
                 found += 1
@@ -268,8 +268,6 @@ class _FakeServeClient:
 
     def wait_idle(self, session_id: str, *, timeout_s: float, **kwargs) -> bool:
         self.wait_timeout_s = timeout_s
-        if self.settle_wait_result is not None:
-            return self.settle_wait_result
         return self.wait_result
 
     def wait_idle_detailed(
@@ -280,19 +278,20 @@ class _FakeServeClient:
         stall_timeout_s: float | None = None,
         loop_kill_marker_dir: str | None = None,
         turn_start_ts_ms: int | None = None,
+        compaction_watermark: int | None = None,
         **kwargs,
     ) -> tuple[bool, str]:
         # Mirrors the real client: the drive needs to tell an exhausted budget
-        # apart from a turn that stopped progressing. `wait_script` scripts the
-        # per-call shapes (a one-shot stall included); the static fallback keys
-        # on wait_result, and a False wait_result stays the original
-        # run_timeout behaviour. The DRIVE wait keys on wait_result directly
-        # (never settle_wait_result, which belongs to the bare wait_idle the
-        # chunk-boundary settle uses).
+        # apart from a turn that stopped progressing — NOT an exhausted context,
+        # which the waiter no longer decides anything about. `wait_script`
+        # scripts the per-call shapes (a one-shot stall included); the static
+        # fallback keys on wait_result, and a False wait_result stays the
+        # original run_timeout behaviour.
         self.stall_timeout_s = stall_timeout_s
         self.wait_timeout_s = timeout_s
         self.loop_kill_marker_dir = loop_kill_marker_dir
         self.turn_start_ts_ms = turn_start_ts_ms
+        self.compaction_watermark = compaction_watermark
         # WO-LOOPKILL-1: mirrors the real client's marker fast path (a fresh
         # marker for THIS session ends the wait immediately with loop_killed)
         # through the REAL reader, consume included. Consumption is no longer
@@ -311,6 +310,21 @@ class _FakeServeClient:
         # client — a fresh marker ends the wait before any script is consulted).
         if self.wait_script:
             return self.wait_script.pop(0)
+        # IN-WAIT COMPACTION COUNT. Mirrors the real client's final count before
+        # it releases the harness: two COMPLETED compactions since the grade
+        # watermark end the wait with idle=False, whatever the static fallback
+        # would have said. The count belongs to the WAIT (the real one samples it
+        # on its own poll ticks, so a turn that never goes idle is still judged);
+        # a turn-end count here would miss exactly the model this rule exists
+        # for. The predicate is `completed_compactions_since` — the mirror of the
+        # real one — reused here, never re-implemented. The marker fast path and
+        # the script above keep precedence, as they do in the real client.
+        # A build passes no watermark, so it never counts.
+        if (
+            compaction_watermark is not None
+            and self.completed_compactions_since(session_id, compaction_watermark) >= 2
+        ):
+            return False, COMPACTIONS_BEFORE_GRADE_WAIT_REASON
         if self.wait_result:
             return True, "idle"
         return False, "timeout"
@@ -360,12 +374,14 @@ def _make_feedback_attempt_kwargs(
     phase: str,
     kill_hook: Any,
     active_cell: Any = None,
+    compaction_watermark: int | None = None,
 ) -> dict[str, Any]:
     """Assemble the dispatch kwargs for ``_run_cell_attempt``.
 
     Serve is the ONLY transport, so these kwargs carry no worktree, env or
     stdout argv any more — there is nothing left to deliver an attempt with
-    except the session."""
+    except the session. ``compaction_watermark`` is the grade waterline the
+    in-drive compactions gate counts from (feedback rounds only)."""
     return {
         "active_cell": active_cell if active_cell is not None else _FakeCell(),
         "run_label": "cell-fb",
@@ -373,6 +389,7 @@ def _make_feedback_attempt_kwargs(
         "prior_cost_usd": 0.0,
         "kill_hook": kill_hook,
         "stdin_text": feedback_text,
+        "compaction_watermark": compaction_watermark,
     }
 
 

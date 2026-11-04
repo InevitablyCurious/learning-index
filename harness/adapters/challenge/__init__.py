@@ -63,9 +63,6 @@ from .constants import (
     TURN_TERMINAL_TRANSPORT_ERROR,
     TURN_TERMINAL_TRUNCATED,
     _CHUNK_STUB_FILE,
-    _COMPACT_PHASE_BUILD,
-    _COMPACT_PHASE_FILENAME,
-    _COMPACT_PHASE_REPAIR,
     _EXCUSE_ELIMINATOR,
     _FINALIZE_RECOVERY_NUDGE,
     _HARNESS_LIMIT_REASONS,
@@ -115,7 +112,6 @@ from .telemetry import (
     _worktree_has_injection_record,
 )
 from .transport import (
-    compact_phase_for,
     _build_truncation_evidence,
     _is_instrument_anomaly,
     _is_unrecovered_anomaly,

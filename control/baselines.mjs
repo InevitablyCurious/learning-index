@@ -266,6 +266,8 @@ export async function collectCells(runsRoot) {
         && !meas.full_green
         && (meas.terminal_reason === "transport_incomplete"
           || meas.terminal_reason === "harness_error"
+          // The harness ended the cell: two compactions before any grade.
+          || meas.terminal_reason === "compactions_before_grade"
           // Grading measured nothing twice on the same code: the instrument's.
           || meas.terminal_reason === "instrument_fault"
           || (meas.provider_truncations ?? 0) > 0

@@ -78,6 +78,7 @@ def _stats(
     budget_stop_signature: str | None = None,
     terminal_zero_tool_turn: bool = False,
     turn_anomalies: tuple[dict[str, Any], ...] = (),
+    compactions_since_grade: int = 0,
 ) -> _OpencodeRunStats:
     return _OpencodeRunStats(
         input_tokens=10,
@@ -92,6 +93,7 @@ def _stats(
         budget_stop_signature=budget_stop_signature,
         terminal_zero_tool_turn=terminal_zero_tool_turn,
         turn_anomalies=turn_anomalies,
+        compactions_since_grade=compactions_since_grade,
     )
 
 
@@ -183,12 +185,32 @@ def _patch_fake_docker(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
     class _FakeServeClient:
         def __init__(self, base_url: str, **kwargs: Any) -> None:
             self.base_url = base_url
+            # Growable, so a test can inject a compaction message and have
+            # completed_compactions_since count it. Empty by default, which
+            # keeps every existing budget_stop test's behaviour unchanged.
+            self._messages: list[dict[str, Any]] = []
 
         def create_session(self, title: str | None = None) -> str:
             return "ses_hermetic"
 
         def get_messages(self, session_id: str) -> list[dict[str, Any]]:
-            return []
+            return list(self._messages)
+
+        def completed_compactions_since(self, session_id: str, watermark: int) -> int:
+            """Mirror of the real predicate: assistant + summary + finish, no error."""
+            found = 0
+            for msg in self._messages[watermark:]:
+                info = msg.get("info") if isinstance(msg, dict) else None
+                if not isinstance(info, dict) or info.get("role") != "assistant":
+                    continue
+                if info.get("summary") is not True:
+                    continue
+                if not isinstance(info.get("finish"), str) or not info.get("finish"):
+                    continue
+                if info.get("error"):
+                    continue
+                found += 1
+            return found
 
         def assistant_texts_since(self, session_id: str, watermark: int) -> list[str]:
             # Every chunk closes cleanly: the marker gate has its own tests, and

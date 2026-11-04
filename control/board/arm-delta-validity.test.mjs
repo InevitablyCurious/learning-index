@@ -183,6 +183,32 @@ test("cellValidity: transport_incomplete alone is a truncation signal", () => {
   assert.equal(v.reason, "void_instrument");
 });
 
+test("cellValidity: compactions_before_grade voids a non-green cell", () => {
+  // The harness ended the cell at two compactions before any grade could be
+  // issued: no capability verdict was ever measured, so scoring it 0% would
+  // fake lift for the memory arm exactly like a transport abort does.
+  const v = cellValidity({
+    full_green: false,
+    terminal_reason: "compactions_before_grade",
+    attempt_count: 3,
+  });
+  assert.equal(v.scored, false);
+  assert.equal(v.reason, "void_instrument");
+});
+
+test("cellValidity: attempt_ceiling_reached is a REAL capability fail and SCORES", () => {
+  // Standing contrast for the void allow-list: running out of attempts is the
+  // model failing to resolve gates, not a broken instrument. Voiding it would
+  // hide a genuine fail from the control arm's denominator.
+  const v = cellValidity({
+    full_green: false,
+    terminal_reason: "attempt_ceiling_reached",
+    attempt_count: 3,
+  });
+  assert.equal(v.scored, true);
+  assert.equal(v.reason, null);
+});
+
 test("cellValidity: a GREEN terminal attempt scores despite earlier truncation", () => {
   // Rule 5.10 is explicit: a green terminal attempt is scored regardless of
   // earlier truncation. Voiding a success because the transport hiccuped

@@ -136,6 +136,24 @@ from .transport import (
 from .utils import UtilsMixin
 from .worker_config import bench_session_title
 
+# ── TWO COMPACTIONS BEFORE A GRADE (TROUBLESHOOT ONLY) ──────────────────────
+#
+# `compactions_before_grade` is the reason a REPAIR session is ended for making
+# no progress: it compacted TWICE without a grade landing in between.
+#
+# WHY ONE IS HEALTHY AND TWO IS NOT. opencode auto-compacts when the
+# conversation outgrows the window. Inside a repair round that is recovery —
+# the session rebuilt its context and carried on fixing. A second compaction
+# before any grade means the round is spending its budget rewriting context
+# instead of changing code, so the cell is ended rather than scored as if it
+# were a real result.
+#
+# Display twin. `termination_reason` carries this machine string;
+# `attempts_to_green` carries the UPPER literal "COMPACTIONS_BEFORE_GRADE" —
+# the same split `termination_reason = CONTEXT_EXHAUSTED` /
+# `attempts_to_green = "CONTEXT_EXHAUSTED"` uses.
+COMPACTIONS_BEFORE_GRADE = "compactions_before_grade"
+
 # WO-77: the first pass is a sequence of chunk prompts (task/backgammon/prompts/
 # chunk-NN.md), driven one per user message over the one serve session.
 #
@@ -1064,8 +1082,11 @@ class ChallengeRunner(
         verdict = "FAIL"
         attempts_to_green: int | str = "FAIL"
         termination_reason = "pending"
-        # CONTEXT EXHAUSTED ends the cell where it happens: during the build
-        # nothing is graded; during a repair round the last graded round stands.
+        # CONTEXT EXHAUSTED — a session that overflowed past what compaction can
+        # recover (ContextOverflowError) — ends the cell where it happens:
+        # during the build nothing is graded; during a repair round the last
+        # graded round stands. A context that merely reached the token threshold
+        # is compacted and the session continues, so it never sets this.
         context_stop = False
         # PLAYER ORDER (stages.py): the checks the model was told about last
         # round, and the complaints it was told that have failed in every grade
@@ -1436,6 +1457,10 @@ class ChallengeRunner(
                         termination_reason = WORKER_DIED
                         context_stop = True  # grade nothing: the worker is gone
                     elif first_run.context_exhausted:
+                        # The genuine residual: the session raised
+                        # ContextOverflowError, i.e. it was too large to compact
+                        # at all. A build that merely filled its context was
+                        # compacted and kept going, so it never arrives here.
                         verdict = "FAIL"
                         attempts_to_green = "CONTEXT_EXHAUSTED"
                         termination_reason = CONTEXT_EXHAUSTED
@@ -1534,9 +1559,17 @@ class ChallengeRunner(
             # D-GATE-COUPLE: gates run regardless of termination_reason.
             # harness_error is an ANNOTATION on the cell, not a skip.
             _can_feedback = _worker_exit_annot is None
+            # The compaction watermark: the session message count at the moment
+            # the last grade completed. Declared here so it is always bound for
+            # the two-compactions check below, and re-captured at EVERY grade
+            # (right after `final_report = report`) so what that check counts is
+            # always "compactions since the last grade". None means no grade has
+            # been observed with a readable session yet, and skips the check.
+            compaction_watermark: int | None = None
             for attempt in range(1, self.max_attempts + 1):
                 if context_stop:
-                    # Out of room during the build: stop the run, grade nothing.
+                    # The worker died, or its session raised ContextOverflowError
+                    # (too large to compact): stop the run, grade nothing.
                     self._progress(
                         f"PROGRESS run_label={run_label} step=context-exhausted-stop "
                         f"phase=build graded=0"
@@ -1693,6 +1726,27 @@ class ChallengeRunner(
                             )
                         break
                 final_report = report
+
+                # ── THE WATERMARK IS RESET AT EVERY GRADE ───────────────────
+                #
+                # This is the one place BOTH arms reach — the measured grade and
+                # the cached-grade reuse — so it is the only honest statement of
+                # "a grade just completed". The session message count here is
+                # the waterline the next repair round is measured from: every
+                # compaction at or after this index is one that round caused.
+                #
+                # A failed read leaves the watermark None, which skips the
+                # check for this round entirely. A transport hiccup must never
+                # end a cell that may be making progress. Mock cells have no
+                # serve session at all, so the guard covers them the same way.
+                compaction_watermark = None
+                if self._serve_client is not None and session_id:
+                    try:
+                        compaction_watermark = len(
+                            self._serve_client.get_messages(session_id)
+                        )
+                    except ServeClientError:
+                        compaction_watermark = None
 
                 attempt_verdict = str(report.get("verdict", "FAIL"))
                 conformed = bool(report.get("conformed", False))
@@ -2177,6 +2231,7 @@ class ChallengeRunner(
                     kill_hook=active_cell.kill_worker_processes,
                     stdin_text=feedback,
                     attempt=next_attempt,
+                    compaction_watermark=compaction_watermark,
                 )
                 next_attempt_cost_usd += feedback_run.cost_usd
                 attempt_costs_usd[next_attempt] = next_attempt_cost_usd
@@ -2209,6 +2264,50 @@ class ChallengeRunner(
                     f"output={feedback_run.output_tokens} reasoning={feedback_run.reasoning_tokens} "
                     f"cost_usd={feedback_run.cost_usd:.4f} cell_cost_usd={cell_cost_usd:.4f}"
                 )
+                # ── TWO COMPACTIONS BEFORE A GRADE ENDS THE CELL ────────────
+                #
+                # Enforced IN-DRIVE now: `_run_opencode_serve` counts completed
+                # compactions since the grade watermark at every turn end (the
+                # loop that already watches turn ends, recovery and context
+                # overflow) and ends the drive at the second one, carrying the
+                # count back on `compactions_since_grade`. This block maps that
+                # signal to the cell terminal — the SAME verdict, reason, notice
+                # and progress line the post-drive check used to emit. There is
+                # no post-drive recount: after the drive returns the model has
+                # stopped, and the next grade re-captures the watermark, so the
+                # in-drive count is complete and a second counting path would
+                # only double-report.
+                #
+                # FEEDBACK-ONLY BY CONSTRUCTION: the watermark is passed only by
+                # `_run_cell_attempt` (feedback). The chunked build never passes
+                # it, so build compaction is never counted. ONE IS HEALTHY, TWO
+                # IS STUCK: the first compaction is recovery; a second before any
+                # grade means the round rewrote context instead of fixing.
+                if feedback_run.compactions_since_grade >= 2:
+                    verdict = "FAIL"
+                    attempts_to_green = "COMPACTIONS_BEFORE_GRADE"
+                    termination_reason = COMPACTIONS_BEFORE_GRADE
+                    live = getattr(self, "_live", None)
+                    if live is not None:
+                        live.notice(
+                            "harness",
+                            "compactions_before_grade",
+                            level="error",
+                            cell_seq=getattr(self, "_cell_seq", None),
+                            session_id=session_id,
+                            detail={
+                                "phase": f"feedback-{attempt}",
+                                "compactions": feedback_run.compactions_since_grade,
+                                "attempt": attempt,
+                            },
+                        )
+                    self._progress(
+                        f"PROGRESS run_label={run_label} "
+                        f"step=compactions-before-grade phase=feedback-{attempt} "
+                        f"compactions={feedback_run.compactions_since_grade} "
+                        f"attempt={attempt} action=end-cell"
+                    )
+                    break
                 if feedback_run.killed_reason == WORKER_DIED:
                     # The worker container stopped mid-round. The round graded
                     # before this one stands; nothing more can run.
@@ -2217,8 +2316,9 @@ class ChallengeRunner(
                     termination_reason = WORKER_DIED
                     break
                 if feedback_run.context_exhausted:
-                    # Out of room mid-repair: stop the run. The round graded
-                    # before this one is the cell's result.
+                    # ContextOverflowError mid-repair: the session was too large
+                    # to compact, so nothing can continue. Stop the run; the
+                    # round graded before this one is the cell's result.
                     verdict = "FAIL"
                     attempts_to_green = "CONTEXT_EXHAUSTED"
                     termination_reason = CONTEXT_EXHAUSTED
@@ -2226,7 +2326,7 @@ class ChallengeRunner(
                         f"PROGRESS run_label={run_label} step=context-exhausted-stop "
                         f"phase=feedback-{attempt} graded={len(attempt_reports)}"
                     )
-                    # A cell out of room is stuck the same way as one out of
+                    # A cell that overflowed is stuck the same way as one out of
                     # attempts: promote the round it was graded on, so the next
                     # run chains from where this one got to (seeded or fresh, as
                     # at the ceiling). Run 1790785038 stopped here with no
@@ -2572,6 +2672,7 @@ class ChallengeRunner(
         kill_hook: Callable[[], None] | None,
         stdin_text: str,
         attempt: int | None = None,
+        compaction_watermark: int | None = None,
     ) -> _OpencodeRunStats:
         """Run ONE cell attempt, delivered over the serve session.
 
@@ -2616,6 +2717,7 @@ class ChallengeRunner(
                 timeout_s=self.run_timeout_s,
                 kill_hook=kill_hook,
                 attempt=attempt,
+                compaction_watermark=compaction_watermark,
             )
         except ServeTransportError:
             raise

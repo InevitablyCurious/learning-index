@@ -368,6 +368,8 @@ function cellsInRun(run) {
       void_instrument: meas
         ? !meas.full_green &&
           (meas.terminal_reason === "transport_incomplete" ||
+            // The harness ended the cell: two compactions before any grade.
+            meas.terminal_reason === "compactions_before_grade" ||
             meas.provider_truncations > 0 ||
             meas.unrecovered_anomaly_turns > 0)
         : false,

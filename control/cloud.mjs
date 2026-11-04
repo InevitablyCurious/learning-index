@@ -179,8 +179,8 @@ export function cloudCatalog() {
         m.context < CONTEXT_ADVISORY_FLOOR
           ? `${m.context.toLocaleString()} token context — below the ${CONTEXT_ADVISORY_FLOOR.toLocaleString()} the local bench aliases run at. ` +
             "The cell may hit the provider's context ceiling before the task completes. " +
-            "OpenCode fires emergency compaction at 95% so the provider does not error out, " +
-            "but compaction is not enabled by default here and a compacted run measures a different thing."
+            "OpenCode auto-compaction is on by default and fires as a session nears its context limit — " +
+            "it keeps room for the reply so the provider does not error out, but a compacted run measures a different thing."
           : null,
       // The slug the manifest will record, shown on the confirmation card.
       slug: `${DEFAULT_CLOUD_ROUTER}/${key}`,

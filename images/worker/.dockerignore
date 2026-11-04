@@ -2,4 +2,3 @@
 *
 !Dockerfile
 !.dockerignore
-!self-compact.ts

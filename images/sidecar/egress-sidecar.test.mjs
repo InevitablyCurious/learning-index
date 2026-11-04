@@ -22,13 +22,6 @@ process.env.OKP_LOOP_KILL_MARKER_DIR ||= fs.mkdtempSync(
 );
 const MARKER_DIR = process.env.OKP_LOOP_KILL_MARKER_DIR;
 
-// The sidecar reads BENCH_COMPACT_PHASE_FILE once at module load, so the
-// sentinel path must be in the env BEFORE the require below — same posture
-// as MARKER_DIR. Unset outside this file: the writer no-ops.
-const PHASE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "okp-sidecar-phase-"));
-process.env.BENCH_COMPACT_PHASE_FILE ||= path.join(PHASE_DIR, "phase");
-const COMPACT_PHASE_FILE = process.env.BENCH_COMPACT_PHASE_FILE;
-
 const { createRequire } = await import("node:module");
 const require = createRequire(import.meta.url);
 const { UPSTREAMS, listen, memoryTraffic, MEMORY_ROUTE_FILE } = require("./egress-sidecar.js");
@@ -247,29 +240,4 @@ test("(e) the ingress forward is registered without scan", async () => {
   const ingress = JSON.parse(out);
   assert.equal(ingress.host, "okp-cell-x");
   assert.equal(ingress.scan, undefined, "the ingress forward must not be scanned");
-});
-
-test("(f) a scan:true port writes the repair sentinel before the response completes", async () => {
-  fs.rmSync(COMPACT_PHASE_FILE, { force: true }); // prove THIS request writes it
-  const upstream = await stubUpstream(SIGNATURE_BODY);
-  const upPort = upstream.address().port;
-  const proxy = await listen(0, {
-    proto: "http",
-    host: "127.0.0.1",
-    port: upPort,
-    scan: true, // model-wire port: the only place the sentinel writer runs
-  });
-  try {
-    const body = await get(proxy.address().port, { "x-session-id": "ses_phase" });
-    assert.equal(body, SIGNATURE_BODY, "the pipe must stay byte-transparent");
-    // No setImmediate here: onMatch runs synchronously inside the proxyRes
-    // "data" listener registered BEFORE pipe(), so the sentinel must already
-    // read repair by the time the client's response completes — the write
-    // lands before the session can idle, not after.
-    assert.equal(fs.readFileSync(COMPACT_PHASE_FILE, "utf8"), "repair\n");
-  } finally {
-    proxy.close();
-    upstream.close();
-    fs.rmSync(COMPACT_PHASE_FILE, { force: true });
-  }
 });

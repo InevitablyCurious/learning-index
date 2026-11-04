@@ -334,10 +334,6 @@ class DockerCellConfig:
     # never set independently): True swaps the cell's key path from the spend-proxy
     # token to the OrcaRouter API key resolved on the host.
     cloud: bool = False
-    # SELF-COMPACTION, declared per cell. Exported as BENCH_SELF_COMPACT=1; the
-    # benchmark's own self-compact plugin (images/worker/self-compact.ts) self-gates on that env and resolves the model to compact
-    # with from the session itself — the harness passes no model ids.
-    self_compact: bool = False
     # PLAN BEFORE WORK, declared per cell. Exported as REQUIRE_TODOS=1.
     #
     # UNPREFIXED on purpose: this is a benchmark run-condition, not an Okp
@@ -348,25 +344,6 @@ class DockerCellConfig:
     # the plugin says HOW), and it is stated here so the flag does not read as
     # broken when nothing enforces it.
     require_todos: bool = False
-    # A2 PHASE SENTINEL. A host directory bind-mounted READ-ONLY into the cell,
-    # holding one file (`phase`) that names the drive phase currently in
-    # flight. The harness rewrites it before every prompt; the worker plugin
-    # reads it on every session.idle and refuses to compact outside `build`.
-    #
-    # WHY A MOUNT AND NOT AN ENV VAR. The cell env is fixed at `docker run` and
-    # cannot change between phases, but the arm has to distinguish build
-    # boundaries from repair rounds INSIDE one cell — the leak this closes is a
-    # compaction that fired during `feedback-2` (run 1788462647).
-    #
-    # WHY OUTSIDE /work, LIKE /okp-state. Anything under the worktree is inside
-    # the surface the model works in and the gates score. The phase is
-    # instrument state, not task state, and the model must never see it.
-    #
-    # WHY READ-ONLY. The harness is the only writer by construction, so a cell
-    # cannot forge its own phase.
-    compact_phase_host_path: Path | None = None
-    compact_phase_container_dir: str = "/okp-compact"
-    compact_phase_container_file: str = "/okp-compact/phase"
     home_dir: str = "/home/worker"
     output_token_max: int | None = None
     worker_logs_dir: Path | None = None
@@ -495,33 +472,6 @@ class DockerCell:
                 "-e",
                 "OKP_LOOP_KILL_MARKER_DIR=/okp-markers",
             ]
-            # A2 phase sentinel, SIDECAR WRITE SIDE. The cell mounts this same
-            # host dir READ-ONLY (see _build_run_argv); the sidecar gets it RW so
-            # it can write the `repair` phase the cell-side plugin reads. The
-            # cell still cannot forge its own phase — only the host side of the
-            # mount is writable, and the cell's copy stays :ro.
-            #
-            # GUARD: exactly when the worker cell also mounts the sentinel —
-            # compacting runs only. self_compact alone is the worker's gate
-            # (_build_run_argv raises when it is armed with no host path); the
-            # `is not None` check keeps an unset path from ever interpolating
-            # the literal "None" into a mount string.
-            if (
-                self.config.self_compact
-                and self.config.compact_phase_host_path is not None
-            ):
-                host_compact_phase = (
-                    Path(self.config.compact_phase_host_path).expanduser().resolve()
-                )
-                host_compact_phase.mkdir(parents=True, exist_ok=True)
-                sidecar_cmd.extend(
-                    [
-                        "-v",
-                        f"{host_compact_phase}:{self.config.compact_phase_container_dir}",
-                        "-e",
-                        f"BENCH_COMPACT_PHASE_FILE={self.config.compact_phase_container_file}",
-                    ]
-                )
             # Memory route: opened only when the cell names a memory server,
             # which only memory-ON cells do. The origin is not a secret.
             if self.config.memory_upstream:
@@ -1525,39 +1475,6 @@ def _build_run_argv(
     # not measuring the same thing.
     if config.require_todos:
         run_cmd.extend(["-e", "REQUIRE_TODOS=1"])
-
-    # SELF-COMPACTION. The benchmark's self-compact plugin self-gates on BENCH_SELF_COMPACT=1 and
-    # resolves the model to compact with from the session itself.
-    if config.self_compact:
-        run_cmd.extend(["-e", "BENCH_SELF_COMPACT=1"])
-
-        # A2 phase sentinel. Mounted for BOTH arms whenever compaction is armed
-        # — the leak was never memory-mode-specific, and an OFF cell that could
-        # still compact during repair would break the very comparability the
-        # OFF arm exists to provide.
-        #
-        # NO SENTINEL, NO COMPACTION: the plugin is fail-closed on this file, so
-        # a cell launched without the mount simply never compacts and the first
-        # chunk boundary aborts it on no_compaction_evidence. That is the
-        # intended failure — loud and at the boundary — rather than a cell that
-        # quietly compacts on the model's say-so.
-        if config.compact_phase_host_path is None:
-            raise RuntimeError(
-                "self_compact is armed but compact_phase_host_path is unset — "
-                "the worker plugin is fail-closed on the phase sentinel and "
-                "would never compact; refusing to launch a cell that cannot "
-                "honour --compact"
-            )
-        host_compact_phase = Path(config.compact_phase_host_path).expanduser().resolve()
-        host_compact_phase.mkdir(parents=True, exist_ok=True)
-        run_cmd.extend(
-            [
-                "-e",
-                f"BENCH_COMPACT_PHASE_FILE={config.compact_phase_container_file}",
-                "-v",
-                f"{host_compact_phase}:{config.compact_phase_container_dir}:ro",
-            ]
-        )
 
     # Live-view topology: in the LEGACY (non-egress) path the cell itself
     # publishes host:serve_host_port -> container:serve_container_port. In

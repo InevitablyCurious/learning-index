@@ -80,36 +80,8 @@ function writeLoopKillMarker({ markerDir, sessionId, signature, now = Date.now }
   }
 }
 
-/*
- * Compact-phase sentinel: the repair-ONLY write, fired at the loop-kill
- * detection point so the sentinel reads `repair` before the session idles.
- * NO-OP when phaseFile is falsy (non-compact run / env unset).
- *
- * Atomic write-then-rename so the compaction arm never reads a torn value.
- * The tmp name is SIDECAR-DISTINCT (`.sidecar.tmp`): the harness publishes
- * the same sentinel through `${phaseFile}.tmp` (backgammon.py:3981), and a
- * shared tmp name would collide when both write the same phase file.
- *
- * The value is hardcoded — the sidecar is a repair-ONLY writer and must
- * never be able to write `build`. Idempotent: repeated calls rewrite the
- * same content through the same atomic replace. Errors are swallowed with
- * the same posture as writeLoopKillMarker: a sentinel write failure must
- * never break the proxy's byte-transparency.
- */
-function writeCompactPhaseRepair({ phaseFile }) {
-  if (!phaseFile) return; // disabled (non-compact run / env unset)
-  try {
-    const tmp = `${phaseFile}.sidecar.tmp`;
-    fs.writeFileSync(tmp, "repair\n");
-    fs.renameSync(tmp, phaseFile);
-  } catch {
-    // best-effort: swallow write errors, keep streaming
-  }
-}
-
 module.exports = {
   LOOP_KILL_SIGNATURES,
   createLoopKillScanner,
   writeLoopKillMarker,
-  writeCompactPhaseRepair,
 };

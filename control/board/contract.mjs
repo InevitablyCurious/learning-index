@@ -326,6 +326,8 @@ export function cellValidity(cell) {
   if (!terminalGreen) {
     const truncationSignal =
       str(c.terminal_reason) === "transport_incomplete" ||
+      // The harness ended the cell: two compactions before any grade.
+      str(c.terminal_reason) === "compactions_before_grade" ||
       (int(c.provider_truncations) ?? 0) > 0 ||
       (int(c.unrecovered_anomaly_turns) ?? 0) > 0;
     if (truncationSignal) return { scored: false, reason: "void_instrument" };

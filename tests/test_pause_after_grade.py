@@ -141,6 +141,10 @@ def _patch_fake_docker(monkeypatch: pytest.MonkeyPatch) -> None:
         def get_messages(self, session_id: str) -> list[dict[str, Any]]:
             return []
 
+        def completed_compactions_since(self, session_id: str, watermark: int) -> int:
+            # No compactions are scripted in this suite.
+            return 0
+
         def assistant_texts_since(self, session_id: str, watermark: int) -> list[str]:
             return [challenge_mod.CHUNK_MARKER]
 

@@ -2,7 +2,9 @@
 
 A memory system enters the benchmark as an opencode plugin baked into the worker
 image. Listing it in a cell's opencode.json is what switches memory on, so only a
-memory-ON cell lists it; an OFF cell on the same image runs without it.
+memory-ON cell lists it — and it is the ONLY plugin listed: an OFF cell's config
+carries no ``plugin`` key at all, because the harness compacts the build itself
+(``ServeClient.summarize``) and no worker plugin is involved.
 """
 
 from __future__ import annotations
@@ -23,7 +25,6 @@ from harness.adapters.docker_worker import (
 )
 
 TASK_DIR = Path(__file__).resolve().parents[1] / "task" / "backgammon"
-SELF_COMPACT = "/opt/bench/self-compact.ts"
 ENTRY = "/opt/bench-plugin/dist/index.js"
 
 
@@ -38,15 +39,15 @@ def _config(**kwargs) -> dict:
     )
 
 
-def test_without_a_plugin_entry_only_self_compaction_is_listed() -> None:
+def test_without_a_plugin_entry_no_plugin_is_listed_at_all() -> None:
     config = _config()
-    assert config["plugin"] == [SELF_COMPACT]
+    assert "plugin" not in config
     assert "mcp" not in config
 
 
-def test_with_a_plugin_entry_the_plugin_is_listed_before_self_compaction() -> None:
+def test_with_a_plugin_entry_the_memory_plugin_is_listed_alone() -> None:
     config = _config(plugin_entry=ENTRY)
-    assert config["plugin"] == [ENTRY, SELF_COMPACT]
+    assert config["plugin"] == [ENTRY]
     assert "mcp" not in config
 
 
@@ -70,8 +71,10 @@ def test_only_a_memory_on_cell_lists_the_baked_plugin(
     written = json.loads(
         (worker_config_host_dir(worktree) / "opencode.json").read_text()
     )
-    assert (ENTRY in written["plugin"]) is listed
-    assert SELF_COMPACT in written["plugin"]
+    if listed:
+        assert written["plugin"] == [ENTRY]
+    else:
+        assert "plugin" not in written, "a memory-OFF cell lists no plugin at all"
 
 
 def _inspect_returning(monkeypatch, stdout: str, returncode: int = 0) -> None:

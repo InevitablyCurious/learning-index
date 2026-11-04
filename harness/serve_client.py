@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import logging
 import threading
 import time
 import urllib.parse
@@ -51,7 +52,15 @@ import urllib.parse
 # seam), so the submodule is imported explicitly rather than left to ride in
 # transitively on serve_transport's import.
 import urllib.request
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
+
+# Module logger. This module has no logging configuration of its own -- lines
+# here only surface if the host app configured the root logger -- and it is used
+# for exactly one thing: reporting a FAILED compaction count read during the
+# idle wait (:meth:`ServeClient._compaction_abort_due`). That read is
+# recoverable, so it must leave a trace without touching control flow.
+_LOG = logging.getLogger(__name__)
 
 # ── EXPLICIT RE-EXPORTS (never ``import *``) ────────────────────────────────
 # Every externally-imported name is listed individually so nothing silently
@@ -61,8 +70,15 @@ from typing import Any, Callable
 # THIS module's namespace at call time — which is exactly why ``ServeClient``
 # stays defined here and why these two bindings are imported here rather than
 # referenced through ``serve_transport.`` at the call sites.
-from harness.context_budget import CONTEXT_EXHAUSTED, context_exhausted
 
+# WAIT-LEVEL SIGNAL for the compactions-before-grade rule: two COMPLETED
+# compactions land before the single grade that would close the round. The
+# literal is deliberately the same string the runner uses as its terminal reason
+# (``harness/adapters/challenge/runner.py`` COMPACTIONS_BEFORE_GRADE) -- the wait
+# SIGNALS, the serve drive MAPS it onto the turn result, the runner DECIDES the
+# verdict. Nothing is imported from the runner (that would be a cycle): the two
+# constants agree by name, not by reference.
+COMPACTIONS_BEFORE_GRADE_WAIT_REASON = "compactions_before_grade"
 WORKER_DIED = "worker_died"
 from harness.loop_kill_marker import (
     LOOP_KILL_WAIT_REASON,
@@ -71,7 +87,6 @@ from harness.loop_kill_marker import (
 )
 from harness.serve_transport import (
     LOOP_GUARD_SIGNATURES,
-    REASON_ERROR_EVENT,
     REASON_LOOP_GUARD,
     REASON_MODEL_SILENT,
     REASON_PROVIDER_UNAVAILABLE,
@@ -82,8 +97,6 @@ from harness.serve_transport import (
     STREAM_DEATH_SIGNATURES,
     TERMINAL_GUARD_ABORT,
     TERMINAL_TRANSPORT_ERROR,
-    TERMINAL_TRUNCATED,
-    TRUNCATED_STEP_FINISH_REASONS,
     ServeClientError,
     _as_list,
     _http_json,
@@ -96,6 +109,10 @@ from harness.serve_transport import (
     parse_busy_status,
     set_read_retry_observer,
 )
+
+# Compaction blocks: ``/summarize`` returns only once the rewrite is done, and a
+# model summarization can take tens of seconds.
+SUMMARIZE_TIMEOUT_S = 300.0
 
 
 def progress_token_of(messages: list) -> tuple[int, int]:
@@ -216,6 +233,17 @@ class ServeClient:
     Real IO only; no retries on transient errors (the harness decides).
     """
 
+    # Every Nth poll tick of the idle wait counts completed compactions. The
+    # count is a WHOLE-TRANSCRIPT READ (``get_messages``), far too heavy for the
+    # busy-poll cadence: ``poll_interval`` defaults to 2.0s, so every 5th tick is
+    # ~10s between reads -- frequent enough to catch a compaction storm inside a
+    # single long agent turn, cheap enough not to multiply the heavy read by the
+    # poll rate. Same reasoning as the 30s progress sample in
+    # :meth:`wait_idle_detailed`. A CLASS attribute, not an instance one and not
+    # a magic number at the call site: a test subclass sets it to 1, and nothing
+    # has to thread a constructor argument through ``wait_idle``.
+    COMPACTION_COUNT_POLL_INTERVAL = 5
+
     def __init__(
         self,
         base_url: str,
@@ -266,10 +294,17 @@ class ServeClient:
         guard, and ALL 68 still carried `summary: true`. A check that trusted the
         flag reported 68 successful compactions where none had occurred.
 
-        The flag says what the message WAS FOR, not what it achieved. So this
-        counts a compaction only when the message is from the `compaction` agent
-        AND carries no `info.error` — the same pair the session DB shows for the
-        five that genuinely completed (`finish: stop`, real token counts).
+        The flag says what the message WAS FOR, not what it achieved. Neither is
+        "no `error`" a receipt: a compaction killed by the process group carries
+        no finish, NO error, and zeroed tokens — the kill never reached the
+        transcript, so the absence of an error proves nothing. What a FINISHED
+        compaction has is `finish` set to a non-empty string (`stop`), written
+        when the stream that rewrites the context returns.
+
+        So this counts a message only when it is an assistant message flagged
+        `summary`, with no `info.error`, AND a non-empty `info.finish`. The
+        `agent == "compaction"` arm is gone: the flag is what marks the rewrite,
+        and the finish is what proves it landed.
 
         Read-only by design: this reports, and the caller records. Nothing acts
         on a zero — a cell that did not compact is a cell that did not compact.
@@ -283,11 +318,14 @@ class ServeClient:
                 continue
             if info.get("role") != "assistant":
                 continue
-            is_compaction = (
-                info.get("agent") == "compaction" or info.get("summary") is True
-            )
-            if is_compaction and not info.get("error"):
-                found += 1
+            if info.get("summary") is not True:
+                continue
+            finish = info.get("finish")
+            if not isinstance(finish, str) or not finish:
+                continue
+            if info.get("error"):
+                continue
+            found += 1
         return found
 
     def guard_killed_compactions_since(self, session_id: str, watermark: int) -> int:
@@ -336,6 +374,29 @@ class ServeClient:
         status = _http_status("POST", url, body=None, timeout=self.timeout)
         if status < 200 or status >= 300:
             raise ServeClientError(f"abort: expected 2xx, got {status}")
+
+    def summarize(
+        self, session_id: str, *, provider_id: str, model_id: str, auto: bool = False
+    ) -> None:
+        """POST /session/{sid}/summarize to compact the session now.
+
+        Blocks until the compaction finishes (the server returns only when the
+        rewrite is done). ``provider_id``/``model_id`` are REQUIRED by the
+        payload schema — a body-less call 400s. ``auto`` means "auto-continue
+        AFTER the compaction" (inject the synthetic continue turn), NOT "enable
+        compaction": this call compacts regardless of the session's
+        ``compaction.auto`` setting. The harness passes ``auto=False`` because
+        it drives the next turn itself and does not want the engine's synthetic
+        continue turn between chunks.
+
+        A write, so never routed through ``_retry_read`` (replaying would
+        re-compact).
+        """
+        url = self._url(f"/session/{urllib.parse.quote(session_id, safe='')}/summarize")
+        body = {"providerID": provider_id, "modelID": model_id, "auto": auto}
+        status = _http_status("POST", url, body=body, timeout=SUMMARIZE_TIMEOUT_S)
+        if status < 200 or status >= 300:
+            raise ServeClientError(f"summarize: expected 2xx, got {status}")
 
     def session_busy(self, session_id: str) -> bool:
         """GET /session/status -> parse_busy_status for ``session_id``.
@@ -396,6 +457,35 @@ class ServeClient:
         reached, _ = self.wait_idle_detailed(session_id, timeout_s=timeout_s, **kwargs)
         return reached
 
+    def _compaction_abort_due(self, session_id: str, watermark: int) -> bool:
+        """Whether the compactions-before-grade rule has fired since ``watermark``.
+
+        THE COUNT HAS EXACTLY ONE HOME. The rule is "two COMPLETED compactions
+        before one grade", and what counts as completed is decided by
+        :meth:`completed_compactions_since` alone -- the receipt that requires a
+        non-empty ``finish`` and refuses the ``summary`` flag. This helper is
+        only a THRESHOLD over that predicate, never a second copy of it: a
+        paraphrased counting arm here would be a second place for the receipt to
+        drift, and the two would disagree the day one of them changed.
+
+        A FAILED READ DEFERS, IT NEVER DECIDES. ``get_messages`` is a network
+        read, so it can raise :class:`ServeClientError`; ending the wait on that
+        would turn a transport hiccup into an aborted round (the same direction
+        the busy probe takes: waiting costs only time). The exception is logged
+        and the caller asks again on a later tick.
+        """
+        try:
+            found = self.completed_compactions_since(session_id, watermark)
+        except ServeClientError:
+            _LOG.warning(
+                "compaction count read failed for session %s; deferring the "
+                "compactions-before-grade check to the next tick",
+                session_id,
+                exc_info=True,
+            )
+            return False
+        return found >= 2
+
     def wait_idle_detailed(
         self,
         session_id: str,
@@ -405,21 +495,35 @@ class ServeClient:
         progress_interval_s: float = 30.0,
         loop_kill_marker_dir: str | None = None,
         turn_start_ts_ms: int | None = None,
-        context_limit_tokens: int | None = None,
         worker_alive: Callable[[], bool] | None = None,
+        compaction_watermark: int | None = None,
     ) -> tuple[bool, str]:
         """Poll until idle, the budget runs out, or the turn stops progressing.
 
         Returns ``(reached_idle, reason)`` where reason is one of ``idle``,
         ``timeout``, ``stalled`` (a tool call never returned), ``model_silent``
         (no tool call running and the model server sent nothing for the whole
-        stall bound), ``loop_killed``, ``context_exhausted`` or ``worker_died``.
+        stall bound), ``compactions_before_grade``, ``loop_killed`` or
+        ``worker_died``.
 
-        CONTEXT EXHAUSTED (harness/context_budget.py). A turn is one agent loop
-        and can run for many model calls, so the size check rides the same
-        infrequent progress probe as the stall bound: when the newest assistant
-        message reaches ``context_limit_tokens``, or a request overflowed, the
-        wait ends with ``context_exhausted`` instead of letting the turn run on.
+        COMPACTIONS BEFORE GRADE. When ``compaction_watermark`` is given (the
+        message count at the round's last grade), the wait counts completed
+        compactions since it ON ITS OWN POLL TICKS -- sampled every
+        :attr:`COMPACTION_COUNT_POLL_INTERVAL` ticks, because the count reads the
+        whole transcript -- and returns ``compactions_before_grade`` at the
+        SECOND. This is what closes the never-idle hole: a model calling tools
+        continuously inside one endless agent turn, with opencode auto-compacting
+        underneath, never reaches a turn boundary, so a check that only ran at
+        turn ends never saw it and the cell was graded anyway. The idle return
+        counts one last time first, so a compaction landing just before idle is
+        caught too. A failed count read is logged and NEVER ends the wait. With
+        the default ``compaction_watermark=None`` (build) the count never runs.
+
+        A FULL CONTEXT IS NOT A REASON TO STOP WAITING. With auto-compaction on,
+        a session at its token threshold compacts and keeps going, and a turn
+        that overflows ends by itself (the session goes idle and the transcript
+        carries ``ContextOverflowError``). Either way the wait has nothing to
+        decide about the context — it ends on idle, the budget, or a stall.
 
         WORKER DIED. A failed busy probe counts as busy (above) — right for a
         blip, wrong when the worker container itself has stopped: run 1789712833
@@ -463,6 +567,9 @@ class ServeClient:
         stall_deadline: float | None = None
         last_token: tuple[int, ...] | None = None
         next_progress_check = time.monotonic()
+        # Busy ticks seen so far; the compaction count is sampled on every
+        # COMPACTION_COUNT_POLL_INTERVAL-th one (see the class attribute).
+        poll_ticks = 0
         # Streamed tokens are progress the stored transcript cannot show.
         deltas = (
             self.open_delta_counter(session_id) if stall_timeout_s is not None else None
@@ -483,25 +590,31 @@ class ServeClient:
                     if worker_alive is not None and not worker_alive():
                         return False, WORKER_DIED
                 if not busy:
+                    # Final count before releasing the harness. The periodic tick
+                    # below covers the never-idle turn; this covers the turn that
+                    # compacted and THEN went idle, whose last compaction can land
+                    # after the final sampled tick.
+                    if compaction_watermark is not None and self._compaction_abort_due(
+                        session_id, compaction_watermark
+                    ):
+                        return False, COMPACTIONS_BEFORE_GRADE_WAIT_REASON
                     return True, "idle"
 
-                now = time.monotonic()
+                # Busy tick: the ONLY place the compactions-before-grade rule can
+                # be enforced for a turn that never ends -- the drive used to
+                # count at turn boundaries, which such a turn never reaches.
+                # Sampled, never every tick: the count reads the whole transcript.
+                poll_ticks += 1
                 if (
-                    stall_timeout_s is not None or context_limit_tokens is not None
-                ) and now >= next_progress_check:
+                    compaction_watermark is not None
+                    and poll_ticks % self.COMPACTION_COUNT_POLL_INTERVAL == 0
+                    and self._compaction_abort_due(session_id, compaction_watermark)
+                ):
+                    return False, COMPACTIONS_BEFORE_GRADE_WAIT_REASON
+
+                now = time.monotonic()
+                if stall_timeout_s is not None and now >= next_progress_check:
                     next_progress_check = now + progress_interval_s
-                    if context_limit_tokens is not None:
-                        try:
-                            exhausted, _size = context_exhausted(
-                                _as_list(self.get_messages(session_id)),
-                                context_limit_tokens,
-                            )
-                        except ServeClientError:
-                            exhausted = (
-                                False  # a failed read is not evidence of anything
-                            )
-                        if exhausted:
-                            return False, CONTEXT_EXHAUSTED
                     try:
                         token = self.session_progress_token(session_id)
                     except ServeClientError:
@@ -592,26 +705,27 @@ def founder_attach_command(host_port: int, session_id: str | None = None) -> str
 
 # Explicit public surface.
 __all__ = [
-    "STREAM_DEATH_SIGNATURES",
+    "COMPACTIONS_BEFORE_GRADE_WAIT_REASON",
     "LOOP_GUARD_SIGNATURES",
     "LOOP_KILL_WAIT_REASON",
     "REASON_LOOP_GUARD",
-    "REASON_STREAM_FINALIZE_TIMEOUT",
-    "REASON_RELAY_STREAM_INCOMPLETE",
     "REASON_PROVIDER_UNAVAILABLE",
+    "REASON_RELAY_STREAM_INCOMPLETE",
+    "REASON_STREAM_FINALIZE_TIMEOUT",
     "REASON_STREAM_INCOMPLETE",
     "RECOVERABLE_STREAM_DEATH_REASONS",
-    "ServeClient",
-    "ServeClientError",
+    "STREAM_DEATH_SIGNATURES",
     "TERMINAL_GUARD_ABORT",
     "TERMINAL_TRANSPORT_ERROR",
+    "ServeClient",
+    "ServeClientError",
     "build_prompt_body",
     "classify_step_finish_reason",
     "classify_transport_anomaly",
     "extract_transcript_metrics",
     "founder_attach_command",
-    "parse_busy_status",
     "loop_kill_marker_name",
+    "parse_busy_status",
     "read_loop_kill_marker",
     "set_read_retry_observer",
 ]

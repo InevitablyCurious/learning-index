@@ -522,6 +522,10 @@ def build_scorecard(
         # InstrumentFaultError): the instrument's failure, never the model's.
         if str(record.get("terminal_reason") or "") == "instrument_fault":
             return True
+        # The harness ended the cell after two completed compactions with no
+        # grade — not a capability result.
+        if str(record.get("terminal_reason") or "") == "compactions_before_grade":
+            return True
         if int(record.get("provider_truncations") or 0) > 0:
             return True
         # ── NOT `truncated_turns` (fixed 2026-09-05), and NOT
@@ -607,14 +611,20 @@ def build_scorecard(
         for record in not_scored_by_index.values()
     ]
 
+    # A void whose terminal reason names itself keeps that name; anything else
+    # is a provider-side truncation, the reason the original gate was built for.
+    _void_reason_by_terminal = {
+        "instrument_fault": "instrument_fault",
+        "compactions_before_grade": "compactions_before_grade",
+    }
+
     void_instrument = [
         {
             "sequence_index": int(record["sequence_index"]),
             "memory_mode": str(record.get("memory_mode") or ""),
-            "void_reason": (
-                "instrument_fault"
-                if str(record.get("terminal_reason") or "") == "instrument_fault"
-                else "provider_truncation"
+            "void_reason": _void_reason_by_terminal.get(
+                str(record.get("terminal_reason") or ""),
+                "provider_truncation",
             ),
         }
         for record in void_instrument_by_index.values()

@@ -153,3 +153,33 @@ def test_provider_truncation_cell_is_void_instrument(tmp_path: Path) -> None:
     assert scorecard["scored_fail"] == 0
     assert scorecard["convergence"]["sessions_completed"] == 0
     assert scorecard["not_scored"] == []
+
+
+def test_compactions_before_grade_cell_is_void_instrument(tmp_path: Path) -> None:
+    """A cell the harness ended for two compactions with no grade is not a result.
+
+    ``harness/adapters/challenge/runner.py`` ends a repair round that compacted
+    twice before any grade (``COMPACTIONS_BEFORE_GRADE``) rather than scoring it:
+    the round rewrote context instead of changing code, so the cell measured
+    nothing about the model. The scorecard must void it and keep the reason —
+    NAMED, ``compactions_before_grade``, never folded into the provider-truncation
+    default (that leg is the instrument's failure too, but a different one).
+    """
+    manifest_path = _manifest(tmp_path)
+    stream = StatusStream(default_status_stream_path(manifest_path))
+
+    _attempt(stream, full_green=False, terminal_reason="compactions_before_grade")
+
+    scorecard = build_scorecard(manifest_path)
+
+    assert scorecard["void_instrument"] == [
+        {
+            "sequence_index": 0,
+            "memory_mode": "on",
+            "void_reason": "compactions_before_grade",
+        }
+    ]
+    # EXCLUDED from the scored set entirely — not a capability FAIL.
+    assert scorecard["scored_sessions"] == 0
+    assert scorecard["scored_fail"] == 0
+    assert scorecard["not_scored"] == []

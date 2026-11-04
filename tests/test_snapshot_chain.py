@@ -151,6 +151,12 @@ def _patch_fake_real_arm(monkeypatch: pytest.MonkeyPatch) -> None:
         def create_session(self, title: str | None = None) -> str:
             return "ses_seeded_cell"
 
+        def get_messages(self, session_id: str) -> list[dict[str, Any]]:
+            return []
+
+        def completed_compactions_since(self, session_id: str, watermark: int) -> int:
+            return 0
+
     monkeypatch.setattr(challenge_mod, "ServeClient", _FakeServeClient)
 
 

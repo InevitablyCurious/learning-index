@@ -101,7 +101,7 @@ def test_chunked_build_writes_one_sidecar_entry_per_chunk(tmp_path: Path) -> Non
 
 def test_compaction_off_fires_no_compaction_at_all(tmp_path: Path) -> None:
     """With compaction OFF, nothing compacts — no summarize call, no compaction
-    part, no compaction accounting.
+    on the transcript, no compaction accounting.
 
     Descended from the W1 acceptance test, which asserted the same thing
     unconditionally because the drive had no compaction of any kind. Chunk-
@@ -129,12 +129,11 @@ def test_compaction_off_fires_no_compaction_at_all(tmp_path: Path) -> None:
     )
 
     assert stats.exit_code == 0
-    assert not any(
-        part.get("type") == "compaction"
-        for msg in client.get_messages("ses_zero_compact")
-        for part in (msg.get("parts") or [])
-    )
-    assert client.compaction_on_idle is None
+    # The write is the observable: compaction is the harness's own POST, so an
+    # OFF drive makes no summarize call and leaves no finished compaction on the
+    # transcript behind.
+    assert client.summarize_calls == []
+    assert client.completed_compactions_since("ses_zero_compact", 0) == 0
 
 
 def test_serve_drive_zero_delta_phase_is_loud_not_clean_zero(tmp_path: Path) -> None:

@@ -35,24 +35,16 @@ def build_worker_opencode_config(
         "small_model": model,
         "shell": "/opt/okp/supervised-shell.js",
     }
-    # Paths stay in lockstep with images/worker/Dockerfile. Self-compaction is the
-    # benchmark's own (/opt/bench/self-compact.ts), baked into EVERY image and
-    # self-gated on BENCH_SELF_COMPACT=1, so it is listed for both arms. The memory
-    # plugin is listed ONLY in a memory-ON cell, by the entry file the image baked
-    # (docker_worker.baked_plugin): listing it is what turns memory on, and an
-    # opencode.json pointing at a file the image never baked kills the worker at
-    # boot.
-    config["plugin"] = ["/opt/bench/self-compact.ts"]
+    # The memory plugin is listed ONLY in a memory-ON cell, by the entry file the
+    # image baked (docker_worker.baked_plugin): listing it is what turns memory
+    # on, and an opencode.json pointing at a file the image never baked kills the
+    # worker at boot.
     if plugin_entry:
-        config["plugin"] = [plugin_entry, "/opt/bench/self-compact.ts"]
-    # REPAIR NEVER COMPACTS, AND NOW NOTHING SLIPS PAST THAT. opencode compacts
-    # by itself when a session nears the model's limit; three of four
-    # Learning-Index runs had repair rounds summarised that way. Off here, the
-    # session instead stops at the limit and the harness ends the cell as
-    # CONTEXT EXHAUSTED (harness/context_budget.py). The plugin's own build-
-    # boundary compaction calls /summarize, which this setting does not gate —
-    # verified in bench-worker:v1.
-    config["compaction"] = {"auto": False}
+        config["plugin"] = [plugin_entry]
+    # AUTO-COMPACTION IS LEFT ON (opencode's default). In troubleshooting, a full
+    # context compacts and the session continues; the harness does not force it
+    # off. Build compaction is fired by the harness itself, after each chunk, via
+    # POST /session/{id}/summarize — no worker plugin is involved.
     config["permission"] = {
         "*": "allow",
         "external_directory": {"*": "deny"},

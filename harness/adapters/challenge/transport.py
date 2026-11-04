@@ -40,8 +40,6 @@ from .constants import (
     TURN_TERMINAL_STALLED,
     TURN_TERMINAL_TRANSPORT_ERROR,
     TURN_TERMINAL_TRUNCATED,
-    _COMPACT_PHASE_BUILD,
-    _COMPACT_PHASE_REPAIR,
     _TRANSPORT_ERROR_SIGNATURES,
 )
 from .models import _OpencodeRunStats
@@ -171,15 +169,6 @@ def _build_truncation_evidence(
             "match_key": f"{run_label}|{attempt or 'none'}|{sess or 'none'}",
         },
     }
-
-
-def compact_phase_for(phase: str) -> str:
-    """Map a drive phase name onto the sentinel value the plugin reads.
-
-    Each chunk drive is its chunk's one boundary — see the block above.
-    """
-    is_build_leg = phase == "initial" or phase.startswith("initial-chunk")
-    return _COMPACT_PHASE_BUILD if is_build_leg else _COMPACT_PHASE_REPAIR
 
 
 class TransportMixin:

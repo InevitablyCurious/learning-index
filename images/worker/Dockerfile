@@ -96,9 +96,6 @@ COPY --from=sidecar-source / /opt/docker-worker-context/sidecar/
 
 ARG BENCH_PLUGIN_ENTRY=
 RUN set -eux; \
-    mkdir -p /opt/bench; \
-    cp /opt/docker-worker-context/self-compact.ts /opt/bench/self-compact.ts; \
-    chmod 0644 /opt/bench/self-compact.ts; \
     if [ -f /opt/docker-worker-context/vendor/opencode-plugin/package.json ]; then \
       test -n "${BENCH_PLUGIN_ENTRY}"; \
       npm i -g --install-links=true /opt/docker-worker-context/vendor/opencode-plugin; \
@@ -110,15 +107,11 @@ RUN set -eux; \
     fi; \
     node - <<'NODE'
 const fs = require("node:fs")
-// Benchmark-native self-compaction: wired into EVERY image, with or without a
-// memory plugin. It self-gates on BENCH_SELF_COMPACT=1, so a cell that did not
-// ask for compaction loads it and nothing happens. The memory plugin is NOT
-// listed here: only a memory-ON cell's own config lists it.
-const selfCompactPath = "/opt/bench/self-compact.ts"
+// The image-level config carries no plugin of its own: the memory plugin is NOT
+// listed here — only a memory-ON cell's own config lists it.
 const config = {
   $schema: "https://opencode.ai/config.json",
   shell: "/opt/okp/supervised-shell.js",
-  plugin: [selfCompactPath],
 }
 fs.mkdirSync("/etc/xdg/opencode", { recursive: true })
 fs.writeFileSync("/etc/xdg/opencode/opencode.json", `${JSON.stringify(config, null, 2)}\n`, "utf8")
@@ -126,7 +119,6 @@ NODE
 
 RUN set -eux; \
     chmod 0666 /etc/xdg/opencode/opencode.json; \
-    test -f /opt/bench/self-compact.ts; \
     mkdir -p /opt/okp; \
     cp /opt/docker-worker-context/sidecar/egress-sidecar.js /opt/okp/egress-sidecar.js; \
     cp /opt/docker-worker-context/sidecar/loop-kill-scanner.cjs /opt/okp/loop-kill-scanner.cjs; \
