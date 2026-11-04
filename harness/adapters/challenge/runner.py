@@ -2089,6 +2089,12 @@ class ChallengeRunner(
                     withheld=stage_view.withheld,
                     unevaluated=stage_view.unevaluated,
                     regressions=regressions,
+                    respec=self._respec_for(
+                        [p for p in problems if isinstance(p, dict)],
+                        stage_view.visible,
+                        stage_view.stage,
+                        self._player_stages(),
+                    ),
                 )
                 # WO-FEEDBACK-ONEPHASE: fold the pass verdict into the single
                 # round message — the player acknowledges what is fixed, then

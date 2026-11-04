@@ -53,7 +53,7 @@ from .constants import (
     _TEAM_REGRESSION_HEADER,
 )
 from .exceptions import MissingFeedbackOverrideError
-from .stages import check_id
+from .stages import Stage, check_id, is_untold, stage_of
 
 
 def load_feedback_overrides(path: Path) -> dict[str, dict[str, str]]:
@@ -507,6 +507,42 @@ class FeedbackMixin:
             cls._FEEDBACK_OVERRIDES_CACHE = cached
         return cached
 
+    # A PREFERENCE IS HANDED BACK, NEVER GUESSED (Jerry, 2026-11-04). The cube's
+    # house numbers are the build brief's choice, not something play reveals: a
+    # model that misses them is not told "it doubles at the wrong moments" and
+    # left to guess (runs 1793736621–1793780359 tuned thresholds for seventy
+    # runs), it is given that part of the brief again, word for word, from
+    # `prompts/respec/<gate>.md` (tests/test_respec.py pins it to the brief).
+    @classmethod
+    def _respec_text(cls, gate: str) -> str | None:
+        path = _PACK.dir / "respec" / f"{gate}.md"
+        return path.read_text(encoding="utf-8").strip() if path.is_file() else None
+
+    @classmethod
+    def _respec_for(
+        cls,
+        problems: Sequence[dict[str, Any]],
+        visible: Sequence[dict[str, Any]],
+        stage: Stage | None,
+        stages: list[Stage],
+    ) -> list[str]:
+        """The brief excerpts to hand back: a gate's, once, when one of its
+        checks is told this round, or fails untold at or before the stage
+        being told (its words are the brief's too)."""
+        told = {str(p.get("check", "")).strip() for p in visible}
+        gates: list[str] = []
+        for p in problems:
+            check = str(p.get("check", "")).strip()
+            gate = check_id(check)
+            if not gate or gate in gates or cls._respec_text(gate) is None:
+                continue
+            if check in told or (
+                is_untold(p)
+                and (stage is None or stage_of(check, stages).number <= stage.number)
+            ):
+                gates.append(gate)
+        return [text for g in gates if (text := cls._respec_text(g))]
+
     @classmethod
     def _fill_seconds(cls, line: str, observed: str | None) -> str:
         """Substitute `{seconds}` in a symptom line from the grader's `observed`.
@@ -752,6 +788,7 @@ class FeedbackMixin:
         withheld: list[str] | None = None,
         unevaluated: list[str] | None = None,
         regressions: set[str] | None = None,
+        respec: Sequence[str] | None = None,
     ) -> str:
         """Compose the message the model receives after a failed attempt.
 
@@ -1020,6 +1057,11 @@ class FeedbackMixin:
                 for n, label in enumerate(ordinary_team, start=1):
                     lines.append(f"{n}) {label}")
             lines += ["", _TEAM_EXCUSE_ELIMINATOR]
+
+        # The brief, handed back for a preference the model missed, follows
+        # the complaints it explains (_respec_text).
+        for text in respec or ():
+            lines += ["", text]
 
         # The integration surface closes EVERY repair message, team or no
         # team: it names what the checking depends on, so the model stops

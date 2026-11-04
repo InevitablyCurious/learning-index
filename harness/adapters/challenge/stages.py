@@ -70,6 +70,10 @@ _UNEVALUATED = "never evaluated"
 _UNTOLD = "[untold]"
 
 
+def is_untold(problem: dict[str, Any]) -> bool:
+    return _UNTOLD in str(problem.get("observed", ""))
+
+
 def is_unevaluated(problem: dict[str, Any]) -> bool:
     observed = str(problem.get("observed", "")).strip()
     return observed.startswith(_UNEVALUATED) or _UNTOLD in observed
