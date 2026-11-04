@@ -263,7 +263,13 @@ test("[F22] REQ-NEWGAME — board resets for the next game", async ({ page }) =>
   });
 
   await page.reload();
-  await page.locator('[data-testid="newGameBtn"]').click({ force: true });
+  // New Game as a player reaches it: the end pop-up's own button when the
+  // pop-up is up, else the page's. Run 1793780359's pop-up covered newGameBtn,
+  // a forced click landed on the pop-up, and the player would have been told
+  // the board never reset — its pop-up's New Game reset all 30.
+  const inPopup = page.getByTestId("modalBtns").getByRole("button", { name: /new game/i });
+  if (await inPopup.isVisible().catch(() => false)) await inPopup.click();
+  else await page.locator('[data-testid="newGameBtn"]').click({ force: true });
 
   await expect(page.locator('[data-testid="checker"]')).toHaveCount(30);
   await expect(
