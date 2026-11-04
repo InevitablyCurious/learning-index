@@ -1990,6 +1990,18 @@ async function offerRace(
   ladder.push(rung());
   while (six > 0) { six--; one++; ladder.push(rung()); }
   while (one > 1) { one--; whiteOff++; ladder.push(rung()); }
+  // Then black further ahead than the first rung: white's off checkers back
+  // on the 6, then two at a time out on the 13. A formula that rates black's
+  // 31-pip lead below its doubling point still doubles somewhere here (run
+  // 1793751254 round 3 doubled from about 50 pips, and every check that rode
+  // on this ladder told the player its offer never showed on screen).
+  six = 10; one = 1;
+  for (whiteOff = 3; whiteOff >= 0; whiteOff--) { six++; ladder.push(rung()); }
+  for (const out of [2, 4]) {
+    const r = rung();
+    r.points[6] = six - out; r.points[13] = out;
+    ladder.push(r);
+  }
   const offering: typeof ladder = [];
   for (const race of ladder) {
     await postJson(page, "/api/new", {});
@@ -2008,7 +2020,10 @@ async function offerRace(
   }
   // A server remembers it has offered this game; the check starts clean.
   await postJson(page, "/api/new", {});
-  return offering[Math.floor((offering.length - 1) / 2)] ?? ladder[0]!;
+  // The middle by black's lead, not by ladder order.
+  const whitePips = (r: (typeof ladder)[number]) => r.points.reduce((sum, n, i) => sum + Math.max(0, n) * i, 0);
+  const byLead = [...offering].sort((a, b) => whitePips(a) - whitePips(b));
+  return byLead[Math.floor((byLead.length - 1) / 2)] ?? ladder[0]!;
 }
 
 test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", async ({ page }) => {
