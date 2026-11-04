@@ -53,6 +53,7 @@ from .constants import (
     _TEAM_REGRESSION_HEADER,
 )
 from .exceptions import MissingFeedbackOverrideError
+from .stages import check_id
 
 
 def load_feedback_overrides(path: Path) -> dict[str, dict[str, str]]:
@@ -861,6 +862,17 @@ class FeedbackMixin:
         # saw. Set in the loop below; extended with withheld/unevaluated after.
         tester_fell_silent = False
 
+        # A line belongs to a gate id and aspect, not to one check: two checks
+        # of one gate tell one line, and when either was told before, the line
+        # is a repeat. Chosen per check, run 1793760587 round 2 told G12's
+        # first sighting and its repeat one under the other — one complaint,
+        # twice, in one message.
+        def line_of(record: dict[str, Any]) -> tuple[str, str | None]:
+            raw = str(record.get("check", "")).strip()
+            return (check_id(raw) or raw, cls._complaint_aspect(record))
+
+        repeat_lines = {line_of(r) for r in records if cls._complaint_id(r) in repeats}
+
         for record in records:
             raw_check = str(record.get("check", "")).strip()
             if not raw_check:
@@ -879,7 +891,7 @@ class FeedbackMixin:
             # already been told and failed to fix gets its second-sighting line.
             # Keyed on the gate id plus the aspect it names (_complaint_id),
             # never on the rendered sentence, which differs between passes.
-            pass_kind = "repeat" if cls._complaint_id(record) in repeats else "first"
+            pass_kind = "repeat" if line_of(record) in repeat_lines else "first"
             label, channel = cls._told_label(record, pass_kind=pass_kind)
             if channel == "team" and cls.feedback_channel(raw_check) == "tester":
                 tester_fell_silent = True

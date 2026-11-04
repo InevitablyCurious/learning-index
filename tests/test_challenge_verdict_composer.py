@@ -191,3 +191,19 @@ def test_build_feedback_prompt_openers_and_invariants() -> None:
         "\n"
         f"{_CONSTRAINTS}"
     )
+
+
+def test_a_line_told_before_is_told_once_as_a_repeat() -> None:
+    # Two checks of one gate tell one line. One was told before, one fails for
+    # the first time: the line is told once, as the repeat — never as its first
+    # sighting and its repeat one under the other.
+    told = "[G12] REQ-CUBE-AI — offers only inside hard window"
+    new = "[G12] REQ-CUBE-AI — accepts near-even cube offers"
+    prompt = ChallengeRunner._build_feedback_prompt(
+        checks=[new, told], repeat_complaints={told}
+    )
+    assert "1) " in prompt and "2) " not in prompt
+    alone = ChallengeRunner._build_feedback_prompt(
+        checks=[told], repeat_complaints={told}
+    )
+    assert prompt.split("1) ", 1)[1] == alone.split("1) ", 1)[1]
