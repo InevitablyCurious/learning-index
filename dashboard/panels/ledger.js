@@ -337,7 +337,6 @@ function endedWord(c) {
   if (c.scored === false) return `void · ${c.void_reason ?? "unscored"}`;
   if (c.context_exhausted) return "context exhausted";
   if (String(c.verdict ?? "").toUpperCase() === "PASS") return "green";
-  if (c.terminal_reason === "attempt_ceiling_reached") return "attempt cap, not green";
   return c.terminal_reason ?? c.verdict ?? "ended";
 }
 
@@ -422,7 +421,18 @@ function detail(c) {
   if (!c) return nul("no measurement");
   const bits = [];
   const ph = c.phases ?? {};
-  bits.push(c.state === "complete" ? `${ph.done ?? 0} of ${ph.total ?? 5}` : `phase ${ph.done ?? 0} of ${ph.total ?? 5} · running`);
+  // A run the producer did not cap carries no total: then the observed count is
+  // the whole truth, and "of M" would name a ceiling nobody measured.
+  const phTotal = typeof ph.total === "number" ? ph.total : null;
+  bits.push(
+    c.state === "complete"
+      ? phTotal === null
+        ? `${ph.done ?? 0} rounds`
+        : `${ph.done ?? 0} of ${phTotal}`
+      : phTotal === null
+        ? `phase ${ph.done ?? 0} · running`
+        : `phase ${ph.done ?? 0} of ${phTotal} · running`,
+  );
   if (c.gates?.total) bits.push(`${c.gates.passed ?? c.gates.total - (c.gates.failed ?? 0)}/${c.gates.total} gates`);
   if (c.void_instrument) bits.push("VOID INSTRUMENT");
   if (c.context_exhausted) bits.push("CONTEXT EXHAUSTED");

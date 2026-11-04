@@ -112,6 +112,7 @@ from harness.serve_transport import (
 
 # Compaction blocks: ``/summarize`` returns only once the rewrite is done, and a
 # model summarization can take tens of seconds.
+# It bounds ONE blocking summarize; it is not, and must never become, a run bound.
 SUMMARIZE_TIMEOUT_S = 300.0
 
 
@@ -452,7 +453,7 @@ class ServeClient:
 
         Returns True if the session reached idle, False otherwise. See
         :meth:`wait_idle_detailed` when the caller needs to tell a stalled turn
-        apart from an exhausted budget.
+        apart from its own ``timeout_s`` deadline running out.
         """
         reached, _ = self.wait_idle_detailed(session_id, timeout_s=timeout_s, **kwargs)
         return reached
@@ -490,7 +491,8 @@ class ServeClient:
         self,
         session_id: str,
         *,
-        timeout_s: float = 600.0,
+        # None = unbounded by wall clock (rely on stall/liveness); a non-None value is a caller's explicit wait deadline, not a run budget.
+        timeout_s: float | None = None,
         stall_timeout_s: float | None = None,
         progress_interval_s: float = 30.0,
         loop_kill_marker_dir: str | None = None,
@@ -498,10 +500,12 @@ class ServeClient:
         worker_alive: Callable[[], bool] | None = None,
         compaction_watermark: int | None = None,
     ) -> tuple[bool, str]:
-        """Poll until idle, the budget runs out, or the turn stops progressing.
+        """Poll until idle, a stall/liveness signal fires, or the caller's
+        explicit ``timeout_s`` deadline (if any) expires.
 
         Returns ``(reached_idle, reason)`` where reason is one of ``idle``,
-        ``timeout``, ``stalled`` (a tool call never returned), ``model_silent``
+        ``timeout`` (only when the caller passed an explicit ``timeout_s``),
+        ``stalled`` (a tool call never returned), ``model_silent``
         (no tool call running and the model server sent nothing for the whole
         stall bound), ``compactions_before_grade``, ``loop_killed`` or
         ``worker_died``.
@@ -523,7 +527,8 @@ class ServeClient:
         a session at its token threshold compacts and keeps going, and a turn
         that overflows ends by itself (the session goes idle and the transcript
         carries ``ContextOverflowError``). Either way the wait has nothing to
-        decide about the context — it ends on idle, the budget, or a stall.
+        decide about the context — it ends on idle, a stall, or a liveness
+        signal.
 
         WORKER DIED. A failed busy probe counts as busy (above) — right for a
         blip, wrong when the worker container itself has stopped: run 1789712833
@@ -534,19 +539,21 @@ class ServeClient:
         A probe that fails even after retries is treated as STILL BUSY, never
         as idle. Reading "idle" from a failed probe is the dangerous direction:
         it releases the harness to gate a worktree the worker is still writing
-        (the 2026-08-09 turns=0/gates-race void). Waiting costs only time; a
-        sustained outage still ends at ``timeout_s``.
+        (the 2026-08-09 turns=0/gates-race void). Waiting costs only time, and a
+        sustained outage cannot decide the turn by itself: the stall bound only
+        rules on a progress token it could not read either. Such a wait ends
+        only when the caller passes an explicit ``timeout_s``; the serve drive
+        passes none and relies on the worker-died probe instead.
 
         WHY A STALL BOUND EXISTS (2026-08-24). ``session_busy`` cannot tell
         "working hard" from "wedged": a hung tool call leaves the session BUSY
         forever. A live cell ran `timeout 3 npm start &` followed by
         `pkill -f "npm start"`, which killed npm but not the node server npm had
         spawned; the orphan held the tool call's stdout pipe open, the tool call
-        never returned, and the session stayed busy. Because the caller passes
-        the WHOLE-RUN budget as ``timeout_s``, one wedged command burned the
-        entire cell. Progress is therefore sampled independently of busyness,
-        and a turn that stops progressing is ended in ``stall_timeout_s``
-        instead of ``timeout_s``.
+        never returned, and the session stayed busy. The drive passes no run
+        budget, so the stall bound IS the no-progress guard: progress is sampled
+        independently of busyness, and a turn that stops progressing is ended in
+        ``stall_timeout_s`` while a working turn is never cut off by a clock.
 
         Sampling is deliberately infrequent (``progress_interval_s``): the probe
         reads the whole message list, which is far too heavy for the busy-poll
@@ -554,7 +561,7 @@ class ServeClient:
 
         LOOP-KILL MARKER (fast path). The guard signature is only observable in
         the transcript after the turn ends, so a loop-killed turn otherwise
-        sits busy until the stall bound or the whole budget expires. When
+        sits busy until the stall bound ends it. When
         ``loop_kill_marker_dir`` is given, each poll also checks for THIS
         session's marker (``loop-kill-<session_id>.json``) at least as new as
         ``turn_start_ts_ms`` (epoch ms; None means any timestamp counts) and
@@ -563,7 +570,7 @@ class ServeClient:
         ``loop_kill_marker_dir=None`` the check never runs and behaviour is
         unchanged.
         """
-        deadline = time.monotonic() + timeout_s
+        deadline = None if timeout_s is None else time.monotonic() + timeout_s
         stall_deadline: float | None = None
         last_token: tuple[int, ...] | None = None
         next_progress_check = time.monotonic()
@@ -575,7 +582,9 @@ class ServeClient:
             self.open_delta_counter(session_id) if stall_timeout_s is not None else None
         )
         try:
-            while time.monotonic() < deadline:
+            while True:
+                if deadline is not None and time.monotonic() >= deadline:
+                    return False, "timeout"
                 if loop_kill_marker_dir is not None and read_loop_kill_marker(
                     loop_kill_marker_dir,
                     turn_start_ts_ms,
@@ -645,7 +654,6 @@ class ServeClient:
                                 return False, REASON_MODEL_SILENT
 
                 time.sleep(self.poll_interval)
-            return False, "timeout"
         finally:
             if deltas is not None:
                 deltas.close()

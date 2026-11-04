@@ -387,9 +387,10 @@ def _hold_for_operator(
     Writes hold-ui.json with schema_version 2, carrying `kind`, `attempt`,
     `max_attempts`, `told_text` (the exact feedback about to be sent, round
     pauses only) and `grade` (values the attempt's grade report already
-    carries, plus the report path). If the release file carries a JSON
-    `{"note": "<text>"}`, the note is appended to operator-notes.jsonl beside
-    hold-ui.json — never reaching the model.
+    carries, plus the report path). `max_attempts` is now always `null` — the
+    cell has no round cap, so nothing bounds the attempt count. If the release
+    file carries a JSON `{"note": "<text>"}`, the note is appended to
+    operator-notes.jsonl beside hold-ui.json — never reaching the model.
     """
     import harness.adapters.challenge as _pkg
 

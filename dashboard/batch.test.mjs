@@ -36,7 +36,7 @@ const { renderLedger, toggleBaselineRow, toggleSuperseded } = await import("./pa
 const cell = (i, over = {}) => ({
   sequence_index: i, state: "complete", scored: true, void_reason: null, problems: 20,
   vs_median: 0, picked: false, turns: 300, tokens: 12_000_000, wall_seconds: 12_000,
-  gates: null, verdict: "FAIL", terminal_reason: "attempt_ceiling_reached",
+  gates: null, verdict: "FAIL", terminal_reason: "stopped",
   context_exhausted: false, attempt_failures: [20, 19, 19], ...over,
 });
 

@@ -54,7 +54,7 @@ Terminal outcome (WO-TRUNC-1 — recorded, never placeholder-null):
 - ``terminal_outcome``: bool — True iff the cell resolved (verdict PASS);
   False for every other ending.
 - ``terminal_reason``: str — the cell's machine termination reason, so a
-  scorecard can tell "the model failed" (``attempt_ceiling_reached``) from
+  scorecard can tell "the model failed" (a non-green verdict) from
   "the stream died" (``transport_incomplete`` / ``harness_error``).
 
 ``delivery`` records (fail-closed, unverified delivery)

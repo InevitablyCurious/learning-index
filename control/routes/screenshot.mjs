@@ -9,7 +9,8 @@
 //
 // No filename or path ever comes off the wire. The wire inputs are run_dir
 // (gated by the wall's containment validator), sequence_index (int >= 0) and
-// attempt (int 1..10); the cell directory is resolved server-side
+// attempt (any int >= 1 — there is no maximum round count); the cell
+// directory is resolved server-side
 // (runstate.cellDirForRun) and the filename is constructed here. A missing
 // capture is a clean 404 — never a fallback to another attempt, which would
 // show a board that is not the one asked for.
@@ -23,11 +24,6 @@ import { sendJson } from "../lib/http.mjs";
 import { statOrNull } from "../lib/fs.mjs";
 import { resolveRunDir } from "../wall.mjs";
 import { cellDirForRun } from "../runstate.mjs";
-
-// The harness clamps max_attempts to this ceiling
-// (harness/adapters/challenge/constants.py: DEFAULT_ATTEMPT_HARD_CEILING = 10),
-// so any valid attempt is 1..10.
-const MAX_ATTEMPTS_HARD_CEILING = 10;
 
 export const routes = [
   {
@@ -58,17 +54,14 @@ export const routes = [
         return;
       }
       if (!/^\d+$/.test(attemptRaw ?? "")) {
-        sendJson(res, 400, {
-          ok: false,
-          reason: `attempt is required (an integer 1..${MAX_ATTEMPTS_HARD_CEILING})`,
-        });
+        sendJson(res, 400, { ok: false, reason: "attempt is required (a positive integer)" });
         return;
       }
       const attempt = Number(attemptRaw);
-      if (attempt < 1 || attempt > MAX_ATTEMPTS_HARD_CEILING) {
+      if (attempt < 1) {
         sendJson(res, 400, {
           ok: false,
-          reason: `attempt must be between 1 and ${MAX_ATTEMPTS_HARD_CEILING}; got ${attempt}`,
+          reason: `attempt must be a positive integer; got ${attempt}`,
         });
         return;
       }

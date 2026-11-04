@@ -2,12 +2,14 @@
 // GET /api/screenshot — serves the grader's per-attempt board capture
 // (<cellDir>/attempt-<N>-board.png) as image/png. The cell directory is
 // resolved server-side; the only wire inputs are run_dir (containment-gated),
-// sequence_index and attempt (1..10).
+// sequence_index and attempt (any int >= 1 — no maximum).
 //
-// The fixture is a run under RUNS_ROOT with attempt-1 and attempt-3 captures
-// present and attempt-2 ABSENT: the route must stream the present one
+// The fixture is a run under RUNS_ROOT with attempt-1, attempt-3 and attempt-12
+// captures present and attempt-2 ABSENT: the route must stream the present one
 // byte-verbatim and 404 the absent one with a stated reason — never fall back
 // to another attempt. Bad/escaping parameters refuse with { ok:false, reason }.
+// A high attempt number (12) is ACCEPTED: there is no ceiling on the round
+// count, so only 0 and non-integers are refused.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from "node:test";
@@ -33,6 +35,8 @@ const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0
 mkdirSync(CELL_DIR, { recursive: true });
 writeFileSync(join(CELL_DIR, "attempt-1-board.png"), PNG);
 writeFileSync(join(CELL_DIR, "attempt-3-board.png"), PNG);
+// A high attempt number: proves the route has no ceiling on the round count.
+writeFileSync(join(CELL_DIR, "attempt-12-board.png"), PNG);
 // attempt-2 deliberately absent.
 
 function screenshotRoute() {
@@ -81,6 +85,21 @@ test("GET /api/screenshot streams the stored capture as image/png, byte-verbatim
   assert.deepEqual(res.bytes(), PNG);
 });
 
+test("GET /api/screenshot accepts a high attempt number — there is no ceiling", async () => {
+  const res = fakeStreamRes();
+  await screenshotRoute().handle({}, res, new URL(`http://x/api/screenshot?${good}&attempt=12`));
+  await new Promise((r) => res.on("finish", r));
+  assert.equal(res.status, 200);
+  assert.equal(res.headers["content-type"], "image/png");
+  assert.deepEqual(res.bytes(), PNG);
+});
+
+test("GET /api/screenshot never refuses a large attempt for being too high (no ceiling)", async () => {
+  const res = await callJson(`?${good}&attempt=9999`);
+  assert.equal(res.status, 404); // absent capture, not a refusal
+  assert.match(res.body.reason, /no screenshot for attempt 9999/);
+});
+
 test("GET /api/screenshot on an absent capture → 404 with a stated reason, never a fallback", async () => {
   const res = await callJson(`?${good}&attempt=2`);
   assert.equal(res.status, 404);
@@ -96,9 +115,9 @@ test("GET /api/screenshot refuses missing, malformed and escaping parameters", a
     `?${good}`, // no attempt
     `?${rd}&sequence_index=abc&attempt=1`,
     `?${rd}&sequence_index=-1&attempt=1`,
-    `?${good}&attempt=0`, // below the 1..10 window
-    `?${good}&attempt=11`, // above the hard ceiling
-    `?${good}&attempt=abc`,
+    `?${good}&attempt=0`, // below the minimum
+    `?${good}&attempt=abc`, // non-integer
+    `?${good}&attempt=1.5`, // non-integer
     `?run_dir=${encodeURIComponent("../../..")}&sequence_index=0&attempt=1`, // escape
     `?run_dir=${encodeURIComponent("/etc")}&sequence_index=0&attempt=1`, // absolute
   ];

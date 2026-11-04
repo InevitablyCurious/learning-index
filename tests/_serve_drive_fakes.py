@@ -274,19 +274,19 @@ class _FakeServeClient:
         self,
         session_id: str,
         *,
-        timeout_s: float,
+        timeout_s: float | None = None,
         stall_timeout_s: float | None = None,
         loop_kill_marker_dir: str | None = None,
         turn_start_ts_ms: int | None = None,
         compaction_watermark: int | None = None,
         **kwargs,
     ) -> tuple[bool, str]:
-        # Mirrors the real client: the drive needs to tell an exhausted budget
-        # apart from a turn that stopped progressing — NOT an exhausted context,
-        # which the waiter no longer decides anything about. `wait_script`
-        # scripts the per-call shapes (a one-shot stall included); the static
-        # fallback keys on wait_result, and a False wait_result stays the
-        # original run_timeout behaviour.
+        # Mirrors the real client: the drive needs to tell a no-progress ending
+        # apart from a clean one — NOT an exhausted context, which the waiter no
+        # longer decides anything about. `wait_script` scripts the per-call
+        # shapes (a one-shot stall included); the static fallback keys on
+        # wait_result, and a False wait_result is the no-progress ending a turn
+        # that never came back now produces.
         self.stall_timeout_s = stall_timeout_s
         self.wait_timeout_s = timeout_s
         self.loop_kill_marker_dir = loop_kill_marker_dir
@@ -327,7 +327,7 @@ class _FakeServeClient:
             return False, COMPACTIONS_BEFORE_GRADE_WAIT_REASON
         if self.wait_result:
             return True, "idle"
-        return False, "timeout"
+        return False, "stalled"
 
     def metrics(self, session_id: str, *, since: int | None = None) -> dict[str, Any]:
         if since is not None:
@@ -362,7 +362,6 @@ def _make_runner(tmp_path: Path, *, compact: bool = False) -> ChallengeRunner:
         # the CONTEXT EXHAUSTED line from them (harness/context_budget.py).
         model="local-llm-proxy/qwen3.6-35b-a3b-bench",
         memory_mode="off",
-        run_timeout_s=30,
         completion_grace_s=2,
         compact=compact,
     )

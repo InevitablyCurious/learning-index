@@ -40,7 +40,7 @@ const V2_HOLD = {
   schema_version: 2,
   kind: "round",
   attempt: 2,
-  max_attempts: 5,
+  max_attempts: null,
   told_text: "I'm still seeing the off tray drawn over some points.",
   grade: {
     report_path: "/runs/t/cell/attempt-2-report.json",
@@ -67,7 +67,9 @@ test("HOLD: readHold returns the v2 fields (kind/attempt/told_text/grade) and he
   assert.equal(hold.schema_version, 2);
   assert.equal(hold.kind, "round");
   assert.equal(hold.attempt, 2);
-  assert.equal(hold.max_attempts, 5);
+  // UNBOUNDED is null: readHold preserves whatever hold-ui.json carries, so a
+  // held cell with no attempt cap reads back as null (never a fallback 5).
+  assert.equal(hold.max_attempts, null);
   assert.equal(hold.told_text, "I'm still seeing the off tray drawn over some points.");
   assert.equal(hold.grade.verdict, "FAIL");
   assert.equal(hold.grade.report_path, "/runs/t/cell/attempt-2-report.json");

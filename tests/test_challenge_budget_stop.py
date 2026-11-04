@@ -47,7 +47,6 @@ def _make_runner(
     tmp_path: Path,
     *,
     cost_limit_usd: float | None = None,
-    max_attempts: int = 8,
     max_output_tokens: int | None = None,
     max_steps_per_attempt: int | None = None,
     output_price_per_1m: float | None = None,
@@ -59,7 +58,6 @@ def _make_runner(
         work_root=tmp_path / "work-root",
         model="local-llm-proxy/okp-bench-worker",
         cost_limit_usd=cost_limit_usd,
-        max_attempts=max_attempts,
         max_output_tokens=max_output_tokens,
         max_steps_per_attempt=max_steps_per_attempt,
         output_price_per_1m=output_price_per_1m,
@@ -232,7 +230,7 @@ def test_prompts_are_delivered_over_the_serve_session_never_on_argv(
     serve is the only transport, so a prompt has no way to reach a command line.
     What is still worth pinning is the delivery itself — the initial task prompt
     and the repair feedback both arrive, in order, as session prompts."""
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=3)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
 
     task_prompt = "D6 initial prompt marker"
@@ -283,7 +281,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=4)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
@@ -457,7 +455,7 @@ def test_zero_progress_gap_has_no_pass_verdict_and_uses_false_header(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=3)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
@@ -533,7 +531,7 @@ def test_a_complaint_that_was_fixed_and_came_back_is_not_still_there(
     # was told; one that came back is a REGRESSION — told under its own opener,
     # never "still". The complaint that never went away keeps its
     # second-sighting line under "I'm still seeing these problems".
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=4)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
@@ -600,35 +598,58 @@ def test_a_complaint_that_was_fixed_and_came_back_is_not_still_there(
         (False, "DID_NOT_CONFORM"),
     ],
 )
-def test_hard_attempt_ceiling_sets_fail_termination_label(
+def test_a_genuine_fault_ending_still_records_the_fail_label_and_parity_pending(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     conformed: bool,
     expected_attempts_to_green: str,
 ) -> None:
-    runner = _make_runner(tmp_path, mock="scaffold", max_attempts=2)
+    """A cell ended by a fault — not by a round count — keeps the FAIL label.
 
+    THE ENDING IS A GENUINE FAULT, NEVER A ROUND COUNT. Grade 1 is a gradable
+    FAIL, so the loop opens a repair round; that round comes back on a non-zero
+    worker exit with no harness-limit reason, so the cell ends as
+    ``harness_error`` on the spot. Nothing here bounds the round count: the loop
+    would keep repairing for as long as the model kept repairing.
+    """
+    runner = _make_runner(tmp_path)
+    _patch_fake_docker(monkeypatch)
+    monkeypatch.setattr(
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["CHUNK ONE"]
+    )
     monkeypatch.setattr(
         runner,
         "_run_gate_report",
         lambda **kwargs: {
             "verdict": "FAIL",
             "conformed": conformed,
-            "problems": [{"check": "[G02] REQ-PIP — pip count"}],
-            "failed_gates": ["[G02] REQ-PIP — pip count"],
+            "problems": [{"check": REAL_CHECK}],
+            "failed_gates": [REAL_CHECK],
         },
     )
 
+    def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:
+        if kwargs.get("phase") == "feedback-1":
+            # THE GENUINE FAULT: the worker exits non-zero mid-round outside
+            # every harness-limit reason — a fault, not a capability result.
+            return _stats(session_id="sess-1", exit_code=1, cost_usd=0.0)
+        return _stats(session_id="sess-1", exit_code=0, cost_usd=0.0)
+
+    monkeypatch.setattr(runner, "_run_opencode_serve", _fake_opencode)
+
     result = runner._run_cell_impl(
-        run_label="ceiling",
-        run_dir=tmp_path / "ceiling",
+        run_label="fault-ending",
+        run_dir=tmp_path / "fault-ending",
         task_id="backgammon",
     )
 
     assert result.verdict == "FAIL"
-    assert result.termination_reason == "attempt_ceiling_reached"
+    assert result.termination_reason == "harness_error"
     assert result.attempts_to_green == expected_attempts_to_green
-    assert result.attempt_reports[-1]["termination_reason"] == "attempt_ceiling_reached"
+    # The graded round that DID run stands as the cell's record, and it is the
+    # record's own terminal that carries the ending.
+    assert result.attempt_reports, "the graded round stands as the cell's record"
+    assert result.attempt_reports[-1]["termination_reason"] == "harness_error"
     assert result.attempt_reports[-1]["parity_pending"] is True
     assert all(ar["parity_pending"] is True for ar in result.attempt_reports)
 
@@ -639,14 +660,14 @@ def test_harness_limit_kill_does_not_force_budget_stop_and_loop_can_continue(
 ) -> None:
     """A harness-limit kill does not force a budget_stop; the loop continues.
 
-    The kill now lands on a FEEDBACK round, not the build: per the 2026-09-08
+    The kill lands on a FEEDBACK round, not the build: per the 2026-09-08
     ruling (WO-ABORT) a partial build fast-fails with ``IncompleteBuildError``
-    and is never graded, so the build here completes cleanly. ``max_attempts=3``
-    so the feedback kill's ``worker_killed_reason`` actually reaches the
-    ``continue_if_budget`` branch on the NEXT loop iteration — with
-    ``max_attempts=2`` the attempt-2 gate PASS would short-circuit before it.
+    and is never graded, so the build here completes cleanly. The feedback kill
+    is a HARNESS LIMIT (``turn_stalled``), so the loop takes the
+    ``continue_if_budget`` branch on the NEXT iteration instead of stopping the
+    cell — the ending is the attempt-3 gate PASS, not a round count.
     """
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=3)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     docker_state = _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *args, **kwargs: ["PROMPT"]
@@ -690,7 +711,7 @@ def test_harness_limit_kill_does_not_force_budget_stop_and_loop_can_continue(
             kill_hook()
             return _stats(
                 session_id="sess-1",
-                killed_reason="run_timeout",
+                killed_reason="turn_stalled",
                 exit_code=137,
                 cost_usd=0.1,
             )
@@ -731,7 +752,7 @@ def test_stalled_feedback_turn_increments_cell_stalled_turns_exactly_once(
     with ``IncompleteBuildError`` per the 2026-09-08 ruling (WO-ABORT) — a
     partial build is never graded — so the build here completes cleanly.
     """
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=2)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
@@ -801,7 +822,7 @@ def test_non_budget_nonzero_worker_exit_classifies_as_harness_error(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=2)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *args, **kwargs: ["PROMPT"]
@@ -859,7 +880,7 @@ def test_serve_session_create_failure_aborts_the_cell(
     stdout subprocess path — a cell that never touched the transport every other
     cell in the campaign used, sitting in the ledger looking identical to them.
     """
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=2)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *args, **kwargs: ["PROMPT"]
@@ -897,7 +918,7 @@ def test_chunked_build_failure_aborts_and_never_reruns_as_one_joined_prompt(
     same name. The stdout transport is purged (2026-09-03), so the guarantee
     is now structural: there is no second route to restart on.
     """
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=2)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner,
@@ -932,7 +953,7 @@ def test_partial_chunked_build_aborts_with_incomplete_build_error(
     reach the grader, and record the abort as a harness_error on the cell.end
     live record.
     """
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=2)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner,

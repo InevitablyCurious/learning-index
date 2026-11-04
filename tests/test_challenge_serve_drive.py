@@ -5,9 +5,13 @@ serve-drive path and the returned ``_OpencodeRunStats`` is asserted field by
 field. ``active_cell`` is a lightweight stand-in exposing ``kill_worker_processes``
 (the only ``DockerCell`` surface ``_run_opencode_serve`` touches).
 
-WO-LI18 split scope: the core serve-drive contract (happy path, timeout,
-stall, transport/truncation anomalies, metering truth) plus the
+WO-LI18 split scope: the core serve-drive contract (happy path, the wedge
+endings, transport/truncation anomalies, metering truth) plus the
 bench-session-title format. Shared fakes: tests/_serve_drive_fakes.py.
+
+THE DRIVE HAS NO RUN-TIME BUDGET. A phase ends at idle, on the two-compaction
+abort, or on a WEDGE SIGNAL — stalled / model-silent / loop-kill /
+worker-died. No test here encodes a clock as an ending.
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ from pathlib import Path
 import pytest
 
 from harness.adapters.challenge import (
+    _MAX_SERVE_RECOVERY_NUDGES,
     _STALL_RECOVERY_NUDGE,
     TURN_TERMINAL_OBSERVATION_LOST,
     TURN_TERMINAL_STALLED,
@@ -56,11 +61,13 @@ def test_serve_drive_happy_path(tmp_path: Path) -> None:
         prompt="build the game",
         run_label="cell-1",
         phase="initial",
-        timeout_s=123.0,
     )
 
     assert client.sent_prompts == [("ses_live_1", "build the game")]
-    assert client.wait_timeout_s == 123.0
+    # The drive hands the waiter NO run-time bound: this phase ends on the
+    # wait itself (IDLE), never on a clock. `timeout_s` survives only as a
+    # handshake/utility knob on the client, so the drive never sets it.
+    assert client.wait_timeout_s is None
     assert stats.exit_code == 0
     assert stats.killed_reason is None
     assert stats.session_id == "ses_live_1"
@@ -79,9 +86,21 @@ def test_serve_drive_happy_path(tmp_path: Path) -> None:
     assert cell.kill_calls == 0
 
 
-def test_serve_drive_timeout_calls_kill_hook(tmp_path: Path) -> None:
+def test_serve_drive_stall_that_never_clears_ends_on_the_recovery_budget(
+    tmp_path: Path,
+) -> None:
+    """A turn that wedges on EVERY re-drive ends on the recovery budget.
+
+    There is no run-time budget on the drive any more, so the only thing that
+    ends a permanently wedged phase is the recovery budget: a count of
+    re-drives, never a clock. A stall is a recoverable wedge signal, so the
+    drive aborts + fires the kill hook, nudges, and re-drives until that budget
+    is spent — the same fail-closed shape an exhausted loop-kill burst takes.
+    """
     runner = _make_runner(tmp_path)
     client = _FakeServeClient()
+    # Every wait ends the same way: the turn wedged. This is the client's
+    # static no-progress fallback — there is no "timeout" ending left to fake.
     client.wait_result = False
     client.metrics_result = {
         "turns": 2,
@@ -97,18 +116,31 @@ def test_serve_drive_timeout_calls_kill_hook(tmp_path: Path) -> None:
     stats = runner._run_opencode_serve(
         active_cell=cell,
         serve_client=client,
-        session_id="ses_timeout",
+        session_id="ses_stall_forever",
         prompt="p",
         run_label="cell-2",
         phase="initial",
-        timeout_s=10.0,
     )
 
-    assert cell.kill_calls == 1
-    assert client.aborted_sessions == ["ses_timeout"]
-    assert stats.killed_reason == "run_timeout"
-    assert stats.exit_code == 1
-    assert stats.turns == 2
+    budget = _MAX_SERVE_RECOVERY_NUDGES
+    # WEDGE ENDING: STALLED, re-driven `budget` times, then the loop breaks.
+    assert stats.recovery_nudges == budget
+    assert [text for _, text in client.sent_prompts] == ["p"] + [
+        _STALL_RECOVERY_NUDGE
+    ] * budget
+    # Every wedged turn was genuinely un-stuck (abort + kill hook) — including
+    # the last one, which the spent budget refused to re-drive.
+    assert len(client.aborted_sessions) == budget + 1
+    assert cell.kill_calls == budget + 1
+    # The budget is not a kill: the drive returns clean and the exhausting
+    # turn stays UNRETRIED on the ledger — the visible seam, exactly as with
+    # an exhausted loop-kill burst.
+    assert stats.killed_reason is None
+    assert stats.exit_code == 0
+    assert len(stats.turn_anomalies) == budget + 1
+    assert all(a["terminal"] == TURN_TERMINAL_STALLED for a in stats.turn_anomalies)
+    assert all(a["retried"] is True for a in stats.turn_anomalies[:budget])
+    assert stats.turn_anomalies[-1]["retried"] is False
 
 
 def test_serve_drive_stalled_turn_recovers_with_stall_nudge(
@@ -122,9 +154,9 @@ def test_serve_drive_stalled_turn_recovers_with_stall_nudge(
     (abort + kill hook), carried as a `turn_stalled` anomaly with retried=True,
     and the drive re-drives with the stall nudge; killed_reason/exit_code stay
     clean. The old terminal behaviour ended the cell outright — that is what
-    cost a live cell 40 minutes on 2026-08-24, with no verdict at all. The
-    distinction from `run_timeout` still holds: run_timeout (the whole budget
-    exhausted) remains terminal; only the single wedged turn recovers.
+    cost a live cell 40 minutes on 2026-08-24, with no verdict at all. A stall
+    is a WEDGE SIGNAL, never a budget: the drive has no run-time bound, so the
+    recoverable wedge and the clean idle after it are the whole ending.
     """
     runner = _make_runner(tmp_path)
     client = _FakeServeClient()
@@ -144,7 +176,6 @@ def test_serve_drive_stalled_turn_recovers_with_stall_nudge(
         prompt="p",
         run_label="cell-stall",
         phase="initial",
-        timeout_s=10.0,
     )
 
     # RECOVERED: clean exit, exactly one nudge, no guard abort.
@@ -178,37 +209,44 @@ def test_serve_drive_stall_is_not_scored_as_a_model_failure(tmp_path: Path) -> N
     assert "turn_stalled" in _HARNESS_LIMIT_REASONS
 
 
-def test_serve_drive_timeout_abort_failure_still_timeout(tmp_path: Path) -> None:
+def test_serve_drive_abort_failure_does_not_block_stall_recovery(
+    tmp_path: Path,
+) -> None:
+    """An abort failure is logged, never allowed to mask the ending.
+
+    The ending here is the WEDGE SIGNAL — the turn stalled, so the drive must
+    un-stick it (abort + kill hook). The abort POST itself failing is not an
+    ending: the kill hook still runs, the stall still rides the recoverable
+    path, and the nudged re-drive ends at idle.
+    """
     runner = _make_runner(tmp_path)
     client = _FakeServeClient()
-    client.wait_result = False
+    # Stall ONCE, then the nudged re-drive goes idle.
+    client.wait_script = [(False, "stalled"), (True, "idle")]
     client.abort_error = ServeClientError("POST .../abort failed: boom")
-    client.metrics_result = {
-        "turns": 1,
-        "input_tokens": 10,
-        "output_tokens": 5,
-        "reasoning_tokens": 0,
-        "cost_usd": 0.0,
-        "provider_truncations": 0,
-        "error_parts": 0,
-    }
+    client.metrics_script = [
+        dict(_ZERO_METRICS),  # phase baseline
+        _metrics(1, 10, 5),  # stalled turn read
+        _metrics(3, 40, 20),  # post-nudge read (session-cumulative)
+    ]
     cell = _FakeCell()
 
     stats = runner._run_opencode_serve(
         active_cell=cell,
         serve_client=client,
-        session_id="ses_timeout_abortfail",
+        session_id="ses_stall_abortfail",
         prompt="p",
         run_label="cell-7",
         phase="initial",
-        timeout_s=10.0,
     )
 
-    assert client.aborted_sessions == ["ses_timeout_abortfail"]
+    # The abort WAS issued (and raised); the kill hook ran anyway, the stall
+    # was classified and nudged, and the phase ended on IDLE — clean.
+    assert client.aborted_sessions == ["ses_stall_abortfail"]
     assert cell.kill_calls == 1
-    assert stats.killed_reason == "run_timeout"
-    assert stats.exit_code == 1
-    assert stats.turns == 1
+    assert stats.recovery_nudges == 1
+    assert stats.killed_reason is None
+    assert stats.exit_code == 0
 
 
 def test_serve_drive_send_error_returns_exit1_no_raise(tmp_path: Path) -> None:

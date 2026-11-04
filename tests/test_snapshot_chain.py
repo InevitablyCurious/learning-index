@@ -1,7 +1,7 @@
 """WO-LI-SNAPSHOT-CHAIN: end-of-run snapshot chaining for exhausted seeded cells.
 
-The contract under test: a DEV-MODE seeded cell that reaches the attempt
-ceiling promotes its final attempt's checkpoint tree into a NEW snapshot under
+The contract under test: a DEV-MODE seeded cell that runs out of context
+promotes its final graded attempt's checkpoint tree into a NEW snapshot under
 $BENCH_RUNS_DIR/snapshots/<id>/ with snapshot_depth = seed depth + 1, and
 records that id on ChallengeCellResult.produced_snapshot_id (the run->snapshot
 join key). Promotion is skipped when the exit is harness_error. On the read
@@ -37,14 +37,12 @@ def _make_runner(
     tmp_path: Path,
     *,
     mock: str | None = "scaffold",
-    max_attempts: int = 8,
     **extra: Any,
 ) -> ChallengeRunner:
     return ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="local-llm-proxy/okp-bench-worker",
-        max_attempts=max_attempts,
         mock=mock,
         **extra,
     )
@@ -235,41 +233,6 @@ def test_load_snapshot_defaults_depth_to_one(tmp_path: Path) -> None:
     assert loaded.snapshot_depth == 1
 
 
-# ── WRITE-SIDE CHAIN: ceiling promotes depth+1 with the join key ────────────
-
-
-def test_seeded_cell_at_ceiling_promotes_snapshot_with_depth_and_join_key(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    seed_tree, seeded_src = _seed_tree(tmp_path)
-    monkeypatch.delenv("BENCH_PROXY_CHECKPOINT", raising=False)
-    _patch_fake_real_arm(monkeypatch)
-
-    runner = _make_runner(
-        tmp_path,
-        mock=None,
-        max_attempts=2,
-        seed_snapshot_tree=seed_tree,
-        seed_snapshot_depth=1,
-    )
-    _patch_seeded_attempt(runner, monkeypatch, exit_code=0)
-
-    result = _drive(runner, tmp_path, monkeypatch, _fail_gate)
-
-    assert result.termination_reason == "attempt_ceiling_reached"
-    dirs = _snapshot_dirs(tmp_path)
-    assert len(dirs) == 1, f"expected exactly one promoted snapshot, got {dirs}"
-    payload = _read_snapshot(tmp_path)
-    assert payload["snapshot_depth"] == 2
-    assert (dirs[0] / "tree").is_dir()
-    # The run->snapshot join key names the promoted snapshot directory.
-    assert result.produced_snapshot_id == dirs[0].name
-    # Sanity: the seeded tree content was carried into the promoted tree.
-    assert (dirs[0] / "tree" / "src" / "game.ts").read_text(
-        encoding="utf-8"
-    ) == seeded_src
-
-
 # ── HARNESS ERROR: no checkpoint, no promotion ──────────────────────────────
 
 
@@ -283,7 +246,6 @@ def test_seeded_cell_harness_error_produces_no_snapshot(
     runner = _make_runner(
         tmp_path,
         mock=None,
-        max_attempts=2,
         seed_snapshot_tree=seed_tree,
         seed_snapshot_depth=1,
     )
@@ -313,7 +275,6 @@ def test_seeded_cell_out_of_room_promotes_its_last_graded_round(
     runner = _make_runner(
         tmp_path,
         mock=None,
-        max_attempts=3,
         seed_snapshot_tree=seed_tree,
         seed_snapshot_depth=1,
     )

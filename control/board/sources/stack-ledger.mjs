@@ -23,9 +23,6 @@ export function describe() {
   return "cross-run cumulative stack — the longitudinal series behind the transfer curve";
 }
 
-/** Phases per cell: 1 build + 4 grades (= max_attempts 5). Chunks are internal to phase 1. */
-const PHASES_PER_CELL = 5;
-
 export async function read(ctx) {
   const runs = await collectRuns(ctx.runsRoot);
   if (!runs.length) {
@@ -68,7 +65,7 @@ export async function read(ctx) {
       org_id: c.org_id,
       created_at: c.created_at,
 
-      phases: { done: c.phases_done, total: PHASES_PER_CELL },
+      phases: { done: c.phases_done, total: null },
       chunk: c.chunk,
 
       // Efficiency — never combined with correctness.
@@ -155,7 +152,7 @@ export async function read(ctx) {
           "denominator is the count of distinct gates ever observed failing in this stack. " +
           "the harness publishes failed gates only — no suite total exists on disk.",
         state: stackState(baseline, on),
-        phases_per_cell: PHASES_PER_CELL,
+        phases_per_cell: null,
       },
     },
   };
@@ -337,7 +334,7 @@ function cellsInRun(run) {
       model: str(s.provider_pin) ?? str(s.model) ?? str(sess?.model),
 
       // Phases from attempt records; no record = 0 phases, a real measurement.
-      phases_done: meas ? Math.min(attempts.length, PHASES_PER_CELL) : 0,
+      phases_done: meas ? attempts.length : 0,
       chunk: { current: null, total: 6 },
 
       turns: meas?.turns ?? null,

@@ -58,14 +58,12 @@ def _make_runner(
     tmp_path: Path,
     *,
     mock: str | None = "scaffold",
-    max_attempts: int = 8,
     **extra: Any,
 ) -> ChallengeRunner:
     return ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="local-llm-proxy/okp-bench-worker",
-        max_attempts=max_attempts,
         mock=mock,
         **extra,
     )
@@ -220,8 +218,53 @@ def test_forced_capture_failure_writes_nothing_and_one_notice(
 def test_no_snapshot_beyond_attempt_one(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Attempt 1 is the corpus fact; later attempts are repair, not capture."""
-    runner = _make_runner(tmp_path, mock="scaffold", max_attempts=2)
+    """Attempt 1 is the corpus fact; later attempts are repair, not capture.
+
+    Mock mode now grades once and ends (WO-LI-SM-2-CAPS-FIX), so the multi-
+    attempt premise this test used to lean on no longer exists there. The
+    property is unchanged — a multi-attempt run captures exactly one snapshot,
+    at attempt 1 — and now lives on the real arm, where repair rounds happen.
+    """
+    monkeypatch.delenv("BENCH_PROXY_CHECKPOINT", raising=False)
+    _patch_fake_real_arm(monkeypatch)
+
+    runner = _make_runner(tmp_path, mock=None)
+    monkeypatch.setattr(
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["BUILD PROMPT"]
+    )
+
+    def _fake_chunked(**kwargs: Any) -> _OpencodeRunStats:
+        # A clean one-chunk build: the transport reached idle on its chunk.
+        return _OpencodeRunStats(
+            input_tokens=1,
+            output_tokens=1,
+            reasoning_tokens=0,
+            turns=1,
+            session_id="ses_fresh_cell",
+            killed_reason=None,
+            exit_code=0,
+            cost_usd=0.0,
+            chunk_reports=({"chunk": 1, "exit_code": 0},),
+        )
+
+    monkeypatch.setattr(runner, "_run_opencode_serve_chunked", _fake_chunked)
+
+    def _fake_attempt(**kwargs: Any) -> _OpencodeRunStats:
+        # The first repair round resolves cleanly: no overflow, no kill, so the
+        # loop proceeds to a second grade.
+        return _OpencodeRunStats(
+            input_tokens=1,
+            output_tokens=1,
+            reasoning_tokens=0,
+            turns=1,
+            session_id="ses_fresh_cell",
+            killed_reason=None,
+            exit_code=0,
+            cost_usd=0.0,
+        )
+
+    monkeypatch.setattr(runner, "_run_cell_attempt", _fake_attempt)
+
     calls = {"count": 0}
 
     def _gate(**kwargs: Any) -> dict[str, Any]:
@@ -230,8 +273,8 @@ def test_no_snapshot_beyond_attempt_one(
             return {
                 "verdict": "FAIL",
                 "conformed": True,
-                "problems": [{"check": "[G02] REQ-PIP — pip count"}],
-                "failed_gates": ["[G02] REQ-PIP — pip count"],
+                "problems": [{"check": SEEDED_CHECK}],
+                "failed_gates": [SEEDED_CHECK],
                 "gate_results": [],
                 "gate_totals": {},
             }
@@ -244,26 +287,71 @@ def test_no_snapshot_beyond_attempt_one(
     assert len(_snapshot_dirs(tmp_path)) == 1
 
 
-def test_fresh_cell_stuck_at_the_ceiling_also_leaves_its_end(
+def test_fresh_cell_out_of_context_also_leaves_its_end(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A fresh cell that never passes leaves its build AND its end: continuous
-    mode's first run is fresh, and the next run chains from where it got to."""
-    runner = _make_runner(tmp_path, mock="scaffold", max_attempts=2)
+    mode's first run is fresh, and the next run chains from where it got to.
+
+    ENDING: the feedback drive reports a context overflow — the one surviving
+    end-of-run snapshot producer (a cell with no room left cannot continue, so
+    the round it was graded on is promoted). A fresh cell's build is depth 1,
+    so its end is depth 2.
+    """
+    monkeypatch.delenv("BENCH_PROXY_CHECKPOINT", raising=False)
+    _patch_fake_real_arm(monkeypatch)
+
+    runner = _make_runner(tmp_path, mock=None)
+    monkeypatch.setattr(
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["BUILD PROMPT"]
+    )
+
+    def _fake_chunked(**kwargs: Any) -> _OpencodeRunStats:
+        # A clean one-chunk build: the transport reached idle on its chunk.
+        return _OpencodeRunStats(
+            input_tokens=1,
+            output_tokens=1,
+            reasoning_tokens=0,
+            turns=1,
+            session_id="ses_fresh_cell",
+            killed_reason=None,
+            exit_code=0,
+            cost_usd=0.0,
+            chunk_reports=({"chunk": 1, "exit_code": 0},),
+        )
+
+    monkeypatch.setattr(runner, "_run_opencode_serve_chunked", _fake_chunked)
+
+    def _out_of_room(**kwargs: Any) -> _OpencodeRunStats:
+        # The first repair round overflows: too large to compact, so the cell
+        # ends on the round it was graded on.
+        return _OpencodeRunStats(
+            input_tokens=1,
+            output_tokens=1,
+            reasoning_tokens=0,
+            turns=1,
+            session_id="ses_fresh_cell",
+            killed_reason=None,
+            exit_code=0,
+            cost_usd=0.0,
+            context_exhausted=True,
+        )
+
+    monkeypatch.setattr(runner, "_run_cell_attempt", _out_of_room)
 
     def _gate(**kwargs: Any) -> dict[str, Any]:
         return {
             "verdict": "FAIL",
             "conformed": True,
-            "problems": [{"check": "[G02] REQ-PIP — pip count"}],
-            "failed_gates": ["[G02] REQ-PIP — pip count"],
+            "problems": [{"check": SEEDED_CHECK}],
+            "failed_gates": [SEEDED_CHECK],
             "gate_results": [],
             "gate_totals": {},
         }
 
     result = _drive(runner, tmp_path, monkeypatch, _gate)
 
-    assert result.termination_reason == "attempt_ceiling_reached"
+    assert result.termination_reason == "context_exhausted"
     depths = {
         d.name: json.loads((d / "snapshot.json").read_text(encoding="utf-8")).get(
             "snapshot_depth"
@@ -442,7 +530,6 @@ def test_seeded_cell_skips_build_and_reaches_first_feedback_round(
     runner = _make_runner(
         tmp_path,
         mock=None,
-        max_attempts=3,
         seed_snapshot_tree=seed_tree,
     )
     monkeypatch.setattr(
@@ -540,7 +627,6 @@ def test_seeded_cell_with_drifted_source_commit_emits_notice_and_skips_build(
     runner = _make_runner(
         tmp_path,
         mock=None,
-        max_attempts=3,
         seed_snapshot_tree=seed_tree,
         seed_snapshot_drift=[
             {
@@ -692,8 +778,6 @@ def _make_seeded_cache_runner(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     snap_dir: Path,
-    *,
-    max_attempts: int = 3,
 ) -> tuple[ChallengeRunner, list[str], list[dict[str, Any]]]:
     """Hermetic seeded real-arm runner; returns (runner, graded paths, phases).
 
@@ -706,7 +790,6 @@ def _make_seeded_cache_runner(
     runner = _make_runner(
         tmp_path,
         mock=None,
-        max_attempts=max_attempts,
         seed_snapshot_tree=snap_dir / "tree",
     )
     runner._live = LiveStream(tmp_path / "live.jsonl", run_id="lbl")
@@ -896,3 +979,52 @@ def test_same_millisecond_distinct_run_identities_never_collide(
         assert (snap / "tree" / "package.json").is_file()
         payload = json.loads((snap / "snapshot.json").read_text(encoding="utf-8"))
         assert payload["snapshot_id"] == snap.name
+
+
+# ── MOCK MODE MUST TERMINATE AFTER ONE GRADE ────────────────────────────────
+#
+# WO-LI-SM-2-CAPS removed the attempt ceiling and the run-time budget, so the
+# attempt loop is now `itertools.count(1)` — unbounded by construction. In real
+# runs the loop converges because feedback can change the tree; in mock mode it
+# copies a FIXED tree and never drives a model, so the round ceiling was that
+# mode's only exit. The lone exit left is the gates_green PASS break: any other
+# grade has to end the cell itself, or the same tree is re-graded forever.
+
+
+def test_mock_failing_grade_terminates_after_one_attempt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A mock-mode cell grades the fixed tree exactly once and must then end —
+    pass or fail — instead of looping. This guards the WO-LI-SM-2-CAPS
+    regression: with the attempt ceiling removed, mock mode's only exit was the
+    gates_green break, so a FAIL grade looped forever re-grading the same tree.
+
+    Fail-fast: the gate stub counts its calls and raises on the second, so a
+    regression (the loop re-grading instead of terminating) fails in
+    milliseconds rather than spinning into pytest's 60s --timeout.
+    """
+    runner = _make_runner(tmp_path, mock="scaffold")
+
+    calls: list[int] = []
+
+    def _gate(**kwargs: Any) -> dict[str, Any]:
+        calls.append(1)
+        if len(calls) > 1:
+            raise AssertionError(
+                "mock FAIL grade was attempted more than once — the run looped "
+                "instead of terminating after a single grade (regression)"
+            )
+        return {
+            "verdict": "FAIL",
+            "conformed": True,
+            "gate_results": [],
+            "gate_totals": {},
+            "failed_gates": [],
+        }
+
+    result = _drive(runner, tmp_path, monkeypatch, _gate)
+
+    assert result.verdict == "FAIL"
+    assert result.termination_reason == "gates_failed"
+    assert result.attempts_to_green == "FAIL"
+    assert len(result.attempt_reports) == 1

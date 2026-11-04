@@ -210,7 +210,6 @@ class RunConfig:
     tau: float = 0.68  # relevance floor on COMBINED score (ratified). Sent as relevance_floor on the wire.
     rng_seed: int = 20260709  # FIXED — the live D-9.4 sampler seeds from wall-clock; pin it or Recall@k>1 wobbles.
     surface_budget: int = 3  # prod surface budget / max-k
-    max_attempts: int = 5  # max solve attempts per task
     deterministic_topn: bool = True  # client-side reproducible top-N by combined_score
     deterministic_recall_limit: int = (
         64  # wire limit when deterministic_topn (hub returns full candidate set)
@@ -260,7 +259,7 @@ class RunConfig:
             "tau": self.tau,
             "rng_seed": self.rng_seed,
             "surface_budget": self.surface_budget,
-            "max_attempts": self.max_attempts,
+            "max_attempts": None,  # unbounded by construction (WO-LI-SM-2-CAPS: no round cap)
             "deterministic_topn": self.deterministic_topn,
             "deterministic_recall_limit": self.deterministic_recall_limit,
             "run_label": self.run_label,

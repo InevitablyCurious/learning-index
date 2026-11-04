@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // LEARNING SOURCE — the pure folds behind the matrix + master validation
 //
-//     cd bench/dashboard && node --test learning.test.mjs
+//     cd Learning-Index && node --test control/board/learning.test.mjs
 //
 // Zero dependencies, stock `node --test`. These pin the pure functions the
 // source builds on; the file walk and the JSON-lines reads are exercised
@@ -15,8 +15,9 @@
 //     exists to prevent.
 //  2. PASS AND FAIL BOTH LAND IN THE MATRIX. Unlike the status stream (which
 //     carries failures only), the learning matrix draws a gate that passed.
-//  3. THE ATTEMPT AXIS IS FIVE (1 build + 4 repair), never ten — the design
-//     comp's 10-attempt grid was reconciled to the harness's max_attempts.
+//  3. THE ATTEMPT AXIS IS THE OBSERVED COUNT, never a fixed number. There is no
+//     maximum round: a cell with N rounds yields N columns, and a seventh round
+//     is its own column rather than truncated or padded to some configured width.
 //  4. A NULL CELL IS "not yet run", DISTINCT from a measured fail — three kinds
 //     of nothing stay separate (contract rule 1).
 //  5. validateMaster mirrors the plugin's three checks: duplicate slugs,
@@ -30,17 +31,11 @@ import {
   validateMaster,
   normalizeLabel,
   CAPTURE_STATES,
-  PHASES_PER_CELL,
 } from "./sources/learning.mjs";
-import { MAX_ATTEMPTS, emptyBoard } from "./contract.mjs";
+import { emptyBoard } from "./contract.mjs";
 
-test("the attempt axis is five: 1 build + 4 repair", () => {
-  assert.equal(PHASES_PER_CELL, 5);
-});
-
-test("the board frame carries max_attempts for the screenshot tabs", () => {
-  assert.equal(MAX_ATTEMPTS, 5);
-  assert.equal(emptyBoard().max_attempts, 5);
+test("the board frame carries no maximum: max_attempts is unbounded (null)", () => {
+  assert.equal(emptyBoard().max_attempts, null);
 });
 
 test("the four capture states are the design's four", () => {
@@ -75,17 +70,19 @@ test("buildMatrix joins roster rows with per-attempt outcomes, pass AND fail", (
   const m = buildMatrix(roster, outcomes);
 
   assert.equal(m.total, 3);
-  assert.equal(m.attempts, 5);
+  // The axis is the highest round ANY gate was graded on — here 2, not a constant.
+  assert.equal(m.attempts, 2);
   assert.equal(m.by_phase.conformance, 1);
   assert.equal(m.by_phase.backend, 2);
 
   const conf = m.gates.find((g) => g.id === "CONF");
-  assert.deepEqual(conf.outcomes, ["fail", "pass", null, null, null]);
+  assert.deepEqual(conf.outcomes, ["fail", "pass"]);
 
   const g01 = m.gates.find((g) => g.id === "G01");
-  assert.deepEqual(g01.outcomes, ["pass", null, null, null, null]);
+  assert.deepEqual(g01.outcomes, ["pass", null]);
 
   assert.equal(m.counts.outcomes_read, 5);
+  assert.equal(m.counts.newest_attempt, 2);
   assert.equal(m.counts.passing_total, 2);
 });
 
@@ -95,7 +92,8 @@ test("no roster → no denominator, but the matrix still builds from outcomes", 
   ]);
   assert.equal(m.total, null);
   assert.equal(m.gates.length, 1);
-  assert.deepEqual(m.gates[0].outcomes, ["fail", null, null, null, null]);
+  assert.equal(m.attempts, 1);
+  assert.deepEqual(m.gates[0].outcomes, ["fail"]);
 });
 
 test("a missing outcome is null — 'not yet run', never a fabricated fail", () => {
@@ -103,8 +101,50 @@ test("a missing outcome is null — 'not yet run', never a fabricated fail", () 
     { total: 1, gates: [{ id: "G01", phase: "backend", title: "x" }] },
     [],
   );
-  assert.deepEqual(m.gates[0].outcomes, [null, null, null, null, null]);
+  // Nothing graded → no columns at all; the absent round is never invented.
+  assert.deepEqual(m.gates[0].outcomes, []);
+  assert.equal(m.attempts, null);
   assert.equal(m.counts.outcomes_read, 0);
+  assert.equal(m.counts.newest_attempt, null);
+
+  // A gap INSIDE the observed axis is null: round 1 unobserved, round 2 measured.
+  const gap = buildMatrix(
+    { total: 1, gates: [{ id: "G01", phase: "backend", title: "x" }] },
+    [{ gate_id: "G01", attempt: 2, predicate_outcome: "pass" }],
+  );
+  assert.deepEqual(gap.gates[0].outcomes, [null, "pass"]);
+  assert.equal(gap.counts.outcomes_read, 1); // the unrun round is not a tested row
+  assert.equal(gap.counts.newest_attempt, 2);
+});
+
+test("a seventh round is kept — the axis is the observed count, never a maximum", () => {
+  const roster = {
+    total: 1,
+    gates: [{ id: "G01", phase: "backend", title: "bar re-entry" }],
+  };
+  const outcomes = [
+    { gate_id: "G01", attempt: 1, predicate_outcome: "fail" },
+    { gate_id: "G01", attempt: 2, predicate_outcome: "fail" },
+    { gate_id: "G01", attempt: 3, predicate_outcome: "fail" },
+    { gate_id: "G01", attempt: 4, predicate_outcome: "fail" },
+    { gate_id: "G01", attempt: 5, predicate_outcome: "fail" },
+    { gate_id: "G01", attempt: 6, predicate_outcome: "fail" },
+    { gate_id: "G01", attempt: 7, predicate_outcome: "pass" },
+  ];
+
+  const m = buildMatrix(roster, outcomes);
+  const g = m.gates[0];
+
+  assert.equal(m.attempts, 7);
+  assert.equal(g.outcomes.length, 7);
+  // Round 7 lands in the LAST slot: not truncated at 5, not padded past 7.
+  assert.equal(g.outcomes[6], "pass");
+  assert.equal(g.outcomes[g.outcomes.length - 1], "pass");
+  assert.deepEqual(g.outcomes, ["fail", "fail", "fail", "fail", "fail", "fail", "pass"]);
+  assert.equal(m.counts.newest_attempt, 7);
+  assert.equal(m.counts.outcomes_read, 7);
+  assert.equal(m.counts.passing_total, 1);
+  assert.equal(m.counts.passing_at_newest, 1);
 });
 
 test("validateMaster passes a clean master and flags all three defect classes", () => {

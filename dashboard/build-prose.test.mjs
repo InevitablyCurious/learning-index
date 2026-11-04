@@ -80,3 +80,17 @@ test("empty states are stated, never another tab's prompt", () => {
 test("a message without an attempt number takes its place in order", () => {
   assert.equal(promptForTab([{ kind: "feedback", text: "a" }, { kind: "feedback", text: "b" }], "2", { completed: 3, max: 5 }).text, "b");
 });
+
+// `max` is the OBSERVED latest round, not a configured cap: there is no round
+// count the board stops at. So a cell that ran seven rounds treats round 7 — and
+// only round 7 — as the terminal one, and round 5's grading still produced a prompt.
+test("seven rounds are read as seven rounds — round 5 is not the last one", () => {
+  const msgs = [M(6, "x")];
+  assert.equal(
+    promptForTab(msgs, "5", { completed: 7, max: 7 }).text,
+    "x",
+    "round 5's grading produced the prompt into round 6",
+  );
+  assert.match(promptForTab(msgs, "7", { completed: 7, max: 7 }).empty, /last attempt/);
+  assert.match(promptForTab(msgs, "6", { completed: 7, max: 7 }).empty, /nothing was reported/);
+});

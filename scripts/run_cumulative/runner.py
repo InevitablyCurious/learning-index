@@ -134,14 +134,10 @@ class _SessionRunState:
         self.last_session_id = last_session_id
 
 
-def _resolve_positive_int_env(
-    name: str,
-    *,
-    optional: bool,
-) -> tuple[int | None, str]:
+def _resolve_positive_int_env(name: str) -> tuple[int | None, str]:
     raw = os.environ.get(name, "").strip()
     if not raw:
-        return (None if optional else config.RunConfig().max_attempts), "default"
+        return None, "default"
     try:
         value = int(raw)
     except ValueError as exc:
@@ -236,19 +232,8 @@ class RealSessionRunner:
         if not self._task_dir.is_dir():
             raise RuntimeError(f"challenge directory missing: {self._task_dir}")
 
-        self._max_attempts, self._max_attempts_source = _resolve_positive_int_env(
-            "BENCH_MAX_ATTEMPTS",
-            optional=False,
-        )
         self._max_steps_per_attempt, self._max_steps_per_attempt_source = (
-            _resolve_positive_int_env(
-                "BENCH_MAX_STEPS_PER_ATTEMPT",
-                optional=True,
-            )
-        )
-        self._run_timeout_s, self._run_timeout_s_source = _resolve_positive_int_env(
-            "BENCH_RUN_TIMEOUT_S",
-            optional=True,
+            _resolve_positive_int_env("BENCH_MAX_STEPS_PER_ATTEMPT")
         )
         self._spend_meter = SpendMeter(resolve_spend_db_dsn())
         self._session_states: dict[int, _SessionRunState] = {}
@@ -287,25 +272,12 @@ class RealSessionRunner:
     def _progress(self, message: str) -> None:
         _LOG.info("run_cumulative.progress %s", message)
 
-    @staticmethod
-    def _wall_near_timeout(wall_seconds: Any, run_timeout_s: int | None) -> bool:
-        if run_timeout_s is None:
-            return False
-        try:
-            return float(wall_seconds) >= 0.98 * float(run_timeout_s)
-        except (TypeError, ValueError):
-            return False
-
     def _populate_contention_covariates(self, result: Any) -> None:
         from harness.contention import ContentionCovariates
 
         retry_count = int(getattr(result, "zero_tool_resumes", 0) or 0)
         wall_seconds_raw = getattr(result, "wall_seconds", None)
         wall_seconds = float(wall_seconds_raw) if wall_seconds_raw is not None else None
-        wall_near_timeout = self._wall_near_timeout(
-            wall_seconds,
-            getattr(self, "_run_timeout_s", None),
-        )
         spend_meter = getattr(self, "_spend_meter", None)
         if spend_meter is None:
             spend_meter = SpendMeter(resolve_spend_db_dsn())
@@ -316,7 +288,6 @@ class RealSessionRunner:
                 getattr(result, "session_id", None),
                 retry_count=retry_count,
                 wall_seconds=wall_seconds,
-                wall_near_timeout=wall_near_timeout,
             )
         except (
             Exception
@@ -332,7 +303,6 @@ class RealSessionRunner:
             contention = ContentionCovariates.empty(
                 retry_count=retry_count,
                 wall_seconds=wall_seconds,
-                wall_near_timeout=wall_near_timeout,
             )
 
         result.contention = contention
@@ -662,7 +632,7 @@ class RealSessionRunner:
             # WO-TRUNC-1: the terminal outcome is now recorded, not placeholder-
             # null. True = the cell resolved (verdict PASS); False = every other
             # ending. terminal_reason carries the machine reason so a scorecard
-            # can tell "the model failed" (attempt_ceiling_reached) from "the
+            # can tell "the model failed" (a non-green verdict) from "the
             # stream died" (transport_incomplete / harness_error).
             "terminal_outcome": verdict_str == "PASS",
             "terminal_reason": str(getattr(result, "termination_reason", "") or ""),
@@ -1051,10 +1021,7 @@ class RealSessionRunner:
             session.run_id = state.run_label
 
         max_steps_per_attempt = getattr(self, "_max_steps_per_attempt", None)
-        run_timeout_s = getattr(self, "_run_timeout_s", None)
-        max_attempts_source = getattr(self, "_max_attempts_source", "default")
         max_steps_source = getattr(self, "_max_steps_per_attempt_source", "default")
-        run_timeout_source = getattr(self, "_run_timeout_s_source", "default")
 
         # WO-BENCH-WORKER-SANDBOX-HARDENING: the worker-facing model URL is
         # ALWAYS the cell's egress sidecar — the cell sits on an --internal
@@ -1115,7 +1082,6 @@ class RealSessionRunner:
             # identification. self._org_id is the authoritative source here —
             # same seam the per-cell status record's org_id uses.
             "org_id": str(getattr(self, "_org_id", None) or ""),
-            "max_attempts": self._max_attempts,
             "proxy_base_url": worker_proxy_base_url,
             "proxy_token": self._proxy_token,
             "logger": _LOG,
@@ -1156,18 +1122,12 @@ class RealSessionRunner:
             runner_kwargs["seed_snapshot_depth"] = seed_snapshot.snapshot_depth
         if max_steps_per_attempt is not None:
             runner_kwargs["max_steps_per_attempt"] = max_steps_per_attempt
-        if run_timeout_s is not None:
-            runner_kwargs["run_timeout_s"] = run_timeout_s
 
         _LOG.info(
-            "run_cumulative.pacing max_attempts=%s max_steps_per_attempt=%s run_timeout_s=%s "
-            "max_attempts_source=%s max_steps_per_attempt_source=%s run_timeout_s_source=%s",
-            self._max_attempts,
+            "run_cumulative.pacing max_steps_per_attempt=%s "
+            "max_steps_per_attempt_source=%s",
             max_steps_per_attempt,
-            run_timeout_s,
-            max_attempts_source,
             max_steps_source,
-            run_timeout_source,
         )
 
         runner = self._runner_cls(

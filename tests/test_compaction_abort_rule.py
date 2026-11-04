@@ -69,10 +69,11 @@ def test_fires_at_the_second_troubleshoot_compaction_before_a_grade(
     """Two compactions in one repair round end the cell as COMPACTIONS_BEFORE_GRADE.
 
     The build completes without a single compaction, grade 1 is a gradable FAIL,
-    and the ``feedback-1`` drive compacts twice before it returns. ``max_attempts=4``
-    so the abort — not the attempt ceiling — is what ends the cell.
+    and the ``feedback-1`` drive compacts twice before it returns. The ENDING is
+    the second compaction itself — the cell's legitimate abort — so nothing
+    bounds the round count.
     """
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=4)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *args, **kwargs: ["CHUNK ONE"]
@@ -112,17 +113,37 @@ def test_build_compactions_never_trigger_the_abort(
     simulating a build that compacted heavily per chunk — and the runner ignores
     it: the build never passes a watermark, so the cell's terminal is decided by
     the FEEDBACK drive alone. ``feedback-1`` compacts exactly ONCE (healthy:
-    recovery), so with ``max_attempts=2`` the cell runs to its attempt ceiling
-    instead of aborting.
+    recovery), and the cell ends the only way an uncapped loop can end normally:
+    the gate PASSES on the next grade (``gates_green``).
     """
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=2)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner,
         "_load_chunk_prompts",
         lambda *args, **kwargs: ["CHUNK ONE", "CHUNK TWO", "CHUNK THREE"],
     )
-    monkeypatch.setattr(runner, "_run_gate_report", _always_fail_gate)
+
+    grades = {"count": 0}
+
+    def _fail_once_then_pass(**kwargs: Any) -> dict[str, Any]:
+        """FAIL once, then PASS — a bounded gate, never a bounded round count."""
+        grades["count"] += 1
+        if grades["count"] == 1:
+            return {
+                "verdict": "FAIL",
+                "conformed": True,
+                "problems": [{"check": REAL_CHECK}],
+                "failed_gates": [REAL_CHECK],
+            }
+        return {
+            "verdict": "PASS",
+            "conformed": True,
+            "problems": [],
+            "failed_gates": [],
+        }
+
+    monkeypatch.setattr(runner, "_run_gate_report", _fail_once_then_pass)
 
     def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:
         phase = str(kwargs.get("phase") or "")
@@ -150,9 +171,11 @@ def test_build_compactions_never_trigger_the_abort(
         task_id="backgammon",
     )
 
+    # The abort did NOT fire: the cell ended by passing its gate — the
+    # legitimate ending, since nothing caps the round count any more.
     assert result.termination_reason != COMPACTIONS_BEFORE_GRADE
-    assert result.termination_reason == "attempt_ceiling_reached"
-    assert result.verdict == "FAIL"
+    assert result.termination_reason == "gates_green"
+    assert result.verdict == "PASS"
 
 
 def test_the_count_resets_at_each_grade(
@@ -163,16 +186,36 @@ def test_the_count_resets_at_each_grade(
 
     The watermark is re-captured at every grade and the count is per-drive, so
     ``feedback-1``'s single compaction is behind round 2's waterline. Two rounds
-    that each compact once are two recoveries, not a stuck session — with
-    ``max_attempts=3`` and a gate that always FAILs, the cell runs to its attempt
-    ceiling.
+    that each compact once are two recoveries, not a stuck session — the gate
+    FAILs twice and then PASSes, so the cell ends ``gates_green`` (a legitimate
+    ending) rather than on a round count.
     """
-    runner = _make_runner(tmp_path, cost_limit_usd=None, max_attempts=3)
+    runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *args, **kwargs: ["CHUNK ONE"]
     )
-    monkeypatch.setattr(runner, "_run_gate_report", _always_fail_gate)
+
+    grades = {"count": 0}
+
+    def _fail_twice_then_pass(**kwargs: Any) -> dict[str, Any]:
+        """FAIL twice, then PASS — a bounded gate, never a bounded round count."""
+        grades["count"] += 1
+        if grades["count"] <= 2:
+            return {
+                "verdict": "FAIL",
+                "conformed": True,
+                "problems": [{"check": REAL_CHECK}],
+                "failed_gates": [REAL_CHECK],
+            }
+        return {
+            "verdict": "PASS",
+            "conformed": True,
+            "problems": [],
+            "failed_gates": [],
+        }
+
+    monkeypatch.setattr(runner, "_run_gate_report", _fail_twice_then_pass)
 
     compacted_phases: list[str] = []
 
@@ -200,7 +243,9 @@ def test_the_count_resets_at_each_grade(
     # have aborted this cell at the second round.
     assert compacted_phases == ["feedback-1", "feedback-2"]
     assert result.termination_reason != COMPACTIONS_BEFORE_GRADE
-    assert result.termination_reason == "attempt_ceiling_reached"
+    # The ending: the gate PASSED on round 3, the only normal way an uncapped
+    # loop stops.
+    assert result.termination_reason == "gates_green"
 
 
 def test_a_live_stream_notice_is_emitted_when_the_rule_fires(
@@ -221,7 +266,6 @@ def test_a_live_stream_notice_is_emitted_when_the_rule_fires(
     runner = _make_runner(
         tmp_path,
         cost_limit_usd=None,
-        max_attempts=4,
         progress=progress_lines.append,
     )
     runner._live = LiveStream.for_run(run_dir, run_id="notice-cell")

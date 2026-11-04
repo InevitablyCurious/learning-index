@@ -6,12 +6,18 @@ node server boots. They assert the loop-level contract:
 
   (a) the round pause happens AFTER the told lines are written and BEFORE the
       next drive;
-  (b) one pause per graded pass, plus exactly one final pause — and no round
-      pause on the final graded attempt;
+  (b) one round pause per non-final graded pass, plus exactly ONE final pause
+      when the cell ends — for ANY reason (a pass, a context overflow, the
+      two-compaction abort, or an operator stop);
   (c) with the flag off there is no hold and no waiting;
   (d) wall_seconds excludes paused time and paused_seconds is recorded;
-  (e) a KeyboardInterrupt during a round pause ends the cell as stopped and
-      cleans up.
+  (e) a KeyboardInterrupt during a round pause ends the cell as stopped, and the
+      hand-stopped cell gets no second (final) pause on its way out.
+
+NO ROUND MAXIMUM EXISTS: the loop is unbounded, so every test here ends on a
+named legitimate ending — a gate that passes after an OBSERVED number of
+failures, a context/compaction terminal, or the operator's stop. A round count
+is always observed, never declared.
 """
 
 from __future__ import annotations
@@ -39,7 +45,6 @@ REAL_PASS1 = "[G01] REQ-INIT — initial position"
 def _make_runner(
     tmp_path: Path,
     *,
-    max_attempts: int = 4,
     pause_after_grade: bool = True,
     mock: str | None = None,
     progress: Any = None,
@@ -48,7 +53,6 @@ def _make_runner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="local-llm-proxy/okp-bench-worker",
-        max_attempts=max_attempts,
         mock=mock,
         progress=progress,
         pause_after_grade=pause_after_grade,
@@ -151,13 +155,18 @@ def _patch_fake_docker(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(challenge_mod, "ServeClient", _FakeServeClient)
 
 
-def _gate_sequence(max_attempts: int):
-    """A gate that FAILs the first max_attempts-1 times, then PASSes."""
+def _gate_sequence(fail_count: int):
+    """A gate that FAILs ``fail_count`` times, then PASSes.
+
+    An OBSERVED count, never a maximum: there is no attempt ceiling, so the
+    round the cell passes on is whatever number of failures this sequence asked
+    for plus one.
+    """
     calls = {"count": 0}
 
     def _fake_gate(**kwargs: Any) -> dict[str, Any]:
         calls["count"] += 1
-        if calls["count"] >= max_attempts:
+        if calls["count"] > fail_count:
             return {
                 "verdict": "PASS",
                 "conformed": True,
@@ -174,12 +183,12 @@ def _gate_sequence(max_attempts: int):
     return _fake_gate
 
 
-def _drive(runner: ChallengeRunner, monkeypatch: pytest.MonkeyPatch, max_attempts: int):
+def _drive(runner: ChallengeRunner, monkeypatch: pytest.MonkeyPatch, fail_count: int):
     """Wire the fake gate + fake serve drive; return the delivered prompts."""
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
     )
-    monkeypatch.setattr(runner, "_run_gate_report", _gate_sequence(max_attempts))
+    monkeypatch.setattr(runner, "_run_gate_report", _gate_sequence(fail_count))
     delivered: list[str | None] = []
 
     def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:
@@ -195,9 +204,9 @@ def test_round_pause_happens_after_told_lines_and_before_next_drive(
 ) -> None:
     """(a) The round pause fires after the told lines are on disk (user-events
     has the feedback) and before the next drive runs."""
-    runner = _make_runner(tmp_path, max_attempts=3)
+    runner = _make_runner(tmp_path)
     _patch_fake_docker(monkeypatch)
-    delivered = _drive(runner, monkeypatch, max_attempts=3)
+    delivered = _drive(runner, monkeypatch, fail_count=2)
 
     run_dir = tmp_path / "run-a"
     events_path = Path(f"{run_dir}/worktree.user-events.jsonl")
@@ -259,10 +268,12 @@ def test_round_pause_happens_after_told_lines_and_before_next_drive(
 def test_one_pause_per_grade_and_exactly_one_final_pause(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """(b) No round pause on the final graded attempt; exactly one final."""
-    runner = _make_runner(tmp_path, max_attempts=3)
+    """(b) No round pause on the final graded attempt — which is the round that
+    PASSED, an observed round 3 here, not a declared maximum — and exactly one
+    final pause."""
+    runner = _make_runner(tmp_path)
     _patch_fake_docker(monkeypatch)
-    _drive(runner, monkeypatch, max_attempts=3)
+    _drive(runner, monkeypatch, fail_count=2)
 
     pauses: list[tuple[str, int | None]] = []
 
@@ -282,13 +293,74 @@ def test_one_pause_per_grade_and_exactly_one_final_pause(
     assert pauses == [("round", 1), ("round", 2), ("final", 3)]
 
 
+def test_compaction_abort_gets_one_final_pause_and_no_further_round_pause(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(b/2) A cell that ends on the two-compaction abort gets exactly ONE final
+    pause, and no round pause after its last grade.
+
+    ENDING: `compactions_before_grade` — the repair round compacted twice
+    without a grade between, so it was rewriting context instead of fixing and
+    the loop ends the cell there. That is one of the ends the final pause must
+    cover ("one final pause when the cell ends, for ANY reason").
+    """
+    runner = _make_runner(tmp_path)
+    _patch_fake_docker(monkeypatch)
+    # The build is a clean one-chunk drive.
+    monkeypatch.setattr(
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
+    )
+    monkeypatch.setattr(
+        runner,
+        "_run_opencode_serve",
+        lambda **kwargs: _stats(session_id="sess-1", exit_code=0),
+    )
+
+    # The repair drive reports the two compactions the serve loop counted. The
+    # counter itself lives in serve.py; this test asserts the LOOP's mapping:
+    # compaction abort -> break -> exactly one final pause.
+    drive_calls = {"count": 0}
+
+    def _stuck(**kwargs: Any) -> _OpencodeRunStats:
+        drive_calls["count"] += 1
+        assert drive_calls["count"] == 1, (
+            "the cell must end at the compaction abort, not drive another round"
+        )
+        return _stats(session_id="sess-1", exit_code=0, compactions_since_grade=2)
+
+    monkeypatch.setattr(runner, "_run_cell_attempt", _stuck)
+    # Always-FAIL: the loop never reaches a second grade — the abort ends it.
+    monkeypatch.setattr(runner, "_run_gate_report", _gate_sequence(fail_count=1))
+
+    pauses: list[tuple[str, int | None]] = []
+
+    def _fake_pause(**kwargs: Any) -> float:
+        pauses.append((kwargs.get("kind"), kwargs.get("attempt")))
+        return 0.0
+
+    monkeypatch.setattr(runner, "_run_operator_pause", _fake_pause)
+
+    result = runner._run_cell_impl(
+        run_label="compaction-abort",
+        run_dir=tmp_path / "run-abort",
+        task_id="backgammon",
+    )
+
+    assert result.termination_reason == "compactions_before_grade"
+    assert result.verdict == "FAIL"
+    # One round pause for the graded pass that preceded the aborted drive, then
+    # exactly one final pause naming that same (last graded) attempt. Two
+    # finals, or a second round pause, would mean the abort path double-paused.
+    assert pauses == [("round", 1), ("final", 1)]
+
+
 def test_flag_off_means_no_hold_and_no_wait(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """(c) With the flag off the loop never calls the pause — no hold, no wait."""
-    runner = _make_runner(tmp_path, max_attempts=3, pause_after_grade=False)
+    runner = _make_runner(tmp_path, pause_after_grade=False)
     _patch_fake_docker(monkeypatch)
-    _drive(runner, monkeypatch, max_attempts=3)
+    _drive(runner, monkeypatch, fail_count=2)
 
     pause_calls: list[Any] = []
 
@@ -315,9 +387,9 @@ def test_wall_seconds_excludes_paused_time_and_paused_seconds_recorded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """(d) wall_seconds excludes the held time; paused_seconds records it."""
-    runner = _make_runner(tmp_path, max_attempts=2)
+    runner = _make_runner(tmp_path)
     _patch_fake_docker(monkeypatch)
-    _drive(runner, monkeypatch, max_attempts=2)
+    _drive(runner, monkeypatch, fail_count=1)
 
     # 2.5s per pause (one round + one final).
     def _fake_pause(**kwargs: Any) -> float:
@@ -345,12 +417,16 @@ def test_wall_seconds_excludes_paused_time_and_paused_seconds_recorded(
 def test_keyboard_interrupt_during_round_pause_ends_cell_as_stopped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """(e) A KeyboardInterrupt during a round pause surfaces as 'stopped'."""
-    runner = _make_runner(tmp_path, max_attempts=3)
+    """(e) A KeyboardInterrupt during a round pause surfaces as 'stopped', and
+    the hand-stopped cell does NOT double-pause on its way out."""
+    runner = _make_runner(tmp_path)
     _patch_fake_docker(monkeypatch)
-    _drive(runner, monkeypatch, max_attempts=3)
+    _drive(runner, monkeypatch, fail_count=2)
+
+    pauses: list[tuple[str, int | None]] = []
 
     def _interrupt_pause(**kwargs: Any) -> float:
+        pauses.append((kwargs.get("kind"), kwargs.get("attempt")))
         if kwargs.get("kind") == "round":
             raise KeyboardInterrupt
         return 0.0
@@ -367,6 +443,15 @@ def test_keyboard_interrupt_during_round_pause_ends_cell_as_stopped(
             task_id="backgammon",
         )
 
+    # THE HAND STOP IS ONE PAUSE, NOT TWO. The operator's interrupt IS the
+    # cell's ending; the interrupted round pause already covers it, so the final
+    # pause must never fire behind it (the interrupt leaves the cell context
+    # scope instead of resuming into the unconditional teardown that owns it).
+    assert pauses == [("round", 1)], (
+        "a KeyboardInterrupt stop must not add a final pause after the "
+        f"interrupted round pause, got {pauses}"
+    )
+
 
 def test_each_pause_reports_its_own_length_boot_included(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -375,7 +460,7 @@ def test_each_pause_reports_its_own_length_boot_included(
     and its `pause.end` event carries THIS pause's length, not a running total."""
     import harness.adapters.challenge.runner as runner_mod
 
-    runner = _make_runner(tmp_path, max_attempts=3)
+    runner = _make_runner(tmp_path)
     holds = iter([0.15, 0.05])
 
     def _slow_hold(**kwargs: Any) -> None:

@@ -106,15 +106,22 @@ test("an unparseable stated phase falls back rather than blanking the spine", ()
   assert.match(html, /RUNNING/);
 });
 
-test("phaseIndex maps the harness's vocabulary, and refuses what it does not know", () => {
+test("phaseIndex maps the harness's vocabulary onto its true row, with no upper bound", () => {
   assert.equal(phaseIndex("initial"), 1);
   assert.equal(phaseIndex("initial-chunk-6"), 1);
   assert.equal(phaseIndex("feedback-1"), 2);
   assert.equal(phaseIndex("verdict-pass-1"), 2);
+  // Attempt N's feedback/verdict is row N+1.
   assert.equal(phaseIndex("feedback-4"), 5);
-  // Out of range and unknown both yield null so the caller can fall back,
-  // rather than being clamped into a phase that was never reported.
-  assert.equal(phaseIndex("feedback-9"), null);
+  assert.equal(phaseIndex("verdict-pass-4"), 5);
+  // NO CEILING: the spine draws one row per OBSERVED round, so a repair round
+  // past any fixed budget must resolve to its true index. Refusing it would
+  // read as "the producer said nothing" and drop a round that really ran.
+  assert.equal(phaseIndex("feedback-9"), 10);
+  assert.equal(phaseIndex("feedback-12"), 13);
+  assert.equal(phaseIndex("verdict-pass-12"), 13);
+  // Unknown vocabulary still yields null so the caller can fall back, rather
+  // than being clamped into a phase that was never reported.
   assert.equal(phaseIndex("who-knows"), null);
   assert.equal(phaseIndex(null), null);
 });

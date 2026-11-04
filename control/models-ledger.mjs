@@ -233,7 +233,6 @@ function startableModels({ eligible, baselines, cloud, inFlightModels }) {
 // runs are the ON cells in its own campaign, in schedule order — CLI-launched
 // cells included. The OFF cell is the floor itself and is not a run.
 
-const PHASE_TOTAL = 3;
 const ON_ARM = "on";
 
 /** The ON cells against one baseline, oldest first; none without a run_dir. */
@@ -256,7 +255,7 @@ function onRunsFor(baseline, allCells) {
         run_dir: cell.run_dir,
         sequence_index: cell.sequence_index,
         state: cell.state,
-        phases: cell.phases ?? { done: 0, total: PHASE_TOTAL },
+        phases: cell.phases ?? { done: 0, total: null },
         turns: cell.turns,
         tokens: cell.tokens,
         wall_seconds: cell.wall_seconds,

@@ -131,7 +131,6 @@ def _drive(
         prompt="fix these",
         run_label="cell-ctx",
         phase=phase,
-        timeout_s=60.0,
     )
 
 
@@ -223,7 +222,7 @@ def test_the_waiter_never_ends_a_turn_for_a_full_context() -> None:
     The waiter ends on idle, the budget or a stall — never on a token count. A
     session at its threshold compacts and continues, and a turn that cannot be
     compacted ends by itself carrying ``ContextOverflowError``. So a saturated,
-    busy session simply keeps waiting until the budget runs out.
+    busy session simply keeps waiting until the explicit wait deadline expires.
     """
 
     class Busy(ServeClient):
@@ -267,7 +266,7 @@ def _cell(
     from tests.test_challenge_budget_stop import REAL_CHECK, _patch_fake_docker
     from tests.test_challenge_budget_stop import _make_runner as make
 
-    runner = make(tmp_path, max_attempts=5)
+    runner = make(tmp_path)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
         runner, "_load_chunk_prompts", lambda *a, **k: ["CHUNK ONE", "CHUNK TWO"]

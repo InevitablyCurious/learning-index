@@ -15,8 +15,11 @@ from pathlib import Path
 from harness.adapters.challenge import build_chunk_completion, count_stub_sentinels
 
 
-# The live 2026-08-26 build: chunks 1-3 ran clean, chunk 4 hung on a tool call
-# and died `run_timeout`, chunks 5-6 never got a turn.
+# The live 2026-08-26 build: chunks 1-3 ran clean, chunk 4's worker died
+# mid-drive and the build ended there, so chunks 5-6 never got a turn.
+# (The drive has no run-time budget: a chunk ends at idle, on the
+# two-compaction abort, or on a wedge signal — stalled / model-silent /
+# loop-kill / worker-died. `worker_died` is the wedge signal here.)
 INCIDENT = [
     {"chunk": 1, "exit_code": 0, "recovery_nudges": 0},
     {"chunk": 2, "exit_code": 0, "recovery_nudges": 1},
@@ -25,7 +28,7 @@ INCIDENT = [
         "chunk": 4,
         "exit_code": 1,
         "recovery_nudges": 0,
-        "killed_reason": "run_timeout",
+        "killed_reason": "worker_died",
     },
 ]
 
@@ -42,7 +45,7 @@ def test_three_states_are_distinguished() -> None:
         "not_reached",
     ]
     # The culprit is NAMED, not reduced to "exit_code=1".
-    assert rows[3]["reason"] == "run_timeout"
+    assert rows[3]["reason"] == "worker_died"
     # A chunk that never ran carries no reason — it did not fail, it never went.
     assert rows[4]["reason"] is None
 

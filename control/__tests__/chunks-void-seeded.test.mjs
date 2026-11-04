@@ -210,15 +210,15 @@ test("CHUNKS: a cell that never ran a build reports null, never 'all incomplete'
 // `p = r.progress`, but the harness writes both fields as SIBLINGS of
 // `progress`, not inside it. `int(undefined) ?? 0` is always zero, so the
 // `truncated_turns > 0` void condition could never fire — a `terminal_reason`
-// other than `transport_incomplete`/`harness_error` (e.g.
-// `attempt_ceiling_reached`, which alone is NOT void — a model failing every
-// attempt is a real capability result) then folded the cell as scorable no
-// matter how many turns had been truncated.
+// other than `transport_incomplete`/`harness_error` (e.g. `stopped`, which
+// alone is NOT void — a model failing every attempt is a real capability
+// result) then folded the cell as scorable no matter how many turns had been
+// truncated.
 // `unrecoveredAnomalyTurns` defaults to `truncatedTurns` so every existing caller
 // keeps meaning "a genuine instrument anomaly". Pass 0 to write the loop-guard
 // case: turns were anomalous, but the harness recovered every one of them.
 function writeTruncatedRun(root, {
-  terminalReason = "attempt_ceiling_reached",
+  terminalReason = "stopped",
   truncatedTurns = 35,
   unrecoveredAnomalyTurns = undefined,
 } = {}) {
@@ -282,9 +282,13 @@ test("VOID-INSTRUMENT: a LOOPING model is not void — the ledger must agree wit
   }
 });
 
-test("VOID-INSTRUMENT: a clean attempt_ceiling_reached cell (no truncation) is NOT void", async () => {
+test("VOID-INSTRUMENT: a clean non-green cell (no truncation) is NOT void", async () => {
   const root = mkdtempSync(join(tmpdir(), "void-clean-"));
   try {
+    // THE GENERIC RULE: any cell that ended for a reason other than an
+    // instrument fault, with no truncated turns, is NOT void — every ending is
+    // treated alike, none is special-cased and none is capped. `stopped` is a
+    // stand-in for that whole class, not a named exception.
     writeTruncatedRun(root, { truncatedTurns: 0 });
     const cells = await collectCells(root);
     assert.equal(

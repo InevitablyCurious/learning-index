@@ -100,7 +100,7 @@ def test_cap_cutoff_only_cell_is_scored_never_void_instrument(
     _attempt(
         stream,
         full_green=False,
-        terminal_reason="attempt_ceiling_reached",
+        terminal_reason="gates_failed",
         cap_cutoffs=2,
         cap_cutoffs_nudged=2,
         provider_truncations=0,
@@ -133,7 +133,7 @@ def test_provider_truncation_cell_is_void_instrument(tmp_path: Path) -> None:
     _attempt(
         stream,
         full_green=False,
-        terminal_reason="attempt_ceiling_reached",
+        terminal_reason="gates_failed",
         provider_truncations=1,
         cap_cutoffs=0,
     )

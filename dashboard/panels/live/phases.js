@@ -1,28 +1,36 @@
-// PHASE SPINE (1 BUILD + 4 GRADEs) and PROVISIONAL COUNTERS, rendered by the
-// gate wall (panels/wall.js, via the live.js re-export): where the cell is, and
-// what it has spent getting there. Pure: reads no panel state.
+// PHASE SPINE (1 BUILD + one GRADE per OBSERVED round) and PROVISIONAL COUNTERS,
+// rendered by the gate wall (panels/wall.js, via the live.js re-export): where
+// the cell is, and what it has spent getting there. Pure: reads no panel state.
 
 import { esc, nul, tok, dur } from "../../board.js";
 import { odo } from "../tick.js";
 
 // ── THE PHASE SPINE ──
 
-// Same as control/board/contract.mjs PHASES_PER_CELL (config.py max_attempts 5).
-const PHASES_PER_CELL = 5;
-
-const PHASES = [
-  { n: 1, name: "BUILD", label: "initial" },
-  ...Array.from({ length: PHASES_PER_CELL - 1 }, (_, i) => ({
-    n: i + 2,
-    name: "GRADE",
-    label: `verdict-pass-${i + 1}`,
-  })),
-];
+/**
+ * One BUILD row, then one GRADE row per round the cell was OBSERVED in. There is
+ * no maximum: a cell graded seven times gets seven GRADE rows, because the spine
+ * reports what happened rather than drawing a budget nobody measured. `rounds` is
+ * derived (observedRounds), never a constant — 0 draws the BUILD row alone.
+ */
+function phasesFor(rounds) {
+  const grades = Number.isFinite(rounds) && rounds > 0 ? rounds : 0;
+  return [
+    { n: 1, name: "BUILD", label: "initial" },
+    ...Array.from({ length: grades }, (_, i) => ({
+      n: i + 2,
+      name: "GRADE",
+      label: `verdict-pass-${i + 1}`,
+    })),
+  ];
+}
 
 /**
  * Map the harness phase string (initial, initial-chunk-N, feedback-N,
- * verdict-pass-N, optional -zero-tool-resume-M) onto 1..5: attempt N's
- * feedback/verdict is phase N+1.
+ * verdict-pass-N, optional -zero-tool-resume-M) onto its row: attempt N's
+ * feedback/verdict is phase N+1. There is no upper bound — a repair round past
+ * any fixed budget still has a row (it must not be dropped or read as pending),
+ * and an unknown phase is null so the caller can fall back.
  */
 export function phaseIndex(phase) {
   const p = String(phase ?? "").toLowerCase();
@@ -31,7 +39,7 @@ export function phaseIndex(phase) {
   const m = p.match(/^(?:feedback|verdict-pass)-(\d+)/);
   if (!m) return null;
   const idx = Number(m[1]) + 1;
-  return idx >= 1 && idx <= PHASES_PER_CELL ? idx : null;
+  return idx >= 1 ? idx : null;
 }
 
 /** Chunk number out of `initial-chunk-4`. Meaningful in phase 1 ONLY. */
@@ -56,6 +64,23 @@ function activePhase(r, board) {
   return { idx, stated: false };
 }
 
+/**
+ * How many rounds this cell was OBSERVED in — the highest attempt the producer
+ * has spoken about. Three records can carry it: a closed attempt (attempt.end →
+ * live.attempts), an attempt already graded while still in flight (gate results →
+ * live.attempt), and the phase the harness stated (phase.start feedback-N /
+ * verdict-pass-N proves attempt N was reached). 0 means nothing has reported.
+ */
+function observedRounds(board, active, verdicts) {
+  let rounds = 0;
+  for (const n of verdicts.keys()) if (n > rounds) rounds = n;
+  const inFlight = board?.live?.attempt;
+  if (Number.isFinite(inFlight) && inFlight > rounds) rounds = inFlight;
+  // Phase index N+1 is attempt N's grading round.
+  if (active !== null && active - 1 > rounds) rounds = active - 1;
+  return rounds;
+}
+
 export function spine(r, board) {
   const { idx: active, stated } = activePhase(r, board);
   const stopped = r.state === "complete" || r.state === "aborted";
@@ -71,7 +96,7 @@ export function spine(r, board) {
   }
 
   const ended = board?.live?.ended ?? null;
-  return `<div class="spine">${PHASES.map((p) => {
+  return `<div class="spine">${phasesFor(observedRounds(board, active, verdicts)).map((p) => {
     let state =
       active === null ? "pending" : p.n < active ? "done" : p.n === active ? (stopped ? "done" : "running") : "pending";
     // A stopped cell's unfinished phases are stopped or not run, never done.

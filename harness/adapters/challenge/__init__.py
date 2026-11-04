@@ -48,10 +48,8 @@ from .models import (
 # re-exported here so every name stays resolvable as
 # harness.adapters.challenge.<name> -- tests read/monkeypatch them here.
 from .constants import (
-    DEFAULT_ATTEMPT_HARD_CEILING,
     DEFAULT_GATE_TIMEOUT_S,
     DEFAULT_MAX_STEPS_PER_ATTEMPT,
-    DEFAULT_RUN_TIMEOUT_S,
     DEFAULT_TURN_STALL_TIMEOUT_S,
     ERROR_CAP_PER_TYPE,
     PROVIDER_BACKOFF_SCHEDULE_S,

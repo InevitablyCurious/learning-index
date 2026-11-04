@@ -59,7 +59,7 @@ writeFileSync(
     JSON.stringify({ kind: "cell.start", cell_seq: 0, session_id: "ses_archived0000000000" }),
     JSON.stringify({ kind: "phase.start", phase: "initial-chunk-1" }),
     JSON.stringify({ kind: "attempt.end", attempt: 1, verdict: "FAIL", conformed: false, failed: 24 }),
-    JSON.stringify({ kind: "cell.end", verdict: "FAIL", terminal_reason: "attempt_ceiling_reached" }),
+    JSON.stringify({ kind: "cell.end", verdict: "FAIL", terminal_reason: "stopped" }),
   ].join("\n") + "\n",
 );
 

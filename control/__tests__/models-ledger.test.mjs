@@ -131,12 +131,13 @@ test("LEDGER: a VOID baseline counts as NO baseline and re-opens + baseline", as
   rmSync(root, { recursive: true, force: true });
 });
 
-test("LEDGER: attempt_ceiling_reached is a real FAIL, not a void instrument", async () => {
+test("LEDGER: a clean non-green cell is a real result, not a void instrument", async () => {
   // A model that fails every attempt is the bench's most important finding.
-  // Calling it an instrument fault would discard it.
+  // The cell ended cleanly — no truncation, no unrecovered anomaly — so calling
+  // it an instrument fault would discard a capability result.
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", {
-    status: { type: "attempt", sequence_index: 0, verdict: "FAIL", terminal_reason: "attempt_ceiling_reached", progress: { turns: 40 } },
+    status: { type: "attempt", sequence_index: 0, verdict: "FAIL", terminal_reason: "stopped", progress: { turns: 40 } },
   });
   await selectFloor(root, "cumulative", "m-a");
 
@@ -145,6 +146,46 @@ test("LEDGER: attempt_ceiling_reached is a real FAIL, not a void instrument", as
     benchModels: [{ id: "m-a", bench_eligible: true }],
   });
   assert.equal(led.models[0].baseline.scorable, true, "a capability FAIL is a usable floor");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("LEDGER: a 7-round cell keeps round 7 — phases are observed, total is null", async () => {
+  // Phases are unbounded: a cell keeps running attempts until it goes green or
+  // the operator stops it, so `done` is the count the cell actually ran and
+  // `total` is null. A clamp at an assumed ceiling would drop round 7 from the
+  // record and invent a denominator the harness never agreed to.
+  const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
+  writeCampaign(root, "cumulative", [
+    { seq: 0, arm: "off", status: { ...OFF_PASS, sequence_index: 0 } },
+    { seq: 1, arm: "on", status: { type: "attempt", sequence_index: 1, attempt: 1, verdict: "PASS", progress: { turns: 6 } } },
+  ]);
+
+  // Seven distinct graded attempts on the ON cell, in attempt order.
+  const attempts = [JSON.stringify({ ...OFF_PASS, sequence_index: 0 })];
+  for (let a = 1; a <= 7; a += 1) {
+    attempts.push(JSON.stringify({
+      type: "attempt",
+      sequence_index: 1,
+      attempt: a,
+      verdict: a === 7 ? "PASS" : "FAIL",
+      failed_gates: a === 7 ? [] : [`[A${a}] BUILD — gate ${a}`],
+      progress: { turns: 4 + a },
+    }));
+  }
+  writeFileSync(
+    join(root, "cumulative", "manifest.status.jsonl"),
+    `${attempts.join("\n")}\n`,
+  );
+
+  await selectFloor(root, "cumulative", "m-a");
+  const led = await readModelsLedger({
+    runsRoot: root,
+    benchModels: [{ id: "m-a", bench_eligible: true }],
+  });
+  const row = led.baseline_rows.find((b) => b.model === "m-a");
+  assert.equal(row.run_count, 1);
+  assert.equal(row.runs[0].cell.phases.done, 7, "round 7 is kept — the count is what the cell ran");
+  assert.equal(row.runs[0].cell.phases.total, null, "unbounded — no denominator is invented");
   rmSync(root, { recursive: true, force: true });
 });
 

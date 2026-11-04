@@ -54,7 +54,7 @@ def _cell_telemetry() -> dict[str, Any]:
         "total_tokens": 30,
         "wall_seconds": 0.1,
         "wall_cost_usd": 0.0,
-        "termination_reason": "attempt_ceiling_reached",
+        "termination_reason": "gates_failed",
         "failed_gates": ["tests"],
     }
 
@@ -816,7 +816,7 @@ def test_a_looping_model_is_scored_not_voided(tmp_path: Path) -> None:
         truncated_turns=3,
         instrument_anomaly_turns=0,
         unrecovered_anomaly_turns=0,
-        terminal_reason="attempt_ceiling_reached",
+        terminal_reason="gates_failed",
         terminal_outcome=True,
     )
 
@@ -883,7 +883,7 @@ def test_a_recovered_anomaly_is_scored_not_voided(tmp_path: Path) -> None:
         truncated_turns=1,
         instrument_anomaly_turns=1,
         unrecovered_anomaly_turns=0,
-        terminal_reason="attempt_ceiling_reached",
+        terminal_reason="gates_failed",
         terminal_outcome=True,
     )
 

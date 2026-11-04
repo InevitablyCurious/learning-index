@@ -167,7 +167,6 @@ def _make_runner_mode(tmp_path: Path, memory_mode: str) -> ChallengeRunner:
         work_root=tmp_path / "work-root",
         model="local-llm-proxy/qwen3.6-35b-a3b-bench",
         memory_mode=memory_mode,
-        run_timeout_s=30,
         completion_grace_s=2,
         compact=False,
     )

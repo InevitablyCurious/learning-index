@@ -459,7 +459,7 @@ test("BACKEND FEED: a structural record's own facts reach the row", async () => 
     JSON.stringify({ v: 1, ts: 1000, kind: "cell.start", cell_seq: 0, session_id: "ses_a", arm: "off", model: "m-a" }),
     JSON.stringify({ v: 1, ts: 2000, kind: "phase.start", cell_seq: 0, phase: "initial-chunk-3" }),
     JSON.stringify({ v: 1, ts: 3000, kind: "attempt.end", cell_seq: 0, attempt: 2, verdict: "FAIL", conformed: true, failed: 5 }),
-    JSON.stringify({ v: 1, ts: 4000, kind: "cell.end", cell_seq: 0, verdict: "FAIL", terminal_reason: "attempt_ceiling_reached" }),
+    JSON.stringify({ v: 1, ts: 4000, kind: "cell.end", cell_seq: 0, verdict: "FAIL", terminal_reason: "stopped" }),
   ].join("\n") + "\n");
 
   const { readBackendFeed } = await import("./backend-feed.mjs");
@@ -469,7 +469,7 @@ test("BACKEND FEED: a structural record's own facts reach the row", async () => 
   assert.equal(by["phase.start"].phase, "initial-chunk-3", "a phase must name itself");
   assert.equal(by["attempt.end"].verdict, "FAIL");
   assert.equal(by["attempt.end"].failed, 5, "how many gates failed is the point of the row");
-  assert.equal(by["cell.end"].terminal_reason, "attempt_ceiling_reached", "why the cell stopped");
+  assert.equal(by["cell.end"].terminal_reason, "stopped", "why the cell stopped");
   assert.equal(by["cell.start"].arm, "off");
 
   // ABSENCE IS OMITTED, never rendered as a zero — a field the producer did not

@@ -5,15 +5,8 @@ from pathlib import Path
 
 import pytest
 
-import harness.adapters.challenge as challenge_mod
-from harness.adapters.challenge import (
-    DEFAULT_ATTEMPT_HARD_CEILING,
-    ChallengeRunner,
-    _OpencodeRunStats,
-    build_worker_opencode_config,
-)
+from harness.adapters.challenge import ChallengeRunner
 from harness.adapters.docker_worker import DockerCellConfig, _build_run_argv
-from harness.config import RunConfig
 
 
 TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
@@ -36,13 +29,11 @@ def _make_runner(
     max_output_tokens: int | None = None,
     max_steps_per_attempt: int | None = None,
     output_price_per_1m: float | None = None,
-    max_attempts: int = DEFAULT_ATTEMPT_HARD_CEILING,
 ) -> ChallengeRunner:
     return ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model=model,
-        max_attempts=max_attempts,
         reasoning_effort=reasoning_effort,
         cost_limit_usd=cost_limit_usd,
         cost_target_usd=cost_target_usd,
@@ -103,14 +94,6 @@ def test_worker_run_argv_omits_output_token_env_when_unclamped(tmp_path: Path) -
     assert not any(
         item.startswith("OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX=") for item in run_argv
     )
-
-
-def test_attempt_ceiling_clamps_to_canonical_hard_cap(tmp_path: Path) -> None:
-    runner = _make_runner(tmp_path, max_attempts=999)
-    assert runner.max_attempts == DEFAULT_ATTEMPT_HARD_CEILING
-
-    runner_small = _make_runner(tmp_path, max_attempts=3)
-    assert runner_small.max_attempts == 3
 
 
 def test_load_chunk_prompts_in_order_with_protocol_on_first_chunk(

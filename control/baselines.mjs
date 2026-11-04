@@ -83,9 +83,6 @@ export function isArchivedRun(name) {
 
 const OFF_ARM = "off";
 
-/** A cell is five phases: 1 build + 4 grades (max_attempts 5). */
-const PHASES_PER_CELL = 5;
-
 /** The repo root (Learning-Index), resolved from this module — never hardcoded by callers. */
 const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 
@@ -259,8 +256,9 @@ export async function collectCells(runsRoot) {
 
       // Void instrument (RUNBOOK 5.10): a non-green ending with an unrecovered
       // provider-side anomaly, or a harness_error. Same rule as stack-ledger.mjs and
-      // run_artifacts.py. attempt_ceiling_reached is a real result, not void. Reads
-      // unrecovered_anomaly_turns: a loop the harness recovered is model behaviour.
+      // run_artifacts.py. A cell that ended without passing and without a truncation
+      // signal is a real result, not void. Reads unrecovered_anomaly_turns: a loop the
+      // harness recovered is model behaviour.
       const voidInstrument = Boolean(
         meas
         && !meas.full_green
@@ -301,8 +299,8 @@ export async function collectCells(runsRoot) {
         void_instrument: voidInstrument,
         // Seeded cells skip the build, so they are never a scorable floor.
         seeded_from_snapshot: meas?.seeded_from_snapshot ?? null,
-        // Capped at five phases.
-        phases: { done: meas ? Math.min(meas.attempts.size, PHASES_PER_CELL) : 0, total: PHASES_PER_CELL },
+        // Every attempt the cell actually ran; no cap, so `total` is null (unbounded).
+        phases: { done: meas ? meas.attempts.size : 0, total: null },
         verdict: meas?.verdict ?? null,
         turns: meas?.turns ?? null,
         tokens: meas?.tokens ?? null,

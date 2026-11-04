@@ -34,9 +34,6 @@ export function describe() {
   return "in-session extraction master + gate×attempt matrix + learning ledger";
 }
 
-/** 1 build + 4 repair rounds (max_attempts 5). */
-export const PHASES_PER_CELL = 5;
-
 /** The four capture states, in the panel's words. */
 export const CAPTURE_STATES = ["unwired", "unobserved", "captured", "anomaly"];
 
@@ -176,8 +173,9 @@ export async function readCell(ctx) {
         run: run.name,
         cell,
         session_id: sessionId,
-        attempt: { current: attemptCurrent, max: PHASES_PER_CELL },
-        phase_count: PHASES_PER_CELL,
+        // Unbounded: there is no maximum round count, only observed ones.
+        attempt: { current: attemptCurrent, max: null },
+        phase_count: null,
         matrix,
         ledger,
         master,
@@ -212,6 +210,12 @@ export function buildMatrix(roster, outcomes) {
     byGate.get(gid).set(a, out);
   }
 
+  // The width is the highest round ANY gate was graded on — observed, never a
+  // configured maximum, so a later repair round is its own column.
+  let rounds = 0;
+  for (const perAttempt of byGate.values())
+    for (const a of perAttempt.keys()) rounds = Math.max(rounds, a);
+
   const phases = ["conformance", "backend", "frontend"];
   const byPhase = { conformance: 0, backend: 0, frontend: 0 };
 
@@ -226,7 +230,7 @@ export function buildMatrix(roster, outcomes) {
         id: gid,
         phase,
         title: str(g.title) ?? gid,
-        outcomes: attemptsOutcomes(perAttempt),
+        outcomes: attemptsOutcomes(perAttempt, rounds),
       });
     }
   } else {
@@ -234,7 +238,7 @@ export function buildMatrix(roster, outcomes) {
     for (const [gid, perAttempt] of byGate) {
       const phase = "conformance";
       byPhase[phase] += 1;
-      gates.push({ id: gid, phase, title: gid, outcomes: attemptsOutcomes(perAttempt) });
+      gates.push({ id: gid, phase, title: gid, outcomes: attemptsOutcomes(perAttempt, rounds) });
     }
   }
 
@@ -257,7 +261,7 @@ export function buildMatrix(roster, outcomes) {
     complete: roster?.enumeration?.complete !== false,
     by_phase: byPhase,
     phases,
-    attempts: PHASES_PER_CELL,
+    attempts: rounds || null,
     gates,
     counts: {
       outcomes_read: tested,
@@ -268,9 +272,14 @@ export function buildMatrix(roster, outcomes) {
   };
 }
 
-function attemptsOutcomes(perAttempt) {
+/**
+ * The observed rounds only: slot i (0-based) is attempt i+1, so the vector's
+ * length IS the axis. No later round is truncated and no null/placeholder
+ * column is padded past the highest graded attempt.
+ */
+function attemptsOutcomes(perAttempt, rounds) {
   const out = [];
-  for (let a = 1; a <= PHASES_PER_CELL; a++) out.push(perAttempt.get(a) ?? null);
+  for (let a = 1; a <= rounds; a++) out.push(perAttempt.get(a) ?? null);
   return out;
 }
 

@@ -270,7 +270,7 @@ def test_progress_from_cell_result_maps_problem_and_telemetry_math() -> None:
     result = ChallengeCellResult(
         verdict="FAIL",
         attempts_to_green=2,
-        termination_reason="attempt_ceiling_reached",
+        termination_reason="gates_failed",
         conformed=False,
         input_tokens=101,
         output_tokens=203,
@@ -306,7 +306,7 @@ def test_progress_from_cell_result_preserves_none_for_nullable_fields() -> None:
     result = ChallengeCellResult(
         verdict="FAIL",
         attempts_to_green="FAIL",
-        termination_reason="attempt_ceiling_reached",
+        termination_reason="gates_failed",
         conformed=False,
         input_tokens=0,
         output_tokens=0,

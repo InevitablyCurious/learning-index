@@ -97,7 +97,6 @@ class ServeMixin:
         run_label: str,
         phase: str,
         prior_cost_usd: float = 0.0,
-        timeout_s: float = 5400.0,
         kill_hook: Callable[[], None] | None = None,
         attempt: int | None = None,
         compaction_watermark: int | None = None,
@@ -426,7 +425,6 @@ class ServeMixin:
                 turn_start_ts_ms = int(time.time() * 1000)
                 idle, wait_reason = serve_client.wait_idle_detailed(
                     session_id,
-                    timeout_s=timeout_s,
                     stall_timeout_s=DEFAULT_TURN_STALL_TIMEOUT_S,
                     loop_kill_marker_dir=loop_kill_marker_dir,
                     turn_start_ts_ms=turn_start_ts_ms,
@@ -447,11 +445,10 @@ class ServeMixin:
             # progress line) EXACTLY once — that block is unchanged.
             #
             # THIS MUST SIT BEFORE `if not idle:`. The reason is returned with
-            # idle=False, so without this branch it falls into the unrecognized
-            # non-idle arm below, which reads as a budget timeout
-            # (`killed_reason = "run_timeout"`, `exit_code = 1`) and aborts +
-            # kill-hooks a worker that did nothing wrong. The wait SIGNALS, this
-            # drive MAPS, the runner DECIDES.
+            # idle=False, so without this branch the drive falls into the
+            # non-idle arm below, which treats a threshold the wait SIGNALLED as
+            # a wedged turn, and aborts + kill-hooks a worker that did nothing
+            # wrong. The wait SIGNALS, this drive MAPS, the runner DECIDES.
             if wait_reason == COMPACTIONS_BEFORE_GRADE_WAIT_REASON:
                 compactions_seen = 2
                 break
@@ -501,12 +498,6 @@ class ServeMixin:
                     )
                 if loop_killed_this_turn:
                     loop_killed_turns += 1
-                elif not (stalled_this_turn or silent_this_turn):
-                    # Distinguish "the cell's whole budget ran out" from "this
-                    # turn stopped progressing". Both end the drive; only the
-                    # second says something went wrong with a single command.
-                    killed_reason = "run_timeout"
-                    exit_code = 1
                 # else: stalled_this_turn. WO-21 STALL-RECOVERY (operator ruling
                 # 2026-09-11): a stalled turn now rides the SAME recoverable path
                 # as a loop kill — killed_reason/exit_code stay clean so the
@@ -535,9 +526,8 @@ class ServeMixin:
                     )
                 self._progress(
                     f"PROGRESS run_label={run_label} step=serve-drive phase={phase} "
-                    f"status={'loop_killed' if loop_killed_this_turn else ('turn_stalled' if stalled_this_turn else (REASON_MODEL_SILENT if silent_this_turn else killed_reason))} "
+                    f"status={'loop_killed' if loop_killed_this_turn else ('turn_stalled' if stalled_this_turn else (REASON_MODEL_SILENT if silent_this_turn else wait_reason))} "
                     f"wait_reason={wait_reason} "
-                    f"timeout_s={timeout_s:.1f} "
                     f"stall_timeout_s={DEFAULT_TURN_STALL_TIMEOUT_S:.0f} "
                     f"session_id={session_id}"
                 )
@@ -1119,7 +1109,7 @@ class ServeMixin:
             f"input={d_input} output={d_output} reasoning={d_reasoning} "
             f"cache_read={d_cache_read} cache_write={d_cache_write} "
             f"session_id={session_id} cost_usd={d_cost:.4f} "
-            f"status={'ok' if idle else (COMPACTIONS_BEFORE_GRADE_WAIT_REASON if compactions_seen >= 2 else 'timeout')}"
+            f"status={'ok' if idle else (COMPACTIONS_BEFORE_GRADE_WAIT_REASON if compactions_seen >= 2 else wait_reason)}"
         )
 
         # The largest context of this phase, counted as opencode counts it
@@ -1183,7 +1173,6 @@ class ServeMixin:
         run_label: str,
         sidecar_path: Path | None = None,
         prior_cost_usd: float = 0.0,
-        timeout_s: float = 5400.0,
         kill_hook: Callable[[], None] | None = None,
     ) -> _OpencodeRunStats:
         """WO-77 chunked first pass: drive the chunk prompts IN ORDER through the
@@ -1277,7 +1266,6 @@ class ServeMixin:
                 run_label=run_label,
                 phase=phase,
                 prior_cost_usd=prior_cost_usd + sum_cost,
-                timeout_s=timeout_s,
                 kill_hook=kill_hook,
                 attempt=1,
             )
@@ -1327,7 +1315,7 @@ class ServeMixin:
                 input_tokens=stats.input_tokens,
                 output_tokens=stats.output_tokens,
                 exit_code=stats.exit_code,
-                # Named cause, for the operator strip: "died (run_timeout)"
+                # Named cause, for the operator strip: "died (worker_died)"
                 # rather than "died (exit_code=1)".
                 killed_reason=stats.killed_reason,
             )

@@ -66,7 +66,6 @@ _RESERVATION_SAFETY_FACTOR = 1.10
 # A STALLED TURN IS NOT A CAPABILITY RESULT. `turn_stalled` joins the harness
 # limits so a wedged tool call is never scored as the model failing.
 _HARNESS_LIMIT_REASONS = {
-    "run_timeout",
     "max_steps_per_attempt",
     "token_cap",
     "turn_stalled",
@@ -75,11 +74,11 @@ _HARNESS_LIMIT_REASONS = {
 
 # How long a turn may make NO transcript progress before the harness ends it.
 #
-# Bounded separately from the run budget because `session_busy` cannot tell
-# "working hard" from "wedged" — a hung tool call stays busy forever, and the
-# drive passes the whole-run budget as its idle timeout, so one wedged command
-# used to burn the entire cell (2026-08-24: 40 minutes of silence, on course
-# for the full 90).
+# This is the NO-PROGRESS bound, not a cap on time: it fires on ABSENCE of
+# transcript/output, never on how long a turn has been running, so it is a
+# wedge detector. `session_busy` cannot tell "working hard" from "wedged" — a
+# hung tool call stays busy forever, and one wedged command used to burn the
+# entire cell (2026-08-24: 40 minutes of silence, on course for the full 90).
 #
 # 10 minutes is deliberately generous. This task has ZERO external runtime
 # dependencies, so there is no `npm install` leg — a legitimate single tool
@@ -303,13 +302,6 @@ REASON_OBSERVATION_LOST = "transcript_read_failed_past_retries"
 TRUNCATION_EVIDENCE_FILENAME = "truncation-evidence.jsonl"
 
 
-# Canonical attempt ceiling. Raised 8 -> 10 (WO-BENCH-ATTEMPTS-3-TO-10): the
-# commissioned solve-attempt count is now 5 (config.py max_attempts), so the
-# hard ceiling must be >= 10 or the clamp at `min(requested, ceiling)` silently
-# caps a 10-attempt request at 8. 10 == the default; the ceiling stays a single
-# knob with no hidden cap below the commissioned count.
-DEFAULT_ATTEMPT_HARD_CEILING = 10
-
 # Canonical per-attempt step cap (runaway-loop guard, NOT a budget instrument).
 # Budget enforcement is the accrued usage.cost kill plus the proxy's hard-cap
 # reservation; this cap exists only to stop a fast runaway tool-call loop.
@@ -320,14 +312,7 @@ DEFAULT_ATTEMPT_HARD_CEILING = 10
 # CLI driver defaults to this constant.
 DEFAULT_MAX_STEPS_PER_ATTEMPT = 100
 
-# Canonical per-attempt wall-clock timeout (guard, NOT a scoring signal).
-# Evidence for 5400: smoke 19d observed ~3060s wall on a healthy 68-turn Opus
-# PASS. Stage-4 at the old 1800s default killed converging near-pass runs
-# (kimi-k2.7-code: 52 turns with 26/29 gates green; mimo-v2.5-pro: 35 turns).
-# int4/fp8 pins run slower than Opus, so the canonical default carries ~1.75x
-# headroom over the slowest healthy observed wall (3060 * 1.75 ~= 5355 -> 5400).
-DEFAULT_RUN_TIMEOUT_S = 5400
-
+# Grader-oracle watchdog (wall-clock, KEPT): bounds the grader subprocess, not the model's run; reported in WO-LI-SM-2-CAPS.
 # Canonical gate-oracle wall-clock timeout (harness guard, NOT a scoring signal).
 # The gate is graded work, not model work: a healthy grade is fast. Measured
 # 2026-08-12 on the backgammon task: 45s and 113s for two clean attempts, and

@@ -380,7 +380,6 @@ def test_serve_drive_stall_with_empty_marker_dir_still_recovers(
         prompt="p",
         run_label="cell-stall-nomarker",
         phase="initial",
-        timeout_s=10.0,
     )
 
     # The waiter got the marker dir — the boundary is genuinely exercised —

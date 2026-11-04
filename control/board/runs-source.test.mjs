@@ -270,8 +270,10 @@ test("runs source: an archived run's status is its scorecard's verdict — score
   try {
     const modelDir = join(runsRoot, ARCHIVED_RUN);
     const livePath = join(modelDir, "memoryOFF", "cell-0000", "live.jsonl");
-    // A FAILING cell (never green, never PASS) that the harness scored.
-    writeFileSync(livePath, JSON.stringify({ kind: "cell.end", verdict: "FAIL", terminal_reason: "attempt_ceiling_reached" }) + "\n");
+    // A FAILING cell (never green, never PASS) that the harness scored. Its
+    // terminal reason is an ordinary non-void one: a non-green ended cell is
+    // just that, with no special name.
+    writeFileSync(livePath, JSON.stringify({ kind: "cell.end", verdict: "FAIL", terminal_reason: "stopped" }) + "\n");
     writeFileSync(
       join(modelDir, "manifest.scorecard.json"),
       JSON.stringify({ scored_sessions: 1, void_instrument: [], not_scored: [] }),

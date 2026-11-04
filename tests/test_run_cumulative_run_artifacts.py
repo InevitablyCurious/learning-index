@@ -91,7 +91,6 @@ def _build_runner(module: Any, tmp_path: Path, *, runs_dir: Path | None = None) 
     runner._runs_dir = runs_dir
     runner._task_dir = tmp_path / "task"
     runner._task = "backgammon"
-    runner._max_attempts = 1
     runner._proxy_base_url = "http://127.0.0.1:11434/v1"
     runner._proxy_token = "proxy-token-value"
     runner._progress = lambda message: None
@@ -377,7 +376,7 @@ def test_scoring_turn_exclusions_reach_the_status_stream(tmp_path: Path) -> None
 
     result = _cell_result()
     result.verdict = "FAIL"
-    result.termination_reason = "attempt_ceiling_reached"
+    result.termination_reason = "gates_failed"
     result.guard_aborted_turns = 2
     result.finalize_timeout_turns = 3
     # WO-ERRDATA-C4: stalled turns are not a scoring subtrahend, but the

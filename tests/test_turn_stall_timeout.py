@@ -210,15 +210,13 @@ class TestStallIsNotAModelFailure:
             "failing the task; scoring it as capability would be a false negative"
         )
 
-    def test_stall_bound_is_far_below_the_run_budget(self):
-        from harness.adapters.challenge import (
-            DEFAULT_RUN_TIMEOUT_S,
-            DEFAULT_TURN_STALL_TIMEOUT_S,
-        )
+    def test_stall_bound_is_a_no_progress_bound_not_a_run_budget(self):
+        from harness.adapters.challenge import DEFAULT_TURN_STALL_TIMEOUT_S
 
-        assert DEFAULT_TURN_STALL_TIMEOUT_S < DEFAULT_RUN_TIMEOUT_S / 4, (
-            "a stall bound near the run budget saves nothing — the point is that "
-            "a wedged turn costs minutes instead of the cell"
+        assert DEFAULT_TURN_STALL_TIMEOUT_S > 0, (
+            "the stall bound fires on the ABSENCE of output for that long, never "
+            "on how long the run has been going: a run has no time budget, and a "
+            "turn that keeps producing progress is never ended by this bound"
         )
 
     def test_the_drive_asks_for_the_stall_bound(self):

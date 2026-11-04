@@ -57,7 +57,7 @@ function fakeDeps(io, over = {}) {
       now: () => 99,
       log: () => {},
       isLive: async () => false,
-      readOutcome: async () => ({ verdict: "FAIL", terminal_reason: "attempt_ceiling_reached", produced_snapshot_id: "S1" }),
+      readOutcome: async () => ({ verdict: "FAIL", terminal_reason: "gates_failed", produced_snapshot_id: "S1" }),
       refreshInFlight: () => null,
       devModeOn: async () => true,
       cellInFlight: async () => false,
@@ -125,14 +125,14 @@ test("CONTINUOUS: a run's outcome is read from its cell.end and its campaign man
   mkdirSync(cell, { recursive: true });
   writeFileSync(join(cell, "live.jsonl"), [
     JSON.stringify({ kind: "cell.start", cell_seq: 0 }),
-    JSON.stringify({ kind: "cell.end", verdict: "FAIL", terminal_reason: "attempt_ceiling_reached" }),
+    JSON.stringify({ kind: "cell.end", verdict: "FAIL", terminal_reason: "gates_failed" }),
   ].join("\n") + "\n");
   writeFileSync(join(runsRoot, runDir, "manifest.json"), JSON.stringify({
     session_records: [{ sequence_index: 0, produced_snapshot_id: "1791-end" }],
   }));
   assert.deepEqual(await readOutcome({ runsRoot, link: { run_dir: runDir, sequence_index: 0 } }), {
     verdict: "FAIL",
-    terminal_reason: "attempt_ceiling_reached",
+    terminal_reason: "gates_failed",
     produced_snapshot_id: "1791-end",
   });
 });

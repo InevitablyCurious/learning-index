@@ -40,7 +40,7 @@
 //
 // ── ATTEMPT TABS ────────────────────────────────────────────────────────────
 //
-// The strip over the viewport (1..max_attempts, then live) is skeleton, NOT
+// The strip over the viewport (1..N observed attempts, then live) is skeleton, NOT
 // data-preserve: patch() re-derives its active/disabled state every tick from
 // the board's completed attempts and the module's activeTab. A numeric tab is
 // enabled once that attempt completed; clicking it swaps the viewport to that
@@ -279,18 +279,34 @@ function renderBlockedFlag(board) {
   return `render blocked — ${RENDER_BLOCKED_LABEL[rb.reason] ?? esc(String(rb.reason))}`;
 }
 
+/** The highest attempt number the live overlay actually reports: how long the
+ *  strip is. Observed, never a fixed cap — the board carries max_attempts as
+ *  null, so a run that keeps going past any configured limit keeps its tabs.
+ *  An attempt is a number; anything non-finite contributes nothing, and no
+ *  attempts at all means 0 — the strip is then just the "live" tab. */
+function observedAttempts(attempts) {
+  if (!Array.isArray(attempts)) return 0;
+  let max = 0;
+  for (const a of attempts) {
+    const n = Number(a?.attempt);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max;
+}
+
 export function renderBuild(board) {
   // activeCell guards board?.runs?.list ?? [] itself; one call, never repeated.
   const card = activeCell(board);
   const id = card ? esc(`s${card.sequence_index}${card.archived ? " · archived" : ""}`) : "—";
   // Attempt tabs, re-derived every tick (the strip is NOT data-preserve, so
-  // patch() morphs this state in place). Count: the board frame's
-  // max_attempts. Enabled: that attempt COMPLETED — an attempt.end entry in
-  // the ACTIVE CELL's own live overlay (view.live covers archived runs too;
-  // the board-root live and by_cell both miss them). Class names stay
-  // double-quoted literals so the style-coverage guard sees them.
+  // patch() morphs this state in place). Count: the highest attempt the run
+  // actually reports (observedAttempts), never a configured cap. Enabled: that
+  // attempt COMPLETED — an attempt.end entry in the ACTIVE CELL's own live
+  // overlay (view.live covers archived runs too; the board-root live and
+  // by_cell both miss them). Class names stay double-quoted literals so the
+  // style-coverage guard sees them.
   const attempts = board?.live?.attempts ?? [];
-  const max = board?.max_attempts ?? 5;
+  const max = observedAttempts(attempts);
   const flag = renderBlockedFlag(board);
   let tabs = "";
   for (let n = 1; n <= max; n += 1) {
@@ -542,7 +558,7 @@ function renderWrong() {
     ? { empty: `feedback unavailable — ${feedbackMsgs.error}` }
     : promptForTab(feedbackMsgs, activeTab, {
         completed: completedAttempts(lastView),
-        max: lastView?.max_attempts ?? 5,
+        max: observedAttempts(lastView?.live?.attempts),
       });
   const sig = JSON.stringify([activeTab, shown.empty ?? null, shown.meta ?? null, shown.text ?? null]);
   // Kept here, not on the element: the board's patch syncs a preserved

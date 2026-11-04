@@ -1343,8 +1343,10 @@ a:hover{color:var(--type)}
    the grid went to 17 columns, a rim sized for a 45px square would have been
    drawn on a 31px one. `--wall-cols` is published by panels/wall.js and
    `--wall-cell` is the actual edge length, so the bands track the square at any
-   suite size. The fractions below reproduce the original 12-column values
-   exactly (rim 3.56px, inset 1.95px, digit 24.1px at a 574px card). */
+   suite size. The rim and inset fractions below reproduce the original
+   12-column values exactly (rim 3.56px, inset 1.95px at a 574px card). The
+   digit is deliberately smaller than the width fraction it replaced — see the
+   note on `.gcell.recovered` — so a multi-digit attempt count cannot clip. */
 .gwall{
   display:grid;gap:2px;justify-content:start;
   --wall-cell:28px;
@@ -1376,14 +1378,16 @@ a:hover{color:var(--type)}
   box-shadow:inset 0 0 0 clamp(1.5px, calc(var(--wall-cell) * 0.043), 4px) var(--bg);
   display:flex;align-items:center;justify-content:center;
   color:var(--bg);letter-spacing:-0.05em;overflow:hidden;
-  /* THE DIGIT FILLS THE GREEN CORE. Sized off the GRID, not off an inherited
-     font-size — the old `em` rule tracked a font-size the cell does not
-     control, which is why the number stayed a speck in a 73px square.
-     4.2cqw is set by the TWO-DIGIT case: the ceiling is 10 attempts, and "10"
-     must clear the gap without touching the rim. A single digit is therefore a
-     little short of the core's full height, which is the correct trade — a
-     clipped "10" would be a wrong reading. */
-  font:700 clamp(8px, calc(var(--wall-cell) * 0.34), 42px)/1 var(--font);
+  /* THE DIGIT IS SIZED OFF THE SQUARE'S EDGE, NOT OFF A DIGIT COUNT. It used to
+     be a fraction of the CARD's width, chosen from a two-digit assumption — that
+     a gate could not pass later than its tenth attempt — and no such cap exists:
+     a 3- or 4-digit count would have been clipped by `overflow:hidden` and read
+     as a smaller number than it is. 0.28 of `--wall-cell` keeps a multi-digit
+     count whole, and at the 28px default cell the 8px floor binds, so a dense
+     board renders the digit at one fixed legible size while a larger square
+     scales it up. A slightly small digit is the right trade; a clipped one is a
+     WRONG READING. */
+  font:700 clamp(8px, calc(var(--wall-cell) * 0.28), 42px)/1 var(--font);
 }
 /* The legend swatch is a fixed 9px: it cannot carry three bands or a readable
    digit, so it falls back to a plain green chip with a thin rim. A smudge is
@@ -1401,7 +1405,7 @@ a:hover{color:var(--type)}
   box-shadow:inset 0 0 0 clamp(1.5px, calc(var(--wall-cell) * 0.043), 4px) var(--bg);
   display:flex;align-items:center;justify-content:center;
   color:var(--bg);letter-spacing:-0.05em;overflow:hidden;
-  font:700 clamp(8px, calc(var(--wall-cell) * 0.34), 42px)/1 var(--font);
+  font:700 clamp(8px, calc(var(--wall-cell) * 0.28), 42px)/1 var(--font);
 }
 .gcell.regressed.sm{font-size:0;display:inline-block;border-width:2px;box-shadow:none}
 /* FAILING. Fill plus an X, so failure is legible by SHAPE and not by hue alone
@@ -1420,8 +1424,9 @@ a:hover{color:var(--type)}
   color:var(--bg);overflow:hidden;
   /* IDENTICAL to .gcell.recovered — the X and the attempt digit must render at
      the same size, and the only way to guarantee that is one declaration in
-     both places. Sized off the GRID (cqw), so it tracks the square. */
-  font:700 clamp(8px, calc(var(--wall-cell) * 0.34), 42px)/1 var(--font);
+     both places. Sized off `--wall-cell`, the square's real edge, so it tracks
+     the grid at any column count. */
+  font:700 clamp(8px, calc(var(--wall-cell) * 0.28), 42px)/1 var(--font);
 }
 /* The ✕ is dropped at legend size: a 9px swatch cannot carry a readable mark,
    and a smudge is worse than a clean fill. The words beside it do that work. */
@@ -1444,7 +1449,7 @@ a:hover{color:var(--type)}
   background:transparent;border:2px solid var(--type);
   display:flex;align-items:center;justify-content:center;
   color:var(--type);overflow:hidden;
-  font:700 clamp(8px, calc(var(--wall-cell) * 0.34), 42px)/1 var(--font);
+  font:700 clamp(8px, calc(var(--wall-cell) * 0.28), 42px)/1 var(--font);
 }
 /* Dropped at legend size for the same reason as the X: a 9px swatch cannot
    carry a readable mark, and the words beside it do that work. */
@@ -2175,39 +2180,6 @@ a:hover{color:var(--type)}
 .learn-block{display:flex;flex-direction:column;gap:6px;padding-top:10px;border-top:1px solid var(--hairline)}
 .learn-block.warn{border-top:1px solid var(--border-strong)}
 
-/* THE MATRIX. Cells are full-column bars (11px), not squares — a dense grid a
-   skeptic can diff against predicate-outcomes.jsonl line by line. */
-.lm{display:flex;flex-direction:column;gap:2px;min-width:0}
-.lm-row{display:grid;grid-template-columns:150px repeat(var(--cols,5),1fr);gap:2px;align-items:center;min-width:0}
-.lm-label{font:400 10.5px var(--font);color:var(--fg);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lm-phase .lm-label{font:700 9.5px var(--font);letter-spacing:.16em;color:var(--dim)}
-.lm-phase{margin-top:4px;border-top:1px solid var(--hairline);padding-top:4px}
-.lm-hdr .lm-label{font:700 10px var(--font);letter-spacing:.1em;color:var(--dim)}
-.lm-ahwrap{text-align:center}
-.lm-ah{font:700 10px var(--font);letter-spacing:.1em;display:inline-block}
-.lm-ah i{display:block;font:italic 400 8.5px var(--font);letter-spacing:.06em;font-style:normal;opacity:.7}
-.lm-scroll{max-height:392px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding-right:4px}
-.lm-cell{height:11px;border-radius:2px}
-.lm-cell.pass{background:var(--check);border:1px solid var(--check)}
-.lm-cell.fail{background:var(--danger);border:1px solid var(--danger)}
-.lm-cell.none{background:transparent;border:1px dotted var(--dim)}
-/* A flip marker: a bright left rule, so a state change reads even in greyscale. */
-.lm-cell.flip{border-left:4px solid var(--type)}
-.learn-legend{display:flex;flex-wrap:wrap;gap:16px;padding-top:9px;border-top:1px solid var(--hairline);font:400 11px var(--font);color:var(--dim)}
-.lm-key{display:inline-block;width:9px;height:9px;border-radius:2px;vertical-align:baseline;margin-right:5px}
-.lm-key.pass{background:var(--check)}
-.lm-key.fail{background:var(--danger)}
-.lm-key.none{background:transparent;border:1px dotted var(--dim)}
-.lm-key.flipk{width:4px;background:var(--type)}
-
-/* ATTEMPT WINDOWS — labels come from learning-ledger.json, never computed. */
-.learn-windows{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
-.lw{border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 7px;display:flex;flex-direction:column;gap:2px;background:transparent}
-.lw.bad{border-color:var(--danger);background:var(--bg-2)}
-.lw-num{font:700 10px var(--font);color:var(--type)}
-.lw-label{font:400 10px/1.3 var(--font);color:var(--fg);overflow-wrap:anywhere}
-.lw-label.dim{color:var(--dim)}
-
 /* CLAIM DISTRIBUTION. fixed=0 is a measured result and renders as 0. */
 .learn-dist{display:flex;flex-wrap:wrap;gap:7px}
 .ld-chip{display:flex;align-items:baseline;gap:7px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font:400 11.5px var(--font);color:var(--fg)}
@@ -2282,12 +2254,11 @@ a:hover{color:var(--type)}
    one card, one header.
 
    THE ARM A/B LEGEND USED TO SIT HERE and is deleted with its rules
-   (`.arm-legend`, `.arm-swatch`). Three tabs leave no room for it, and the arms
-   are already named in words on the learning cell-info row and on the plot's
-   own labels — the legend was the third place saying the same thing. The
-   `--arm-a` / `--arm-b` PROPERTIES stay — recall.js and learning.js colour by
-   them directly — but the `.arm-a` / `.arm-b` CLASSES went with the legend:
-   it was their only caller. */
+   (`.arm-legend`, `.arm-swatch`): the arms are already named in words on the
+   plot's own labels, so the legend was a second place saying the same thing.
+   The `--arm-a` / `--arm-b` PROPERTIES stay — recall.js is now their only
+   consumer — but the `.arm-a` / `.arm-b` CLASSES went with the legend: it was
+   their only caller. */
 .curve-metric{display:flex;justify-content:flex-end}
 .curve-foot .btn{margin-left:auto}
 

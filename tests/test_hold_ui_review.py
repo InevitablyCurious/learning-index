@@ -128,7 +128,7 @@ def _hold_kwargs(tmp_path: Path, worktree: Path, lines: list[str]) -> dict:
         "progress": lines.append,
         "kind": "round",
         "attempt": 1,
-        "max_attempts": 5,
+        "max_attempts": None,
         "told_text": "I'm still seeing the off tray drawn over some points.",
         "grade": {
             "report_path": str(tmp_path / "attempt-1-report.json"),
@@ -306,7 +306,9 @@ def test_state_file_carries_the_v2_contract(
 ) -> None:
     """A consumer (the dashboard, a separate agent's work) must be able to
     release the pause from hold-ui.json ALONE, without reading this source.
-    schema_version is 2 and carries kind/attempt/max_attempts/told_text/grade."""
+    schema_version is 2 and carries kind/attempt/max_attempts/told_text/grade.
+    `max_attempts` is present but always `null`: the cell has no round cap, and
+    a round count is only ever an OBSERVED count."""
     _require_grader_image()
     monkeypatch.setattr(challenge_mod, "_HOLD_UI_PORT", _RELEASE_CONTRACT_PORT)
     worktree = _mk_worktree(tmp_path, _RELEASE_CONTRACT_PORT)
@@ -338,7 +340,7 @@ def test_state_file_carries_the_v2_contract(
     # ── WO-PAUSE-AFTER-GRADE v2 fields ──
     assert state["kind"] == "round"
     assert state["attempt"] == 1
-    assert state["max_attempts"] == 5
+    assert state["max_attempts"] is None
     assert state["told_text"] == "I'm still seeing the off tray drawn over some points."
     grade = state["grade"]
     assert grade["verdict"] == "FAIL"

@@ -32,9 +32,11 @@ globalThis.setInterval = noop;
 
 const { renderBuild } = await import("./panels/build.js");
 
+// The strip is derived from the attempts the live overlay OBSERVES, never from
+// a configured cap: the board carries max_attempts as null (unbounded).
 const blocked = (reason) => ({
   live: { attempts: [{ attempt: 1, render_blocked: { reason } }] },
-  max_attempts: 5,
+  max_attempts: null,
 });
 
 test("a render-blocked attempt names the reason, in operator words", () => {
@@ -59,12 +61,32 @@ test("geometry-not-drawn carries its own plain label", () => {
 });
 
 test("a healthy attempt paints no flag", () => {
-  const html = renderBuild({ live: { attempts: [{ attempt: 1 }] }, max_attempts: 5 });
+  const html = renderBuild({ live: { attempts: [{ attempt: 1 }] }, max_attempts: null });
   assert.ok(!html.includes("render blocked"));
 });
 
 test("a build with no live feed still renders, and shows no flag", () => {
-  const html = renderBuild({ max_attempts: 5 });
+  const html = renderBuild({ max_attempts: null });
   assert.ok(html.includes("LIVE BUILD"));
   assert.ok(!html.includes("render blocked"));
+});
+
+// ── the strip's length is OBSERVED ──────────────────────────────────────────
+// Tabs run 1..N for the attempts the overlay actually reports, then "live".
+// No cap is applied and no tab is padded: a run that reached round 7 has seven
+// numbered tabs, and a run with nothing yet has none of them.
+
+const tabs = (html) => [...html.matchAll(/data-build-tab="([^"]+)"/g)].map((m) => m[1]);
+
+test("seven observed rounds make seven numbered tabs, and no more", () => {
+  const attempts = Array.from({ length: 7 }, (_, i) => ({ attempt: i + 1 }));
+  const html = renderBuild({ live: { attempts }, max_attempts: null });
+  assert.ok(html.includes('data-build-tab="7"'), "round 7 is an observed round, so it has a tab");
+  assert.ok(!html.includes('data-build-tab="8"'), "nothing is padded past the last observed round");
+  assert.deepEqual(tabs(html), ["1", "2", "3", "4", "5", "6", "7", "live"]);
+});
+
+test("a board with no attempts yet has only the live tab", () => {
+  const html = renderBuild({ live: { attempts: [] }, max_attempts: null });
+  assert.deepEqual(tabs(html), ["live"]);
 });

@@ -95,3 +95,41 @@ test("no baseline cell means baseline_n 0, whatever is armed", async () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ── PHASES: OBSERVED, NEVER CLAMPED ────────────────────────────────────────
+
+test("a 7-round cell keeps round 7 — phases are observed, total is null", async () => {
+  // Attempts are unbounded: a cell keeps running until it goes green or the
+  // operator stops it. So `done` is the count the cell actually ran and `total`
+  // is null. Clamping at an assumed ceiling would drop round 7 from the curve
+  // and present an invented denominator as if the harness had agreed to one.
+  const root = mkdtempSync(join(tmpdir(), "okp-baseline-n-"));
+  try {
+    writeRun(root, "cumulative", { arm: "off" });
+
+    // Seven distinct graded attempts on the one scheduled cell, in attempt order.
+    const attempts = [];
+    for (let a = 1; a <= 7; a += 1) {
+      attempts.push(JSON.stringify({
+        type: "attempt",
+        sequence_index: 0,
+        attempt: a,
+        verdict: a === 7 ? "PASS" : "FAIL",
+        failed_gates: a === 7 ? [] : [`[A${a}] BUILD — gate ${a}`],
+        progress: { turns: 4 + a },
+      }));
+    }
+    writeFileSync(
+      join(root, "cumulative", "manifest.status.jsonl"),
+      `${attempts.join("\n")}\n`,
+    );
+
+    const res = await readStack(root);
+    assert.equal(res.ok, true);
+    const cell = res.patch.stack.all[0];
+    assert.equal(cell.phases.done, 7, "round 7 is kept — the count is what the cell ran");
+    assert.equal(cell.phases.total, null, "unbounded — no denominator is invented");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

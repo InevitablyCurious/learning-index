@@ -196,13 +196,13 @@ test("cellValidity: compactions_before_grade voids a non-green cell", () => {
   assert.equal(v.reason, "void_instrument");
 });
 
-test("cellValidity: attempt_ceiling_reached is a REAL capability fail and SCORES", () => {
-  // Standing contrast for the void allow-list: running out of attempts is the
+test("cellValidity: a graded-fail (gates_failed) cell is a REAL capability fail and SCORES", () => {
+  // Standing contrast for the void allow-list: a cell whose gates failed is the
   // model failing to resolve gates, not a broken instrument. Voiding it would
   // hide a genuine fail from the control arm's denominator.
   const v = cellValidity({
     full_green: false,
-    terminal_reason: "attempt_ceiling_reached",
+    terminal_reason: "gates_failed",
     attempt_count: 3,
   });
   assert.equal(v.scored, true);

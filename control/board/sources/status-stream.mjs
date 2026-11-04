@@ -86,7 +86,7 @@ export async function readCell(ctx) {
         arm: c.arm,
         cell_label: c.cell_label,
         org_id: c.org_id,
-        attempt: { current: c.attempt, max: 5 },
+        attempt: { current: c.attempt, max: null },
         turns: c.turns,
         tokens: {
           input: c.input_tokens,

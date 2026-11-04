@@ -67,7 +67,6 @@ def test_the_drive_stops_on_a_dead_worker_without_nudging(tmp_path: Path) -> Non
         prompt="fix",
         run_label="cell",
         phase="feedback-2",
-        timeout_s=60.0,
     )
     assert stats.killed_reason == WORKER_DIED
     assert stats.exit_code == 1
@@ -96,7 +95,7 @@ def test_a_worker_that_dies_in_a_repair_round_ends_the_cell_keeping_the_last_gra
     from tests.test_challenge_budget_stop import REAL_CHECK, _patch_fake_docker
     from tests.test_challenge_budget_stop import _make_runner as make
 
-    runner = make(tmp_path, max_attempts=5)
+    runner = make(tmp_path)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(runner, "_load_chunk_prompts", lambda *a, **k: ["CHUNK"])
     grades = {"n": 0}

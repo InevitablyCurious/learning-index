@@ -33,6 +33,7 @@ importing it directly is correct -- same rationale as serve.py
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import re
@@ -90,9 +91,7 @@ from .constants import (
     _RESERVATION_SAFETY_FACTOR,
     _SPEC,
     _WORKER_AGENTS_MD,
-    DEFAULT_ATTEMPT_HARD_CEILING,
     DEFAULT_GATE_TIMEOUT_S,
-    DEFAULT_RUN_TIMEOUT_S,
     TURN_TERMINAL_GUARD_ABORT,
     TURN_TERMINAL_OBSERVATION_LOST,
     TURN_TERMINAL_STALLED,
@@ -299,10 +298,8 @@ class ChallengeRunner(
         memory_mode: str = "off",
         org_id: str = "",
         mock: str | None = None,
-        max_attempts: int = DEFAULT_ATTEMPT_HARD_CEILING,
         resume_budget: int = 2,
         token_cap: int = 200000,
-        run_timeout_s: int = DEFAULT_RUN_TIMEOUT_S,
         gate_timeout_s: int = DEFAULT_GATE_TIMEOUT_S,
         #: Fraction of the GRADING CONTAINER's own resources to use for test
         #: workers. None leaves the container's default (lib/workers.mjs).
@@ -404,14 +401,9 @@ class ChallengeRunner(
         )
         self._seed_snapshot_depth = seed_snapshot_depth
         self._produced_snapshot_id: str | None = None
-        requested_max_attempts = int(max_attempts)
-        if requested_max_attempts < 1:
-            raise ValueError("max_attempts must be >= 1")
-        self.max_attempts = min(requested_max_attempts, DEFAULT_ATTEMPT_HARD_CEILING)
         self.resume_budget = int(resume_budget)
         if self.resume_budget < 0:
             raise ValueError("resume_budget must be >= 0")
-        self.run_timeout_s = int(run_timeout_s)
         self.gate_timeout_s = int(gate_timeout_s)
         if self.gate_timeout_s <= 0:
             raise ValueError("gate_timeout_s must be > 0")
@@ -490,8 +482,6 @@ class ChallengeRunner(
             raise ValueError("mock must be one of: None, 'golden', 'scaffold'")
         if int(token_cap) < 1:
             raise ValueError("token_cap must be >= 1")
-        if self.run_timeout_s < 1:
-            raise ValueError("run_timeout_s must be >= 1")
         if int(completion_grace_s) < 1:
             raise ValueError("completion_grace_s must be >= 1")
         if self.cost_limit_usd is not None and self.cost_limit_usd <= 0:
@@ -716,8 +706,8 @@ class ChallengeRunner(
     ) -> str | None:
         """Promote a stuck cell's final graded attempt into a new snapshot.
 
-        Fires at the attempt ceiling and when the cell runs out of context, for
-        seeded and fresh cells alike: copies the final attempt's checkpoint tree
+        Fires when the cell runs out of context, for seeded and fresh cells
+        alike: copies the final attempt's checkpoint tree
         (already excluded + frozen) into runs/snapshots/ with snapshot_depth =
         seed depth + 1 (a fresh cell's build is depth 1, so its end is 2), and
         records the new id on self so the cell result can carry it back to the
@@ -907,8 +897,8 @@ class ChallengeRunner(
             # vocabulary's own word for "the harness itself broke"; the class name
             # travels beside it as `terminal_exception`, where a reader can see it
             # is a different kind of fact. Writing `KeyboardInterrupt` into a
-            # field whose other values are `gates_green` and
-            # `attempt_ceiling_reached` is how a vocabulary stops being one.
+            # field whose other values are `gates_green` and `context_exhausted`
+            # is how a vocabulary stops being one.
             # THE BOARD'S STOP IS NOT A HARNESS FAULT. It sends SIGINT, which
             # arrives as KeyboardInterrupt; recording it as harness_error voided
             # runs an operator had simply stopped (1789710421, 1789711588).
@@ -1400,7 +1390,6 @@ class ChallengeRunner(
                             run_label=run_label,
                             sidecar_path=user_events_path,
                             prior_cost_usd=cell_cost_usd,
-                            timeout_s=self.run_timeout_s,
                             kill_hook=active_cell.kill_worker_processes,
                         )
                     except ServeTransportError:
@@ -1566,7 +1555,13 @@ class ChallengeRunner(
             # always "compactions since the last grade". None means no grade has
             # been observed with a readable session yet, and skips the check.
             compaction_watermark: int | None = None
-            for attempt in range(1, self.max_attempts + 1):
+            # NO ROUND MAXIMUM. The round count here is an OBSERVED count, never
+            # a declared one: the loop leaves only when the checks pass, the
+            # compactions-before-grade abort fires, the operator stops the cell,
+            # or a genuine fault ends it. Every `break`/`continue` below is
+            # unchanged — `itertools.count` yields 1, 2, 3, ... like the old
+            # `range` did, it just never runs out.
+            for attempt in itertools.count(1):
                 if context_stop:
                     # The worker died, or its session raised ContextOverflowError
                     # (too large to compact): stop the run, grade nothing.
@@ -1919,35 +1914,6 @@ class ChallengeRunner(
                     termination_reason = "gates_green"
                     break
 
-                if attempt >= self.max_attempts:
-                    verdict = "FAIL"
-                    attempts_to_green = "DID_NOT_CONFORM" if not conformed else "FAIL"
-                    if _worker_exit_annot == "harness_error":
-                        termination_reason = "harness_error"
-                    elif _worker_exit_annot is not None:
-                        termination_reason = "transport_incomplete"
-                    else:
-                        termination_reason = "attempt_ceiling_reached"
-                        # WO-LI-SNAPSHOT-CHAIN: a cell that exhausts its attempts,
-                        # seeded or fresh, promotes its FINAL attempt's checkpoint
-                        # tree into a new snapshot (snapshot_depth = seed depth + 1)
-                        # so the next run can chain from where this one got to — a
-                        # fresh baseline included, or continuous mode has nothing
-                        # to continue from after its first run. Skipped on
-                        # harness_error (no checkpoint) and transport_incomplete
-                        # (breaks earlier, never here).
-                        self._capture_end_of_run_snapshot(
-                            worktree=(
-                                run_dir / "checkpoints" / f"cp-{attempt:02d}" / "tree"
-                            ),
-                            state_hash=attempt_state_hash,
-                            run_label=run_label,
-                            run_identity=run_identity,
-                            session_id=session_id,
-                            attempt=attempt,
-                        )
-                    break
-
                 if worker_killed_reason in _HARNESS_LIMIT_REASONS:
                     self._progress(
                         f"PROGRESS run_label={run_label} step=attempt-harness-limit attempt={attempt} "
@@ -1977,10 +1943,21 @@ class ChallengeRunner(
                     break
 
                 if self.mock is not None:
+                    # Mock mode copies a fixed tree and never drives a model, so
+                    # re-grading the same tree cannot change the result. The gate
+                    # was graded exactly once this attempt; a PASS already broke
+                    # at the gates_green exit above, so reaching here means it
+                    # failed. End as a genuine graded failure (wedge detection,
+                    # not a new cap — the deleted attempt ceiling was mock mode's
+                    # only exit).
+                    verdict = "FAIL"
+                    attempts_to_green = "DID_NOT_CONFORM" if not conformed else "FAIL"
+                    termination_reason = "gates_failed"
                     self._progress(
-                        f"PROGRESS run_label={run_label} step=feedback-skip attempt={attempt} reason=mock_mode"
+                        f"PROGRESS run_label={run_label} step=mock-grade-final "
+                        f"attempt={attempt} verdict={attempt_verdict} reason=mock_mode"
                     )
-                    continue
+                    break
 
                 if active_cell is None:
                     self._progress(
@@ -2326,11 +2303,10 @@ class ChallengeRunner(
                         f"PROGRESS run_label={run_label} step=context-exhausted-stop "
                         f"phase=feedback-{attempt} graded={len(attempt_reports)}"
                     )
-                    # A cell that overflowed is stuck the same way as one out of
-                    # attempts: promote the round it was graded on, so the next
-                    # run chains from where this one got to (seeded or fresh, as
-                    # at the ceiling). Run 1790785038 stopped here with no
-                    # snapshot to continue from.
+                    # A cell that overflowed cannot continue: promote the round it
+                    # was graded on, so the next run chains from where this one
+                    # got to (seeded or fresh). Run 1790785038 stopped here with
+                    # no snapshot to continue from.
                     self._capture_end_of_run_snapshot(
                         worktree=(
                             run_dir / "checkpoints" / f"cp-{attempt:02d}" / "tree"
@@ -2634,7 +2610,8 @@ class ChallengeRunner(
                 session_id=session_id,
                 pause_kind=kind,
                 attempt=attempt,
-                max_attempts=self.max_attempts,
+                # None = unbounded: a round count is observed, never declared.
+                max_attempts=None,
             )
         started = time.monotonic()
         _hold_for_operator(
@@ -2646,7 +2623,7 @@ class ChallengeRunner(
             progress=self._progress,
             kind=kind,
             attempt=attempt,
-            max_attempts=self.max_attempts,
+            max_attempts=None,
             told_text=told_text,
             grade=grade,
         )
@@ -2714,7 +2691,6 @@ class ChallengeRunner(
                 run_label=run_label,
                 phase=phase,
                 prior_cost_usd=prior_cost_usd,
-                timeout_s=self.run_timeout_s,
                 kill_hook=kill_hook,
                 attempt=attempt,
                 compaction_watermark=compaction_watermark,

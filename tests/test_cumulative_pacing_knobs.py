@@ -6,7 +6,6 @@ from typing import Any
 
 import pytest
 
-from harness.config import RunConfig
 from harness.cumulative.types import PhaseGroup, SessionRecord
 
 
@@ -47,9 +46,7 @@ def test_pacing_knobs_env_unset_uses_defaults_without_optional_runner_overrides(
     tmp_path: Path,
 ) -> None:
     module = _load_run_cumulative_module()
-    monkeypatch.delenv("BENCH_MAX_ATTEMPTS", raising=False)
     monkeypatch.delenv("BENCH_MAX_STEPS_PER_ATTEMPT", raising=False)
-    monkeypatch.delenv("BENCH_RUN_TIMEOUT_S", raising=False)
 
     runner = _build_real_session_runner(module, tmp_path)
     captured: dict[str, Any] = {}
@@ -70,9 +67,7 @@ def test_pacing_knobs_env_unset_uses_defaults_without_optional_runner_overrides(
     runner._runner_cls = _FakeRunner
     runner.run_session(_sample_session())
 
-    assert captured["max_attempts"] == RunConfig().max_attempts
     assert "max_steps_per_attempt" not in captured
-    assert "run_timeout_s" not in captured
 
 
 def test_pacing_knobs_env_set_forwards_runner_constructor_overrides(
@@ -80,9 +75,7 @@ def test_pacing_knobs_env_set_forwards_runner_constructor_overrides(
     tmp_path: Path,
 ) -> None:
     module = _load_run_cumulative_module()
-    monkeypatch.setenv("BENCH_MAX_ATTEMPTS", "5")
     monkeypatch.setenv("BENCH_MAX_STEPS_PER_ATTEMPT", "83")
-    monkeypatch.setenv("BENCH_RUN_TIMEOUT_S", "1200")
 
     runner = _build_real_session_runner(module, tmp_path)
     captured: dict[str, Any] = {}
@@ -103,20 +96,14 @@ def test_pacing_knobs_env_set_forwards_runner_constructor_overrides(
     runner._runner_cls = _FakeRunner
     runner.run_session(_sample_session())
 
-    assert captured["max_attempts"] == 5
     assert captured["max_steps_per_attempt"] == 83
-    assert captured["run_timeout_s"] == 1200
 
 
 @pytest.mark.parametrize(
     ("env_name", "env_value"),
     [
-        ("BENCH_MAX_ATTEMPTS", "0"),
-        ("BENCH_MAX_ATTEMPTS", "abc"),
         ("BENCH_MAX_STEPS_PER_ATTEMPT", "0"),
         ("BENCH_MAX_STEPS_PER_ATTEMPT", "abc"),
-        ("BENCH_RUN_TIMEOUT_S", "0"),
-        ("BENCH_RUN_TIMEOUT_S", "abc"),
     ],
 )
 def test_pacing_knobs_invalid_env_raises_runtime_error(
@@ -126,9 +113,7 @@ def test_pacing_knobs_invalid_env_raises_runtime_error(
     env_value: str,
 ) -> None:
     module = _load_run_cumulative_module()
-    monkeypatch.delenv("BENCH_MAX_ATTEMPTS", raising=False)
     monkeypatch.delenv("BENCH_MAX_STEPS_PER_ATTEMPT", raising=False)
-    monkeypatch.delenv("BENCH_RUN_TIMEOUT_S", raising=False)
     monkeypatch.setenv(env_name, env_value)
 
     with pytest.raises(RuntimeError, match=env_name):

@@ -12,7 +12,7 @@ import { batchView } from "../baselines.mjs";
 
 const cell = (i, over = {}) => ({
   sequence_index: i, state: "complete", turns: 300, tokens: 1, wall_seconds: 10,
-  gates: null, verdict: "FAIL", terminal_reason: "attempt_ceiling_reached",
+  gates: null, verdict: "FAIL", terminal_reason: "stopped",
   context_exhausted: false, attempt_failures: [], ...over,
 });
 

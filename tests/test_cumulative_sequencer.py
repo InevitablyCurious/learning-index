@@ -43,7 +43,7 @@ def _cell_telemetry() -> dict[str, Any]:
         "total_tokens": 30,
         "wall_seconds": 0.1,
         "wall_cost_usd": 0.0,
-        "termination_reason": "attempt_ceiling_reached",
+        "termination_reason": "gates_failed",
         "failed_gates": ["tests"],
     }
 
