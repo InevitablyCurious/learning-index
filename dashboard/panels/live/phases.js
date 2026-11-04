@@ -85,6 +85,7 @@ const END_WORD = {
   stopped: "STOPPED FROM THE BOARD",
   worker_died: "WORKER DIED",
   harness_error: "HARNESS ERROR",
+  compactions_before_grade: "TWO COMPACTIONS, NO GRADE",
 };
 
 function phaseRow(p, state, r, board, verdict, stated, ended) {
