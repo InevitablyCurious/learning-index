@@ -306,6 +306,35 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
       ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "easy").action
     ).toBe(expectedOfferAction(windowWpCand, "easy", true));
 
+    // The same judgement across the races the offer checks play (offerRace in
+    // core.spec.ts, G24's ladder): one board let run 1793751254's build pass
+    // with a hold of its own invention (no double until both sides had six
+    // off), while it held inside its window on one ladder and doubled above
+    // the ceiling on the other — and the player heard only "the offer never
+    // shows up on screen".
+    const races: Board[] = [];
+    let six = 10, one = 1, whiteOff = 4;
+    const rung = () => {
+      const p = emptyPoints();
+      p[6] = six; p[1] = one; p[19] = -5;
+      return bd(p, { white: 0, black: 0 }, { white: whiteOff, black: 10 });
+    };
+    races.push(rung());
+    while (six > 0) { six--; one++; races.push(rung()); }
+    while (one > 1) { one--; whiteOff++; races.push(rung()); }
+    for (let off = 10; off >= 0; off -= 2) {
+      const p = emptyPoints();
+      p[19] = -5; p[6] = 15 - off;
+      races.push(bd(p, { white: 0, black: 0 }, { white: off, black: 10 }));
+    }
+    for (const race of races) {
+      const wp = ai.winProbability(race, "black");
+      expect(
+        ai.shouldAiDouble(race, "black", { value: 1, owner: null }, "hard").action,
+        `black 30 pips, white ${game.pipCount(race, "white")} with ${race.off.white} off, win chance ${wp}`,
+      ).toBe(expectedOfferAction(wp, "hard", true));
+    }
+
     const tooGoodPoints = emptyPoints();
     tooGoodPoints[24] = -1; // black pip 1
     const tooGoodBoard = bd(tooGoodPoints, { white: 14, black: 0 }, { white: 1, black: 14 }); // white pip 350 from bar
