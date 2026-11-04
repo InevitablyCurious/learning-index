@@ -100,7 +100,9 @@ describe("Backgammon backend server-path integrity", () => {
     await api("/api/move", { from: winMove!.from, to: winMove!.to, die: winMove!.die });
     const state = await getState();
     expect(state.winner).toBe("white");
-    expect(state.winType, "[aspect: points]").toBe("gammon");
+    // A gammon named as something else is the classification's finding (G10's
+    // own line); only a gammon that scores wrong is told as the points.
+    expect(state.winType).toBe("gammon");
     expect(state.pointsWon, "[aspect: points]").toBe(2);
   });
 

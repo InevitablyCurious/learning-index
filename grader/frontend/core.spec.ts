@@ -2280,12 +2280,15 @@ async function bearOffTheLastPiece(page: Page): Promise<void> {
   const picked = await pickUpAPiece(page, hints);
   expect(picked, "[needs: F03] the last white checker on point 1 could not be picked up").toBe(true);
 
-  // The bear-off hint's visible text is exactly "off" (hintWords reads it as
-  // ["off"]) — find it by what the player reads, then click where it shows.
+  // The bear-off hint reads "off" or the die it uses, as every hint may (the
+  // prompt asks for a hint per playable die, not a word): a 1 bearing off from
+  // point 1 is the only move, so either is it. Run 1793780359's hint read "1",
+  // and both checks told the player the pop-up never came.
   const hintCount = await hints.count();
   let offHint: Locator | null = null;
   for (let i = 0; i < hintCount; i++) {
-    if (hintWords(await hints.nth(i).innerText()).includes("off")) {
+    const words = hintWords(await hints.nth(i).innerText());
+    if (words.includes("off") || words.includes("1")) {
       offHint = hints.nth(i);
       break;
     }
