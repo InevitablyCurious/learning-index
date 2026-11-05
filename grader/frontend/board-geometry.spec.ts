@@ -471,25 +471,6 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   // drawn beside the bottom one was told "The triangles point outward").
   const needsRows = splitRows(points).separated ? "" : "[needs: F28] ";
 
-  // The board is one plain colour with the points drawn on it (the build prompt):
-  // the strips beside the triangles show that one colour. A board whose point
-  // columns are painted in stripes behind black triangles (run 1791318365) shows
-  // two, and its real triangles read as nothing against the felt this check reads.
-  // The strips are read beside each point's TAGGED box. When the bar is drawn
-  // over points, the boxes run under it while the triangles are squeezed beside
-  // it, so a box's sides land on its neighbour's triangle and a plain board reads
-  // as three colours (run 1793876536 cell 1: 69%, one board colour to the eye).
-  // The bar check tells that layout fault; this one waits on it.
-  // Bar only, not the tray: a bar over a point box is exactly what fails F29's
-  // overlap aspect, which F29 asserts before its [needs: F30] blend aspect — so
-  // the two waits can never both apply (tests/test_player_stages.py).
-  const needsBar = points.some((p) => covers(bar, p)) ? "[needs: F29] " : "";
-  const boardColour = await sampleBoardColour(page, points);
-  expect(
-    boardColour.share >= 0.9,
-    `${needsRows}${needsBar}[aspect: boardcolours] the colours beside the points are not one board colour (the commonest is ${Math.round(boardColour.share * 100)}% of them)`,
-  ).toBe(true);
-
   // A point with no triangle: nothing painted at its rim or its inner end (run
   // 1790381377: every point a transparent box, told "The triangles point
   // outward"), or paint right across it at both ends — a block or a band, no
@@ -524,6 +505,33 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
     noTriangle,
     `${needsRows}${spread} no triangle drawn on points: ${noTriangle.join(", ")}`,
   ).toEqual([]);
+
+  // The board is one plain colour with the points drawn on it (the build prompt):
+  // the strips beside the triangles show that one colour. A board whose point
+  // columns are painted in stripes behind black triangles (run 1791318365) shows
+  // two, and its real triangles read as nothing against the felt this check reads.
+  // Read only beside points a player can see as triangles: not under the bar or
+  // the tray (their strips show the bar or tray), and not a point with no
+  // triangle (the check above tells that first). Run 1793876536 cell 1 read the
+  // tray over points 1, 2, 23, 24 as "not one board colour" and hid a whole half
+  // of undrawn triangles behind that line.
+  // When the bar is drawn over point boxes, the boxes run under it while the
+  // triangles are squeezed beside it, so a box's sides land on its neighbour's
+  // triangle (cell 1 round 1: 69%, one colour to the eye). The bar check tells
+  // that layout fault; this one waits on it. Bar only, not the tray: a bar over a
+  // point box is exactly what fails F29's overlap aspect, which F29 asserts before
+  // its [needs: F30] blend aspect — so the two waits can never both apply
+  // (tests/test_player_stages.py).
+  const needsBar = points.some((p) => covers(bar, p)) ? "[needs: F29] " : "";
+  const visible = new Set(judged.filter((s) => !noTriangle.includes(s.num)).map((s) => s.num));
+  const colourPoints = points.filter((p) => visible.has(p.num));
+  if (colourPoints.length > 0) {
+    const boardColour = await sampleBoardColour(page, colourPoints, points);
+    expect(
+      boardColour.share >= 0.9,
+      `${needsRows}${needsBar}[aspect: boardcolours] the colours beside the points are not one board colour (the commonest is ${Math.round(boardColour.share * 100)}% of them)`,
+    ).toBe(true);
+  }
 
   // Pointing outward: wider further in than at the rim, however short it is.
   const outward = judged.filter((s) => s.shape === "outward").map((s) => s.num);

@@ -725,7 +725,11 @@ export async function boardGeometryDrawn(page: Page): Promise<boolean> {
 export async function sampleBoardColour(
   page: Page,
   points: PointBox[],
+  // The board's middle comes from ALL its points: a subset (a caller reading
+  // only some of them) would move the average and put a row on the wrong side.
+  allPoints: PointBox[] = points,
 ): Promise<{ share: number; colours: number[][] }> {
+  const boardMidY = allPoints.reduce((sum, p) => sum + p.y + p.height / 2, 0) / allPoints.length;
   const hideStyle = await page.addStyleTag({
     content: '[data-testid="checker"], [data-testid="hint"] { visibility: hidden !important; }',
   });
@@ -733,7 +737,7 @@ export async function sampleBoardColour(
     const buf = await page.screenshot({ type: "png" });
     const dataUrl = "data:image/png;base64," + buf.toString("base64");
     return await page.evaluate(
-      async ({ dataUrl, points }) => {
+      async ({ dataUrl, points, midY }) => {
         const img = new Image();
         await new Promise<void>((resolve, reject) => {
           img.onload = () => resolve();
@@ -754,7 +758,6 @@ export async function sampleBoardColour(
         // Where a triangle has narrowed away: a half to three quarters of the way in
         // from its rim, at the very sides of its box. Nearer the rim a wide triangle
         // fills the box and shows its own colour there.
-        const midY = points.reduce((sum, p) => sum + p.y + p.height / 2, 0) / points.length;
         const samples: number[][] = [];
         for (const p of points) {
           const top = p.y + p.height / 2 < midY;
@@ -772,7 +775,7 @@ export async function sampleBoardColour(
         clusters.sort((a, b) => b.n - a.n);
         return { share: samples.length ? clusters[0].n / samples.length : 0, colours: clusters.slice(0, 3).map((k) => k.c) };
       },
-      { dataUrl, points },
+      { dataUrl, points, midY: boardMidY },
     );
   } finally {
     await hideStyle.evaluate((el) => (el as HTMLElement).remove()).catch(() => undefined);
