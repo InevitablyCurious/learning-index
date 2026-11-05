@@ -245,19 +245,26 @@ test("[F35] REQ-LAYOUT — board and controls placement", async ({ page }) => {
   for (const size of SIZES) {
     const layout = await openAt(page, size);
     const board = drawnBoard(layout);
+    // The orientation first, the left edge last: a player who sees the controls
+    // stacked under the board says the layout is wrong, not where the board
+    // starts (Jerry, run 1793908891 round 1: "app orientation is wrong, buttons
+    // should be right with board on left" — the model was told only the left
+    // edge). Missing is the testid check's finding; not showing is F38's; an
+    // empty box has nothing to place.
+    const placed = Object.entries(layout.controls).filter(([, c]) => c && c.shown && !c.empty);
+    const notRight = placed.filter(([, c]) => c!.x < board.x + board.w - 2).map(([id]) => id);
+    expect(
+      placed.length === 0 || notRight.length < placed.length,
+      `at ${layout.size} none of the buttons and game info is right of the board (it ends at x=${Math.round(board.x + board.w)}): ${notRight.join(", ")}`,
+    ).toBeTruthy();
+    expect(
+      notRight,
+      `[aspect: controls] at ${layout.size} not right of the board (it ends at x=${Math.round(board.x + board.w)}): ${notRight.join(", ")}`,
+    ).toEqual([]);
     expect(
       board.x <= 0.1 * layout.vw,
       `[aspect: leftedge] at ${layout.size} the board starts at x=${Math.round(board.x)}, too far in from the left edge`,
     ).toBeTruthy();
-    for (const [id, c] of Object.entries(layout.controls)) {
-      // Missing is the testid check's finding; not showing is F38's; an empty
-      // box has nothing to place.
-      if (!c || !c.shown || c.empty) continue;
-      expect(
-        c.x >= board.x + board.w - 2,
-        `[aspect: controls] at ${layout.size} ${id} (x=${Math.round(c.x)}) is not right of the board (it ends at x=${Math.round(board.x + board.w)})`,
-      ).toBeTruthy();
-    }
   }
 });
 
