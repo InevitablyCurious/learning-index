@@ -43,13 +43,14 @@ def test_empty_slot_passes_and_names_the_launch_folder(runs):
     )
 
 
-def test_occupied_slot_blocks(runs):
+def test_existing_campaign_passes_because_each_click_appends(runs):
     (runs / "1789000000/cloud/orcarouter/anthropic/claude-x").mkdir(parents=True)
     c = Check()
     check_run_dir(c, CLOUD, runs_root=runs)
     name, ok, detail, *_ = _slot(c)
-    assert not ok
+    assert ok
     assert "EXISTS" in detail
+    assert "appends a cell" in detail
 
 
 def test_unreadable_pointer_blocks(tmp_path):

@@ -43,10 +43,12 @@ def _subject(args) -> dict:
 
 
 def check_run_dir(c: Check, args, runs_root=None) -> None:
-    """Report whether the chosen model's campaign slot is already occupied.
+    """Report where the chosen model's campaign lands: new, or appended to.
 
-    READ-ONLY. An unreadable tree pointer blocks: the launch would quietly file
-    the run outside the tree, where a reset never sweeps it.
+    READ-ONLY. Every Run click appends one cell, so an existing campaign is the
+    normal case, not a refusal. Only an unreadable tree pointer blocks: the
+    launch would quietly file the run outside the tree, where a reset never
+    sweeps it.
     """
     node = shutil.which("node")
     if node is None:
@@ -97,8 +99,6 @@ def check_run_dir(c: Check, args, runs_root=None) -> None:
         return
     c.add(
         "campaign slot",
-        False,
-        f"{rel} EXISTS ({tree_note}) — a campaign occupies this slot. "
-        "Reset mints a new tree (never delete); a launch into it RESUMES that "
-        "campaign — intended only for resumes.",
+        True,
+        f"{rel} EXISTS ({tree_note}) — this run appends a cell to that campaign",
     )

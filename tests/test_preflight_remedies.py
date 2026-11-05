@@ -70,12 +70,12 @@ def test_a_passing_check_never_carries_a_remedy() -> None:
 
 
 def test_a_check_with_no_tool_says_so_rather_than_guessing() -> None:
-    """Most failures have no button — a campaign slot to archive, a dead hub, a
+    """Most failures have no button — an unreadable tree pointer, a dead hub, a
     roster that disagrees with itself. The field is present and null, so the
     board can tell "no button" from "the payload predates remedies"."""
     pf = _preflight()
     c = pf.Check()
-    c.add("campaign slot", False, "a campaign occupies this slot")
+    c.add("campaign slot", False, "active-tree.json unreadable")
     row = c.as_rows()[0]
     assert "remedy_tool" in row
     assert row["remedy_tool"] is None
