@@ -320,7 +320,10 @@ def test_a_cell_stopped_while_paused_still_records_its_full_cost(
     assert build["turns"] == 3
     assert build["compactions"] == 5
     assert build["context_peak"] == 4_000
-    assert build["grades"] == {"total": 2, "passed": 1, "failed": 1}
+    assert build["grades"] == {
+        "count": 1,
+        "last": {"total": 2, "passed": 1, "failed": 1},
+    }
     assert build["wall_seconds"] == pytest.approx(5_781.029)
     assert phases["total"]["wall_seconds"] == pytest.approx(5_781.029)
     assert phases["total"]["turns"] == 3
@@ -407,13 +410,18 @@ def test_attempt_reports_grade_the_phase_they_belonged_to(tmp_path: Path) -> Non
         run_dir=run_dir,
         void={"is_void": False, "reason": None},
     )["phases"]
-    assert phases["build"]["grades"] == {"total": 2, "passed": 1, "failed": 1}
-    assert phases["troubleshooting"]["grades"] == {
-        "total": 2,
-        "passed": 2,
-        "failed": 0,
+    assert phases["build"]["grades"] == {
+        "count": 1,
+        "last": {"total": 2, "passed": 1, "failed": 1},
     }
-    assert phases["total"]["grades"] == {"total": 4, "passed": 3, "failed": 1}
+    troubleshooting = phases["troubleshooting"]["grades"]
+    assert troubleshooting["last"] == {"total": 2, "passed": 2, "failed": 0}
+    # Gate counts are never summed across passes: the total keeps the pass count
+    # and the latest pass's outcome.
+    assert phases["total"]["grades"] == {
+        "count": 1 + troubleshooting["count"],
+        "last": {"total": 2, "passed": 2, "failed": 0},
+    }
 
 
 def test_grades_alone_still_open_the_phase_they_belong_to(tmp_path: Path) -> None:
@@ -436,7 +444,10 @@ def test_grades_alone_still_open_the_phase_they_belong_to(tmp_path: Path) -> Non
     )["phases"]
     assert set(phases["build"]) == {"grades"}
     assert set(phases["troubleshooting"]) == {"grades"}
-    assert phases["total"]["grades"] == {"total": 3, "passed": 2, "failed": 1}
+    assert phases["total"]["grades"] == {
+        "count": 2,
+        "last": {"total": 1, "passed": 1, "failed": 0},
+    }
 
 
 # ── ABSENT IS NOT ZERO ───────────────────────────────────────────────────────

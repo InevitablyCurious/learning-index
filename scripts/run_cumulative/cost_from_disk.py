@@ -103,17 +103,18 @@ def _attempt_report_indices(run_dir: Path) -> list[int]:
     return sorted(indices)
 
 
-def _grades_from_reports(run_dir: Path, attempts: list[int]) -> dict[str, int] | None:
-    """Graded gate outcomes across ``attempts``; None when nothing was graded.
+def _grades_from_reports(run_dir: Path, attempts: list[int]) -> dict[str, Any] | None:
+    """How many grades ``attempts`` holds, and what the latest of them found.
 
-    ``total`` is the graded denominator (passed + failed), so the three numbers
-    are always internally consistent. ABSENT, never zeros, when no report in the
-    slice published a ``gate_results`` row with a decided status: a phase that
-    was never graded must not read as a phase that graded nothing and passed.
+    ``count`` is the number of grading passes (attempts whose report published
+    a decided gate row); ``last`` is that latest pass's gate outcome, ``total``
+    being its graded denominator (passed + failed). Gate counts are NEVER summed
+    across passes: run 1793876536 cell 1 read 472 "grades" for two passes of 236
+    gates, a number that measures nothing. ABSENT, never zeros, when no report in
+    the slice was graded: a phase never graded must not read as one that passed.
     """
-    passed = 0
-    failed = 0
-    graded = False
+    count = 0
+    last: dict[str, int] | None = None
     for attempt in attempts:
         report = _read_json_object(run_dir / f"attempt-{attempt}-report.json")
         if report is None:
@@ -121,6 +122,8 @@ def _grades_from_reports(run_dir: Path, attempts: list[int]) -> dict[str, int] |
         rows = report.get("gate_results")
         if not isinstance(rows, list):
             continue
+        passed = 0
+        failed = 0
         for row in rows:
             if not isinstance(row, Mapping):
                 continue
@@ -131,10 +134,13 @@ def _grades_from_reports(run_dir: Path, attempts: list[int]) -> dict[str, int] |
                 passed += 1
             else:
                 failed += 1
-            graded = True
-    if not graded:
+        if passed + failed == 0:
+            continue
+        count += 1
+        last = {"total": passed + failed, "passed": passed, "failed": failed}
+    if last is None:
         return None
-    return {"total": passed + failed, "passed": passed, "failed": failed}
+    return {"count": count, "last": last}
 
 
 @dataclass(frozen=True)
@@ -476,12 +482,13 @@ def _total_phase(
     peaks = [phase["context_peak"] for phase in phases if "context_peak" in phase]
     if peaks:
         total["context_peak"] = max(peaks)
-    grades: dict[str, int] = {}
-    for phase in phases:
-        for name, value in (phase.get("grades") or {}).items():
-            grades[name] = grades.get(name, 0) + int(value)
-    if grades:
-        total["grades"] = grades
+    graded = [phase["grades"] for phase in phases if "grades" in phase]
+    if graded:
+        # Phases are in order, so the last graded phase holds the latest pass.
+        total["grades"] = {
+            "count": sum(g["count"] for g in graded),
+            "last": graded[-1]["last"],
+        }
     return total
 
 
