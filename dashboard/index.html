@@ -661,9 +661,7 @@ a:hover{color:var(--type)}
 .build-tab{font:400 11px var(--font);background:transparent;color:var(--dim);border:0;border-bottom:2px solid transparent;border-radius:0;padding:3px 8px;cursor:pointer}
 .build-tab.active{color:var(--fg);border-bottom-color:var(--fg)}
 .build-tab:disabled{color:var(--dim);border-color:var(--hairline);cursor:not-allowed}
-.curve-frame,.curve-foot,.tui-head,.tui-foot,.ledger-head,.axis,.big,.prov,.feed-head{font-family:var(--font)}
-.curve-frame{padding:22px;border:1px solid var(--border);border-radius:var(--radius-md);background:linear-gradient(180deg,color-mix(in srgb,var(--bg-2) 85%, transparent),var(--bg-2))}
-.curve-svg{overflow:visible}
+.tui-head,.tui-foot,.ledger-head,.axis,.big,.prov,.feed-head{font-family:var(--font)}
 .c-axis,.c-legend,.c-note,.c-base-lbl,.c-annot,.c-val,.c-delta,.c-gate{fill:var(--dim);font-size:11px}
 .c-base,.c-path,.c-ax{stroke:var(--fg);stroke-width:1.5;fill:none;stroke-dasharray:8 6}
 .c-pt{fill:var(--fg);stroke:var(--fg);stroke-width:2}
@@ -712,8 +710,8 @@ a:hover{color:var(--type)}
 .ledger-lead{display:flex;flex-direction:column;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--hairline)}
 .big{display:flex;flex-direction:column;gap:4px;font:700 13px var(--font)}
 /* ── PAUSE-AFTER-EACH-GRADE TOGGLE (panels/create.js confirm step, dev mode) ──
-   A row with an on/off toggle and one plain line under it. Mirrors the
-   continuous control's shape so the confirm step reads as one surface. */
+   A row with an on/off toggle and one plain line under it, so the confirm step
+   reads as one surface. */
 .cpause{display:flex;flex-direction:column;gap:6px;margin-top:2px}
 .cpause-btn{
   font:700 12px var(--font);letter-spacing:.12em;color:var(--fg);
@@ -722,15 +720,6 @@ a:hover{color:var(--type)}
 }
 .cpause-btn:hover:not(:disabled){color:var(--type);border-color:var(--fg)}
 .cpause-btn[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
-/* CONTINUOUS MODE — the chain's banner (panels/continuous.js): accent while it
-   runs, plain once it ended, ok-green when the model passed everything. */
-.cont{background:var(--surface-raised);border:1px solid var(--accent);border-radius:var(--radius-xl);padding:var(--pad);display:flex;flex-direction:column;gap:10px;min-width:0}
-.cont.ended{border-color:var(--border)}
-.cont.passed{border-color:var(--ok)}
-.cont-line{font:400 12px/1.6 var(--font);color:var(--fg)}
-.cont-wait{color:var(--warn)}
-.cont-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.cont-refusal{font:400 12px/1.6 var(--font);color:var(--danger)}
 .muted-box{padding:8px 10px;border:1px solid var(--danger);border-radius:var(--radius-sm)}
 
 /* THE FREEZE REFUSAL. Rendered where the click happened, because a refusal the
@@ -813,50 +802,11 @@ a:hover{color:var(--type)}
    has actively removed it. The red border and the red summary warning render
    together, so the colour means the same thing in both places. */
 .chead-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
-/* ── SEED FROM A BUILD SNAPSHOT — the dev-mode step (panels/snapshot.js) ───
-   A LIST OF CHOICES, not a list of records: every row is the same control, so
-   "build from scratch" is exactly as easy to pick as a snapshot. The step is a
-   shortcut, and a shortcut whose opt-out is harder than its opt-in is a trap.
-
-   Selection is the FILLED treatment, matching the segmented controls elsewhere
-   on the board — one visual language for "this is the chosen one". */
-.sn-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow:auto}
-.sn-row{
-  display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;align-items:start;
-  width:100%;text-align:left;cursor:pointer;
-  padding:9px 11px;border:1px solid var(--border);border-radius:var(--radius-md);
-  background:transparent;color:inherit;font:inherit;
-}
-.sn-row:hover{border-color:var(--fg)}
-.sn-row.on{border-color:var(--fg);background:color-mix(in srgb, var(--fg) 8%, transparent)}
-.sn-mark{font:700 12px var(--font);color:var(--type);line-height:1.5}
-.sn-main{display:flex;flex-direction:column;gap:3px;min-width:0}
-.sn-id{font:700 12px var(--font);color:var(--type);display:flex;gap:10px;align-items:baseline;min-width:0}
-.sn-when{font:400 10.5px var(--font);color:var(--dim);flex:none}
-.sn-depth{font:400 10px var(--font);color:var(--dim);opacity:.75;flex:none}
-.sn-meta{font:400 11.5px/1.5 var(--font);color:var(--fg);overflow-wrap:anywhere}
-/* The build-from-scratch row is a peer, not a cancel — same box, no special
-   colour. Only its position (first) says it is the default. */
-.sn-skip .sn-id{letter-spacing:.04em}
-/* PROVENANCE DRIFT IS SHOWN AND NEVER DISQUALIFIES (D-SNAP-DEVMODE-EXCEPTIONS).
-   Dim, not amber: amber on this board is operator caution, and a snapshot built
-   at another commit is an ordinary fact about a dev-mode tool. */
-.sn-drift{font:400 10.5px var(--font);color:var(--dim)}
-.sn-empty{font:400 12px/1.6 var(--font);color:var(--dim);padding:14px 12px;border:1px dashed var(--border-strong);border-radius:var(--radius-md)}
-/* THE REFUSED ONES ARE LISTED, NOT HIDDEN. A snapshot an operator captured and
-   cannot find teaches them nothing by its absence. */
-.sn-refused{display:flex;flex-direction:column;gap:4px;margin-top:10px;padding-top:9px;border-top:1px solid var(--hairline)}
-.sn-refused-head{font:700 10px var(--font);letter-spacing:.14em;color:var(--dim)}
-.sn-refused-row{font:400 11px/1.5 var(--font);color:var(--dim);overflow-wrap:anywhere}
-.sn-refused-row b{color:var(--fg);font-weight:700}
-
 .ccompact-btn{font:400 11px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;cursor:pointer}
 .ccompact-btn:hover{border-color:var(--border-strong)}
 .ccompact-btn.override{border:1px solid var(--danger);color:var(--danger)}
 .cconcurrent-btn{font:400 11px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;cursor:pointer}
 .cconcurrent-btn:hover{border-color:var(--border-strong)}
-.ccontinuous-btn{font:400 11px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;cursor:pointer}
-.ccontinuous-btn[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
 .ctitle{font:700 14px/1.35 var(--font);color:var(--type)}
 .cbody{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
 .cnote{font:400 11.5px/1.5 var(--font);color:var(--dim)}
@@ -1255,10 +1205,7 @@ a:hover{color:var(--type)}
 /* The elapsed counter is the honest signal; the dots are decoration. Under
    reduced motion the dots hold still and the counter still proves liveness. */
 
-/* ── TUI MIRROR — the third tab of the transfer-curve card ────────────────
-   It was `.tui-dock`: position:fixed, bottom-right, floating over whatever was
-   underneath it. That is DELETED — the mirror is a tab now, it flows in the
-   card, and nothing on this board floats over the argument.
+/* ── TUI MIRROR — the live view's own terminal (panels/tui.js) ────────────
 
    THE GRID IS NO LONGER SIZED FROM THIS FILE. `--tui-w`/`--tui-h`/
    `--tui-scale` and the transform that used them are gone with the constants
@@ -1501,15 +1448,7 @@ a:hover{color:var(--type)}
 .gp-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.06em}
 .gp-detail{flex:none;font-weight:700}
 
-/* ── TRANSFER CURVE — the empty/void frames ──────────────────────────────
-   These are the states where there is nothing to plot. They are designed
-   answers, not degraded plots, so they get real type hierarchy. */
-.curve-frame-head{font:700 13px var(--font);letter-spacing:.02em;color:var(--type)}
-.curve-frame-line{font:400 12.5px/1.6 var(--font);color:var(--fg);margin-top:6px}
-.curve-frame-note{font:400 12px/1.6 var(--font);color:var(--dim);margin-top:6px}
-.curve-frame.bad .curve-frame-head{color:var(--danger)}
-.curve-frame.bad{border-color:var(--danger)}
-.curve-foot{display:flex;gap:22px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--hairline);font:400 12px var(--font);color:var(--dim)}
+/* The live view panel takes the row's slack; its terminal fills what is left. */
 .curve{flex:1 1 0}
 
 /* ── RUN LEDGER — row cells. Only the long identity columns may ellipsize:
@@ -1636,15 +1575,13 @@ a:hover{color:var(--type)}
    does not say what it is waiting for is indistinguishable from a broken one. */
 .blwhy{padding:0 4px 10px 36px;font:400 11.5px/1.5 var(--font)}
 /* ── THE BATCH'S CELLS ── inside an open row: one line per cell of the batch,
-   void ones included (marked, never dropped), the picked floor marked. */
-.bccols,.bcrow{display:grid;grid-template-columns:62px 74px 80px minmax(170px,1.4fr) 64px 76px 76px minmax(120px,1fr) 64px;gap:10px;align-items:baseline;min-width:0}
+   void ones included (marked, never dropped). */
+.bccols,.bcrow{display:grid;grid-template-columns:62px 74px 80px minmax(170px,1.4fr) 64px 76px 76px minmax(120px,1fr);gap:10px;align-items:baseline;min-width:0}
 .bccols{font:700 10px/1 var(--font);letter-spacing:.14em;color:var(--dim);padding-bottom:5px;border-bottom:1px solid var(--hairline)}
 .bcrow{padding:6px 0;font:400 12px var(--font);color:var(--fg);border-bottom:1px solid var(--hairline)}
 .bccols>span,.bcrow>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bcseq{color:var(--type)}
-.bcact{text-align:right}
 .bcrow.bc-void{opacity:.8}
-.bcrow.bc-picked{background:color-mix(in srgb, var(--fg) 7%, transparent)}
 /* THE TWO SENTENCES THAT ARGUE THE NESTING. Side by side at equal weight,
    because they are two halves of one claim. */
 /* Last block on the card now that the stat strip leads it, so the rule that
@@ -2166,116 +2103,10 @@ a:hover{color:var(--type)}
      run table keeps its LOG column, which is how a cell is found on disk. */
 }
 
-/* ── LEARNING PANEL — the in-session capture surface ─────────────────────
-   Three views over board.learning: MATRIX (gate × attempt), CLAIMS (the
-   model's own account), LIVE (bookkeeping + history). Colours are SEMANTIC —
-   pass/fail are gate outcomes only, polarity never takes them, arm identity is
-   words + colour like the rest of the board. */
+/* Muted text inside an otherwise-typed line — emphasized phrasing a tag or a
+   cell cannot say in its own colour. Emitted by panels/wall.js and
+   panels/tui.js. */
 .dim{color:var(--dim);font-style:normal}
-.learn{display:flex;flex-direction:column;gap:11px;min-width:0;font-family:var(--font);color:var(--fg)}
-.learn-head{display:flex;align-items:baseline;gap:12px;min-width:0}
-.learn-kick{font:700 10.5px var(--font);letter-spacing:.16em;color:var(--dim);flex:none}
-.learn-note{font:400 11.5px/1.5 var(--font);color:var(--dim);min-width:0}
-.learn-head .learn-note{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.learn-block{display:flex;flex-direction:column;gap:6px;padding-top:10px;border-top:1px solid var(--hairline)}
-.learn-block.warn{border-top:1px solid var(--border-strong)}
-
-/* CLAIM DISTRIBUTION. fixed=0 is a measured result and renders as 0. */
-.learn-dist{display:flex;flex-wrap:wrap;gap:7px}
-.ld-chip{display:flex;align-items:baseline;gap:7px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 10px;font:400 11.5px var(--font);color:var(--fg)}
-.ld-chip.dim{color:var(--dim);border-style:dashed;border-color:var(--border-strong)}
-.ld-label{color:var(--dim)}
-.ld-n{font-weight:700;font-variant-numeric:tabular-nums;color:var(--type)}
-.ld-n.zero{color:var(--dim)}
-
-/* CLAIMS — the model's own account, two authors side by side. */
-.lc-goal{display:flex;align-items:baseline;gap:10px;border:1px dashed var(--border-strong);border-radius:var(--radius-md);padding:9px 11px}
-.lc-goal .learn-kick{flex:none}
-.lc-goal-text{flex:1;min-width:0;font:400 11.5px/1.5 var(--font);color:var(--fg)}
-.lc-invalid{display:flex;flex-direction:column;gap:4px;border:1px solid var(--danger);border-radius:var(--radius-md);padding:9px 11px}
-.lc-traj{border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-2)}
-.lc-traj-head{display:flex;align-items:baseline;gap:11px;padding:10px 12px;border-bottom:1px solid var(--hairline)}
-.lc-traj-label{flex:none;font:700 12.5px var(--font);color:var(--type)}
-.lc-count{flex:none;font:400 11px var(--font);color:var(--fg)}
-.lc-rec{padding:11px 12px;border-bottom:1px solid var(--hairline);display:flex;flex-direction:column;gap:8px}
-.lc-rec:last-child{border-bottom:0}
-.lc-rec-top{display:flex;align-items:baseline;gap:10px}
-/* Polarity is do-this / do-not-do, NOT a verdict — muted, never pass/fail. */
-.lc-pol{flex:none;font:700 10px var(--font);letter-spacing:.12em;color:var(--comment);border:1px solid var(--comment);border-radius:var(--radius-sm);padding:3px 7px}
-.lc-pol.neg{border-style:dashed}
-.lc-statement{flex:1;min-width:0;font:400 13px/1.5 var(--font);color:var(--type);overflow-wrap:anywhere}
-.lc-win{flex:none;font:700 10px var(--font);letter-spacing:.12em;color:var(--fg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:3px 7px}
-.lc-win.bad{color:var(--danger);border-color:var(--danger)}
-.lc-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.lc-col{display:flex;flex-direction:column;gap:5px;min-width:0}
-.lc-w{font:400 11.5px/1.55 var(--font);color:var(--fg)}
-.lc-w i{font-style:normal;color:var(--dim)}
-.lc-evs{display:flex;flex-direction:column;gap:3px;padding-top:3px}
-.lc-ev{font:italic 400 11.5px/1.5 var(--font);color:var(--fg)}
-.lc-ev i{font-style:normal;color:var(--dim)}
-.lc-lines{display:flex;flex-wrap:wrap;gap:4px}
-.lc-line{font:700 11px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:3px 7px;font-variant-numeric:tabular-nums}
-.learn-foot2{display:flex;gap:20px;padding-top:9px;border-top:1px solid var(--hairline)}
-.learn-foot2>span{flex:1;font:400 11px/1.5 var(--font);color:var(--dim)}
-
-/* LIVE — bookkeeping, marks pips, capture states, session history. */
-.lv-cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
-.lv-col{display:flex;flex-direction:column;gap:11px;min-width:0}
-.lbook{display:flex;flex-direction:column;gap:7px}
-.lbook-row{display:flex;align-items:baseline;gap:10px;font:400 12px var(--font)}
-.lbook-k{flex:none;width:132px;color:var(--dim)}
-.lbook-v{flex:1;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
-.lp-pips{display:flex;gap:5px;align-items:center}
-.lp-pip{width:30px;height:13px;border-radius:3px;background:transparent;border:1px dotted var(--dim)}
-.lp-pip.on{background:var(--fg);border:1px solid var(--fg)}
-.lp-pip.gap{background:transparent;border:1px solid var(--border-strong)}
-.lcs-list{display:flex;flex-direction:column;gap:6px}
-.lcs{display:flex;align-items:baseline;gap:9px;border:1px dashed var(--border-strong);border-radius:var(--radius-sm);padding:7px 9px;background:transparent}
-.lcs.on{background:var(--bg-2);border-style:solid}
-.lcs-label{flex:none;font:700 10px var(--font);letter-spacing:.12em;width:112px}
-.lcs-body{flex:1;min-width:0;font:400 11px/1.45 var(--font);color:var(--fg);overflow-wrap:anywhere}
-.ls{display:flex;flex-direction:column;min-width:0}
-.ls-row{display:grid;grid-template-columns:112px 62px minmax(0,1fr) 74px 74px;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--hairline);font:400 11.5px var(--font);color:var(--fg);font-variant-numeric:tabular-nums}
-.ls-hdr{font:700 9.5px var(--font);letter-spacing:.12em;color:var(--dim);padding-bottom:5px}
-.ls-id{color:var(--type);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ls-tally{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ls-bytes{color:var(--dim)}
-
-/* The unobserved / unwired frame — a designed state, never an error. */
-.learn-frame{border:1px dashed var(--border-strong);border-radius:var(--radius-lg);padding:20px;display:flex;flex-direction:column;gap:7px}
-.learn-frame-head{font:700 11px var(--font);letter-spacing:.16em;color:var(--dim)}
-.learn-frame-body{font:400 12.5px/1.6 var(--font);color:var(--fg);max-width:820px}
-.learn-frame-note{font:400 11.5px/1.5 var(--font);color:var(--dim)}
-
-/* ── LEARNING AND THE TUI MIRROR LIVE ON THE TRANSFER CURVE CARD ──────────
-   The curve header carries the top-level TRANSFER CURVE | LEARNING | TUI
-   MIRROR switch; the learning tab's own bar carries MATRIX / CLAIMS / LIVE.
-   The curve is the WHAT, the learning view is the WHY, the mirror is the RAW —
-   one card, one header.
-
-   THE ARM A/B LEGEND USED TO SIT HERE and is deleted with its rules
-   (`.arm-legend`, `.arm-swatch`): the arms are already named in words on the
-   plot's own labels, so the legend was a second place saying the same thing.
-   The `--arm-a` / `--arm-b` PROPERTIES stay — recall.js is now their only
-   consumer — but the `.arm-a` / `.arm-b` CLASSES went with the legend: it was
-   their only caller. */
-.curve-metric{display:flex;justify-content:flex-end}
-.curve-foot .btn{margin-left:auto}
-
-.learn-bar{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--hairline);min-width:0}
-.learn-brand{flex:none;font:700 11px var(--font);letter-spacing:.18em;color:var(--type)}
-.learn-cellinfo{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--hairline);font:400 12px var(--font)}
-.learn-cell{color:var(--type)}
-.learn-arm{font-weight:700}
-.learn-model{color:var(--dim)}
-.learn-state{flex:none;font:700 10.5px var(--font);letter-spacing:.14em;color:var(--type);border:1px solid var(--fg);border-radius:var(--radius-sm);padding:3px 8px;white-space:nowrap}
-.learn-state.good{color:var(--check);border-color:var(--check)}
-.learn-state.muted{color:var(--dim);border-color:var(--border-strong)}
-.learn-state.bad{color:var(--danger);border-color:var(--danger)}
-
-/* The learning views live inside the 50% curve card, so the two-column LIVE
-   view stacks where the card is narrow. */
-@media (max-width:1400px){.lv-cols{grid-template-columns:minmax(0,1fr)}}
 
 /* ── DEV MODE (panels/devmode.js) ─────────────────────────────────────────
    The settings drawer's mode toggle, and the topbar markers chrome.js will
@@ -2283,7 +2114,7 @@ a:hover{color:var(--type)}
    names, pre-styled here).
 
    UNREACHABLE IS NOT OFF. The unknown subtree is dashed — the board's
-   no-signal grammar (`.learn-frame`) — and amber, never the
+   no-signal grammar — and amber, never the
    hollow-dim off treatment: absence of an answer must not render as a
    confident OFF.
 

@@ -305,57 +305,6 @@ def test_build_scorecard_reads_only_manifest_and_stream(tmp_path) -> None:
     assert not mutable_manifest_path.exists()
 
 
-def test_build_scorecard_carries_snapshot_honesty_fields_from_the_stream(
-    tmp_path,
-) -> None:
-    """WO-SNAP-03 half A: the scorecard path passes the declared fields.
-
-    Top-level keys on a status-stream record must survive the
-    ``_ScoredSession`` carrier into ``ConvergencePoint.from_session_record``
-    and out through the published point dict; a record without the keys
-    scores as unseeded defaults (None/False/False).
-    """
-    run_dir = tmp_path / "runs" / "cumulative"
-    mutable_manifest_path = run_dir / "manifest.json"  # deliberately absent
-
-    stream = StatusStream(run_dir / "manifest.status.jsonl")
-    stream.append(
-        {
-            **_status_record(
-                sequence_index=0,
-                session_fp="fp-0",
-                session_id="s-0",
-                progress=_progress(full_green=True, resolved=3, total_tokens=3000),
-            ),
-            "seeded_from_snapshot": "snap-abc123",
-            "build_phase_ran": False,
-            "dev_mode": False,
-        }
-    )
-    stream.append(
-        _status_record(
-            sequence_index=1,
-            session_fp="fp-1",
-            session_id="s-1",
-            progress=_progress(full_green=False, resolved=1, total_tokens=1000),
-        )
-    )
-    write_run_manifest(run_dir / "manifest.run-manifest.json", _manifest())
-
-    scorecard = build_scorecard(mutable_manifest_path)
-
-    points = scorecard["convergence"]["points"]
-    assert len(points) == 2
-    seeded_point = next(p for p in points if p["sequence_index"] == 0)
-    assert seeded_point["seeded_from_snapshot"] == "snap-abc123"
-    assert seeded_point["build_phase_ran"] is False
-    assert seeded_point["dev_mode"] is False
-    bare_point = next(p for p in points if p["sequence_index"] == 1)
-    assert bare_point["seeded_from_snapshot"] is None
-    assert bare_point["build_phase_ran"] is False
-    assert bare_point["dev_mode"] is False
-
-
 def test_build_scorecard_aggregates_error_totals_over_best_by_cell(tmp_path) -> None:
     """WO-ERRDATA-C5: the scorecard carries per-run error-type totals.
 

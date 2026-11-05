@@ -96,9 +96,8 @@ def test_the_sidecar_traffic_count_is_read_from_the_marker_dir(tmp_path: Path) -
 
 
 class _Cell(MemoryRecordMixin):
-    def __init__(self, memory_mode: str, mock: str | None = None) -> None:
+    def __init__(self, memory_mode: str) -> None:
         self.memory_mode = memory_mode
-        self.mock = mock
         self.progress: list[str] = []
         self._progress = self.progress.append
         self._baked_plugin = BakedPlugin(
@@ -158,13 +157,6 @@ def test_an_off_cell_records_delivery_only(tmp_path: Path, counters: Path) -> No
         "first_prompt_tokens": 9150,
         "tool_calls": {"bash": 2, "honcho_search": 1},
     }
-
-
-def test_a_mock_cell_writes_no_record(tmp_path: Path, counters: Path) -> None:
-    cell = _Cell("on", mock="golden")
-    cell._memory_begin(run_label="mock")
-    cell._memory_finish(run_label="mock", run_dir=tmp_path)
-    assert not (tmp_path / MEMORY_RECORD_FILENAME).exists()
 
 
 def test_a_busy_memory_system_stops_the_cell_before_it_starts(

@@ -1,11 +1,12 @@
-// Pure domain layer for the batch/median/operator-selection baseline (Step 6).
-// A model's floor is no longer an arbitrary last-scorable pick: it is the
-// operator's selected run from a batch of N runs, whose MEDIAN problem count
-// over SCORED runs (voids excluded, never counted as failures) is the
-// baseline. The batch is bound to a fingerprint of everything that determines
-// what was measured; any input change voids the batch and names the changed
-// input. No I/O beyond batch.json read/write and directory hashing — no
-// server, no network, no state outside the passed arguments.
+// Pure domain layer for the batch/median baseline (Step 6): a campaign's runs,
+// their MEDIAN problem count over SCORED runs (voids excluded, never counted as
+// failures), and the fingerprint binding. A baseline is no longer one picked
+// run — every click is one more baseline, and the average is taken per
+// fingerprint (baselines.mjs `fingerprints`). The batch is bound to a
+// fingerprint of everything that determines what was measured; any input change
+// voids the batch and names the changed input. No I/O beyond batch.json
+// read/write and directory hashing — no server, no network, no state outside
+// the passed arguments.
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -195,12 +196,6 @@ export function medianOfScored(runs) {
   return counts.length % 2 === 1 ? counts[mid] : (counts[mid - 1] + counts[mid]) / 2;
 }
 
-/** Signed deviation of a pick from the median: + = worse, - = better. */
-export function signedDeviation(problemCount, median) {
-  if (median == null) return null;
-  return problemCount - median;
-}
-
 /**
  * Batch-level contention summary over the SCORED runs only — the same
  * population the median is derived from. VISIBILITY ONLY: it lets an operator
@@ -273,7 +268,6 @@ export function assembleBatch({ runDir, runs, fingerprint, now = new Date().toIS
     // What conditions the batch was gathered under, over the SCORED runs only
     // (contentionSummary). Visibility only, never a gate, never fingerprinted.
     contention: contentionSummary(normalized),
-    selection: null,
     void: false,
     // Why the batch is void: "superseded" (the code changed since it ran),
     // "mixed" (its cells ran on different inputs) or "unfingerprinted" (its
@@ -290,25 +284,6 @@ export function markVoid(batch, kind, changedInput, changedReason) {
   batch.void_kind = kind;
   batch.void_input = changedInput;
   batch.void_reason = changedReason;
-  batch.updated_at = new Date().toISOString();
-  return batch;
-}
-
-/**
- * Record the operator's pick: the scored run at sequenceIndex, with its
- * signed deviation from the batch median. Fails loud on an absent or void
- * sequence_index — a void run is never selectable as the artifact.
- */
-export function selectRun(batch, sequenceIndex) {
-  const run = batch.runs.find(
-    (candidate) => candidate.scored === true && candidate.sequence_index === sequenceIndex,
-  );
-  if (!run) throw new Error("no scored run with sequence_index " + sequenceIndex);
-  batch.selection = {
-    sequence_index: run.sequence_index,
-    problem_count: run.problem_count,
-    signed_deviation: signedDeviation(run.problem_count, batch.median),
-  };
   batch.updated_at = new Date().toISOString();
   return batch;
 }

@@ -100,7 +100,6 @@ def test_seeded_worktree_has_no_evaluation_vocabulary(tmp_path: Path) -> None:
         task_dir=SCAFFOLD.parent,
         work_root=tmp_path / "work-root",
         model="openrouter/anthropic/claude-opus-4.8",
-        mock="scaffold",
     )
     runner._init_worktree_git(worktree=worktree)
 

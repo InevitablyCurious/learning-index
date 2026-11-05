@@ -5,11 +5,11 @@
 // extracted: log prose can hold workspace text, and the board is public.
 
 import { join } from "node:path";
-import { int, str, percentiles } from "../contract.mjs";
+import { int, percentiles } from "../contract.mjs";
 import { readTail, listDir, statOrNull } from "./_runtime.mjs";
 
 export const id = "plugin-log";
-export const fields = ["honesty.recall_latency_ms", "honesty.guard_detections", "recall_stats"];
+export const fields = ["honesty.recall_latency_ms", "honesty.guard_detections"];
 export function describe() {
   return "plugin log — recall latency (p50/p95), fire/return counts, guard detections";
 }
@@ -37,8 +37,6 @@ export async function read(ctx) {
   const guard = {};
   let fired = 0;
   let returned = 0;
-  let returnedCountSum = 0;
-  const reasons = {};
 
   for (const l of logs) {
     for (const line of (await readTail(l.path)).split("\n")) {
@@ -48,10 +46,6 @@ export async function read(ctx) {
         returned += 1;
         const dur = int(/dur_ms=(\d+)/.exec(line)?.[1]);
         if (dur !== null) durations.push(dur);
-        const count = int(/count=(\d+)/.exec(line)?.[1]);
-        if (count !== null) returnedCountSum += count;
-        const reason = str(/reason_code=([^\s]+)/.exec(line)?.[1]);
-        if (reason && reason !== "null") reasons[reason] = (reasons[reason] ?? 0) + 1;
       }
 
       // Guard detections: counted by rule, content never echoed.
@@ -68,12 +62,6 @@ export async function read(ctx) {
     ok: true,
     provenance: { path: logs[0].path, mtime: logs[0].mtime, bytes: logs[0].size },
     patch: {
-      recall_stats: {
-        fired,
-        returned,
-        returned_count_sum: returnedCountSum,
-        reason_codes: reasons,
-      },
       honesty: {
         recall_latency_ms: percentiles(durations),
         guard_detections: guard,

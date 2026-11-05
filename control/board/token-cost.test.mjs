@@ -34,7 +34,6 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { read as readStack } from "./sources/stack-ledger.mjs";
 import { readCell } from "./sources/status-stream.mjs";
 
 // ── fixture builders ─────────────────────────────────────────────────────────
@@ -92,7 +91,7 @@ async function writeCost(runDir, seq, total, { arm = "off" } = {}) {
   await writeFile(join(dir, "cost.json"), `${JSON.stringify(record)}\n`, "utf8");
 }
 
-/** A campaign directory stack-ledger can read: manifest + the status stream. */
+/** A campaign directory the cell reader can read: manifest + the status stream. */
 async function writeRun(root, records) {
   const dir = join(root, "cumulative");
   await mkdir(dir, { recursive: true });
@@ -129,13 +128,6 @@ async function onRoot(fn) {
   }
 }
 
-/** The stack's first (and only) ledger row — the cell's own numbers. */
-async function ledgerRow(root) {
-  const res = await readStack({ runsRoot: root, benchRoot: root, config: {} });
-  assert.equal(res.ok, true, `stack-ledger should read: ${res.reason ?? ""}`);
-  return res.patch.stack.all[0];
-}
-
 /** The cell's own view (status-stream readCell). */
 async function cellView(root) {
   const res = await readCell({
@@ -167,24 +159,6 @@ const TOTAL = {
   cache_write_tokens: 500,
 };
 
-test("stack-ledger: a cell's tokens are cost.json phases.total, not the last attempt's work_*", async () => {
-  await onRoot(async (root) => {
-    const dir = await writeRun(root, twoAttempts());
-    await writeCost(dir, 0, TOTAL);
-
-    const row = await ledgerRow(root);
-    assert.deepEqual(
-      row.tokens_breakdown,
-      { input: 1_000, output: 200, reasoning: 150, cache_read: 4_000, cache_write: 500 },
-      "every kind comes off the stamp",
-    );
-    assert.equal(row.tokens, 5_850, "the total is the five kinds together");
-    // The attempt rows said 333 / 444 / 99_999-ish. None of it may surface.
-    assert.notEqual(row.tokens_breakdown.input, 333);
-    assert.notEqual(row.tokens_breakdown.output, 444);
-  });
-});
-
 test("status-stream: a cell's tokens are cost.json phases.total, not the last attempt's work_*", async () => {
   await onRoot(async (root) => {
     const dir = await writeRun(root, twoAttempts());
@@ -214,16 +188,14 @@ test("output is phases.total.output_tokens (generation-only), reasoning separate
     const dir = await writeRun(root, twoAttempts());
     await writeCost(dir, 0, TOTAL);
 
-    const row = await ledgerRow(root);
-    assert.equal(row.tokens_breakdown.output, 200, "output is RAW generation, reasoning excluded");
-    assert.equal(row.tokens_breakdown.reasoning, 150, "reasoning is its own category");
+    const run = await cellView(root);
+    assert.equal(run.tokens.output, 200, "output is RAW generation, reasoning excluded");
+    assert.equal(run.tokens.reasoning, 150, "reasoning is its own category");
     assert.equal(
-      row.tokens_breakdown.output,
+      run.tokens.output,
       TOTAL.output_tokens,
       "no fold of reasoning into output — the field is `output`, not `output_and_reasoning`",
     );
-    // The status-stream cell view states the same split.
-    const run = await cellView(root);
     assert.equal(run.tokens.output, 200);
     assert.equal(run.tokens.reasoning, 150);
   });
@@ -235,16 +207,6 @@ test("a cell with NO cost.json shows null tokens, even when its rows are full of
   await onRoot(async (root) => {
     await writeRun(root, twoAttempts()); // rows carry work_* and progress totals
     // No cost stamp written at all.
-
-    const row = await ledgerRow(root);
-    assert.equal(row.tokens, null, "an unstamped cell's spend is unknown, not the attempt's");
-    assert.deepEqual(row.tokens_breakdown, {
-      input: null,
-      output: null,
-      reasoning: null,
-      cache_read: null,
-      cache_write: null,
-    });
 
     const run = await cellView(root);
     assert.equal(run.tokens.input, null, "no fallback to work_input_tokens or progress.input_tokens");
@@ -260,16 +222,8 @@ test("a stamp with no phases.total (void/pre-standard) shows null tokens too", a
     const dir = await writeRun(root, twoAttempts());
     await writeCost(dir, 0, null); // phases: {} — the stamp exists, the total does not
 
-    const row = await ledgerRow(root);
-    assert.equal(row.tokens, null);
-    assert.deepEqual(row.tokens_breakdown, {
-      input: null,
-      output: null,
-      reasoning: null,
-      cache_read: null,
-      cache_write: null,
-    });
     const run = await cellView(root);
+    assert.equal(run.tokens.input, null, "no total on the stamp is unknown, not 0");
     assert.equal(run.tokens.input, null);
     assert.equal(run.tokens.output, null);
   });
@@ -281,14 +235,11 @@ test("a PARTIAL stamp sums only the kinds it observed — never a zero for the m
     // A local model: no cache figures, no reasoning key (to_dict omits absent keys).
     await writeCost(dir, 0, { input_tokens: 10, output_tokens: 20 });
 
-    const row = await ledgerRow(root);
-    assert.equal(row.tokens, 30, "10 + 20 only");
-    assert.equal(row.tokens_breakdown.reasoning, null, "unobserved, not 0");
-    assert.equal(row.tokens_breakdown.cache_read, null);
-    assert.equal(row.tokens_breakdown.cache_write, null);
-
     const run = await cellView(root);
-    assert.equal(run.tokens.reasoning, null);
+    assert.equal(run.tokens.input, 10);
+    assert.equal(run.tokens.output, 20);
+    assert.equal(run.tokens.reasoning, null, "unobserved, not 0");
+    assert.equal(run.tokens.cache_read, null);
     assert.equal(run.tokens.cache_write, null);
   });
 });

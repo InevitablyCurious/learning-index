@@ -3,7 +3,7 @@
 //
 // How many OFF baselines were gathered on EXACTLY this code, and what they cost.
 // The rule being pinned: a cell counts only when its numbers are a measurement
-// (complete, not void, not seeded, not context-exhausted-ungraded, stamped with a
+// (complete, not void, not context-exhausted-ungraded, stamped with a
 // phase total, carrying a fingerprint the current input set can still hash), the
 // grouping key is the fingerprint HASH (two cells on different inputs never
 // share a row), and a field absent from every cell in a row averages to null —
@@ -19,7 +19,7 @@ import path from "node:path";
 import { readBaselines } from "../baselines.mjs";
 import { FIXTURE_FP, writeRun, writeCellCost, writeCellFingerprint, costStamp } from "./_shared.mjs";
 
-/** A completed, unseeded, non-void OFF cell's status row. */
+/** A completed, non-void OFF cell's status row. */
 const STATUS = (problems_before = 10) => ({
   type: "attempt", sequence_index: 0, attempt: 1, verdict: "FAIL",
   progress: { turns: 20, total_tokens: 5000, problems_before },
@@ -135,18 +135,13 @@ test("BASELINES-AGGREGATE: a different fingerprint (one commit later) forms its 
   assert.equal(b.avg.cache_write_tokens, 0);
 });
 
-test("BASELINES-AGGREGATE: void, seeded and pre-standard cells are excluded from the count", async (t) => {
+test("BASELINES-AGGREGATE: void and pre-standard cells are excluded from the count", async (t) => {
   const root = await runsRoot(t);
   // The one cell that counts.
   await writeCell(root, "camp-counted", { record: costStamp({ turns: 30, wall_seconds: 600 }) });
   // The harness stamped this one void: its numbers measure the harness.
   await writeCell(root, "camp-void", {
     record: { outcome: "failed", phases: { total: { turns: 999 } }, void: { is_void: true, reason: "provider_truncation" } },
-  });
-  // Seeded: skips the build, sits on a different scale.
-  await writeCell(root, "camp-seeded", {
-    status: { ...STATUS(), seeded_from_snapshot: "snap-1" },
-    record: costStamp({ turns: 777 }),
   });
   // Pre-standard: the record predates the inputs it takes to hash a fingerprint,
   // so it belongs to no fingerprint at all.
@@ -157,7 +152,7 @@ test("BASELINES-AGGREGATE: void, seeded and pre-standard cells are excluded from
   assert.equal(idx.fingerprints.length, 1);
   const [row] = idx.fingerprints;
   assert.equal(row.baseline_count, 1, "only the cell that measured the model counts");
-  assert.equal(row.avg.turns, 30, "neither the void, the seeded nor the pre-standard cell is averaged in");
+  assert.equal(row.avg.turns, 30, "neither the void nor the pre-standard cell is averaged in");
   assert.equal(row.avg.wall_seconds, 600);
 });
 

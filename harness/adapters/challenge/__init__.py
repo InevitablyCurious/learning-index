@@ -2,7 +2,7 @@
 
 This adapter drives a single backgammon cell end-to-end:
 - seed a fresh worktree from scaffold
-- run either a mock worker (golden/scaffold copy) or headless opencode
+- run headless opencode against it
 - evaluate with the backgammon gate report runner
 - apply budget-bounded rounds of *problems-only* feedback in the same session
 
@@ -14,9 +14,9 @@ the role mixins live in .utils / .pricing / .feedback / .telemetry /
 stays here is (1) the re-export surface, so every name stays resolvable
 as harness.adapters.challenge.<name>, and (2) the PATCH SEAMS: the
 names tests monkeypatch ON THIS PACKAGE, read at call time by the
-consumers (.runner late-binds capture_snapshot / compute_grader_hash /
-DockerCell / docker_available / ServeClient / worker_image_fingerprint;
-.bootstrap late-binds DockerCellConfig; .hold_ui late-binds _HOLD_UI_PORT).
+consumers (.runner late-binds DockerCell / docker_available / ServeClient /
+worker_image_fingerprint; .bootstrap late-binds DockerCellConfig; .hold_ui
+late-binds _HOLD_UI_PORT).
 """
 
 import logging
@@ -156,11 +156,6 @@ from ..docker_worker import (
 # passed in, so the patch seam stays exactly where the tests set it.
 # ServeClientError is a plain re-export (tests read it from this package).
 from harness.serve_client import ServeClient, ServeClientError
-
-# PATCH SEAMS: tests monkeypatch capture_snapshot / compute_grader_hash ON
-# THIS PACKAGE; .runner (_capture_attempt_one_snapshot) late-binds them at
-# CALL time.
-from harness.snapshot import capture_snapshot, compute_grader_hash
 
 # WO-LI15-I3B STAGE 3B: the runner itself -- class attributes + the G0/G1
 # base methods, mixin bases resolved through the MRO.

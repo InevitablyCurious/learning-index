@@ -9,9 +9,14 @@ first died seconds in on `sequence_index N out of range`.
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 import pytest
 
+from harness.cumulative.manifest import roster_hash
 from harness.cumulative.ordering import build_off_order, build_schedule
+from harness.cumulative.sequencer import CumulativeSequencer
 from harness.cumulative.types import RosterEntry
 
 
@@ -76,3 +81,78 @@ def test_the_batch_is_big_enough_for_a_median_to_mean_anything() -> None:
     # gathering. This pins that the schedule can express the N they choose.
     for n in (2, 4, 8):
         assert len(build_off_order(roster("p/a"), replicates=n)) == n
+
+
+class _SeqRunner:
+    """SessionRunner double: records the sessions it was asked to run."""
+
+    def __init__(self) -> None:
+        self.ran: list[int] = []
+
+    def prepare_fixture(self, session: Any) -> None:
+        pass
+
+    def run_session(self, session: Any) -> dict[str, Any]:
+        self.ran.append(session.sequence_index)
+        return {
+            "problems_before": 3,
+            "problems_final": ["problem-2"],
+            "resolved_count": 1,
+            "remaining_count": 2,
+            "conformed": False,
+            "attempts_to_green": 1,
+            "turns": 2,
+            "input_tokens": 10,
+            "output_tokens": 20,
+            "total_tokens": 30,
+            "wall_seconds": 0.1,
+            "wall_cost_usd": 0.0,
+            "termination_reason": "gates_failed",
+            "failed_gates": ["tests"],
+        }
+
+
+def test_a_memory_on_plan_has_no_length_limit(tmp_path: Path) -> None:
+    """An ON arm follows the standard method for ANY number of rounds.
+
+    The plan a memory-ON cell is handed is not capped: the schedule builder
+    emits one ON slot per unit of the operator's budget, and the sequencer
+    walks a plan of that length to done on a fresh manifest without a range or
+    drift refusal. 64 is far beyond any historical limit — the point is that
+    nothing in the plan path counts rounds.
+    """
+    on_budget = 64
+    entries = roster("p/a")
+
+    schedule = build_schedule(
+        entries,
+        seed=1,
+        roster_hash=roster_hash(entries),
+        on_budget=on_budget,
+        off_replicates=3,
+    )
+
+    assert len(schedule) == on_budget + 3, "three OFF replicates + the ON budget"
+    on_slots = [s for s in schedule if s.memory_mode == "on"]
+    assert len(on_slots) == on_budget
+    assert all(s.phase_group == "on" for s in on_slots)
+    # Contiguous and in order across the join: the sequencer selects by index.
+    assert [s.sequence_index for s in schedule] == list(range(on_budget + 3))
+
+    runner = _SeqRunner()
+    sequencer = CumulativeSequencer(
+        tmp_path / "manifest.json",
+        runner=runner,
+        roster=entries,
+        seed=1,
+        task="backgammon",
+        org_id="org-no-plan-cap",
+        config_fingerprint="cfg-no-plan-cap",
+        on_budget=on_budget,
+        off_replicates=3,
+    )
+
+    done = sequencer.step_until_done()
+
+    assert done["status"] == "done"
+    assert runner.ran == list(range(on_budget + 3))

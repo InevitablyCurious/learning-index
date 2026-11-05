@@ -103,9 +103,16 @@ test("renderDevModeSection UNKNOWN — absence of the control plane is a THIRD p
   );
 });
 
-test("renderDevModeSection ON warns that seeded cells are not floors", () => {
+test("renderDevModeSection ON says what the mode actually does — pauses after every grade", () => {
   const html = renderDevModeSection(boardWithDevMode({ enabled: true, source: "state_file" }));
-  assert.ok(html.includes("NOT scorable floors"), "the cost of the mode must stay on screen");
+  assert.ok(
+    html.includes("pauses after every grade"),
+    "the cost of the mode must stay on screen: it is the pause gate, not snapshot seeding",
+  );
+  assert.ok(
+    !html.includes("seeded cell"),
+    "the old snapshot-seeding caveat describes a capability the modal no longer has",
+  );
 });
 
 test("an unsettable mode renders disabled and says why", () => {

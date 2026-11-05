@@ -91,8 +91,8 @@ export function parseJsonl(text) {
 // start). Not mtime (renames and reads move it), not the launch log (archived
 // runs keep their old path), not the folder name. A manifest with no parseable
 // created_at ranks below any that has one; when neither declares, a run with
-// attempt records beats a bare folder, then mtime. Pinned by
-// arm-delta-validity.test.mjs.
+// attempt records beats a bare folder, then mtime. The ranking cases in
+// control/board/arm-delta-validity.test.mjs pin it.
 //
 // ── BENCHMARK TREE ── the rules live in control/tree.mjs; these are the
 // readers' views of them.
@@ -125,7 +125,8 @@ export async function listCampaignDirs(runsRoot) {
 }
 
 
-// Only stack-ledger.mjs spans runs, and says so; this prevents cross-run folds.
+// The per-run sources resolve their run through this and never merge two, so no
+// figure folds across runs.
 export async function activeRun(runsRoot) {
   let best = null;
   for (const ent of await listCampaignDirs(runsRoot)) {

@@ -23,12 +23,11 @@ from typing import Any
 import pytest
 
 
-# LI-14: run_cumulative is now a package (scripts/run_cumulative/) fronted by a
-# thin scripts/run_cumulative.py entrypoint. Import the PACKAGE. The freeze guard
+# LI-14: run_cumulative is a package (scripts/run_cumulative/) fronted by a thin
+# scripts/run_cumulative.py entrypoint. Import the PACKAGE. The freeze guard
 # (verify_task_template_frozen) and compute_task_template_hash both live in
 # run_cumulative.template, so the monkeypatch below targets THAT submodule —
-# patching the facade's re-export would not reach the guard's __globals__ (the
-# same reason the run-artifacts test patches run_cumulative.runner.load_snapshot).
+# patching the facade's re-export would not reach the guard's __globals__.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import run_cumulative  # noqa: E402
 

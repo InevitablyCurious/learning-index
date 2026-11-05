@@ -16,7 +16,6 @@ export const CONTROL_CONTRACT_VERSION = "1.0";
  * @property {boolean} start_run        — can launch a new cell
  * @property {boolean} resume_run       — ALWAYS FALSE. See RESUME_UNSUPPORTED.
  * @property {boolean} events           — can proxy the live event stream
- * @property {boolean} select_context   — can set context length per run
  */
 
 /**
@@ -119,7 +118,6 @@ export const STALL_THRESHOLD_S = 900;
  * @property {string}      model      — alias from the roster (required)
  * @property {"on"|"off"}  arm        — memory mode (required)
  * @property {string|null} org        — required for ON cells, rejected for OFF
- * @property {number|null} context    — context length; null = registry default
  * @property {string}      confirm    — MUST equal the confirmation token
  */
 
@@ -127,23 +125,17 @@ export const STALL_THRESHOLD_S = 900;
  * The confirmation token is a pure function of the submitted parameters, so a
  * preview for one configuration cannot confirm a different one.
  */
-export function confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous = false, pauseAfterGrade = false }) {
+export function confirmationToken({ model, arm, org, kind, compact, pauseAfterGrade = false }) {
   const parts = [
     `model=${model ?? ""}`,
     `arm=${arm ?? ""}`,
     `org=${org ?? ""}`,
-    `context=${context ?? "default"}`,
     // The substrate is in the token: a local confirmation must not start a billed
     // cloud cell.
     `kind=${kind ?? "local"}`,
     // Compaction is in the token: it changes what the cell does and its scale.
     `compact=${compact === true ? "on" : "off"}`,
-    // The armed snapshot is in the token: re-arming disarms the confirmation.
-    `snapshotId=${snapshotId ?? ""}`,
   ];
-  // Continuous mode keeps starting runs after this one, so a confirmation for a
-  // single run must not start a chain. Present only when on.
-  if (continuous === true) parts.push("continuous=on");
   // Operator pause between grades (WO-PAUSE-AFTER-GRADE) changes what the run
   // does (halts for a human every grade), so it is bound into the token: a
   // preview shown without it must not start a run that pauses. Present only when on.
@@ -155,7 +147,7 @@ export function confirmationToken({ model, arm, org, context, kind, compact, sna
  * The restatement shown before START, composed by the server so the words read
  * are the words acted on.
  */
-export function restatement({ model, arm, org, context, kind, cloud = null, compact = false, continuous = false, pauseAfterGrade = false }) {
+export function restatement({ model, arm, org, kind, cloud = null, compact = false, pauseAfterGrade = false }) {
   const armWord = arm === "on" ? "MEMORY ON" : arm === "off" ? "CONTROL" : "UNKNOWN ARM";
   const isCloud = kind === "cloud";
   return [
@@ -165,7 +157,6 @@ export function restatement({ model, arm, org, context, kind, cloud = null, comp
     isCloud
       ? `substrate: CLOUD — routed to ${cloud?.provider ?? "a vendor"} via ${cloud?.slug ?? "the router"}, and BILLED`
       : "substrate: LOCAL — the resident model behind the relay proxy, unbilled",
-    `context: ${context ? `${context} tokens` : "registry default (262144)"}`,
     // Stated either way, on or off.
     compact
       // No count: the number of build chunks is the challenge's, not this
@@ -177,11 +168,6 @@ export function restatement({ model, arm, org, context, kind, cloud = null, comp
       : "compaction: OFF — the build runs uncompacted, and the repair phase " +
         "starts with whatever context the build left",
     org ? `org: ${org}` : "org: not applicable to a control cell",
-    // Stated only when on: the one line that says this start is not one run.
-    ...(continuous
-      ? ["continuous: ON — when this run ends the tree is reset and the next run starts from its end " +
-          "snapshot, and so on until the model passes everything"]
-      : []),
     // Stated only when on: the run halts for a human after every grade.
     ...(pauseAfterGrade
       ? ["pause after each grade: ON — the run stops after every graded pass (and once at " +

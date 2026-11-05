@@ -254,11 +254,11 @@ describe("the instrument is pinned as tightly as the corpus it measures", () => 
     // `grader_hash` skips node_modules, so the lockfile IS the record of which
     // toolchain a run used. If it ever stopped being hashed, the grader would
     // have no identity at all.
-    const snapshot = fs.readFileSync(
-      path.join(BENCH, "harness", "snapshot.py"),
+    const fingerprint = fs.readFileSync(
+      path.join(BENCH, "harness", "fingerprint.py"),
       "utf-8",
     );
-    const excluded = /GRADER_HASH_EXCLUDED[\s\S]*?\{([\s\S]*?)\}/.exec(snapshot)![1];
+    const excluded = /GRADER_EXCLUDED[\s\S]*?\{([\s\S]*?)\}/.exec(fingerprint)![1];
     expect(excluded).not.toMatch(/package-lock/);
     expect(excluded).not.toMatch(/package\.json/);
   });

@@ -4,8 +4,6 @@
 
 import { findChallenge } from "../challenges.mjs";
 import { confirmationToken, restatement, refuse } from "../contract.mjs";
-import { CONTEXT_CHOICES } from "../roster.mjs";
-import { baselineFor, collectOffCells } from "../baselines.mjs";
 import {
   resolveCloudModel,
   readCloudKey,
@@ -13,12 +11,10 @@ import {
   COMPACT_DEFAULT_CEILING,
 } from "../cloud.mjs";
 import { resolveDevMode } from "../devmode.mjs";
-import { readSnapshot, seedableBy, resolveArmed } from "../snapshots.mjs";
-import { readChain } from "../continuous.mjs";
 import { substrateRefreshInFlight } from "../tooljobs.mjs";
 // The serial gate's one source of in-flight truth: the N-slot run ledger.
 import { inFlightModels } from "../run-ledger.mjs";
-import { args, BENCH_ROOT, RUNS_ROOT } from "../state.mjs";
+import { args, BENCH_ROOT } from "../state.mjs";
 
 /**
  * Validate a start request. Preview runs every parameter check but cannot
@@ -34,7 +30,6 @@ export async function validateStart(
   const model = typeof payload?.model === "string" ? payload.model.trim() : "";
   const arm = payload?.arm === "on" || payload?.arm === "off" ? payload.arm : null;
   const org = typeof payload?.org === "string" && payload.org.trim() ? payload.org.trim() : null;
-  const context = Number.isFinite(payload?.context) ? Number(payload.context) : null;
   // Tri-state: true/false are the operator's choice; undefined means the model's
   // context window decides (in finishValidate). Never coerced to false.
   const compactRequested =
@@ -42,8 +37,7 @@ export async function validateStart(
   // Plain boolean: no server default, so absent means off.
   const requireTodos = payload?.requireTodos === true;
   // Operator pause between grades (WO-PAUSE-AFTER-GRADE): a dev-mode capability,
-  // refused below (finishValidate) when dev mode is off — same shape as
-  // continuous. Absent means off.
+  // refused below (finishValidate) when dev mode is off. Absent means off.
   const pauseAfterGrade = payload?.pauseAfterGrade === true;
   // Absent = the installation's default challenge. Named, it must exist and be
   // runnable.
@@ -120,7 +114,7 @@ export async function validateStart(
       retired_reason: null,
     };
     return await finishValidate(
-      { model, arm, org, context, kind, entry: cloudEntry, cloud, compactRequested, requireTodos, graderWorkerTarget, challengeId, pauseAfterGrade },
+      { model, arm, org, kind, entry: cloudEntry, cloud, compactRequested, requireTodos, graderWorkerTarget, challengeId, pauseAfterGrade },
       { requireConfirm, runsRoot, payload },
     );
   }
@@ -146,7 +140,7 @@ export async function validateStart(
   }
 
   return await finishValidate(
-    { model, arm, org, context, kind, entry, cloud: null, compactRequested, requireTodos, challengeId, pauseAfterGrade },
+    { model, arm, org, kind, entry, cloud: null, compactRequested, requireTodos, challengeId, pauseAfterGrade },
     { requireConfirm, runsRoot, payload },
   );
 }
@@ -171,7 +165,7 @@ export function compactDefaultFor(entry) {
 }
 
 export async function finishValidate(
-  { model, arm, org, context, kind, entry, cloud, compactRequested = null, requireTodos = false, graderWorkerTarget = null, challengeId = "", pauseAfterGrade = false },
+  { model, arm, org, kind, entry, cloud, compactRequested = null, requireTodos = false, graderWorkerTarget = null, challengeId = "", pauseAfterGrade = false },
   { requireConfirm, runsRoot, payload },
 ) {
   // The org is an optional label on an ON cell (the memory system's own settings
@@ -180,92 +174,21 @@ export async function finishValidate(
     return refuse("org_forbidden", "a CONTROL cell must not carry an org — it writes no memories");
   }
 
-  if (context !== null) {
-    if (!CONTEXT_CHOICES.includes(context)) {
-      return refuse(
-        "context_unavailable",
-        `context ${context} is not one of the offered lengths (${CONTEXT_CHOICES.join(", ")})`,
-      );
-    }
-    if (Number.isFinite(entry.max_context) && context > entry.max_context) {
-      return refuse(
-        "context_unavailable",
-        `context ${context} exceeds the runtime ceiling for ${model} (${entry.max_context})`,
-      );
-    }
-  }
-
-  // ── THE BASELINE GATE ── an ON cell needs a valid, non-void floor of its own
-  // model (baselineFor): without one it burns hours on an uninterpretable number.
-  // scorable:false is "no floor yet" in every form — including a batch awaiting
-  // the operator's selection (reason "awaiting_selection"): a batch nobody has
-  // picked is not a floor to measure against. This is also the only place the
-  // same-model rule lives. OFF cells are exempt (an OFF cell is a baseline run).
-  // With no runsRoot the gate cannot be evaluated, so it fails closed.
-  if (arm === "on") {
-    if (!runsRoot) {
-      return refuse(
-        "baseline_required",
-        "the baseline gate could not be evaluated (no runs root supplied), and an ON cell must " +
-          "never launch on an unverified floor",
-      );
-    }
-    const offCells = await collectOffCells(runsRoot);
-    const baseline = await baselineFor(model, offCells, { runsRoot });
-    if (!baseline.scorable) {
-      return refuse("baseline_required", baseline.reason, { model, subject_model: model });
-    }
-  }
+  // ── NO BASELINE GATE ── an ON cell launches standalone. There is no floor to
+  // pick and none to require: its Δ is read afterwards against the average of
+  // every baseline sharing its fingerprint (models-ledger.mjs `deltaOf`), and it
+  // states "no baselines on this fingerprint" rather than inventing a zero. A
+  // missing baseline is therefore a fact about the history, never a lock on the
+  // launch — the only gates left are capacity (the N-slot ledger) and the
+  // roster's own eligibility.
 
   // The operator's explicit choice wins; otherwise the model's window decides.
   const compact = compactRequested ?? compactDefaultFor(entry);
 
-  // The armed snapshot comes from server-side state (never the payload) and is
-  // returned, so preview and start agree. A snapshot left armed after dev mode was
-  // turned off is ignored (a normal run). Absent, unreadable or model-mismatched
-  // snapshots are refused here, before any container starts; the harness
-  // re-checks all of it.
-  let snapshotId = null;
-  const devMode = await resolveDevMode({ benchRoot: BENCH_ROOT });
-  if (devMode.enabled) {
-    const armed = await resolveArmed({ benchRoot: BENCH_ROOT });
-    if (armed.snapshot_id) {
-      const row = await readSnapshot(RUNS_ROOT, armed.snapshot_id);
-      const check = seedableBy(row, model);
-      if (!check.ok) return refuse("snapshot_not_seedable", check.reason, { snapshot_id: armed.snapshot_id, model });
-      snapshotId = armed.snapshot_id;
-    }
-  }
-
-  // ── CONTINUOUS MODE ── this start begins a chain: every later run starts from
-  // the last one's end snapshot (control/continuous.mjs). One chain at a time,
-  // one cell at a time, CONTROL cells only, and seeding needs dev mode.
-  const continuous = payload?.continuous === true;
-  if (continuous) {
-    if (arm !== "off") {
-      return refuse("continuous_baseline_only",
-        "continuous mode is set on the + baseline sequence: it chains CONTROL cells, each from the " +
-          "last one's end snapshot — a MEMORY ON cell is one step on its track");
-    }
-    if ((payload?.concurrency ?? 1) !== 1) {
-      return refuse("continuous_one_cell",
-        `continuous mode runs one cell at a time, each from the one before it — got concurrency ${JSON.stringify(payload.concurrency)}`);
-    }
-    if (!devMode.enabled) {
-      return refuse("dev_mode_off",
-        "continuous mode starts every run after the first from the last run's end snapshot, and seeding " +
-          "is a development capability — turn dev mode on in SETTINGS first");
-    }
-    const chain = await readChain({ benchRoot: BENCH_ROOT });
-    if (chain?.active) {
-      return refuse("continuous_active",
-        `continuous mode is already running (run ${chain.links.length}) — end it from its banner first`);
-    }
-  }
-
   // ── OPERATOR PAUSE BETWEEN GRADES (WO-PAUSE-AFTER-GRADE) ── a dev-mode
-  // capability, gated exactly like continuous: it halts the run for a human
-  // every grade, which is not a scorable automated measurement.
+  // capability: it halts the run for a human every grade, which is not a
+  // scorable automated measurement. The gate needs the mode, so it is read here.
+  const devMode = await resolveDevMode({ benchRoot: BENCH_ROOT });
   if (pauseAfterGrade && !devMode.enabled) {
     return refuse("dev_mode_off",
       "pause-after-grade holds the run after every graded pass so an operator can review " +
@@ -273,7 +196,7 @@ export async function finishValidate(
         "measurement — turn dev mode on in SETTINGS first");
   }
 
-  const expected = confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous, pauseAfterGrade });
+  const expected = confirmationToken({ model, arm, org, kind, compact, pauseAfterGrade });
   if (requireConfirm && payload?.confirm !== expected) {
     return refuse(
       "bad_confirmation",
@@ -281,7 +204,7 @@ export async function finishValidate(
         "preview was shown. Review the restatement and confirm again.",
       {
         expected_token: expected,
-        restatement: restatement({ model, arm, org, context, kind, cloud, compact, continuous, pauseAfterGrade }),
+        restatement: restatement({ model, arm, org, kind, cloud, compact, pauseAfterGrade }),
       },
     );
   }
@@ -299,5 +222,5 @@ export async function finishValidate(
     }
   }
 
-  return { ok: true, model, arm, org, context, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous, pauseAfterGrade };
+  return { ok: true, model, arm, org, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, challenge, pauseAfterGrade };
 }

@@ -177,8 +177,6 @@ class MemoryRecordMixin:
         """
         self._memory_record: dict[str, Any] | None = None
         self._memory_config: dict[str, Any] | None = None
-        if self.mock is not None:
-            return
         record: dict[str, Any] = {"memory_mode": self.memory_mode}
         if self.memory_mode == "on":
             record["ready_before"] = wait_until_ready()

@@ -35,14 +35,7 @@ function writeTree(r, treeId, { under = null, cell = "cell-0000", manifest = "{}
   return base;
 }
 
-/** A snapshot dir under runs/snapshots/, with a marker file inside. */
-function writeSnapshot(r, id) {
-  const dir = join(r, "snapshots", id);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "snapshot.json"), "{}");
-  return dir;
-}
-
+/** The tree's active pointer, so "the live tree" is a fact on disk. */
 function setActive(r, id) {
   writeFileSync(join(r, "active-tree.json"), JSON.stringify({ active: id }));
 }
@@ -79,61 +72,6 @@ test("delete: removes the folder and tidies an empty archive", async () => {
     assert.equal(done.ok, true);
     assert.equal(existsSync(join(r, "backups", "1789023699")), false);
     assert.deepEqual(await listRunCells(r), [], "the run is gone from history");
-  } finally { rmSync(r, { recursive: true, force: true }); }
-});
-
-test("delete: removes the run's produced snapshot — downstream snapshots are kept", async () => {
-  const r = root();
-  try {
-    writeTree(r, "1788600000", {
-      manifest: JSON.stringify({ session_records: [{ produced_snapshot_id: "AAA" }] }),
-    });
-    setActive(r, "9999999999");
-    writeSnapshot(r, "AAA"); // produced by this run
-    writeSnapshot(r, "BBB"); // downstream: seeded FROM AAA, not referenced by the run
-    const [row] = await listRunCells(r);
-    const plan = await planRunDelete(r, row.benchmark_id, row.cell);
-
-    assert.deepEqual(plan.snapshot_ids, ["AAA"]);
-    assert.match(plan.token, /\|snaps=AAA$/);
-    assert.match(
-      plan.restatement,
-      /produced snapshot will ALSO be removed from disk: runs\/snapshots\/AAA\./,
-    );
-    assert.match(plan.restatement, /Snapshots seeded from it downstream are kept\./);
-
-    const done = await deleteRun(r, row.benchmark_id, row.cell, plan.token);
-    assert.equal(done.ok, true);
-    assert.equal(done.snapshots_deleted, 1);
-    assert.equal(existsSync(join(r, "1788600000")), false, "the run is gone");
-    assert.equal(existsSync(join(r, "snapshots", "AAA")), false, "the produced snapshot is gone");
-    assert.equal(existsSync(join(r, "snapshots", "BBB")), true, "no cascade: a downstream snapshot stays");
-  } finally { rmSync(r, { recursive: true, force: true }); }
-});
-
-test("delete: no produced_snapshot_id — run goes, snapshots untouched, no error", async () => {
-  const r = root();
-  try {
-    writeTree(r, "1788600001", {
-      manifest: JSON.stringify({ session_records: [{ produced_snapshot_id: null }] }),
-    });
-    setActive(r, "9999999999");
-    writeSnapshot(r, "CCC");
-    const [row] = await listRunCells(r);
-    const plan = await planRunDelete(r, row.benchmark_id, row.cell);
-
-    assert.deepEqual(plan.snapshot_ids, []);
-    assert.match(
-      plan.token,
-      /^delete-run\|1788600001\|files=\d+\|bytes=\d+$/,
-      "the token is unchanged when the run produced no snapshot",
-    );
-
-    const done = await deleteRun(r, row.benchmark_id, row.cell, plan.token);
-    assert.equal(done.ok, true);
-    assert.equal(done.snapshots_deleted, 0);
-    assert.equal(existsSync(join(r, "1788600001")), false);
-    assert.equal(existsSync(join(r, "snapshots", "CCC")), true);
   } finally { rmSync(r, { recursive: true, force: true }); }
 });
 

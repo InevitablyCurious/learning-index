@@ -171,24 +171,6 @@ def assert_clean_worktree(*, worktree: Path, scaffold: Path) -> None:
     )
 
 
-def assert_seeded_from_snapshot(*, worktree: Path, snapshot_tree: Path) -> None:
-    """Raise unless the seeded worktree is byte-identical to the DECLARED SNAPSHOT.
-
-    The same check as ``assert_clean_worktree`` with the expected tree SWAPPED,
-    never bypassed: ``snapshot_tree`` is a captured snapshot's ``tree/`` —
-    ``.git``-free and ``AGENTS.md``-free by construction (``SNAPSHOT_EXCLUDED``
-    in snapshot.py) — and ``HARNESS_SEEDED`` still accounts for the harness's
-    own AGENTS.md on top of it. A worktree that drifts from the declared
-    snapshot means the seed did not produce the slate this cell declared it
-    would start from: inherited work, or a half-copied snapshot.
-    """
-    _assert_drift_free(
-        worktree=worktree,
-        expected_path=snapshot_tree,
-        expected_label="declared snapshot tree",
-    )
-
-
 def _docker_stdout(args: list[str]) -> str | None:
     """Run a read-only docker query. None when docker cannot be consulted."""
     try:

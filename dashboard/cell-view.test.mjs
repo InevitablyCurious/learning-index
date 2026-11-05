@@ -29,8 +29,8 @@ function board() {
       counts: { total: 3, live: 3, scored: 0, void: 0, harness_error: 0 },
     },
     by_cell: {
-      [`${RD}::0`]: { run: { phase: "initial-chunk-3", turns: 30 }, live: { session_id: "s0" }, suite: { gates: ["a"] }, learning: { session_id: "s0" } },
-      [`${RD}::1`]: { run: { phase: "feedback-2", turns: 90 }, live: { session_id: "s1" }, suite: { gates: ["b"] }, learning: { session_id: "s1" } },
+      [`${RD}::0`]: { run: { phase: "initial-chunk-3", turns: 30 }, live: { session_id: "s0" }, suite: { gates: ["a"] } },
+      [`${RD}::1`]: { run: { phase: "feedback-2", turns: 90 }, live: { session_id: "s1" }, suite: { gates: ["b"] } },
     },
   };
 }
@@ -42,7 +42,6 @@ test("the view is the selected cell's, and switches with the selection", () => {
   assert.equal(v1.run.model, "m", "board-wide run fields stay");
   assert.equal(v1.live.session_id, "s1");
   assert.deepEqual(v1.suite.gates, ["b"]);
-  assert.equal(v1.learning.session_id, "s1");
   setSelectedCell(`${RD}::0`);
   const v0 = cellView(board());
   assert.equal(v0.run.turns, 30);
@@ -54,7 +53,6 @@ test("a cell with no view yet shows nothing of its own — never another cell's"
   const v = cellView(board());
   assert.equal(v.live, null);
   assert.equal(v.suite, null);
-  assert.equal(v.learning, null);
   assert.equal(v.run.phase, undefined);
   setSelectedCell(null);
 });
@@ -71,7 +69,7 @@ test("an archived run's fetched view lays over like any cell's", async () => {
     status: 200,
     json: async () => ({
       ok: true,
-      view: { run: { phase: "archived-record" }, honesty: {}, live: null, suite: null, learning: null, sources: null },
+      view: { run: { phase: "archived-record" }, honesty: {}, live: null, suite: null, sources: null },
     }),
   });
   await loadRunView(card);

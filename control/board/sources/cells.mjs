@@ -266,12 +266,6 @@ export async function read(ctx) {
       cells: {
         run_dir: runDir,
         list,
-        // The batch's own numbers, carried so the strip and the batch panel
-        // cannot disagree about which run is representative.
-        median: batch?.median ?? null,
-        fingerprint: batch?.fingerprint ?? null,
-        batch_void: batch?.void === true,
-        void_reason: batch?.void_reason ?? null,
         counts: {
           total: list.length,
           live: list.filter((c) => c.running).length,

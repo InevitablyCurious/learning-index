@@ -7,8 +7,8 @@
 // directory `activeRun()` resolves. Both readers used to join the bare filename
 // onto `run.dir`, which opened a path that never exists and reported
 // "no live.jsonl yet" — a reason indistinguishable from a run that legitimately
-// never wrote a stream. The gate wall and the learning matrix therefore stayed
-// empty for the entire life of every run.
+// never wrote a stream. The gate wall therefore stayed empty for the entire
+// life of every run.
 //
 // These tests pin the three facts that fix depends on.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -21,7 +21,6 @@ import { join } from "node:path";
 
 import { cellLiveStreamPath } from "../control/board/sources/_runtime.mjs";
 import * as liveStream from "../control/board/sources/live-stream.mjs";
-import * as learning from "../control/board/sources/learning.mjs";
 
 const ROSTER = {
   total: 3,
@@ -42,7 +41,7 @@ const STREAM = [
 ];
 
 /** A campaign whose stream sits where the harness actually writes it. */
-async function fixture({ stream = STREAM, outcomes = null } = {}) {
+async function fixture({ stream = STREAM } = {}) {
   const root = await mkdtemp(join(tmpdir(), "livestream-"));
   const runs = join(root, "runs");
   const campaign = join(runs, "9999000000", "cloud", "p", "m", "mm");
@@ -54,9 +53,6 @@ async function fixture({ stream = STREAM, outcomes = null } = {}) {
   );
   await writeFile(join(campaign, "gate-roster.json"), JSON.stringify(ROSTER));
   if (stream) await writeFile(join(cell, "live.jsonl"), stream.map((r) => JSON.stringify(r)).join("\n") + "\n");
-  if (outcomes) {
-    await writeFile(join(campaign, "predicate-outcomes.jsonl"), outcomes.map((r) => JSON.stringify(r)).join("\n") + "\n");
-  }
   const address = { run_dir: "9999000000/cloud/p/m/mm", sequence_index: 0 };
   return { ctx: { runsRoot: runs, benchRoot: root, cell: address }, runs, campaign, cell, address };
 }
@@ -107,45 +103,6 @@ test("gate wall reads verdicts from the cell-directory stream; later attempt win
   assert.equal(alpha.status, "pass");
   assert.equal(alpha.attempt, 2);
   assert.deepEqual(live.gate_counts, { pass: 2, fail: 0, other: 0 });
-});
-
-test("learning matrix fills from the live stream before any post-mortem file exists", async () => {
-  const { ctx } = await fixture();
-  const { learning: L } = (await learning.readCell(ctx)).patch;
-  // Session resolution no longer waits for predicate-outcomes.jsonl.
-  assert.equal(L.session_id, "ses_LIVE");
-  assert.equal(L.attempt.current, 2);
-  assert.equal(L.cell.memory_mode, "off");
-  assert.equal(L.cell.sequence_index, 0);
-  // The vector is exactly the observed rounds (1..2 here): no placeholder column.
-  const byId = new Map(L.matrix.gates.map((g) => [g.id, g.outcomes]));
-  assert.deepEqual(byId.get("CONF"), ["pass", null]);
-  // The repair trajectory is visible while the cell is still running.
-  assert.deepEqual(byId.get("backend/a.test.ts::alpha"), ["fail", "pass"]);
-  // A gate the stream never named stays untested — the stream only ADDS.
-  assert.deepEqual(byId.get("frontend/b.test.ts::beta"), [null, null]);
-  assert.equal(L.matrix.attempts, 2);
-  assert.equal(L.matrix.total, 3);
-});
-
-test("predicate-outcomes.jsonl stays authoritative once the campaign writes it", async () => {
-  const { ctx } = await fixture({
-    outcomes: [
-      // Disagrees with the live stream on CONF, and names the final session.
-      { gate_id: "CONF", attempt: 1, predicate_outcome: "fail", session_id: "ses_FINAL", memory_mode: "off", sequence_index: 0 },
-      { gate_id: "frontend/b.test.ts::beta", attempt: 2, predicate_outcome: "pass", session_id: "ses_FINAL", sequence_index: 0 },
-      // Another cell's row in the same campaign file: never this cell's matrix.
-      { gate_id: "frontend/b.test.ts::beta", attempt: 3, predicate_outcome: "fail", session_id: "ses_OTHER", sequence_index: 1 },
-    ],
-  });
-  const { learning: L } = (await learning.readCell(ctx)).patch;
-  assert.equal(L.session_id, "ses_FINAL");
-  const byId = new Map(L.matrix.gates.map((g) => [g.id, g.outcomes]));
-  // Post-mortem overwrites the live verdict for the same (gate, attempt)...
-  assert.deepEqual(byId.get("CONF"), ["fail", null]);
-  // ...while live-only rows are retained rather than dropped.
-  assert.deepEqual(byId.get("backend/a.test.ts::alpha"), ["fail", "pass"]);
-  assert.deepEqual(byId.get("frontend/b.test.ts::beta"), [null, "pass"]);
 });
 
 // ── THE TRAJECTORY SURVIVES THE FOLD ────────────────────────────────────────
@@ -287,12 +244,6 @@ test("a graded attempt's verdicts come from its report when the stream's tail no
   assert.equal(live.attempt, 1);
   assert.deepEqual(live.gate_counts, { pass: 2, fail: 1, other: 0 }, "every graded gate is on the wall");
   assert.equal(live.gates.find((g) => g.id === "backend/a.test.ts::alpha").status, "fail");
-
-  const { learning: L } = (await learning.readCell(ctx)).patch;
-  const byId = new Map(L.matrix.gates.map((g) => [g.id, g.outcomes]));
-  // One graded round: the report covers attempt 1 only, so the vector is width 1.
-  assert.deepEqual(byId.get("frontend/b.test.ts::beta"), ["pass"]);
-  assert.deepEqual(byId.get("backend/a.test.ts::alpha"), ["fail"]);
 });
 
 test("the tail still adds an attempt that is grading now, over the reports", async () => {
@@ -311,40 +262,4 @@ test("the tail still adds an attempt that is grading now, over the reports", asy
   assert.equal(alpha.first_pass_attempt, 2);
   assert.equal(alpha.ever_failed, true);
   assert.equal(live.gates.find((g) => g.id === "frontend/b.test.ts::beta").status, "fail", "report-only gate shown");
-});
-
-// ── ROUND 7 IS KEPT ─────────────────────────────────────────────────────────
-// There is no maximum round count. The vector's width is the highest attempt
-// ANY gate was graded on, so a seventh repair round is its own column: a fixed
-// axis would either truncate it or pad rounds that never happened.
-
-const SEVEN_ROUNDS = [
-  { v: 1, ts: 1, kind: "cell.start", session_id: "ses_7", cell_seq: 0, arm: "off" },
-  ...Array.from({ length: 7 }, (_, i) => ({
-    v: 1,
-    ts: i + 2,
-    kind: "gate.result",
-    session_id: "ses_7",
-    attempt: i + 1,
-    id: "backend/a.test.ts::alpha",
-    status: i === 6 ? "pass" : "fail",
-    phase: "backend",
-  })),
-];
-
-test("a gate graded through round 7 keeps round 7 in the last slot", async () => {
-  const { ctx } = await fixture({ stream: SEVEN_ROUNDS });
-  const { learning: L } = (await learning.readCell(ctx)).patch;
-  const alpha = L.matrix.gates.find((g) => g.id === "backend/a.test.ts::alpha");
-  assert.deepEqual(
-    alpha.outcomes,
-    ["fail", "fail", "fail", "fail", "fail", "fail", "pass"],
-    "seven observed rounds, no padding and nothing beyond round 7",
-  );
-  assert.equal(alpha.outcomes.length, 7);
-  assert.equal(alpha.outcomes.at(-1), "pass", "round 7 is the LAST slot — a later repair round is never truncated");
-  // A gate the stream never named is still on the same observed axis.
-  assert.deepEqual(L.matrix.gates.find((g) => g.id === "frontend/b.test.ts::beta").outcomes, [null, null, null, null, null, null, null]);
-  assert.equal(L.matrix.attempts, 7);
-  assert.equal(L.attempt.current, 7);
 });

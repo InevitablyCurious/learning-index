@@ -411,9 +411,6 @@ class _ScoredSession:
         "session_fp",
         "session_id",
         "progress",
-        "seeded_from_snapshot",
-        "build_phase_ran",
-        "dev_mode",
     )
 
     def __init__(
@@ -423,17 +420,11 @@ class _ScoredSession:
         session_fp: str,
         session_id: str | None,
         progress: dict[str, Any],
-        seeded_from_snapshot: str | None = None,
-        build_phase_ran: bool = False,
-        dev_mode: bool = False,
     ) -> None:
         self.sequence_index = sequence_index
         self.session_fp = session_fp
         self.session_id = session_id
         self.progress = progress
-        self.seeded_from_snapshot = seeded_from_snapshot
-        self.build_phase_ran = build_phase_ran
-        self.dev_mode = dev_mode
 
 
 # A void whose terminal reason names itself keeps that name; anything else is a
@@ -618,9 +609,6 @@ def build_scorecard(
             session_fp=str(record.get("session_fp") or ""),
             session_id=record.get("session_id"),
             progress=dict(record["progress"]),
-            seeded_from_snapshot=record.get("seeded_from_snapshot"),
-            build_phase_ran=bool(record.get("build_phase_ran", False)),
-            dev_mode=bool(record.get("dev_mode", False)),
         )
         for record in best_by_cell.values()
         if _is_scored(int(record["sequence_index"]))

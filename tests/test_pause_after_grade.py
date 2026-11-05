@@ -9,7 +9,8 @@ node server boots. They assert the loop-level contract:
   (b) one round pause per non-final graded pass, plus exactly ONE final pause
       when the cell ends — for ANY reason (a pass, a context overflow, the
       two-compaction abort, or an operator stop);
-  (c) with the flag off there is no hold and no waiting;
+  (c) with the flag off there is no hold and no waiting — NORMAL mode, one
+      click, build then troubleshoot to completion with no stops;
   (d) wall_seconds excludes paused time and paused_seconds is recorded;
   (e) a KeyboardInterrupt during a round pause ends the cell as stopped, and the
       hand-stopped cell gets no second (final) pause on its way out.
@@ -46,14 +47,12 @@ def _make_runner(
     tmp_path: Path,
     *,
     pause_after_grade: bool = True,
-    mock: str | None = None,
     progress: Any = None,
 ) -> ChallengeRunner:
     return ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="local-llm-proxy/okp-bench-worker",
-        mock=mock,
         progress=progress,
         pause_after_grade=pause_after_grade,
     )
@@ -291,6 +290,49 @@ def test_one_pause_per_grade_and_exactly_one_final_pause(
 
     assert result.verdict == "PASS"
     assert pauses == [("round", 1), ("round", 2), ("final", 3)]
+
+
+def test_dev_mode_pauses_after_every_grade_of_a_long_plan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DEV MODE IS A PAUSE POLICY, NOT A ROUND LIMIT.
+
+    The owner plays the app after every grade, however many grades there are,
+    and once at the end. A plan that needs four repair rounds must produce four
+    round pauses plus one final — a plan of ANY length, not the two the other
+    tests happen to use.
+    """
+    runner = _make_runner(tmp_path)
+    _patch_fake_docker(monkeypatch)
+    delivered = _drive(runner, monkeypatch, fail_count=4)
+
+    pauses: list[tuple[str, int | None]] = []
+    held: list[str] = []
+
+    def _fake_pause(**kwargs: Any) -> float:
+        pauses.append((kwargs.get("kind"), kwargs.get("attempt")))
+        held.append(kwargs.get("kind"))
+        return 0.0
+
+    monkeypatch.setattr(runner, "_run_operator_pause", _fake_pause)
+
+    result = runner._run_cell_impl(
+        run_label="dev-mode-long-plan",
+        run_dir=tmp_path / "run-long",
+        task_id="backgammon",
+    )
+
+    assert result.verdict == "PASS"
+    # One observed round count: the gate failed four times, then passed.
+    assert len(delivered) == 5, "initial drive + four feedback drives"
+    assert pauses == [
+        ("round", 1),
+        ("round", 2),
+        ("round", 3),
+        ("round", 4),
+        ("final", 5),
+    ]
+    assert held == ["round", "round", "round", "round", "final"]
 
 
 def test_compaction_abort_gets_one_final_pause_and_no_further_round_pause(

@@ -901,7 +901,7 @@ def test_gate_oracle_runs_in_its_own_image_never_the_cell_s() -> None:
     happened to satisfy the invariant, not the invariant: grading on the host
     meant grading with whatever Node, Playwright, Chromium and vitest the
     operator had, against a candidate built inside a digest-pinned image. Four
-    unpinned axes, and `compute_grader_hash` excludes node_modules, so nothing
+    unpinned axes, and the grader hash excludes node_modules, so nothing
     recorded which toolchain produced a result.
 
     Grading now runs in its OWN image (`bench-grader:<challenge>`). The invariant is

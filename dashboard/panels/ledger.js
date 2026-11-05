@@ -1,13 +1,16 @@
 // PANEL: BASELINES — one row per OFF batch, its cells and its ON runs inside.
 //
-// A floor is a BATCH of OFF cells (control/batch.mjs): the median problem
-// count over the scored cells, their spread, and the one cell the operator
-// picks — shown with its distance from the median. The row says that much;
-// expanding it lists every cell of the batch (void ones included) with its own
-// numbers and repair trajectory, and the ON runs measured against the floor.
-// A run is a delta against one specific floor, so it is drawn inside that
-// floor's row. A model with no batch has no row ([+ BASELINE] is where that
-// absence belongs).
+// A baseline is a BATCH of OFF cells (control/batch.mjs): the median problem
+// count over the scored cells and their spread, every cell kept for reading.
+// The row says that much; expanding it lists every cell of the batch (void ones
+// included) with its own numbers and repair trajectory, and the ON runs measured
+// against the baselines on the same fingerprint.
+//
+// An ON run's Δ is measured against the AVERAGE of every baseline gathered on
+// its fingerprint (control/models-ledger.mjs deltaOf), never a single chosen
+// cell — so adding a baseline is the only thing that moves it, and the count it
+// is over is printed beside the number. A model with no batch has no row
+// ([+ BASELINE] is where that absence belongs).
 //
 // Every gate ([+ run] allowed or not) comes from control/models-ledger.mjs as
 // {allowed, reason} and is rendered, never re-derived. A disabled control states
@@ -34,8 +37,8 @@ export function toggleSuperseded() {
 /**
  * A batch voided by its fingerprint: the code moved past it (superseded), its
  * cells ran on different inputs (mixed), or they recorded nothing to bind it
- * to (unfingerprinted). Kept and readable, never a floor — so it sits in its
- * own folded group below the batches that can be.
+ * to (unfingerprinted). Kept and readable, never counted as a baseline — so it
+ * sits in its own folded group below the batches that are.
  */
 const isSuperseded = (b) => b.state === "void" && typeof b.void_kind === "string";
 
@@ -73,14 +76,14 @@ export function renderLedger(board) {
 
 /**
  * The head: what the card is, the counts, and the one [+ BASELINE] control.
- * Starting a run is on each floor's own row, not here.
+ * Starting a run is on each baseline's own row, not here.
  */
 function head(ledger, board) {
   const c = ledger?.counts ?? null;
   return `
     <div class="ledger-head">
       <span class="ttl">BASELINES</span>
-      <span class="sub">every completed OFF measurement · local and cloud · every ON run is measured against one of these</span>
+      <span class="sub">every completed OFF measurement · local and cloud · every ON run is measured against the average of the baselines on its fingerprint</span>
       ${c ? `<span class="blcount">${esc(countWords(c))}</span>` : ""}
       ${serialChip(ledger)}
       ${renderRestoreButton(board)}
@@ -172,11 +175,11 @@ function body(board, ledger, rows) {
   return `
     ${cols()}
     ${live.map((b) => baselineRow(board, ledger, b)).join("")}
-    ${live.length ? "" : `<div class="ledger-empty"><div class="note">${esc("No batch can be a floor right now — every batch below was measured on something other than the current code. Start a new baseline.")}</div></div>`}
+    ${live.length ? "" : `<div class="ledger-empty"><div class="note">${esc("No batch is a baseline right now — every batch below was measured on something other than the current code. Start a new baseline.")}</div></div>`}
     ${folded.length ? supersededGroup(board, ledger, folded) : ""}`;
 }
 
-/** The folded group of batches that can never be a floor, each saying why. */
+/** The folded group of batches that are never a baseline, each saying why. */
 function supersededGroup(board, ledger, rows) {
   const n = rows.length;
   return `
@@ -184,7 +187,7 @@ function supersededGroup(board, ledger, rows) {
       <div class="blsup-head" data-superseded-toggle="1" role="button" tabindex="0" aria-expanded="${supersededOpen ? "true" : "false"}">
         <span class="blcaret">${supersededOpen ? "▾" : "▸"}</span>
         <span>${esc(`SUPERSEDED — ${n} batch${n === 1 ? "" : "es"}`)}</span>
-        <span class="note">${esc("measured on something other than the current code · kept for reading, never a floor")}</span>
+        <span class="note">${esc("measured on something other than the current code · kept for reading, never a baseline")}</span>
       </div>
       ${supersededOpen ? rows.map((b) => baselineRow(board, ledger, b)).join("") : ""}
     </div>`;
@@ -197,8 +200,8 @@ function empty(ledger) {
     <div class="ledger-empty">
       <div class="bright">${esc("No baseline has been measured yet.")}</div>
       <div class="note">${esc(
-        "A baseline is one OFF cell — the floor every Δ on this board is subtracted from. Nothing can be "
-        + "run or compared until one exists.",
+        "A baseline is one OFF batch of cells — every Δ on this board is measured against the average of the "
+        + "baselines sharing the run's fingerprint. Nothing can be run or compared until one exists.",
       )}</div>
       <div class="note">${
         startable.length
@@ -213,7 +216,7 @@ function cols() {
   return `
     <div class="blcols">
       <span></span><span>MODEL · PROVIDER</span><span>KIND</span><span>CELLS</span>
-      <span>MEDIAN (SPREAD)</span><span>FLOOR</span><span>ON RUNS</span><span></span>
+      <span>MEDIAN (SPREAD)</span><span>STATE</span><span>ON RUNS</span><span></span>
     </div>`;
 }
 
@@ -263,13 +266,11 @@ function medianWord(batch) {
   return `${esc(String(batch.median))}${spread}`;
 }
 
-/** A signed percentage, "+4.3%" / "−8.7%" / "±0%". */
-function pct(p) {
-  if (p === null || p === undefined) return "";
-  return `${p > 0 ? "+" : p < 0 ? "−" : "±"}${Math.abs(p)}%`;
-}
-
-/** FLOOR: the picked cell and its distance from the median, or why there is none. */
+/**
+ * The row's state word. A closed batch is MEASURED: every cell of it counts
+ * toward its fingerprint's average, so no single cell is named here — naming one
+ * was the old measuring method.
+ */
 function stateWord(b) {
   // Elapsed ("RUNNING · 22m"), not "ago": the batch is running now.
   if (b.state === "running") return `RUNNING${b.campaign_started_at ? ` · ${esc(elapsed(b.campaign_started_at))}` : ""}`;
@@ -277,16 +278,12 @@ function stateWord(b) {
     if (b.void_kind === "superseded") return `SUPERSEDED — ${esc(b.void_input ?? "an input")} changed`;
     if (b.void_kind === "mixed") return `MIXED — ${esc(b.void_input ?? "inputs")} differ`;
     if (b.void_kind === "unfingerprinted") return "UNFINGERPRINTED";
-    return "VOID — NOT A FLOOR";
+    return "VOID — NOT A BASELINE";
   }
-  // Out of context room takes the column on a floor too (exhaustedNote says
-  // what its numbers mean).
+  // Out of context room takes the column on a measured batch too (exhaustedNote
+  // says what its numbers mean).
   if (b.state === "exhausted" || b.context_exhausted) return "CONTEXT EXHAUSTED";
-  if (b.state === "awaiting") return "AWAITING PICK";
-  const pick = b.batch?.pick ?? null;
-  if (!pick) return "FLOOR";
-  const seq = `s${String(pick.sequence_index).padStart(4, "0")}`;
-  return `${esc(seq)} · ${esc(String(pick.problems))} <span class="note">${esc(`${pct(pick.pct_from_median)} vs median`)}</span>`;
+  return "MEASURED";
 }
 
 /** The void reason, printed on the row: its numbers measure the harness. */
@@ -299,8 +296,8 @@ function voidNote(b) {
 }
 
 /**
- * Context exhausted, on the row. On a floor the last graded round is the
- * result; otherwise nothing was graded.
+ * Context exhausted, on the row. On a measured batch the last graded round is
+ * the result; otherwise nothing was graded.
  */
 function exhaustedNote(b) {
   if (!b.context_exhausted) return "";
@@ -310,7 +307,7 @@ function exhaustedNote(b) {
   return `<div class="blwhy"><span class="null">${esc(text)}</span></div>`;
 }
 
-// ── INSIDE A BASELINE: the batch's cells, then the ON runs against its floor.
+// ── INSIDE A BASELINE: the batch's cells, then the ON runs measured against it.
 
 function drawer(board, ledger, b) {
   return `
@@ -320,20 +317,11 @@ function drawer(board, ledger, b) {
     </div>`;
 }
 
-/** The operator's last refused pick, per run_dir, printed where it was made. */
-const pickRefusals = new Map();
-export function notePickRefusal(runDir, message) {
-  if (message) pickRefusals.set(runDir, message);
-  else pickRefusals.delete(runDir);
-}
-
 /**
  * Every cell of the batch: its attempt-1 problem count (what the median is
  * over), its distance from the median, its failures per attempt (the repair
- * trajectory), and what it cost. A pick button on each scored cell of a batch
- * that can hold a floor — awaiting one, or already holding one (re-picking the
- * floor is ordinary; the route accepts it). None on a void batch — a floor never
- * rides stale numbers — and none while the batch runs, which is not settled yet.
+ * trajectory), and what it cost. No cell is selectable: the batch is measured as
+ * a whole, and a Δ is against the average over the baselines on its fingerprint.
  */
 function cellsSection(b) {
   const batch = b.batch;
@@ -341,8 +329,6 @@ function cellsSection(b) {
   if (!list.length) {
     return `<div class="rsec"><span class="kick">CELLS IN THIS BATCH — 0</span><div class="rempty">${esc("no cell of this batch has been found on disk.")}</div></div>`;
   }
-  const canPick = b.state === "awaiting" || b.state === "complete";
-  const refusal = pickRefusals.get(b.run_dir);
   return `
     <div class="rsec">
       <div class="rsecline">
@@ -350,26 +336,20 @@ function cellsSection(b) {
         <span class="spacer"></span>
         <span class="note">${esc("problems = failed gates at attempt 1 · the median is over scored cells · void cells are listed, never counted")}</span>
       </div>
-      ${refusal ? `<div class="blwhy"><span class="danger">${esc(refusal)}</span></div>` : ""}
       <div class="bccols">
         <span>CELL</span><span>PROBLEMS</span><span>VS MEDIAN</span><span>FAILURES BY ATTEMPT</span>
-        <span>TURNS</span><span>WALL</span><span>TOKENS</span><span>ENDED</span><span></span>
+        <span>TURNS</span><span>WALL</span><span>TOKENS</span><span>ENDED</span>
       </div>
-      ${list.map((c) => cellRow(b, c, canPick)).join("")}
+      ${list.map((c) => cellRow(c)).join("")}
     </div>`;
 }
 
-function cellRow(b, c, canPick) {
+function cellRow(c) {
   const seq = `s${String(c.sequence_index).padStart(4, "0")}`;
   const isVoid = c.scored === false;
   const vs = c.vs_median === null ? nul("—") : esc(`${c.vs_median > 0 ? "+" : c.vs_median < 0 ? "−" : "±"}${Math.abs(c.vs_median)}`);
-  const act = c.picked
-    ? `<span class="tag">FLOOR</span>`
-    : canPick && c.scored === true
-      ? `<button class="btn sm" data-batch-pick="${esc(String(c.sequence_index))}" data-batch-dir="${esc(String(b.run_dir ?? ""))}">pick</button>`
-      : "";
   return `
-    <div class="bcrow${isVoid ? " bc-void" : ""}${c.picked ? " bc-picked" : ""}">
+    <div class="bcrow${isVoid ? " bc-void" : ""}">
       <span class="bcseq">${esc(seq)}</span>
       <span>${c.problems === null ? nul("—") : esc(String(c.problems))}</span>
       <span>${vs}</span>
@@ -378,7 +358,6 @@ function cellRow(b, c, canPick) {
       <span>${c.wall_seconds === null ? nul("—") : esc(dur(c.wall_seconds))}</span>
       <span>${c.tokens === null ? nul("—") : esc(tok(c.tokens))}</span>
       <span class="${isVoid ? "danger" : ""}">${esc(endedWord(c))}</span>
-      <span class="bcact">${act}</span>
     </div>`;
 }
 
@@ -422,8 +401,9 @@ function runBtn(b) {
 }
 
 /**
- * The ON runs against this floor, newest first, read off its campaign
- * (models-ledger.mjs onRunsFor).
+ * The ON runs for this model, newest first, read off its campaign
+ * (models-ledger.mjs onRunsFor). Each one is drawn with the Δ it has earned
+ * against the average of the baselines on its own fingerprint.
  */
 function runs(b) {
   const list = b.runs ?? [];
@@ -432,12 +412,12 @@ function runs(b) {
   if (!list.length) {
     return `
       <div class="rsec">
-        <span class="kick">RUNS AGAINST THIS FLOOR — 0</span>
+        <span class="kick">ON RUNS FOR THIS MODEL — 0</span>
         <div class="rempty">${esc(
           b.state === "complete"
-            ? "no ON cell has been measured against this baseline yet. + run starts one — the same model, "
-              + "with the knowledge captured from this floor injected."
-            : "nothing can be measured against this baseline until it closes as a valid floor.",
+            ? "no ON cell has been measured against this model's baselines yet. + run starts one — the same "
+              + "model, with the knowledge captured by its OFF cells injected."
+            : "nothing can be measured against this model's baselines until it closes as a valid one.",
         )}</div>
       </div>`;
   }
@@ -445,18 +425,18 @@ function runs(b) {
   return `
     <div class="rsec">
       <div class="rsecline">
-        <span class="kick">RUNS AGAINST THIS FLOOR — ${list.length}</span>
-        ${best ? `<span class="pbest ${best.better ? "bright" : "danger"}" title="${esc(best.note ?? "")}">${esc(`BEST ${sign(best.turns)}${Math.abs(best.turns)} TURNS`)}</span>` : ""}
+        <span class="kick">ON RUNS FOR THIS MODEL — ${list.length}</span>
+        ${best ? `<span class="pbest ${best.better ? "bright" : "danger"}" title="${esc(best.note ?? "")}">${esc(`BEST ${sign(best.turns)}${Math.round(Math.abs(best.turns) * 10) / 10} TURNS`)}</span>` : ""}
         <span class="spacer"></span>
-        <span class="note">${esc("newest first · every ON cell in this floor\'s own campaign")}</span>
+        <span class="note">${esc("newest first · every ON cell for this model, each measured against the average of the baselines on its own fingerprint")}</span>
       </div>
       <div class="rcols">
         <span></span><span>RUN</span><span>WHEN</span><span>DETAIL</span><span>TURNS</span><span>Δ VS BASELINE</span>
       </div>
-      ${list.map((r) => runRow(r, b)).join("")}
+      ${list.map(runRow).join("")}
     </div>`;
 }
-function runRow(r, b) {
+function runRow(r) {
   const c = r.cell ?? null;
   return `
     <div class="rrow">
@@ -465,7 +445,7 @@ function runRow(r, b) {
       <span>${r.started_at ? esc(since(r.started_at)) : nul("time unobserved")}</span>
       <span class="rdetail">${detail(c)}</span>
       <span>${c && c.turns !== null ? esc(String(c.turns)) : nul("—")}</span>
-      <span class="delta">${deltaCell(r, b)}</span>
+      <span class="delta">${deltaCell(r)}</span>
     </div>`;
 }
 
@@ -526,16 +506,22 @@ export function buildStrip(c) {
 }
 
 /**
- * Δ against the floor this row is inside, computed server-side. `better`
- * arrives as a word, because fewer turns (a minus) is an improvement.
+ * Δ against the AVERAGE of the baselines on this run's fingerprint, computed
+ * server-side (models-ledger.mjs deltaOf). The count it is over is printed with
+ * the number, because the number means nothing without it: `+1.4 turns vs 3
+ * baselines`. `better` is a bool — fewer turns (a minus) is an improvement.
+ *
+ * A run with no computable Δ prints the server's own sentence and no number: a
+ * zero would claim a comparison nobody made.
  */
-function deltaCell(r, b) {
+function deltaCell(r) {
   const d = r.delta ?? null;
   if (!d) return r.cell ? nul("—") : "";
-  if (!d.computable) return `<span class="null">${esc(`Δ ${d.reason}`)}</span>`;
-  const parts = [`${sign(d.turns)}${Math.abs(d.turns)} turns`];
-  if (d.tokens !== null && d.tokens !== undefined) parts.push(`${sign(d.tokens)}${tok(Math.abs(d.tokens))}`);
-  return `<span class="${d.better ? "bright" : "danger"}">${esc(parts.join(" · "))}${d.better ? "" : " — worse than baseline"}</span>`;
+  if (!d.computable) return `<span class="null">${esc(d.reason)}</span>`;
+  const count = d.baseline_count;
+  const turns = `${sign(d.turns)}${Math.round(Math.abs(d.turns) * 10) / 10} turns `
+    + `vs ${count} baseline${count === 1 ? "" : "s"}`;
+  return `<span class="${d.better ? "bright" : "danger"}">${esc(turns)}${d.better ? "" : " — worse than baseline"}</span>`;
 }
 
 function sign(d) {
@@ -577,7 +563,7 @@ function nesting() {
         "Runs sort newest first inside a baseline. A running baseline holds its row with the pending state and nothing can be measured against it until it closes.",
       )}</span>
       <span>${esc(
-        "Nesting is the argument: a run has no meaning apart from the floor it is subtracted from, so it is never a top-level object.",
+        "Nesting is the argument: a run has no meaning apart from the baselines it is subtracted from, so it is never a top-level object.",
       )}</span>
     </div>`;
 }

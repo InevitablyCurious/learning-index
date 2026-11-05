@@ -1,8 +1,11 @@
-// BASELINES — the one owner of "does model X have a floor, and which cell is it".
+// BASELINES — the one owner of "does model X have a baseline, and what did it
+// cost".
 //
-// A floor: the operator's SELECTED run from the model's persisted batch
-// (<run_dir>/batch.json — median over the scored runs, fingerprint-bound). A
-// single run is not a baseline; an unselected batch is "awaiting_selection".
+// A baseline: every completed, non-void OFF cell — one click on Run is one
+// baseline. There is no picked floor and no selection: the numbers an ON run is
+// measured against are the AVERAGE over every baseline sharing its fingerprint
+// (`fingerprints`, derived at read time), so a baseline is never rationed and
+// adding one is the only thing that moves a Δ.
 //
 // Re-baselining is ordinary: every Run in the OFF arm yields one more baseline,
 // so baselines ACCUMULATE per fingerprint — how many were gathered on exactly
@@ -31,7 +34,6 @@ import {
   assembleBatch,
   readBatch,
   writeBatch,
-  selectRun,
 } from "./batch.mjs";
 
 /**
@@ -230,8 +232,6 @@ export async function collectCells(runsRoot, { includeBackups = false } = {}) {
         // Null without a real total rather than a denominator made of observed failures.
         gates: gateTotals(r) ?? prev.gates ?? null,
         terminal_reason: str(r.terminal_reason) ?? prev.terminal_reason ?? null,
-        // Seeded is sticky: a later record without it must not un-seed the cell.
-        seeded_from_snapshot: str(r.seeded_from_snapshot) ?? prev.seeded_from_snapshot ?? null,
       });
     }
 
@@ -283,8 +283,6 @@ export async function collectCells(runsRoot, { includeBackups = false } = {}) {
         // RUNBOOK 5.10, read off the harness's stamp: a cell that never
         // produced the stamp is pre-standard, and not void.
         void_instrument: cost?.void?.is_void === true,
-        // Seeded cells skip the build, so they are never a scorable floor.
-        seeded_from_snapshot: meas?.seeded_from_snapshot ?? null,
         // Every attempt the cell actually ran; no cap, so `total` is null (unbounded).
         phases: { done: meas ? meas.attempts.size : 0, total: null },
         verdict: meas?.verdict ?? null,
@@ -324,8 +322,7 @@ export async function collectCells(runsRoot, { includeBackups = false } = {}) {
 /**
  * How a cell ended, from the last cell.end on its own live.jsonl
  * (harness/live_stream.py), or null when it recorded no end. The tail is
- * enough: cell.end is the stream's last word. Continuous mode reads the verdict
- * from here too (control/continuous.mjs).
+ * enough: cell.end is the stream's last word.
  */
 export async function readCellEnd(cellDir) {
   const tail = await readTail(join(cellDir, "live.jsonl"));
@@ -628,9 +625,9 @@ export function batchFingerprintOf(cells) {
  * the first of N cells finished, with the rest frozen as `not_started`.
  *
  * NOT stale merely because the numbers differ — a run's problem count does not
- * change after it ends, and re-assembling on every read would fight the
- * operator's selection for no reason. Only the appearance of a measurement
- * where the record claims none counts.
+ * change after it ends, and re-assembling on every read would rewrite the record
+ * for no reason. Only the appearance of a measurement where the record claims
+ * none counts.
  */
 export function batchIsStale(batch, cells) {
   const byIndex = new Map(cells.map((c) => [c.sequence_index, c]));
@@ -641,7 +638,6 @@ export function batchIsStale(batch, cells) {
     const measured =
       cell.state === "complete"
       && !cell.void_instrument
-      && !cell.seeded_from_snapshot
       && !(cell.context_exhausted === true && !cell.gates);
     if (measured) return true;
   }
@@ -660,35 +656,18 @@ export function batchIsStale(batch, cells) {
 }
 
 /**
- * Re-assemble a batch from the cells as they now stand, keeping the operator's
- * pick if that run is still scored.
- *
- * The selection is the operator's; the numbers around it are the disk's. A
- * pick that is no longer scored is dropped rather than carried — a floor must
- * never point at a run the batch does not consider measured.
+ * Re-assemble a batch from the cells as they now stand. The record is the
+ * disk's: there is no operator pick to carry across (the average is taken per
+ * fingerprint, not per chosen run).
  */
-export async function reassemblePreservingSelection({ repoRoot = REPO_ROOT, runDir, cells, persisted = null, current = null }) {
-  const fresh = await assembleBatchForCells({ repoRoot, runDir, cells, current });
-  const pick = persisted?.selection?.sequence_index;
-  if (pick === undefined || pick === null) return fresh;
-  const stillScored = (fresh.runs ?? []).some(
-    (r) => r.sequence_index === pick && r.scored === true,
-  );
-  if (!stillScored) return fresh;
-  selectRun(fresh, pick);
-  await writeBatch(runDir, fresh);
-  return fresh;
-}
-
 export async function assembleBatchForCells({ repoRoot = REPO_ROOT, runDir, cells, current = null }) {
-  // The same scorability rule baselineFor applies: complete, not void-instrument,
-  // not seeded, and not out of context before anything was graded.
-  const scored = (c) => c.state === "complete" && !c.void_instrument && !c.seeded_from_snapshot && !(c.context_exhausted === true && !c.gates);
+  // The same scorability rule baselineFor applies: complete, not
+  // void-instrument, and not out of context before anything was graded.
+  const scored = (c) => c.state === "complete" && !c.void_instrument && !(c.context_exhausted === true && !c.gates);
   const voidReason = (c) => c.context_exhausted === true && !c.gates ? "context_exhausted"
-    : c.seeded_from_snapshot ? "seeded_from_snapshot"
-      : c.void_instrument ? (c.terminal_reason === "instrument_fault" ? "instrument_fault" : "void_instrument")
-        : c.state !== "complete" ? (c.terminal_exception ?? c.terminal_reason ?? c.state ?? "incomplete")
-          : "no_measurement";
+    : c.void_instrument ? (c.terminal_reason === "instrument_fault" ? "instrument_fault" : "void_instrument")
+      : c.state !== "complete" ? (c.terminal_exception ?? c.terminal_reason ?? c.state ?? "incomplete")
+        : "no_measurement";
   const runs = cells.map((c) => ({
     sequence_index: c.sequence_index,
     problem_count: scored(c) ? c.problems_before : null,
@@ -734,24 +713,8 @@ export async function verifyAgainstCurrentCode(batch, { repoRoot = REPO_ROOT, cu
 }
 
 /**
- * Read the batch for a runs-root-RELATIVE run_dir and check it against the
- * current code. A batch the check voids is persisted void right here — the
- * record must not keep claiming a validity it lost. No batch is {ok:false}:
- * this path never assembles one (assembly needs the cells, which only
- * baselineFor has).
- */
-export async function readBatchForRunDir({ runsRoot, runDir, repoRoot = REPO_ROOT }) {
-  const abs = join(runsRoot, runDir);
-  const batch = await readBatch(abs);
-  if (!batch) return { ok: false, error: "no batch for run_dir" };
-  if (await verifyAgainstCurrentCode(batch, { repoRoot })) await writeBatch(abs, batch);
-  return { ok: true, batch };
-}
-
-/**
  * What the BASELINES row shows inside a batch: every cell of it with its own
- * numbers, the median and the spread of the scored problem counts, and the
- * operator's pick with its distance from the median.
+ * numbers, the median and the spread of the scored problem counts.
  *
  * The problem count and the scored/void verdict come from the batch record
  * (batch.mjs) — the same numbers the median is taken over — never re-derived.
@@ -765,7 +728,6 @@ export function batchView(cells, batch) {
   const scoredCounts = (batch?.runs ?? [])
     .filter((r) => r.scored === true && Number.isFinite(r.problem_count))
     .map((r) => r.problem_count);
-  const pickIdx = Number.isInteger(batch?.selection?.sequence_index) ? batch.selection.sequence_index : null;
 
   const list = [...cells]
     .sort((a, b) => a.sequence_index - b.sequence_index)
@@ -779,7 +741,6 @@ export function batchView(cells, batch) {
         void_reason: r?.void_reason ?? null,
         problems,
         vs_median: r?.scored === true && median !== null && problems !== null ? problems - median : null,
-        picked: pickIdx === c.sequence_index,
         turns: c.turns ?? null,
         tokens: c.tokens ?? null,
         wall_seconds: c.wall_seconds ?? null,
@@ -791,47 +752,34 @@ export function batchView(cells, batch) {
       };
     });
 
-  const picked = list.find((c) => c.picked) ?? null;
   return {
     median,
     spread: scoredCounts.length ? { min: Math.min(...scoredCounts), max: Math.max(...scoredCounts) } : null,
     scored_count: batch ? (batch.scored_count ?? scoredCounts.length) : 0,
     void_count: batch ? (batch.void_count ?? 0) : 0,
     cells: list,
-    // The floor: which cell, its signed deviation as stored with the pick, and
-    // that deviation as a share of the median (null when the median is 0).
-    pick: picked
-      ? {
-          sequence_index: picked.sequence_index,
-          problems: picked.problems,
-          signed_deviation: batch.selection.signed_deviation ?? null,
-          pct_from_median: median ? Math.round(((picked.problems - median) / median) * 1000) / 10 : null,
-        }
-      : null,
   };
 }
 
 /**
- * The baseline for one model: the operator's SELECTED run from the model's
- * persisted batch — never an arbitrary pick. A single run is not a baseline;
- * the batch (<runsRoot>/<run_dir>/batch.json: median problem count over the
- * SCORED runs, fingerprint-bound) plus the operator's selection is. Without a
- * selection there is no floor yet (reason "awaiting_selection"); the standing
- * refusals (seeded, void, exhausted, pending, never-run) are unchanged. The
- * batch is assembled on first read and never rewritten here, so a persisted
- * selection survives every derivation; a selection is never fabricated.
+ * The baseline for one model: its campaign's batch — the MEDIAN problem count
+ * over the SCORED runs, fingerprint-bound (<runsRoot>/<run_dir>/batch.json). No
+ * run is picked: every completed, non-void OFF cell is a baseline, and the
+ * numbers a Δ is measured against are the per-fingerprint average across all of
+ * them (`fingerprints`). The standing refusals (void, exhausted, pending,
+ * never-run) are unchanged. The batch is assembled on first read and only
+ * re-assembled when the cells on disk have outgrown it; nothing is fabricated.
  */
 export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsRoot = null, current = currentGetter(repoRoot) } = {}) {
   const mine = offCells.filter((c) => c.model === model);
-  // Out of room with nothing graded is not a floor.
+  // Out of room with nothing graded is not a baseline.
   const exhaustedUngraded = (c) => c.context_exhausted === true && !c.gates;
   const scorable = mine.filter(
-    (c) => c.state === "complete" && !c.void_instrument && !c.seeded_from_snapshot && !exhaustedUngraded(c),
+    (c) => c.state === "complete" && !c.void_instrument && !exhaustedUngraded(c),
   );
   const exhausted = mine.filter(
-    (c) => c.state === "complete" && !c.void_instrument && !c.seeded_from_snapshot && exhaustedUngraded(c),
+    (c) => c.state === "complete" && !c.void_instrument && exhaustedUngraded(c),
   );
-  const seeded = mine.filter((c) => c.state === "complete" && Boolean(c.seeded_from_snapshot));
   // Void: graded but measuring the harness, or ended before any graded attempt.
   const voids = mine.filter((c) => (c.state === "complete" && c.void_instrument) || c.state === "ended");
   // Still to finish: not begun, or begun with no end recorded. A cell that
@@ -853,8 +801,8 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
     // One batch per run dir: this dir's batch is assembled from this dir's
     // cells (identical to `mine` in the single-dir case).
     const batchCells = mine.filter((c) => c.run_dir === relDir);
-    // An existing batch is the operator's record — read it, and assemble ONLY
-    // when absent: re-assembling would wipe a persisted selection.
+    // An existing batch is the record — read it, and assemble ONLY when absent
+    // or stale: a re-assembly rewrites the record, so it is done for a reason.
     //
     // ── BUT A BATCH ASSEMBLED MID-FLIGHT IS NOT A RECORD, IT IS A SNAPSHOT ──
     //
@@ -866,24 +814,21 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
     // reported the first cell to finish as though it were the whole batch.
     //
     // So a batch is STALE when the cells on disk now carry measurements it
-    // does not. Re-assemble from the current cells and carry the operator's
-    // selection across if that run is still scored — the selection is theirs
-    // to keep; the numbers around it are not theirs to freeze.
+    // does not. Re-assemble from the current cells.
     const persisted = await readBatch(runDir);
     const batch = persisted && !batchIsStale(persisted, batchCells)
       ? persisted
-      : await reassemblePreservingSelection({ repoRoot, runDir, cells: batchCells, persisted, current });
+      : await assembleBatchForCells({ repoRoot, runDir, cells: batchCells, current });
     // Every read checks the recorded fingerprint against the code as it is
     // now: a batch the code has moved past is void, and says which input.
     if (await verifyAgainstCurrentCode(batch, { repoRoot, current })) await writeBatch(runDir, batch);
 
-    // A fingerprint-void batch is never a floor: its numbers measured a
+    // A fingerprint-void batch is never a baseline: its numbers measured a
     // different grader/prompts/scaffold/golden/image than the current one, so
-    // every Δ against them would be invalid — even a persisted selection does
-    // not rescue it. Name the changed input; never quietly reuse stale
-    // numbers. (The void is detected + persisted by readBatchForRunDir; a
-    // freshly assembled batch is fingerprinted from the current inputs and so
-    // is never void here.)
+    // every Δ against them would be invalid. Name the changed input; never
+    // quietly reuse stale numbers. (The void is detected + persisted by
+    // verifyAgainstCurrentCode; a freshly assembled batch is fingerprinted from
+    // the current inputs and so is never void here.)
     if (batch.void === true) {
       const rep = mine[0];
       return {
@@ -906,78 +851,34 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
       };
     }
 
-    if (batch.selection) {
-      const sel = batchCells.find((c) => c.sequence_index === batch.selection.sequence_index);
-      if (!sel) {
-        throw new Error(
-          `baselineFor(${model}): the batch selection names sequence_index `
-          + `${batch.selection.sequence_index}, which no OFF cell of ${relDir} matches — `
-          + "the persisted batch and the cells on disk disagree",
-        );
-      }
-      return {
-        exists: true,
-        scorable: true,
-        id: sel.id,
-        run_dir: sel.run_dir,
-        sequence_index: sel.sequence_index,
-        // The floor's MEASUREMENT: the selected run's problem count. (Under the
-        // single-run pick this was the campaign's created_at timestamp.)
-        measured_before: sel.problems_before,
-        kind: sel.kind,
-        provider: sel.provider,
-        model_slug: sel.model_slug,
-        turns: sel.turns,
-        tokens: sel.tokens,
-        wall_seconds: sel.wall_seconds,
-        gates: sel.gates,
-        verdict: sel.verdict,
-        context_exhausted: sel.context_exhausted === true,
-        // The batch's scored-run count; only the selected run is the floor.
-        candidates: batch.scored_count,
-        median: batch.median,
-        batch: batchView(batchCells, batch),
-        reason: null,
-      };
-    }
-
-    // Batch assembled, operator hasn't picked: a batch exists, a floor does
-    // not. No pick is fabricated — this is the awaiting-selection state.
-    const rep = mine[0];
+    // No pick, by design: the newest completed OFF cell names the row (an
+    // identity plus its own measurement, for the card), while the numbers a Δ is
+    // measured against are the per-fingerprint average in `fingerprints`. A
+    // batch never has to be selected to be a baseline — choosing one cell WAS
+    // the old measuring method.
+    const rep = scorable[scorable.length - 1];
     return {
       exists: true,
-      scorable: false,
+      scorable: true,
       id: rep.id,
       run_dir: rep.run_dir,
       sequence_index: rep.sequence_index,
+      // This cell's own problem count — one sample of the batch, not its median.
+      measured_before: rep.problems_before,
       kind: rep.kind,
       provider: rep.provider,
       model_slug: rep.model_slug,
+      turns: rep.turns,
+      tokens: rep.tokens,
+      wall_seconds: rep.wall_seconds,
+      gates: rep.gates,
+      verdict: rep.verdict,
+      context_exhausted: rep.context_exhausted === true,
+      // Run against an averaged baseline, never one cell.
       candidates: batch.scored_count,
       median: batch.median,
       batch: batchView(batchCells, batch),
-      reason: "awaiting_selection",
-    };
-  }
-
-  // Seeded is checked before void; it is the more fundamental refusal.
-  if (seeded.length) {
-    const s = seeded[seeded.length - 1];
-    return {
-      exists: false,
-      scorable: false,
-      seeded: true,
-      // No voided/pending flag: the row resolves to "none" and never reaches the card.
-      id: s.id,
-      run_dir: s.run_dir,
-      sequence_index: s.sequence_index,
-      kind: s.kind,
-      provider: s.provider,
-      model_slug: s.model_slug,
-      candidates: 0,
-      reason:
-        `seeded from snapshot \`${s.seeded_from_snapshot}\` — a seeded cell skips the build `
-        + "and sits on a different turn/token scale than the floor a Δ is measured against.",
+      reason: null,
     };
   }
 
@@ -1049,17 +950,16 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
     exists: false,
     scorable: false,
     candidates: 0,
-    reason: `no OFF cell has ever been run for ${model} — the floor every Δ is measured against does not exist yet`,
+    reason: `no OFF cell has ever been run for ${model} — there is no baseline yet to measure a run against`,
   };
 }
 
 /**
- * Every baseline that exists: one row per model (a model has one floor;
- * `candidates` is the batch's scored-run count — the pool the floor was picked
- * from, so it includes it). States: complete (a floor), awaiting (a
- * batch assembled but unselected — visible so the operator can pick), running
- * (in flight, refuses runs), void (ran but measured the harness), exhausted
- * (out of context before grading), none (no row — e.g. only seeded cells).
+ * Every baseline that exists: one row per model (a model has one campaign;
+ * `candidates` is the batch's scored-run count — every scored run is one more
+ * baseline). States: complete (a measured batch), running (in flight, refuses
+ * runs), void (ran but measured the harness), exhausted (out of context before
+ * grading), none (no row).
  */
 async function baselineList(offCells, { repoRoot = REPO_ROOT, runsRoot = null, current = currentGetter(repoRoot) } = {}) {
   const byModel = new Map();
@@ -1072,8 +972,6 @@ async function baselineList(offCells, { repoRoot = REPO_ROOT, runsRoot = null, c
   const rows = [];
   for (const [model, cells] of byModel) {
     const b = await baselineFor(model, cells, { repoRoot, runsRoot, current });
-    // An awaiting-selection batch is a VISIBLE row: the operator must see the
-    // batch (and its median) to pick from it — dropping it hides the pick.
     const state = b.scorable
       ? "complete"
       : b.voided
@@ -1082,9 +980,7 @@ async function baselineList(offCells, { repoRoot = REPO_ROOT, runsRoot = null, c
           ? "exhausted"
           : b.pending
             ? "running"
-            : b.reason === "awaiting_selection"
-              ? "awaiting"
-              : "none";
+            : "none";
     if (state === "none") continue;
 
     // Identity from the resolved baseline, else the newest cell.
@@ -1113,16 +1009,16 @@ async function baselineList(offCells, { repoRoot = REPO_ROOT, runsRoot = null, c
       // Cells found vs valid: what to check when an expected floor is missing.
       cells_seen: cells.length,
       candidates: b.candidates ?? 0,
-      // The batch's median problem count — the awaiting row's measurement and
-      // the void row's stale one. Null when no batch was ever assembled.
+      // The batch's median problem count — the row's measurement. Null when no
+      // batch was ever assembled.
       median: b.median ?? null,
       // Why the batch is void (state "void"): superseded / mixed /
       // unfingerprinted, the input concerned, and the sentence; else null.
       void_kind: b.void_kind ?? null,
       void_input: b.void_input ?? null,
       void_reason: b.void_reason ?? null,
-      // The batch's cells, median, spread and pick (batchView); null for a row
-      // with no batch behind it.
+      // The batch's cells, median and spread (batchView); null for a row with
+      // no batch behind it.
       batch: b.batch ?? null,
       reason: b.reason ?? null,
     });
@@ -1154,15 +1050,14 @@ const AGGREGATE_COST_FIELDS = [
 
 /**
  * Does this cell's numbers belong in its fingerprint's aggregate? Same rule the
- * floor uses — complete, not void, not seeded, not context-exhausted-ungraded —
- * plus the two the aggregate adds: the harness must have stamped a phase total
- * to average, and the cell must carry a fingerprint the current input set can
+ * baseline uses — complete, not void, not context-exhausted-ungraded — plus the
+ * two the aggregate adds: the harness must have stamped a phase total to
+ * average, and the cell must carry a fingerprint the current input set can
  * still hash (a record short of an input belongs to no fingerprint).
  */
 function countsTowardFingerprint(c) {
   return c.state === "complete"
     && !c.void_instrument
-    && !c.seeded_from_snapshot
     && !(c.context_exhausted === true && !c.gates)
     && Boolean(c.cost?.phases?.total);
 }
@@ -1216,7 +1111,7 @@ function fingerprintBaselines(cells) {
 }
 
 /**
- * Every bench model's floor. A model with no OFF cell still gets
+ * Every bench model's baseline. A model with no OFF cell still gets
  * `exists: false` and a reason, so the UI can render its gate.
  */
 async function buildBaselineIndex({ runsRoot, models }) {
@@ -1255,7 +1150,7 @@ async function buildBaselineIndex({ runsRoot, models }) {
       exhausted: list.filter((b) => b.state === "exhausted").length,
     },
     note:
-      "forever baselines — every completed, non-void, unseeded OFF cell is a baseline. A baseline "
+      "forever baselines — every completed, non-void OFF cell is a baseline. A baseline "
       + "accumulates onto its fingerprint — baselines that share one are counted and averaged "
       + "together (context, wall time, turns, tokens), each field over the cells that measured it; "
       + "a different fingerprint is a different family. A void-instrument cell is no baseline.",

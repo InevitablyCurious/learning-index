@@ -7,8 +7,8 @@
 //   - No CORS stops such a page from READING a reply, not from SENDING a
 //     write. A text/plain POST needs no preflight, and every route here parses
 //     its body as JSON whatever its type. Nothing legitimate sends this server
-//     an Origin (the dashboard relay strips it; continuous mode and the tools
-//     are not browsers), so a write that carries one came from a web page.
+//     an Origin (the dashboard relay strips it, and the CLI tools are not
+//     browsers), so a write that carries one came from a web page.
 //   - A page on a domain re-resolved to 127.0.0.1 (DNS rebinding) is
 //     same-origin with itself and CAN read replies. Its Host header still names
 //     that domain, so only loopback names and the relay's host.docker.internal

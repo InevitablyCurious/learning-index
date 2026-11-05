@@ -1,15 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // HOLD TESTS — control/hold.mjs: reading a hold-ui.json (schema_version 2 only,
-// v1 is no longer produced) and releasing it with an optional operator note.
+// v1 is no longer produced). The hold is a dev-mode pause the operator attends;
+// the harness owns its release, so this module only reads.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { readHold, releaseHold, MAX_NOTE_CHARS } from "../hold.mjs";
+import { readHold } from "../hold.mjs";
 
 const HOLD_FILE = "hold-ui.json";
 
@@ -86,60 +87,6 @@ test("HOLD: readHold refuses schema_version 1 (no longer produced) as invalid", 
   assert.match(hold.reason, /only v2/);
 });
 
-test("HOLD: releaseHold writes an empty release file for a plain release", async () => {
-  const { runs } = sandbox();
-  const releasePath = join(runs, "t", "cell", "RELEASE_HOLD");
-  writeHold(runs, "t/cell", {
-    ...V2_HOLD,
-    release: { method: "touch_file", path: releasePath, poll_interval_s: 2 },
-  });
-  const res = await releaseHold({ runsRoot: runs, runDirs: ["t"] });
-  assert.equal(res.ok, true);
-  assert.equal(res.path, releasePath);
-  assert.equal(readFileSync(releasePath, "utf8"), "", "a plain release is empty");
-});
-
-test("HOLD: releaseHold writes the note as JSON content when a note is given", async () => {
-  const { runs } = sandbox();
-  const releasePath = join(runs, "t", "cell", "RELEASE_HOLD");
-  writeHold(runs, "t/cell", {
-    ...V2_HOLD,
-    release: { method: "touch_file", path: releasePath, poll_interval_s: 2 },
-  });
-  const res = await releaseHold({ runsRoot: runs, runDirs: ["t"], note: "  off tray looks fixed  " });
-  assert.equal(res.ok, true);
-  assert.equal(res.operator_note, "off tray looks fixed");
-  const written = JSON.parse(readFileSync(releasePath, "utf8"));
-  assert.deepEqual(written, { note: "off tray looks fixed" });
-});
-
-test("HOLD: a blank note is a plain release; an over-long note is refused, not cut", async () => {
-  const { runs } = sandbox();
-  const releasePath = join(runs, "t", "cell", "RELEASE_HOLD");
-  writeHold(runs, "t/cell", {
-    ...V2_HOLD,
-    release: { method: "touch_file", path: releasePath, poll_interval_s: 2 },
-  });
-  // Over the limit -> refused, nothing written, the run stays held.
-  const tooLong = await releaseHold({ runsRoot: runs, runDirs: ["t"], note: "x".repeat(MAX_NOTE_CHARS + 1) });
-  assert.equal(tooLong.ok, false);
-  assert.equal(tooLong.code, "note_too_long");
-  assert.equal(existsSync(releasePath), false, "a refused release must not release the run");
-  // Exactly at the limit -> kept whole.
-  await releaseHold({ runsRoot: runs, runDirs: ["t"], note: "y".repeat(MAX_NOTE_CHARS) });
-  assert.equal(JSON.parse(readFileSync(releasePath, "utf8")).note.length, MAX_NOTE_CHARS);
-  // Blank note -> plain (empty) release; no temporary file left behind.
-  await releaseHold({ runsRoot: runs, runDirs: ["t"], note: "   " });
-  assert.equal(readFileSync(releasePath, "utf8"), "");
-  assert.equal(existsSync(`${releasePath}.tmp`), false);
-});
-
-test("HOLD: release with no active hold is a harmless no-op", async () => {
-  const { runs } = sandbox();
-  const res = await releaseHold({ runsRoot: runs, runDirs: ["t"] });
-  assert.equal(res.ok, true);
-  assert.equal(res.released, true);
-});
 // The real layout: <run_dir>/memoryOFF/cell-0000/hold-ui.json sits seven
 // directories below runs/. A whole-tree scan capped at depth 6 never found it,
 // so the board showed no hold while the harness waited (2026-10-14 proof run).
@@ -153,16 +100,10 @@ test("HOLD: a hold in a live run's cell directory is found at the real depth", a
   assert.equal(hold?.kind, "round");
 });
 
-test("HOLD: a hold file left by a run that is not in flight is never shown or released", async () => {
+test("HOLD: a hold file left by a run that is not in flight is never shown", async () => {
   const { runs } = sandbox();
-  const releasePath = join(runs, REAL_RUN_DIR, "memoryOFF", "cell-0000", "RELEASE_HOLD");
-  writeHold(runs, `${REAL_RUN_DIR}/memoryOFF/cell-0000`, {
-    ...V2_HOLD,
-    release: { method: "touch_file", path: releasePath, poll_interval_s: 2 },
-  });
+  writeHold(runs, `${REAL_RUN_DIR}/memoryOFF/cell-0000`, V2_HOLD);
   assert.equal(await readHold({ runsRoot: runs, runDirs: [] }), null);
-  await releaseHold({ runsRoot: runs, runDirs: [] });
-  assert.equal(existsSync(releasePath), false);
 });
 
 test("HOLD: a hold-ui.json inside the model's worktree is not a hold", async () => {

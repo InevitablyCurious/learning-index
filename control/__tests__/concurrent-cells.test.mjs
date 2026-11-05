@@ -340,7 +340,9 @@ test("START: one request launches N cells — concurrency, atomic indices, per-c
   const src = readFileSync(join(HERE, "routes", "run.mjs"), "utf8");
   const start = src.indexOf('path: "/api/run/start"');
   assert.notEqual(start, -1, "the /api/run/start route disappeared");
-  const end = src.indexOf('path: "/api/run/resume"', start);
+  // The NEXT route after start bounds the slice: there is one path per route
+  // entry, so the following `path:` literal is the handler's end.
+  const end = src.indexOf('path: "/api/run/stop/preview"', start);
   assert.notEqual(end, -1, "could not find the end of the start handler");
   const handler = src.slice(start, end);
 
@@ -371,13 +373,14 @@ test("START: one request launches N cells — concurrency, atomic indices, per-c
     "each cell carries its own index on argv",
   );
 
-  // 4. The OFF arm plans the campaign's ACCUMULATED slot count — the highest
-  //    allocated index + 1 — never this batch's own N, so an index past the
-  //    current plan grows the harness's schedule (append) instead of tripping
-  //    its range check (sequencer.py:207-215).
-  assert.match(
-    handler,
-    /arm === "on" \? \[\] : \["--off-replicates", String\(batch\[batch\.length - 1\]\.sequence_index \+ 1\)\]/,
+  // 4. The arm splice: the OFF arm plans the campaign's ACCUMULATED slot count
+  //    — the highest allocated index + 1 — never this batch's own N, so an index
+  //    past the current plan grows the harness's schedule (append) instead of
+  //    tripping its range check (sequencer.py:207-215). The ON arm plans the
+  //    baseline's own OFF prefix PLUS the budget that grows the ON band to
+  //    contain its index (see the ON-budget test below).
+  assert.ok(
+    handler.includes('["--off-replicates", String(batch[batch.length - 1].sequence_index + 1)]'),
     "the OFF arm plans the accumulated schedule, not the batch's own N",
   );
 
@@ -395,4 +398,61 @@ test("START: one request launches N cells — concurrency, atomic indices, per-c
   // 7. The response is per cell: runs[] plus the tree health, never a bare ok.
   assert.match(handler, /ok: true,\s*\n\s*runs,/, "success carries runs[], one record per cell");
   assert.match(handler, /tree_error/, "and the tree health rides along");
+});
+
+// ── THE ON ARM'S PLAN BUDGET ─────────────────────────────────────────────────
+//
+// The standard method is ONE session from build to completion, and the harness
+// plans ONE schedule: the OFF baseline, then the ON band STARTING at the OFF
+// slot count (harness/cumulative/ordering.py build_schedule, start_index =
+// len(off_order)). The memory-ON arm therefore cannot follow a plan of any
+// length unless the launch tells the harness to GROW that band: it pushed no
+// `--on-budget` at all, so build_on_order kept its default budget of 0 and
+// every memory-ON cell was refused seconds after launch. The plan budget is
+// what makes a memory-ON run work in BOTH modes, for any number of rounds.
+
+test("START: the memory-ON arm's argv carries the plan budget that grows the ON band", () => {
+  const src = readFileSync(join(HERE, "routes", "run.mjs"), "utf8");
+  const start = src.indexOf('path: "/api/run/start"');
+  assert.notEqual(start, -1, "the /api/run/start route disappeared");
+  const end = src.indexOf('path: "/api/run/stop/preview"', start);
+  assert.notEqual(end, -1, "could not find the end of the start handler");
+  const handler = src.slice(start, end);
+
+  // The ON arm: the baseline's own OFF prefix — the band starts at the OFF slot
+  // count, so a different plan prefix would be schedule drift — PLUS the budget
+  // that grows the band to contain this batch's index.
+  assert.ok(
+    handler.includes(
+      '["--off-replicates", String(offBand.replicates), "--on-budget", String(onBudget)]',
+    ),
+    "the ON arm must push BOTH --off-replicates and --on-budget — without the budget " +
+      "the harness plans a zero-length ON band and refuses every memory-ON cell",
+  );
+
+  // The OFF arm plans the accumulated schedule only: it has no band to grow, and
+  // a budget there would change what a baseline measures.
+  assert.ok(
+    handler.includes('["--off-replicates", String(batch[batch.length - 1].sequence_index + 1)]'),
+    "the OFF arm pushes --off-replicates alone",
+  );
+
+  // The budget is DERIVED from the campaign's recorded schedule, never from this
+  // batch's own N: index N sits N − off_slots slots into the ON band, so the
+  // band needs that many slots to contain it.
+  assert.match(
+    handler,
+    /arm === "on" \? batch\[batch\.length - 1\]\.sequence_index - offBand\.off_slots \+ 1 : null/,
+    "the ON budget is the index's offset into the ON band (N − off_slots + 1)",
+  );
+  // …and the schedule it is derived from is READ from the campaign manifest, not guessed.
+  assert.match(handler, /recordedOffBand\(sequenceManifest\)/);
+
+  // The band cannot be sized without a baseline: a campaign with no recorded OFF
+  // slot is refused BEFORE anything spawns, by name — never sized from a blind 0.
+  assert.match(handler, /"no_baseline"/, "an ON cell with no OFF baseline is refused by name");
+  assert.match(handler, /"manifest_unreadable"/, "an unreadable manifest is refused, never guessed");
+  // …and an index that lands BELOW the recorded OFF baseline is refused rather
+  // than handed a non-positive budget.
+  assert.match(handler, /"on_band_mismatch"/);
 });

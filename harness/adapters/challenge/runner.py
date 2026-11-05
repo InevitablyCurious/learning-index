@@ -3,7 +3,7 @@
 Extracted VERBATIM from harness/adapters/challenge/__init__.py
 (WO-LI15-I3B STAGE 3B): the ChallengeRunner class statement -- its
 class-level attributes and the G0/G1 base methods (__init__,
-build_need_card, _capture_attempt_one_snapshot, _record_checkpoint,
+build_need_card, _record_checkpoint,
 run_cell, _mark_harness_resume, _run_cell_impl,
 _run_cell_attempt) -- now lives here; the package __init__ is a thin
 re-export shim. The role mixins (utils, pricing, feedback, telemetry,
@@ -12,10 +12,9 @@ every self./cls. cross-call still resolves through the MRO with zero
 call-site changes. This module must not import from the package __init__
 at module level -- the package __init__ imports this module.
 
-SEAM NOTES. Six names stay PACKAGE globals that tests monkeypatch
-(monkeypatch.setattr(challenge_mod, NAME, fake)): capture_snapshot and
-compute_grader_hash (consumed in _capture_attempt_one_snapshot), and
-DockerCell, docker_available, ServeClient and worker_image_fingerprint
+SEAM NOTES. Four names stay PACKAGE globals that tests monkeypatch
+(monkeypatch.setattr(challenge_mod, NAME, fake)): DockerCell,
+docker_available, ServeClient and worker_image_fingerprint
 (consumed in _run_cell_impl). Each consuming method binds them as
 call-time LOCALS -- one read of the package attribute per call
 (`import harness.adapters.challenge as _pkg` at the top of the
@@ -34,14 +33,12 @@ importing it directly is correct -- same rationale as serve.py
 from __future__ import annotations
 
 import itertools
-import json
 import os
 import re
 import shutil
 import subprocess
 import time
 import uuid
-from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Callable
 
@@ -72,7 +69,6 @@ from harness.worker_image import (
 from ...cell_isolation import (
     assert_clean_worktree,
     assert_no_docker_residue,
-    assert_seeded_from_snapshot,
 )
 from ..docker_worker import (
     WORKER_IMAGE,
@@ -307,7 +303,6 @@ class ChallengeRunner(
         model: str,
         memory_mode: str = "off",
         org_id: str = "",
-        mock: str | None = None,
         resume_budget: int = 2,
         token_cap: int = 200000,
         gate_timeout_s: int = DEFAULT_GATE_TIMEOUT_S,
@@ -331,12 +326,7 @@ class ChallengeRunner(
         compact: bool = False,
         require_todos: bool = False,
         pause_after_grade: bool = False,
-        chunk_plan_hash: str | None = None,
-        template_hash: str | None = None,
         source_commit: str | None = None,
-        seed_snapshot_tree: Path | None = None,
-        seed_snapshot_drift: list[dict[str, str | None]] | None = None,
-        seed_snapshot_depth: int | None = None,
     ) -> None:
         # WO-GATE-ROSTER: the campaign's gate roster, written once at cell start
         # by the sequencer. Passed to `report.mjs` so it can report which gates
@@ -364,7 +354,7 @@ class ChallengeRunner(
         # Deriving it here from `self.cloud` or from a context number would be a
         # SECOND definition of the rule, free to disagree with the one the
         # operator confirmed — and the arm they confirmed is the arm that has to
-        # run. Defaults False so every existing construction site (tests, mock
+        # run. Defaults False so every existing construction site (tests, direct
         # callers) keeps today's behaviour rather than silently acquiring six
         # extra model turns.
         self.compact = bool(compact)
@@ -379,38 +369,17 @@ class ChallengeRunner(
         self.pause_after_grade = bool(pause_after_grade)
         self.memory_mode = str(memory_mode)
         # Bench identity for session titling (WO-STRIP-2b). Empty is legitimate
-        # (mock/unit callers); the title then uses the "org" fallback component.
+        # (unit callers); the title then uses the "org" fallback component.
         self.org_id = str(org_id or "")
         # Set once at cell start in _run_cell_impl (stable across attempts and
         # resumes); read by the serve-session create call and the first-run argv.
         self._cell_ts: int | None = None
         self._session_title: str | None = None
-        self.mock = mock
-        # Corpus-identity provenance for the attempt-1 snapshot. Produced by the
-        # campaign layer and threaded in — never re-derived here: a number
-        # computed twice is two numbers that can disagree.
-        self._chunk_plan_hash = chunk_plan_hash
-        self._template_hash = template_hash
+        # The corpus identity this cell runs against. Produced by the campaign
+        # layer and threaded in — never re-derived here: a number computed twice
+        # is two numbers that can disagree. `_source_commit` is an input to the
+        # cell fingerprint.
         self._source_commit = source_commit
-        # WO-SNAP-04 seed branch: a resolved snapshot `tree/` directory to seed
-        # the worktree from INSTEAD of the scaffold. Resolved and validated by
-        # the caller (threaded from run_cumulative.py) — never re-derived here.
-        # None keeps the normal scaffold seed and the normal build. When set:
-        # the worktree is seeded from it, the isolation preflight asserts
-        # against it (swapped, never bypassed), the chunked build is skipped
-        # (the snapshot IS the build work product), and the attempt-1 snapshot
-        # capture is suppressed (a seeded cell has no build of its own to
-        # capture — a snapshot-of-a-snapshot would be a degenerate corpus row).
-        self._seed_snapshot_tree = seed_snapshot_tree
-        # WO-SNAP-04B (D-SNAP-DEVMODE-EXCEPTIONS): seed-time corpus-provenance
-        # drift REPORTED by the snapshot resolver and threaded here from
-        # run_cumulative.py — entries are {"field", "snapshot", "running"}.
-        # Empty when the running corpus matches the snapshot's.
-        self._seed_snapshot_drift = (
-            list(seed_snapshot_drift) if seed_snapshot_drift else []
-        )
-        self._seed_snapshot_depth = seed_snapshot_depth
-        self._produced_snapshot_id: str | None = None
         self.resume_budget = int(resume_budget)
         if self.resume_budget < 0:
             raise ValueError("resume_budget must be >= 0")
@@ -488,8 +457,6 @@ class ChallengeRunner(
 
         if self.memory_mode not in {"off", "on"}:
             raise ValueError("memory_mode must be 'off' or 'on'")
-        if self.mock not in {None, "golden", "scaffold"}:
-            raise ValueError("mock must be one of: None, 'golden', 'scaffold'")
         if int(token_cap) < 1:
             raise ValueError("token_cap must be >= 1")
         if int(completion_grace_s) < 1:
@@ -566,197 +533,6 @@ class ChallengeRunner(
             stack=list(_SPEC.stack),
         )
 
-    def _capture_attempt_one_snapshot(
-        self,
-        *,
-        worktree: Path,
-        state_hash: str | None,
-        gate_totals: dict | None,
-        failed_gates: list[str],
-        first_run: Any,
-        build_chunk_expected: int,
-        worker_image_identity: Any,
-        run_label: str,
-        run_identity: str,
-        session_id: str | None,
-        report: dict[str, Any] | None = None,
-    ) -> None:
-        """Copy the attempt-1 graded tree beside its gate record, or say why not.
-
-        The attempt record carries the state hash; this carries the STATE: the
-        tree the gates actually graded, plus the producer-stated provenance
-        (corpus identity, worker image, void flags) that a later reader cannot
-        reconstruct. Every value is stated by its producer, never re-derived
-        here.
-
-        Capture is instrumentation: it NEVER raises and never fails a cell. Any
-        failure degrades to "no snapshot" plus exactly one live notice, so the
-        absence is reported on the surface built to show it rather than silent.
-        """
-        # WO-LI15-I3B STAGE 3B: late-bound patch seams. Tests monkeypatch
-        # capture_snapshot/compute_grader_hash on the PACKAGE
-        # (harness.adapters.challenge), so bind them as call-time locals --
-        # one read of the package attr per call -- and the patched object is
-        # what runs. Never a module-top import here.
-        import harness.adapters.challenge as _pkg
-
-        capture_snapshot = _pkg.capture_snapshot
-        compute_grader_hash = _pkg.compute_grader_hash
-
-        try:
-            # Same resolution as the harness's runs root (lconfig.py): env
-            # override first, repo-local `runs/` otherwise.
-            runs_root = Path(
-                os.environ.get("BENCH_RUNS_DIR") or (self._repo_root / "runs")
-            )
-            snapshot_root = runs_root / "snapshots"
-            snapshot_id = f"{int(time.time() * 1000)}-{run_identity}"
-            # A cell the harness limited is not a capability result; the flag
-            # travels with the snapshot so the tree is never read as one.
-            cell_void = bool(
-                first_run is not None
-                and (
-                    first_run.killed_reason in _HARNESS_LIMIT_REASONS
-                    or first_run.budget_stop_detected
-                    or first_run.zero_tool_turn_honest_fail
-                )
-            )
-            provenance: dict[str, Any] = {
-                "chunk_plan_hash": self._chunk_plan_hash,
-                "template_hash": self._template_hash,
-                "source_commit": self._source_commit,
-                # Grader identity: the hash of the gate code that produced
-                # this grade. A later seeded cell reuses the stored grade
-                # ONLY when this hash still matches (dev-mode grade cache).
-                "grader_hash": compute_grader_hash(_GRADER_DIR),
-                "worker_image_fingerprint": (
-                    worker_image_identity.to_dict()
-                    if worker_image_identity is not None
-                    else None
-                ),
-                "author_model": self.model,
-                "provider": self.model.partition("/")[0],
-                "memory_mode": self.memory_mode,
-                "run_id": run_label,
-                "cell_seq": getattr(self, "_cell_seq", None),
-                "gate_totals": gate_totals,
-                "failed_gates": failed_gates,
-                "build_chunks": (
-                    build_chunk_completion(
-                        chunk_reports=first_run.chunk_reports,
-                        expected=build_chunk_expected,
-                        worktree=worktree,
-                    )
-                    if first_run is not None
-                    else []
-                ),
-                "cell_void": cell_void,
-            }
-            captured = capture_snapshot(
-                worktree=worktree,
-                snapshot_root=snapshot_root,
-                snapshot_id=snapshot_id,
-                state_hash=state_hash,
-                state_alg=STATE_ALG,
-                provenance=provenance,
-            )
-            if captured is not None and report is not None:
-                # The grade travels with the tree: a seeded cell can reuse it
-                # iff the grader is byte-identical (grader_hash above). Any
-                # write failure is swallowed by the surrounding except — a
-                # snapshot without its grade is simply never cache-reused.
-                (captured / "grade-report.json").write_text(
-                    json.dumps(report, indent=2) + "\n", encoding="utf-8"
-                )
-            if captured is None:
-                # Failure OR a null state hash (structurally ineligible). One
-                # notice, warn level: the run continues either way.
-                live = getattr(self, "_live", None)
-                if live is not None:
-                    live.notice(
-                        "harness",
-                        "snapshot_capture_failed",
-                        level="warn",
-                        cell_seq=getattr(self, "_cell_seq", None),
-                        session_id=session_id,
-                        detail={"snapshot_id": snapshot_id, "attempt": 1},
-                    )
-        except Exception:
-            # Instrumentation never kills a run: swallow, the cell carries on.
-            pass
-
-    def _capture_end_of_run_snapshot(
-        self,
-        *,
-        worktree: Path,
-        state_hash: str | None,
-        run_label: str,
-        run_identity: str,
-        session_id: str | None,
-        attempt: int,
-    ) -> str | None:
-        """Promote a stuck cell's final graded attempt into a new snapshot.
-
-        Fires when the cell runs out of context, for seeded and fresh cells
-        alike: copies the final attempt's checkpoint tree
-        (already excluded + frozen) into runs/snapshots/ with snapshot_depth =
-        seed depth + 1 (a fresh cell's build is depth 1, so its end is 2), and
-        records the new id on self so the cell result can carry it back to the
-        campaign (the run->snapshot join key). Seeding from it stays dev-mode only.
-
-        Instrumentation: never raises, never fails a cell. Failure degrades to
-        "no snapshot" plus one warn notice.
-        """
-        import harness.adapters.challenge as _pkg
-
-        capture_snapshot = _pkg.capture_snapshot
-        try:
-            runs_root = Path(
-                os.environ.get("BENCH_RUNS_DIR") or (self._repo_root / "runs")
-            )
-            snapshot_root = runs_root / "snapshots"
-            snapshot_id = f"{int(time.time() * 1000)}-{run_identity}"
-            seed_depth = self._seed_snapshot_depth if self._seed_snapshot_depth else 1
-            provenance: dict[str, Any] = {
-                "snapshot_depth": seed_depth + 1,
-                "chunk_plan_hash": self._chunk_plan_hash,
-                "template_hash": self._template_hash,
-                "source_commit": self._source_commit,
-                "author_model": self.model,
-                "provider": self.model.partition("/")[0],
-                "memory_mode": self.memory_mode,
-                "run_id": run_label,
-                "cell_seq": getattr(self, "_cell_seq", None),
-            }
-            captured = capture_snapshot(
-                worktree=worktree,
-                snapshot_root=snapshot_root,
-                snapshot_id=snapshot_id,
-                state_hash=state_hash,
-                state_alg=STATE_ALG,
-                provenance=provenance,
-            )
-            if captured is None:
-                live = getattr(self, "_live", None)
-                if live is not None:
-                    live.notice(
-                        "harness",
-                        "snapshot_capture_failed",
-                        level="warn",
-                        cell_seq=getattr(self, "_cell_seq", None),
-                        session_id=session_id,
-                        detail={
-                            "snapshot_id": snapshot_id,
-                            "attempt": attempt,
-                            "kind": "end_of_run",
-                        },
-                    )
-                return None
-            self._produced_snapshot_id = snapshot_id
-            return snapshot_id
-        except Exception:
-            return None
-
     def _record_checkpoint(
         self,
         *,
@@ -809,24 +585,6 @@ class ChallengeRunner(
         # cell is unaffected.
         self._live = LiveStream.for_run(run_dir, run_id=str(run_label))
         cell_seq = getattr(self, "_cell_seq", None)
-
-        # WO-SNAP-04B / D-SNAP-DEVMODE-EXCEPTIONS: seed-time provenance drift
-        # RELAXES snapshot validity to a warning — the ruling demotes it to a
-        # reported fact, so the cell proceeds on the running corpus and is
-        # never refused. Emitted at the top of the stream, before any cell
-        # work can bury it; silent when the corpus matches (empty list).
-        for d in self._seed_snapshot_drift:
-            self._live.notice(
-                "harness",
-                "snapshot_validity_relaxed",
-                level="warn",
-                cell_seq=cell_seq,
-                detail={
-                    "field": d["field"],
-                    "snapshot": d["snapshot"],
-                    "running": d["running"],
-                },
-            )
 
         # `run.start` FIRST, so a reader that opens only this cell's stream has
         # the campaign context without going to the manifest. The roster is
@@ -985,21 +743,16 @@ class ChallengeRunner(
             shutil.rmtree(worktree)
         worktree.mkdir(parents=True, exist_ok=True)
 
-        # WO-SNAP-04: a seeded cell starts from the declared snapshot tree; an
-        # unseeded cell starts from the scaffold. Same copy, same AGENTS.md,
-        # same preflight below — only the declared expected tree swaps. The
-        # scaffold-copy literal is LOAD-BEARING: the AGENTS.md ordering guard
-        # in tests/test_challenge_zero_tool_resume.py indexes on it verbatim.
-        if self._seed_snapshot_tree is not None:
-            self._copy_tree_contents(self._seed_snapshot_tree, worktree)
-        else:
-            self._copy_tree_contents(self.task_dir / "scaffold", worktree)
+        # Every cell starts from the scaffold. The scaffold-copy literal is
+        # LOAD-BEARING: the AGENTS.md ordering guard in
+        # tests/test_challenge_zero_tool_resume.py indexes on it verbatim.
+        self._copy_tree_contents(self.task_dir / "scaffold", worktree)
         # No runtime/model block: naming the model back to itself is a tell
         # that something is driving it, and nothing downstream reads this.
         (worktree / "AGENTS.md").write_text(_WORKER_AGENTS_MD, encoding="utf-8")
         self._progress(
             f"PROGRESS run_label={run_label} step=worktree-seed "
-            f"src={self._seed_snapshot_tree if self._seed_snapshot_tree is not None else self.task_dir / 'scaffold'} "
+            f"src={self.task_dir / 'scaffold'} "
             f"dst={worktree}"
         )
         # ── ISOLATION PREFLIGHT (1/2): the tree the model will edit ──────────
@@ -1011,17 +764,7 @@ class ChallengeRunner(
         # runs of the SAME model are the case where inherited work is both most
         # likely and least visible — the leftovers look plausible because the
         # same model wrote them.
-        # WO-SNAP-04: the expected tree SWAPS with the seed source, it is never
-        # bypassed — a seeded cell asserts against its declared snapshot exactly
-        # as a scaffold cell asserts against the scaffold.
-        if self._seed_snapshot_tree is not None:
-            assert_seeded_from_snapshot(
-                worktree=worktree, snapshot_tree=self._seed_snapshot_tree
-            )
-        else:
-            assert_clean_worktree(
-                worktree=worktree, scaffold=self.task_dir / "scaffold"
-            )
+        assert_clean_worktree(worktree=worktree, scaffold=self.task_dir / "scaffold")
         self._progress(
             f"PROGRESS run_label={run_label} step=isolation-worktree result=clean dst={worktree}"
         )
@@ -1084,9 +827,9 @@ class ChallengeRunner(
         told_open: set[str] = set()
         _worker_exit_annot: str | None = None
         first_run: _OpencodeRunStats | None = None
-        # Monotonic clock start of the chunked build, for the attempt-1
-        # snapshot's build wall time. Stays None in mock mode (honest absence:
-        # no build ran, so no build wall exists to report).
+        # Monotonic clock start of the chunked build, for the build phase's
+        # wall time. Stays None when no build drive ran (honest
+        # absence: no build ran, so no build wall exists to report).
         build_started: float | None = None
         # ── PER-PHASE COST SPLIT (build vs troubleshooting) ─────────────────
         #
@@ -1096,8 +839,8 @@ class ChallengeRunner(
         # identically. These carry the split beside the totals; NOTHING is
         # subtracted from the totals, so every scored number is unchanged.
         #
-        # All three stay None when no real drive ran (mock, seeded build): the
-        # phase did not happen, and `PhaseCost.to_dict()` drops absent fields
+        # All three stay None when no drive ran for the phase: the phase did
+        # not happen, and `PhaseCost.to_dict()` drops absent fields
         # rather than claiming a phase that cost nothing.
         build_phase_cost: PhaseCost | None = None
         # Monotonic wall of the build drive only, kept so the troubleshooting
@@ -1119,465 +862,426 @@ class ChallengeRunner(
 
         worker_killed_reason: str | None = None
         observed_attempt_costs: list[float] = []
-        active_cell: DockerCell | None = None
-        cell_context: Any = nullcontext()
-        worker_image_identity: ImageFingerprint | None = None
+        # All three are bound unconditionally below, before the cell context is
+        # entered: there is one arm, so there is no path that reaches the graded
+        # loop without a Docker cell, an image fingerprint and a live context.
+        active_cell: DockerCell
+        cell_context: DockerCell
+        worker_image_identity: ImageFingerprint
 
-        if self.mock in {"golden", "scaffold"}:
-            mock_src = self.task_dir / str(self.mock)
-            self._copy_tree_contents(mock_src, worktree)
+        docker_ok, docker_detail = docker_available()
+        if not docker_ok:
+            raise RuntimeError(
+                "Docker required for isolated worker; "
+                f"docker preflight failed: {docker_detail}"
+            )
+        worker_image_identity = worker_image_fingerprint()
+        if worker_image_identity is None:
+            raise RuntimeError(
+                "Docker worker image missing. "
+                "Build it with: .venv/bin/python scripts/rebuild_worker_image.py"
+            )
+        # WHAT THIS CELL RUNS ON, recorded before it runs (harness/fingerprint.py).
+        # The batch is fingerprinted from these files alone; a cell that
+        # cannot record one refuses to start rather than run unrecorded.
+        #
+        # The last three inputs read LOCAL FILES (the image sources) rather
+        # than the running containers. Any failure to read one raises: a cell
+        # whose fingerprint is incomplete cannot join a baseline, so it must
+        # not run at all (no silent fallback).
+        worker_digest = worker_source_digest(self._repo_root / "images" / "worker")
+        opencode_version = pinned_opencode_version(
+            self._repo_root / "images" / "worker"
+        )
+        grader_image_input = {
+            "image": grader_image_mod.IMAGE,
+            "source_digest": grader_image_mod.source_digest(
+                _GRADER_DIR,
+                self._repo_root / "images" / "grader" / "Dockerfile",
+            ),
+        }
+        write_cell_fingerprint(
+            run_dir,
+            cell_fingerprint(
+                task_dir=self.task_dir,
+                grader_dir=_GRADER_DIR,
+                model=self.model,
+                challenge=self.task_dir.name,
+                compaction=self.compact,
+                worker_image=worker_image_identity.to_dict(),
+                harness_dir=self._repo_root / "harness",
+                source_commit=self._source_commit,
+                source_dirty=git_status_dirty(self._repo_root),
+                worker_source_digest=worker_digest,
+                opencode_version=opencode_version,
+                grader_image=grader_image_input,
+            ),
+        )
+        # Read the image-baked memory plugin ONCE per cell, next to the image
+        # identity probe, and stash it on self: a memory-ON cell's opencode.json
+        # lists its entry file. It travels via self because all three call
+        # sites must keep the exact spelling
+        # `_write_worker_permission_config(worktree=worktree)` — the ordering
+        # guard in test_challenge_zero_tool_resume.py indexes on that literal.
+        #
+        # An ON cell on an image with no plugin would run with no memory under
+        # an ON label. Refuse it here, before anything is launched.
+        self._baked_plugin = baked_plugin()
+        if self.memory_mode == "on" and self._baked_plugin is None:
+            raise RuntimeError(
+                f"memory-ON cell, but {WORKER_IMAGE} has no memory plugin baked in. "
+                "Set BENCH_PLUGIN_DIR to the plugin package and rebuild the worker "
+                "image (scripts/rebuild_worker_image.py)."
+            )
+        self._progress(
+            f"PROGRESS run_label={run_label} step=memory-plugin "
+            f"memory_mode={self.memory_mode} plugin="
+            f"{self._baked_plugin.identity if self._baked_plugin else 'none'} "
+            f"loaded={str(self.memory_mode == 'on').lower()}"
+        )
+
+        sanitized_label = re.sub(r"[^a-zA-Z0-9_.-]", "-", run_label)
+        container_name = f"bench-cell-{sanitized_label}-{run_identity}"
+        stale_rm = subprocess.run(
+            ["docker", "rm", "-f", container_name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        stale_detail = (stale_rm.stderr or stale_rm.stdout or "").strip()
+        if stale_rm.returncode == 0:
             self._progress(
-                f"PROGRESS run_label={run_label} step=worker-launch mode=mock mock={self.mock}"
+                "PROGRESS run_label="
+                f"{run_label} step=docker-stale-remove name={container_name} detail={stale_detail or 'removed'}"
+            )
+        elif "no such container" in stale_detail.lower():
+            self._progress(
+                f"PROGRESS run_label={run_label} step=docker-stale-remove name={container_name} detail=already-absent"
             )
         else:
-            docker_ok, docker_detail = docker_available()
-            if not docker_ok:
-                raise RuntimeError(
-                    "Docker required for isolated worker; "
-                    f"docker preflight failed: {docker_detail}"
-                )
-            worker_image_identity = worker_image_fingerprint()
-            if worker_image_identity is None:
-                raise RuntimeError(
-                    "Docker worker image missing. "
-                    "Build it with: .venv/bin/python scripts/rebuild_worker_image.py"
-                )
-            # WHAT THIS CELL RUNS ON, recorded before it runs (harness/fingerprint.py).
-            # The batch is fingerprinted from these files alone; a cell that
-            # cannot record one refuses to start rather than run unrecorded.
-            #
-            # The last three inputs read LOCAL FILES (the image sources) rather
-            # than the running containers. Any failure to read one raises: a cell
-            # whose fingerprint is incomplete cannot join a baseline, so it must
-            # not run at all (no silent fallback).
-            worker_digest = worker_source_digest(self._repo_root / "images" / "worker")
-            opencode_version = pinned_opencode_version(
-                self._repo_root / "images" / "worker"
-            )
-            grader_image_input = {
-                "image": grader_image_mod.IMAGE,
-                "source_digest": grader_image_mod.source_digest(
-                    _GRADER_DIR,
-                    self._repo_root / "images" / "grader" / "Dockerfile",
-                ),
-            }
-            write_cell_fingerprint(
-                run_dir,
-                cell_fingerprint(
-                    task_dir=self.task_dir,
-                    grader_dir=_GRADER_DIR,
-                    model=self.model,
-                    challenge=self.task_dir.name,
-                    compaction=self.compact,
-                    worker_image=worker_image_identity.to_dict(),
-                    harness_dir=self._repo_root / "harness",
-                    source_commit=self._source_commit,
-                    source_dirty=git_status_dirty(self._repo_root),
-                    worker_source_digest=worker_digest,
-                    opencode_version=opencode_version,
-                    grader_image=grader_image_input,
-                ),
-            )
-            # Read the image-baked memory plugin ONCE per cell, next to the image
-            # identity probe, and stash it on self: a memory-ON cell's opencode.json
-            # lists its entry file. It travels via self because all three call
-            # sites must keep the exact spelling
-            # `_write_worker_permission_config(worktree=worktree)` — the ordering
-            # guard in test_challenge_zero_tool_resume.py indexes on that literal.
-            #
-            # An ON cell on an image with no plugin would run with no memory under
-            # an ON label. Refuse it here, before anything is launched.
-            self._baked_plugin = baked_plugin()
-            if self.memory_mode == "on" and self._baked_plugin is None:
-                raise RuntimeError(
-                    f"memory-ON cell, but {WORKER_IMAGE} has no memory plugin baked in. "
-                    "Set BENCH_PLUGIN_DIR to the plugin package and rebuild the worker "
-                    "image (scripts/rebuild_worker_image.py)."
-                )
-            self._progress(
-                f"PROGRESS run_label={run_label} step=memory-plugin "
-                f"memory_mode={self.memory_mode} plugin="
-                f"{self._baked_plugin.identity if self._baked_plugin else 'none'} "
-                f"loaded={str(self.memory_mode == 'on').lower()}"
+            raise RuntimeError(
+                f"failed to remove stale docker container name={container_name}: "
+                f"{stale_detail or f'exit={stale_rm.returncode}'}"
             )
 
-            sanitized_label = re.sub(r"[^a-zA-Z0-9_.-]", "-", run_label)
-            container_name = f"bench-cell-{sanitized_label}-{run_identity}"
-            stale_rm = subprocess.run(
-                ["docker", "rm", "-f", container_name],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            stale_detail = (stale_rm.stderr or stale_rm.stdout or "").strip()
-            if stale_rm.returncode == 0:
-                self._progress(
-                    "PROGRESS run_label="
-                    f"{run_label} step=docker-stale-remove name={container_name} detail={stale_detail or 'removed'}"
-                )
-            elif "no such container" in stale_detail.lower():
-                self._progress(
-                    f"PROGRESS run_label={run_label} step=docker-stale-remove name={container_name} detail=already-absent"
-                )
-            else:
-                raise RuntimeError(
-                    f"failed to remove stale docker container name={container_name}: "
-                    f"{stale_detail or f'exit={stale_rm.returncode}'}"
-                )
-
-            # ── ISOLATION PREFLIGHT (2/2): no container or session DB survives ──
-            #
-            # The `docker rm -f` above can exit 0 while a container lingers on a
-            # wedged daemon, and the session-DB volume is removed later still.
-            # Verify by asking docker what actually exists, by EXACT name only:
-            # the memory system is a separately-managed process whose survival
-            # across runs is the experiment, and nothing here may enumerate or
-            # delete beyond this one cell's two names.
-            assert_no_docker_residue(container_name=container_name)
-            self._progress(
-                f"PROGRESS run_label={run_label} step=isolation-docker result=clean "
-                f"container={container_name}"
-            )
-            self._progress(
-                f"PROGRESS run_label={run_label} step=worker-isolation isolation=docker "
-                f"image={WORKER_IMAGE} image_id={worker_image_identity.image_id} "
-                f"image_created={worker_image_identity.created} memory_mode={self.memory_mode} "
-                f"container={container_name}"
-            )
-            self._init_worktree_git(worktree=worktree)
-            cell_config = self._build_cell_config(
-                worktree=worktree,
-                container_name=container_name,
-                # Egress contract (harness/egress.py): the sidecar name is
-                # derived from the run_identity token (sha256, DNS-safe by
-                # construction) — NOT the sanitized container label — so it
-                # matches the URL run_cumulative/spend_key point the worker at.
-                egress_host=egress_container_name(run_identity),
-            )
-            cell_context = DockerCell(
-                cell_config,
-                progress=self._progress,
-            )
+        # ── ISOLATION PREFLIGHT (2/2): no container or session DB survives ──
+        #
+        # The `docker rm -f` above can exit 0 while a container lingers on a
+        # wedged daemon, and the session-DB volume is removed later still.
+        # Verify by asking docker what actually exists, by EXACT name only:
+        # the memory system is a separately-managed process whose survival
+        # across runs is the experiment, and nothing here may enumerate or
+        # delete beyond this one cell's two names.
+        assert_no_docker_residue(container_name=container_name)
+        self._progress(
+            f"PROGRESS run_label={run_label} step=isolation-docker result=clean "
+            f"container={container_name}"
+        )
+        self._progress(
+            f"PROGRESS run_label={run_label} step=worker-isolation isolation=docker "
+            f"image={WORKER_IMAGE} image_id={worker_image_identity.image_id} "
+            f"image_created={worker_image_identity.created} memory_mode={self.memory_mode} "
+            f"container={container_name}"
+        )
+        self._init_worktree_git(worktree=worktree)
+        cell_config = self._build_cell_config(
+            worktree=worktree,
+            container_name=container_name,
+            # Egress contract (harness/egress.py): the sidecar name is
+            # derived from the run_identity token (sha256, DNS-safe by
+            # construction) — NOT the sanitized container label — so it
+            # matches the URL run_cumulative/spend_key point the worker at.
+            egress_host=egress_container_name(run_identity),
+        )
+        cell_context = DockerCell(
+            cell_config,
+            progress=self._progress,
+        )
 
         with cell_context as managed_cell:
-            if self.mock is None:
-                if not isinstance(managed_cell, DockerCell):
-                    raise RuntimeError(
-                        "docker worker context did not yield a DockerCell"
-                    )
-                active_cell = managed_cell
-                self._write_worker_permission_config(worktree=worktree)
+            if not isinstance(managed_cell, DockerCell):
+                raise RuntimeError("docker worker context did not yield a DockerCell")
+            active_cell = managed_cell
+            self._write_worker_permission_config(worktree=worktree)
 
-                # Live-view topology: start the persistent opencode serve for this
-                # cell immediately after the container is entered, before the first
-                # scored `opencode run`. Unconditional for both memory arms.
-                active_cell.start_serve()
-                self._progress(
-                    "PROGRESS step=live-view "
-                    f"serve=http://127.0.0.1:{self.serve_host_port} "
-                    f"attach_cmd='opencode attach http://127.0.0.1:{self.serve_host_port}'"
+            # Live-view topology: start the persistent opencode serve for this
+            # cell immediately after the container is entered, before the first
+            # scored `opencode run`. Unconditional for both memory arms.
+            active_cell.start_serve()
+            self._progress(
+                "PROGRESS step=live-view "
+                f"serve=http://127.0.0.1:{self.serve_host_port} "
+                f"attach_cmd='opencode attach http://127.0.0.1:{self.serve_host_port}'"
+            )
+
+            # WO-WATCH-1E: establish the serve-drive session and surface it so
+            # the founder can attach without hunting.
+            #
+            # A FAILURE HERE IS A SCORED-CELL ABORT. It used to be survivable:
+            # the session id stayed None and the entire cell ran down the
+            # stdout subprocess path instead, producing a cell that had never
+            # touched the transport every other cell uses. There is one
+            # transport now, so no session means no cell.
+            serve_base = f"http://127.0.0.1:{self.serve_host_port}"
+            self._serve_client = ServeClient(serve_base)
+            try:
+                cell_session_id = self._serve_client.create_session(
+                    title=self._session_title
                 )
-
-                # WO-WATCH-1E: establish the serve-drive session and surface it so
-                # the founder can attach without hunting.
-                #
-                # A FAILURE HERE IS A SCORED-CELL ABORT. It used to be survivable:
-                # the session id stayed None and the entire cell ran down the
-                # stdout subprocess path instead, producing a cell that had never
-                # touched the transport every other cell uses. There is one
-                # transport now, so no session means no cell.
-                serve_base = f"http://127.0.0.1:{self.serve_host_port}"
-                self._serve_client = ServeClient(serve_base)
+            except ServeClientError as exc:
+                self._progress(
+                    f"PROGRESS run_label={run_label} step=live-view "
+                    f"status=abort reason=session_create_failed detail={exc}"
+                )
+                raise ServeTransportError(
+                    f"could not create the serve session at {serve_base} "
+                    f"({exc}) — the benchmark has one transport and this cell "
+                    "cannot run without it"
+                ) from exc
+            self._cell_session_id = cell_session_id
+            self._cell_context_peak = None
+            # ── LIVE: THE JOIN KEY, PUBLISHED AT THE MOMENT IT EXISTS ───
+            # Every consumer keys on session_id. Until this record existed
+            # the only place it appeared was predicate-outcomes.jsonl,
+            # written after the whole campaign exits — so the learning panel
+            # resolved `unresolved` for entire runs. This is that fix: the
+            # id is on the stream before the model takes a single turn.
+            if getattr(self, "_live", None) is not None:
+                self._live.emit(
+                    "cell.start",
+                    cell_seq=getattr(self, "_cell_seq", None),
+                    session_id=cell_session_id,
+                    arm=str(getattr(self, "memory_mode", "") or "") or None,
+                    model=str(getattr(self, "model", "") or "") or None,
+                    serve_host_port=int(self.serve_host_port),
+                    serve_url=serve_base,
+                )
+            self._progress(
+                "PROGRESS step=live-view "
+                f"session_id={cell_session_id or 'none'} serve={serve_base} "
+                f"attach_cmd='{founder_attach_command(self.serve_host_port, cell_session_id)}'"
+            )
+            if cell_session_id is not None:
                 try:
-                    cell_session_id = self._serve_client.create_session(
-                        title=self._session_title
+                    marker = worktree.parent / "live-view.txt"
+                    marker.write_text(
+                        f"session_id={cell_session_id}\n"
+                        f"attach_cmd={founder_attach_command(self.serve_host_port, cell_session_id)}\n"
+                        f"serve=http://127.0.0.1:{self.serve_host_port}\n",
+                        encoding="utf-8",
                     )
-                except ServeClientError as exc:
+                    self._progress(f"PROGRESS step=live-view marker={marker}")
+                except OSError as exc:
                     self._progress(
-                        f"PROGRESS run_label={run_label} step=live-view "
-                        f"status=abort reason=session_create_failed detail={exc}"
+                        f"PROGRESS step=live-view marker_write_failed detail={exc}"
                     )
+
+            chunk_prompts = self._load_chunk_prompts()
+            build_chunk_expected = len(chunk_prompts)
+            task_prompt = self._joined_chunk_prompt(chunk_prompts)
+            self._progress(
+                f"PROGRESS run_label={run_label} step=worker-launch-start mode=real model={self.model} "
+                f"pure={pure} prompt_chars={len(task_prompt)} prompt_chunks={len(chunk_prompts)} "
+                "prompt_delivery=stdin"
+            )
+            self._emit_cost_target_warning_if_reached(
+                run_label=run_label,
+                phase="initial",
+                cumulative_cost_usd=cell_cost_usd,
+            )
+
+            budget_decision = self._budget_decision_for_attempt(
+                run_label=run_label,
+                attempt=1,
+                observed_attempt_costs=observed_attempt_costs,
+            )
+            if budget_decision == "harness_error":
+                verdict = "FAIL"
+                attempts_to_green = "FAIL"
+                termination_reason = "harness_error"
+            elif budget_decision == "budget_stop":
+                verdict = "BUDGET_STOP"
+                attempts_to_green = "BUDGET_STOP"
+                termination_reason = "attempts_exhausted_by_budget"
+            else:
+                # ── THE CHUNKED BUILD IS THE ONLY BUILD ─────────────────
+                #
+                # A transport fault here used to restart the entire build on
+                # the stdout path with all six chunks JOINED INTO ONE PROMPT.
+                # That is not the same experiment: the chunk boundaries are
+                # where the compactions happen, so
+                # the salvaged cell measured a different thing under the same
+                # name. It aborts instead.
+                if self._serve_client is None or self._cell_session_id is None:
                     raise ServeTransportError(
-                        f"could not create the serve session at {serve_base} "
-                        f"({exc}) — the benchmark has one transport and this cell "
-                        "cannot run without it"
-                    ) from exc
-                self._cell_session_id = cell_session_id
-                self._cell_context_peak = None
-                # ── LIVE: THE JOIN KEY, PUBLISHED AT THE MOMENT IT EXISTS ───
-                # Every consumer keys on session_id. Until this record existed
-                # the only place it appeared was predicate-outcomes.jsonl,
-                # written after the whole campaign exits — so the learning panel
-                # resolved `unresolved` for entire runs. This is that fix: the
-                # id is on the stream before the model takes a single turn.
-                if getattr(self, "_live", None) is not None:
-                    self._live.emit(
-                        "cell.start",
-                        cell_seq=getattr(self, "_cell_seq", None),
-                        session_id=cell_session_id,
-                        arm=str(getattr(self, "memory_mode", "") or "") or None,
-                        model=str(getattr(self, "model", "") or "") or None,
-                        serve_host_port=int(self.serve_host_port),
-                        serve_url=serve_base,
+                        "no serve session for the chunked build — the "
+                        "benchmark has one transport and there is no second "
+                        "way to run this cell"
                     )
-                self._progress(
-                    "PROGRESS step=live-view "
-                    f"session_id={cell_session_id or 'none'} serve={serve_base} "
-                    f"attach_cmd='{founder_attach_command(self.serve_host_port, cell_session_id)}'"
-                )
-                if cell_session_id is not None:
-                    try:
-                        marker = worktree.parent / "live-view.txt"
-                        marker.write_text(
-                            f"session_id={cell_session_id}\n"
-                            f"attach_cmd={founder_attach_command(self.serve_host_port, cell_session_id)}\n"
-                            f"serve=http://127.0.0.1:{self.serve_host_port}\n",
-                            encoding="utf-8",
-                        )
-                        self._progress(f"PROGRESS step=live-view marker={marker}")
-                    except OSError as exc:
-                        self._progress(
-                            f"PROGRESS step=live-view marker_write_failed detail={exc}"
-                        )
-
-                chunk_prompts = self._load_chunk_prompts()
-                build_chunk_expected = len(chunk_prompts)
-                task_prompt = self._joined_chunk_prompt(chunk_prompts)
-                self._progress(
-                    f"PROGRESS run_label={run_label} step=worker-launch-start mode=real model={self.model} "
-                    f"pure={pure} prompt_chars={len(task_prompt)} prompt_chunks={len(chunk_prompts)} "
-                    "prompt_delivery=stdin"
-                )
-                self._emit_cost_target_warning_if_reached(
-                    run_label=run_label,
-                    phase="initial",
-                    cumulative_cost_usd=cell_cost_usd,
-                )
-
-                budget_decision = self._budget_decision_for_attempt(
-                    run_label=run_label,
-                    attempt=1,
-                    observed_attempt_costs=observed_attempt_costs,
-                )
-                if budget_decision == "harness_error":
-                    verdict = "FAIL"
-                    attempts_to_green = "FAIL"
-                    termination_reason = "harness_error"
-                elif budget_decision == "budget_stop":
-                    verdict = "BUDGET_STOP"
-                    attempts_to_green = "BUDGET_STOP"
-                    termination_reason = "attempts_exhausted_by_budget"
-                elif self._seed_snapshot_tree is not None:
-                    # ── WO-SNAP-04 SEED BRANCH: THE BUILD ALREADY HAPPENED ──
-                    #
-                    # The worktree was seeded from a captured snapshot of a
-                    # prior cell's graded tree, so there is no build to drive:
-                    # no chunk prompt is delivered, no build cost is incurred,
-                    # no build chunk exists to report. What the attempt loop
-                    # and the feedback path read is this minimal post-build
-                    # state:
-                    #
-                    # - session_id binds the cell's serve session. It is
-                    #   otherwise bound ONLY from first_run.session_id inside
-                    #   the build block below — and first_run.session_id IS
-                    #   this same id (the chunked build drives
-                    #   session_id=self._cell_session_id), which is also what
-                    #   _run_cell_attempt delivers every feedback round over.
-                    #   Left None, the pre-feedback guard would abort the cell
-                    #   with harness_error before ANY troubleshooting round.
-                    # - build_started / first_run stay None: honest absence,
-                    #   exactly as the mock path — downstream reads already
-                    #   tolerate None (build_chunks falls through to None,
-                    #   transport_resume_count to 0).
-                    # - build_chunk_expected = 0: a seeded cell ran zero build
-                    #   chunks, so the result records no build-chunk rows, the
-                    #   same shape the mock arm records.
-                    session_id = self._cell_session_id
-                    build_chunk_expected = 0
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=worker-launch-start mode=seeded "
-                        f"seed_snapshot_tree={self._seed_snapshot_tree} build=skipped "
-                        f"session_id={session_id or 'none'}"
+                build_started = time.monotonic()
+                try:
+                    first_run = self._run_opencode_serve_chunked(
+                        active_cell=active_cell,
+                        serve_client=self._serve_client,
+                        session_id=self._cell_session_id,
+                        prompts=chunk_prompts,
+                        run_label=run_label,
+                        sidecar_path=user_events_path,
+                        prior_cost_usd=cell_cost_usd,
+                        kill_hook=active_cell.kill_worker_processes,
                     )
-                else:
-                    # ── THE CHUNKED BUILD IS THE ONLY BUILD ─────────────────
-                    #
-                    # A transport fault here used to restart the entire build on
-                    # the stdout path with all six chunks JOINED INTO ONE PROMPT.
-                    # That is not the same experiment: the chunk boundaries are
-                    # where the compactions happen, so
-                    # the salvaged cell measured a different thing under the same
-                    # name. It aborts instead.
-                    if self._serve_client is None or self._cell_session_id is None:
-                        raise ServeTransportError(
-                            "no serve session for the chunked build — the "
-                            "benchmark has one transport and there is no second "
-                            "way to run this cell"
-                        )
-                    build_started = time.monotonic()
-                    try:
-                        first_run = self._run_opencode_serve_chunked(
-                            active_cell=active_cell,
-                            serve_client=self._serve_client,
-                            session_id=self._cell_session_id,
-                            prompts=chunk_prompts,
-                            run_label=run_label,
-                            sidecar_path=user_events_path,
-                            prior_cost_usd=cell_cost_usd,
-                            kill_hook=active_cell.kill_worker_processes,
-                        )
-                    except ServeTransportError:
-                        raise
-                    except Exception as exc:
-                        self._progress(
-                            f"PROGRESS run_label={run_label} step=serve-drive "
-                            f"phase=initial status=abort reason=exception detail={exc}"
-                        )
-                        raise ServeTransportError(
-                            f"the chunked build failed on the serve transport ({exc}) "
-                            "— aborting rather than salvaging it by another route"
-                        ) from exc
+                except ServeTransportError:
+                    raise
+                except Exception as exc:
                     self._progress(
                         f"PROGRESS run_label={run_label} step=serve-drive "
-                        f"phase=initial status=used"
+                        f"phase=initial status=abort reason=exception detail={exc}"
                     )
-                    # PHASE BOUNDARY, captured the moment the build drive
-                    # returns: after this line every real dollar belongs to
-                    # troubleshooting. Epoch for the writer that splits
-                    # session-db events; monotonic for the wall, which must not
-                    # jump if the host clock steps.
-                    phase_boundary_wall_ts = time.time()
-                    build_wall_seconds = (
-                        time.monotonic() - build_started
-                        if build_started is not None
-                        else None
-                    )
-                    observed_attempt_costs.append(first_run.cost_usd)
-                    cell_cost_usd += first_run.cost_usd
-                    session_id = first_run.session_id
-                    input_tokens_total += first_run.input_tokens
-                    output_tokens_total += (
-                        first_run.output_tokens + first_run.reasoning_tokens
-                    )
-                    reasoning_tokens_total += first_run.reasoning_tokens
-                    cache_read_total += first_run.cache_read_tokens
-                    cache_write_total += first_run.cache_write_tokens
-                    turns_total += first_run.turns
-                    provider_truncations_total += first_run.provider_truncations
-                    cap_cutoffs_total += first_run.cap_cutoffs
-                    cap_cutoffs_nudged_total += first_run.cap_cutoffs_nudged
-                    zero_tool_turns_total += first_run.zero_tool_turns
-                    zero_tool_resumes_total += first_run.zero_tool_resumes
-                    if first_run.zero_tool_turn_honest_fail:
-                        zero_tool_turn_honest_fails_total += 1
-                    turn_anomalies_all.extend(first_run.turn_anomalies)
-                    unmetered_turns_total += first_run.unmetered_turns
-                    unmetered_turn_wall_total += first_run.unmetered_turn_wall_s
-                    prev_run_stats = first_run
-                    worker_killed_reason = first_run.killed_reason
-                    # The build phase, recorded from the drive's own stats. This
-                    # is the ONLY place a build cost exists: the feedback loop
-                    # below accumulates its own half, and the writer fills
-                    # `compactions`/`grades` from the session DB and attempt
-                    # reports (fields this site cannot observe).
-                    #
-                    # `output_tokens` is the RAW split, unlike the cell total
-                    # above which folds reasoning into it — `reasoning_tokens`
-                    # sits beside it here, so folding would double-count.
-                    build_phase_cost = PhaseCost(
-                        input_tokens=first_run.input_tokens,
-                        output_tokens=first_run.output_tokens,
-                        reasoning_tokens=first_run.reasoning_tokens,
-                        cache_read_tokens=first_run.cache_read_tokens,
-                        cache_write_tokens=first_run.cache_write_tokens,
-                        turns=first_run.turns,
-                        wall_seconds=build_wall_seconds,
-                        context_peak=first_run.context_peak_tokens,
-                        # A LOCAL MODEL HAS NO DOLLARS: absent (None), never
-                        # 0.0 — a fabricated zero would let a local build
-                        # masquerade as a priced one in any aggregate.
-                        cost_usd=first_run.cost_usd if self.cloud else None,
-                    )
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=worker-launch-end mode=real "
-                        f"exit={first_run.exit_code} killed={first_run.killed_reason or 'none'} "
-                        f"turns={first_run.turns} input={first_run.input_tokens} "
-                        f"output={first_run.output_tokens} reasoning={first_run.reasoning_tokens} "
-                        f"session_id={session_id or 'none'} cost_usd={first_run.cost_usd:.4f} "
-                        f"cell_cost_usd={cell_cost_usd:.4f}"
-                    )
+                    raise ServeTransportError(
+                        f"the chunked build failed on the serve transport ({exc}) "
+                        "— aborting rather than salvaging it by another route"
+                    ) from exc
+                self._progress(
+                    f"PROGRESS run_label={run_label} step=serve-drive "
+                    f"phase=initial status=used"
+                )
+                # PHASE BOUNDARY, captured the moment the build drive
+                # returns: after this line every real dollar belongs to
+                # troubleshooting. Epoch for the writer that splits
+                # session-db events; monotonic for the wall, which must not
+                # jump if the host clock steps.
+                phase_boundary_wall_ts = time.time()
+                build_wall_seconds = (
+                    time.monotonic() - build_started
+                    if build_started is not None
+                    else None
+                )
+                observed_attempt_costs.append(first_run.cost_usd)
+                cell_cost_usd += first_run.cost_usd
+                session_id = first_run.session_id
+                input_tokens_total += first_run.input_tokens
+                output_tokens_total += (
+                    first_run.output_tokens + first_run.reasoning_tokens
+                )
+                reasoning_tokens_total += first_run.reasoning_tokens
+                cache_read_total += first_run.cache_read_tokens
+                cache_write_total += first_run.cache_write_tokens
+                turns_total += first_run.turns
+                provider_truncations_total += first_run.provider_truncations
+                cap_cutoffs_total += first_run.cap_cutoffs
+                cap_cutoffs_nudged_total += first_run.cap_cutoffs_nudged
+                zero_tool_turns_total += first_run.zero_tool_turns
+                zero_tool_resumes_total += first_run.zero_tool_resumes
+                if first_run.zero_tool_turn_honest_fail:
+                    zero_tool_turn_honest_fails_total += 1
+                turn_anomalies_all.extend(first_run.turn_anomalies)
+                unmetered_turns_total += first_run.unmetered_turns
+                unmetered_turn_wall_total += first_run.unmetered_turn_wall_s
+                prev_run_stats = first_run
+                worker_killed_reason = first_run.killed_reason
+                # The build phase, recorded from the drive's own stats. This
+                # is the ONLY place a build cost exists: the feedback loop
+                # below accumulates its own half, and the writer fills
+                # `compactions`/`grades` from the session DB and attempt
+                # reports (fields this site cannot observe).
+                #
+                # `output_tokens` is the RAW split, unlike the cell total
+                # above which folds reasoning into it — `reasoning_tokens`
+                # sits beside it here, so folding would double-count.
+                build_phase_cost = PhaseCost(
+                    input_tokens=first_run.input_tokens,
+                    output_tokens=first_run.output_tokens,
+                    reasoning_tokens=first_run.reasoning_tokens,
+                    cache_read_tokens=first_run.cache_read_tokens,
+                    cache_write_tokens=first_run.cache_write_tokens,
+                    turns=first_run.turns,
+                    wall_seconds=build_wall_seconds,
+                    context_peak=first_run.context_peak_tokens,
+                    # A LOCAL MODEL HAS NO DOLLARS: absent (None), never
+                    # 0.0 — a fabricated zero would let a local build
+                    # masquerade as a priced one in any aggregate.
+                    cost_usd=first_run.cost_usd if self.cloud else None,
+                )
+                self._progress(
+                    f"PROGRESS run_label={run_label} step=worker-launch-end mode=real "
+                    f"exit={first_run.exit_code} killed={first_run.killed_reason or 'none'} "
+                    f"turns={first_run.turns} input={first_run.input_tokens} "
+                    f"output={first_run.output_tokens} reasoning={first_run.reasoning_tokens} "
+                    f"session_id={session_id or 'none'} cost_usd={first_run.cost_usd:.4f} "
+                    f"cell_cost_usd={cell_cost_usd:.4f}"
+                )
 
-                    if first_run.killed_reason == WORKER_DIED:
-                        verdict = "FAIL"
-                        attempts_to_green = "WORKER_DIED"
-                        termination_reason = WORKER_DIED
-                        context_stop = True  # grade nothing: the worker is gone
-                    elif first_run.context_exhausted:
-                        # The genuine residual: the session raised
-                        # ContextOverflowError, i.e. it was too large to compact
-                        # at all. A build that merely filled its context was
-                        # compacted and kept going, so it never arrives here.
-                        verdict = "FAIL"
-                        attempts_to_green = "CONTEXT_EXHAUSTED"
-                        termination_reason = CONTEXT_EXHAUSTED
-                        context_stop = True
-                    elif first_run.budget_stop_detected:
-                        verdict = "BUDGET_STOP"
-                        attempts_to_green = "BUDGET_STOP"
-                        termination_reason = "budget_stop_mid_attempt"
-                    elif first_run.zero_tool_turn_honest_fail:
+                if first_run.killed_reason == WORKER_DIED:
+                    verdict = "FAIL"
+                    attempts_to_green = "WORKER_DIED"
+                    termination_reason = WORKER_DIED
+                    context_stop = True  # grade nothing: the worker is gone
+                elif first_run.context_exhausted:
+                    # The genuine residual: the session raised
+                    # ContextOverflowError, i.e. it was too large to compact
+                    # at all. A build that merely filled its context was
+                    # compacted and kept going, so it never arrives here.
+                    verdict = "FAIL"
+                    attempts_to_green = "CONTEXT_EXHAUSTED"
+                    termination_reason = CONTEXT_EXHAUSTED
+                    context_stop = True
+                elif first_run.budget_stop_detected:
+                    verdict = "BUDGET_STOP"
+                    attempts_to_green = "BUDGET_STOP"
+                    termination_reason = "budget_stop_mid_attempt"
+                elif first_run.zero_tool_turn_honest_fail:
+                    verdict = "FAIL"
+                    attempts_to_green = "FAIL"
+                    termination_reason = "zero_tool_turn_honest_fail"
+                elif (
+                    first_run.exit_code not in (0, None)
+                    and first_run.killed_reason not in _HARNESS_LIMIT_REASONS
+                ):
+                    # D-EXIT1-TERMINAL: stream-incomplete is transport, not terminal.
+                    # Resume from checkpoint; keep _can_feedback=True.
+                    if first_run.exit_code == 1 and self._detect_stream_incomplete(
+                        first_run
+                    ):
+                        self._progress(
+                            f"PROGRESS run_label={run_label} step=transport-stoppage "
+                            f"phase=initial exit_code=1 finish_reason=stream-incomplete "
+                            f"resume_budget={self.resume_budget} session_id={first_run.session_id or 'none'}"
+                        )
+                        first_run = _OpencodeRunStats(
+                            input_tokens=first_run.input_tokens,
+                            output_tokens=first_run.output_tokens,
+                            reasoning_tokens=first_run.reasoning_tokens,
+                            turns=first_run.turns,
+                            session_id=first_run.session_id,
+                            killed_reason=None,
+                            exit_code=None,
+                            cost_usd=first_run.cost_usd,
+                            budget_stop_detected=first_run.budget_stop_detected,
+                            budget_stop_signature=first_run.budget_stop_signature,
+                            provider_truncations=first_run.provider_truncations,
+                            cap_cutoffs=first_run.cap_cutoffs,
+                            cap_cutoffs_nudged=first_run.cap_cutoffs_nudged,
+                            context_peak_tokens=first_run.context_peak_tokens,
+                            zero_tool_turns=first_run.zero_tool_turns,
+                            terminal_zero_tool_turn=first_run.terminal_zero_tool_turn,
+                            zero_tool_resumes=first_run.zero_tool_resumes,
+                            zero_tool_turn_honest_fail=first_run.zero_tool_turn_honest_fail,
+                            resume_count=1,
+                            turn_anomalies=first_run.turn_anomalies,
+                            unmetered_turns=first_run.unmetered_turns,
+                            unmetered_turn_wall_s=first_run.unmetered_turn_wall_s,
+                        )
+                        if self.resume_budget > 0:
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=transport-resume-allowed "
+                                f"phase=initial resume_count=1 budget={self.resume_budget}"
+                            )
+                        # _can_feedback stays True (_worker_exit_annot is still None)
+                    else:
                         verdict = "FAIL"
                         attempts_to_green = "FAIL"
-                        termination_reason = "zero_tool_turn_honest_fail"
-                    elif (
-                        first_run.exit_code not in (0, None)
-                        and first_run.killed_reason not in _HARNESS_LIMIT_REASONS
-                    ):
-                        # D-EXIT1-TERMINAL: stream-incomplete is transport, not terminal.
-                        # Resume from checkpoint; keep _can_feedback=True.
-                        if first_run.exit_code == 1 and self._detect_stream_incomplete(
-                            first_run
-                        ):
-                            self._progress(
-                                f"PROGRESS run_label={run_label} step=transport-stoppage "
-                                f"phase=initial exit_code=1 finish_reason=stream-incomplete "
-                                f"resume_budget={self.resume_budget} session_id={first_run.session_id or 'none'}"
-                            )
-                            first_run = _OpencodeRunStats(
-                                input_tokens=first_run.input_tokens,
-                                output_tokens=first_run.output_tokens,
-                                reasoning_tokens=first_run.reasoning_tokens,
-                                turns=first_run.turns,
-                                session_id=first_run.session_id,
-                                killed_reason=None,
-                                exit_code=None,
-                                cost_usd=first_run.cost_usd,
-                                budget_stop_detected=first_run.budget_stop_detected,
-                                budget_stop_signature=first_run.budget_stop_signature,
-                                provider_truncations=first_run.provider_truncations,
-                                cap_cutoffs=first_run.cap_cutoffs,
-                                cap_cutoffs_nudged=first_run.cap_cutoffs_nudged,
-                                context_peak_tokens=first_run.context_peak_tokens,
-                                zero_tool_turns=first_run.zero_tool_turns,
-                                terminal_zero_tool_turn=first_run.terminal_zero_tool_turn,
-                                zero_tool_resumes=first_run.zero_tool_resumes,
-                                zero_tool_turn_honest_fail=first_run.zero_tool_turn_honest_fail,
-                                resume_count=1,
-                                turn_anomalies=first_run.turn_anomalies,
-                                unmetered_turns=first_run.unmetered_turns,
-                                unmetered_turn_wall_s=first_run.unmetered_turn_wall_s,
-                            )
-                            if self.resume_budget > 0:
-                                self._progress(
-                                    f"PROGRESS run_label={run_label} step=transport-resume-allowed "
-                                    f"phase=initial resume_count=1 budget={self.resume_budget}"
-                                )
-                            # _can_feedback stays True (_worker_exit_annot is still None)
-                        else:
-                            verdict = "FAIL"
-                            attempts_to_green = "FAIL"
-                            termination_reason = "harness_error"
-                            _worker_exit_annot = "harness_error"
+                        termination_reason = "harness_error"
+                        _worker_exit_annot = "harness_error"
 
             # WO-ABORT: a build that fell through every recovery branch with a
             # chunk missing is an incomplete build — abort, never grade. The
@@ -1640,159 +1344,140 @@ class ChallengeRunner(
                 self._progress(
                     f"PROGRESS run_label={run_label} step=gate-attempt-start attempt={attempt} target={worktree}"
                 )
-                # Dev-mode grade cache: a seeded attempt 1 reuses the grade
-                # stored beside its snapshot tree ONLY when the grader is
-                # byte-identical; a miss (or any other arm) grades for real
-                # below, exactly as before.
-                report = None
-                if (
-                    attempt == 1
-                    and self._seed_snapshot_tree is not None
-                    and self.mock is None
-                ):
-                    report = self._load_cached_grade(
-                        Path(self._seed_snapshot_tree).parent
+                try:
+                    report = self._grade_measured(
+                        worktree=worktree,
+                        report_path=report_json,
+                        log_path=gate_log,
+                        attempt=attempt,
+                        run_identity=run_identity,
                     )
-                if report is None:
-                    try:
-                        report = self._grade_measured(
+                except GateTimeoutError as exc:
+                    # A STALL IS NOT A VERDICT (WO-FEEDBACK-1).
+                    #
+                    # This exception was raised and never caught anywhere in the
+                    # repo, so a timed-out gate propagated out of run_cell and
+                    # ABORTED THE CAMPAIGN. The evidence existed (gate log,
+                    # `step=gate-timeout`) but never reached the scored
+                    # artifacts, so the canonical impractical-not-impossible
+                    # event was the one outcome the record could not express.
+                    #
+                    # The gate was KILLED: nothing was measured. That is not the
+                    # model failing, and it must never be recorded as such —
+                    # hence its own termination_reason, and an
+                    # `attempts_to_green` that says so in words rather than
+                    # borrowing FAIL.
+                    verdict = "FAIL"
+                    attempts_to_green = "GATE_TIMEOUT"
+                    termination_reason = "gate_timeout"
+                    self._progress(
+                        f"PROGRESS run_label={run_label} step=gate-timeout-recorded "
+                        f"attempt={attempt} termination_reason=gate_timeout detail={exc}"
+                    )
+                    if _worker_exit_annot != "harness_error":
+                        # Computed once inside the guard for both consumers:
+                        # the attempt record and the check-point. A
+                        # harness_error-annotated gate-timeout gets neither,
+                        # matching the normal-path hook's guard.
+                        attempt_state_hash = _snapshot_state_hash(worktree)
+                        attempt_reports.append(
+                            {
+                                "attempt": attempt,
+                                "verdict": "FAIL",
+                                "conformed": False,
+                                "n_problems": 0,
+                                # Empty, NOT populated with the suite: no gate
+                                # failed, the runner was killed before it could
+                                # say. Inventing failures here would attribute a
+                                # harness death to the model.
+                                "failed_gates": [],
+                                # None, not [] — "not published" rather than
+                                # "published and empty" (invariants I-2 / I-4).
+                                "gate_results": None,
+                                "gate_totals": None,
+                                "state_hash": attempt_state_hash,
+                                "state_alg": STATE_ALG,
+                                "gate_timeout": True,
+                                "parity_pending": True,
+                            }
+                        )
+                        self._record_checkpoint(
+                            run_dir=run_dir,
                             worktree=worktree,
-                            report_path=report_json,
-                            log_path=gate_log,
                             attempt=attempt,
-                            run_identity=run_identity,
+                            phase=(
+                                "initial" if attempt == 1 else f"feedback-{attempt - 1}"
+                            ),
+                            state_hash=attempt_state_hash,
+                            run_label=run_label,
                         )
-                    except GateTimeoutError as exc:
-                        # A STALL IS NOT A VERDICT (WO-FEEDBACK-1).
-                        #
-                        # This exception was raised and never caught anywhere in the
-                        # repo, so a timed-out gate propagated out of run_cell and
-                        # ABORTED THE CAMPAIGN. The evidence existed (gate log,
-                        # `step=gate-timeout`) but never reached the scored
-                        # artifacts, so the canonical impractical-not-impossible
-                        # event was the one outcome the record could not express.
-                        #
-                        # The gate was KILLED: nothing was measured. That is not the
-                        # model failing, and it must never be recorded as such —
-                        # hence its own termination_reason, and an
-                        # `attempts_to_green` that says so in words rather than
-                        # borrowing FAIL.
-                        verdict = "FAIL"
-                        attempts_to_green = "GATE_TIMEOUT"
-                        termination_reason = "gate_timeout"
-                        self._progress(
-                            f"PROGRESS run_label={run_label} step=gate-timeout-recorded "
-                            f"attempt={attempt} termination_reason=gate_timeout detail={exc}"
+                    break
+                except InstrumentFaultError as exc:
+                    # A GRADING PASS THAT MEASURED NOTHING, TWICE (Jerry,
+                    # 2026-09-23). _grade_measured already regraded once:
+                    # an unreadable report or a pass the grader itself
+                    # marked not gradable. Twice on the same code is the
+                    # instrument's failure, never the model's — the cell
+                    # ends VOID (run_artifacts), counts toward no median,
+                    # and says why. It must never abort the campaign.
+                    verdict = "FAIL"
+                    attempts_to_green = "INSTRUMENT_FAULT"
+                    termination_reason = "instrument_fault"
+                    self._progress(
+                        f"PROGRESS run_label={run_label} step=instrument-fault-recorded "
+                        f"attempt={attempt} termination_reason=instrument_fault detail={exc}"
+                    )
+                    if _worker_exit_annot != "harness_error":
+                        # Computed once inside the guard for both consumers:
+                        # the attempt record and the check-point. A
+                        # harness_error-annotated gate-timeout gets neither,
+                        # matching the normal-path hook's guard.
+                        attempt_state_hash = _snapshot_state_hash(worktree)
+                        attempt_reports.append(
+                            {
+                                "attempt": attempt,
+                                "verdict": "FAIL",
+                                "conformed": False,
+                                "n_problems": 0,
+                                # Empty, NOT populated with the suite: no gate
+                                # failed, the runner was killed before it could
+                                # say. Inventing failures here would attribute a
+                                # harness death to the model.
+                                "failed_gates": [],
+                                # None, not [] — "not published" rather than
+                                # "published and empty" (invariants I-2 / I-4).
+                                "gate_results": None,
+                                "gate_totals": None,
+                                "state_hash": attempt_state_hash,
+                                "state_alg": STATE_ALG,
+                                "instrument_fault": True,
+                                "parity_pending": True,
+                            }
                         )
-                        if _worker_exit_annot != "harness_error":
-                            # Computed once inside the guard for both consumers:
-                            # the attempt record and the check-point. A
-                            # harness_error-annotated gate-timeout gets neither,
-                            # matching the normal-path hook's guard.
-                            attempt_state_hash = _snapshot_state_hash(worktree)
-                            attempt_reports.append(
-                                {
-                                    "attempt": attempt,
-                                    "verdict": "FAIL",
-                                    "conformed": False,
-                                    "n_problems": 0,
-                                    # Empty, NOT populated with the suite: no gate
-                                    # failed, the runner was killed before it could
-                                    # say. Inventing failures here would attribute a
-                                    # harness death to the model.
-                                    "failed_gates": [],
-                                    # None, not [] — "not published" rather than
-                                    # "published and empty" (invariants I-2 / I-4).
-                                    "gate_results": None,
-                                    "gate_totals": None,
-                                    "state_hash": attempt_state_hash,
-                                    "state_alg": STATE_ALG,
-                                    "gate_timeout": True,
-                                    "parity_pending": True,
-                                }
-                            )
-                            self._record_checkpoint(
-                                run_dir=run_dir,
-                                worktree=worktree,
-                                attempt=attempt,
-                                phase=(
-                                    "initial"
-                                    if attempt == 1
-                                    else f"feedback-{attempt - 1}"
-                                ),
-                                state_hash=attempt_state_hash,
-                                run_label=run_label,
-                            )
-                        break
-                    except InstrumentFaultError as exc:
-                        # A GRADING PASS THAT MEASURED NOTHING, TWICE (Jerry,
-                        # 2026-09-23). _grade_measured already regraded once:
-                        # an unreadable report or a pass the grader itself
-                        # marked not gradable. Twice on the same code is the
-                        # instrument's failure, never the model's — the cell
-                        # ends VOID (run_artifacts), counts toward no median,
-                        # and says why. It must never abort the campaign.
-                        verdict = "FAIL"
-                        attempts_to_green = "INSTRUMENT_FAULT"
-                        termination_reason = "instrument_fault"
-                        self._progress(
-                            f"PROGRESS run_label={run_label} step=instrument-fault-recorded "
-                            f"attempt={attempt} termination_reason=instrument_fault detail={exc}"
+                        self._record_checkpoint(
+                            run_dir=run_dir,
+                            worktree=worktree,
+                            attempt=attempt,
+                            phase=(
+                                "initial" if attempt == 1 else f"feedback-{attempt - 1}"
+                            ),
+                            state_hash=attempt_state_hash,
+                            run_label=run_label,
                         )
-                        if _worker_exit_annot != "harness_error":
-                            # Computed once inside the guard for both consumers:
-                            # the attempt record and the check-point. A
-                            # harness_error-annotated gate-timeout gets neither,
-                            # matching the normal-path hook's guard.
-                            attempt_state_hash = _snapshot_state_hash(worktree)
-                            attempt_reports.append(
-                                {
-                                    "attempt": attempt,
-                                    "verdict": "FAIL",
-                                    "conformed": False,
-                                    "n_problems": 0,
-                                    # Empty, NOT populated with the suite: no gate
-                                    # failed, the runner was killed before it could
-                                    # say. Inventing failures here would attribute a
-                                    # harness death to the model.
-                                    "failed_gates": [],
-                                    # None, not [] — "not published" rather than
-                                    # "published and empty" (invariants I-2 / I-4).
-                                    "gate_results": None,
-                                    "gate_totals": None,
-                                    "state_hash": attempt_state_hash,
-                                    "state_alg": STATE_ALG,
-                                    "instrument_fault": True,
-                                    "parity_pending": True,
-                                }
-                            )
-                            self._record_checkpoint(
-                                run_dir=run_dir,
-                                worktree=worktree,
-                                attempt=attempt,
-                                phase=(
-                                    "initial"
-                                    if attempt == 1
-                                    else f"feedback-{attempt - 1}"
-                                ),
-                                state_hash=attempt_state_hash,
-                                run_label=run_label,
-                            )
-                        break
+                    break
                 final_report = report
 
                 # ── THE WATERMARK IS RESET AT EVERY GRADE ───────────────────
                 #
-                # This is the one place BOTH arms reach — the measured grade and
-                # the cached-grade reuse — so it is the only honest statement of
-                # "a grade just completed". The session message count here is
-                # the waterline the next repair round is measured from: every
-                # compaction at or after this index is one that round caused.
+                # This is the one place every graded pass reaches, so it is the
+                # only honest statement of "a grade just completed". The session
+                # message count here is the waterline the next repair round is
+                # measured from: every compaction at or after this index is one
+                # that round caused.
                 #
                 # A failed read leaves the watermark None, which skips the
                 # check for this round entirely. A transport hiccup must never
-                # end a cell that may be making progress. Mock cells have no
-                # serve session at all, so the guard covers them the same way.
+                # end a cell that may be making progress.
                 compaction_watermark = None
                 if self._serve_client is not None and session_id:
                     try:
@@ -1901,9 +1586,9 @@ class ChallengeRunner(
                     # cell totals. `prev_run_stats` is the drive that produced
                     # the tree just graded — the chunked build for attempt 1,
                     # the feedback round before it otherwise. None means no
-                    # model ran this attempt (mock, seeded build): the fields
-                    # are then ABSENT, never 0, because a zero would claim a
-                    # measured turn that never happened.
+                    # model ran this attempt: the fields are then ABSENT,
+                    # never 0, because a zero would claim a measured turn that
+                    # never happened.
                     attempt_tokens: dict[str, Any] = (
                         {
                             "input_tokens": prev_run_stats.input_tokens,
@@ -1958,27 +1643,6 @@ class ChallengeRunner(
                         state_hash=attempt_state_hash,
                         run_label=run_label,
                     )
-                    # WO-SNAP-04 (F3): a seeded cell captures NOTHING at
-                    # attempt 1. Its tree is a prior cell's snapshot, and it
-                    # has no build work product of its own (first_run is an
-                    # honest absence) — capturing would write a degenerate
-                    # snapshot-of-a-snapshot into the corpus. The attempt-1
-                    # gate report above already grades the seeded tree; that
-                    # grade is the record.
-                    if attempt == 1 and self._seed_snapshot_tree is None:
-                        self._capture_attempt_one_snapshot(
-                            worktree=worktree,
-                            state_hash=attempt_state_hash,
-                            gate_totals=gate_totals,
-                            failed_gates=failed_gates,
-                            first_run=first_run,
-                            build_chunk_expected=build_chunk_expected,
-                            worker_image_identity=worker_image_identity,
-                            run_label=run_label,
-                            run_identity=run_identity,
-                            session_id=session_id,
-                            report=report,
-                        )
                 self._progress(
                     f"PROGRESS gate attempt={attempt} verdict={attempt_verdict} "
                     f"conformed={conformed} problems={len(problems)}"
@@ -2016,33 +1680,6 @@ class ChallengeRunner(
                         termination_reason = "transport_incomplete"
                     else:
                         termination_reason = "gates_failed"
-                    break
-
-                if self.mock is not None:
-                    # Mock mode copies a fixed tree and never drives a model, so
-                    # re-grading the same tree cannot change the result. The gate
-                    # was graded exactly once this attempt; a PASS already broke
-                    # at the gates_green exit above, so reaching here means it
-                    # failed. End as a genuine graded failure (wedge detection,
-                    # not a new cap — the deleted attempt ceiling was mock mode's
-                    # only exit).
-                    verdict = "FAIL"
-                    attempts_to_green = "DID_NOT_CONFORM" if not conformed else "FAIL"
-                    termination_reason = "gates_failed"
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=mock-grade-final "
-                        f"attempt={attempt} verdict={attempt_verdict} reason=mock_mode"
-                    )
-                    break
-
-                if active_cell is None:
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=feedback-stop attempt={attempt} "
-                        "reason=active_cell_missing"
-                    )
-                    verdict = "FAIL"
-                    attempts_to_green = "DID_NOT_CONFORM" if not conformed else "FAIL"
-                    termination_reason = "harness_error"
                     break
 
                 if not session_id:
@@ -2413,20 +2050,6 @@ class ChallengeRunner(
                         f"PROGRESS run_label={run_label} step=context-exhausted-stop "
                         f"phase=feedback-{attempt} graded={len(attempt_reports)}"
                     )
-                    # A cell that overflowed cannot continue: promote the round it
-                    # was graded on, so the next run chains from where this one
-                    # got to (seeded or fresh). Run 1790785038 stopped here with
-                    # no snapshot to continue from.
-                    self._capture_end_of_run_snapshot(
-                        worktree=(
-                            run_dir / "checkpoints" / f"cp-{attempt:02d}" / "tree"
-                        ),
-                        state_hash=attempt_state_hash,
-                        run_label=run_label,
-                        run_identity=run_identity,
-                        session_id=session_id,
-                        attempt=attempt,
-                    )
                     break
                 if feedback_run.budget_stop_detected:
                     verdict = "BUDGET_STOP"
@@ -2455,7 +2078,7 @@ class ChallengeRunner(
             # teardown (RC-6). Replaces the deleted env gate (BENCH_HOLD_UI):
             # the pause fires ONLY when `pause_after_grade` is on. kind="final",
             # told_text is None (nothing further is being sent).
-            if self.pause_after_grade and active_cell is not None:
+            if self.pause_after_grade:
                 final_attempt = (
                     attempt_reports[-1]["attempt"] if attempt_reports else None
                 )
@@ -2603,9 +2226,9 @@ class ChallengeRunner(
             if build_wall_seconds is not None:
                 troubleshooting_wall: float | None = wall_seconds - build_wall_seconds
             else:
-                # NO BUILD RAN (seeded/skipped build): the whole cell wall IS
-                # the troubleshooting wall. Reporting None here would throw away
-                # a wall that was in fact measured.
+                # NO BUILD WALL WAS RECORDED: the whole cell wall IS the
+                # troubleshooting wall. Reporting None here would throw away a
+                # wall that was in fact measured.
                 troubleshooting_wall = wall_seconds
             troubleshooting_phase_cost = PhaseCost(
                 input_tokens=feedback_phase_acc["input_tokens"],
@@ -2644,7 +2267,6 @@ class ChallengeRunner(
             problems_final=problems_final,
             attempt_reports=attempt_reports,
             worktree=str(worktree),
-            produced_snapshot_id=self._produced_snapshot_id,
             session_id=session_id,
             session_title=self._session_title,
             memory_mode=self.memory_mode,

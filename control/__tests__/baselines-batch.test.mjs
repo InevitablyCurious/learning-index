@@ -50,7 +50,6 @@ function cell(overrides = {}) {
     sequence_index: 0,
     state: "complete",
     void_instrument: false,
-    seeded_from_snapshot: null,
     context_exhausted: false,
     gates: { passed: 1, failed: 0, error: 0, not_run: 0, total: 1 },
     terminal_reason: null,
@@ -68,7 +67,6 @@ test("BASELINES-BATCH: assembleBatchForCells persists batch.json — scored/void
   const cells = [
     cell({ sequence_index: 0, problems_before: 10 }),
     cell({ sequence_index: 1, void_instrument: true, terminal_reason: "transport_incomplete", problems_before: 3 }),
-    cell({ sequence_index: 2, seeded_from_snapshot: "snap-1", problems_before: 4 }),
     cell({ sequence_index: 3, state: "not_started", gates: null, problems_before: null }),
     cell({ sequence_index: 4, context_exhausted: true, gates: null, problems_before: null }),
     cell({ sequence_index: 5, problems_before: 20 }),
@@ -82,9 +80,8 @@ test("BASELINES-BATCH: assembleBatchForCells persists batch.json — scored/void
   assert.deepEqual(onDisk, batch);
 
   assert.equal(batch.scored_count, 3);
-  assert.equal(batch.void_count, 4);
+  assert.equal(batch.void_count, 3);
   assert.equal(batch.median, 20); // median of {10,20,30}; voids never enter
-  assert.equal(batch.selection, null);
   assert.equal(batch.void, false);
 
   assert.deepEqual(
@@ -92,7 +89,6 @@ test("BASELINES-BATCH: assembleBatchForCells persists batch.json — scored/void
     [
       [0, 10, true, null],
       [1, null, false, "void_instrument"],
-      [2, null, false, "seeded_from_snapshot"],
       [3, null, false, "not_started"],
       [4, null, false, "context_exhausted"],
       [5, 20, true, null],
@@ -362,10 +358,10 @@ test("BASELINES-BATCH: collectCells reads each cell's recorded fingerprint, null
   assert.equal(cells.find((c) => c.run_dir === "without-fp").fingerprint, null);
 });
 
-test("BASELINES-BATCH: a picked floor turns superseded on the next read once the code moves", async (t) => {
+test("BASELINES-BATCH: a baseline turns superseded on the next read once the code moves", async (t) => {
   const { writeRun } = await import("./_shared.mjs");
   const { baselineFor, collectOffCells } = await import("../baselines.mjs");
-  const { readBatch, selectRun, writeBatch } = await import("../batch.mjs");
+  const { readBatch } = await import("../batch.mjs");
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "baselines-sup-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   writeRun(root, "camp", {
@@ -373,15 +369,12 @@ test("BASELINES-BATCH: a picked floor turns superseded on the next read once the
   });
   const cells = await collectOffCells(root);
   await baselineFor("m-a", cells, { runsRoot: root });
-  const batch = await readBatch(path.join(root, "camp"));
-  selectRun(batch, 0);
-  await writeBatch(path.join(root, "camp"), batch);
   assert.equal((await baselineFor("m-a", cells, { runsRoot: root })).scorable, true, "current code: a floor");
 
   setFixtureCode({ grader_hash: "z".repeat(64) });
   t.after(() => setFixtureCode());
   const after = await baselineFor("m-a", cells, { runsRoot: root });
-  assert.equal(after.scorable, false, "the selection does not rescue it");
+  assert.equal(after.scorable, false, "the moved code voids the batch — nothing rescues it");
   assert.equal(after.reason, "batch_void");
   assert.equal(after.void_kind, "superseded");
   assert.equal(after.void_input, "grader_hash");

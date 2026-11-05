@@ -60,6 +60,38 @@ test("LAUNCH: every setting the argv builder uses is destructured everywhere", (
   }
 });
 
+test("LAUNCH: the per-cell arm flags are flags the harness actually defines", () => {
+  // The per-cell vector is the shared argv plus the two flags that state the
+  // arm's PLAN: --off-replicates (how many OFF slots the schedule plans) and
+  // --on-budget (how much ON band it plans). Both belong to the harness's MAIN
+  // parser (scripts/run_cumulative/__init__.py), and a flag nobody defines is an
+  // argparse exit 2 seconds after launch — with the cell already recorded as
+  // started. The budget is the one that mattered: DEFAULT_ON_BUDGET is 0, so an
+  // ON cell launched without it plans a zero-length band and is refused.
+  const src = readFileSync(join(HERE, "routes", "run.mjs"), "utf-8");
+  const at = src.indexOf('"--sequence-index", String(cell.sequence_index)');
+  assert.ok(at > 0, "the per-cell argv splice has moved — find it and re-scope this test");
+  const perCell = src.slice(at, src.indexOf("...argv.slice(subcommandAt)", at));
+
+  const flags = [...new Set([...perCell.matchAll(/"(--[a-z][a-z-]*)"/g)].map((m) => m[1]))].sort();
+  assert.deepEqual(
+    flags,
+    ["--off-replicates", "--on-budget", "--sequence-index"],
+    "the per-cell vector pushes exactly the cell's index and its arm's plan",
+  );
+
+  const harnessArgv = readFileSync(
+    join(HERE, "..", "scripts", "run_cumulative", "__init__.py"),
+    "utf-8",
+  );
+  for (const flag of flags) {
+    assert.ok(
+      harnessArgv.includes(`"${flag}"`),
+      `\`${flag}\` is pushed into the per-cell argv but the harness defines no such flag`,
+    );
+  }
+});
+
 // ── STREAM ERRORS MUST COUNT STREAM ERRORS (2026-09-11) ─────────────────────
 //
 // The slot read `error_totals.finalize_timeout_turns` — ONE narrow kind, a turn

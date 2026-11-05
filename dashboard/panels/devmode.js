@@ -1,8 +1,9 @@
-// DEV MODE — the drawer section that toggles the control plane's mode. It
-// unlocks snapshot seeding (never a scorable floor); a mode, not a per-run
-// checkbox, so it can't be reached by accident. The state is the server's
-// (control.capabilities.dev_mode): a toggle POSTs and re-reads. Unreachable
-// renders UNKNOWN, never OFF.
+// DEV MODE — the drawer section that toggles the control plane's mode. It gates
+// the pause-after-grade capability: a run started while it is on pauses after
+// every grade and once at the end, so the operator can play the model's app. A
+// mode, not a per-run checkbox, so it can't be reached by accident. The state is
+// the server's (control.capabilities.dev_mode): a toggle POSTs and re-reads.
+// Unreachable renders UNKNOWN, never OFF.
 
 import { esc } from "../board.js";
 import { renderSwitch } from "./switches.js";
@@ -88,7 +89,7 @@ export function renderDevModeSection(board) {
       ? (dm.settable_reason ?? "this cannot be changed from the board")
       : dm.reason ?? null,
     warn: dm.enabled
-      ? "While this is on, the board offers cells that are NOT scorable floors. A seeded cell skips the build phase and sits on a different turn and token scale than a floor — the bench refuses it as a baseline, deliberately. Turn this off when you go back to measuring."
+      ? "While this is on, a run started from the modal pauses after every grade — so you can play the model's app and read what it will be told before anything is sent — and once more at the end. The method is the same as a normal run; only the pauses differ. Turn this off to start a run that runs to completion on one click."
       : null,
   })}
     <div class="sw-note">${esc(sourceWord(dm.source))}</div>

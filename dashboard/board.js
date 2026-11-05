@@ -272,7 +272,6 @@ function connect() {
 import { renderTopbar, renderProvenance } from "./panels/chrome.js";
 import { openReset, closeReset, isResetOpen } from "./panels/treereset.js";
 import { setRouterDraft } from "./panels/routers.js";
-import { isDevModeOn } from "./panels/devmode.js";
 import {
   debounced,
   graderWorkerTarget,
@@ -313,7 +312,6 @@ import {
   feedExportText,
   feedExportLabel,
 } from "./panels/live.js";
-import { renderContinuous } from "./panels/continuous.js";
 import { renderCells, setSelectedCell, selectedCell, observeCellStrip, activeCell } from "./panels/cells.js";
 import { renderRail } from "./panels/rail.js";
 import { renderRecall } from "./panels/recall.js";
@@ -325,13 +323,11 @@ import {
   createSelection,
   createForward,
   createBack,
-  createModel,
   setCreateChallenge,
   setCreateKind,
   setCreateModel,
   toggleCreateCompact,
   toggleCreateConcurrency,
-  toggleCreateContinuous,
   toggleCreatePause,
   setCreateConcurrencyN,
   openCellConfirm,
@@ -345,7 +341,6 @@ import {
   askDetach, cancelDetach, isDetachConfirming, paintTui, fitTui,
 } from "./panels/tui.js";
 import { paintTicks, snapTicks } from "./panels/tick.js";
-import { armSnapshot } from "./panels/snapshot.js";
 import { renderOverlay } from "./overlay.js";
 import { patch } from "./dom.js";
 // Network acts live in board-actions.js; state and render stay here.
@@ -358,14 +353,12 @@ import {
   doLaunchBaseline,
   doLoadTools,
   doRunTool,
-  doEndContinuous,
   detachTui,
   doLoadBackups,
   doArmRestore,
   doCommitRestore,
   doArmReset,
   doCommitReset,
-  doPickBatch,
 } from "./board-actions.js";
 
 function render() {
@@ -402,7 +395,6 @@ function render() {
   patch(root, `
     <div class="shell">
       ${renderTopbar(view, { stale: consecutiveErrors > 0, lastError })}
-      ${renderContinuous(view)}
       ${renderCells(view)}
       <div class="axes-row">
         ${renderLiveView(view)}
@@ -441,7 +433,7 @@ function render() {
 
 /**
  * The board as ONE CELL sees it: board-wide sections as they are, and the
- * strip's active cell's own view (run, live, suite, learning, honesty — from
+ * strip's active cell's own view (run, live, suite, honesty — from
  * board.by_cell for a current cell, from the archived-view cache for an
  * archived run) laid over them; `run` merges, so the board-wide model and org
  * stay. No active cell, or a cell with no view yet: those sections are absent
@@ -455,7 +447,7 @@ export function cellView(b) {
   const load = archived && key !== null ? runViews.get(key) ?? null : null;
   const own = archived ? (load?.state === "ready" ? load.view : null) : key ? b?.by_cell?.[key] ?? null : null;
   const view = { ...b };
-  for (const k of ["live", "suite", "learning"]) view[k] = own?.[k] ?? null;
+  for (const k of ["live", "suite"]) view[k] = own?.[k] ?? null;
   view.run = { ...(b?.run ?? {}), ...(own?.run ?? {}) };
   // The cell's transport honesty over the board-wide memory telemetry (the
   // ON-only funnel and plugin-log sources, which are not per-cell yet).
@@ -569,7 +561,7 @@ export function followActiveCell(b, repaint) {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-gate-id],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-continuous-end],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-continuous],[data-create-pause],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-batch-pick],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-seed-pick],[data-cell-pick]");
+  const t = e.target.closest("[data-gate-id],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-concurrency],[data-create-pause],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-cell-pick]");
   if (!t) return;
 
   if (t.dataset.gateId) {
@@ -588,7 +580,6 @@ function onClick(e) {
   if (t.hasAttribute("data-tui-detach")) { askDetach(); render(); return; }
   if (t.hasAttribute("data-tui-detach-yes")) { void detachTui(); return; }
   if (t.hasAttribute("data-tui-cancel")) { cancelDetach(); render(); return; }
-  if (t.hasAttribute("data-continuous-end")) { void doEndContinuous(); return; }
 
   // ── [+ BASELINE] ── pure selection held in panels/create.js; only launch
   // reaches the network.
@@ -598,17 +589,9 @@ function onClick(e) {
     t.hasAttribute("data-create-cancel")
     || (t.hasAttribute("data-create-scrim") && e.target === t)
   ) { closeCreate(); render(); return; }
-  // Dev mode (the server's answer) decides whether the seed step is in the sequence.
-  if (t.hasAttribute("data-create-next")) { createForward(isDevModeOn(board)); render(); return; }
-  if (t.hasAttribute("data-create-back")) { createBack(isDevModeOn(board)); render(); return; }
+  if (t.hasAttribute("data-create-next")) { createForward(); render(); return; }
+  if (t.hasAttribute("data-create-back")) { createBack(); render(); return; }
 
-  // Arm or disarm a snapshot; the empty value (build from scratch) disarms.
-  if (t.hasAttribute("data-seed-pick")) {
-    const id = t.getAttribute("data-seed-pick") || null;
-    armSnapshot(id, createModel());
-    render();
-    return;
-  }
   if (t.dataset.createChallenge) {
     setCreateChallenge(t.dataset.createChallenge);
     render();
@@ -620,7 +603,6 @@ function onClick(e) {
   // Flip away from what is currently shown.
   if (t.dataset.createCompact) { toggleCreateCompact(t.dataset.createCompact === "on"); render(); return; }
   if (t.dataset.createConcurrency) { toggleCreateConcurrency(); render(); return; }
-  if (t.dataset.createContinuous) { toggleCreateContinuous(); render(); return; }
   if (t.dataset.createPause) { toggleCreatePause(); render(); return; }
   if (t.hasAttribute("data-create-baseline-continue")) {
     // Runs preflight, preview and start; results land on BASELINE · 4.
@@ -737,17 +719,11 @@ function onClick(e) {
     render();
     return;
   }
-  // ── BATCH ── the operator's floor pick, on a cell row inside the BASELINES
-  // drawer: [pick] stores one scored cell with its signed deviation from the
-  // median. The run_dir rides on the button as a companion attribute, like
-  // model/kind ride on [+ run].
-  if (t.dataset.batchPick) { void doPickBatch(t.dataset.batchDir, Number(t.dataset.batchPick)); return; }
   // ── RUN STRIP ── which run the board is about, selected by its cell address
   // (`<run_dir>::<seq>`), so an ARCHIVED run selects like any other. Local view
-  // state plus at most one read: it starts nothing and picks no floor (that is
-  // [data-batch-pick] above). The selection is immediate; render follows it
-  // (followActiveCell) — an archived run's view loads once and is kept, a
-  // current cell's is already in by_cell.
+  // state plus at most one read: it starts nothing. The selection is immediate;
+  // render follows it (followActiveCell) — an archived run's view loads once and
+  // is kept, a current cell's is already in by_cell.
   // Clicking the selected card again clears back to "follow the live cell", so
   // the strip is never a state the operator is stuck in. A void run selects
   // like any other — it is where they find out why it died.

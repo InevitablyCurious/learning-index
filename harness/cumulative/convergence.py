@@ -102,9 +102,6 @@ class ConvergencePoint:
     tool_calls: int | None
     test_invocations: int | None
     agentic_cycles: int | None
-    seeded_from_snapshot: str | None = None
-    build_phase_ran: bool = False
-    dev_mode: bool = False
     # WO-CONCUR-07: the contention covariates this session was gathered under,
     # mirrored from the progress dict's CONTENTION_FIELDS (visibility, never a
     # gate). None only on a point constructed without a progress mapping; a
@@ -148,9 +145,6 @@ class ConvergencePoint:
             tool_calls=_coerce_optional_int(progress.get("tool_calls")),
             test_invocations=_coerce_optional_int(progress.get("test_invocations")),
             agentic_cycles=_coerce_optional_int(progress.get("agentic_cycles")),
-            seeded_from_snapshot=getattr(record, "seeded_from_snapshot", None),
-            build_phase_ran=bool(getattr(record, "build_phase_ran", False)),
-            dev_mode=bool(getattr(record, "dev_mode", False)),
             contention={name: progress.get(name) for name in CONTENTION_FIELDS},
         )
 
@@ -171,9 +165,6 @@ class ConvergencePoint:
             "tool_calls": self.tool_calls,
             "test_invocations": self.test_invocations,
             "agentic_cycles": self.agentic_cycles,
-            "seeded_from_snapshot": self.seeded_from_snapshot,
-            "build_phase_ran": self.build_phase_ran,
-            "dev_mode": self.dev_mode,
             "contention": self.contention,
         }
 

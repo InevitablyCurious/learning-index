@@ -1,7 +1,7 @@
 // Pins the batch contract — the frozen scaffold-hash algorithm anchor,
-// median over scored runs (voids excluded), signed deviation, fingerprint
-// validity, and the batch.json record shape. Pure domain layer: temp dirs
-// only, no server, no network.
+// median over scored runs (voids excluded), fingerprint validity, and the
+// batch.json record shape. Pure domain layer: temp dirs only, no server, no
+// network.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -15,11 +15,9 @@ import {
   computeFingerprint,
   fingerprintVerdict,
   medianOfScored,
-  signedDeviation,
   contentionSummary,
   assembleBatch,
   markVoid,
-  selectRun,
   batchPath,
   readBatch,
   writeBatch,
@@ -146,13 +144,6 @@ test("BATCH: medianOfScored excludes voids — never counted as failures", () =>
     "all-void → null",
   );
   assert.equal(medianOfScored([]), null, "empty → null");
-});
-
-test("BATCH: signedDeviation is + worse, - better, null without a median", () => {
-  assert.equal(signedDeviation(26, 23), 3);
-  assert.equal(signedDeviation(20, 23), -3);
-  assert.equal(signedDeviation(22, 23), -1);
-  assert.equal(signedDeviation(10, null), null);
 });
 
 test("BATCH: fingerprintVerdict names the first changed input with its reason", () => {
@@ -316,7 +307,7 @@ test("BATCH: computeFingerprint is insertion-order independent and canonical", (
   );
 });
 
-test("BATCH: assembleBatch computes counts + median and initializes selection/void", () => {
+test("BATCH: assembleBatch computes counts + median and initializes the void state", () => {
   const fingerprint = computeFingerprint(makeValues());
   const now = "2026-09-22T00:00:00.000Z";
   const batch = assembleBatch({
@@ -339,7 +330,9 @@ test("BATCH: assembleBatch computes counts + median and initializes selection/vo
   assert.equal(batch.scored_count, 3);
   assert.equal(batch.void_count, 1);
   assert.equal(batch.median, 24);
-  assert.equal(batch.selection, null);
+  // No selection field: the record is the disk's, and a Δ is measured against
+  // the fingerprint average — there is no operator pick to initialize.
+  assert.equal("selection" in batch, false);
   assert.equal(batch.void, false);
   assert.equal(batch.void_input, null);
   assert.equal(batch.void_reason, null);
@@ -443,25 +436,6 @@ test("BATCH: assembleBatch carries per-run contention and surfaces the scored-on
     Object.keys(batch.fingerprint.values),
     FINGERPRINT_INPUTS.map((input) => input.name),
   );
-});
-
-test("BATCH: selectRun stores the signed deviation and fails loud otherwise", () => {
-  const batch = makeBatch();
-  assert.equal(batch.median, 23);
-
-  selectRun(batch, 2);
-  assert.deepEqual(batch.selection, {
-    sequence_index: 2,
-    problem_count: 26,
-    signed_deviation: 3,
-  });
-  assert.notEqual(batch.updated_at, "2026-01-01T00:00:00.000Z", "updated_at touched");
-
-  selectRun(batch, 4);
-  assert.equal(batch.selection.signed_deviation, -3, "re-selecting a better run");
-
-  assert.throws(() => selectRun(batch, 99), /no scored run with sequence_index 99/);
-  assert.throws(() => selectRun(batch, 1), /no scored run with sequence_index 1/, "void run");
 });
 
 test("BATCH: markVoid flags the batch with the changed input", () => {

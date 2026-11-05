@@ -32,16 +32,12 @@ export const routes = [
         resume_run: false,
         resume: RESUME_UNSUPPORTED,
         events: true,
-        select_context: true,
         // Tells "no /api/wall on this control plane" from "nothing to show".
         wall: true,
         wall_contract_version: WALL_CONTRACT_VERSION,
         // The verbatim graded text the model was sent.
         feedback: true,
         feedback_contract_version: FEEDBACK_CONTRACT_VERSION,
-        // The service supports cloud baselines; whether one can start now (a key) is
-        // /api/cloud's answer.
-        cloud_baselines: true,
         // Dev mode, folded in so the top bar learns it on every poll: on, off, or
         // unknown when this call fails. Same function /api/devmode serves.
         dev_mode: await resolveDevMode({ benchRoot: BENCH_ROOT }),

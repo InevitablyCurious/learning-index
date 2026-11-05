@@ -2,9 +2,9 @@
 //
 // The problem counts and scored/void verdicts come from the batch record — the
 // numbers the median is taken over — never re-derived from the cells. Voids are
-// listed, never dropped. The pick carries its distance from the median as a
-// percentage (Jerry, 2026-09-22: Δ is against the picked baseline, which carries
-// its own ±N% from the median).
+// listed, never dropped. There is no picked cell: a Δ is measured against the
+// fingerprint's AVERAGE, so the view carries each cell's distance from the
+// median and no pick.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -18,7 +18,7 @@ const cell = (i, over = {}) => ({
 
 // The 2026-09-22 N=4 batch: 27, 23, void, 17 → median 23.
 const batch = (over = {}) => ({
-  median: 23, scored_count: 3, void_count: 1, selection: null,
+  median: 23, scored_count: 3, void_count: 1,
   runs: [
     { sequence_index: 0, problem_count: 27, scored: true, void_reason: null },
     { sequence_index: 1, problem_count: 23, scored: true, void_reason: null },
@@ -45,14 +45,8 @@ test("median, spread over scored cells only, and counts", () => {
   assert.deepEqual(v.spread, { min: 17, max: 27 });
   assert.equal(v.scored_count, 3);
   assert.equal(v.void_count, 1);
-  assert.equal(v.pick, null);
-});
-
-test("the pick carries its signed deviation and its percentage of the median", () => {
-  const v = batchView(cells, batch({ selection: { sequence_index: 0, signed_deviation: 4 } }));
-  assert.deepEqual(v.pick, { sequence_index: 0, problems: 27, signed_deviation: 4, pct_from_median: 17.4 });
-  assert.equal(v.cells[0].picked, true);
-  assert.equal(v.cells.filter((c) => c.picked).length, 1);
+  // No pick: the view states distances from the median, never a chosen cell.
+  assert.equal("pick" in v, false);
 });
 
 test("with no batch record (still running) the cells carry no verdict", () => {

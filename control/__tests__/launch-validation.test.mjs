@@ -1,8 +1,7 @@
 // Extracted verbatim from control/control.test.mjs — WO-LI18 split A.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { confirmationToken, restatement, refuse } from "../contract.mjs";
@@ -102,26 +101,69 @@ test("ROSTER: every retirement states its reason", () => {
 // ── CONFIRMATION: a stale token must not validate ────────────────────────────
 
 test("confirmation token is a pure function of the parameters", () => {
-  const a = confirmationToken({ model: "m", arm: "off", org: null, context: null });
-  const b = confirmationToken({ model: "m", arm: "off", org: null, context: null });
+  const a = confirmationToken({ model: "m", arm: "off", org: null });
+  const b = confirmationToken({ model: "m", arm: "off", org: null });
   assert.equal(a, b);
 });
 
 test("changing ANY parameter invalidates the token", () => {
-  const base = { model: "m", arm: "off", org: null, context: null };
+  const base = { model: "m", arm: "off", org: null };
   const t = confirmationToken(base);
   assert.notEqual(t, confirmationToken({ ...base, model: "other" }));
   assert.notEqual(t, confirmationToken({ ...base, arm: "on" }));
   assert.notEqual(t, confirmationToken({ ...base, org: "org-1" }));
-  assert.notEqual(t, confirmationToken({ ...base, context: 262144 }));
+  // The substrate is in the token: a local confirmation must never start a
+  // billed cloud cell.
+  assert.notEqual(t, confirmationToken({ ...base, kind: "cloud" }));
   // Compaction changes what the cell DOES — six extra model turns and a
   // turn/token scale no uncompacted cell shares. A token minted for one must
   // never confirm the other.
   assert.notEqual(t, confirmationToken({ ...base, compact: true }));
 });
 
+test("NO CHAIN, NO SEED: a start payload has no chain/seed concept at all", async () => {
+  // The standard method is ONE run: a baseline (build, then troubleshoot to
+  // completion) or a memory-ON run of the same shape. There is no chaining from
+  // a previous run's snapshot and no seeded start, so a chain/seed field in a
+  // payload is neither a token part nor a parameter — it is IGNORED, and the
+  // server has nothing to read it into.
+  const base = { model: "m", arm: "off", org: null, kind: "local", compact: false };
+
+  // 1. Neither a chain nor a seed can be bound into the token or the restatement.
+  const chainish = { ...base, continuous: true, snapshotId: "snap-a" };
+  assert.equal(confirmationToken(chainish), confirmationToken(base), "a chain/seed field must not reach the token");
+  assert.equal(restatement(chainish), restatement(base), "…nor the words the operator confirms");
+  assert.doesNotMatch(confirmationToken(base), /continuous|snapshotId/);
+  assert.doesNotMatch(restatement(base), /continuous|snapshot|chain/i);
+
+  // 2. A payload still carrying one is not refused and not honoured: the
+  //    confirmation for the real parameters matches, so the start goes ahead
+  //    exactly as previewed.
+  const ok = await finishValidate(
+    // compactRequested, not `compact`: the operator's explicit choice is the
+    // field validation reads, and it decides the token.
+    { ...base, compactRequested: false, entry: {}, cloud: null },
+    { requireConfirm: true, runsRoot: null, payload: { ...chainish, confirm: confirmationToken(base) } },
+  );
+  assert.equal(ok.ok, true, "a stale chain/seed field must not block a run");
+  assert.equal("continuous" in ok, false, "…and never comes back out of validation");
+  assert.equal("snapshotId" in ok, false);
+
+  // 3. The routes never launch with a seed and never read a chain field: one
+  //    path from build to completion, no branch on how the worktree is primed.
+  const routesDir = join(HERE, "routes");
+  const routeFiles = readdirSync(routesDir).filter((f) => f.endsWith(".mjs"));
+  assert.ok(routeFiles.length > 0, "no route files found — this check would pass vacuously");
+  for (const file of routeFiles) {
+    const src = readFileSync(join(routesDir, file), "utf8");
+    for (const needle of ['--seed-snapshot', "/api/continuous", "payload.continuous", "payload.snapshotId"]) {
+      assert.ok(!src.includes(needle), `routes/${file} still carries ${needle}`);
+    }
+  }
+});
+
 test("COMPACTION: the token separates on from off, and the restatement says which", () => {
-  const base = { model: "m", arm: "off", org: null, context: null, kind: "local" };
+  const base = { model: "m", arm: "off", org: null, kind: "local" };
   assert.notEqual(
     confirmationToken({ ...base, compact: true }),
     confirmationToken({ ...base, compact: false }),
@@ -191,7 +233,7 @@ test("REQUIRE TODOS: every name that reads the value is in a scope that HAS it",
 
   // 2. Every site that destructures `compact` off `check` must take it too —
   //    those are the same object, and a partial destructure is a silent undefined.
-  const destructures = src.match(/const \{ model, arm, org, context, kind, cloud, compact[^}]*\} = check;/g) ?? [];
+  const destructures = src.match(/const \{ model, arm, org, kind, cloud, compact[^}]*\} = check;/g) ?? [];
   assert.ok(destructures.length >= 2, "expected the preview and launch destructures");
   for (const d of destructures) {
     assert.match(d, /requireTodos/, `destructure missing requireTodos: ${d}`);
@@ -250,14 +292,10 @@ test("PAUSE AFTER GRADE: validateStart accepts it, refuses it with dev mode off,
   // accepted (and returned) when dev mode is on, refused with dev_mode_off when
   // it is off, and bound into the confirmation token so preview and start agree.
   const saved = { ...process.env };
-  delete process.env.BENCH_SEED_SNAPSHOT;
-  // Never read this machine's armed snapshot: an operator's armed seed would
-  // otherwise turn this into a seeded start for a model it does not match.
-  process.env.BENCH_SEED_SNAPSHOT_FILE = join(mkdtempSync(join(tmpdir(), "okp-pause-")), "armed-snapshot.json");
   try {
     process.env.BENCH_DEV_MODE = "on";
     const ok = await finishValidate(
-      { model: "m-a", arm: "off", org: null, context: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: true },
+      { model: "m-a", arm: "off", org: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: true },
       { requireConfirm: false, runsRoot: null, payload: { pauseAfterGrade: true } },
     );
     assert.equal(ok.ok, true);
@@ -265,7 +303,7 @@ test("PAUSE AFTER GRADE: validateStart accepts it, refuses it with dev mode off,
 
     process.env.BENCH_DEV_MODE = "off";
     const off = await finishValidate(
-      { model: "m-a", arm: "off", org: null, context: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: true },
+      { model: "m-a", arm: "off", org: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: true },
       { requireConfirm: false, runsRoot: null, payload: { pauseAfterGrade: true } },
     );
     assert.equal(off.ok, false);
@@ -273,7 +311,7 @@ test("PAUSE AFTER GRADE: validateStart accepts it, refuses it with dev mode off,
 
     // Without the flag, dev mode off is not an obstacle.
     const noFlag = await finishValidate(
-      { model: "m-a", arm: "off", org: null, context: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: false },
+      { model: "m-a", arm: "off", org: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: false },
       { requireConfirm: false, runsRoot: null, payload: {} },
     );
     assert.equal(noFlag.ok, true);
@@ -283,7 +321,7 @@ test("PAUSE AFTER GRADE: validateStart accepts it, refuses it with dev mode off,
 });
 
 test("PAUSE AFTER GRADE: the flag is bound into the confirmation token and the argv push exists", () => {
-  const p = { model: "m", arm: "off", org: null, context: null, kind: "local", compact: false, snapshotId: null };
+  const p = { model: "m", arm: "off", org: null, kind: "local", compact: false };
   assert.equal(confirmationToken(p), confirmationToken({ ...p, pauseAfterGrade: false }), "off leaves the token as it was");
   assert.notEqual(confirmationToken({ ...p, pauseAfterGrade: true }), confirmationToken(p));
   assert.match(confirmationToken({ ...p, pauseAfterGrade: true }), /pauseAfterGrade=on/);
@@ -292,7 +330,7 @@ test("PAUSE AFTER GRADE: the flag is bound into the confirmation token and the a
   const src = readFileSync(join(BENCH, "control", "routes", "run.mjs"), "utf8");
   assert.match(src, /if \(pauseAfterGrade\) argv\.push\("--pause-after-grade"\)/);
   // The preview/start destructures must carry pauseAfterGrade too.
-  const destructures = src.match(/const \{ model, arm, org, context, kind, cloud, compact[^}]*\} = check;/g) ?? [];
+  const destructures = src.match(/const \{ model, arm, org, kind, cloud, compact[^}]*\} = check;/g) ?? [];
   assert.ok(destructures.length >= 2, "expected the preview and launch destructures");
   for (const d of destructures) assert.match(d, /pauseAfterGrade/);
 });

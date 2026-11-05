@@ -40,7 +40,7 @@ class BootstrapMixin:
         golden_dir = str((self.task_dir / "golden").resolve())
         # The memory plugin is loaded in memory-ON cells only: listing it is what
         # switches memory on. The baked plugin is stashed by the Docker arm beside
-        # the image-identity probe; direct/mock callers have none.
+        # the image-identity probe.
         baked = getattr(self, "_baked_plugin", None)
         plugin_entry = baked.entry if (self.memory_mode == "on" and baked) else None
         config = build_worker_opencode_config(

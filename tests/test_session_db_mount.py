@@ -128,7 +128,6 @@ def test_build_cell_config_wires_session_db_host_path_to_run_dir(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="openrouter/anthropic/claude-opus-4.8",
-        mock="scaffold",
     )
 
     cell_config = runner._build_cell_config(

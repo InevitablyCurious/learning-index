@@ -8,30 +8,16 @@ import { join } from "node:path";
 import { confirmationToken } from "../contract.mjs";
 import { readCloud, resolveCloudModel, cloudCatalog, CLOUD_MODELS, CONTEXT_ADVISORY_FLOOR } from "../cloud.mjs";
 import { readBaselines, BASELINES_FILE, isArchivedRun, baselineId, identifyCell, collectOffCells, assembleBatchForCells } from "../baselines.mjs";
-import { selectRun, writeBatch, markVoid } from "../batch.mjs";
+import { writeBatch, markVoid } from "../batch.mjs";
 import { manifestArgFor, campaignDirName } from "../campaign.mjs";
 import { mintTree } from "../tree.mjs";
 import { readModelsLedger } from "../models-ledger.mjs";
 
-import { BENCH, writeRun, writeCampaign, OFF_PASS, writeCampaignCell, treeFixture, writeCellFingerprint, writeCellCost, costStamp } from "./_shared.mjs";
+import { BENCH, FIXTURE_FP, writeRun, writeCampaign, OFF_PASS, treeFixture, writeCellFingerprint, writeCellCost, costStamp } from "./_shared.mjs";
 
-/**
- * The operator's pick: assemble the batch for one model's OFF cells and select
- * `seq` as the floor. A single completed OFF cell is no longer a baseline by
- * itself — a floor exists only once the batch carries a selection.
- */
-async function selectFloor(root, dir, model, seq = 0) {
-  const cells = (await collectOffCells(root)).filter((c) => c.model === model);
-  const runDir = join(root, dir);
-  const batch = await assembleBatchForCells({ runDir, cells });
-  selectRun(batch, seq);
-  await writeBatch(runDir, batch);
-}
-
-test("LEDGER: a SELECTED OFF cell is the baseline, and it opens + run — and + baseline stays open for a repeat", async () => {
+test("LEDGER: a completed OFF cell IS the baseline, and it opens + run — and + baseline stays open for a repeat", async () => {
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", { status: OFF_PASS });
-  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -91,32 +77,6 @@ const OFF_PASS_MEASURED = {
   progress: { ...OFF_PASS.progress, problems_before: 7 },
 };
 
-test("LEDGER: an UNSELECTED batch is a VISIBLE 'awaiting' row carrying the median — never silently dropped", async () => {
-  // The failure this prevents: baselineFor answered awaiting_selection (a batch
-  // exists, no floor does) but baselineList derived no flag from it, computed
-  // state "none" and skipped the row — so the card never showed the batch the
-  // operator has to pick from, and the model looked never-run.
-  const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
-  writeRun(root, "cumulative", { status: OFF_PASS_MEASURED });
-  // NO selectFloor: the batch assembles on first read, the selection never does.
-
-  const led = await readModelsLedger({
-    runsRoot: root,
-    benchModels: [{ id: "m-a", bench_eligible: true }],
-  });
-  const row = led.baseline_rows.find((b) => b.model === "m-a");
-  assert.ok(row, "an awaiting-selection batch must appear in baseline_rows");
-  assert.equal(row.state, "awaiting");
-  assert.equal(row.reason, "awaiting_selection");
-  assert.equal(row.scorable, false, "an unselected batch is not a floor");
-  assert.equal(row.median, 7, "the batch median rides the row so the card can render it");
-  assert.equal(row.void_input, null, "nothing is void here");
-  assert.equal(row.candidates, 1, "the batch's scored-run count rides the row");
-  assert.equal(row.can_run.allowed, false, "no floor — nothing may be measured against it");
-  assert.match(row.can_run.reason, /^pick a floor from this batch first/);
-  rmSync(root, { recursive: true, force: true });
-});
-
 test("LEDGER: a batch_void row names the changed input — void_input rides through to baseline_rows", async () => {
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", { status: OFF_PASS_MEASURED });
@@ -145,8 +105,8 @@ test("LEDGER: a batch_void row names the changed input — void_input rides thro
 
 test("LEDGER: a VOID baseline counts as NO baseline and re-opens + baseline", async () => {
   // The failure this prevents: void numbers exist and look like success, so a
-  // gate keyed on "a cell completed" would green-light an ON run whose every Δ
-  // is measured against the harness rather than the model.
+  // floor keyed on "a cell completed" would stand as the measurement an ON run's
+  // Δ is read against — a Δ against the harness rather than the model.
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   const runDir = writeRun(root, "cumulative", {
     status: { type: "attempt", sequence_index: 0, verdict: "FAIL", terminal_reason: "transport_incomplete", progress: { turns: 2 } },
@@ -164,7 +124,12 @@ test("LEDGER: a VOID baseline counts as NO baseline and re-opens + baseline", as
   const m = led.models[0];
   assert.equal(m.baseline.scorable, false);
   assert.equal(m.baseline.voided, true);
-  assert.equal(m.can_run.allowed, false, "nothing may be measured against a void floor");
+  // A void cell is no baseline — and it is not a floor a run is measured
+  // against either. The launch gate itself is CAPACITY ONLY: a baseline is
+  // history an ON run is read against later, never a precondition.
+  assert.equal(m.can_run.allowed, true, "nothing is in flight — the launch gate is capacity alone");
+  assert.equal(m.can_run.reason, null);
+  assert.equal(led.fingerprints.length, 0, "a void cell joins no fingerprint's average");
   assert.equal(m.can_baseline.allowed, true, "the operator must be able to re-measure");
   assert.match(m.can_baseline.reason ?? "", /^$|void/i);
   rmSync(root, { recursive: true, force: true });
@@ -178,7 +143,6 @@ test("LEDGER: a clean non-green cell is a real result, not a void instrument", a
   writeRun(root, "cumulative", {
     status: { type: "attempt", sequence_index: 0, verdict: "FAIL", terminal_reason: "stopped", progress: { turns: 40 } },
   });
-  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -216,7 +180,6 @@ test("LEDGER: a 7-round cell keeps round 7 — phases are observed, total is nul
     `${attempts.join("\n")}\n`,
   );
 
-  await selectFloor(root, "cumulative", "m-a");
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }],
@@ -248,7 +211,6 @@ test("LEDGER: a cell in flight blocks EVERY button on ITS OWN model, never anoth
   // across models while one model stays serial.
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", { status: OFF_PASS });           // m-a has a floor
-  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -271,11 +233,9 @@ test("LEDGER: a cell in flight blocks EVERY button on ITS OWN model, never anoth
   // m-b: untouched by m-a's cell.
   assert.equal(byId["m-b"].in_flight, false);
   assert.equal(byId["m-b"].can_baseline.allowed, true, "another model's cell never blocks this floor");
-  assert.equal(byId["m-b"].can_run.allowed, false, "m-b still has no floor to run against");
-  assert.ok(
-    !/in flight/.test(String(byId["m-b"].can_run.reason)),
-    "m-b's refusal is about its missing floor, not about a cell it does not have",
-  );
+  // …and its launch is open too: the gate is capacity alone, never a baseline.
+  assert.equal(byId["m-b"].can_run.allowed, true, "a launch needs capacity, not a baseline");
+  assert.equal(byId["m-b"].can_run.reason, null, "nothing is in flight for m-b, so nothing refuses it");
 
   // The floor row of the in-flight model must not offer a launch either.
   const row = led.baseline_rows.find((b) => b.model === "m-a");
@@ -287,17 +247,16 @@ test("LEDGER: a cell in flight blocks EVERY button on ITS OWN model, never anoth
 test("LEDGER: a floor on one model never blocks another model's + baseline", async () => {
   // THE DEFECT THIS PINS. The profile subject rule was applied to OFF cells as
   // well as ON, so freezing the first profile disabled [+ baseline] on every
-  // OTHER bench model — and since a run gates on a floor, no second model could
-  // ever be benchmarked. The whole bench silently locked to whichever model was
-  // profiled first, with four permanently disabled buttons to show for it. The
-  // profile store is gone; this pins the surviving rule.
+  // OTHER bench model, and the whole bench silently locked to whichever model
+  // was profiled first. The profile store is gone; this pins the surviving rule.
   //
   // A baseline is measured against nothing, and no other model's floor has any
   // bearing on it. A model's OWN floor does not block its next baseline either:
-  // a repeat on the same fingerprint is what the average is made of.
+  // a repeat on the same fingerprint is what the average is made of. And a
+  // launch is gated by capacity alone, so a model that has never been
+  // baselined may still run — its Δ says "no baselines on this fingerprint".
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", { status: OFF_PASS });           // m-a has a floor
-  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -313,12 +272,12 @@ test("LEDGER: a floor on one model never blocks another model's + baseline", asy
   assert.equal(byId["m-a"].can_baseline.allowed, true);
   assert.equal(byId["m-a"].can_baseline.reason, null, "a standing floor is not a refusal");
   assert.equal(byId["m-a"].can_run.allowed, true);
-  // Every other model may still measure its own floor.
+  // Every other model may still measure its own floor — and launch.
   for (const id of ["m-b", "m-c"]) {
     assert.equal(byId[id].can_baseline.allowed, true, `${id} must be able to measure its own floor`);
     assert.equal(byId[id].can_baseline.reason, null, "an open gate states no refusal");
-    // …and nothing can be measured against a floor it does not have.
-    assert.equal(byId[id].can_run.allowed, false);
+    assert.equal(byId[id].can_run.allowed, true, `${id} launches on capacity, never on a baseline`);
+    assert.equal(byId[id].can_run.reason, null);
   }
   rmSync(root, { recursive: true, force: true });
 });
@@ -381,7 +340,6 @@ test("CAMPAIGN: an unreadable legacy manifest never relocates the live campaign"
 test("BASELINES: the index is the single export, and it is written to disk", async () => {
   const root = mkdtempSync(join(tmpdir(), "okp-base-"));
   writeRun(root, "cumulative", { status: OFF_PASS });           // m-a floored
-  await selectFloor(root, "cumulative", "m-a");
   const models = [{ id: "m-a", bench_eligible: true }, { id: "m-b", bench_eligible: true }];
 
   const idx = await readBaselines({ runsRoot: root, models });
@@ -417,7 +375,6 @@ test("LEDGER: a floor with no ON cell reports an empty run list, not an excuse",
   // is no attribution step any more for one to fail at.
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", { status: OFF_PASS });
-  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -438,60 +395,43 @@ test("LEDGER: the ON cells of the floor\'s own campaign ARE its runs, read off d
   // in the floor\'s own directory. A cell started at the CLI therefore appears
   // here, where the profile store called it "real but unattributed".
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
-  writeCampaign(root, "cumulative", [
+  const dir = writeCampaign(root, "cumulative", [
     { seq: 0, arm: "off", status: { ...OFF_PASS, sequence_index: 0 } },
     { seq: 1, arm: "on", status: { type: "attempt", sequence_index: 1, verdict: "PASS", progress: { turns: 6, total_tokens: 300, wall_seconds: 40 } } },
     { seq: 2, arm: "on", status: { type: "attempt", sequence_index: 2, verdict: "PASS", progress: { turns: 7, total_tokens: 350, wall_seconds: 45 } } },
   ]);
-  await selectFloor(root, "cumulative", "m-a");
+  // The OFF cell's cost stamp is what the fingerprint aggregate averages, and
+  // the average is what a Δ is now measured against.
+  writeCellCost(dir, 0, { record: costStamp({ turns: 9, wall_seconds: 60 }) });
 
   const led = await readModelsLedger({
     runsRoot: root,
     benchModels: [{ id: "m-a", bench_eligible: true }],
   });
   const row = led.baseline_rows.find((b) => b.model === "m-a");
-  assert.equal(row.run_count, 2, "both ON cells are runs; the OFF cell is the floor, not a run");
+  assert.equal(row.run_count, 2, "both ON cells are runs; the OFF cell is the baseline, not a run");
 
   // NEWEST FIRST on the wire, and the ordinals are positions in the SCHEDULE —
-  // a run\'s number never changes when a later one is added.
+  // a run's number never changes when a later one is added.
   assert.deepEqual(row.runs.map((r) => r.seq), [2, 1]);
   assert.deepEqual(row.runs.map((r) => r.sequence_index), [2, 1]);
   for (const r of row.runs) assert.ok(r.cell, "an ON cell on disk always carries its measurement");
 
-  // Δ IS AGAINST THIS ROW\'S FLOOR, and `better` is a word, not the sign.
+  // Δ IS AGAINST THE AVERAGE OF THE BASELINES ON THIS FINGERPRINT — never one
+  // picked cell — and `better` is a word, not the sign. Here the family is one
+  // cell, so the average is that cell's 9 turns.
   const first = row.runs.find((r) => r.seq === 1);
   assert.equal(first.delta.computable, true);
   assert.equal(first.delta.turns, 6 - 9);
-  assert.equal(first.delta.better, true, "fewer turns than the floor is an improvement");
+  assert.equal(first.delta.baseline_count, 1, "one baseline on this fingerprint");
+  assert.match(first.delta.fingerprint, /^[0-9a-f]{64}$/, "the reading names the code it was measured on");
+  assert.equal(first.delta.better, true, "fewer turns than the average is an improvement");
 
   // BEST IS EFFICIENCY ONLY and says so.
   assert.equal(row.best.run_seq, 1);
   assert.equal(row.best.turns, -3);
   assert.equal(row.best.axis, "efficiency");
-  rmSync(root, { recursive: true, force: true });
-});
-
-test("LEDGER: the floor\'s own OFF cell is never listed as a run against itself", async () => {
-  // A Δ of a cell against itself is zero, and it would sit at the top of every
-  // list looking like a measurement. The arm is the filter: only ON cells are
-  // runs. This also replaces the old wrong-arm check — a recorded key could
-  // point at the OFF cell and adopt its numbers for an ON run, inverting the
-  // sign of every Δ. Nothing is recorded now, so that state is unreachable.
-  const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
-  writeCampaign(root, "cumulative", [
-    { seq: 0, arm: "off", status: { ...OFF_PASS, sequence_index: 0 } },
-    { seq: 1, arm: "on", status: { type: "attempt", sequence_index: 1, verdict: "PASS", progress: { turns: 6 } } },
-  ]);
-  await selectFloor(root, "cumulative", "m-a");
-
-  const led = await readModelsLedger({
-    runsRoot: root,
-    benchModels: [{ id: "m-a", bench_eligible: true }],
-  });
-  const row = led.baseline_rows.find((b) => b.model === "m-a");
-  assert.equal(row.sequence_index, 0, "the floor is slot 0");
-  assert.equal(row.run_count, 1);
-  assert.deepEqual(row.runs.map((r) => r.sequence_index), [1], "slot 0 is the floor, not a run against it");
+  assert.match(row.best.note, /average of 1 baseline on this fingerprint/);
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -711,7 +651,6 @@ test("BASELINE: the list is rooted in cells, so a cloud floor appears without a 
     progress: { turns: 31, total_tokens: 900, wall_seconds: 120 },
   })}\n`);
   writeCellFingerprint(dir, 0);
-  await selectFloor(root, "cumulative-anthropic-claude-opus-5", "anthropic/claude-opus-5");
 
   // NOTE the empty roster: this is the cold case where the local proxy is down.
   const idx = await readBaselines({ runsRoot: root, models: [] });
@@ -753,8 +692,6 @@ test("BASELINES: a tree-layout campaign carries the FULL relative run_dir, not t
     // list is one row per model — two m-a floors would fold into a single row.
     writeRun(runs, "cumulative-legacy-model", { model: "m-b", status: OFF_PASS });
 
-    await selectFloor(runs, rel, "m-a");
-    await selectFloor(runs, "cumulative-legacy-model", "m-b");
 
     const idx = await readBaselines({ runsRoot: runs, models: [] });
     assert.equal(idx.list.length, 2);
@@ -793,22 +730,6 @@ test("TOKEN: the substrate is part of the confirmation fingerprint", () => {
   );
 });
 
-test("TOKEN: the armed snapshot is part of the confirmation fingerprint", () => {
-  // A confirmation binds to the snapshot armed when it was minted. Omitted
-  // from the token, arming a different snapshot between preview and start
-  // would still validate the old confirmation — the operator confirms one
-  // snapshot and the run reads another. Arming ANY snapshot after an
-  // unset-snapshot preview must likewise invalidate the pending confirmation.
-  assert.notEqual(
-    confirmationToken({ model: "m", arm: "off", snapshotId: "snap-a" }),
-    confirmationToken({ model: "m", arm: "off", snapshotId: "snap-b" }),
-  );
-  assert.notEqual(
-    confirmationToken({ model: "m", arm: "off", snapshotId: null }),
-    confirmationToken({ model: "m", arm: "off", snapshotId: "snap-a" }),
-  );
-});
-
 test("LEDGER: startable spans both substrates and gates each one separately", async () => {
   // The [+ PROFILE] modal's baseline branch renders this list. A picker that
   // offers a model the launch would refuse teaches the operator that the UI
@@ -817,7 +738,6 @@ test("LEDGER: startable spans both substrates and gates each one separately", as
   mkdirSync(join(root, "config"), { recursive: true });
   writeFileSync(join(root, "config", "cloud.env"), "ORCAROUTER_API_KEY=k\n");
   writeRun(root, "cumulative", { status: OFF_PASS });
-  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -862,7 +782,6 @@ test("LEDGER: a cell in flight blocks its OWN model's rows on BOTH substrates, n
   mkdirSync(join(root, "config"), { recursive: true });
   writeFileSync(join(root, "config", "cloud.env"), "ORCAROUTER_API_KEY=k\n");
   writeRun(root, "cumulative", { status: OFF_PASS });
-  await selectFloor(root, "cumulative", "m-a");
 
   const led = await readModelsLedger({
     runsRoot: root,
@@ -892,23 +811,111 @@ test("LEDGER: a cell in flight blocks its OWN model's rows on BOTH substrates, n
   rmSync(root, { recursive: true, force: true });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// REGRESSION: THE GATE WALL READ A RUN DIRECTORY THAT NO LONGER EXISTS.
-//
-// Campaigns became per-model (`campaignDirName` → `runs/cumulative-<model>`)
-// while every run-scoped read still defaulted to the literal `"cumulative"`.
-// Nothing failed loudly: `readWall` found no pinned roster there, enumerated the
-// live suite instead, found no `manifest.status.jsonl`, and served a TRUE
-// denominator with zero outcomes against it. The board printed `0/71 passing`
-// over 71 empty squares while the run's own artifacts recorded 16 passing and
-// 2 failing — the exact "measured and passed" vs "not measured" confusion the
-// wall was rebuilt to make impossible.
-//
-// The old suite could not catch this: every fixture named its run directory
-// `cumulative`, so the stale default was correct in the tests and wrong only on
-// disk. These two assert the join the server actually depends on — the run
-// directory is RESOLVED FROM THE LOG, and a per-model campaign folds normally.
-// ─────────────────────────────────────────────────────────────────────────────
 
-/** A campaign directory with a pinned roster and one attempt's outcomes. */
 
+// ── THE Δ IS THE FINGERPRINT AVERAGE, AND ADDING A BASELINE IS THE ONLY THING
+// THAT MOVES IT ──────────────────────────────────────────────────────────────
+//
+// A Δ used to be read against one picked cell, so re-picking the floor shifted
+// the number shown for every run already measured against it. The average of
+// every baseline on the same fingerprint cannot do that: a baseline added on the
+// SAME code moves the average (and the Δ with it, and the Δ says how many
+// baselines that was), a run added beside it moves nothing, and a baseline on a
+// DIFFERENT fingerprint belongs to another family entirely.
+
+/**
+ * One campaign of m-a: OFF baselines (a cost stamp each — that is what the
+ * per-fingerprint average is made of) followed by ON runs.
+ */
+function writeAverageCampaign(root, { baselines, ons }) {
+  const slots = [
+    ...baselines.map((turns, i) => ({
+      seq: i,
+      arm: "off",
+      status: { type: "attempt", sequence_index: i, verdict: "FAIL", progress: { turns, problems_before: 7 } },
+    })),
+    ...ons.map((turns, i) => ({
+      seq: baselines.length + i,
+      arm: "on",
+      status: {
+        type: "attempt",
+        sequence_index: baselines.length + i,
+        verdict: "PASS",
+        progress: { turns },
+      },
+    })),
+  ];
+  const dir = writeCampaign(root, "cumulative", slots);
+  baselines.forEach((turns, i) => writeCellCost(dir, i, { record: costStamp({ turns }) }));
+  return dir;
+}
+
+/** The ledger as the card reads it, plus the first (oldest) ON run of m-a. */
+async function readLedgerRun(root) {
+  const led = await readModelsLedger({
+    runsRoot: root,
+    benchModels: [{ id: "m-a", bench_eligible: true }],
+  });
+  return { led, run: led.models[0].runs[0] };
+}
+
+test("LEDGER: a Δ is the fingerprint average, and it says how many baselines that is", async () => {
+  const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
+  writeAverageCampaign(root, { baselines: [20, 30], ons: [22] });
+
+  const { led, run } = await readLedgerRun(root);
+  // The average is derived from the OFF cells on exactly this code.
+  assert.equal(led.fingerprints.length, 1);
+  const [fp] = led.fingerprints;
+  assert.equal(fp.baseline_count, 2);
+  assert.equal(fp.avg.turns, 25, "the mean of 20 and 30 — neither cell on its own");
+
+  assert.equal(run.delta.computable, true);
+  assert.equal(run.delta.turns, 22 - 25, "the Δ is against the average, not a picked cell");
+  assert.equal(run.delta.baseline_count, 2, "the reading says how many baselines it is over");
+  assert.equal(run.delta.fingerprint, fp.fingerprint_hash, "and which code that was");
+  assert.match(run.delta.fingerprint, /^[0-9a-f]{64}$/);
+  assert.equal(run.delta.better, true, "fewer turns than the average is an improvement");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("LEDGER: adding a baseline is the only thing that moves a Δ", async () => {
+  const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
+  const step = () => readLedgerRun(root);
+
+  // Two baselines (20, 30) and one ON run (22) → 22 − 25.
+  writeAverageCampaign(root, { baselines: [20, 30], ons: [22] });
+  let s = await step();
+  assert.equal(s.run.delta.turns, 22 - 25);
+  assert.equal(s.run.delta.baseline_count, 2);
+
+  // A THIRD baseline on the same code moves the average, and the Δ with it.
+  writeAverageCampaign(root, { baselines: [20, 30, 40], ons: [22] });
+  s = await step();
+  assert.equal(s.run.cell.turns, 22, "still the same ON run");
+  assert.equal(s.run.delta.turns, 22 - 30, "the average moved (25 → 30), so the Δ did");
+  assert.equal(s.run.delta.baseline_count, 3, "and it now says it is over three");
+
+  // Another RUN beside it moves nothing — a run is not a baseline.
+  writeAverageCampaign(root, { baselines: [20, 30, 40], ons: [22, 5] });
+  s = await step();
+  assert.equal(s.run.cell.turns, 22, "the run read is still the first ON run");
+  assert.equal(s.run.delta.turns, 22 - 30, "a run added beside it leaves the Δ alone");
+  assert.equal(s.run.delta.baseline_count, 3);
+
+  // A baseline on a DIFFERENT fingerprint is another family: it changes neither.
+  const other = writeRun(root, "cumulative-other-code", {
+    status: { type: "attempt", sequence_index: 0, verdict: "FAIL", progress: { turns: 99, problems_before: 7 } },
+  });
+  writeCellFingerprint(other, 0, { values: { ...FIXTURE_FP, source_commit: "e".repeat(40) } });
+  writeCellCost(other, 0, { record: costStamp({ turns: 99 }) });
+
+  s = await step();
+  assert.equal(s.led.fingerprints.length, 2, "a second family of baselines now exists");
+  assert.equal(s.run.delta.turns, 22 - 30, "a baseline on another code never enters this Δ");
+  assert.equal(s.run.delta.baseline_count, 3, "nor its count");
+  const own = s.led.fingerprints.find((f) => f.fingerprint_hash === s.run.delta.fingerprint);
+  assert.equal(own.baseline_count, 3, "this fingerprint still holds exactly its three baselines");
+  assert.equal(own.avg.turns, 30);
+  rmSync(root, { recursive: true, force: true });
+});

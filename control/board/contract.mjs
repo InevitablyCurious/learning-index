@@ -14,9 +14,6 @@
 
 export const CONTRACT_VERSION = "2.0";
 
-/** Gate counts cluster within a cell: below this, no delta and no CI. */
-export const MIN_CELLS_PER_ARM = 3;
-
 /** Permanent provenance label. Never a badge. Never a tier. */
 export const ATTESTATION = "bench-mock/self-declared";
 
@@ -81,39 +78,6 @@ export function emptyBoard() {
       ext: [],
     },
 
-    // ── THE LONGITUDINAL SERIES ── owned by sources/stack-ledger.mjs. Efficiency
-    // and correctness side by side, never combined: an ON cell can be faster and
-    // worse.
-    stack: {
-      id: null,
-      state: null, // curve state, decided by stackState() in sources/stack-ledger.mjs
-      baseline: null, // the ONE OFF cell. n=1 BY DESIGN, never a distribution
-      baseline_n: 0,
-      baseline_scorable: false,
-      baseline_candidates: 0,
-      runs: [], // ON cells, oldest first — the curve reads left to right
-      all: [],
-      excluded: { total: 0, different_experiment: 0 },
-      // Gates observed failing (the harness publishes failures only); never a
-      // invented suite size.
-      gate_universe: null,
-      gate_universe_note: null,
-      // null = unbounded; consumers derive the observed count.
-      phases_per_cell: null,
-    },
-
-    // ── CONTINUOUS MODE ── owned by sources/continuous.mjs: the chain as
-    // control/continuous.mjs keeps it (active, its runs, why it ended). null =
-    // no chain was ever started: the banner renders nothing.
-    continuous: null,
-
-    // ── THE LEARNING VIEW ── the model's own account of what it learned this
-    // cell, the gate×attempt matrix and the learning ledger (sources/learning.mjs,
-    // panels/learning.js). null = no active run. Window labels come from
-    // learning-ledger.json; polarity is do / do-not, never pass/fail colours; the
-    // OFF-cell capture is not persisted and reads unwired.
-    learning: null,
-
     provenance: {
       attestation: ATTESTATION,
       gate_mode: null, // auto-approve | human | null
@@ -124,17 +88,6 @@ export function emptyBoard() {
       leader_fp: null,
       corpus: "benchmark",
       seed: null,
-    },
-
-    arm_delta: {
-      sufficient: false,
-      min_cells_per_arm: MIN_CELLS_PER_ARM,
-      a: armSlot(),
-      b: armSlot(),
-      delta: null,
-      ci: null, // stays null: gates cluster within cell (see note below)
-      statement: null,
-      note: "gate-level results are clustered within cell — 68 gates from one cell are not 68 independent samples. no CI over gate counts.",
     },
 
     // ── THE GATE SUITE ── the gate wall's only source, GET /api/wall
@@ -203,26 +156,8 @@ export function emptyBoard() {
     // status breakdown. Null until the source answers; never a partial object.
     runs: null,
 
-    history: [],
-
     sources: [],
   };
-}
-
-function armSlot() {
-  return {
-    cells: 0,
-    gates_resolved: null,
-    gates_total: null,
-    resolution_rate: null,
-    median_turns_to_green: null,
-    // Cells kept out of the numbers above, by reason — never a measured 0.
-    excluded: excludedSlot(),
-  };
-}
-
-function excludedSlot() {
-  return { total: 0, void_instrument: 0, resolution_unmeasurable: 0 };
 }
 
 // ── helpers used by every source ──
@@ -317,28 +252,4 @@ export function cellValidity(cell) {
   if (attempts < 2) return { scored: false, reason: "resolution_unmeasurable" };
 
   return { scored: true, reason: null };
-}
-
-/**
- * Show a delta only with at least MIN_CELLS_PER_ARM scored cells per arm
- * ("COLLECTING" otherwise); ci stays null (gate samples cluster within cell).
- */
-export function finalizeDelta(delta) {
-  const a = delta.a;
-  const b = delta.b;
-  const sufficient = a.cells >= MIN_CELLS_PER_ARM && b.cells >= MIN_CELLS_PER_ARM;
-  delta.sufficient = sufficient;
-
-  if (!sufficient || a.resolution_rate === null || b.resolution_rate === null) {
-    delta.delta = null;
-    delta.statement = null;
-    return delta;
-  }
-
-  delta.delta = a.resolution_rate - b.resolution_rate;
-  const pct = (x) => `${Math.round(x * 100)}%`;
-  delta.statement =
-    `memory-on resolves ${pct(a.resolution_rate)} of gates vs ` +
-    `${pct(b.resolution_rate)} control, across ${a.cells} and ${b.cells} cells.`;
-  return delta;
 }

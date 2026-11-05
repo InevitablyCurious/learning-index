@@ -1,18 +1,25 @@
 // THE MODEL LEDGER — GET /api/models-ledger: one row per bench-eligible model,
-// and one row per measured floor with its ON runs nested inside. Every gate is
-// computed here, once, so a button and the server's rule cannot disagree.
+// and one row per measured baseline with its ON runs nested inside. Every gate
+// is computed here, once, so a button and the server's rule cannot disagree.
 //
-//  1. An ON run needs its model's baseline complete and non-void.
-//  2. An ON run is always the same model as its floor (self-paired).
+//  1. A launch is gated by capacity alone: a cell in flight for that model. No
+//     baseline is required to start — a baseline is a history an ON run is read
+//     against later, never a key that unlocks it.
+//  2. An ON run is always the same model as the baselines it is read against
+//     (self-paired).
 //  3. Runs are serial PER MODEL: a cell in flight blocks its own model's
 //     launches, never another model's (the N-slot ledger, run-ledger.mjs).
 //
 // A baseline is not rationed: every Run in OFF mode measures one, and repeats on
 // the same fingerprint are averaged (baselines.mjs `fingerprints`). A void
-// baseline counts as no baseline, with the reason.
+// baseline counts as no baseline, with the reason. An ON Δ is measured against
+// that AVERAGE — adding a baseline is the only thing that moves it.
 
-// The floor has one owner (baselines.mjs), shared with /api/baselines.
+// The baseline has one owner (baselines.mjs), carried whole inside this payload.
 import { readBaselines, collectCells } from "./baselines.mjs";
+// The one canonicalizer: an ON cell's recorded fingerprint and an OFF cell's are
+// hashed the same way, which is what lets a Δ find its family.
+import { computeFingerprint } from "./batch.mjs";
 
 const str = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
 const int = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
@@ -55,11 +62,12 @@ export async function readModelsLedger({ runsRoot, benchModels, inFlightModels =
       reason: inFlight ? serialReasonFor(id) : null,
     };
 
-    // An ON run needs a closed, valid floor of its own model — the same
-    // baselineFor rule /api/run/start applies.
+    // A launch is gated by ONE thing in this model's own state: nothing in
+    // flight. A baseline is not a precondition — the Δ is read against the
+    // fingerprint's average after the fact, and says so when there is none.
     const canRun = {
-      allowed: !inFlight && baseline.scorable,
-      reason: inFlight ? serialReasonFor(id) : (baseline.scorable ? null : runRefusal(baseline)),
+      allowed: !inFlight,
+      reason: inFlight ? serialReasonFor(id) : null,
     };
 
     return {
@@ -69,8 +77,8 @@ export async function readModelsLedger({ runsRoot, benchModels, inFlightModels =
       declared_context: int(m.declared_context),
       max_context: int(m.max_context),
       baseline,
-      // The ON cells measured against this floor (onRunsFor).
-      runs: onRunsFor(baseline, allCells),
+      // The ON cells measured against this model's baselines (onRunsFor).
+      runs: onRunsFor(id, allCells, baselines.fingerprints),
       // This model's own serial state; the top-level run_in_flight is the aggregate.
       in_flight: inFlight,
       can_baseline: canBaseline,
@@ -81,7 +89,7 @@ export async function readModelsLedger({ runsRoot, benchModels, inFlightModels =
   return {
     ok: true,
     contract_version: MODELS_LEDGER_CONTRACT_VERSION,
-    // The floor index, attached whole (also at /api/baselines and baselines.json).
+    // The baseline index, attached whole (and written to baselines.json).
     baselines,
     // The aggregate mirror of the per-model gates: is ANY model in flight.
     run_in_flight: inFlightModels.size > 0,
@@ -123,33 +131,22 @@ export async function readModelsLedger({ runsRoot, benchModels, inFlightModels =
   };
 }
 
-/**
- * Why [+ run] is refused on a floor that is not scorable, in words. The batch
- * states are codes on the record (baselines.mjs); a refusal is read by a person.
- */
-function runRefusal(b) {
-  if (b.reason === "awaiting_selection") return "pick a floor from this batch first — an ON run is measured against one picked cell";
-  if (b.reason === "batch_void") {
-    return `this batch can never be a floor — ${b.void_reason ?? "it is void"}`;
-  }
-  return b.reason;
-}
-
-/** One row per measured floor, every gate resolved here. */
+/** One row per measured baseline, every gate resolved here. */
 function baselineRows({ baselines, allCells, inFlightModels }) {
   const rows = Array.isArray(baselines?.list) ? baselines.list : [];
 
   return rows.map((b) => {
-    // Runs against this row's own floor.
-    const runs = onRunsFor(b, allCells);
-    // This floor's own model in flight; another model's cell does not block it.
+    // Runs read against this model's baselines.
+    const runs = onRunsFor(b.model, allCells, baselines?.fingerprints);
+    // This baseline's own model in flight; another model's cell does not block it.
     const inFlight = inFlightModels.has(b.model);
 
-    // Needs a closed, valid floor; running and void refuse with different
-    // reasons (wait vs archive and re-run).
+    // The same gate the model row carries: capacity alone. A void or exhausted
+    // row is a row about the past, not a lock on the next launch — its own
+    // `reason` still says why it is not a baseline.
     const canRun = {
-      allowed: !inFlight && b.scorable === true,
-      reason: inFlight ? serialReasonFor(b.model) : (b.scorable ? null : runRefusal(b)),
+      allowed: !inFlight,
+      reason: inFlight ? serialReasonFor(b.model) : null,
     };
 
     return {
@@ -159,7 +156,7 @@ function baselineRows({ baselines, allCells, inFlightModels }) {
       // Newest first; `seq` keeps the schedule position.
       runs: [...runs].reverse(),
       run_count: runs.length,
-      best: bestDelta(runs, b),
+      best: bestDelta(runs),
       can_run: canRun,
     };
   });
@@ -227,23 +224,24 @@ function startableModels({ eligible, baselines, cloud, inFlightModels }) {
   return out;
 }
 
-// ── THE RUNS UNDER A BASELINE ── read off disk. A campaign schedules one
-// model: slot 0 is the OFF floor, every later slot an ON repetition. So a floor's
-// runs are the ON cells in its own campaign, in schedule order — CLI-launched
-// cells included. The OFF cell is the floor itself and is not a run.
+// ── THE RUNS OF A MODEL ── read off disk. A campaign is per MODEL, so its OFF
+// slots (the baselines) and its ON slots share one run_dir; the ON cells are
+// selected by MODEL rather than by that dir, so a memory-ON run started on a
+// model with no baseline yet is still listed (it has a Δ to earn later). Runs
+// come in schedule order — CLI-launched cells included. The OFF cells are the
+// baselines and are not runs.
 
 const ON_ARM = "on";
 
-/** The ON cells against one baseline, oldest first; none without a run_dir. */
-function onRunsFor(baseline, allCells) {
-  const runDir = str(baseline?.run_dir);
-  if (!runDir) return [];
+/** The ON cells of one model, oldest first. */
+function onRunsFor(model, allCells, fingerprints) {
+  if (!model) return [];
 
   return (allCells ?? [])
-    .filter((c) => c.run_dir === runDir && c.arm === ON_ARM)
+    .filter((c) => c.model === model && c.arm === ON_ARM)
     .sort((a, b) => (a.sequence_index ?? 0) - (b.sequence_index ?? 0))
     .map((cell, i) => ({
-      // "run 06": position among this floor's ON cells, stable as runs are added.
+      // "run 06": position among this model's ON cells, stable as runs are added.
       seq: i + 1,
       started_at: cell.created_at ?? null,
       model: cell.model,
@@ -265,19 +263,32 @@ function onRunsFor(baseline, allCells) {
         context_exhausted: cell.context_exhausted === true,
         build_chunks: cell.build_chunks ?? null,
       },
-      delta: deltaOf(cell, baseline),
+      delta: deltaOf(cell, fingerprints),
     }));
 }
 
 /**
- * Δ against the floor this run is nested under (same model by construction).
- * No number while the cell runs, when either side is void or unscored, or when a
- * turn count is unobserved.
+ * Δ against the AVERAGE of every baseline gathered on this run's fingerprint —
+ * never a single picked cell, so adding a baseline is the only thing that moves
+ * it and an earlier run's Δ is stable forever after.
+ *
+ * No number while the cell runs, when either side is void or unscored, when the
+ * cell carries no fingerprint to place it by, or when no baseline has yet been
+ * gathered on that fingerprint (a zero would claim a comparison nobody made).
+ * Every branch carries `baseline_count` and `fingerprint`, so the reading is
+ * always "measured against N baselines on this code".
  */
-function deltaOf(cell, baseline) {
+function deltaOf(cell, fingerprints) {
   if (!cell) return null;
   if (cell.state !== "complete") {
-    return { computable: false, reason: "withheld until the cell closes", turns: null, tokens: null };
+    return {
+      computable: false,
+      reason: "withheld until the cell closes",
+      turns: null,
+      tokens: null,
+      baseline_count: 0,
+      fingerprint: null,
+    };
   }
   if (cell.void_instrument) {
     return {
@@ -285,33 +296,79 @@ function deltaOf(cell, baseline) {
       reason: "void instrument — these numbers measure the harness, not the model",
       turns: null,
       tokens: null,
+      baseline_count: 0,
+      fingerprint: null,
     };
   }
-  if (!baseline?.scorable) {
-    return { computable: false, reason: "no valid floor to measure against", turns: null, tokens: null };
+
+  let hash = null;
+  try {
+    hash = computeFingerprint(cell.fingerprint).hash;
+  } catch {
+    // An incomplete or pre-standard record: it belongs to no fingerprint.
+    hash = null;
   }
-  if (cell.turns === null || baseline.turns === null || baseline.turns === undefined) {
-    return { computable: false, reason: "turns unobserved on one side", turns: null, tokens: null };
+  if (!hash) {
+    return {
+      computable: false,
+      reason: "this cell recorded no fingerprint, so it belongs to no baseline family",
+      turns: null,
+      tokens: null,
+      baseline_count: 0,
+      fingerprint: null,
+    };
   }
 
-  const turns = cell.turns - baseline.turns;
-  const tokens =
-    cell.tokens !== null && baseline.tokens !== null && baseline.tokens !== undefined
-      ? cell.tokens - baseline.tokens
-      : null;
+  const group = (fingerprints ?? []).find((f) => f.fingerprint_hash === hash) ?? null;
+  if (!group || !(group.baseline_count > 0)) {
+    return {
+      computable: false,
+      reason: "no baselines on this fingerprint",
+      turns: null,
+      tokens: null,
+      baseline_count: 0,
+      fingerprint: hash,
+    };
+  }
+
+  const avg = group.avg ?? {};
+  const baseTurns = num(avg.turns);
+  if (baseTurns === null || !Number.isFinite(cell.turns)) {
+    return {
+      computable: false,
+      reason: "turns unobserved on one side",
+      turns: null,
+      tokens: null,
+      baseline_count: group.baseline_count,
+      fingerprint: hash,
+    };
+  }
+
+  const turns = cell.turns - baseTurns;
 
   return {
     computable: true,
     reason: null,
     turns,
-    tokens,
+    // Tokens are averaged BY KIND in the forever baseline (input, output,
+    // reasoning, cache read/write — AGGREGATE_COST_FIELDS) while a cell records
+    // one `total_tokens`, so there is no averaged total to subtract and summing
+    // the kinds would compare two different units. Reported as unobserved rather
+    // than invented; the per-kind averages ride `fingerprints[].avg`.
+    tokens: null,
     // Named: fewer turns (a negative Δ) is better.
     better: turns < 0,
+    // The average it was measured against: how many baselines, on which code.
+    baseline_count: group.baseline_count,
+    fingerprint: hash,
   };
 }
 
-/** The best run under a baseline by turns only — efficiency, labelled as such. */
-function bestDelta(runs, baseline) {
+/** A finite number, or null — an unmeasured side is never a zero. */
+const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+/** The best run of a baseline by turns only — efficiency, labelled as such. */
+function bestDelta(runs) {
   const scored = runs.filter((r) => r.delta?.computable === true);
   if (!scored.length) return null;
   const best = scored.reduce((a, b) => (b.delta.turns < a.delta.turns ? b : a));
@@ -321,9 +378,15 @@ function bestDelta(runs, baseline) {
     tokens: best.delta.tokens,
     better: best.delta.better,
     axis: "efficiency",
-    note: "fewest turns against this model's floor. Turns only — it says nothing about gates.",
+    note:
+      `fewest turns against the average of ${best.delta.baseline_count} `
+      + `${best.delta.baseline_count === 1 ? "baseline" : "baselines"} on this fingerprint. `
+      + "Turns only — it says nothing about gates.",
   };
 }
 
 // 2: the profile level was removed (a breaking shape change).
-const MODELS_LEDGER_CONTRACT_VERSION = 2;
+// 3: a Δ is measured against the fingerprint's AVERAGE, not a picked cell — the
+//    per-run delta carries `baseline_count` and `fingerprint`, and a batch record
+//    no longer carries a `pick`.
+const MODELS_LEDGER_CONTRACT_VERSION = 3;

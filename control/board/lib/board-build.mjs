@@ -12,26 +12,22 @@ import { reconcileRunLiveness } from "../run-liveness.mjs";
 import * as runManifest from "../sources/run-manifest.mjs";
 import * as statusStream from "../sources/status-stream.mjs";
 import * as runLog from "../sources/run-log.mjs";
-import * as stackLedger from "../sources/stack-ledger.mjs";
 import * as funnelCells from "../sources/funnel-cells.mjs";
 import * as pluginLog from "../sources/plugin-log.mjs";
 import * as opencodeServe from "../sources/opencode-serve.mjs";
 import * as controlPlane from "../sources/control-plane.mjs";
 import * as gateSuite from "../sources/gate-suite.mjs";
-import * as learning from "../sources/learning.mjs";
 import * as liveStream from "../sources/live-stream.mjs";
 import * as toolJobs from "../sources/tool-jobs.mjs";
 import * as cells from "../sources/cells.mjs";
 import * as runs from "../sources/runs.mjs";
-import * as continuous from "../sources/continuous.mjs";
 
 // Every source is always on: each one reports its own absence ("unwired",
 // with a reason) instead of being switched off by configuration.
 //
 // Board-wide sources: one read for the whole board.
 const MODS = [
-  runManifest, statusStream, stackLedger, funnelCells, pluginLog,
-  controlPlane, toolJobs, cells, runs, continuous,
+  runManifest, funnelCells, pluginLog, controlPlane, toolJobs, cells, runs,
 ];
 
 // ── PER-CELL SOURCES ── everything that describes ONE cell. Each exports
@@ -41,7 +37,7 @@ const MODS = [
 // write, and the board showed whichever cell wrote last under the strip's
 // selection. Merge order as ORDER: the status stream, then the log pulse, then
 // the live stream, then the serve API (freshest).
-const CELL_MODS = [statusStream, learning, runLog, liveStream, opencodeServe, gateSuite];
+const CELL_MODS = [statusStream, runLog, liveStream, opencodeServe, gateSuite];
 
 /** The address a cell is keyed by everywhere: `<run_dir>::<sequence_index>`. */
 export function cellKey(cell) {
@@ -54,7 +50,7 @@ export function cellKey(cell) {
  * Merge order: later sources win on conflict, and null never overwrites (see
  * mergePatch).
  *   run-manifest   provenance floor
- *   status-stream  authoritative for gates, arm, verdict
+ *   status-stream  per cell: authoritative for arm, attempt, turns, tokens
  *   run-log        live pulse between attempt records
  *   live-stream    fresher than anything written at cell end
  *   opencode-serve last: freshest tokens and liveness
@@ -65,7 +61,6 @@ const ORDER = [
   "status-stream",
   "funnel-cells",
   "plugin-log",
-  "learning",
   "run-log",
   "live-stream",
   "opencode-serve",
@@ -81,8 +76,6 @@ const ORDER = [
   // Owns `suite` alone (split from control-plane so a slow suite can't hold the
   // TUI); position not load-bearing.
   "gate-suite",
-  // Owns `continuous` alone — one small file read; listed so it never sorts first.
-  "continuous",
 ];
 
 async function buildBoard(cfg) {

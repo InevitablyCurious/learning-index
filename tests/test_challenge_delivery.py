@@ -1,14 +1,29 @@
+"""Delivery telemetry: what the memory plugin actually put in front of the model.
+
+Two layers are under test. The scanners read the plugin's own log
+(`.okp/logs/okp-plugin-errors.log`) for `[inject] injected ...` lines; the cell
+path runs the REAL arm — there is no mock arm — with the container, the
+transport and the build drive stood in, so everything above them (the worktree
+seed, the memory switch, the scan at the end) is the code a measured run uses.
+"""
+
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+import harness.adapters.challenge as challenge_mod
+import harness.adapters.challenge.runner as runner_mod
 from harness.adapters.challenge import (
     ChallengeRunner,
+    _OpencodeRunStats,
     _scan_cell_delivery,
     _scan_injected_block_chars,
 )
+from harness.adapters.docker_worker import BakedPlugin, ImageFingerprint
 
 
 TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
@@ -20,14 +35,136 @@ def _write_plugin_log(worktree: Path, contents: str) -> None:
     log_path.write_text(contents, encoding="utf-8")
 
 
-def _make_runner(tmp_path: Path, *, memory_mode: str = "on") -> ChallengeRunner:
-    return ChallengeRunner(
+def _patch_fake_real_arm(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hermetic real-arm stubs, mirroring test_challenge_budget_stop.
+
+    No docker, no serve HTTP, no model contact: the container, the transport
+    and the fingerprint are stood in; everything above them is real.
+    """
+
+    class _FakeDockerCellConfig:
+        def __init__(
+            self,
+            *,
+            worktree: Path,
+            memory_mode: str,
+            container_name: str,
+            output_token_max: int | None = None,
+        ) -> None:
+            self.worktree = worktree
+            self.memory_mode = memory_mode
+            self.container_name = container_name
+            self.output_token_max = output_token_max
+
+    class _FakeDockerCell:
+        def __init__(self, config: _FakeDockerCellConfig, progress: Any) -> None:
+            self.config = config
+            self.progress = progress
+            self.container_name = config.container_name
+
+        def __enter__(self) -> "_FakeDockerCell":
+            return self
+
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+        def kill_worker_processes(self) -> None:
+            pass
+
+        def start_serve(self) -> None:
+            # Never start a real `opencode serve`; the session is stubbed below.
+            pass
+
+    monkeypatch.setattr(challenge_mod, "DockerCellConfig", _FakeDockerCellConfig)
+    monkeypatch.setattr(challenge_mod, "DockerCell", _FakeDockerCell)
+    monkeypatch.setattr(challenge_mod, "docker_available", lambda: (True, "ok"))
+    monkeypatch.setattr(
+        challenge_mod,
+        "worker_image_fingerprint",
+        lambda: ImageFingerprint(
+            image_id="sha256:fake-delivery-test-worker",
+            created="2026-09-04T00:00:00Z",
+        ),
+    )
+
+    real_run = challenge_mod.subprocess.run
+
+    def _run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        cmd = args[0] if args else kwargs.get("args")
+        if isinstance(cmd, list) and cmd and cmd[0] == "docker":
+            return subprocess.CompletedProcess(
+                cmd, 1, stdout="", stderr="No such container"
+            )
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(challenge_mod.subprocess, "run", _run)
+
+    class _FakeServeClient:
+        def __init__(self, base_url: str, **kwargs: Any) -> None:
+            self.base_url = base_url
+
+        def create_session(self, title: str | None = None) -> str:
+            return "ses_delivery_cell"
+
+        def get_messages(self, session_id: str) -> list[dict[str, Any]]:
+            return []
+
+        def completed_compactions_since(self, session_id: str, watermark: int) -> int:
+            return 0
+
+    monkeypatch.setattr(challenge_mod, "ServeClient", _FakeServeClient)
+    # The image's baked memory plugin, read from labels in a real run. An ON
+    # cell refuses to start without one, so the fake image carries it.
+    monkeypatch.setattr(
+        runner_mod,
+        "baked_plugin",
+        lambda: BakedPlugin(
+            entry="/opt/bench-plugin/dist/index.js",
+            identity="@honcho-ai/opencode-honcho@0.2.1",
+        ),
+    )
+
+
+def _make_runner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, memory_mode: str = "on"
+) -> ChallengeRunner:
+    """A real-arm runner with a clean one-chunk build; no container, no model."""
+    _patch_fake_real_arm(monkeypatch)
+    runner = ChallengeRunner(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="openrouter/anthropic/claude-opus-4.8",
         memory_mode=memory_mode,
-        mock="golden",
     )
+    monkeypatch.setattr(
+        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["BUILD PROMPT"]
+    )
+
+    def _fake_chunked(**kwargs: Any) -> _OpencodeRunStats:
+        # A clean one-chunk build: the transport reached idle on its chunk.
+        return _OpencodeRunStats(
+            input_tokens=1,
+            output_tokens=1,
+            reasoning_tokens=0,
+            turns=1,
+            session_id="ses_delivery_cell",
+            killed_reason=None,
+            exit_code=0,
+            cost_usd=0.0,
+            chunk_reports=({"chunk": 1, "exit_code": 0},),
+        )
+
+    monkeypatch.setattr(runner, "_run_opencode_serve_chunked", _fake_chunked)
+    return runner
+
+
+def _pass_report(**kwargs: Any) -> dict[str, Any]:
+    return {
+        "verdict": "PASS",
+        "conformed": True,
+        "problems": [],
+        "failed_gates": [],
+    }
 
 
 def test_scan_cell_delivery_returns_yes_when_any_inject_count_is_positive(
@@ -192,41 +329,38 @@ def test_restore_only_log_is_not_an_injection(tmp_path: Path) -> None:
     assert _scan_cell_delivery(worktree) is None
 
 
+def _memory_on_prepare(plugin_log: str | None):
+    """Stand in for the memory switch: mark the cell measured, plant the log.
+
+    The plugin log is written HERE, not by a copy hook, because the isolation
+    preflight refuses any file in the worktree that the scaffold did not
+    declare — the cell's own telemetry can only appear after it.
+    """
+
+    def _prepare(*, worktree: Path) -> bool:
+        marker = worktree / ".okp" / "org.json"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("{}", encoding="utf-8")
+        if plugin_log is not None:
+            _write_plugin_log(worktree, plugin_log)
+        return False
+
+    return _prepare
+
+
 def test_run_cell_impl_sets_delivery_yes_when_memory_on_and_inject_log_exists(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    runner = _make_runner(tmp_path, memory_mode="on")
-    monkeypatch.setattr(runner, "_prepare_memory_mode", lambda *, worktree: False)
+    runner = _make_runner(tmp_path, monkeypatch, memory_mode="on")
     monkeypatch.setattr(
         runner,
-        "_run_gate_report",
-        lambda **kwargs: {
-            "verdict": "PASS",
-            "conformed": True,
-            "problems": [],
-            "failed_gates": [],
-        },
+        "_prepare_memory_mode",
+        _memory_on_prepare(
+            "[inject] injected count=2 chars=1207 sid=ses_delivery newly_served=2\n"
+        ),
     )
-
-    original_copy_tree_contents = ChallengeRunner._copy_tree_contents
-
-    def _copy_tree_contents_with_log(src_dir: Path, dst_dir: Path) -> None:
-        original_copy_tree_contents(src_dir, dst_dir)
-        if Path(src_dir).name == "golden":
-            _write_plugin_log(
-                dst_dir,
-                "[inject] injected count=2 chars=1207 sid=ses_delivery newly_served=2\n",
-            )
-            marker = dst_dir / ".okp" / "org.json"
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text("{}", encoding="utf-8")
-
-    monkeypatch.setattr(
-        ChallengeRunner,
-        "_copy_tree_contents",
-        staticmethod(_copy_tree_contents_with_log),
-    )
+    monkeypatch.setattr(runner, "_run_gate_report", _pass_report)
 
     result = runner._run_cell_impl(
         run_label="delivery-on-yes",
@@ -241,37 +375,15 @@ def test_run_cell_impl_sets_injected_block_est_tokens_from_scanned_chars(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    runner = _make_runner(tmp_path, memory_mode="on")
-    monkeypatch.setattr(runner, "_prepare_memory_mode", lambda *, worktree: False)
+    runner = _make_runner(tmp_path, monkeypatch, memory_mode="on")
     monkeypatch.setattr(
         runner,
-        "_run_gate_report",
-        lambda **kwargs: {
-            "verdict": "PASS",
-            "conformed": True,
-            "problems": [],
-            "failed_gates": [],
-        },
+        "_prepare_memory_mode",
+        _memory_on_prepare(
+            "[inject] injected count=2 block_chars=1207 sid=ses_tokens newly_served=2\n"
+        ),
     )
-
-    original_copy_tree_contents = ChallengeRunner._copy_tree_contents
-
-    def _copy_tree_contents_with_log(src_dir: Path, dst_dir: Path) -> None:
-        original_copy_tree_contents(src_dir, dst_dir)
-        if Path(src_dir).name == "golden":
-            _write_plugin_log(
-                dst_dir,
-                "[inject] injected count=2 block_chars=1207 sid=ses_tokens newly_served=2\n",
-            )
-            marker = dst_dir / ".okp" / "org.json"
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text("{}", encoding="utf-8")
-
-    monkeypatch.setattr(
-        ChallengeRunner,
-        "_copy_tree_contents",
-        staticmethod(_copy_tree_contents_with_log),
-    )
+    monkeypatch.setattr(runner, "_run_gate_report", _pass_report)
 
     result = runner._run_cell_impl(
         run_label="delivery-on-est-tokens",
@@ -287,25 +399,11 @@ def test_run_cell_impl_sets_delivery_not_measured_when_memory_on_without_inject_
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    runner = _make_runner(tmp_path, memory_mode="on")
-
-    def _prepare_with_marker(*, worktree: Path) -> bool:
-        marker = worktree / ".okp" / "org.json"
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text("{}", encoding="utf-8")
-        return False
-
-    monkeypatch.setattr(runner, "_prepare_memory_mode", _prepare_with_marker)
-    monkeypatch.setattr(
-        runner,
-        "_run_gate_report",
-        lambda **kwargs: {
-            "verdict": "PASS",
-            "conformed": True,
-            "problems": [],
-            "failed_gates": [],
-        },
-    )
+    runner = _make_runner(tmp_path, monkeypatch, memory_mode="on")
+    # Measured as a memory cell (the marker exists) but the plugin logged no
+    # injection at all: that is "not_measured", never a fabricated "NO".
+    monkeypatch.setattr(runner, "_prepare_memory_mode", _memory_on_prepare(None))
+    monkeypatch.setattr(runner, "_run_gate_report", _pass_report)
 
     result = runner._run_cell_impl(
         run_label="delivery-on-not-measured",
@@ -317,8 +415,10 @@ def test_run_cell_impl_sets_delivery_not_measured_when_memory_on_without_inject_
 
 
 @pytest.mark.slow
-def test_run_cell_impl_sets_delivery_na_when_memory_off(tmp_path: Path) -> None:
-    runner = _make_runner(tmp_path, memory_mode="off")
+def test_run_cell_impl_sets_delivery_na_when_memory_off(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    runner = _make_runner(tmp_path, monkeypatch, memory_mode="off")
 
     result = runner._run_cell_impl(
         run_label="delivery-off-na",

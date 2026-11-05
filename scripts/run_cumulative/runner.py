@@ -1,9 +1,6 @@
 """Per-session runtime seam: RealSessionRunner + runner construction.
 
-Split out of ``scripts/run_cumulative.py`` (LI-14). ``load_snapshot`` is
-imported at the TOP here so ``RealSessionRunner._resolve_seed_snapshot``'s
-bare-name call resolves in this module's namespace — the monkeypatch target
-``run_cumulative.runner.load_snapshot``.
+Split out of ``scripts/run_cumulative.py`` (LI-14).
 """
 
 from __future__ import annotations
@@ -41,11 +38,6 @@ from harness.cumulative.types import SessionRecord
 from harness.egress import worker_model_base_url
 from harness.preflight import verify_worker_model_acceptance
 from harness.proxy_meter import SpendMeter
-from harness.snapshot import (
-    LoadedSnapshot,
-    load_snapshot,
-    validate_snapshot_for_seed,
-)
 from harness.spend_key import (
     key_fingerprint,
     resolve_local_llm_proxy_api_key,
@@ -57,7 +49,6 @@ from .paths import (
     DEFAULT_ORG_ID,
     DEFAULT_PROXY_RUNS_DIR,
     GATE_ROSTER_TIMEOUT_S,
-    PROMPTS_DIR,
     REPO_ROOT,
     PathLayout,
     _mode_dir,
@@ -416,9 +407,9 @@ def _work_token_fields(source: Mapping[str, Any]) -> dict[str, Any]:
     attempt (mock, seeded build, harness error), so a missing counter is
     written as an explicit ``None`` and never as ``0`` — a fabricated zero
     claims a measured turn that never happened, and this stream's readers
-    treat null and absent identically (see the seeded_from_snapshot note
-    below). ``work_total_tokens`` sums whatever IS present and is ``None`` when
-    nothing is, rather than inventing a total out of nothing.
+    treat null and absent identically. ``work_total_tokens`` sums whatever IS
+    present and is ``None`` when nothing is, rather than inventing a total out
+    of nothing.
     """
     values: dict[str, Any] = {}
     for record_key, source_key in _WORK_TOKEN_COUNTERS:
@@ -490,7 +481,6 @@ class RealSessionRunner:
         require_todos: bool = False,
         pause_after_grade: bool = False,
         grader_worker_target: float | None = None,
-        seed_snapshot: str | None = None,
         run_identity: str | None = None,
     ) -> None:
         self._task = task
@@ -521,20 +511,6 @@ class RealSessionRunner:
         self._grader_worker_target = (
             None if grader_worker_target is None else float(grader_worker_target)
         )
-        # WO-SNAP-04: dev-mode seed snapshot id (--seed-snapshot), declared at
-        # launch like ``compact``. Resolved against the runs root and validated
-        # per session in run_session (_resolve_seed_snapshot); a refusal ABORTS
-        # the run — it never degrades to a scaffold build. The loaded snapshot
-        # is cached on _seed_snapshot so a multi-session campaign reads disk
-        # once, but validation is per-session because each session carries its
-        # own model.
-        self._seed_snapshot_id = seed_snapshot
-        self._seed_snapshot: LoadedSnapshot | None = None
-        # WO-SNAP-04B (D-SNAP-DEVMODE-EXCEPTIONS): corpus-provenance drift
-        # found by the per-session validation — reported, never refused.
-        # Refreshed by every _resolve_seed_snapshot call and threaded to the
-        # adapter in run_session as seed_snapshot_drift.
-        self._seed_snapshot_drift: list[dict[str, str | None]] = []
 
         # THE CHALLENGE, NOT THE EXAMPLE. Backgammon is what ships; a challenge
         # is its own repo, selected with BENCH_TASK_DIR (harness/prompt_pack.py).
@@ -652,48 +628,6 @@ class RealSessionRunner:
             return None
         scaffold = Path(task_dir) / "scaffold"
         return compute_task_template_hash(scaffold)
-
-    def _resolve_seed_snapshot(self, session: SessionRecord) -> LoadedSnapshot | None:
-        """Resolve + validate the --seed-snapshot tree for this session, or None.
-
-        WO-SNAP-04 dev-mode seeding. Returns None when no snapshot was declared
-        (the normal scaffold+build run). Otherwise loads the snapshot from the
-        runs root — the SAME env-or-repo rule the capture side uses
-        (adapters/challenge.py: BENCH_RUNS_DIR, else <repo>/runs) — and
-        validates it against this session's model and the running corpus
-        identity. The corpus derivations MIRROR run_session's runner_kwargs
-        exactly (chunk_plan_hash over task/backgammon/prompts, template_hash
-        over the scaffold, source_commit from git HEAD): a number computed by
-        a different formula is a different number, and a snapshot validated
-        against it would be validated against nothing.
-
-        The disk load is cached on ``self._seed_snapshot``; the validation is
-        NOT cached, because each session carries its own model and a model
-        mismatch is a refusal. Refusals raise SnapshotError subclasses
-        (not-found, unreadable, model mismatch) which abort the run at the top
-        level — a refused snapshot never falls back to a scaffold build.
-        Corpus-provenance drift is NOT a refusal (D-SNAP-DEVMODE-EXCEPTIONS):
-        it is REPORTED — stored on ``self._seed_snapshot_drift`` and threaded
-        to the adapter by run_session.
-        """
-        seed_id = getattr(self, "_seed_snapshot_id", None)
-        if seed_id is None:
-            return None
-        snap = getattr(self, "_seed_snapshot", None)
-        if snap is None:
-            runs_root = Path(
-                os.environ.get("BENCH_RUNS_DIR") or (self._repo_root / "runs")
-            )
-            snap = load_snapshot(str(seed_id), runs_root)
-            self._seed_snapshot = snap
-        self._seed_snapshot_drift = validate_snapshot_for_seed(
-            snap,
-            model=session.model,
-            chunk_plan_hash=compute_task_template_hash(PROMPTS_DIR),
-            template_hash=self._compute_task_template_hash(),
-            source_commit=self._current_git_head(getattr(self, "_repo_root", None)),
-        )
-        return snap
 
     @staticmethod
     def _serialize_worker_fingerprint(result: Any) -> dict | str | None:
@@ -1029,21 +963,6 @@ class RealSessionRunner:
             # session(s) (bench-<org>-<arm>-<cell_ts>); joins exported
             # session-DB rows to bench cells on the prod dashboard.
             "session_title": str(getattr(result, "session_title", None) or ""),
-            # WO-SNAP-04 honesty fields. Written onto the session by
-            # run_session (the single writer seam WO-SNAP-03 declared on
-            # SessionRecord) and mirrored here verbatim — build_scorecard and
-            # the convergence trend read them back from THIS stream, so a
-            # seeded cell is dev-mode and ran no build, while a normal cell
-            # states build_phase_ran=True. The cost a seeded cell skipped is no
-            # longer carried here: snapshots stopped recording a build cost, so
-            # there is nothing truthful left to copy.
-            # This stream does not drop None values (StatusStream.append writes
-            # the record as-is, like extraction_candidate_count above), so
-            # unseeded records carry explicit nulls; readers (.get) treat null
-            # and absent identically.
-            "seeded_from_snapshot": session.seeded_from_snapshot,
-            "build_phase_ran": bool(session.build_phase_ran),
-            "dev_mode": bool(session.dev_mode),
         }
 
         stream = StatusStream(
@@ -1380,28 +1299,6 @@ class RealSessionRunner:
                 run_label=state.run_identity
             )
 
-        # WO-SNAP-04: dev-mode seeding, resolved and validated BEFORE the
-        # runner exists — a refusal (SnapshotError) aborts the run here and
-        # never reaches a scaffold build. The four honesty fields WO-SNAP-03
-        # declared on SessionRecord are WRITTEN here, on the session, by this
-        # single writer: the sequencer's manifest checkpoint (to_dict) and the
-        # status stream (_append_status_records) both carry the same values
-        # from the same seam.
-        seed_snapshot = self._resolve_seed_snapshot(session)
-        session.seeded_from_snapshot = (
-            seed_snapshot.snapshot_id if seed_snapshot is not None else None
-        )
-        # build_phase_ran's whole point: did the chunked build run? A seeded
-        # cell skips it (the snapshot IS the build work product); a normal
-        # cell runs it, so its honest value is True — not the declared
-        # default False, which would claim the build was skipped when it ran.
-        session.build_phase_ran = seed_snapshot is None
-        # Seeding is a dev-mode act, and on this path --seed-snapshot IS the
-        # dev-mode signal: derived strictly from it, never a silent global.
-        # (The control plane's dev-mode toggle is JS-only today; there is no
-        # server→argv plumbing for it — flagged in the WO-SNAP-04 hand-up.)
-        session.dev_mode = seed_snapshot is not None
-
         runner_kwargs: dict[str, Any] = {
             "task_dir": self._task_dir,
             "work_root": state.run_dir,
@@ -1427,29 +1324,11 @@ class RealSessionRunner:
             "require_todos": bool(getattr(self, "_require_todos", False)),
             "pause_after_grade": bool(getattr(self, "_pause_after_grade", False)),
             "grader_worker_target": getattr(self, "_grader_worker_target", None),
-            # WO-SNAP-02: corpus identity for snapshot provenance. The
-            # producer states these; the runner/snapshot consumer must never
-            # re-derive them. Raw values — None is honest producer-absence
-            # and must not be rewritten to "" (unlike the sequencer's
-            # chunk_plan_hash, whose manifest field is str-typed).
-            "chunk_plan_hash": compute_task_template_hash(PROMPTS_DIR),
-            "template_hash": self._compute_task_template_hash(),
+            # Corpus identity of the code this cell runs. The campaign layer
+            # states it; the adapter never re-derives it, and it is an input to
+            # the cell fingerprint, so it stays threaded through.
             "source_commit": self._current_git_head(getattr(self, "_repo_root", None)),
         }
-        if seed_snapshot is not None:
-            # The RESOLVED snapshot tree/ directory. The adapter seeds the
-            # worktree from it instead of the scaffold, asserts isolation
-            # against it (swapped, never bypassed), skips the chunked build
-            # and suppresses the attempt-1 capture (a snapshot-of-a-snapshot
-            # would be a degenerate corpus row).
-            runner_kwargs["seed_snapshot_tree"] = seed_snapshot.tree
-            # WO-SNAP-04B: the corpus-provenance drift this session's
-            # validation reported (D-SNAP-DEVMODE-EXCEPTIONS — demoted from a
-            # refusal). Threaded to the adapter, which emits it as a notice;
-            # a copy so later sessions' revalidation cannot mutate what an
-            # already-constructed runner holds.
-            runner_kwargs["seed_snapshot_drift"] = list(self._seed_snapshot_drift)
-            runner_kwargs["seed_snapshot_depth"] = seed_snapshot.snapshot_depth
         if max_steps_per_attempt is not None:
             runner_kwargs["max_steps_per_attempt"] = max_steps_per_attempt
 
@@ -1482,7 +1361,6 @@ class RealSessionRunner:
             result = runner.run_cell(
                 state.run_label, state.run_dir, run_identity=state.run_identity
             )
-            session.produced_snapshot_id = getattr(result, "produced_snapshot_id", None)
             state.last_session_id = result.session_id or state.last_session_id
 
             # WO-ERRDATA-20-CAP: accumulate per-cell error counts into the
@@ -1661,9 +1539,5 @@ def _build_real_runner(
         require_todos=bool(getattr(args, "require_todos", False)),
         pause_after_grade=bool(getattr(args, "pause_after_grade", False)),
         grader_worker_target=getattr(args, "grader_worker_target", None),
-        # WO-SNAP-04: declared on the MAIN parser (every subcommand parses it;
-        # only `run` builds a real runner). Absent/empty means no seeding —
-        # the normal scaffold+build run.
-        seed_snapshot=str(getattr(args, "seed_snapshot", "") or "").strip() or None,
         run_identity=run_identity,
     )

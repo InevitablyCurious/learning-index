@@ -12,7 +12,7 @@ import { join } from "node:path";
 
 import { listCampaignDirs } from "../tree.mjs";
 import { runDirOf } from "../runstate.mjs";
-import { listRunCells, readCheckpointIndex, readDiffText, readTranscriptText } from "../history.mjs";
+import { listRunCells, readCheckpointIndex, readDiffText } from "../history.mjs";
 import { HERE } from "./_shared.mjs";
 
 test("RUNDIR: a seed line's two /runs/ paths resolve to the destination run", () => {
@@ -213,12 +213,10 @@ test("HISTORY: absent artifacts are honest null/404, never 500", async () => {
     assert.equal(diff.code, "not_found");
     assert.equal(diff.status, 404);
 
-    // A transcript is the record of what the model was actually told — absence
-    // is a 404, never an empty string passed off as content.
-    const transcript = await readTranscriptText(root, h.treeId, cell);
-    assert.equal(transcript.ok, false);
-    assert.equal(transcript.code, "not_found");
-    assert.equal(transcript.status, 404);
+    // A transcript is the record of what the model was actually told, and no
+    // route serves its text any more: `GET /api/history/transcript` was
+    // removed with the chaining/seed machinery that only used it. The file's
+    // PRESENCE is still reported as `transcript_file`; only its body is gone.
 
     // Only an invalid identifier is refused — as a 400, never a throw.
     const invalid = await readCheckpointIndex(root, "../..", cell);
@@ -257,12 +255,11 @@ test("HISTORY: diff route refuses path traversal", async () => {
   }
 });
 
-test("HISTORY: a synthetic run round-trips checkpoints, diff, and transcript", async () => {
+test("HISTORY: a synthetic run round-trips checkpoints and diff", async () => {
   const root = mkdtempSync(join(tmpdir(), "okp-hist-roundtrip-"));
   try {
     const h = writeHistoryCell(root, `1788672514/${HISTORY_CAMPAIGN}/memoryOFF/cell-0000`, {
       withCheckpoints: true,
-      withTranscript: true,
     });
     const cell = historyWireCell(h);
 
@@ -281,31 +278,32 @@ test("HISTORY: a synthetic run round-trips checkpoints, diff, and transcript", a
     const prefixed = await readDiffText(root, h.treeId, cell, "checkpoints/diffs/cp-01_to_cp-02/combined.diff");
     assert.equal(prefixed.ok, true);
     assert.equal(prefixed.text, bare.text);
-
-    const transcript = await readTranscriptText(root, h.treeId, cell);
-    assert.equal(transcript.ok, true);
-    assert.ok(transcript.text.includes("## 1. User"));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("HISTORY: routes/tree.mjs wires the four routes, the import, and sendText", () => {
+test("HISTORY: routes/tree.mjs wires the three routes, the import, and sendText", () => {
   // server.mjs calls listen() at import, so the wiring is pinned by source
   // text — the same deliberate trade the GUARD section makes. Since LI-14
   // phase 2 the history routes live in control/routes/tree.mjs, one directory
   // down from the modules they import, so the needles carry the ../ prefix.
+  // Three, not four: `GET /api/history/transcript` was removed with the
+  // chaining machinery — a transcript's body is no longer served by any route.
   const TREE_ROUTES_SRC = readFileSync(join(HERE, "routes", "tree.mjs"), "utf8");
   for (const needle of [
     '"/api/history"',
     '"/api/history/checkpoints"',
     '"/api/history/diff"',
-    '"/api/history/transcript"',
     'from "../history.mjs"',
     'from "../lib/http.mjs"',
   ]) {
     assert.ok(TREE_ROUTES_SRC.includes(needle), `routes/tree.mjs no longer contains ${needle}`);
   }
+  assert.ok(
+    !TREE_ROUTES_SRC.includes('"/api/history/transcript"'),
+    "the transcript route is back — nothing reads a transcript body any more",
+  );
   // sendText's DEFINITION moved to lib/http.mjs (LI-14 phase 1); the import
   // needle above is what wires it into the routes this test pins.
   const httpSrc = readFileSync(join(HERE, "lib", "http.mjs"), "utf8");

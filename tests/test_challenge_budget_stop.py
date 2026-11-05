@@ -50,7 +50,6 @@ def _make_runner(
     max_output_tokens: int | None = None,
     max_steps_per_attempt: int | None = None,
     output_price_per_1m: float | None = None,
-    mock: str | None = None,
     progress: Any = None,
 ) -> ChallengeRunner:
     return ChallengeRunner(
@@ -61,7 +60,6 @@ def _make_runner(
         max_output_tokens=max_output_tokens,
         max_steps_per_attempt=max_steps_per_attempt,
         output_price_per_1m=output_price_per_1m,
-        mock=mock,
         progress=progress,
     )
 

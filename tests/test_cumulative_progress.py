@@ -19,7 +19,6 @@ from harness.adapters.challenge import (
 from harness.adapters.docker_worker import ImageFingerprint
 from harness.cumulative.convergence import (
     CONVERGENCE_SCHEMA_VERSION,
-    ConvergencePoint,
     build_convergence_trend,
 )
 from harness.cumulative.manifest import CumulativeManifest, roster_hash
@@ -698,67 +697,6 @@ def test_build_convergence_trend_resolved_total_none_when_all_missing() -> None:
 
     assert trend.sessions_completed == 2
     assert trend.resolved_total is None
-
-
-def test_snapshot_honesty_fields_lockstep_and_reach_the_convergence_point() -> None:
-    """WO-SNAP-03 half A: the declared honesty fields are schema+plumbing.
-
-    Defaults declare an unseeded cell; ``SessionRecord.to_dict``/``from_dict``
-    preserve the fields in lockstep (and a pre-field checkpoint reads as
-    unseeded defaults); ``ConvergencePoint.from_session_record`` reads them
-    from the record's TOP-LEVEL attributes, never from ``record.progress``.
-    """
-    unseeded = _session_record(0, progress=None)
-    assert unseeded.seeded_from_snapshot is None
-    assert unseeded.build_phase_ran is False
-    assert unseeded.dev_mode is False
-
-    seeded = SessionRecord(
-        sequence_index=1,
-        model="openrouter/model-a",
-        provider_pin="openrouter",
-        memory_mode="on",
-        phase_group="on",
-        phase="DONE",
-        session_id="sess-seeded",
-        session_fp=SessionRecord.session_fp_of("sess-seeded"),
-        progress=ProgressVector(full_green=True, resolved_count=1).to_dict(),
-        seeded_from_snapshot="snap-abc123",
-        build_phase_ran=False,
-        dev_mode=False,
-    )
-
-    restored = SessionRecord.from_dict(seeded.to_dict())
-    assert restored.seeded_from_snapshot == "snap-abc123"
-    assert restored.build_phase_ran is False
-    assert restored.dev_mode is False
-
-    # A checkpoint written before the fields existed reads as unseeded defaults.
-    legacy_payload = seeded.to_dict()
-    for key in (
-        "seeded_from_snapshot",
-        "build_phase_ran",
-        "dev_mode",
-    ):
-        del legacy_payload[key]
-    legacy = SessionRecord.from_dict(legacy_payload)
-    assert legacy.seeded_from_snapshot is None
-    assert legacy.build_phase_ran is False
-    assert legacy.dev_mode is False
-
-    point = ConvergencePoint.from_session_record(seeded)
-    assert point is not None
-    assert point.seeded_from_snapshot == "snap-abc123"
-    assert point.build_phase_ran is False
-    assert point.dev_mode is False
-
-    unseeded_point = ConvergencePoint.from_session_record(
-        _session_record(2, progress=ProgressVector(full_green=False).to_dict())
-    )
-    assert unseeded_point is not None
-    assert unseeded_point.seeded_from_snapshot is None
-    assert unseeded_point.build_phase_ran is False
-    assert unseeded_point.dev_mode is False
 
 
 def test_manifest_session_records_support_done_state_equivalent_convergence() -> None:

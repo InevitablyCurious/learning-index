@@ -11,7 +11,6 @@ import argparse
 import json
 import logging
 import os
-import sys
 import uuid
 from pathlib import Path
 from typing import Any, Callable
@@ -23,7 +22,6 @@ from harness.process_reaper import (
     ProcessReaper,
     run_reaper_unconditional,
 )
-from harness.snapshot import SnapshotError
 
 # Re-imported INTO this namespace so the conductor functions below resolve their
 # bare-name calls here — which is what makes ``monkeypatch.setattr(run_cumulative,
@@ -99,19 +97,7 @@ def _handle_run(args: argparse.Namespace) -> int:
             f"--mode {mode_arg} requested but current cell is memory_mode={session.memory_mode}"
         )
 
-    try:
-        result = context.sequencer.step_until_done()
-    except SnapshotError as exc:
-        # WO-SNAP-04: an operator-facing refusal, not a bug. A refused seed
-        # snapshot (absent, unreadable, model mismatch) ABORTS the run — it
-        # never falls back to a scaffold build — and the operator gets one
-        # clean line on stderr instead of a traceback. (Corpus-provenance
-        # drift is not a refusal: D-SNAP-DEVMODE-EXCEPTIONS demoted it to a
-        # reported warning.)
-        # Exit 2 distinguishes the clean refusal from a crash (1). The
-        # reaper/predicate/retention finally in main() runs on this path too.
-        print(f"SEED SNAPSHOT REFUSED: {exc}", file=sys.stderr)
-        return 2
+    result = context.sequencer.step_until_done()
     # step_until_done returns status:done (with convergence) or
     # status:halted_on_gate (measurement gate descriptor); gate failures
     # raise. Print the descriptor as-is.
@@ -241,24 +227,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
             "index out of range for session_records fails loudly. Omit for "
             "the default behaviour: read current_index, advance after the "
             "session."
-        ),
-    )
-    parser.add_argument(
-        "--seed-snapshot",
-        dest="seed_snapshot",
-        default=None,
-        help=(
-            "DEV-MODE seeding flag: start every cell from the captured "
-            "snapshot <id> (under <runs>/snapshots/, runs root resolved via "
-            "BENCH_RUNS_DIR else the repo's runs/) instead of the task "
-            "scaffold, skipping the chunked build. The snapshot must have "
-            "been authored by this run's model; a model mismatch (or an "
-            "absent or unreadable snapshot) refuses the run outright (exit 2, "
-            "'SEED SNAPSHOT REFUSED') and never falls back to a scaffold "
-            "build. Corpus-identity drift does NOT refuse: the seed proceeds "
-            "and the drift is reported as a warning. Seeded cells are "
-            "recorded with dev_mode=true and are not comparable to unseeded "
-            "floors."
         ),
     )
     parser.add_argument(

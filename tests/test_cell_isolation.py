@@ -12,7 +12,6 @@ import pytest
 from harness.cell_isolation import (
     CellIsolationError,
     assert_clean_worktree,
-    assert_seeded_from_snapshot,
     docker_residue,
     worktree_drift,
 )
@@ -184,68 +183,3 @@ def test_agents_md_content_is_the_harness_business_not_the_scaffolds(
     worktree = _seeded(tmp_path, scaffold)
     (worktree / "AGENTS.md").write_text("# totally different notes\n", encoding="utf-8")
     assert_clean_worktree(worktree=worktree, scaffold=scaffold)  # must not raise
-
-
-def _snapshot_tree(root: Path) -> Path:
-    """A captured snapshot's ``tree/``: the slate one cell DECLARED it started
-    from. ``.git``-free and ``AGENTS.md``-free by construction, like the real
-    thing (``SNAPSHOT_EXCLUDED`` in snapshot.py)."""
-    t = root / "snapshot" / "tree"
-    (t / "src").mkdir(parents=True)
-    (t / "src" / "game.ts").write_text(
-        'throw new Error("not implemented")\n', encoding="utf-8"
-    )
-    (t / "package.json").write_text("{}\n", encoding="utf-8")
-    return t
-
-
-def test_a_worktree_seeded_from_the_declared_snapshot_passes(tmp_path: Path) -> None:
-    """Clean seed: the snapshot tree's files byte-for-byte + the harness's
-    AGENTS.md, which HARNESS_SEEDED accounts for."""
-    snapshot_tree = _snapshot_tree(tmp_path)
-    worktree = _seeded(tmp_path, snapshot_tree)
-    assert_seeded_from_snapshot(worktree=worktree, snapshot_tree=snapshot_tree)
-
-
-def test_a_worktree_that_drifts_from_the_declared_snapshot_refuses_the_launch(
-    tmp_path: Path,
-) -> None:
-    """The check is SWAPPED to the snapshot tree, never bypassed: a file no
-    snapshot declared is inherited work exactly as it is against a scaffold."""
-    snapshot_tree = _snapshot_tree(tmp_path)
-    worktree = _seeded(tmp_path, snapshot_tree)
-    (worktree / "src" / "ai.ts").write_text(
-        "export function evaluate(){return 1}\n", encoding="utf-8"
-    )
-
-    with pytest.raises(CellIsolationError) as err:
-        assert_seeded_from_snapshot(worktree=worktree, snapshot_tree=snapshot_tree)
-
-    msg = str(err.value)
-    assert "declared snapshot tree" in msg
-    assert str(snapshot_tree) in msg
-    assert "src/ai.ts" in msg
-    assert "UNEXPECTED" in msg
-    assert "inherited work" in msg
-    assert "Nothing was launched" in msg
-
-
-def test_drift_against_the_snapshot_tree_reports_all_three_directions(
-    tmp_path: Path,
-) -> None:
-    """Same machinery, same sets: ``worktree_drift`` against the snapshot tree
-    reports unexpected, missing and modified separately, content-hashed."""
-    snapshot_tree = _snapshot_tree(tmp_path)
-    worktree = _seeded(tmp_path, snapshot_tree)
-    (worktree / "leftover.ts").write_text("x", encoding="utf-8")
-    (worktree / "package.json").unlink()
-    (worktree / "src" / "game.ts").write_text(
-        "export function startingPoints(){ return [] }\n", encoding="utf-8"
-    )
-
-    unexpected, missing, modified = worktree_drift(
-        worktree=worktree, scaffold=snapshot_tree
-    )
-    assert unexpected == {"leftover.ts"}
-    assert missing == {"package.json"}
-    assert modified == {"src/game.ts"}

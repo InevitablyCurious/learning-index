@@ -61,7 +61,6 @@ def test_only_a_memory_on_cell_lists_the_baked_plugin(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="openrouter/anthropic/claude-opus-4.8",
-        mock="scaffold",
         memory_mode=memory_mode,
     )
     runner._baked_plugin = BakedPlugin(entry=ENTRY, identity="memory-plugin@1.0.0")
@@ -115,7 +114,7 @@ def test_both_arms_start_from_the_same_worktree(
 ) -> None:
     """Memory is switched on in the cell's config, never by files the model sees:
     no marker, predicate or runner is added for one arm, and a stale ``.okp/``
-    from an old seed snapshot is removed in both."""
+    from a previous cell is removed in both."""
     worktree = tmp_path / "worktree"
     (worktree / ".okp").mkdir(parents=True)
     (worktree / ".okp" / "org.json").write_text("{}")
@@ -124,7 +123,6 @@ def test_both_arms_start_from_the_same_worktree(
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="local/qwen",
-        mock="scaffold",
         memory_mode=memory_mode,
     )
 

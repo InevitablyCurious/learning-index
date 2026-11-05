@@ -1,6 +1,6 @@
-// DEV MODE — the control plane's own mode, which gates capabilities for
-// iterating on the benchmark (first: seeding a cell from a build snapshot, which
-// is never a scorable floor). Server state, never the browser's claim.
+// DEV MODE — the control plane's own mode, which gates the one capability that
+// pauses a run for a human: the pause after every grade (and once at the end),
+// the Dev-mode pause. Server state, never the browser's claim.
 //
 // Precedence: environment → state file → default OFF. A pinned environment makes
 // the mode unsettable (`settable` is published and the write refuses, rather

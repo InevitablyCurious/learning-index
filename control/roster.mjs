@@ -20,9 +20,6 @@ export const RETIRED_ALIASES = {
     + "run on it measures an unrecorded subject. Benchmark a named bench alias instead.",
 };
 
-/** Context options offered by the UI. */
-export const CONTEXT_CHOICES = [65536, 131072, 262144];
-
 async function getJson(url, timeoutMs = 2000) {
   try {
     const res = await fetch(url, {
@@ -128,7 +125,6 @@ export async function readRoster({ proxyUrl, runtimeUrl }) {
     ok: proxyRes.ok,
     models,
     bench_models: models.filter((m) => m.bench_eligible),
-    context_choices: CONTEXT_CHOICES,
     proxy_ok: proxyRes.ok,
     runtime_ok: runtimeRes.ok,
     // Verbatim, for the control region.

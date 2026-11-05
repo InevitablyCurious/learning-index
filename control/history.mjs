@@ -213,19 +213,3 @@ export async function readDiffText(runsRoot, benchmarkId, cell, relPath) {
     return { ok: false, code: "not_found", reason: "diff not found", status: 404 };
   }
 }
-
-/** The cell's verbatim transcript; absence is a 404, never a substitute. */
-export async function readTranscriptText(runsRoot, benchmarkId, cell) {
-  const cellDir = resolveCellDir(runsRoot, benchmarkId, cell);
-  if (cellDir === null) return INVALID_RUN;
-  const transcriptPath = join(cellDir, "transcript.md");
-  const st = await statOrNull(transcriptPath);
-  if (st === null || !st.isFile()) {
-    return { ok: false, code: "not_found", reason: "transcript not found", status: 404 };
-  }
-  try {
-    return { ok: true, text: await readFile(transcriptPath, "utf8") };
-  } catch {
-    return { ok: false, code: "not_found", reason: "transcript not found", status: 404 };
-  }
-}

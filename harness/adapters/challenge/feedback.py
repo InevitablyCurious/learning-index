@@ -17,11 +17,6 @@ _build_pass_verdict became a @classmethod in the move (orchestrator decision,
 WO-LI15-I2B): its two sibling calls were hardcoded to the ChallengeRunner
 global, which does not exist in this module; cls. resolves them through the
 MRO. No subclass of ChallengeRunner exists, so behavior is identical.
-
-THE LATE-BOUND compute_grader_hash SEAM. tests/test_snapshot_capture.py
-patches the PACKAGE attr (challenge_mod.compute_grader_hash), so
-_load_cached_grade reads it once per call via a local binding instead of
-importing it -- the same pattern as _HOLD_UI_PORT in hold_ui.py.
 """
 
 from __future__ import annotations
@@ -41,7 +36,6 @@ from .constants import (
     _FEEDBACK_HEADER_REPEAT,
     _FIXED_OPENER_MANY,
     _FIXED_OPENER_ONE,
-    _GRADER_DIR,
     _PACK,
     _SPEC,
     _PASS_VERDICT_MAX_LISTED,
@@ -1069,48 +1063,3 @@ class FeedbackMixin:
         lines += ["", _CONSTRAINTS]
 
         return "\n".join(lines)
-
-    def _load_cached_grade(self, snapshot_dir: Path) -> dict[str, Any] | None:
-        """Return the stored attempt-1 grade iff the grader is byte-identical.
-
-        DEV-MODE GRADE CACHE, NOT CERTIFICATION. A seeded cell re-runs the
-        gates over a tree copied from a prior cell; when the gate code has not
-        changed since that cell graded, the outcome is already known — the
-        snapshot carries the full attempt-1 grade beside its tree. Reuse it
-        ONLY when the stored ``grader_hash`` equals the running gates dir's
-        hash. Any miss — absent files, unparseable JSON, absent or mismatched
-        hash, non-dict grade — returns ``None`` silently and the cell grades
-        for real, exactly as before the cache existed. Never raises.
-        """
-        import harness.adapters.challenge as _pkg
-
-        compute_grader_hash = (
-            _pkg.compute_grader_hash
-        )  # late-bound: tests patch the package attr; read once per call
-        try:
-            current = compute_grader_hash(_GRADER_DIR)
-            stored = json.loads(
-                (snapshot_dir / "snapshot.json").read_text(encoding="utf-8")
-            ).get("grader_hash")
-            grade = json.loads(
-                (snapshot_dir / "grade-report.json").read_text(encoding="utf-8")
-            )
-            if stored is not None and stored == current and isinstance(grade, dict):
-                live = getattr(self, "_live", None)
-                if live is not None:
-                    live.notice(
-                        "harness",
-                        "grade_cache_hit",
-                        level="info",
-                        cell_seq=getattr(self, "_cell_seq", None),
-                        session_id=self._cell_session_id,
-                        detail={
-                            "snapshot_id": snapshot_dir.name,
-                            "grader_hash_matched": True,
-                        },
-                    )
-                return grade
-            return None
-        except Exception:
-            # An unreadable cache is a miss, not an error: grade for real.
-            return None

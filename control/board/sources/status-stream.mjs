@@ -1,70 +1,24 @@
-// SOURCE: status-stream — the active run's manifest.status.jsonl, the
-// authoritative per-attempt record (gates, arm, verdict). Records:
-// `attempt` (memory_mode, failed_gates, verdict, progress) and `turn_terminal`
-// (per anomalous turn). Appended at attempt end (~30 min), so it is not the live
-// pulse. It does not build the gate wall (that is GET /api/wall); failed_gates is
-// used here for resolved gates and the arm delta. Token totals are NOT read from
-// these rows — an attempt's counters are that attempt's — they come from each
-// cell's cost stamp (`cost.json` `phases.total`) below.
+// SOURCE: status-stream — ONE CELL's manifest.status.jsonl, the authoritative
+// per-attempt record (arm, verdict, progress). Records: `attempt`
+// (memory_mode, failed_gates, verdict, progress) and `turn_terminal` (per
+// anomalous turn). Appended at attempt end (~30 min), so it is not the live
+// pulse. It does not build the gate wall (that is GET /api/wall). Token totals
+// are NOT read from these rows — an attempt's counters are that attempt's —
+// they come from each cell's cost stamp (`cost.json` `phases.total`) below.
+//
+// Per cell only. The board-wide reads this source used to publish (a per-arm
+// delta and a run history) had no renderer, and are gone.
 
-import { parseGate, int, str, median, finalizeDelta, cellValidity } from "../contract.mjs";
 import { join } from "node:path";
-import { readTail, parseJsonl, activeRun, statOrNull } from "./_runtime.mjs";
+import { int, str } from "../contract.mjs";
+import { readTail, parseJsonl, statOrNull } from "./_runtime.mjs";
 import { readCellCost } from "../../baselines.mjs";
 
 export const id = "status-stream";
-export const fields = ["arm_delta", "history"];
 /** What readCell adds to one cell's view. */
 export const cellFields = ["run.arm", "run.attempt", "run.turns", "run.tokens", "honesty"];
 export function describe() {
   return "append-only per-attempt status stream (RC-5) — authoritative for gates, arm, verdict";
-}
-
-export async function read(ctx) {
-  // One run only (activeRun), never a fold across run folders.
-  const run = await activeRun(ctx.runsRoot);
-  if (!run?.statusPath) {
-    return {
-      ok: false,
-      reason: "no manifest.status.jsonl yet — appended at attempt end (~30 min)",
-    };
-  }
-
-  const records = parseJsonl(await readTail(run.statusPath));
-  const cells = cellsFromRecords(records, run.name);
-  if (!cells.length) {
-    return { ok: false, reason: "status stream present but carries no attempt records" };
-  }
-  await attachCostStamp(cells, run.dir);
-
-  cells.sort((a, b) => (b.last_seen ?? 0) - (a.last_seen ?? 0));
-
-  const arm_delta = buildDelta(cells);
-  const history = cells
-    .filter((c) => c.complete)
-    .map((c) => ({
-      cell_label: c.cell_label,
-      arm: c.arm,
-      started_at: null,
-      duration_s: c.wall_seconds,
-      segments: segmentsFor(c),
-      triggers: [],
-      gates_resolved: c.resolved_gates.length,
-      verdict: c.verdict,
-    }));
-
-  return {
-    ok: true,
-    provenance: {
-      path: run.statusPath,
-      mtime: run.statusStat?.mtimeMs ?? null,
-      bytes: run.statusStat?.size ?? null,
-      run: run.name,
-    },
-    // Across the campaign's cells on purpose: the OFF/ON delta and the history
-    // are about the batch, not one cell.
-    patch: { arm_delta, history },
-  };
 }
 
 /**
@@ -133,8 +87,9 @@ function nullSum(cells, key) {
 }
 
 /**
- * Fold a stream's records into per-cell state by sequence_index, gate history
- * ordered by attempt.
+ * Fold a stream's records into per-cell state by sequence_index. An `attempt`
+ * record that states an attempt number IS that attempt — the number is a fact
+ * about the cell, not a property of the gate list beside it.
  */
 function cellsFromRecords(records, dirName) {
   const by = new Map();
@@ -149,8 +104,6 @@ function cellsFromRecords(records, dirName) {
         arm: null,
         org_id: null,
         attempt: null,
-        attempts: new Map(), // attempt -> Set(gate id)
-        gateMeta: new Map(), // gate id -> parsed
         verdict: null,
         complete: false,
         turns: null,
@@ -173,10 +126,7 @@ function cellsFromRecords(records, dirName) {
         served_failed: null,
         problems_before: null,
         problems_after: null,
-        // The harness's RUNBOOK 5.10 verdict, attached from cost.json.
-        void_instrument: false,
         last_seen: 0,
-        resolved_gates: [],
       });
     }
     const c = by.get(key);
@@ -190,27 +140,12 @@ function cellsFromRecords(records, dirName) {
       continue;
     }
 
-    // Only `attempt` records (or legacy ones with no type) carry gate/progress
+    // Only `attempt` records (or legacy ones with no type) carry progress
     // state; other types are skipped.
     if (r.type !== undefined && r.type !== "attempt") continue;
-    const gates = Array.isArray(r.failed_gates)
-      ? r.failed_gates
-      : Array.isArray(r.progress?.failed_gates)
-        ? r.progress.failed_gates
-        : null;
 
     const attempt = int(r.attempt);
-    if (attempt !== null && gates) {
-      const set = new Set();
-      for (const raw of gates) {
-        const g = parseGate(raw);
-        if (!g) continue;
-        set.add(g.id);
-        if (!c.gateMeta.has(g.id)) c.gateMeta.set(g.id, g);
-      }
-      c.attempts.set(attempt, set);
-      c.attempt = Math.max(c.attempt ?? 0, attempt);
-    }
+    if (attempt !== null) c.attempt = Math.max(c.attempt ?? 0, attempt);
 
     c.arm = str(r.memory_mode) ?? c.arm;
     c.org_id = str(r.org_id) ?? c.org_id;
@@ -236,22 +171,13 @@ function cellsFromRecords(records, dirName) {
     c.last_seen += 1;
   }
 
-  for (const c of by.values()) c.resolved_gates = resolvedGates(c);
   return [...by.values()];
 }
 
 /**
- * Attach what a cell's own cost stamp holds — both its RUNBOOK 5.10 verdict and
- * its token totals — in ONE read per cell.
+ * Attach the cell's own token totals from its cost stamp, in ONE read per cell.
  *
- * The verdict: cost.json `void.is_void` (harness/cumulative/run_artifacts.py
- * cell_void, written by scripts/run_cumulative/runner.py beside
- * fingerprint.json) is the single truth. Re-deriving it from the status-stream
- * signal fields here was a duplicate of that rule and had already drifted from
- * it (it missed instrument_fault and observation_lost_turns). A cell with no
- * stamp is pre-standard or still running — not void.
- *
- * The tokens: `phases.total` is the only place all five kinds exist, with
+ * `phases.total` is the only place all five kinds exist, with
  * `output_tokens` generation-only and `reasoning_tokens` beside it. A status
  * row's `work_*` counters are per ATTEMPT, phase-scoped — reading them per cell
  * by last-write-wins reported the last attempt as the whole cell. An absent key
@@ -265,7 +191,6 @@ async function attachCostStamp(cells, runDir) {
       `cell-${String(c.seq).padStart(4, "0")}`,
     );
     const cost = await readCellCost(cellDir);
-    c.void_instrument = cost?.void?.is_void === true;
     const total = cost?.phases?.total ?? null;
     c.input_tokens = int(total?.input_tokens);
     c.output_tokens = int(total?.output_tokens);
@@ -274,89 +199,4 @@ async function attachCostStamp(cells, runDir) {
     c.cache_write_tokens = int(total?.cache_write_tokens);
   }
   return cells;
-}
-
-/**
- * Gates red in an earlier attempt and absent in the latest — the only
- * defensible "resolved" from this stream.
- */
-function resolvedGates(cell) {
-  const attempts = [...cell.attempts.keys()].sort((a, b) => a - b);
-  if (attempts.length < 2) return [];
-  const first = cell.attempts.get(attempts[0]);
-  const last = cell.attempts.get(attempts[attempts.length - 1]);
-  return [...first].filter((g) => !last.has(g));
-}
-
-/**
- * Per-arm resolution (resolved / ever red) over scored cells only
- * (cellValidity); excluded cells are counted, never silently dropped. An
- * unscored cell would add a guaranteed 0% and fake lift for the memory arm.
- */
-function buildDelta(cells) {
-  const build = (arm) => {
-    const observed = cells.filter((c) => c.arm === arm && c.attempts.size);
-    const excluded = { total: 0, void_instrument: 0, resolution_unmeasurable: 0 };
-    const mine = [];
-    for (const c of observed) {
-      const v = cellValidity(c);
-      if (v.scored) {
-        mine.push(c);
-        continue;
-      }
-      excluded.total += 1;
-      excluded[v.reason] += 1;
-    }
-
-    if (!mine.length) {
-      return {
-        cells: 0,
-        gates_resolved: null,
-        gates_total: null,
-        resolution_rate: null,
-        median_turns_to_green: null,
-        excluded,
-      };
-    }
-    let resolved = 0;
-    let total = 0;
-    for (const c of mine) {
-      const attempts = [...c.attempts.keys()].sort((a, b) => a - b);
-      const everRed = new Set();
-      for (const a of attempts) for (const g of c.attempts.get(a)) everRed.add(g);
-      resolved += c.resolved_gates.length;
-      total += everRed.size;
-    }
-    return {
-      cells: mine.length,
-      gates_resolved: resolved,
-      gates_total: total,
-      resolution_rate: total > 0 ? resolved / total : null,
-      median_turns_to_green: median(mine.filter((c) => c.verdict === "PASS").map((c) => c.turns)),
-      excluded,
-    };
-  };
-
-  return finalizeDelta({
-    sufficient: false,
-    min_cells_per_arm: 3,
-    a: build("on"),
-    b: build("off"),
-    delta: null,
-    ci: null,
-    statement: null,
-    note: "gate-level results are clustered within cell — 68 gates from one cell are not 68 independent samples. no CI over gate counts.",
-  });
-}
-
-/** Build phase vs error phase. */
-function segmentsFor(cell) {
-  const total = cell.wall_seconds ?? 0;
-  if (!total) return [];
-  const attempts = [...cell.attempts.keys()].length || 1;
-  const build = total / attempts;
-  return [
-    { kind: "build", from_s: 0, to_s: Math.round(build) },
-    { kind: "error", from_s: Math.round(build), to_s: total },
-  ];
 }

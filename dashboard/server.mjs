@@ -53,7 +53,6 @@ const STATIC = {
   "/panels/routers.js": { file: "panels/routers.js", type: "text/javascript; charset=utf-8" },
   "/panels/liveview.js": { file: "panels/liveview.js", type: "text/javascript; charset=utf-8" },
   "/panels/ledger.js": { file: "panels/ledger.js", type: "text/javascript; charset=utf-8" },
-  "/panels/batch.js": { file: "panels/batch.js", type: "text/javascript; charset=utf-8" },
   "/panels/create.js": { file: "panels/create.js", type: "text/javascript; charset=utf-8" },
   "/panels/facet.js": { file: "panels/facet.js", type: "text/javascript; charset=utf-8" },
   "/panels/live.js": { file: "panels/live.js", type: "text/javascript; charset=utf-8" },
@@ -61,7 +60,6 @@ const STATIC = {
   "/panels/live/phases.js": { file: "panels/live/phases.js", type: "text/javascript; charset=utf-8" },
   "/panels/live/history.js": { file: "panels/live/history.js", type: "text/javascript; charset=utf-8" },
   "/panels/live/backend.js": { file: "panels/live/backend.js", type: "text/javascript; charset=utf-8" },
-  "/panels/continuous.js": { file: "panels/continuous.js", type: "text/javascript; charset=utf-8" },
   "/panels/cells.js": { file: "panels/cells.js", type: "text/javascript; charset=utf-8" },
   "/panels/tui.js": { file: "panels/tui.js", type: "text/javascript; charset=utf-8" },
   "/panels/wall.js": { file: "panels/wall.js", type: "text/javascript; charset=utf-8" },
@@ -79,7 +77,6 @@ const STATIC = {
   "/panels/challenge.js": { file: "panels/challenge.js", type: "text/javascript; charset=utf-8" },
   "/panels/switches.js": { file: "panels/switches.js", type: "text/javascript; charset=utf-8" },
   "/panels/tick.js": { file: "panels/tick.js", type: "text/javascript; charset=utf-8" },
-  "/panels/snapshot.js": { file: "panels/snapshot.js", type: "text/javascript; charset=utf-8" },
 
   // ── VENDORED, NOT INSTALLED ───────────────────────────────────────────────
   // xterm.js 6.0.0 (MIT, zero runtime dependencies), checked in as the PREBUILT

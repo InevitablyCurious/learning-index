@@ -557,10 +557,6 @@ class SessionRecord:
     complete_gate: bool = False
     started_at: str | None = None
     updated_at: str | None = None
-    seeded_from_snapshot: str | None = None
-    build_phase_ran: bool = False
-    dev_mode: bool = False
-    produced_snapshot_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -586,10 +582,6 @@ class SessionRecord:
             "complete_gate": self.complete_gate,
             "started_at": self.started_at,
             "updated_at": self.updated_at,
-            "seeded_from_snapshot": self.seeded_from_snapshot,
-            "build_phase_ran": self.build_phase_ran,
-            "dev_mode": self.dev_mode,
-            "produced_snapshot_id": self.produced_snapshot_id,
         }
 
     @classmethod
@@ -628,10 +620,6 @@ class SessionRecord:
             complete_gate=bool(d.get("complete_gate", False)),
             started_at=d.get("started_at"),
             updated_at=d.get("updated_at"),
-            seeded_from_snapshot=d.get("seeded_from_snapshot"),
-            build_phase_ran=bool(d.get("build_phase_ran", False)),
-            dev_mode=bool(d.get("dev_mode", False)),
-            produced_snapshot_id=d.get("produced_snapshot_id"),
         )
 
     def set_phase(self, phase: SessionPhase) -> None:

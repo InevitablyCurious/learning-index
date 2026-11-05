@@ -99,7 +99,7 @@ async function checkTarget(browser, base) {
   }
 
   // Tabs are looked up by name each time: a live board redraws between clicks.
-  for (const attr of ["data-curve-tab", "data-feedtab"]) {
+  for (const attr of ["data-feedtab"]) {
     const names = await page.locator(`[${attr}]`).evaluateAll((els, a) => els.map((e) => e.getAttribute(a)), attr);
     for (const n of names) await click(`[${attr}="${n}"]`, `the ${n} tab`);
   }
@@ -124,13 +124,6 @@ async function checkTarget(browser, base) {
     await click("[data-create-next]", "the next button (kind)");
     await click("[data-create-model]", "a model to pick");
     await click("[data-create-next]", "the next button (model)");
-    // In dev mode the next step offers build snapshots — judged from what the
-    // top bar says, never from whether the page happened to ask.
-    if (await page.locator(".devmode-on").count()) {
-      expectFetched("/api/snapshots", "the snapshot step");
-      if (!(await shows("[data-seed-pick]"))) problems.push("the snapshot step shows no choices");
-      await click("[data-create-next]", "the next button (snapshot)");
-    }
     expectFetched("/api/challenges", "the challenge step");
     if (!(await shows("[data-create-challenge]"))) problems.push("the challenge step lists no challenges");
     await page.keyboard.press("Escape");

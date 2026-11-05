@@ -307,7 +307,6 @@ class ChallengeCellResult:
     # surfaced to the run-manifest status stream so the prod dashboard can
     # join exported session-DB rows to bench cells.
     session_title: str | None = None
-    produced_snapshot_id: str | None = None
     # ── PER-PHASE COST CONTRACT ───────────────────────────────────────────
     # The totals above are cell-cumulative, which cannot answer the question
     # the benchmark actually cares about: how much of a cell's cost was

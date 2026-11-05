@@ -7,14 +7,13 @@ import { open, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
-  RESUME_UNSUPPORTED,
   confirmationToken,
   restatement,
   refuse,
 } from "../contract.mjs";
 import { readRoster } from "../roster.mjs";
 import { readRunState, confirmAlive, cellSessionId, cellServeUrl, readTail } from "../runstate.mjs";
-import { readHold, releaseHold } from "../hold.mjs";
+import { readHold } from "../hold.mjs";
 // Where a cell's measurement lands (one campaign per model), and the atomic
 // cursor that hands N concurrent cells distinct sequence indices.
 import { allocateSequenceIndex, campaignTargetFor } from "../campaign.mjs";
@@ -40,7 +39,6 @@ import { sendJson, readBody } from "../lib/http.mjs";
 import { validateStart } from "../lib/validate.mjs";
 import { substrateRefreshInFlight } from "../tooljobs.mjs";
 import { stopAll } from "../lib/lifecycle.mjs";
-import { beginChain, endChain, readChain } from "../continuous.mjs";
 
 // The stop confirmation token, shared by preview and commit. Bound to EVERY
 // run in flight: a cell starting or ending, or a new pid/log, re-mints it, so a
@@ -99,12 +97,11 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous, pauseAfterGrade } = check;
+      const { model, arm, org, kind, cloud, compact, requireTodos, graderWorkerTarget, challenge, pauseAfterGrade } = check;
       sendJson(res, 200, {
         ok: true,
-        token: confirmationToken({ model, arm, org, context, kind, compact, snapshotId, continuous, pauseAfterGrade }),
-        restatement: restatement({ model, arm, org, context, kind, cloud, compact, continuous, pauseAfterGrade }),
-        continuous: continuous === true,
+        token: confirmationToken({ model, arm, org, kind, compact, pauseAfterGrade }),
+        restatement: restatement({ model, arm, org, kind, cloud, compact, pauseAfterGrade }),
         // The resolved compaction answer, so the frame shows what the token was
         // minted for.
         compact: compact === true,
@@ -173,7 +170,7 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, context, kind, cloud, compact, requireTodos, graderWorkerTarget, snapshotId, challenge, continuous, pauseAfterGrade } = check;
+      const { model, arm, org, kind, cloud, compact, requireTodos, graderWorkerTarget, challenge, pauseAfterGrade } = check;
 
       // Argv array, no shell — the SHARED argv, identical for every cell of
       // the batch except the per-cell --sequence-index spliced in below.
@@ -216,10 +213,7 @@ export const routes = [
       if (target.manifest_arg) argv.push("--manifest", target.manifest_arg);
       // `run` accepts only --mode, --proxy-base-url, --proxy-token-file; check new
       // flags against the subparser. Compaction is always passed explicitly (the
-      // harness has no default). The seed is a main-parser flag; validateStart already
-      // refused unseedable cases, and the harness re-checks (a snapshot can vanish
-      // between preview and start).
-      if (snapshotId) argv.push("--seed-snapshot", snapshotId);
+      // harness has no default).
 
       // The subcommand's position in the shared argv: each cell's
       // --sequence-index (also a main-parser flag) is spliced in just before
@@ -247,11 +241,56 @@ export const routes = [
       const sequenceManifest =
         target.manifest_arg ?? join(RUNS_ROOT, "cumulative", "manifest.json");
 
+      // ── THE ON ARM'S PLAN BAND ── the harness plans ONE schedule: the OFF
+      // baseline, then the ON band STARTING at the OFF slot count
+      // (harness/cumulative/ordering.py build_schedule builds the ON order with
+      // start_index=len(off_order)). So an ON cell exists only if its index
+      // lands inside that band, and the OFF prefix it must sit after is a fact
+      // about the campaign's RECORDED schedule — never this batch's own index,
+      // which is already past the end of it. The plan is re-derived from that
+      // prefix: the same off_replicates the baseline was created with, plus
+      // --on-budget to grow the band to cover this index. A non-positive budget
+      // plans no ON slot at all and the harness refuses the cell seconds after
+      // launch, so it is refused here instead, before anything is spawned.
+      let offBand = null;
+      if (arm === "on") {
+        try {
+          offBand = await recordedOffBand(sequenceManifest);
+        } catch (err) {
+          // Sizing the band from a blind 0 would plan an ON slot outside the
+          // recorded schedule; an unreadable manifest is refused, never guessed.
+          sendJson(res, 500, refuse(
+            "manifest_unreadable",
+            `cannot size the ON band: ${sequenceManifest} exists but cannot be read — ${err?.message ?? err}`,
+          ));
+          return;
+        }
+        if (offBand === null || offBand.off_slots < 1) {
+          sendJson(res, 409, refuse(
+            "no_baseline",
+            `this campaign has no OFF baseline yet, so a memory-ON cell has nothing to be ` +
+              `measured against and no ON band to be planned in — run a baseline on '${model}' first.`,
+            { manifest: sequenceManifest },
+          ));
+          return;
+        }
+      }
+
       // ── PRE-FLIGHT THE WHOLE BATCH ── N distinct indices and N open logs,
       // ALL before the first spawn. Any cell that cannot be prepared refuses
       // the whole batch and what was prepared is cleaned up: a half-launched
       // batch is worse than a refused one.
       const batch = [];
+      // A batch that never spawned leaves no trace: prepared-but-unused logs are
+      // ghosts the run state would read as live-by-default.
+      const discardBatch = async () => {
+        await Promise.all(batch.map(async (cell) => {
+          await cell.fh.close().catch(() => {});
+          for (const f of [cell.log_path, noticesPathFor(cell.log_path), baselinePathFor(cell.log_path)]) {
+            await unlink(f).catch(() => {});
+          }
+        }));
+      };
       try {
         for (let i = 0; i < concurrency; i += 1) {
           // The cursor is atomic (campaign.mjs): concurrent starts — this
@@ -282,18 +321,11 @@ export const routes = [
           // Written before the spawn, so a launch that dies at startup still
           // leaves a record that it was attempted.
           await notice(logPath, "run_queued", {
-            detail: { model: model ?? null, arm: arm ?? null, context: context ?? null },
+            detail: { model: model ?? null, arm: arm ?? null },
           });
         }
       } catch (err) {
-        // Nothing was spawned: prepared-but-unused logs are ghosts the run
-        // state would read as live-by-default, so the batch leaves no trace.
-        await Promise.all(batch.map(async (cell) => {
-          await cell.fh.close().catch(() => {});
-          for (const f of [cell.log_path, noticesPathFor(cell.log_path), baselinePathFor(cell.log_path)]) {
-            await unlink(f).catch(() => {});
-          }
-        }));
+        await discardBatch();
         sendJson(res, 500, refuse(
           "launcher_failed",
           `batch of ${concurrency} refused: cell ${batch.length + 1} could not be prepared — ${err?.message ?? err}`,
@@ -302,12 +334,28 @@ export const routes = [
         return;
       }
 
+      // N − off_slots + 1: index N sits N − off_slots slots into the ON band, so
+      // the band needs that many slots to contain it. Only the ON arm has a band
+      // to grow; the OFF arm's plan is unchanged.
+      const onBudget =
+        arm === "on" ? batch[batch.length - 1].sequence_index - offBand.off_slots + 1 : null;
+      if (arm === "on" && onBudget < 1) {
+        await discardBatch();
+        sendJson(res, 409, refuse(
+          "on_band_mismatch",
+          `allocated index ${batch[batch.length - 1].sequence_index} sits below this ` +
+            `campaign's OFF baseline (${offBand.off_slots} slots), so the ON band would not ` +
+            `contain it — the launch counter restarted below the recorded schedule. ` +
+            `Archive the campaign or start a fresh baseline.`,
+          { off_slot_count: offBand.off_slots, sequence_index: batch[batch.length - 1].sequence_index },
+        ));
+        return;
+      }
+
       // ── LAUNCH THE BATCH ── per cell: splice its index into the shared
       // argv, spawn detached, and take the ledger slot at spawn. The env base
       // is shared; only BENCH_NOTICES is per cell.
       const env = { ...process.env };
-      // Context goes through the environment; null = registry default.
-      if (context !== null) env.BENCH_WORKER_NUM_CTX = String(context);
       // Read by the harness at import; unset = its own default.
       if (challenge?.dir) env.BENCH_TASK_DIR = challenge.dir;
 
@@ -315,15 +363,22 @@ export const routes = [
         const cellArgv = [
           ...argv.slice(0, subcommandAt),
           "--sequence-index", String(cell.sequence_index),
-          // EVERY cell of the batch plans the SAME slots: the highest index
-          // this batch allocated, +1 — the campaign's accumulated OFF slot
-          // count. The harness GROWS the schedule to that length by APPENDING
-          // the missing slots (sequencer.py:138-174), so the highest allocated
-          // index is in range for every cell; the batch's own N would plan
-          // only N slots and every cell past them dies on
-          // "sequence_index N out of range". Sent on the OFF arm only: an ON
-          // cell is a single measurement against the floor, never a reshuffle.
-          ...(arm === "on" ? [] : ["--off-replicates", String(batch[batch.length - 1].sequence_index + 1)]),
+          // OFF: EVERY cell of the batch plans the SAME slots — the highest
+          // index this batch allocated, +1, which is the campaign's accumulated
+          // OFF slot count. The harness GROWS the schedule to that length by
+          // APPENDING the missing slots (sequencer.py:138-174), so the highest
+          // allocated index is in range for every cell; the batch's own N would
+          // plan only N slots and every cell past them dies on "sequence_index
+          // N out of range".
+          //
+          // ON: the baseline's own off_replicates (the band starts at the OFF
+          // slot count, and a different plan prefix would be schedule drift)
+          // PLUS the budget that grows the band to cover this batch's index —
+          // the flag the ON arm was missing, which left build_on_order at its
+          // default budget of 0 and refused every memory-ON cell.
+          ...(arm === "on"
+            ? ["--off-replicates", String(offBand.replicates), "--on-budget", String(onBudget)]
+            : ["--off-replicates", String(batch[batch.length - 1].sequence_index + 1)]),
           ...argv.slice(subcommandAt),
         ];
         // The harness writes run-scoped notices to the same file; `source` says
@@ -386,7 +441,6 @@ export const routes = [
           arm,
           kind,
           org,
-          context,
           manifest_arg: target.manifest_arg ?? null,
           pid: cell.pid,
           started_at: Date.now(),
@@ -447,57 +501,15 @@ export const routes = [
         return;
       }
 
-      // Continuous mode: this launch is the chain's first run (control/continuous.mjs
-      // starts every later one). Not recorded = it will not chain, and says so.
-      let chain = null;
-      if (continuous) {
-        try {
-          chain = await beginChain({
-            benchRoot: BENCH_ROOT,
-            payload,
-            link: {
-              run_id: runs[0].run_id,
-              run_dir: target.run_dir,
-              sequence_index: runs[0].sequence_index,
-              log_path: runs[0].log_path,
-              seeded_from: snapshotId ?? null,
-              started_at: Date.now(),
-            },
-          });
-        } catch (err) {
-          sendJson(res, 500, refuse(
-            "continuous_not_recorded",
-            `the run started (pid ${runs[0].pid ?? "?"}), but continuous mode could not be recorded, ` +
-              `so it will not chain — ${err?.message ?? err}`,
-            { runs, tree_error },
-          ));
-          return;
-        }
-      }
-
       sendJson(res, 200, {
         ok: true,
         runs,
-        ...(chain ? { continuous: chain } : {}),
         // null is healthy; non-null means these runs are filed outside the tree.
         tree_error,
         // The N=1 mirror: the dashboard's single-start consumer
         // (panels/create.js) reads pid/log_path off this response.
         ...(runs.length === 1 ? { pid: runs[0].pid, log_path: runs[0].log_path } : {}),
       });
-      return;
-    },
-  },
-
-  {
-    // ── POST /api/run/resume ── always refuses, with its reason (see
-    // RESUME_UNSUPPORTED).
-    method: "POST",
-    path: "/api/run/resume",
-    async handle(req, res, url) {
-      sendJson(res, 501, refuse("resume_unsupported", RESUME_UNSUPPORTED.reason, {
-        alternative: RESUME_UNSUPPORTED.alternative,
-      }));
       return;
     },
   },
@@ -566,19 +578,11 @@ export const routes = [
         );
         return;
       }
-      // Stopping the run stops continuous mode too, before the run's end can
-      // start the next one. Recorded with the operator as the reason.
-      const chainWasActive = (await readChain({ benchRoot: BENCH_ROOT }))?.active === true;
-      if (chainWasActive) {
-        await endChain({ benchRoot: BENCH_ROOT, code: "operator_stop", reason: "the operator stopped the run" });
-      }
       const done = await stopAll();
       const after = await readRunState({ runsRoot: RUNS_ROOT });
       sendJson(res, 200, {
         ok: true,
         stopped: true,
-        // Only when this stop ended a running chain.
-        ...(chainWasActive ? { continuous_ended: true } : {}),
         runs: done.runs,
         signalled: done.signalled,
         // From a re-read: "signal sent" is not "nothing is running".
@@ -684,30 +688,6 @@ export const routes = [
       return;
     },
   },
-
-  {
-    // ── POST /api/hold/release ── idempotent. Optional JSON body `{note}`: the
-    // harness journals the note with the release; it never reaches the model.
-    // A body that is not that shape is refused, so a note is never lost quietly.
-    method: "POST",
-    path: "/api/hold/release",
-    async handle(req, res, url) {
-      let body;
-      try {
-        body = JSON.parse((await readBody(req)) || "{}");
-      } catch {
-        sendJson(res, 400, { ok: false, code: "bad_body", reason: "the release body must be JSON: {\"note\"?: string}" });
-        return;
-      }
-      if (body?.note != null && typeof body.note !== "string") {
-        sendJson(res, 400, { ok: false, code: "bad_body", reason: "note must be a string" });
-        return;
-      }
-      const result = await releaseHold({ runsRoot: RUNS_ROOT, runDirs: await liveRunDirs(), note: body?.note ?? null });
-      sendJson(res, result.ok ? 200 : result.code === "note_too_long" ? 400 : 409, result);
-      return;
-    },
-  },
 ];
 
 /** The run directories (relative to RUNS_ROOT) of the runs in flight — the only runs a hold can belong to. */
@@ -716,8 +696,46 @@ async function liveRunDirs() {
   return (state.runs ?? []).filter((r) => r.running && r.run_dir).map((r) => r.run_dir);
 }
 
-/** The challenge this campaign started on (from the run manifest), or null. */
-async function pinnedChallengeFor(manifestArg) {
+/**
+ * The campaign's recorded OFF band, which is where the ON band starts: the
+ * harness plans the ON order from start_index=len(off_order)
+ * (harness/cumulative/ordering.py build_schedule). Returns
+ * `{ off_slots, replicates }`, or null when there is no manifest yet — a fresh
+ * campaign holds no baseline, and the caller refuses an ON cell on it.
+ *
+ * `replicates` is what the baseline was planned with: build_off_order emits
+ * `replicates` slots PER roster entry, so the recorded OFF count is
+ * roster × replicates. It must divide exactly; a prefix that does not is not an
+ * OFF baseline this launcher knows how to extend, and is refused rather than
+ * planned from a guess. A manifest that exists but cannot be read throws.
+ */
+async function recordedOffBand(manifestArg) {
+  let raw;
+  try {
+    raw = await readFile(manifestArg, "utf8");
+  } catch (err) {
+    if (err?.code === "ENOENT") return null;
+    throw err;
+  }
+  const manifest = JSON.parse(raw);
+  const schedule = Array.isArray(manifest?.schedule) ? manifest.schedule : [];
+  const offSlots = schedule.filter((s) => s?.memory_mode === "off").length;
+  if (offSlots < 1) return { off_slots: 0, replicates: null };
+
+  // The roster the schedule planned for. A manifest from which it is missing
+  // cannot be re-derived; the OFF count alone is the single-model case.
+  const rosterSize = Array.isArray(manifest?.roster) && manifest.roster.length
+    ? manifest.roster.length
+    : 1;
+  if (offSlots % rosterSize !== 0) {
+    throw new Error(
+      `${offSlots} recorded OFF slots do not divide into ${rosterSize} roster entries`,
+    );
+  }
+  return { off_slots: offSlots, replicates: offSlots / rosterSize };
+}
+
+/** The challenge this campaign started on (from the run manifest), or null. */async function pinnedChallengeFor(manifestArg) {
   if (!manifestArg) return null;
   try {
     const dir = manifestArg.slice(0, manifestArg.lastIndexOf("/"));

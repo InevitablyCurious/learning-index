@@ -1,7 +1,7 @@
 // CONTEXT EXHAUSTED on the BASELINES card. The harness stops a cell whose
 // session ran out of room (harness/context_budget.py) and records
 // terminal_reason "context_exhausted". A graded stop is a real floor with the
-// label once the operator selects it (a single run alone is not a baseline);
+// label — every completed, non-void OFF cell is a baseline, nothing to pick;
 // a stop during the build graded nothing and is not a floor.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -9,8 +9,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { readBaselines, collectOffCells, assembleBatchForCells } from "../baselines.mjs";
-import { selectRun, writeBatch } from "../batch.mjs";
+import { readBaselines } from "../baselines.mjs";
 import { writeCellFingerprint } from "./_shared.mjs";
 
 function campaign(records) {
@@ -32,14 +31,8 @@ test("CONTEXT EXHAUSTED: stopped after grading is a floor, labelled", async () =
       gate_totals: { pass: 99, fail: 18, error: 0, not_run: 0, total: 117 },
       progress: { turns: 200, total_tokens: 900, wall_seconds: 120 } },
   ]);
-  // The operator's pick makes the graded stop the floor (a single run alone is
-  // not a baseline any more).
-  const runDir = join(root, "cumulative-anthropic-claude-opus-5");
-  const cells = (await collectOffCells(root)).filter((c) => c.model === "anthropic/claude-opus-5");
-  const batch = await assembleBatchForCells({ runDir, cells });
-  selectRun(batch, 0);
-  await writeBatch(runDir, batch);
-
+  // A graded stop IS a baseline by itself: no selection step stands between
+  // the cell on disk and the floor the card renders.
   const idx = await readBaselines({ runsRoot: root, models: [] });
   const row = idx.list[0];
   assert.equal(row.state, "complete");

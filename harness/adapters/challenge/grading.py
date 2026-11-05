@@ -87,7 +87,7 @@ class GradingMixin:
         # It used to run here, on the host, with whatever was installed. Four
         # things differed from the container the candidate was BUILT in — Node,
         # Playwright, Chromium, and vitest (declared as a RANGE, so it could
-        # change itself on a reinstall) — and `compute_grader_hash` excludes
+        # change itself on a reinstall) — and the grader hash excludes
         # node_modules, so nothing recorded which toolchain produced a result.
         #
         # The corpus is frozen byte-for-byte and a cell aborts on a mismatch.

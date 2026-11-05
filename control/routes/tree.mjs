@@ -15,7 +15,7 @@ import {
 // Restore: listing, checking and putting back a backup (backups.mjs).
 import { listBackups, restoreBackup } from "../backups.mjs";
 import { readDevMode } from "../devmode.mjs";
-import { listRunCells, readCheckpointIndex, readDiffText, readTranscriptText } from "../history.mjs";
+import { listRunCells, readCheckpointIndex, readDiffText } from "../history.mjs";
 import { playStatus, startPlay, stopPlay } from "../play.mjs";
 import { deleteRun, planRunDelete } from "../rundelete.mjs";
 import { readRunState, cellDirForRun } from "../runstate.mjs";
@@ -279,23 +279,6 @@ export const routes = [
       }
       const r = await readDiffText(RUNS_ROOT, pair.benchmarkId, pair.cell, url.searchParams.get("path"));
       if (r.ok) sendText(res, 200, r.text, "text/plain; charset=utf-8");
-      else sendJson(res, r.status, { ok: false, code: r.code, reason: r.reason });
-      return;
-    },
-  },
-
-  {
-    // ── GET /api/history/transcript ── the cell's transcript.md, raw.
-    method: "GET",
-    path: "/api/history/transcript",
-    async handle(req, res, url) {
-      const pair = await historyCellPair(RUNS_ROOT, url.searchParams.get("run"), sequenceIndexParam(url));
-      if (!pair) {
-        sendJson(res, 400, refuse("invalid_run", NO_CELL_REASON));
-        return;
-      }
-      const r = await readTranscriptText(RUNS_ROOT, pair.benchmarkId, pair.cell);
-      if (r.ok) sendText(res, 200, r.text, "text/markdown; charset=utf-8");
       else sendJson(res, r.status, { ok: false, code: r.code, reason: r.reason });
       return;
     },

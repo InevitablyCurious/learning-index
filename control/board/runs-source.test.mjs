@@ -299,10 +299,10 @@ test("runs source: an archived run's status is its scorecard's verdict — score
 });
 
 test("runs source: a CURRENT run's status is its scorecard's too — never the BASELINES batch record", async () => {
-  // Run 1790258326 (seeded from a snapshot, context_exhausted, scored FAIL by
-  // the harness) read VOID while current and SCORED once archived: the current
-  // path read batch.json, which marks every seeded run not-scored because a
-  // seeded run is no floor. That is baseline eligibility, not measurement.
+  // Run 1790258326 (scored FAIL by the harness) read VOID while current and
+  // SCORED once archived: the current path read batch.json, which marks a run
+  // not-scored when it is no baseline floor. That is baseline eligibility, not
+  // measurement — the harness's scorecard is the measurement.
   const runsRoot = fixture();
   try {
     const campaign = join(runsRoot, CURRENT_RUN);
@@ -310,7 +310,7 @@ test("runs source: a CURRENT run's status is its scorecard's too — never the B
       join(campaign, "batch.json"),
       JSON.stringify({
         schema_version: 1, run_dir: CURRENT_RUN,
-        runs: [{ sequence_index: 0, problem_count: null, scored: false, void_reason: "seeded_from_snapshot" }],
+        runs: [{ sequence_index: 0, problem_count: null, scored: false, void_reason: "void_instrument" }],
         median: null,
       }),
     );

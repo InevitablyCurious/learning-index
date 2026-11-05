@@ -21,7 +21,6 @@ def test_settings_file_is_written_outside_the_worktree(tmp_path: Path) -> None:
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="openrouter/anthropic/claude-opus-4.8",
-        mock="scaffold",
     )
 
     runner._write_worker_permission_config(worktree=worktree)

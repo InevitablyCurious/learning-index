@@ -1,10 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// BUILD-CHUNKS VOID + SEEDED-CELL TESTS — split VERBATIM from
+// BUILD-CHUNKS FOLD + VOID-INSTRUMENT TESTS — split VERBATIM from
 // control/control.test.mjs (lines 3952–4306). Local helpers kept here:
-// CHUNKS_ATTEMPT_1, writeTwoAttemptRun, writeStampedRun, writeSeededRun.
+// CHUNKS_ATTEMPT_1, writeTwoAttemptRun, writeStampedRun.
 // MIGRATED (run-state contract): the two RUN STATE tests now enumerate from
 // durable launch RECORDS + a process scan (`aliveProbe` and log-file
 // enumeration are gone); everything after them is byte-identical.
+// The seeded-cell section is gone with snapshot seeding itself: no cell carries
+// `seeded_from_snapshot`, so there is no seeded fold to pin.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from "node:test";
@@ -14,11 +16,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { STALL_THRESHOLD_S } from "../contract.mjs";
-import { collectCells, collectOffCells, baselineFor, baselineId } from "../baselines.mjs";
-import { readBatch, selectRun, writeBatch } from "../batch.mjs";
+import { collectCells } from "../baselines.mjs";
 import { campaignDirName } from "../campaign.mjs";
 import { readRunState } from "../runstate.mjs";
-import { readModelsLedger } from "../models-ledger.mjs";
 import { writeCampaignCell, writeCellFingerprint, writeCellCost } from "./_shared.mjs";
 
 test("RUN STATE: a killed CLI-launched run does not block reset", async () => {
@@ -317,185 +317,3 @@ test("VOID-INSTRUMENT: a cell with NO cost.json is not void — pre-standard is 
     rmSync(root, { recursive: true, force: true });
   }
 });
-
-// ── WO-SNAP-03: A SEEDED CELL IS NEVER A FLOOR ─────────────────────────────
-//
-// `seeded_from_snapshot` is written TOP-LEVEL on the attempt record — a sibling
-// of `progress`, the same field-path trap as the truncation counters above. The
-// producer ships in WO-SNAP-04; until then only these tests synthesize it, and
-// the fold must already refuse it: a seeded cell skips the build, so its
-// turn/token totals sit on a different scale than the floor a Δ is measured
-// against. The property is bidirectional — seeded never scores, unseeded still
-// does.
-function writeSeededRun(root, { dir = "cumulative", snapshotId = "snap-fixture-1" } = {}) {
-  const d = join(root, dir);
-  mkdirSync(d, { recursive: true });
-  writeFileSync(join(d, "manifest.json"), JSON.stringify({
-    created_at: "2026-09-04T00:00:00Z",
-    schedule: [{ sequence_index: 0, memory_mode: "off", provider_pin: "m-a" }],
-  }));
-  const a1 = {
-    type: "attempt", sequence_index: 0, attempt: 5, verdict: "PASS",
-    progress: { turns: 12, total_tokens: 900, problems_before: 7, build_chunks: [] },
-  };
-  // TOP-LEVEL — sibling of `progress`, never inside it.
-  if (snapshotId !== null) a1.seeded_from_snapshot = snapshotId;
-  writeFileSync(join(d, "manifest.status.jsonl"), `${JSON.stringify(a1)}\n`);
-  writeCellFingerprint(d, 0);
-  return d;
-}
-
-test("SEEDED: a cell carrying seeded_from_snapshot folds with the id and never scores", async () => {
-  const root = mkdtempSync(join(tmpdir(), "seeded-off-"));
-  try {
-    writeSeededRun(root);
-    const cells = await collectCells(root);
-    assert.equal(cells.length, 1);
-    assert.equal(
-      cells[0].seeded_from_snapshot,
-      "snap-fixture-1",
-      "the fold must carry the id from the TOP-LEVEL record field — reading r.progress.seeded_from_snapshot would silently null it",
-    );
-
-    const b = await baselineFor("m-a", await collectOffCells(root), { runsRoot: root });
-    assert.equal(b.scorable, false, "a seeded cell must never become a model's floor — even complete, PASS, non-void");
-    assert.equal(b.seeded, true);
-    assert.equal(b.voided, undefined, "no voided flag — baselineList must compute state 'none' and drop the row");
-    assert.equal(b.pending, undefined, "no pending flag either");
-    assert.equal(
-      b.reason,
-      "seeded from snapshot `snap-fixture-1` — a seeded cell skips the build and sits on a different turn/token scale than the floor a Δ is measured against.",
-      "the refusal sentence is spec'd verbatim — backticks, em-dash and Δ included",
-    );
-
-    // THE SAFETY PROPERTY, END TO END: the ledger's baseline_rows — what
-    // PROFILE·1 renders — must not carry a row for the seeded cell's model.
-    const led = await readModelsLedger({
-      runsRoot: root,
-      benchModels: [{ id: "m-a", bench_eligible: true }],
-    });
-    assert.equal(led.models[0].baseline.scorable, false);
-    assert.equal(led.baseline_rows.length, 0, "state 'none' drops the row — a seeded cell never appears in baseline_rows");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("SEEDED: the same cell WITHOUT the field is a floor once SELECTED — a single run alone is not", async () => {
-  const root = mkdtempSync(join(tmpdir(), "seeded-clean-"));
-  try {
-    writeSeededRun(root, { snapshotId: null });
-    const cells = await collectCells(root);
-    assert.equal(cells[0].seeded_from_snapshot, null, "an absent field folds to null, never undefined");
-
-    const offCells = await collectOffCells(root);
-    // A SINGLE RUN IS NO LONGER A BASELINE. One complete, non-void, unseeded
-    // OFF cell assembles a batch, but until the operator picks, there is no
-    // floor — the old implicit `scorable[scorable.length - 1]` pick is gone.
-    const unselected = await baselineFor("m-a", offCells, { runsRoot: root });
-    assert.equal(unselected.scorable, false, "one completed OFF cell by itself is not a floor any more");
-    assert.equal(unselected.exists, true, "the batch exists even though no floor does");
-    assert.equal(unselected.reason, "awaiting_selection");
-    assert.equal(unselected.candidates, 1, "the batch scored the single run");
-    assert.equal(unselected.median, 7, "the median of the scored runs rides the awaiting state");
-
-    // The operator's selection makes it the floor.
-    const runDir = join(root, "cumulative");
-    const batch = await readBatch(runDir);
-    assert.ok(batch, "baselineFor assembled the batch on first read");
-    selectRun(batch, 0);
-    await writeBatch(runDir, batch);
-
-    const b = await baselineFor("m-a", offCells, { runsRoot: root });
-    assert.equal(b.scorable, true, "a complete, non-void, unseeded OFF cell is a valid floor once selected");
-    assert.equal(b.exists, true);
-    assert.equal(b.sequence_index, 0);
-    assert.equal(b.measured_before, 7, "the floor's measurement is the selected run's problem count");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-/** ONE campaign, three OFF cells: seq 0 seeded, seq 1 + seq 2 scored. */
-function writeMixedCampaign(root, dir) {
-  const d = join(root, dir);
-  mkdirSync(d, { recursive: true });
-  writeFileSync(join(d, "manifest.json"), JSON.stringify({
-    created_at: "2026-09-04T00:00:00Z",
-    schedule: [
-      { sequence_index: 0, memory_mode: "off", provider_pin: "m-a" },
-      { sequence_index: 1, memory_mode: "off", provider_pin: "m-a" },
-      { sequence_index: 2, memory_mode: "off", provider_pin: "m-a" },
-    ],
-  }));
-  const seeded = {
-    type: "attempt", sequence_index: 0, attempt: 5, verdict: "PASS",
-    seeded_from_snapshot: "snap-fixture-1",
-    progress: { turns: 12, total_tokens: 900, problems_before: 4, build_chunks: [] },
-  };
-  const r1 = {
-    type: "attempt", sequence_index: 1, attempt: 5, verdict: "PASS",
-    progress: { turns: 30, total_tokens: 2100, problems_before: 10, build_chunks: [] },
-  };
-  const r2 = {
-    type: "attempt", sequence_index: 2, attempt: 5, verdict: "FAIL",
-    progress: { turns: 44, total_tokens: 3000, problems_before: 20, build_chunks: [] },
-  };
-  writeFileSync(join(d, "manifest.status.jsonl"),
-    [seeded, r1, r2].map((r) => JSON.stringify(r)).join("\n") + "\n");
-  for (const seq of [0, 1, 2]) writeCellFingerprint(d, seq);
-  return d;
-}
-
-test("SEEDED: a seeded cell never joins the batch, and the SELECTED run is the floor — whichever its order", async () => {
-  const root = mkdtempSync(join(tmpdir(), "seeded-mixed-"));
-  try {
-    writeMixedCampaign(root, "cumulative");
-    const offCells = await collectOffCells(root);
-    assert.equal(offCells.length, 3);
-
-    // No selection yet: the batch exists — median over the two SCORED runs,
-    // the seeded cell never enters — but no floor does.
-    const unselected = await baselineFor("m-a", offCells, { runsRoot: root });
-    assert.equal(unselected.scorable, false);
-    assert.equal(unselected.exists, true);
-    assert.equal(unselected.reason, "awaiting_selection");
-    assert.equal(unselected.candidates, 2, "the seeded cell is not a candidate");
-    assert.equal(unselected.median, 15, "median of the scored runs {10, 20}");
-
-    // The operator picks seq 1 — NOT the last scorable run. The old implicit
-    // pick took scorable[scorable.length - 1] (seq 2 here) in filesystem-walk
-    // order; the floor is now the selected run, whichever its position.
-    const runDir = join(root, "cumulative");
-    const batch = await readBatch(runDir);
-    selectRun(batch, 1);
-    await writeBatch(runDir, batch);
-
-    const b = await baselineFor("m-a", offCells, { runsRoot: root });
-    assert.equal(b.scorable, true);
-    assert.equal(b.sequence_index, 1, "the floor is the SELECTED run, not an order-dependent pick");
-    assert.equal(b.run_dir, "cumulative");
-    assert.equal(b.id, baselineId("cumulative", 1));
-    assert.equal(b.measured_before, 10, "the selected run's problem count");
-    assert.equal(b.candidates, 2);
-    assert.equal(b.reason, null);
-
-    // A seeded run is never selectable: selectRun fails loud rather than
-    // fabricating a selection over an unscored run.
-    assert.throws(() => selectRun(batch, 0), /no scored run/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// ── run state publishes the boolean its callers read ────────────────────────
-//
-// THE MEASURED DEFECT: `running` was computed inside readRunState and never
-// returned. Four call sites in server.mjs read `state.running` and all four got
-// `undefined` — STOP refused every live cell, and the guard that stops
-// worker-image-rebuild from rebuilding the substrate under a running cell never
-// fired once.
-//
-// Pinned on the CONTRACT (the field exists and agrees with `state`) rather than
-// on any one caller, because the bug was that the field was absent for all of
-// them.

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { NOTICE_SOURCES, NOTICE_LEVELS } from "../contract.mjs";
-import { matchRuntime, CONTEXT_CHOICES } from "../roster.mjs";
+import { matchRuntime } from "../roster.mjs";
 import { sessionIdFrom, terminalFrom, pidAlive, confirmAlive, TERMINAL_STATUS, classifyTerminal } from "../runstate.mjs";
 
 import { BENCH } from "./_shared.mjs";
@@ -237,11 +237,6 @@ test("runtime matching survives the two services' different naming", () => {
   assert.equal(hit.loaded_context, 262144);
   assert.equal(matchRuntime("something-entirely-else", idx), null);
   assert.equal(matchRuntime(null, idx), null);
-});
-
-test("context choices are offered as an explicit list", () => {
-  assert.ok(CONTEXT_CHOICES.includes(262144));
-  assert.ok(CONTEXT_CHOICES.every((n) => Number.isInteger(n) && n > 0));
 });
 
 // ── REFUSALS ─────────────────────────────────────────────────────────────────

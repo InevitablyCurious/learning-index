@@ -220,7 +220,6 @@ def _runner(tmp_path: Path, memory_mode: str) -> ChallengeRunner:
         task_dir=TASK_DIR,
         work_root=tmp_path / "work-root",
         model="local/qwen",
-        mock="scaffold",
         memory_mode=memory_mode,
     )
 
