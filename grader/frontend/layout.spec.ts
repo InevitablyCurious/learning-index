@@ -632,9 +632,14 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
     { a: before, b: after },
   );
 
+  // A copy left behind is MORE bars or trays than the page drew at the start:
+  // run 1793897465 tags its bar as two halves from the first frame, and "2 bars"
+  // was told as old copies left by a resize that changed nothing.
+  const barsAtStart = Math.max(1, full.bars);
+  const traysAtStart = Math.max(1, full.trays);
   for (const { where, fit } of [...seen, { where: "after the window was made full size again", fit: back }]) {
     expect(
-      fit.bars <= 1 && fit.trays <= 1,
+      fit.bars <= barsAtStart && fit.trays <= traysAtStart,
       `[aspect: stale] ${where} there are ${fit.bars} bars and ${fit.trays} off trays drawn`,
     ).toBe(true);
   }

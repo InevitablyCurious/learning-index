@@ -276,17 +276,28 @@ export function pointWidth(points: PointBox[]): number {
 export async function readBarBox(
   page: Page,
 ): Promise<{ x: number; y: number; width: number; height: number; centerX: number; centerY: number } | null> {
+  // The bar as a player sees it: every element tagged "bar", taken together.
+  // Run 1793897465 drew its bar as two tagged halves that met in the middle;
+  // reading only the first was told "The bar doesn't run the full height of the
+  // board" about a bar that ran top to bottom on screen.
   const bar = page.locator('[data-testid="bar"]');
   if ((await bar.count()) === 0) return null;
-  return bar.first().evaluate((element) => {
-    const rect = element.getBoundingClientRect();
+  return page.evaluate(() => {
+    const rects = [...document.querySelectorAll('[data-testid="bar"]')]
+      .map((element) => element.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+    if (rects.length === 0) return null;
+    const x0 = Math.min(...rects.map((r) => r.left));
+    const y0 = Math.min(...rects.map((r) => r.top));
+    const x1 = Math.max(...rects.map((r) => r.right));
+    const y1 = Math.max(...rects.map((r) => r.bottom));
     return {
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-      centerX: rect.x + rect.width / 2,
-      centerY: rect.y + rect.height / 2,
+      x: x0,
+      y: y0,
+      width: x1 - x0,
+      height: y1 - y0,
+      centerX: (x0 + x1) / 2,
+      centerY: (y0 + y1) / 2,
     };
   });
 }
