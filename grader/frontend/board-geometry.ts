@@ -889,7 +889,31 @@ export async function standsOutFromBoard(
           const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
           return [d[0], d[1], d[2]];
         };
-        const far = (c: number[]) => Math.hypot(c[0] - board[0], c[1] - board[1], c[2] - board[2]) > 45;
+        // Apart to the eye, not only in raw RGB: dark colours sit close in RGB
+        // while looking plainly different. Run 1793908891 round 4's near-black
+        // bar (13,7,4) on a dark brown board (44,24,16) is 37 apart in RGB and
+        // was told "blends into the board"; Jerry saw a black bar. CIELAB
+        // lightness and colour (ΔE 1976) carry what an eye sees; a ΔE of 8 is
+        // a difference no one misses on two large areas side by side, and that
+        // bar reads 13.8. The same colour still reads 0.
+        const lab = (c: number[]): number[] => {
+          const lin = c.map((v) => {
+            const s = v / 255;
+            return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+          });
+          const xyz = [
+            (0.4124 * lin[0] + 0.3576 * lin[1] + 0.1805 * lin[2]) / 0.95047,
+            0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2],
+            (0.0193 * lin[0] + 0.1192 * lin[1] + 0.9505 * lin[2]) / 1.08883,
+          ].map((t) => (t > 216 / 24389 ? Math.cbrt(t) : (24389 / 27 * t + 16) / 116));
+          return [116 * xyz[1] - 16, 500 * (xyz[0] - xyz[1]), 200 * (xyz[1] - xyz[2])];
+        };
+        const boardLab = lab(board);
+        const far = (c: number[]) => {
+          if (Math.hypot(c[0] - board[0], c[1] - board[1], c[2] - board[2]) > 45) return true;
+          const l = lab(c);
+          return Math.hypot(l[0] - boardLab[0], l[1] - boardLab[1], l[2] - boardLab[2]) >= 8;
+        };
         return boxes.map((b) => {
           if (!b) return { fill: false, outline: false, centre: null };
           const samples = [0.2, 0.5, 0.8].map((f) => at(b.x + b.width / 2, b.y + b.height * f));
