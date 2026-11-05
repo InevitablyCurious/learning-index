@@ -112,7 +112,6 @@ def _contention() -> dict[str, Any]:
         "upstream_error_count": 3,
         "max_request_ms": 1200,
         "median_request_ms": 800,
-        "wall_near_timeout": False,
     }
 
 

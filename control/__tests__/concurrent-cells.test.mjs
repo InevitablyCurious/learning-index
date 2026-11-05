@@ -231,9 +231,9 @@ test("CAMPAIGN: allocateSequenceIndex is atomic across concurrent starts, seeded
       JSON.stringify({
         created_at: "2026-09-20T00:00:00Z",
         current_index: 7,
-        // The bound the cursor must respect: the harness refuses
-        // --sequence-index >= the schedule length (sequencer.py:168-175).
-        // Length 20 covers every index this test allocates (7..19).
+        // A manifest whose plan already covers 20 slots: the cursor starts at
+        // current_index and counts on from there, whatever the schedule holds
+        // (allocation is unbounded — growing the plan is the launcher's job).
         schedule: Array.from({ length: 20 }, (_, i) => ({ sequence_index: i })),
       }),
     );
@@ -261,8 +261,8 @@ test("CAMPAIGN: allocateSequenceIndex is atomic across concurrent starts, seeded
     // cell's _checkpoint is a full-manifest atomic_write that would clobber it.
     assert.equal(readFileSync(manifestArg, "utf8"), before, "the manifest is untouched");
 
-    // An absent manifest is a fresh campaign: no schedule exists to bound
-    // against yet, so the cursor is unbounded and its first cell is index 0.
+    // An absent manifest is a fresh campaign: no plan exists yet, and its
+    // first cell is index 0 with the launcher planning the slot for it.
     const fresh = join(root, "no-such-campaign", "manifest.json");
     assert.deepEqual(
       [await allocateSequenceIndex(fresh), await allocateSequenceIndex(fresh)],
@@ -273,8 +273,8 @@ test("CAMPAIGN: allocateSequenceIndex is atomic across concurrent starts, seeded
   }
 });
 
-test("CAMPAIGN: allocateSequenceIndex refuses indices past the schedule length — the harness's range check, enforced upfront", async () => {
-  const root = mkdtempSync(join(tmpdir(), "conc-seq-bound-"));
+test("CAMPAIGN: allocateSequenceIndex allocates past the schedule length — the launcher grows the plan to cover it", async () => {
+  const root = mkdtempSync(join(tmpdir(), "conc-seq-grow-"));
   try {
     const manifestArg = join(root, "cumulative-m-b", "manifest.json");
     mkdirSync(dirname(manifestArg), { recursive: true });
@@ -287,7 +287,7 @@ test("CAMPAIGN: allocateSequenceIndex refuses indices past the schedule length �
       }),
     );
 
-    // Within the bound: seeded-consecutive, exactly as before.
+    // Within the schedule: seeded-consecutive, exactly as before.
     assert.deepEqual(
       [
         await allocateSequenceIndex(manifestArg),
@@ -298,23 +298,37 @@ test("CAMPAIGN: allocateSequenceIndex refuses indices past the schedule length �
       "indices inside the schedule length allocate as before",
     );
 
-    // The 4th allocation is past the schedule: refused upfront, naming the
-    // range — the harness would refuse --sequence-index 3 cell-by-cell
-    // (sequencer.py:168-175), so the pre-flight loop refuses the whole batch
-    // before any spawn. No clamp, no degrade to current_index selection.
-    await assert.rejects(
-      allocateSequenceIndex(manifestArg),
-      /sequence_index 3 out of range: manifest schedule has 3 session_record\(s\); valid indices are 0\.\.2/,
-      "an over-range index throws with the valid range named",
+    // The 4th allocation is PAST the schedule and is ACCEPTED: the harness
+    // reserves its range check for an index no plan covers, and a launch that
+    // plans more slots EXTENDS the manifest by appending them (sequencer.py:138-174)
+    // — strictly an append, never a reshuffle. So the cursor hands out the next
+    // contiguous index and the launcher sizes --off-replicates to (index + 1),
+    // which is what makes it in range (routes/run.mjs). No throw, no clamp.
+    assert.equal(
+      await allocateSequenceIndex(manifestArg),
+      3,
+      "an index past the schedule length is allocated, not refused",
+    );
+    assert.equal(
+      await allocateSequenceIndex(manifestArg),
+      4,
+      "and the cursor keeps counting — every click gets the next index",
     );
 
-    // The refusal throws BEFORE the increment: the over-range index is not
-    // consumed, so a retry refuses identically (no silent cursor drift).
-    await assert.rejects(
-      allocateSequenceIndex(manifestArg),
-      /sequence_index 3 out of range/,
-      "the refused index is not burned — the cursor stays at the bound",
+    // A second and third CLICK (a fresh campaign, one cell per click): index 0,
+    // then 1, then 2, each with the launcher growing the plan to index + 1.
+    const clickManifest = join(root, "cumulative-m-click", "manifest.json");
+    mkdirSync(dirname(clickManifest), { recursive: true });
+    writeFileSync(
+      clickManifest,
+      JSON.stringify({ created_at: "2026-09-20T00:00:00Z", current_index: 0, schedule: [] }),
     );
+    const clicks = [
+      await allocateSequenceIndex(clickManifest),
+      await allocateSequenceIndex(clickManifest),
+      await allocateSequenceIndex(clickManifest),
+    ];
+    assert.deepEqual(clicks, [0, 1, 2], "three clicks, three consecutive cells, no refusal");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -357,18 +371,28 @@ test("START: one request launches N cells — concurrency, atomic indices, per-c
     "each cell carries its own index on argv",
   );
 
-  // 4. Every spawned cell takes an N-slot ledger slot, keyed on its run_id.
+  // 4. The OFF arm plans the campaign's ACCUMULATED slot count — the highest
+  //    allocated index + 1 — never this batch's own N, so an index past the
+  //    current plan grows the harness's schedule (append) instead of tripping
+  //    its range check (sequencer.py:207-215).
+  assert.match(
+    handler,
+    /arm === "on" \? \[\] : \["--off-replicates", String\(batch\[batch\.length - 1\]\.sequence_index \+ 1\)\]/,
+    "the OFF arm plans the accumulated schedule, not the batch's own N",
+  );
+
+  // 5. Every spawned cell takes an N-slot ledger slot, keyed on its run_id.
   assert.match(handler, /registerRun\(\{/, "each launched cell registers in the run ledger");
   assert.match(handler, /run_id: cell\.run_id/, "the slot is keyed on the control-plane run_id");
 
-  // 5. N logs of one second stay distinct: the padded index suffix (and the
+  // 6. N logs of one second stay distinct: the padded index suffix (and the
   //    name keeps runstate.mjs's /^(off|on)-cell-|^cell-/ scan pattern).
   assert.ok(
     handler.includes('${arm}-cell-${stamp}-s${String(sequenceIndex).padStart(4, "0")}.log'),
     "per-cell log names carry the padded sequence index — N logs of one second never collide",
   );
 
-  // 6. The response is per cell: runs[] plus the tree health, never a bare ok.
+  // 7. The response is per cell: runs[] plus the tree health, never a bare ok.
   assert.match(handler, /ok: true,\s*\n\s*runs,/, "success carries runs[], one record per cell");
   assert.match(handler, /tree_error/, "and the tree health rides along");
 });

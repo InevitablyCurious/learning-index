@@ -23,12 +23,15 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from harness import config
+from harness.adapters.challenge import ERROR_CAP_PER_TYPE, ErrorCapExceeded
+from harness.adapters.challenge.memory_record import compaction_timestamps
 from harness.benv import load_bench_env
 from harness.live_stream import run_notice
 from harness.cumulative.progress import progress_from_cell_result
 from harness.cumulative.run_artifacts import (
     RunManifest,
     StatusStream,
+    cell_void,
     default_run_manifest_path,
     default_status_stream_path,
     write_run_manifest,
@@ -64,6 +67,265 @@ from .roster import _apply_model_override, _normalize_model_slug
 from .template import compute_task_template_hash, verify_task_template_frozen
 
 _LOG = logging.getLogger("run_cumulative")
+
+#: Per-cell cost artifact, written by ``run_session`` on EVERY exit.
+COST_FILENAME = "cost.json"
+
+#: The gate statuses that constitute a GRADED outcome (the vocabulary
+#: ``grader/gate-results.mjs`` publishes as GATE_STATUSES). ``not_run`` and
+#: ``error`` are the instrument's own silence and its own fault — they belong to
+#: a suite's denominator, never to a passed/failed count, because scoring them
+#: as failures would score the harness instead of the cell.
+_GRADED_GATE_STATUSES = frozenset({"pass", "fail"})
+
+#: Phase fields that ADD UP across a cell's two phases. ``context_peak`` is
+#: deliberately absent: peaks do not sum, they take the maximum.
+_ADDITIVE_PHASE_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "turns",
+    "compactions",
+    "wall_seconds",
+)
+
+
+def _read_json_object(path: Path) -> dict[str, Any] | None:
+    """Read one JSON object; None when it is missing, unreadable or not an object."""
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _attempt_report_indices(run_dir: Path) -> list[int]:
+    """Attempt numbers whose ``attempt-N-report.json`` exists in the cell dir.
+
+    The FILES, not ``result.attempt_reports``: the cost writer runs in a
+    ``finally`` that must also cover the exits with no result at all (stopped,
+    crashed, capped), and the grader publishes each report before the loop can
+    die — so the files are the only grade source that survives every exit.
+    """
+    try:
+        names = [entry.name for entry in Path(run_dir).glob("attempt-*-report.json")]
+    except OSError:
+        return []
+    indices: list[int] = []
+    for name in names:
+        stem = name.removeprefix("attempt-").removesuffix("-report.json")
+        if stem.isdigit():
+            indices.append(int(stem))
+    return sorted(indices)
+
+
+def _grades_from_reports(run_dir: Path, attempts: list[int]) -> dict[str, int] | None:
+    """Graded gate outcomes across ``attempts``; None when nothing was graded.
+
+    ``total`` is the graded denominator (passed + failed), so the three numbers
+    are always internally consistent. ABSENT, never zeros, when no report in the
+    slice published a ``gate_results`` row with a decided status: a phase that
+    was never graded must not read as a phase that graded nothing and passed.
+    """
+    passed = 0
+    failed = 0
+    graded = False
+    for attempt in attempts:
+        report = _read_json_object(run_dir / f"attempt-{attempt}-report.json")
+        if report is None:
+            continue
+        rows = report.get("gate_results")
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            status = row.get("status")
+            if status not in _GRADED_GATE_STATUSES:
+                continue
+            if status == "pass":
+                passed += 1
+            else:
+                failed += 1
+            graded = True
+    if not graded:
+        return None
+    return {"total": passed + failed, "passed": passed, "failed": failed}
+
+
+def _compactions_by_phase(
+    run_dir: Path, boundary_seconds: float | None
+) -> tuple[int | None, int | None]:
+    """Split the cell's completed compactions into (build, troubleshooting).
+
+    ``phase_boundary_wall_ts`` is the epoch-SECONDS wall clock the adapter
+    stamped when the build phase closed; the session DB stores ms-epoch
+    ``time_created``, so the comparison is in milliseconds. Either side missing
+    (no DB export, no boundary) yields ``(None, None)`` — an unplaceable
+    compaction is not attributed to a phase, and a phase with no compactions
+    observed carries the key ABSENT rather than a fabricated 0.
+    """
+    if boundary_seconds is None:
+        return (None, None)
+    stamps = compaction_timestamps(Path(run_dir) / "session-db" / "opencode.db")
+    if stamps is None:
+        return (None, None)
+    cutoff_ms = float(boundary_seconds) * 1000.0
+    build = sum(1 for stamp in stamps if stamp <= cutoff_ms)
+    return (build, len(stamps) - build)
+
+
+def _phase_dict(phase: Any) -> dict[str, Any]:
+    """A ``PhaseCost`` as a plain dict; ``{}`` when the phase was not observed."""
+    to_dict = getattr(phase, "to_dict", None)
+    if not callable(to_dict):
+        return {}
+    return dict(to_dict())
+
+
+def _total_phase(
+    build: Mapping[str, Any], troubleshooting: Mapping[str, Any]
+) -> dict[str, Any]:
+    """The cell's two phases recombined: additive fields sum, peaks take the max.
+
+    ``cost_usd`` is emitted only when EVERY observed phase carries it. A sum
+    across a priced and an unpriced phase would produce a total that is neither
+    (a local phase has no dollars at all), and a total missing half a cell's
+    spend is worse than an absent one: it reads as the whole cost.
+    """
+    phases = (build, troubleshooting)
+    total: dict[str, Any] = {}
+    for field in _ADDITIVE_PHASE_FIELDS:
+        values = [phase[field] for phase in phases if field in phase]
+        if values:
+            total[field] = sum(values)
+    peaks = [phase["context_peak"] for phase in phases if "context_peak" in phase]
+    if peaks:
+        total["context_peak"] = max(peaks)
+    grades: dict[str, int] = {}
+    for phase in phases:
+        for name, value in (phase.get("grades") or {}).items():
+            grades[name] = grades.get(name, 0) + int(value)
+    if grades:
+        total["grades"] = grades
+    observed = [phase for phase in phases if phase]
+    if observed and all("cost_usd" in phase for phase in observed):
+        total["cost_usd"] = sum(float(phase["cost_usd"]) for phase in observed)
+    return total
+
+
+def _void_for(result: Any) -> dict[str, Any]:
+    """VOID-INSTRUMENT classification of this cell, via the single rule's owner.
+
+    A crash is NOT a void: it is a recorded crash. Nothing was measured, so
+    there is no measurement to discard — calling it void would let a harness
+    fault hide inside the same bucket as a cell the instrument failed to read.
+    """
+    if result is None:
+        return {"is_void": False, "reason": None}
+    return cell_void(
+        {
+            "progress": progress_from_cell_result(result).to_dict(),
+            "terminal_reason": getattr(result, "termination_reason", ""),
+            "provider_truncations": getattr(result, "provider_truncations", 0),
+            "unrecovered_anomaly_turns": getattr(
+                result, "unrecovered_anomaly_turns", 0
+            ),
+            "observation_lost_turns": getattr(result, "observation_lost_turns", 0),
+        }
+    )
+
+
+def _cell_outcome(result: Any) -> str:
+    """How the cell ENDED, for ``cost.json``'s ``outcome``.
+
+    One vocabulary for every exit: a cell stopped by an operator, capped by the
+    benchmark's error budget and one that ran and failed all cost money, and
+    only the last is a capability signal — a reader has to be able to tell them
+    apart without parsing a log.
+    """
+    if getattr(result, "termination_reason", "") == "compactions_before_grade":
+        return "aborted_compaction"
+    return "passed" if progress_from_cell_result(result).full_green else "failed"
+
+
+def _cost_record(*, outcome: str, result: Any, run_dir: Path) -> dict[str, Any]:
+    """Assemble the per-cell cost.json body for one ended cell."""
+    indices = _attempt_report_indices(run_dir)
+    build_grades = _grades_from_reports(run_dir, [i for i in indices if i == 1])
+    troubleshooting_grades = _grades_from_reports(
+        run_dir, [i for i in indices if i > 1]
+    )
+    build_compactions: int | None = None
+    troubleshooting_compactions: int | None = None
+    if result is not None:
+        build_compactions, troubleshooting_compactions = _compactions_by_phase(
+            run_dir, getattr(result, "phase_boundary_wall_ts", None)
+        )
+    build = _phase_dict(getattr(result, "build_phase", None))
+    troubleshooting = _phase_dict(getattr(result, "troubleshooting_phase", None))
+    # An attempt-1 grade is the BUILD's grade only when a build actually ran.
+    # The adapter sets `build_phase` exactly then, so its absence (a seeded cell
+    # grading the seed tree, or a cell that died before the build closed) leaves
+    # attempt 1's grade unattributed rather than mislabelled onto a build.
+    if build:
+        if build_grades is not None:
+            build["grades"] = build_grades
+        if build_compactions is not None:
+            build["compactions"] = build_compactions
+    # Attempts 2..N are the troubleshooting rounds by construction — there is no
+    # alternative attribution for them — so they are kept even when the adapter
+    # never closed that phase aggregate (a cell that died mid-round).
+    if troubleshooting_grades is not None:
+        troubleshooting["grades"] = troubleshooting_grades
+    if troubleshooting_compactions is not None:
+        troubleshooting["compactions"] = troubleshooting_compactions
+
+    phases: dict[str, Any] = {}
+    if build:
+        phases["build"] = build
+    if troubleshooting:
+        phases["troubleshooting"] = troubleshooting
+    if phases:
+        phases["total"] = _total_phase(build, troubleshooting)
+
+    record: dict[str, Any] = {"outcome": outcome, "phases": phases}
+    paused = getattr(result, "paused_seconds", None) if result is not None else None
+    if paused is not None:
+        record["paused_seconds"] = float(paused)
+    record["void"] = _void_for(result)
+    return record
+
+
+def _write_cost_json(run_dir: Path, *, outcome: str, result: Any) -> None:
+    """Write this cell's ``cost.json``. NEVER raises, never alters the run.
+
+    WHY THIS EXISTS AT ALL. Cost used to live only on the ``type:"attempt"``
+    status row, appended after the cell finished — and after the
+    ``ErrorCapExceeded`` fast-fail. A stopped, crashed or capped cell therefore
+    lost its cost entirely: precisely the cells an operator most needs priced,
+    because they are the ones burning spend without producing a measurement.
+    Written from a ``finally`` so no exit path can skip it.
+
+    Atomic (tmp + ``os.replace``), mirroring ``harness/fingerprint.py``
+    ``write_cell_fingerprint``, so a reader never sees a half-written record.
+    """
+    try:
+        record = _cost_record(outcome=outcome, result=result, run_dir=run_dir)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        tmp = run_dir / f"{COST_FILENAME}.{os.getpid()}.tmp"
+        tmp.write_text(
+            json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(tmp, run_dir / COST_FILENAME)
+    except Exception as exc:  # instrumentation-only: a lost artifact, never a lost run
+        _LOG.warning(
+            "run_cumulative.cost_json_failed path=%s error_class=%s",
+            run_dir / COST_FILENAME,
+            exc.__class__.__name__,
+        )
 
 
 def _read_proxy_served_identity(proxy_runs_dir: Path | None = None) -> str | None:
@@ -117,6 +379,54 @@ def _read_proxy_served_identity(proxy_runs_dir: Path | None = None) -> str | Non
         except OSError:
             continue
     return latest_served
+
+
+# The per-attempt `work_*` token counters as (status-row key, source key)
+# pairs. One table, so the row, the adapter's report and the sum below can
+# never drift into three different spellings of the same measurement.
+_WORK_TOKEN_COUNTERS: tuple[tuple[str, str], ...] = (
+    ("work_input_tokens", "input_tokens"),
+    ("work_output_tokens", "output_tokens"),
+    ("work_reasoning_tokens", "reasoning_tokens"),
+    ("work_cache_read_tokens", "cache_read_tokens"),
+    ("work_cache_write_tokens", "cache_write_tokens"),
+)
+
+
+def _work_token_fields(source: Mapping[str, Any]) -> dict[str, Any]:
+    """The ``work_*`` token counters for ONE attempt, read from ``source``.
+
+    WHY PER-ATTEMPT. These keys used to be filled from the CELL's totals and
+    copied verbatim onto every attempt row (``dict(base)``), so a three-attempt
+    cell published three rows claiming the same counters — each one the sum of
+    all three attempts, and therefore no attempt's own truth. An attempt row
+    that cannot say what ITS attempt spent is not an attempt measurement.
+    Cell totals are written to ``cost.json``; this stream states per attempt.
+
+    THE SPLIT IS RAW, NOT FOLDED. ``work_output_tokens`` is generation only and
+    ``work_reasoning_tokens`` sits beside it, because that is how the adapter
+    publishes them (``adapters/challenge.py`` folds reasoning into the CELL
+    total only). Folding again here would count reasoning twice in
+    ``work_total_tokens``, which is therefore the sum of the counters present.
+    Derived figures stay recoverable: ``work_output_tokens`` IS generation-only,
+    and every billed token is ``work_input_tokens + work_output_tokens +
+    work_reasoning_tokens + work_cache_read_tokens + work_cache_write_tokens``.
+
+    ABSENT STAYS ABSENT. The adapter omits these keys when no model drove the
+    attempt (mock, seeded build, harness error), so a missing counter is
+    written as an explicit ``None`` and never as ``0`` — a fabricated zero
+    claims a measured turn that never happened, and this stream's readers
+    treat null and absent identically (see the seeded_from_snapshot note
+    below). ``work_total_tokens`` sums whatever IS present and is ``None`` when
+    nothing is, rather than inventing a total out of nothing.
+    """
+    values: dict[str, Any] = {}
+    for record_key, source_key in _WORK_TOKEN_COUNTERS:
+        raw = source.get(source_key)
+        values[record_key] = int(raw) if raw is not None else None
+    counted = [value for value in values.values() if value is not None]
+    values["work_total_tokens"] = sum(counted) if counted else None
+    return values
 
 
 class _SessionRunState:
@@ -544,6 +854,11 @@ class RealSessionRunner:
     ) -> None:
         """Append per-attempt status records to the append-only stream.
 
+        One row per graded attempt, each carrying ITS OWN token counters
+        (``work_*``): a cell-level total copied across attempt rows states
+        nothing about any single attempt, which is exactly what these rows
+        exist to state. Cell totals live in ``cost.json``.
+
         Instrumentation-only: must never alter run behaviour or abort the run.
         """
         try:
@@ -573,15 +888,28 @@ class RealSessionRunner:
 
         input_tokens = int(getattr(result, "input_tokens", 0) or 0)
         output_tokens = int(getattr(result, "output_tokens", 0) or 0)
-        # ADDITIVE ONLY (WO-TOKENS-ALL). `input_tokens` / `output_tokens` above
-        # and the three `work_*` fields they feed are UNCHANGED, so every cell
-        # already scored stays comparable to every cell scored after this. The
-        # new fields sit alongside them; a record written before this change
-        # simply lacks them and the board renders it as such rather than
-        # assuming a zero.
+        # These five are the CELL's totals. They no longer feed the attempt
+        # rows (`work_*` below is per attempt — see _work_token_fields); the
+        # cell-level copy is what `cost.json` records.
         reasoning_tokens = int(getattr(result, "reasoning_tokens", 0) or 0)
         cache_read_tokens = int(getattr(result, "cache_read_tokens", 0) or 0)
         cache_write_tokens = int(getattr(result, "cache_write_tokens", 0) or 0)
+        # The cell totals in the adapter's RAW-split shape, so a single-attempt
+        # cell can hand its one attempt the same counters a published attempt
+        # report would. `output_tokens` above has this cell's reasoning folded
+        # in (adapters/challenge.py accumulates output+reasoning), so it is
+        # unfolded here rather than counted a second time when
+        # _work_token_fields sums the split back up. The unfolding is the
+        # identity, not a clamp: summed back, the five fields reproduce
+        # `input + output + cache_read + cache_write` exactly, folded reasoning
+        # included, which is the honest billed total.
+        cell_token_source: dict[str, Any] = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens - reasoning_tokens,
+            "reasoning_tokens": reasoning_tokens,
+            "cache_read_tokens": cache_read_tokens,
+            "cache_write_tokens": cache_write_tokens,
+        }
         progress_injected_est = progress_dict.get("injected_block_est_tokens")
         progress_consumer_injected = progress_dict.get("consumer_injected_count")
 
@@ -601,28 +929,14 @@ class RealSessionRunner:
             "org_id": str(getattr(self, "_org_id", None) or ""),
             "served_model": served_model,
             "progress": progress_dict,
-            "work_input_tokens": input_tokens,
-            "work_output_tokens": output_tokens,
-            # EVERY token the provider processed and billed for this cell.
-            #
-            # Was `input + output`, kept that way "for comparability" while
-            # `work_processed_tokens` carried the honest figure beside it. Two
-            # names for what should be one number, and the one the benchmark
-            # SCORED on was the understated one — by ~100x on a cached run
-            # (measured: 178,120 reported against 9,977,856 cache reads).
-            #
-            # Collapsed to one honest number. There is no comparability to
-            # protect: pre-conformity data is throwaway and nothing has shipped.
-            "work_total_tokens": (
-                input_tokens + output_tokens + cache_read_tokens + cache_write_tokens
-            ),
-            # `work_output_tokens` has ALWAYS carried reasoning folded inside
-            # it (adapters/challenge.py accumulates output+reasoning). This
-            # names the reasoning share so the split is recoverable:
-            #   generation-only = work_output_tokens - work_reasoning_tokens
-            "work_reasoning_tokens": reasoning_tokens,
-            "work_cache_read_tokens": cache_read_tokens,
-            "work_cache_write_tokens": cache_write_tokens,
+            # NO `work_*` TOKEN COUNTERS HERE. They are PER-ATTEMPT and are
+            # attached below from each attempt report (_work_token_fields), so
+            # `dict(base)` can never spray one attempt's numbers, or the cell's
+            # cumulative total, across every attempt row. The cell's own totals
+            # are recorded in cost.json, and they must carry cache reads: a
+            # cached run reports ~100x more cache reads than input+output
+            # (measured: 178,120 against 9,977,856), so a total that omits them
+            # is not a comparable number, merely a small one.
             "injected_block_est_tokens": progress_injected_est,
             "injected_count": getattr(result, "injected_count", None),
             "injected_block_chars": getattr(result, "injected_block_chars", None),
@@ -719,19 +1033,16 @@ class RealSessionRunner:
             # run_session (the single writer seam WO-SNAP-03 declared on
             # SessionRecord) and mirrored here verbatim — build_scorecard and
             # the convergence trend read them back from THIS stream, so a
-            # seeded cell is dev-mode, ran no build, and carries the build
-            # cost it skipped, while a normal cell states build_phase_ran=True.
+            # seeded cell is dev-mode and ran no build, while a normal cell
+            # states build_phase_ran=True. The cost a seeded cell skipped is no
+            # longer carried here: snapshots stopped recording a build cost, so
+            # there is nothing truthful left to copy.
             # This stream does not drop None values (StatusStream.append writes
             # the record as-is, like extraction_candidate_count above), so
             # unseeded records carry explicit nulls; readers (.get) treat null
             # and absent identically.
             "seeded_from_snapshot": session.seeded_from_snapshot,
             "build_phase_ran": bool(session.build_phase_ran),
-            "skipped_build_cost": (
-                dict(session.skipped_build_cost)
-                if isinstance(session.skipped_build_cost, Mapping)
-                else None
-            ),
             "dev_mode": bool(session.dev_mode),
         }
 
@@ -745,6 +1056,26 @@ class RealSessionRunner:
         if isinstance(attempt_reports, list) and attempt_reports:
             for idx, attempt in enumerate(attempt_reports, start=1):
                 attempt_record = dict(base)
+                # THIS ATTEMPT'S OWN TOKEN COUNTERS, from the report the
+                # adapter published for it — the drive that produced the tree
+                # graded here. `dict(base)` carries none, so an attempt that
+                # published no stats states None rather than inheriting a
+                # sibling's or the cell's totals.
+                attempt_tokens = _work_token_fields(
+                    attempt if isinstance(attempt, Mapping) else {}
+                )
+                if (
+                    attempt_tokens["work_total_tokens"] is None
+                    and len(attempt_reports) == 1
+                ):
+                    # ONE attempt published no stats. Attribution is then exact
+                    # rather than assumed: with a single attempt the cell total
+                    # IS that attempt's total, the same grounds the
+                    # no-attempt_reports branch below stands on. With two or
+                    # more attempts there is no such identity, and the counters
+                    # stay None instead of being divided or repeated.
+                    attempt_tokens = _work_token_fields(cell_token_source)
+                attempt_record.update(attempt_tokens)
                 if isinstance(attempt, Mapping):
                     attempt_record["attempt"] = attempt.get("attempt", idx)
                     attempt_record["verdict"] = attempt.get("verdict", result.verdict)
@@ -791,7 +1122,6 @@ class RealSessionRunner:
                     attempt_record["aborted_runners"] = list(
                         attempt.get("aborted_runners", []) or []
                     )
-                    attempt_record["attempt_cost_usd"] = attempt.get("attempt_cost_usd")
                     # PLAYER ORDER: the stage this round reached and how many
                     # failing checks lay past it — where a model gets stuck.
                     attempt_record["player_stage"] = attempt.get("player_stage")
@@ -815,6 +1145,11 @@ class RealSessionRunner:
                 stream.append(attempt_record)
         else:
             record = dict(base)
+            # NO attempt reports: the cell total IS this single attempt's total,
+            # so its counters ARE the per-attempt counters for the one attempt
+            # this row states — a build-only cell still reports its tokens
+            # instead of dropping them for want of a graded attempt.
+            record.update(_work_token_fields(cell_token_source))
             record["attempt"] = 1
             record["verdict"] = getattr(result, "verdict", "")
             record["termination_reason"] = getattr(result, "termination_reason", "")
@@ -1061,11 +1396,6 @@ class RealSessionRunner:
         # cell runs it, so its honest value is True — not the declared
         # default False, which would claim the build was skipped when it ran.
         session.build_phase_ran = seed_snapshot is None
-        session.skipped_build_cost = (
-            dict(seed_snapshot.build_cost)
-            if seed_snapshot is not None and seed_snapshot.build_cost is not None
-            else None
-        )
         # Seeding is a dev-mode act, and on this path --seed-snapshot IS the
         # dev-mode signal: derived strictly from it, never a silent global.
         # (The control plane's dev-mode toggle is JS-only today; there is no
@@ -1139,77 +1469,101 @@ class RealSessionRunner:
         # parsing the run label. Set as an attribute rather than a constructor
         # argument so an adapter that predates the live stream still works.
         runner._cell_seq = int(session.sequence_index)
-        result = runner.run_cell(
-            state.run_label, state.run_dir, run_identity=state.run_identity
-        )
-        session.produced_snapshot_id = getattr(result, "produced_snapshot_id", None)
-        state.last_session_id = result.session_id or state.last_session_id
-
-        # WO-ERRDATA-20-CAP: accumulate per-cell error counts into the
-        # per-benchmark totals and fast-fail the WHOLE benchmark (uncaught, no
-        # scorecard) the moment any one type exceeds the cap. Mirrors
-        # ServeTransportError: raised uncaught, propagates out of run_session
-        # -> step_until_done -> CLI abort.
-        from harness.adapters.challenge import ERROR_CAP_PER_TYPE, ErrorCapExceeded
-
-        self._error_totals["guard_aborted_turns"] += int(
-            getattr(result, "guard_aborted_turns", 0) or 0
-        )
-        self._error_totals["finalize_timeout_turns"] += int(
-            getattr(result, "finalize_timeout_turns", 0) or 0
-        )
-        self._error_totals["stalled_turns"] += int(
-            getattr(result, "stalled_turns", 0) or 0
-        )
-        for _kind, _total in self._error_totals.items():
-            if _total > ERROR_CAP_PER_TYPE:
-                raise ErrorCapExceeded(
-                    f"{_kind} total {_total} exceeds per-benchmark cap "
-                    f"{ERROR_CAP_PER_TYPE} (sequence_index={session.sequence_index})"
-                )
-        self._populate_contention_covariates(result)
-
-        # Instrumentation-only run artifacts (write-once manifest + append-only
-        # status stream). Must never alter scoring/extraction/gates/feedback or
-        # abort the run; served_model is only known after the first run_cell.
-        served_upstream, served_dict = self._observe_served_model(
-            getattr(result, "session_id", None),
-            str(session.model),
-        )
-        self._write_run_manifest_once(
-            session=session,
-            served_model=served_upstream,
-            result=result,
-        )
-        self._append_status_records(
-            session=session,
-            result=result,
-            served_model=served_dict,
-        )
-        # PUBLISH THE SCORECARD AFTER EVERY CELL, not once at the end.
+        # COST IS RECORDED FROM A `finally`, NOT FROM THE ATTEMPT STATUS ROW.
         #
-        # The scorecard is derived from the two artifacts written just above, so
-        # this is the first moment this cell's outcome can be classified as
-        # scored, not-scored or VOID-INSTRUMENT. Publishing here is what lets the
-        # board state whether a finished cell contributed a data point -- before
-        # this, `void_instrument` existed only inside a process that was about to
-        # exit, and a voided cell was indistinguishable on screen from one still
-        # running.
-        #
-        # Instrumentation-only, exactly like the two calls above: `write_scorecard`
-        # never raises, and a failure costs the board its numbers, never the run.
-        self._publish_scorecard()
+        # That row is appended once the cell finishes — and after the
+        # ErrorCapExceeded fast-fail below — so a stopped, crashed or capped
+        # cell used to lose its cost entirely. Those are exactly the cells an
+        # operator needs priced: they burn spend and produce no measurement.
+        # `outcome` is set on every exit path; the finally writes it out.
+        result: Any = None
+        outcome = "crashed"
+        try:
+            result = runner.run_cell(
+                state.run_label, state.run_dir, run_identity=state.run_identity
+            )
+            session.produced_snapshot_id = getattr(result, "produced_snapshot_id", None)
+            state.last_session_id = result.session_id or state.last_session_id
 
-        _LOG.info(
-            "run_cumulative.run_session sequence_index=%d memory_mode=%s verdict=%s session_fp=%s",
-            session.sequence_index,
-            session.memory_mode,
-            result.verdict,
-            SessionRecord.session_fp_of(result.session_id)
-            if isinstance(result.session_id, str) and result.session_id.strip()
-            else "none",
-        )
-        return result
+            # WO-ERRDATA-20-CAP: accumulate per-cell error counts into the
+            # per-benchmark totals and fast-fail the WHOLE benchmark (uncaught,
+            # no scorecard) the moment any one type exceeds the cap. Mirrors
+            # ServeTransportError: raised uncaught, propagates out of
+            # run_session -> step_until_done -> CLI abort.
+            self._error_totals["guard_aborted_turns"] += int(
+                getattr(result, "guard_aborted_turns", 0) or 0
+            )
+            self._error_totals["finalize_timeout_turns"] += int(
+                getattr(result, "finalize_timeout_turns", 0) or 0
+            )
+            self._error_totals["stalled_turns"] += int(
+                getattr(result, "stalled_turns", 0) or 0
+            )
+            for _kind, _total in self._error_totals.items():
+                if _total > ERROR_CAP_PER_TYPE:
+                    raise ErrorCapExceeded(
+                        f"{_kind} total {_total} exceeds per-benchmark cap "
+                        f"{ERROR_CAP_PER_TYPE} (sequence_index={session.sequence_index})"
+                    )
+            self._populate_contention_covariates(result)
+
+            # Instrumentation-only run artifacts (write-once manifest +
+            # append-only status stream). Must never alter
+            # scoring/extraction/gates/feedback or abort the run; served_model is
+            # only known after the first run_cell.
+            served_upstream, served_dict = self._observe_served_model(
+                getattr(result, "session_id", None),
+                str(session.model),
+            )
+            self._write_run_manifest_once(
+                session=session,
+                served_model=served_upstream,
+                result=result,
+            )
+            self._append_status_records(
+                session=session,
+                result=result,
+                served_model=served_dict,
+            )
+            # PUBLISH THE SCORECARD AFTER EVERY CELL, not once at the end.
+            #
+            # The scorecard is derived from the two artifacts written just
+            # above, so this is the first moment this cell's outcome can be
+            # classified as scored, not-scored or VOID-INSTRUMENT. Publishing
+            # here is what lets the board state whether a finished cell
+            # contributed a data point -- before this, `void_instrument` existed
+            # only inside a process that was about to exit, and a voided cell
+            # was indistinguishable on screen from one still running.
+            #
+            # Instrumentation-only, exactly like the two calls above:
+            # `write_scorecard` never raises, and a failure costs the board its
+            # numbers, never the run.
+            self._publish_scorecard()
+
+            _LOG.info(
+                "run_cumulative.run_session sequence_index=%d memory_mode=%s verdict=%s session_fp=%s",
+                session.sequence_index,
+                session.memory_mode,
+                result.verdict,
+                SessionRecord.session_fp_of(result.session_id)
+                if isinstance(result.session_id, str) and result.session_id.strip()
+                else "none",
+            )
+            outcome = _cell_outcome(result)
+            return result
+        except ErrorCapExceeded:
+            outcome = "error_cap"
+            raise
+        except KeyboardInterrupt:
+            outcome = "stopped"
+            raise
+        except BaseException:
+            outcome = "crashed"
+            raise
+        finally:
+            # Instrumentation-only: this never raises, so no exit path above can
+            # be turned into a different one by a failed cost write.
+            _write_cost_json(state.run_dir, outcome=outcome, result=result)
 
 
 def _build_real_runner(

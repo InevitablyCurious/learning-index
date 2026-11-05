@@ -110,6 +110,45 @@ def tool_calls_by_name(session_db: Path) -> dict[str, int] | None:
     return dict(sorted(counts.items()))
 
 
+def compaction_timestamps(session_db: Path) -> list[int] | None:
+    """ms-epoch ``time_created`` of every COMPLETED compaction; None if unreadable.
+
+    WHY the three-part predicate and not ``summary = 1``: the flag says what a
+    message was FOR, never what it achieved. Measured on run 1788415430
+    (2026-09-03): of 73 compaction-agent messages, 68 were killed mid-stream by
+    the relay's loop guard and ALL 68 still carried ``summary: true``; a
+    flag-keyed count reported 68 compactions where none had occurred. A killed
+    compaction also carries no ``error`` (it never reached the transcript), so
+    the only receipt a FINISHED one has is a non-empty ``finish`` — the same
+    receipt ``ServeClient.completed_compactions_since`` counts live turns with
+    (harness/serve_client.py:288).
+
+    The timestamps, not a count, because the caller splits compactions across a
+    cell's build and troubleshooting phases against a wall-clock boundary the
+    adapter recorded, and only the DB can say which side each one fell on.
+    """
+    rows = _rows(
+        session_db,
+        "SELECT time_created FROM message "
+        "WHERE json_extract(data, '$.role') = 'assistant' "
+        "AND json_extract(data, '$.summary') = 1 "
+        "AND json_extract(data, '$.finish') <> '' "
+        "AND json_extract(data, '$.error') IS NULL "
+        "ORDER BY time_created ASC, rowid ASC",
+    )
+    if rows is None:
+        return None
+    stamps: list[int] = []
+    for row in rows:
+        try:
+            stamps.append(int(row[0]))
+        except (IndexError, TypeError, ValueError):
+            # A null/garbled time_created is not a compaction we can place on a
+            # phase; dropping it keeps the split honest rather than guessing.
+            continue
+    return stamps
+
+
 def read_memory_route(run_dir: Path) -> dict[str, Any] | None:
     """The sidecar's memory-route traffic count; None when it wrote none."""
     path = run_dir / LOOP_KILL_MARKER_DIRNAME / MEMORY_ROUTE_FILENAME

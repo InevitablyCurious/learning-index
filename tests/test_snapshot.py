@@ -164,7 +164,6 @@ SEED_PROVENANCE: dict[str, Any] = {
     "source_commit": "commit-1",
     "author_model": "m",
     "provider": "m",
-    "build_cost": {"turns": 2, "total_tokens": 99},
 }
 
 
@@ -192,7 +191,6 @@ def test_load_snapshot_round_trip(tmp_path):
     assert loaded.state_alg == STATE_ALG
     assert loaded.author_model == "m"
     assert loaded.provider == "m"
-    assert loaded.build_cost == {"turns": 2, "total_tokens": 99}
     assert loaded.chunk_plan_hash == "cph-1"
     assert loaded.template_hash == "th-1"
     assert loaded.source_commit == "commit-1"
@@ -238,7 +236,6 @@ def test_load_snapshot_absent_manifest_keys_are_none(tmp_path):
         "source_commit",
         "author_model",
         "provider",
-        "build_cost",
     ):
         assert getattr(loaded, field) is None
 

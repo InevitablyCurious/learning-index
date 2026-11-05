@@ -12,7 +12,6 @@ class ContentionCovariates:
     max_request_ms: int | None
     median_request_ms: int | None
     wall_seconds: float | None
-    wall_near_timeout: bool
 
     @classmethod
     def empty(
@@ -20,7 +19,6 @@ class ContentionCovariates:
         *,
         retry_count: int = 0,
         wall_seconds: float | None = None,
-        wall_near_timeout: bool = False,
     ) -> ContentionCovariates:
         return cls(
             http_429_count=None,
@@ -30,7 +28,6 @@ class ContentionCovariates:
             max_request_ms=None,
             median_request_ms=None,
             wall_seconds=wall_seconds,
-            wall_near_timeout=bool(wall_near_timeout),
         )
 
 

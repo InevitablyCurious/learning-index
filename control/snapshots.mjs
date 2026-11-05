@@ -65,7 +65,6 @@ export async function readSnapshot(runsRoot, id) {
   }
 
   const gates = manifest.gate_totals ?? null;
-  const cost = manifest.build_cost ?? null;
   const row = {
     id,
     author_model: manifest.author_model ?? null,
@@ -78,9 +77,6 @@ export async function readSnapshot(runsRoot, id) {
     // Identity metadata only: nothing selects or gates on the gate tally.
     gate_totals: gates,
     failed_count: gates && Number.isFinite(gates.fail) ? gates.fail : null,
-
-    // What a seeded run skips, stated at capture.
-    build_cost: cost,
 
     // Reported, never disqualifying.
     source_commit: manifest.source_commit ?? null,

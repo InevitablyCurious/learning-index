@@ -308,21 +308,15 @@ def test_build_scorecard_reads_only_manifest_and_stream(tmp_path) -> None:
 def test_build_scorecard_carries_snapshot_honesty_fields_from_the_stream(
     tmp_path,
 ) -> None:
-    """WO-SNAP-03 half A: the scorecard path passes the four declared fields.
+    """WO-SNAP-03 half A: the scorecard path passes the declared fields.
 
     Top-level keys on a status-stream record must survive the
     ``_ScoredSession`` carrier into ``ConvergencePoint.from_session_record``
     and out through the published point dict; a record without the keys
-    scores as unseeded defaults (None/False/None/False).
+    scores as unseeded defaults (None/False/False).
     """
     run_dir = tmp_path / "runs" / "cumulative"
     mutable_manifest_path = run_dir / "manifest.json"  # deliberately absent
-    skipped_build_cost = {
-        "turns": 4,
-        "total_tokens": 1200,
-        "wall_seconds": 30.5,
-        "wall_cost_usd": 0.25,
-    }
 
     stream = StatusStream(run_dir / "manifest.status.jsonl")
     stream.append(
@@ -335,7 +329,6 @@ def test_build_scorecard_carries_snapshot_honesty_fields_from_the_stream(
             ),
             "seeded_from_snapshot": "snap-abc123",
             "build_phase_ran": False,
-            "skipped_build_cost": dict(skipped_build_cost),
             "dev_mode": False,
         }
     )
@@ -356,12 +349,10 @@ def test_build_scorecard_carries_snapshot_honesty_fields_from_the_stream(
     seeded_point = next(p for p in points if p["sequence_index"] == 0)
     assert seeded_point["seeded_from_snapshot"] == "snap-abc123"
     assert seeded_point["build_phase_ran"] is False
-    assert seeded_point["skipped_build_cost"] == skipped_build_cost
     assert seeded_point["dev_mode"] is False
     bare_point = next(p for p in points if p["sequence_index"] == 1)
     assert bare_point["seeded_from_snapshot"] is None
     assert bare_point["build_phase_ran"] is False
-    assert bare_point["skipped_build_cost"] is None
     assert bare_point["dev_mode"] is False
 
 

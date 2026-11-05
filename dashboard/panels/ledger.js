@@ -65,6 +65,7 @@ export function renderLedger(board) {
     <section class="ledger bl">
       ${stripBlock()}
       ${head(ledger, board)}
+      ${fingerprintStrip(ledger)}
       ${ledger ? body(board, ledger, rows) : unwired()}
       ${nesting()}
     </section>`;
@@ -102,6 +103,56 @@ function serialChip(ledger) {
   if (!ledger) return "";
   if (!ledger.run_in_flight) return `<span class="tag">IDLE — NO CELL IN FLIGHT</span>`;
   return `<span class="tag bad" title="${esc(ledger.serial_note ?? "")}">CELL IN FLIGHT — ALL LAUNCHES BLOCKED</span>`;
+}
+
+/**
+ * PER FINGERPRINT — how many baselines were gathered on each exact code state
+ * and what one cost on average (control/baselines.mjs `fingerprints`). A repeat
+ * run on the same fingerprint lands on the same line and moves the average:
+ * re-baselining is ordinary, and the count is the evidence of it.
+ */
+function fingerprintStrip(ledger) {
+  const list = ledger?.fingerprints ?? [];
+  if (!list.length) return "";
+  return `
+    <div class="rsec">
+      <div class="rsecline">
+        <span class="kick">PER FINGERPRINT — ${list.length}</span>
+        <span class="spacer"></span>
+        <span class="note">${esc(
+          "one line per exact code state · every completed OFF baseline lands on its own fingerprint · "
+          + "each field averages over the cells that measured it — an unmeasured field is never a zero",
+        )}</span>
+      </div>
+      ${list.map(fingerprintRow).join("")}
+    </div>`;
+}
+
+/** One fingerprint line: its model, how many baselines, and the average cost. */
+function fingerprintRow(fp) {
+  const hash = String(fp?.fingerprint_hash ?? "");
+  const count = Number.isFinite(fp?.baseline_count) ? fp.baseline_count : null;
+  const avg = fp?.avg ?? {};
+  const bits = [
+    `fp ${hash.slice(0, 8)}`,
+    count === null ? nul("—") : esc(`${count} baseline${count === 1 ? "" : "s"}`),
+    `ctx ${avgText(avg.context_peak, (v) => Math.round(v).toLocaleString())}`,
+    `wall ${avgText(avg.wall_seconds, dur)}`,
+    `${avgText(avg.turns, (v) => String(Math.round(v)))} turns`,
+    `${avgText(avg.input_tokens, tok)} tok`,
+  ];
+  return `
+    <div class="rsecline" title="${esc(hash)}">
+      <span class="blid">${esc(fp?.model ?? "unknown model")}</span>
+      <span class="note">${bits.join(" · ")}</span>
+    </div>`;
+}
+
+/** An average, formatted; an unmeasured field reads "—", never 0. */
+function avgText(v, format) {
+  if (typeof v !== "number" || !Number.isFinite(v)) return nul("—");
+  const s = format(v);
+  return s === null || s === undefined ? nul("—") : esc(String(s));
 }
 
 function unwired() {
@@ -279,8 +330,10 @@ export function notePickRefusal(runDir, message) {
 /**
  * Every cell of the batch: its attempt-1 problem count (what the median is
  * over), its distance from the median, its failures per attempt (the repair
- * trajectory), and what it cost. A pick button on each scored cell while the
- * batch awaits one; none on a void batch — a floor never rides stale numbers.
+ * trajectory), and what it cost. A pick button on each scored cell of a batch
+ * that can hold a floor — awaiting one, or already holding one (re-picking the
+ * floor is ordinary; the route accepts it). None on a void batch — a floor never
+ * rides stale numbers — and none while the batch runs, which is not settled yet.
  */
 function cellsSection(b) {
   const batch = b.batch;
@@ -288,7 +341,7 @@ function cellsSection(b) {
   if (!list.length) {
     return `<div class="rsec"><span class="kick">CELLS IN THIS BATCH — 0</span><div class="rempty">${esc("no cell of this batch has been found on disk.")}</div></div>`;
   }
-  const canPick = b.state === "awaiting";
+  const canPick = b.state === "awaiting" || b.state === "complete";
   const refusal = pickRefusals.get(b.run_dir);
   return `
     <div class="rsec">

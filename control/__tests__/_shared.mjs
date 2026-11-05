@@ -32,6 +32,12 @@ export const FIXTURE_FP = {
   scaffold_hash: "s".repeat(64),
   golden_hash: "o".repeat(64),
   worker_image: { image_id: "sha256:fixture", created: "2026-09-01T00:00:00Z" },
+  harness_hash: "h".repeat(64),
+  source_commit: "c".repeat(40),
+  source_dirty: false,
+  worker_source_digest: "w".repeat(64),
+  opencode_version: "1.0.0-fixture",
+  grader_image: { image: "grader-img-1", source_digest: "gd1" },
 };
 export const FIXTURE_CODE = {
   chunk_plan_hash: FIXTURE_FP.chunk_plan_hash,
@@ -39,6 +45,12 @@ export const FIXTURE_CODE = {
   scaffold_hash: FIXTURE_FP.scaffold_hash,
   golden_hash: FIXTURE_FP.golden_hash,
   worker_image: FIXTURE_FP.worker_image,
+  harness_hash: FIXTURE_FP.harness_hash,
+  source_commit: FIXTURE_FP.source_commit,
+  source_dirty: FIXTURE_FP.source_dirty,
+  worker_source_digest: FIXTURE_FP.worker_source_digest,
+  opencode_version: FIXTURE_FP.opencode_version,
+  grader_image: FIXTURE_FP.grader_image,
 };
 let fixtureCode = FIXTURE_CODE;
 /** Make "the current code" differ (or restore it with no argument). */
@@ -52,6 +64,27 @@ export function writeCellFingerprint(runDir, seq, { arm = "off", values = FIXTUR
   const cell = join(runDir, `memory${String(arm).toUpperCase()}`, `cell-${String(seq).padStart(4, "0")}`);
   mkdirSync(cell, { recursive: true });
   writeFileSync(join(cell, "fingerprint.json"), JSON.stringify({ schema_version: 1, values }));
+}
+
+/**
+ * A cell's cost stamp, where the harness writes it
+ * (scripts/run_cumulative/runner.py; sibling of fingerprint.json). `record` is
+ * the whole body: { outcome, phases: { build?, troubleshooting?, total? },
+ * paused_seconds?, void: { is_void, reason } }.
+ */
+export function writeCellCost(runDir, seq, { arm = "off", record }) {
+  const cell = join(runDir, `memory${String(arm).toUpperCase()}`, `cell-${String(seq).padStart(4, "0")}`);
+  mkdirSync(cell, { recursive: true });
+  writeFileSync(join(cell, "cost.json"), `${JSON.stringify(record, null, 2)}\n`);
+}
+
+/** A cost stamp for a cell that measured the model: the common fixture body. */
+export function costStamp(total = null, { outcome = "failed" } = {}) {
+  return {
+    outcome,
+    phases: total ? { total } : {},
+    void: { is_void: false, reason: null },
+  };
 }
 
 /** A run dir on disk: one schedule slot plus its status record. */

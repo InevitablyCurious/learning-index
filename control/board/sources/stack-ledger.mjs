@@ -15,6 +15,7 @@
 import { int, num, str, parseGate } from "../contract.mjs";
 import { readTail, parseJsonl, readJson, statOrNull, listCampaignDirs } from "./_runtime.mjs";
 import { resolveArmed } from "../../snapshots.mjs";
+import { readCellCost } from "../../baselines.mjs";
 import { join } from "node:path";
 
 export const id = "stack-ledger";
@@ -30,7 +31,7 @@ export async function read(ctx) {
   }
 
   const cells = [];
-  for (const r of runs) cells.push(...cellsInRun(r));
+  for (const r of runs) cells.push(...(await cellsInRun(r)));
   if (!cells.length) {
     return { ok: false, reason: "run directories present but none carry a scheduled cell" };
   }
@@ -70,9 +71,9 @@ export async function read(ctx) {
 
       // Efficiency — never combined with correctness.
       turns: c.turns,
-      tokens: c.total_tokens,
-      // What the token total is made of; absent stays null.
-      tokens_breakdown: c.tokens_breakdown ?? null,
+      tokens: c.tokens,
+      // What the token total is made of; a kind the stamp omits stays null.
+      tokens_breakdown: c.tokens_breakdown,
       wall_seconds: c.wall_seconds,
 
       // Correctness — never combined with efficiency.
@@ -212,9 +213,10 @@ async function collectRuns(runsRoot) {
 
 /**
  * A run folder's cells: identity from the schedule (so a cell with no status
- * record still shows), measurement from the status stream by sequence_index.
+ * record still shows), measurement from the status stream by sequence_index,
+ * and the void verdict from the cell's own cost stamp.
  */
-function cellsInRun(run) {
+async function cellsInRun(run) {
   const m = run.manifest;
   const schedule = Array.isArray(m.schedule) ? m.schedule : [];
   if (!schedule.length) return [];
@@ -236,21 +238,10 @@ function cellsInRun(run) {
         failed_now: null,
         verdict: null,
         seeded_from_snapshot: null,
-        unrecovered_anomaly_turns: 0,
         turns: null,
-        total_tokens: null,
-        // Per-category breakdown: null (never 0) when the record predates capture.
-        tk_input: null,
-        tk_output_and_reasoning: null,
-        tk_reasoning: null,
-        tk_cache_read: null,
-        tk_cache_write: null,
         wall_seconds: null,
         terminal: false,
         terminal_reason: null,
-        full_green: false,
-        provider_truncations: 0,
-        truncated_turns: 0,
       });
     }
     const c = records.get(seq);
@@ -275,34 +266,14 @@ function cellsInRun(run) {
 
     c.verdict = str(r.verdict) ?? c.verdict;
     c.turns = int(p.turns) ?? c.turns;
-    // total_tokens is every token processed (input, output incl. reasoning, both
-    // cache figures). Falls back to work_total_tokens only when it is absent.
-    c.total_tokens =
-      int(p.total_tokens) ??
-      int(r.work_total_tokens) ??
-      c.total_tokens;
-
-    // The split the curve stacks. work_output_tokens includes reasoning; records
-    // from before capture stay null (drawn as a legacy bar).
-    c.tk_input = int(r.work_input_tokens) ?? int(p.input_tokens) ?? c.tk_input;
-    c.tk_output_and_reasoning =
-      int(r.work_output_tokens) ?? int(p.output_tokens) ?? c.tk_output_and_reasoning;
-    c.tk_reasoning = int(r.work_reasoning_tokens) ?? c.tk_reasoning;
-    c.tk_cache_read = int(r.work_cache_read_tokens) ?? c.tk_cache_read;
-    c.tk_cache_write = int(r.work_cache_write_tokens) ?? c.tk_cache_write;
+    // No token counter is read here on purpose. A status row's `work_*` counters
+    // are that ATTEMPT's, phase-scoped; folding them per cell by last-write-wins
+    // would show the final attempt's spend as the whole cell's. The cell's tokens
+    // come from its own `cost.json` `phases.total` below — one read per cell.
     const wall = num(p.wall_seconds);
     if (wall !== null) c.wall_seconds = Math.round(wall);
     if (r.terminal_outcome === true || str(r.terminal_reason)) c.terminal = true;
     c.terminal_reason = str(r.terminal_reason) ?? c.terminal_reason;
-    c.full_green = p.full_green === true;
-    c.provider_truncations = Math.max(c.provider_truncations, int(r.provider_truncations) ?? 0);
-    c.truncated_turns = Math.max(c.truncated_turns, int(r.truncated_turns) ?? 0);
-    // The unrecovered-anomaly subset is what the void rule reads; truncated_turns
-    // also counts recovered loops and never decides a measurement.
-    c.unrecovered_anomaly_turns = Math.max(
-      c.unrecovered_anomaly_turns,
-      int(r.unrecovered_anomaly_turns) ?? 0,
-    );
     // Sticky, and read from the record itself (not `progress`).
     c.seeded_from_snapshot = str(r.seeded_from_snapshot) ?? c.seeded_from_snapshot;
   }
@@ -313,7 +284,8 @@ function cellsInRun(run) {
     sessions.set(int(s.sequence_index) ?? 0, s);
   }
 
-  return schedule.map((s) => {
+  const out = [];
+  for (const s of schedule) {
     const seq = int(s.sequence_index) ?? 0;
     const meas = records.get(seq) ?? null;
     const sess = sessions.get(seq) ?? null;
@@ -321,8 +293,15 @@ function cellsInRun(run) {
     const attempts = meas ? [...meas.attempts.keys()].sort((a, b) => a - b) : [];
     const lastSet = attempts.length ? meas.attempts.get(attempts[attempts.length - 1]) : null;
     const firstSet = attempts.length ? meas.attempts.get(attempts[0]) : null;
+    const arm = str(s.memory_mode) ?? str(sess?.memory_mode);
 
-    return {
+    // ONE read of this cell's cost stamp: it is the harness's authority on both
+    // what the cell cost (`phases.total`) and whether it measured the model or
+    // itself (`void.is_void`). Nothing here re-derives either.
+    const cost = await readCellCost(cellDirFor(run.dir, arm, seq));
+    const tokens = costTokens(cost);
+
+    out.push({
       run_dir: run.name,
       sequence_index: seq,
       created_at: created,
@@ -330,7 +309,7 @@ function cellsInRun(run) {
       roster_hash: rosterHash,
       seed,
       org_id: str(s.org_id) ?? orgId,
-      arm: str(s.memory_mode) ?? str(sess?.memory_mode),
+      arm,
       model: str(s.provider_pin) ?? str(s.model) ?? str(sess?.model),
 
       // Phases from attempt records; no record = 0 phases, a real measurement.
@@ -338,14 +317,9 @@ function cellsInRun(run) {
       chunk: { current: null, total: 6 },
 
       turns: meas?.turns ?? null,
-      total_tokens: meas?.total_tokens ?? null,
-      tokens_breakdown: {
-        input: meas?.tk_input ?? null,
-        output_and_reasoning: meas?.tk_output_and_reasoning ?? null,
-        reasoning: meas?.tk_reasoning ?? null,
-        cache_read: meas?.tk_cache_read ?? null,
-        cache_write: meas?.tk_cache_write ?? null,
-      },
+      tokens: tokens.total_tokens,
+      // What the token total is made of; a kind the stamp omits stays null.
+      tokens_breakdown: tokens.breakdown,
       wall_seconds: meas?.wall_seconds ?? null,
 
       failed_now: lastSet ? lastSet.size : null,
@@ -359,20 +333,50 @@ function cellsInRun(run) {
       state: !meas ? "not_started" : meas.terminal ? "complete" : "running",
       terminal_reason: meas?.terminal_reason ?? null,
 
-      // RUNBOOK 5.10: an unrecovered provider-side anomaly on a non-green ending is
-      // an instrument failure, never plotted. Reads unrecovered_anomaly_turns, like
-      // run_artifacts.py and control/baselines.mjs.
-      void_instrument: meas
-        ? !meas.full_green &&
-          (meas.terminal_reason === "transport_incomplete" ||
-            // The harness ended the cell: two compactions before any grade.
-            meas.terminal_reason === "compactions_before_grade" ||
-            meas.provider_truncations > 0 ||
-            meas.unrecovered_anomaly_turns > 0)
-        : false,
+      // RUNBOOK 5.10, read off the harness's own stamp: cost.json's
+      // `void.is_void` (harness/cumulative/run_artifacts.py cell_void, written by
+      // scripts/run_cumulative/runner.py beside fingerprint.json) is the single
+      // truth. Re-deriving it from the status stream here duplicated that rule and
+      // had drifted from it. A cell with no stamp is pre-standard or still
+      // running — not void.
+      void_instrument: cost?.void?.is_void === true,
 
       // As stated by the harness that seeded it.
       seeded_from_snapshot: meas?.seeded_from_snapshot ?? null,
-    };
-  });
+    });
+  }
+  return out;
+}
+
+/** A cell's directory: <campaign>/memory<ARM>/cell-NNNN (harness path layout). */
+function cellDirFor(runDir, arm, seq) {
+  return join(
+    runDir,
+    `memory${String(arm ?? "unknown").toUpperCase()}`,
+    `cell-${String(seq).padStart(4, "0")}`,
+  );
+}
+
+/**
+ * A cell's token totals off its cost stamp's `phases.total` — the only place all
+ * five kinds exist, with `output_tokens` generation-only and reasoning beside it.
+ * An absent kind is null (unknown), never 0: a cell with no stamp, or a stamp
+ * with no `phases.total`, shows null throughout rather than inheriting an
+ * attempt's partial counters. The total is the sum of the kinds observed — never
+ * a subset presented as a whole.
+ */
+function costTokens(cost) {
+  const total = cost?.phases?.total ?? null;
+  const breakdown = {
+    input: int(total?.input_tokens),
+    output: int(total?.output_tokens),
+    reasoning: int(total?.reasoning_tokens),
+    cache_read: int(total?.cache_read_tokens),
+    cache_write: int(total?.cache_write_tokens),
+  };
+  const kinds = Object.values(breakdown).filter((v) => v !== null);
+  return {
+    breakdown,
+    total_tokens: kinds.length ? kinds.reduce((a, b) => a + b, 0) : null,
+  };
 }

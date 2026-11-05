@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  CODE_INPUTS,
   FINGERPRINT_INPUTS,
   hashDir,
   computeFingerprint,
@@ -48,6 +49,12 @@ function makeValues(overrides = {}) {
     scaffold_hash: "scaffold-1",
     golden_hash: "golden-1",
     worker_image: { image_id: "sha256:img-1", created: "2026-01-01T00:00:00Z" },
+    harness_hash: "harness-1",
+    source_commit: "commit-1",
+    source_dirty: false,
+    worker_source_digest: "wsd-1",
+    opencode_version: "1.0.0",
+    grader_image: { image: "grader-img-1", source_digest: "gd1" },
     ...overrides,
   };
 }
@@ -185,6 +192,36 @@ test("BATCH: fingerprintVerdict names the first changed input with its reason", 
   );
   assert.equal(createdChanged.changedInput, "worker_image", "created is an identity field too");
 
+  const graderImageChanged = fingerprintVerdict(
+    fp,
+    computeFingerprint(
+      makeValues({ grader_image: { image: "grader-img-2", source_digest: "gd1" } }),
+    ),
+  );
+  assert.equal(graderImageChanged.valid, false);
+  assert.equal(graderImageChanged.changedInput, "grader_image");
+
+  const graderDigestChanged = fingerprintVerdict(
+    fp,
+    computeFingerprint(
+      makeValues({ grader_image: { image: "grader-img-1", source_digest: "gd2" } }),
+    ),
+  );
+  assert.equal(
+    graderDigestChanged.changedInput,
+    "grader_image",
+    "source_digest is an identity field too",
+  );
+
+  assert.equal(
+    fingerprintVerdict(
+      fp,
+      computeFingerprint(makeValues({ grader_image: { ...makeValues().grader_image } })),
+    ).valid,
+    true,
+    "an equal-but-not-identical grader_image is the same image",
+  );
+
   const compactionFlipped = fingerprintVerdict(
     fp,
     computeFingerprint(makeValues({ compaction: true })),
@@ -205,6 +242,35 @@ test("BATCH: fingerprintVerdict names the first changed input with its reason", 
   );
 });
 
+test("BATCH: CODE_INPUTS is the eleven code ingredients, never the experiment's identity", () => {
+  // What a later edit/commit/rebuild can move under a batch — including the six
+  // that say where the measurement came from. Model, challenge and compaction
+  // stay out: they are what the batch IS, not the code it ran on.
+  assert.deepEqual(CODE_INPUTS, [
+    "chunk_plan_hash",
+    "grader_hash",
+    "scaffold_hash",
+    "golden_hash",
+    "worker_image",
+    "harness_hash",
+    "source_commit",
+    "source_dirty",
+    "worker_source_digest",
+    "opencode_version",
+    "grader_image",
+  ]);
+  for (const identity of ["model", "challenge", "compaction"]) {
+    assert.equal(CODE_INPUTS.includes(identity), false, `${identity} is never compared as code`);
+  }
+  for (const name of CODE_INPUTS) {
+    assert.equal(
+      FINGERPRINT_INPUTS.some((input) => input.name === name),
+      true,
+      `${name} is a fingerprint input`,
+    );
+  }
+});
+
 test("BATCH: computeFingerprint is insertion-order independent and canonical", () => {
   assert.deepEqual(
     FINGERPRINT_INPUTS.map((input) => input.name),
@@ -217,6 +283,12 @@ test("BATCH: computeFingerprint is insertion-order independent and canonical", (
       "scaffold_hash",
       "golden_hash",
       "worker_image",
+      "harness_hash",
+      "source_commit",
+      "source_dirty",
+      "worker_source_digest",
+      "opencode_version",
+      "grader_image",
     ],
     "contract order is pinned",
   );
@@ -284,21 +356,21 @@ test("BATCH: assembleBatch computes counts + median and initializes selection/vo
   );
 });
 
-test("BATCH: contentionSummary sums counts, maxes latencies, ANYs wall_near_timeout — scored runs only", () => {
+test("BATCH: contentionSummary sums counts and maxes latencies — scored runs only", () => {
   const run = (scored, contention) => ({ scored, contention });
   const runs = [
     run(true, {
       http_429_count: 2, http_402_count: null, retry_count: 1, upstream_error_count: 0,
-      max_request_ms: 500, median_request_ms: 120, wall_near_timeout: false,
+      max_request_ms: 500, median_request_ms: 120,
     }),
     run(true, {
       http_429_count: 3, http_402_count: 1, retry_count: null, upstream_error_count: 2,
-      max_request_ms: 900, median_request_ms: 80, wall_near_timeout: true,
+      max_request_ms: 900, median_request_ms: 80,
     }),
     // A void run never enters the summary — the same population as the median.
     run(false, {
       http_429_count: 100, http_402_count: 100, retry_count: 100, upstream_error_count: 100,
-      max_request_ms: 100000, median_request_ms: 100000, wall_near_timeout: true,
+      max_request_ms: 100000, median_request_ms: 100000,
     }),
   ];
   assert.deepEqual(contentionSummary(runs), {
@@ -308,34 +380,27 @@ test("BATCH: contentionSummary sums counts, maxes latencies, ANYs wall_near_time
     upstream_error_count: 2, // SUM 0 + 2
     max_request_ms: 900, // MAX
     median_request_ms: 120, // MAX
-    wall_near_timeout: true, // ANY
   });
 
   // A field no scored run measured is null — never a fabricated 0/false.
   const unmeasured = [
     run(true, {
       http_429_count: null, http_402_count: null, retry_count: null, upstream_error_count: null,
-      max_request_ms: null, median_request_ms: null, wall_near_timeout: null,
+      max_request_ms: null, median_request_ms: null,
     }),
     run(true, null), // no contention object at all
   ];
   assert.deepEqual(contentionSummary(unmeasured), {
     http_429_count: null, http_402_count: null, retry_count: null, upstream_error_count: null,
-    max_request_ms: null, median_request_ms: null, wall_near_timeout: null,
+    max_request_ms: null, median_request_ms: null,
   });
   assert.deepEqual(contentionSummary([]), contentionSummary(unmeasured), "empty → all null");
-
-  // A measured false stays false — ANY is not "truthy-or-null".
-  assert.equal(
-    contentionSummary([run(true, { wall_near_timeout: false })]).wall_near_timeout,
-    false,
-  );
 });
 
 test("BATCH: assembleBatch carries per-run contention and surfaces the scored-only summary", () => {
   const crowded = {
     http_429_count: 1, http_402_count: 0, retry_count: 2, upstream_error_count: null,
-    max_request_ms: 300, median_request_ms: 100, wall_near_timeout: false,
+    max_request_ms: 300, median_request_ms: 100,
   };
   const batch = assembleBatch({
     runDir: "/tmp/run-c",
@@ -345,14 +410,14 @@ test("BATCH: assembleBatch carries per-run contention and surfaces the scored-on
         sequence_index: 1, problem_count: null, scored: false, void_reason: "void_instrument",
         contention: {
           http_429_count: 9, http_402_count: 9, retry_count: 9, upstream_error_count: 9,
-          max_request_ms: 9999, median_request_ms: 9999, wall_near_timeout: true,
+          max_request_ms: 9999, median_request_ms: 9999,
         },
       },
       {
         sequence_index: 2, problem_count: 20, scored: true, void_reason: null,
         contention: {
           http_429_count: 4, http_402_count: null, retry_count: 1, upstream_error_count: 3,
-          max_request_ms: 800, median_request_ms: 50, wall_near_timeout: true,
+          max_request_ms: 800, median_request_ms: 50,
         },
       },
     ],
@@ -371,10 +436,9 @@ test("BATCH: assembleBatch carries per-run contention and surfaces the scored-on
     upstream_error_count: 3, // null + 3
     max_request_ms: 800, // MAX over scored
     median_request_ms: 100, // MAX over scored
-    wall_near_timeout: true, // ANY over scored
   });
   // Contention is deliberately NOT fingerprinted: the canonical values stay
-  // the eight contract inputs (pinned by the FINGERPRINT_INPUTS order test).
+  // the fourteen contract inputs (pinned by the FINGERPRINT_INPUTS order test).
   assert.deepEqual(
     Object.keys(batch.fingerprint.values),
     FINGERPRINT_INPUTS.map((input) => input.name),

@@ -315,12 +315,15 @@ export const routes = [
         const cellArgv = [
           ...argv.slice(0, subcommandAt),
           "--sequence-index", String(cell.sequence_index),
-          // EVERY cell of the batch plans the same N slots. Without this the
-          // schedule holds one session per model, the allocator hands out
-          // 0..N-1, and every cell after the first dies seconds in on
-          // "sequence_index 2 out of range". Sent on the OFF arm only: an ON
-          // cell is a single measurement against the floor.
-          ...(arm === "on" ? [] : ["--off-replicates", String(concurrency)]),
+          // EVERY cell of the batch plans the SAME slots: the highest index
+          // this batch allocated, +1 — the campaign's accumulated OFF slot
+          // count. The harness GROWS the schedule to that length by APPENDING
+          // the missing slots (sequencer.py:138-174), so the highest allocated
+          // index is in range for every cell; the batch's own N would plan
+          // only N slots and every cell past them dies on
+          // "sequence_index N out of range". Sent on the OFF arm only: an ON
+          // cell is a single measurement against the floor, never a reshuffle.
+          ...(arm === "on" ? [] : ["--off-replicates", String(batch[batch.length - 1].sequence_index + 1)]),
           ...argv.slice(subcommandAt),
         ];
         // The harness writes run-scoped notices to the same file; `source` says

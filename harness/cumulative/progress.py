@@ -70,14 +70,6 @@ def _float_or_default(value: Any, *, default: float) -> float:
         return default
 
 
-def _bool_or_default(value: Any, *, default: bool) -> bool:
-    if value is _MISSING or value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    return bool(value)
-
-
 def _str_or_default(value: Any, *, default: str) -> str:
     if value is _MISSING or value is None:
         return default
@@ -110,10 +102,6 @@ def _contention_fields(result: Any) -> dict[str, Any]:
         ),
         "max_request_ms": _optional_int(_field(contention, "max_request_ms")),
         "median_request_ms": _optional_int(_field(contention, "median_request_ms")),
-        "wall_near_timeout": _bool_or_default(
-            _field(contention, "wall_near_timeout"),
-            default=False,
-        ),
     }
 
 

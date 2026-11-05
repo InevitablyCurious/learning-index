@@ -70,8 +70,11 @@ function attempt({
   };
 }
 
-/** Write records to a temp runs root and read them through the real module. */
-async function boardFrom(records) {
+/**
+ * Write records to a temp runs root and read them through the real module.
+ * `stamps` lays the cells' cost.json void stamps beside the stream.
+ */
+async function boardFrom(records, stamps = []) {
   const root = await mkdtemp(join(tmpdir(), "okp-dash-test-"));
   try {
     const dir = join(root, "cumulative");
@@ -81,12 +84,28 @@ async function boardFrom(records) {
       records.map((r) => JSON.stringify(r)).join("\n") + "\n",
       "utf8",
     );
+    for (const s of stamps) await writeCostStamp(dir, s.seq, s);
     const res = await read({ runsRoot: root, benchRoot: root, config: {} });
     assert.equal(res.ok, true, `source should read: ${res.reason ?? ""}`);
     return res.patch;
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+}
+
+/**
+ * A cell's cost stamp, where the harness writes it — sibling of fingerprint.json
+ * inside <campaign>/memory<ARM>/cell-NNNN. Since the board deleted its own copy
+ * of the RUNBOOK 5.10 rule, this stamp is the ONLY thing that can void a cell.
+ */
+async function writeCostStamp(dir, seq, { arm = "off", isVoid, reason = null }) {
+  const cell = join(dir, `memory${arm.toUpperCase()}`, `cell-${String(seq).padStart(4, "0")}`);
+  await mkdir(cell, { recursive: true });
+  await writeFile(
+    join(cell, "cost.json"),
+    JSON.stringify({ outcome: "failed", phases: {}, void: { is_void: isVoid, reason } }) + "\n",
+    "utf8",
+  );
 }
 
 /** One cell's view (readCell) over the same records, in a run named "cumulative". */
@@ -142,65 +161,56 @@ function scoredCell(seq, mode) {
 }
 
 // ── cellValidity, in isolation ───────────────────────────────────────────────
+//
+// THE VERDICT IS READ, NEVER RE-DERIVED. The harness owns RUNBOOK 5.10 and
+// stamps it into each cell's cost.json (`void: { is_void, reason }`,
+// harness/cumulative/run_artifacts.py cell_void); the source attaches it as
+// `void_instrument`. These pin that this module obeys that stamp and that the
+// status-stream fields it used to read (terminal_reason, provider_truncations,
+// unrecovered_anomaly_turns, full_green) no longer decide anything here.
 
-test("cellValidity: an UNRECOVERED anomaly voids a non-green cell — not a 0%", () => {
-  // The void signal is the producer-stated `unrecovered_anomaly_turns` —
-  // anomalies the harness did NOT recover. No other truncation signal here:
-  // this pins that disjunct alone (2026-09-05 swap from `truncated_turns`).
-  const v = cellValidity({
-    full_green: false,
-    terminal_reason: "harness_error",
-    unrecovered_anomaly_turns: 11,
-    attempt_count: 3,
-  });
+test("cellValidity: a void-instrument stamp is never scored — not a 0%", () => {
+  const v = cellValidity({ void_instrument: true, attempt_count: 3 });
   assert.equal(v.scored, false);
   assert.equal(v.reason, "void_instrument");
 });
 
-test("cellValidity: a RECOVERED loop-guard cell (truncated_turns > 0, unrecovered 0) SCORES", () => {
-  // The other half of the 2026-09-05 swap, mirroring control.test.mjs's
-  // loop-guard pin: the harness caught a looping model and recovered it.
-  // `truncated_turns` counts those turns, but a looping model is a capability
-  // observation, not a broken instrument — the cell is a measurement.
+test("cellValidity: the status-stream signal fields decide NOTHING", () => {
+  // Every one of these used to void the cell on its own, and the copy had
+  // already drifted from the owner: it missed `instrument_fault` and
+  // `observation_lost_turns`. Only the harness's stamp may void a cell.
   const v = cellValidity({
     full_green: false,
+    terminal_reason: "transport_incomplete",
+    provider_truncations: 40,
+    unrecovered_anomaly_turns: 11,
+    truncated_turns: 9,
+    attempt_count: 3,
+  });
+  assert.equal(v.scored, true, "no stamp, no void verdict");
+  assert.equal(v.reason, null);
+});
+
+test("cellValidity: a RECOVERED loop-guard cell (truncated_turns > 0) SCORES", () => {
+  // The 2026-09-05 fix, now the harness's to make: a looping model the harness
+  // caught and recovered is a capability observation, not a broken instrument —
+  // its stamp lands false. Voiding it here is what burned the 39/53 cell.
+  const v = cellValidity({
+    void_instrument: false,
     terminal_reason: "gates_failed",
     truncated_turns: 9,
-    unrecovered_anomaly_turns: 0,
     attempt_count: 2,
   });
   assert.equal(v.scored, true);
   assert.equal(v.reason, null);
 });
 
-test("cellValidity: transport_incomplete alone is a truncation signal", () => {
-  const v = cellValidity({
-    full_green: false,
-    terminal_reason: "transport_incomplete",
-    attempt_count: 3,
-  });
-  assert.equal(v.scored, false);
-  assert.equal(v.reason, "void_instrument");
-});
-
-test("cellValidity: compactions_before_grade voids a non-green cell", () => {
-  // The harness ended the cell at two compactions before any grade could be
-  // issued: no capability verdict was ever measured, so scoring it 0% would
-  // fake lift for the memory arm exactly like a transport abort does.
-  const v = cellValidity({
-    full_green: false,
-    terminal_reason: "compactions_before_grade",
-    attempt_count: 3,
-  });
-  assert.equal(v.scored, false);
-  assert.equal(v.reason, "void_instrument");
-});
-
 test("cellValidity: a graded-fail (gates_failed) cell is a REAL capability fail and SCORES", () => {
-  // Standing contrast for the void allow-list: a cell whose gates failed is the
-  // model failing to resolve gates, not a broken instrument. Voiding it would
-  // hide a genuine fail from the control arm's denominator.
+  // A cell whose gates failed is the model failing to resolve gates, not a
+  // broken instrument. The harness stamps it non-void; voiding it would hide a
+  // genuine fail from the control arm's denominator.
   const v = cellValidity({
+    void_instrument: false,
     full_green: false,
     terminal_reason: "gates_failed",
     attempt_count: 3,
@@ -210,10 +220,11 @@ test("cellValidity: a graded-fail (gates_failed) cell is a REAL capability fail 
 });
 
 test("cellValidity: a GREEN terminal attempt scores despite earlier truncation", () => {
-  // Rule 5.10 is explicit: a green terminal attempt is scored regardless of
-  // earlier truncation. Voiding a success because the transport hiccuped
-  // mid-run would discard a real result.
+  // Rule 5.10: a green terminal attempt is scored regardless of truncation seen
+  // on earlier attempts, so the harness never stamps such a cell void. This
+  // module carries no green check of its own — the stamp already states it.
   const v = cellValidity({
+    void_instrument: false,
     full_green: true,
     terminal_reason: "gates_green",
     truncated_turns: 9,
@@ -224,13 +235,13 @@ test("cellValidity: a GREEN terminal attempt scores despite earlier truncation",
 });
 
 test("cellValidity: a single-attempt cell is resolution_unmeasurable", () => {
-  const v = cellValidity({ full_green: false, terminal_reason: "gates_failed", attempt_count: 1 });
+  const v = cellValidity({ void_instrument: false, attempt_count: 1 });
   assert.equal(v.scored, false);
   assert.equal(v.reason, "resolution_unmeasurable");
 });
 
 test("cellValidity: a clean multi-attempt cell scores", () => {
-  const v = cellValidity({ full_green: false, terminal_reason: "gates_failed", attempt_count: 2 });
+  const v = cellValidity({ void_instrument: false, attempt_count: 2 });
   assert.equal(v.scored, true);
   assert.equal(v.reason, null);
 });
@@ -240,19 +251,24 @@ test("cellValidity: a clean multi-attempt cell scores", () => {
 test("THE INCIDENT: the burned harness_error cell never enters the control arm", async () => {
   // Verbatim shape of runs/cumulative/manifest.status.jsonl record 0, the cell
   // that was live in arm B as `cells:1, resolution_rate:0` when this was found.
-  const patch = await boardFrom([
-    attempt({
-      seq: 0,
-      attempt: 1,
-      mode: "off",
-      gates: Array.from({ length: 23 }, (_, i) => `[G${String(i + 1).padStart(2, "0")}] REQ-X — g`),
-      terminalReason: "harness_error",
-      lengthTruncations: 151,
-      truncatedTurns: 11,
-      turns: 158,
-    }),
-    { type: "extraction", sequence_index: 0, memory_mode: "off", extraction_state: "invoked_cut_off" },
-  ]);
+  // Its void verdict comes from the harness's stamp — 151 provider truncations —
+  // not from anything re-read here.
+  const patch = await boardFrom(
+    [
+      attempt({
+        seq: 0,
+        attempt: 1,
+        mode: "off",
+        gates: Array.from({ length: 23 }, (_, i) => `[G${String(i + 1).padStart(2, "0")}] REQ-X — g`),
+        terminalReason: "harness_error",
+        lengthTruncations: 151,
+        truncatedTurns: 11,
+        turns: 158,
+      }),
+      { type: "extraction", sequence_index: 0, memory_mode: "off", extraction_state: "invoked_cut_off" },
+    ],
+    [{ seq: 0, isVoid: true, reason: "provider_truncations" }],
+  );
 
   const b = patch.arm_delta.b;
   assert.equal(b.cells, 0, "a void-instrument cell must not count as an observation");
@@ -283,11 +299,12 @@ test("a legitimate two-attempt cell still scores, and the rate is real", async (
 // ── the reason the WO exists: no fabricated lift ─────────────────────────────
 
 test("FABRICATED LIFT: void control cells cannot unlock a delta", async () => {
-  // Three ON cells that genuinely score, and three OFF cells that are all
-  // void-instrument. Pre-fix this published a delta of +50 points against a
-  // control arm crippled by arithmetic. Post-fix the control arm has zero
-  // scored cells, so the board must stay in COLLECTING.
+  // Three ON cells that genuinely score, and three OFF cells whose own cost
+  // stamp says the instrument failed to measure them. Pre-fix this published a
+  // delta of +50 points against a control arm crippled by arithmetic. Post-fix
+  // the control arm has zero scored cells, so the board must stay in COLLECTING.
   const records = [];
+  const stamps = [];
   for (const seq of [0, 1, 2]) records.push(...scoredCell(seq, "on"));
   for (const seq of [3, 4, 5]) {
     records.push(
@@ -299,14 +316,16 @@ test("FABRICATED LIFT: void control cells cannot unlock a delta", async () => {
         unrecoveredAnomalyTurns: 7,
       }),
     );
+    stamps.push({ seq, isVoid: true, reason: "unrecovered_anomaly_turns" });
   }
 
-  const patch = await boardFrom(records);
+  const patch = await boardFrom(records, stamps);
   const d = patch.arm_delta;
 
   assert.equal(d.a.cells, 3, "the ON arm legitimately reached threshold");
   assert.equal(d.b.cells, 0, "every control cell was void");
   assert.equal(d.b.excluded.total, 3);
+  assert.equal(d.b.excluded.void_instrument, 3, "excluded for the instrument, not for arithmetic");
   assert.equal(d.sufficient, false, "threshold must count SCORED cells only");
   assert.equal(d.delta, null, "no delta may be published against an empty control arm");
   assert.equal(d.statement, null);
@@ -368,9 +387,12 @@ test("an archived record carrying no `type` is still read as an attempt", async 
 // The display-vs-measurement rule below is unchanged; only the delta is filtered.
 
 test("a void cell is excluded from the delta while its record is still read", async () => {
-  const patch = await boardFrom([
-    attempt({ seq: 0, attempt: 1, mode: "off", terminalReason: "harness_error", unrecoveredAnomalyTurns: 11 }),
-  ]);
+  const patch = await boardFrom(
+    [
+      attempt({ seq: 0, attempt: 1, mode: "off", terminalReason: "harness_error", unrecoveredAnomalyTurns: 11 }),
+    ],
+    [{ seq: 0, isVoid: true, reason: "unrecovered_anomaly_turns" }],
+  );
   // Read and counted as an exclusion — never silently dropped, which is what
   // makes the exclusion auditable rather than invisible.
   assert.equal(patch.arm_delta.b.cells, 0);
@@ -384,17 +406,20 @@ test("LOOP-GUARD: a recovered cell (truncated_turns > 0, unrecovered 0) SCORES o
   // and must enter the delta — voiding it here is exactly the defect that
   // burned the 39/53 cell. Mirrors control.test.mjs's loop-guard pin, driven
   // through the real source module over real records.
-  const patch = await boardFrom([
-    attempt({ seq: 0, attempt: 1, mode: "off", truncatedTurns: 9, unrecoveredAnomalyTurns: 0 }),
-    attempt({
-      seq: 0,
-      attempt: 2,
-      mode: "off",
-      gates: ["[G02] REQ-B — b"],
-      truncatedTurns: 9,
-      unrecoveredAnomalyTurns: 0,
-    }),
-  ]);
+  const patch = await boardFrom(
+    [
+      attempt({ seq: 0, attempt: 1, mode: "off", truncatedTurns: 9, unrecoveredAnomalyTurns: 0 }),
+      attempt({
+        seq: 0,
+        attempt: 2,
+        mode: "off",
+        gates: ["[G02] REQ-B — b"],
+        truncatedTurns: 9,
+        unrecoveredAnomalyTurns: 0,
+      }),
+    ],
+    [{ seq: 0, isVoid: false }],
+  );
   const b = patch.arm_delta.b;
   assert.equal(b.cells, 1, "the recovered cell is an observation, not an instrument failure");
   assert.equal(b.excluded.void_instrument, 0);
@@ -633,7 +658,8 @@ test("BASELINE: a RUNNING off cell is pending, never void-instrument", async () 
 
 test("BASELINE: void_instrument is still reported as void", async () => {
   // The guard must not swing the other way — a genuinely truncated terminal
-  // cell is an instrument failure and has to keep saying so.
+  // cell is an instrument failure and has to keep saying so. The verdict is the
+  // harness's: its cost stamp says void, so the ledger must report void.
   const root = await mkdtemp(join(tmpdir(), "okp-dash-void-"));
   try {
     const dir = join(root, "cumulative");
@@ -658,6 +684,7 @@ test("BASELINE: void_instrument is still reported as void", async () => {
       ].map((r) => JSON.stringify(r)).join("\n") + "\n",
       "utf8",
     );
+    await writeCostStamp(dir, 0, { isVoid: true, reason: "transport_incomplete" });
 
     const { read: readStack } = await import("./sources/stack-ledger.mjs");
     const res = await readStack({ runsRoot: root, benchRoot: root, config: {} });

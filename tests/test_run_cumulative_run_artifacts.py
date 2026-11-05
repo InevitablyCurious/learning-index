@@ -39,7 +39,6 @@ def _cell_result() -> Any:
                 "conformed": True,
                 "n_problems": 0,
                 "failed_gates": [],
-                "attempt_cost_usd": 0.0,
                 # WO-CUTOFF: per-attempt context figures sourced from
                 # attempt_reports; the ledger writer copies them onto the
                 # attempt row only when present (None = not recorded).
@@ -524,16 +523,16 @@ def test_local_proxy_log_served_identity_lands_in_manifest_and_status(
 #
 # --seed-snapshot resolves + validates a captured snapshot against the
 # session's model and the running corpus, threads the resolved tree/ to the
-# adapter, and writes the four honesty fields (seeded_from_snapshot /
-# build_phase_ran / skipped_build_cost / dev_mode) onto the session and into
-# every attempt status record. A refusal ABORTS — it never falls back to a
-# scaffold build.
+# adapter, and writes the three honesty fields (seeded_from_snapshot /
+# build_phase_ran / dev_mode) onto the session and into every attempt status
+# record. A refusal ABORTS — it never falls back to a scaffold build.
+# There is no fourth field: the snapshot carries no build cost, so a seeded
+# cell states THAT it skipped the build, never a fabricated price for skipping.
 
 _SEED_SNAPSHOT_ID = "snap-seed-1"
 # Stated constants, precedent: tests/test_snapshot_capture.py (no git shelling
 # in tests; _current_git_head is shadowed on the instance).
 _SEED_COMMIT = "0123456789abcdef"
-_SEED_BUILD_COST = {"total_cost_usd": 0.42, "build_chunks": 6}
 
 
 def _seed_fixture(
@@ -585,7 +584,6 @@ def _seed_fixture(
         "source_commit": _SEED_COMMIT if source_commit is None else source_commit,
         "author_model": author_model,
         "provider": "local-llm-proxy",
-        "build_cost": dict(_SEED_BUILD_COST),
     }
     src_tree = tmp_path / "graded-tree"
     src_tree.mkdir()
@@ -637,7 +635,6 @@ def test_resolve_seed_snapshot_returns_loaded_tree(
     assert snap.snapshot_id == _SEED_SNAPSHOT_ID
     assert snap.tree == snap_tree
     assert (snap.tree / "app.ts").read_text(encoding="utf-8") == "graded code"
-    assert snap.build_cost == _SEED_BUILD_COST
     # The load is cached on the runner for subsequent sessions.
     assert runner._seed_snapshot is snap
 
@@ -719,18 +716,20 @@ def test_run_session_seeded_threads_tree_and_writes_honesty_fields(
     # Honesty fields on the session — the seam the manifest checkpoint carries.
     assert session.seeded_from_snapshot == _SEED_SNAPSHOT_ID
     assert session.build_phase_ran is False
-    assert session.skipped_build_cost == _SEED_BUILD_COST
     assert session.dev_mode is True
 
-    # Every attempt status record carries the same four fields.
+    # Every attempt status record carries the same three fields.
     records = _read_status_records(tmp_path / "runs")
     assert records
     for record in records:
         assert record["type"] == "attempt"
         assert record["seeded_from_snapshot"] == _SEED_SNAPSHOT_ID
         assert record["build_phase_ran"] is False
-        assert record["skipped_build_cost"] == _SEED_BUILD_COST
         assert record["dev_mode"] is True
+        # The retired build-cost field is GONE, not nulled: a seeded cell
+        # skips the build and the snapshot records no price for it, so there
+        # is nothing truthful left to copy onto the row.
+        assert "skipped_build_cost" not in record
 
 
 def test_run_session_seeded_with_drifted_source_commit_proceeds(
@@ -801,7 +800,6 @@ def test_run_session_unseeded_writes_honest_build_phase_ran_true(
 
     assert session.seeded_from_snapshot is None
     assert session.build_phase_ran is True
-    assert session.skipped_build_cost is None
     assert session.dev_mode is False
 
     records = _read_status_records(tmp_path / "runs")
@@ -809,8 +807,8 @@ def test_run_session_unseeded_writes_honest_build_phase_ran_true(
     for record in records:
         assert record["seeded_from_snapshot"] is None
         assert record["build_phase_ran"] is True
-        assert record["skipped_build_cost"] is None
         assert record["dev_mode"] is False
+        assert "skipped_build_cost" not in record
 
 
 def test_run_session_refusal_aborts_before_runner_construction(

@@ -62,7 +62,6 @@ CONTENTION_FIELDS = (
     "upstream_error_count",
     "max_request_ms",
     "median_request_ms",
-    "wall_near_timeout",
 )
 
 

@@ -1,11 +1,15 @@
 // BASELINES — the one owner of "does model X have a floor, and which cell is it".
 //
-// One floor per model: the operator's SELECTED run from the model's persisted
-// batch (<run_dir>/batch.json — median over the scored runs, fingerprint-bound).
-// A single run is not a baseline; an unselected batch is "awaiting_selection".
-// A model with a valid floor cannot start another baseline (re-baselining means
-// archiving the run); a model without one always can. A void cell (it measured
-// the harness, not the model) is no baseline.
+// A floor: the operator's SELECTED run from the model's persisted batch
+// (<run_dir>/batch.json — median over the scored runs, fingerprint-bound). A
+// single run is not a baseline; an unselected batch is "awaiting_selection".
+//
+// Re-baselining is ordinary: every Run in the OFF arm yields one more baseline,
+// so baselines ACCUMULATE per fingerprint — how many were gathered on exactly
+// this code, plus the average context/wall/turns/tokens across them, derived at
+// read time. Only a cell in flight blocks another run for that model. A void
+// cell (it measured the harness, not the model) is no baseline: that verdict is
+// the harness's own cost.json `void.is_void` stamp, never re-derived here.
 //
 // <runsRoot>/baselines.json is an export, never an input: every read re-derives
 // from the run folders, and a failed write is reported in `stored`, not thrown.
@@ -118,8 +122,6 @@ const str = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
 // int() maps null→0 (Number(null) === 0); a covariate that was NOT measured
 // must stay null, never a fabricated 0 — so guard the null before coercing.
 const measuredInt = (v) => (v == null ? null : int(v));
-// A boolean that yields null when absent/non-boolean — never null→false.
-const bool = (v) => (typeof v === "boolean" ? v : null);
 
 /**
  * The gate tally an attempt record carries, or null when it has no total —
@@ -142,12 +144,12 @@ function gateTotals(r) {
 }
 
 /**
- * The seven contention covariates, flat in each status record's `progress`
+ * The six contention covariates, flat in each status record's `progress`
  * (written by the harness ProgressVector). VISIBILITY ONLY: they say what
  * conditions the cell was gathered under — they gate nothing, score nothing,
  * and are deliberately NOT fingerprint inputs (a crowded run is the same run).
  * Sticky per field across the attempt fold like every other measurement;
- * null means "not measured" (spend DB unavailable), never a coerced 0/false.
+ * null means "not measured" (spend DB unavailable), never a coerced 0.
  */
 function contentionOf(p, prev) {
   const c = prev ?? {};
@@ -158,26 +160,27 @@ function contentionOf(p, prev) {
     upstream_error_count: measuredInt(p.upstream_error_count) ?? c.upstream_error_count ?? null,
     max_request_ms: measuredInt(p.max_request_ms) ?? c.max_request_ms ?? null,
     median_request_ms: measuredInt(p.median_request_ms) ?? c.median_request_ms ?? null,
-    wall_near_timeout: bool(p.wall_near_timeout) ?? c.wall_near_timeout ?? null,
   };
 }
 
 /**
  * Every OFF cell on disk, folded per model. Identity from the schedule,
  * measurement from the status stream, so a crashed cell still appears.
+ * `includeBackups` reaches the rotated trees under runs/backups (history).
  */
-export async function collectOffCells(runsRoot) {
-  return (await collectCells(runsRoot)).filter((c) => c.arm === OFF_ARM);
+export async function collectOffCells(runsRoot, opts) {
+  return (await collectCells(runsRoot, opts)).filter((c) => c.arm === OFF_ARM);
 }
 
 /** Every cell on disk, both arms, folded by the same rules. */
-export async function collectCells(runsRoot) {
+export async function collectCells(runsRoot, { includeBackups = false } = {}) {
   const cells = [];
 
-  // Walks nested campaigns in the live tree (retired trees skipped).
+  // Walks nested campaigns in the live tree (retired trees skipped; rotated
+  // trees only when the caller is reading history).
   let entries = [];
   try {
-    entries = await listLiveCampaignDirs(runsRoot);
+    entries = await listLiveCampaignDirs(runsRoot, { includeBackups });
   } catch {
     return cells;
   }
@@ -229,15 +232,6 @@ export async function collectCells(runsRoot) {
         terminal_reason: str(r.terminal_reason) ?? prev.terminal_reason ?? null,
         // Seeded is sticky: a later record without it must not un-seed the cell.
         seeded_from_snapshot: str(r.seeded_from_snapshot) ?? prev.seeded_from_snapshot ?? null,
-        // Summed across attempts (a truncation in any attempt taints the cell). These
-        // fields sit on the record itself, not under `progress`.
-        truncated_turns: (prev.truncated_turns ?? 0) + (int(r.truncated_turns) ?? 0),
-        // Unrecovered anomalies — the one the void check reads. Summed the same way.
-        unrecovered_anomaly_turns:
-          (prev.unrecovered_anomaly_turns ?? 0) + (int(r.unrecovered_anomaly_turns) ?? 0),
-        provider_truncations: (prev.provider_truncations ?? 0) + (int(r.provider_truncations) ?? 0),
-        // Green only if it actually passed.
-        full_green: str(r.verdict) === "PASS" || prev.full_green === true,
       });
     }
 
@@ -254,28 +248,18 @@ export async function collectCells(runsRoot) {
       const who = identifyCell(slot, manifest);
       const model = who.id;
 
-      // Void instrument (RUNBOOK 5.10): a non-green ending with an unrecovered
-      // provider-side anomaly, or a harness_error. Same rule as stack-ledger.mjs and
-      // run_artifacts.py. A cell that ended without passing and without a truncation
-      // signal is a real result, not void. Reads unrecovered_anomaly_turns: a loop the
-      // harness recovered is model behaviour.
-      const voidInstrument = Boolean(
-        meas
-        && !meas.full_green
-        && (meas.terminal_reason === "transport_incomplete"
-          || meas.terminal_reason === "harness_error"
-          // The harness ended the cell: two compactions before any grade.
-          || meas.terminal_reason === "compactions_before_grade"
-          // Grading measured nothing twice on the same code: the instrument's.
-          || meas.terminal_reason === "instrument_fault"
-          || (meas.provider_truncations ?? 0) > 0
-          || (meas.unrecovered_anomaly_turns ?? 0) > 0),
-      );
-
+      // The harness's own verdict on whether it measured the model or itself:
+      // cost.json's `void.is_void` (harness/cumulative/run_artifacts.py cell_void,
+      // written by scripts/run_cumulative/runner.py beside fingerprint.json) is
+      // the single truth. Re-deriving it from the status stream here duplicated
+      // the rule and had already drifted from it.
+      const cellDir = join(dir, `memory${String(arm ?? "unknown").toUpperCase()}`, `cell-${String(seq).padStart(4, "0")}`);
       // What the cell recorded it ran on, at its start (harness/fingerprint.py);
       // null for a cell that recorded nothing.
-      const cellDir = join(dir, `memory${String(arm ?? "unknown").toUpperCase()}`, `cell-${String(seq).padStart(4, "0")}`);
       const fingerprint = await readCellFingerprint(cellDir);
+      // The cell's cost stamp, and with it the void verdict; null for a cell
+      // that ended before the stamp existed (pre-standard, not void).
+      const cost = await readCellCost(cellDir);
       // A cell with no attempt record may still have RUN: it died before its
       // first graded attempt (e.g. IncompleteBuildError in the build). The
       // harness records how it ended on its own stream (cell.end); read that
@@ -296,7 +280,9 @@ export async function collectCells(runsRoot) {
         // complete: graded · ended: ran and stopped before a graded attempt ·
         // started: began, no end recorded yet · not_started: never began.
         state: meas ? "complete" : ended ? "ended" : fingerprint ? "started" : "not_started",
-        void_instrument: voidInstrument,
+        // RUNBOOK 5.10, read off the harness's stamp: a cell that never
+        // produced the stamp is pre-standard, and not void.
+        void_instrument: cost?.void?.is_void === true,
         // Seeded cells skip the build, so they are never a scorable floor.
         seeded_from_snapshot: meas?.seeded_from_snapshot ?? null,
         // Every attempt the cell actually ran; no cap, so `total` is null (unbounded).
@@ -306,7 +292,7 @@ export async function collectCells(runsRoot) {
         tokens: meas?.tokens ?? null,
         problems_before: meas?.problems_before ?? null,
         wall_seconds: meas?.wall_seconds ?? null,
-        // The cell's seven contention covariates (null when never measured).
+        // The cell's six contention covariates (null when never measured).
         contention: meas?.contention ?? null,
         gates: meas?.gates ?? null,
         // null means no data, never "every chunk incomplete".
@@ -322,6 +308,12 @@ export async function collectCells(runsRoot) {
         context_exhausted: meas?.terminal_reason === "context_exhausted",
         created_at: str(manifest.created_at),
         fingerprint,
+        // The harness's per-cell cost stamp (scripts/run_cumulative/runner.py):
+        // { outcome, phases: { build?, troubleshooting?, total? }, paused_seconds?,
+        //   void: { is_void, reason } }. Carried whole — its `void.reason` is the
+        // only statement of WHY a cell is void, and its `phases.total` is what
+        // the per-fingerprint aggregate averages.
+        cost,
       });
     }
   }
@@ -361,29 +353,209 @@ async function readCellFingerprint(cellDir) {
   return rec?.values && typeof rec.values === "object" ? rec.values : null;
 }
 
+/**
+ * A cell's cost stamp (scripts/run_cumulative/runner.py), or null for a cell
+ * that produced none. The stamp is the harness's authority on both what the
+ * cell cost per phase and whether it measured the model or itself
+ * (`void.is_void`) — this module never re-derives either.
+ */
+export async function readCellCost(cellDir) {
+  return readJsonOrNull(join(cellDir, "cost.json"));
+}
+
 const execFileP = promisify(execFile);
 const WORKER_IMAGE_TAG = "bench-worker:v1";
 
+/** The challenge the control plane measures — the dir the four tree hashes name. */
+const TASK_REL = ["task", "backgammon"];
+/** The worker context's baked set, mirroring images/worker/.dockerignore. */
+const WORKER_BAKED_FILES = new Set(["Dockerfile", ".dockerignore"]);
+/** Never hashed from the sidecar context — prefixed, exactly as harness/worker_image.py tests it. */
+const WORKER_SOURCE_EXCLUDED = [".git/", ".github/", "node_modules/"];
+/** Never baked into the grader image, and so never part of its identity. */
+const GRADER_SOURCE_EXCLUDED = new Set(["node_modules", "test-results", ".git"]);
+const OPENCODE_ARG = "ARG OPENCODE_VERSION=";
+
 /**
- * The CODE inputs as they stand now: the four directory hashes over the
- * measured repo (harness/fingerprint.py hashes them the same way at a cell's
- * start) and the worker image docker holds under the bench tag. Throws when
- * the image cannot be read: a batch that cannot be checked is not called
- * current.
+ * Every regular file under `dirPath` as `{ rel, full }`, `rel` a POSIX path
+ * relative to `rootPath` — Python's `Path.rglob("*")` + `is_file()`: a symlink
+ * to a file counts (is_file follows it), a symlink to a directory is not
+ * descended. `skipSymlinks` reproduces harness/grader_image.py's baked_paths,
+ * which drops symlinks outright.
+ */
+async function walkRelFiles(dirPath, rootPath, { skipSymlinks = false } = {}) {
+  const files = [];
+  for (const entry of await fs.readdir(dirPath, { withFileTypes: true })) {
+    const full = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await walkRelFiles(full, rootPath, { skipSymlinks })));
+      continue;
+    }
+    let regular = entry.isFile();
+    if (!regular && entry.isSymbolicLink() && !skipSymlinks) {
+      regular = (await fs.stat(full).catch(() => null))?.isFile() === true;
+    }
+    if (!regular) continue;
+    files.push({ rel: path.relative(rootPath, full).split(path.sep).join("/"), full });
+  }
+  return files;
+}
+
+/**
+ * sha256 over `{rel, full}` entries, sorted by rel, mixed as
+ * `rel ‖ 0x00 ‖ sha256(bytes)` — the image-source digest shape of
+ * harness/worker_image.py and harness/grader_image.py. NOT hashDir's mixing:
+ * the file's own digest enters, never its raw bytes.
+ */
+async function relPathDigest(entries) {
+  const ordered = [...entries].sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  const digest = createHash("sha256");
+  for (const { rel, full } of ordered) {
+    digest.update(rel, "utf8");
+    digest.update(Buffer.from([0]));
+    digest.update(createHash("sha256").update(await fs.readFile(full)).digest());
+  }
+  return digest.digest("hex");
+}
+
+/**
+ * What this tree would bake into the worker image, VANILLA (no plugin) —
+ * harness/worker_image.py `source_digest(worker_dir)` byte for byte: the
+ * Dockerfile and .dockerignore, plus the sibling sidecar tree under
+ * `sidecar/`-prefixed rel paths. The sidecar dir is the build's second context,
+ * hashed when it is there.
+ */
+async function workerSourceDigest(workerDir) {
+  const entries = (await walkRelFiles(workerDir, workerDir)).filter(({ rel }) =>
+    WORKER_BAKED_FILES.has(rel),
+  );
+  const sidecarDir = path.join(path.dirname(workerDir), "sidecar");
+  const hasSidecar = (await fs.stat(sidecarDir).catch(() => null))?.isDirectory() === true;
+  if (hasSidecar) {
+    for (const { rel, full } of await walkRelFiles(sidecarDir, sidecarDir)) {
+      const excluded =
+        rel.endsWith(".DS_Store") || WORKER_SOURCE_EXCLUDED.some((prefix) => rel.startsWith(prefix));
+      if (!excluded) entries.push({ rel: `sidecar/${rel}`, full });
+    }
+  }
+  return relPathDigest(entries);
+}
+
+/**
+ * The grader image's source identity — harness/grader_image.py
+ * `source_digest(gates_dir, dockerfile)` byte for byte: every regular
+ * non-symlink file under the gates dir, plus the Dockerfile itself (it pins the
+ * base image and the installs, so it is part of the instrument).
+ */
+async function graderSourceDigest(graderDir, dockerfile) {
+  const entries = (await walkRelFiles(graderDir, graderDir, { skipSymlinks: true })).filter(
+    ({ rel }) => {
+      const parts = rel.split("/");
+      return (
+        parts[parts.length - 1] !== ".DS_Store" &&
+        !parts.some((part) => GRADER_SOURCE_EXCLUDED.has(part))
+      );
+    },
+  );
+  entries.push({ rel: "Dockerfile", full: dockerfile });
+  return relPathDigest(entries);
+}
+
+/** The opencode version the worker Dockerfile pins (harness/worker_image.py). */
+async function pinnedOpencodeVersion(workerDir) {
+  const dockerfile = path.join(workerDir, "Dockerfile");
+  for (const line of (await fs.readFile(dockerfile, "utf8")).split(/\r?\n/)) {
+    if (line.startsWith(OPENCODE_ARG)) return line.slice(OPENCODE_ARG.length).trim();
+  }
+  throw new Error(`${dockerfile} pins no ${OPENCODE_ARG}`);
+}
+
+/** The commit the tree stands on — the full 40-char sha, never --short. */
+async function sourceCommit(repoRoot) {
+  const { stdout } = await execFileP("git", ["rev-parse", "HEAD"], { cwd: repoRoot });
+  const commit = String(stdout).trim();
+  if (!commit) throw new Error(`git reported no HEAD commit in ${repoRoot}`);
+  return commit;
+}
+
+/** Whether the tree has uncommitted changes — a dirty run is not reproducible from its commit. */
+async function sourceDirty(repoRoot) {
+  const { stdout } = await execFileP("git", ["status", "--porcelain"], { cwd: repoRoot });
+  return String(stdout).trim() !== "";
+}
+
+/**
+ * The grader image identity a cell records (harness/grader_image.py): the
+ * challenge's tag plus the digest of the gates and the Dockerfile that build
+ * it. No docker — the tag is derived from challenge.json's name and the digest
+ * is filesystem-only.
+ */
+async function graderImageIdentity(taskDir, graderDir, dockerfile) {
+  const manifestPath = path.join(taskDir, "challenge.json");
+  const spec = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+  const name = typeof spec?.name === "string" ? spec.name.trim() : "";
+  if (!name) throw new Error(`${manifestPath} declares no challenge name`);
+  return {
+    image: `bench-grader:${name}`,
+    source_digest: await graderSourceDigest(graderDir, dockerfile),
+  };
+}
+
+/**
+ * The CODE inputs as they stand now, all eleven: the four tree hashes over the
+ * measured challenge, the harness hash, the source commit and whether the tree
+ * is dirty, what this tree would bake into the worker image, the opencode
+ * version the worker Dockerfile pins, the grader image identity, and the worker
+ * image docker holds under the bench tag. Each is computed the way the harness
+ * computes it at a cell's start (harness/fingerprint.py, worker_image.py,
+ * grader_image.py), so the two never drift into disagreeing about what was
+ * measured. Throws when any input cannot be computed: a batch that cannot be
+ * checked is not called current.
  */
 export async function currentCodeInputs({ repoRoot = REPO_ROOT } = {}) {
-  const [chunk_plan_hash, grader_hash, scaffold_hash, golden_hash, image] = await Promise.all([
-    hashDir(path.join(repoRoot, "task", "backgammon", "prompts")),
-    hashDir(path.join(repoRoot, "grader"), {
-      exclude: new Set(["node_modules", ".git", "test-results"]),
-    }),
-    hashDir(path.join(repoRoot, "task", "backgammon", "scaffold")),
-    hashDir(path.join(repoRoot, "task", "backgammon", "golden")),
+  const taskDir = path.join(repoRoot, ...TASK_REL);
+  const workerDir = path.join(repoRoot, "images", "worker");
+  const graderDir = path.join(repoRoot, "grader");
+  const [
+    chunk_plan_hash,
+    grader_hash,
+    scaffold_hash,
+    golden_hash,
+    harness_hash,
+    source_commit,
+    source_dirty,
+    worker_source_digest,
+    opencode_version,
+    grader_image,
+    image,
+  ] = await Promise.all([
+    hashDir(path.join(taskDir, "prompts")),
+    hashDir(graderDir, { exclude: new Set(["node_modules", ".git", "test-results"]) }),
+    hashDir(path.join(taskDir, "scaffold")),
+    hashDir(path.join(taskDir, "golden")),
+    hashDir(path.join(repoRoot, "harness"), { exclude: new Set(["__pycache__"]) }),
+    sourceCommit(repoRoot),
+    sourceDirty(repoRoot),
+    workerSourceDigest(workerDir),
+    pinnedOpencodeVersion(workerDir),
+    graderImageIdentity(taskDir, graderDir, path.join(repoRoot, "images", "grader", "Dockerfile")),
     execFileP("docker", ["image", "inspect", WORKER_IMAGE_TAG, "--format", "{{.Id}}\n{{.Created}}"]),
   ]);
   const [image_id, created] = String(image.stdout).trim().split("\n");
   if (!image_id || !created) throw new Error(`docker did not identify ${WORKER_IMAGE_TAG}`);
-  return { chunk_plan_hash, grader_hash, scaffold_hash, golden_hash, worker_image: { image_id, created } };
+  return {
+    chunk_plan_hash,
+    grader_hash,
+    scaffold_hash,
+    golden_hash,
+    worker_image: { image_id, created },
+    harness_hash,
+    source_commit,
+    source_dirty,
+    worker_source_digest,
+    opencode_version,
+    grader_image,
+  };
 }
 
 /**
@@ -883,7 +1055,8 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
 
 /**
  * Every baseline that exists: one row per model (a model has one floor;
- * `candidates` counts the others). States: complete (a floor), awaiting (a
+ * `candidates` is the batch's scored-run count — the pool the floor was picked
+ * from, so it includes it). States: complete (a floor), awaiting (a
  * batch assembled but unselected — visible so the operator can pick), running
  * (in flight, refuses runs), void (ran but measured the harness), exhausted
  * (out of context before grading), none (no row — e.g. only seeded cells).
@@ -965,7 +1138,82 @@ async function baselineList(offCells, { repoRoot = REPO_ROOT, runsRoot = null, c
 
 /** The stored export. One file, rewritten only when the answer changes. */
 export const BASELINES_FILE = "baselines.json";
-const BASELINES_CONTRACT_VERSION = 1;
+const BASELINES_CONTRACT_VERSION = 2;
+
+/** The per-cell fields the fingerprint aggregate averages, off `phases.total`. */
+const AGGREGATE_COST_FIELDS = [
+  "context_peak",
+  "wall_seconds",
+  "turns",
+  "input_tokens",
+  "output_tokens",
+  "reasoning_tokens",
+  "cache_read_tokens",
+  "cache_write_tokens",
+];
+
+/**
+ * Does this cell's numbers belong in its fingerprint's aggregate? Same rule the
+ * floor uses — complete, not void, not seeded, not context-exhausted-ungraded —
+ * plus the two the aggregate adds: the harness must have stamped a phase total
+ * to average, and the cell must carry a fingerprint the current input set can
+ * still hash (a record short of an input belongs to no fingerprint).
+ */
+function countsTowardFingerprint(c) {
+  return c.state === "complete"
+    && !c.void_instrument
+    && !c.seeded_from_snapshot
+    && !(c.context_exhausted === true && !c.gates)
+    && Boolean(c.cost?.phases?.total);
+}
+
+/**
+ * Per-fingerprint baselines: how many completed non-void OFF cells ran on
+ * exactly this code, and what they cost on average.
+ *
+ * A FIELD ABSENT IN EVERY CELL IS null, never 0 — an unmeasured covariate is
+ * not a free one. Each field averages over the cells that HAVE it, so a cell
+ * whose stamp omitted `context_peak` cannot drag the mean toward zero.
+ */
+function fingerprintBaselines(cells) {
+  const groups = new Map();
+  for (const c of cells) {
+    if (!countsTowardFingerprint(c)) continue;
+    let hash;
+    try {
+      hash = computeFingerprint(c.fingerprint).hash;
+    } catch {
+      // An incomplete or pre-standard record: outside every fingerprint.
+      continue;
+    }
+    const group = groups.get(hash) ?? { model: c.model ?? null, totals: [] };
+    group.totals.push(c.cost.phases.total);
+    groups.set(hash, group);
+  }
+
+  const fingerprints = [];
+  for (const [fingerprint_hash, group] of groups) {
+    const avg = {};
+    for (const field of AGGREGATE_COST_FIELDS) {
+      const values = group.totals
+        .map((total) => total?.[field])
+        .filter((v) => typeof v === "number" && Number.isFinite(v));
+      avg[field] = values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+    }
+    fingerprints.push({
+      fingerprint_hash,
+      model: group.model,
+      baseline_count: group.totals.length,
+      avg,
+    });
+  }
+
+  // By model, then the most-repeated fingerprint first.
+  fingerprints.sort((a, b) =>
+    String(a.model ?? "").localeCompare(String(b.model ?? ""))
+    || b.baseline_count - a.baseline_count);
+  return fingerprints;
+}
 
 /**
  * Every bench model's floor. A model with no OFF cell still gets
@@ -973,6 +1221,10 @@ const BASELINES_CONTRACT_VERSION = 1;
  */
 async function buildBaselineIndex({ runsRoot, models }) {
   const offCells = await collectOffCells(runsRoot);
+  // The floor is about NOW; the aggregate is a HISTORY — a reset rotates runs
+  // into runs/backups, and the count of baselines gathered on a fingerprint
+  // must survive that. Only the aggregate reads rotated trees.
+  const historyCells = await collectOffCells(runsRoot, { includeBackups: true });
   const ids = (models ?? []).map((m) => (typeof m === "string" ? m : str(m?.id))).filter(Boolean);
 
   // One read of the current code for the whole index, taken only if a batch
@@ -993,6 +1245,9 @@ async function buildBaselineIndex({ runsRoot, models }) {
     // from the cells (what the BASELINES card shows): it includes cloud floors and
     // models that left the roster, and omits rostered models that never ran.
     list,
+    // One row per fingerprint ever measured: how many baselines were gathered on
+    // it (live and rotated) and the average cost across them.
+    fingerprints: fingerprintBaselines(historyCells),
     counts: {
       complete: list.filter((b) => b.state === "complete").length,
       running: list.filter((b) => b.state === "running").length,
@@ -1000,9 +1255,10 @@ async function buildBaselineIndex({ runsRoot, models }) {
       exhausted: list.filter((b) => b.state === "exhausted").length,
     },
     note:
-      "one floor per model. A model with no scorable floor may always start a baseline; a model "
-      + "with one may not — re-baselining is a declared act (archive the run), not a button. "
-      + "Void-instrument cells are not floors.",
+      "forever baselines — every completed, non-void, unseeded OFF cell is a baseline. A baseline "
+      + "accumulates onto its fingerprint — baselines that share one are counted and averaged "
+      + "together (context, wall time, turns, tokens), each field over the cells that measured it; "
+      + "a different fingerprint is a different family. A void-instrument cell is no baseline.",
   };
 }
 

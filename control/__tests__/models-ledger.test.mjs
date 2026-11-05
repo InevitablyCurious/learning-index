@@ -13,7 +13,7 @@ import { manifestArgFor, campaignDirName } from "../campaign.mjs";
 import { mintTree } from "../tree.mjs";
 import { readModelsLedger } from "../models-ledger.mjs";
 
-import { BENCH, writeRun, writeCampaign, OFF_PASS, writeCampaignCell, treeFixture, writeCellFingerprint } from "./_shared.mjs";
+import { BENCH, writeRun, writeCampaign, OFF_PASS, writeCampaignCell, treeFixture, writeCellFingerprint, writeCellCost, costStamp } from "./_shared.mjs";
 
 /**
  * The operator's pick: assemble the batch for one model's OFF cells and select
@@ -28,7 +28,7 @@ async function selectFloor(root, dir, model, seq = 0) {
   await writeBatch(runDir, batch);
 }
 
-test("LEDGER: a SELECTED OFF cell is the baseline, and it opens + run but not + baseline", async () => {
+test("LEDGER: a SELECTED OFF cell is the baseline, and it opens + run — and + baseline stays open for a repeat", async () => {
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", { status: OFF_PASS });
   await selectFloor(root, "cumulative", "m-a");
@@ -40,14 +40,48 @@ test("LEDGER: a SELECTED OFF cell is the baseline, and it opens + run but not + 
   const m = led.models[0];
   assert.equal(m.baseline.scorable, true);
   assert.equal(m.can_run.allowed, true);
-  // Re-baselining is a declared act (RUNBOOK 5.13), never a live button.
-  assert.equal(m.can_baseline.allowed, false);
+  // Every Run in OFF mode is a baseline, and a floor already standing does not
+  // ration the next one: repeats on the same fingerprint are averaged.
+  assert.equal(m.can_baseline.allowed, true);
+  assert.equal(m.can_baseline.reason, null, "an open gate states no refusal");
 
   // The card's own rooting carries the same verdict on the same floor.
   const row = led.baseline_rows.find((b) => b.model === "m-a");
   assert.ok(row, "a measured floor has no row in baseline_rows");
   assert.equal(row.can_run.allowed, true);
   assert.equal(row.run_count, 0, "no ON cell has been measured against it yet");
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("LEDGER: the per-fingerprint aggregate is surfaced on the payload the card renders", async () => {
+  // The BASELINES card prints, per fingerprint, how many baselines were gathered
+  // on exactly this code and what one cost on average. The aggregate is derived
+  // in baselines.mjs; this pins that models-ledger carries it at the ROOT, so the
+  // card reads one key instead of reaching into the floor index for it.
+  const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
+  const dir = writeRun(root, "cumulative", {
+    status: {
+      type: "attempt", sequence_index: 0, attempt: 1, verdict: "FAIL",
+      progress: { turns: 20, total_tokens: 5000, problems_before: 7 },
+    },
+  });
+  writeCellCost(dir, 0, {
+    record: costStamp({ context_peak: 100000, wall_seconds: 600, turns: 20, input_tokens: 1000 }),
+  });
+
+  const led = await readModelsLedger({
+    runsRoot: root,
+    benchModels: [{ id: "m-a", bench_eligible: true }],
+  });
+
+  assert.equal(led.fingerprints.length, 1, "one measured baseline → one fingerprint row");
+  const [fp] = led.fingerprints;
+  assert.match(fp.fingerprint_hash, /^[0-9a-f]{64}$/);
+  assert.equal(fp.model, "m-a");
+  assert.equal(fp.baseline_count, 1);
+  assert.equal(fp.avg.turns, 20);
+  // Absent from the stamp → null, never 0: an unmeasured cost is not a free one.
+  assert.equal(fp.avg.cache_write_tokens, null);
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -114,8 +148,13 @@ test("LEDGER: a VOID baseline counts as NO baseline and re-opens + baseline", as
   // gate keyed on "a cell completed" would green-light an ON run whose every Δ
   // is measured against the harness rather than the model.
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
-  writeRun(root, "cumulative", {
+  const runDir = writeRun(root, "cumulative", {
     status: { type: "attempt", sequence_index: 0, verdict: "FAIL", terminal_reason: "transport_incomplete", progress: { turns: 2 } },
+  });
+  // The void verdict is the harness's, stamped into the cell's cost.json
+  // (scripts/run_cumulative/runner.py) — never re-derived from the status row.
+  writeCellCost(runDir, 0, {
+    record: { outcome: "failed", phases: {}, void: { is_void: true, reason: "transport_incomplete" } },
   });
 
   const led = await readModelsLedger({
@@ -253,8 +292,9 @@ test("LEDGER: a floor on one model never blocks another model's + baseline", asy
   // profiled first, with four permanently disabled buttons to show for it. The
   // profile store is gone; this pins the surviving rule.
   //
-  // A baseline is measured against nothing. One floor per model, and no other
-  // model's floor has any bearing on it.
+  // A baseline is measured against nothing, and no other model's floor has any
+  // bearing on it. A model's OWN floor does not block its next baseline either:
+  // a repeat on the same fingerprint is what the average is made of.
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
   writeRun(root, "cumulative", { status: OFF_PASS });           // m-a has a floor
   await selectFloor(root, "cumulative", "m-a");
@@ -269,9 +309,9 @@ test("LEDGER: a floor on one model never blocks another model's + baseline", asy
   });
 
   const byId = Object.fromEntries(led.models.map((m) => [m.id, m]));
-  // m-a is floored: no second baseline, but a run against it is open.
-  assert.equal(byId["m-a"].can_baseline.allowed, false);
-  assert.match(byId["m-a"].can_baseline.reason, /already has a valid baseline/);
+  // m-a is floored: a run against it is open, and so is another baseline.
+  assert.equal(byId["m-a"].can_baseline.allowed, true);
+  assert.equal(byId["m-a"].can_baseline.reason, null, "a standing floor is not a refusal");
   assert.equal(byId["m-a"].can_run.allowed, true);
   // Every other model may still measure its own floor.
   for (const id of ["m-b", "m-c"]) {
@@ -786,10 +826,11 @@ test("LEDGER: startable spans both substrates and gates each one separately", as
   });
 
   const local = led.startable.find((s) => s.id === "m-a");
-  // It already has a floor, so re-baselining is refused — and the refusal names
-  // the declared act that IS the way to do it.
-  assert.equal(local.can_baseline.allowed, false);
-  assert.match(local.can_baseline.reason, /declared act/);
+  // It already has a floor — which is now reported as information, not a gate:
+  // a repeat baseline is how a fingerprint earns an average.
+  assert.equal(local.has_baseline, true, "the standing floor is still stated");
+  assert.equal(local.can_baseline.allowed, true);
+  assert.equal(local.can_baseline.reason, null, "a standing floor is not a refusal");
 
   const cloud = led.startable.find((s) => s.id === "anthropic/claude-opus-5");
   assert.equal(cloud.kind, "cloud");

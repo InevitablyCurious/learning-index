@@ -380,7 +380,7 @@ function baselineModel(ledger) {
     branch: "start new baseline",
     title: "Pick the model under test",
     body,
-    note: "One model per baseline. A model that already has a valid floor cannot start another — re-baselining is a declared act (archive the run), not a button.",
+    note: "Every Run is a baseline. Baselines with the same fingerprint are averaged — run again any time.",
     cta: "→",
     ctaAttr: `data-create-next="1"`,
     ctaOk: Boolean(ui.model),
@@ -389,7 +389,7 @@ function baselineModel(ledger) {
 
 /**
  * One model. One that cannot be baselined is drawn dead with its reason, never
- * hidden (usually: it already has a floor).
+ * hidden (usually: a cell of it is in flight).
  */
 function modelLine(m) {
   const ok = m.can_baseline?.allowed === true;

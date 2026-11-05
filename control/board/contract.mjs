@@ -296,27 +296,22 @@ export function median(xs) {
 }
 
 /**
- * Can this cell enter the arm delta? Mirrors the scorecard's rule
- * (harness/cumulative/run_artifacts.py, RUNBOOK 5.10); returns { scored } or
+ * Can this cell enter the arm delta? Returns { scored } or
  * { scored: false, reason }.
- *   void instrument: a non-green end caused by the transport, never scored as a
- *     capability FAIL (that would fake lift for the memory arm).
+ *   void instrument: RUNBOOK 5.10 — the harness failed to measure, so the cell is
+ *     never scored as a capability FAIL (that would fake lift for the memory
+ *     arm). The verdict is the harness's OWN: cost.json's `void.is_void`
+ *     (harness/cumulative/run_artifacts.py cell_void), attached to the cell as
+ *     `void_instrument` by the source that read it. This function must never
+ *     re-derive the rule from status-stream fields — that copy missed
+ *     instrument_fault and observation_lost_turns and had drifted from the owner.
  *   resolution unmeasurable: a single attempt cannot show resolved gates, so it
  *     would score a guaranteed 0%.
  */
 export function cellValidity(cell) {
   const c = cell ?? {};
 
-  const terminalGreen = c.full_green === true;
-  if (!terminalGreen) {
-    const truncationSignal =
-      str(c.terminal_reason) === "transport_incomplete" ||
-      // The harness ended the cell: two compactions before any grade.
-      str(c.terminal_reason) === "compactions_before_grade" ||
-      (int(c.provider_truncations) ?? 0) > 0 ||
-      (int(c.unrecovered_anomaly_turns) ?? 0) > 0;
-    if (truncationSignal) return { scored: false, reason: "void_instrument" };
-  }
+  if (c.void_instrument === true) return { scored: false, reason: "void_instrument" };
 
   const attempts = c.attempts instanceof Map ? c.attempts.size : int(c.attempt_count) ?? 0;
   if (attempts < 2) return { scored: false, reason: "resolution_unmeasurable" };

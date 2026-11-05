@@ -1,4 +1,4 @@
-// Pins the batch groundwork in baselines.mjs: the eight fingerprint inputs
+// Pins the batch groundwork in baselines.mjs: the fourteen fingerprint inputs
 // collected from the measured repo + run-manifest, and batch assembly —
 // median over SCORED runs, voids excluded and never counted as failures —
 // persisted to batch.json. Temp dirs for runDir; repo hashes are live.
@@ -7,9 +7,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
-import { assembleBatchForCells, collectCells } from "../baselines.mjs";
-import { FINGERPRINT_INPUTS, hashDir } from "../batch.mjs";
+import { assembleBatchForCells, collectCells, currentCodeInputs } from "../baselines.mjs";
+import { CODE_INPUTS, FINGERPRINT_INPUTS, hashDir } from "../batch.mjs";
 import { BENCH, FIXTURE_FP, setFixtureCode } from "./_shared.mjs";
 
 // Frozen by the Python hash (harness/fingerprint.py dir_hash, and the older
@@ -175,15 +176,90 @@ test("BASELINES-BATCH: hashDir matches the Python hash of the frozen scaffold an
   assert.equal(await hashDir(path.join(BENCH, "task", "backgammon", "golden")), FROZEN_GOLDEN_HASH);
 });
 
+test("BASELINES-BATCH: the current code inputs cover the harness, git, worker/grader source and opencode version", async () => {
+  // EXTENDED, not replaced: the five original code inputs plus the six
+  // ingredients that say WHERE the measurement came from. Every name here is
+  // re-derived on each check; a name missing from the provider would write
+  // undefined and supersede every batch on first read. Pinned against
+  // CODE_INPUTS so the array and the provider can never drift apart.
+  const current = await currentCodeInputs();
+  assert.deepEqual(Object.keys(current).sort(), [...CODE_INPUTS].sort());
+  assert.deepEqual(Object.keys(current).sort(), [
+    "chunk_plan_hash",
+    "golden_hash",
+    "grader_hash",
+    "grader_image",
+    "harness_hash",
+    "opencode_version",
+    "scaffold_hash",
+    "source_commit",
+    "source_dirty",
+    "worker_image",
+    "worker_source_digest",
+  ]);
+  assert.equal(current.opencode_version, "1.18.20", "the version images/worker/Dockerfile pins");
+  assert.equal(current.source_commit.length, 40, "the full sha, never --short");
+  assert.equal(typeof current.source_dirty, "boolean", "dirty is an observed fact, never null");
+  assert.deepEqual(current.grader_image.image, "bench-grader:backgammon");
+});
+
+test("BASELINES-BATCH: the identity ingredients match the Python harness byte for byte", async () => {
+  // Asks the Python harness itself for the values harness/fingerprint.py,
+  // harness/worker_image.py and harness/grader_image.py compute for this tree,
+  // so the pin never goes stale on a harness edit. If JS and Python ever
+  // disagree, every batch reads as superseded.
+  const py = [
+    "import json",
+    "from pathlib import Path",
+    "from harness import fingerprint, worker_image, grader_image",
+    "r = Path('.')",
+    "print(json.dumps({",
+    "  'harness_hash': fingerprint.dir_hash(r / 'harness', fingerprint.PYCACHE_EXCLUDED),",
+    "  'worker_source_digest': worker_image.source_digest(r / 'images' / 'worker'),",
+    "  'grader_source_digest': grader_image.source_digest(r / 'grader', r / 'images' / 'grader' / 'Dockerfile'),",
+    "}))",
+  ].join("\n");
+  const out = execFileSync(path.join(BENCH, ".venv", "bin", "python"), ["-c", py], {
+    cwd: BENCH,
+    encoding: "utf8",
+  });
+  const expected = JSON.parse(out);
+  const current = await currentCodeInputs();
+  assert.equal(current.harness_hash, expected.harness_hash, "hashDir(harness/, __pycache__ excluded)");
+  assert.equal(
+    current.worker_source_digest,
+    expected.worker_source_digest,
+    "worker_image.source_digest(images/worker)",
+  );
+  assert.equal(
+    current.grader_image.source_digest,
+    expected.grader_source_digest,
+    "grader_image.source_digest(grader, images/grader/Dockerfile)",
+  );
+});
+
+test("BASELINES-BATCH: a moved instrument through the provider supersedes the batch, naming it", async (t) => {
+  // The provider path, end to end: assembleBatchForCells asks the provider for
+  // the current code and the batch is voided by the ingredient that moved.
+  const runDir = await makeRunDir(t);
+  setFixtureCode({ opencode_version: "9.9.9-moved" });
+  t.after(() => setFixtureCode());
+  const batch = await assembleBatchForCells({ runDir, cells: [cell({ problems_before: 5 })] });
+  assert.equal(batch.void, true);
+  assert.equal(batch.void_kind, "superseded");
+  assert.equal(batch.void_input, "opencode_version");
+  assert.deepEqual(batch.fingerprint.values, FIXTURE_FP, "the recorded fingerprint is kept");
+});
+
 test("BASELINES-BATCH: per-run contention rides onto batch.runs[] and the summary aggregates scored runs only", async (t) => {
   const runDir = await makeRunDir(t);
   const crowded = {
     http_429_count: 2, http_402_count: null, retry_count: 3, upstream_error_count: 1,
-    max_request_ms: 900, median_request_ms: 120, wall_near_timeout: true,
+    max_request_ms: 900, median_request_ms: 120,
   };
   const quiet = {
     http_429_count: 0, http_402_count: 0, retry_count: 0, upstream_error_count: 0,
-    max_request_ms: 200, median_request_ms: 90, wall_near_timeout: false,
+    max_request_ms: 200, median_request_ms: 90,
   };
   const cells = [
     cell({ sequence_index: 0, problems_before: 10, contention: crowded }),
@@ -210,11 +286,10 @@ test("BASELINES-BATCH: per-run contention rides onto batch.runs[] and the summar
     upstream_error_count: 1, // SUM 1 + 0
     max_request_ms: 900, // MAX over scored
     median_request_ms: 120, // MAX over scored
-    wall_near_timeout: true, // ANY over scored
   });
 });
 
-test("BASELINES-BATCH: collectCells folds the seven contention covariates out of the status stream's progress dicts", async (t) => {
+test("BASELINES-BATCH: collectCells folds the six contention covariates out of the status stream's progress dicts", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "baselines-contention-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const camp = path.join(root, "cumulative");
@@ -233,7 +308,6 @@ test("BASELINES-BATCH: collectCells folds the seven contention covariates out of
     progress: {
       turns: 9, http_429_count: 2, http_402_count: null, retry_count: 3,
       upstream_error_count: 1, max_request_ms: 900, median_request_ms: 120,
-      wall_near_timeout: true,
     },
   };
   // A later attempt that measured nothing must not blank the measurement
@@ -243,7 +317,6 @@ test("BASELINES-BATCH: collectCells folds the seven contention covariates out of
     progress: {
       turns: 4, http_429_count: null, http_402_count: null, retry_count: null,
       upstream_error_count: null, max_request_ms: null, median_request_ms: null,
-      wall_near_timeout: null,
     },
   };
   // A cell whose contention was never measured at all (spend DB unavailable):
@@ -264,13 +337,13 @@ test("BASELINES-BATCH: collectCells folds the seven contention covariates out of
 
   assert.deepEqual(bySeq[0].contention, {
     http_429_count: 2, http_402_count: null, retry_count: 3, upstream_error_count: 1,
-    max_request_ms: 900, median_request_ms: 120, wall_near_timeout: true,
+    max_request_ms: 900, median_request_ms: 120,
   }, "measured values survive a later all-null record; null stays null (never 0)");
 
   assert.deepEqual(bySeq[1].contention, {
     http_429_count: null, http_402_count: null, retry_count: null, upstream_error_count: null,
-    max_request_ms: null, median_request_ms: null, wall_near_timeout: null,
-  }, "never measured → all seven null, never 0/false");
+    max_request_ms: null, median_request_ms: null,
+  }, "never measured → all six null, never 0/false");
 });
 
 test("BASELINES-BATCH: collectCells reads each cell's recorded fingerprint, null where none was written", async (t) => {

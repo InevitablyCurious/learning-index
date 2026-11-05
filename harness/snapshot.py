@@ -116,7 +116,6 @@ class LoadedSnapshot:
     source_commit: str | None
     author_model: str | None
     provider: str | None
-    build_cost: dict[str, Any] | None
     snapshot_depth: int
 
 
@@ -160,7 +159,6 @@ def load_snapshot(snapshot_id: str, runs_root: Path) -> LoadedSnapshot:
         source_commit=payload.get("source_commit"),
         author_model=payload.get("author_model"),
         provider=payload.get("provider"),
-        build_cost=payload.get("build_cost"),
         snapshot_depth=payload.get("snapshot_depth") or 1,
     )
 

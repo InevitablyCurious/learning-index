@@ -36,7 +36,6 @@ CONTENTION_FIELDS = (
     "upstream_error_count",
     "max_request_ms",
     "median_request_ms",
-    "wall_near_timeout",
 )
 
 
@@ -105,7 +104,6 @@ class ConvergencePoint:
     agentic_cycles: int | None
     seeded_from_snapshot: str | None = None
     build_phase_ran: bool = False
-    skipped_build_cost: dict[str, Any] | None = None
     dev_mode: bool = False
     # WO-CONCUR-07: the contention covariates this session was gathered under,
     # mirrored from the progress dict's CONTENTION_FIELDS (visibility, never a
@@ -132,8 +130,6 @@ class ConvergencePoint:
                 SessionRecord.session_fp_of(session_id) if session_id else "none"
             )
 
-        skipped_build_cost = getattr(record, "skipped_build_cost", None)
-
         return cls(
             sequence_index=int(record.sequence_index),
             session_fp=session_fp,
@@ -154,9 +150,6 @@ class ConvergencePoint:
             agentic_cycles=_coerce_optional_int(progress.get("agentic_cycles")),
             seeded_from_snapshot=getattr(record, "seeded_from_snapshot", None),
             build_phase_ran=bool(getattr(record, "build_phase_ran", False)),
-            skipped_build_cost=dict(skipped_build_cost)
-            if isinstance(skipped_build_cost, Mapping)
-            else None,
             dev_mode=bool(getattr(record, "dev_mode", False)),
             contention={name: progress.get(name) for name in CONTENTION_FIELDS},
         )
@@ -180,7 +173,6 @@ class ConvergencePoint:
             "agentic_cycles": self.agentic_cycles,
             "seeded_from_snapshot": self.seeded_from_snapshot,
             "build_phase_ran": self.build_phase_ran,
-            "skipped_build_cost": self.skipped_build_cost,
             "dev_mode": self.dev_mode,
             "contention": self.contention,
         }

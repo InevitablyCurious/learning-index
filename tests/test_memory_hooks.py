@@ -86,11 +86,10 @@ def test_a_bad_ready_timeout_is_refused(raw: str) -> None:
 
 
 def test_the_ready_command_runs_through_the_shell() -> None:
-    assert wait_until_ready({ENV_MEMORY_READY_CMD: "test 1 -eq 1"}) == {
-        "ready": True,
-        "waited_s": 0.0,
-        "polls": 1,
-    }
+    script = _Script([(0, "")])
+    record = _wait(script, {ENV_MEMORY_READY_CMD: "test 1 -eq 1"})
+    assert record == {"ready": True, "waited_s": 0.0, "polls": 1}
+    assert script.calls[0] == ["sh", "-c", "test 1 -eq 1"]
 
 
 def test_no_cost_command_means_no_cost() -> None:

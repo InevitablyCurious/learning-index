@@ -6,9 +6,10 @@
 //  1. Every cell of the batch is listed — a void one too, with its reason and
 //     no pick button. Voids are never dropped: a batch that hid its failures
 //     would present fewer samples with the confidence of more.
-//  2. While the batch awaits a pick, every SCORED cell has a pick button; a
-//     void batch (fingerprint changed) has none — a floor never rides stale
-//     numbers — and a picked batch shows FLOOR on its cell.
+//  2. While the batch can hold a floor — awaiting a pick, or already holding
+//     one — every SCORED cell has a pick button, so the floor can be re-picked
+//     (re-baselining is ordinary). A void batch (fingerprint changed) has none —
+//     a floor never rides stale numbers — and a picked cell shows FLOOR.
 //  3. The row states the median and spread, and the pick's distance from the
 //     median as a percentage, as the server computed it.
 //  4. pickRun POSTs /api/batch/select with {run_dir, sequence_index}.
@@ -138,11 +139,74 @@ test("a picked batch shows the floor with its distance from the median", () => {
   }));
   assert.ok(html.includes("s0000 · 27"));
   assert.ok(html.includes("+17.4% vs median"));
-  assert.deepEqual(picks(html), [], "no re-pick once a floor stands");
   assert.ok(html.includes(">FLOOR<"), "the picked cell is marked");
 });
 
+test("a floored batch still offers a re-pick — re-baselining is an ordinary act", () => {
+  // A floor is no longer rationed to one per model: every Run is a baseline, and
+  // a second batch on the same fingerprint is averaged with the first. Picking a
+  // different scored cell as the floor is therefore a live control, not an
+  // archived ceremony — POST /api/batch/select accepts it on a non-void batch.
+  const cells = batch().cells.map((c) => ({ ...c, picked: c.sequence_index === 0 }));
+  const html = open(row({
+    state: "complete", scorable: true, reason: null,
+    batch: batch({ cells, pick: { sequence_index: 0, problems: 27, signed_deviation: 4, pct_from_median: 17.4 } }),
+  }));
+  assert.deepEqual(picks(html), ["1", "3"], "the other scored cells can take the floor; the picked one is marked FLOOR");
+  assert.ok(!picks(html).includes("2"), "a void cell is never pickable");
+});
+
 // ── B: the network act ───────────────────────────────────────────────────────
+
+// ── D: the per-fingerprint aggregate ────────────────────────────────────────
+
+test("the card prints the per-fingerprint aggregate: count and average, absent as —", () => {
+  // ledger.fingerprints is how many baselines were gathered on each exact code
+  // state and what one cost on average. The count IS the evidence that
+  // re-baselining happened; the averages are over the cells that measured a
+  // field, so an unmeasured one reads — and never a fabricated zero.
+  const board = {
+    models_ledger: {
+      baseline_rows: [],
+      counts: { complete: 0, running: 0, void: 0 },
+      startable: [],
+      run_in_flight: false,
+      fingerprints: [
+        {
+          fingerprint_hash: "a".repeat(64),
+          model: "qwen3.6-35b",
+          baseline_count: 3,
+          avg: {
+            context_peak: 32768, wall_seconds: 720, turns: 30, input_tokens: 45000,
+            output_tokens: 200, reasoning_tokens: null, cache_read_tokens: 1200, cache_write_tokens: null,
+          },
+        },
+        {
+          // A cell whose stamp omitted every averaged field: measured, but with
+          // nothing to average. Each of these must read —, never 0.
+          fingerprint_hash: "b".repeat(64),
+          model: "qwen3.6-35b",
+          baseline_count: 1,
+          avg: {
+            context_peak: null, wall_seconds: null, turns: null, input_tokens: null,
+            output_tokens: null, reasoning_tokens: null, cache_read_tokens: null, cache_write_tokens: null,
+          },
+        },
+      ],
+    },
+  };
+  const html = renderLedger(board);
+  assert.ok(html.includes("PER FINGERPRINT — 2"), "the strip names itself and its row count");
+  assert.ok(html.includes("fp aaaaaaaa"), "eight characters of the hash, not all sixty-four");
+  assert.ok(html.includes("3 baselines"), "the count per fingerprint");
+  assert.ok(html.includes("ctx 32,768"), "the average context peak");
+  assert.ok(html.includes("wall 12:00"), "the average wall time");
+  assert.ok(html.includes("30 turns"));
+  assert.ok(html.includes("45K tok"), "token averages use the board's tok()");
+  assert.ok(html.includes("1 baseline ·"), "a single baseline is not '1 baselines'");
+  assert.ok(html.includes("ctx <span class=\"null\">—</span>"), "an unmeasured average reads —");
+  assert.ok(!/(?<![\d.])0 (turns|tok|baselines)/.test(html), "never a fabricated zero");
+});
 
 // ── C: the two network acts ──────────────────────────────────────────────────
 

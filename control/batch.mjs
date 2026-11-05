@@ -11,11 +11,29 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 /**
- * The inputs that are CODE — what a later edit or rebuild can change under a
- * batch. A recorded fingerprint is compared against the current tree on these
- * only; model, challenge and compaction are the batch's own identity.
+ * The inputs that are CODE — what a later edit, commit or rebuild can change
+ * under a batch: the four measured trees, the worker image, and the six
+ * ingredients that say where that measurement came from (the harness code, the
+ * source commit and whether the tree was dirty, what was baked from this tree,
+ * the opencode version, the grader image). A recorded fingerprint is compared
+ * against the current tree on these only, so a moved instrument voids the batch
+ * instead of letting a new run's Δ be measured against a foreign median. Model,
+ * challenge and compaction stay out: they are the experiment's own identity,
+ * never code.
  */
-export const CODE_INPUTS = ["chunk_plan_hash", "grader_hash", "scaffold_hash", "golden_hash", "worker_image"];
+export const CODE_INPUTS = [
+  "chunk_plan_hash",
+  "grader_hash",
+  "scaffold_hash",
+  "golden_hash",
+  "worker_image",
+  "harness_hash",
+  "source_commit",
+  "source_dirty",
+  "worker_source_digest",
+  "opencode_version",
+  "grader_image",
+];
 
 /**
  * The ordered fingerprint inputs. Order is contract: computeFingerprint
@@ -39,6 +57,27 @@ export const FINGERPRINT_INPUTS = [
   {
     name: "worker_image",
     reason: "the container build (pinned opencode/node/playwright/chromium)",
+  },
+  {
+    name: "harness_hash",
+    reason: "the harness code that drove the cell (git status is not enough alone)",
+  },
+  {
+    name: "source_commit",
+    reason: "the commit the tree stood on when the cell started",
+  },
+  {
+    name: "source_dirty",
+    reason: "uncommitted changes — a dirty run is not reproducible from its commit",
+  },
+  {
+    name: "worker_source_digest",
+    reason: "what was baked into the worker image from this source tree",
+  },
+  { name: "opencode_version", reason: "the agent runtime version inside the worker" },
+  {
+    name: "grader_image",
+    reason: "the grader container that turns a run into a failure count",
   },
 ];
 
@@ -104,6 +143,23 @@ function workerImageEqual(a, b) {
   return a.image_id === b.image_id && a.created === b.created;
 }
 
+/** grader_image compares on identity fields only: image and source_digest. */
+function graderImageEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object") return false;
+  return a.image === b.image && a.source_digest === b.source_digest;
+}
+
+/**
+ * Inputs whose value is an object with identity fields, and the comparator that
+ * compares it on those fields alone (a structuredClone'd canonical never === a
+ * raw parse, so a plain === would report them changed).
+ */
+const IDENTITY_COMPARATORS = new Map([
+  ["worker_image", workerImageEqual],
+  ["grader_image", graderImageEqual],
+]);
+
 /**
  * Compare a stored fingerprint against the current one. Accepts {values,hash}
  * fingerprint objects or bare values maps. Returns the FIRST differing input
@@ -115,7 +171,8 @@ export function fingerprintVerdict(stored, current) {
   for (const { name, reason } of FINGERPRINT_INPUTS) {
     const a = storedValues == null ? undefined : storedValues[name];
     const b = currentValues == null ? undefined : currentValues[name];
-    const equal = name === "worker_image" ? workerImageEqual(a, b) : a === b;
+    const equalBy = IDENTITY_COMPARATORS.get(name);
+    const equal = equalBy ? equalBy(a, b) : a === b;
     if (!equal) {
       return { valid: false, changedInput: name, changedReason: reason };
     }
@@ -152,8 +209,7 @@ export function signedDeviation(problemCount, median) {
  * same run). Aggregation over scored runs carrying a contention object:
  *   - the four counts (http_429_count, http_402_count, retry_count,
  *     upstream_error_count) are SUMMED;
- *   - the two latencies (max_request_ms, median_request_ms) take the MAX;
- *   - wall_near_timeout is ANY (true when any scored run is true).
+ *   - the two latencies (max_request_ms, median_request_ms) take the MAX.
  * A field no scored run measured is null — never a fabricated 0/false.
  */
 export function contentionSummary(runs) {
@@ -177,13 +233,6 @@ export function contentionSummary(runs) {
     }
     return out;
   };
-  const any = (key) => {
-    let out = null;
-    for (const c of measured) {
-      if (typeof c[key] === "boolean") out = out === null ? c[key] : out || c[key];
-    }
-    return out;
-  };
   return {
     http_429_count: sum("http_429_count"),
     http_402_count: sum("http_402_count"),
@@ -191,7 +240,6 @@ export function contentionSummary(runs) {
     upstream_error_count: sum("upstream_error_count"),
     max_request_ms: max("max_request_ms"),
     median_request_ms: max("median_request_ms"),
-    wall_near_timeout: any("wall_near_timeout"),
   };
 }
 
@@ -207,7 +255,7 @@ export function assembleBatch({ runDir, runs, fingerprint, now = new Date().toIS
     problem_count: Number.isFinite(run.problem_count) ? run.problem_count : null,
     scored: run.scored === true,
     void_reason: typeof run.void_reason === "string" ? run.void_reason : null,
-    // The run's seven contention covariates, copied so the record never
+    // The run's six contention covariates, copied so the record never
     // aliases the caller's object. Visibility only — NOT a fingerprint input.
     contention: run.contention && typeof run.contention === "object" ? { ...run.contention } : null,
   }));

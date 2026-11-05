@@ -41,13 +41,11 @@ class SpendMeter:
         *,
         retry_count: int = 0,
         wall_seconds: float | None = None,
-        wall_near_timeout: bool = False,
     ) -> ContentionCovariates:
         if not session_id:
             return ContentionCovariates.empty(
                 retry_count=retry_count,
                 wall_seconds=wall_seconds,
-                wall_near_timeout=wall_near_timeout,
             )
 
         query = (
@@ -79,10 +77,9 @@ class SpendMeter:
             max_request_ms=int(row[3]) if row[3] is not None else None,
             median_request_ms=median_request_ms,
             wall_seconds=wall_seconds,
-            wall_near_timeout=bool(wall_near_timeout),
         )
         logger.info(
-            "proxy_meter.contention_covariates op=contention_covariates session_id=%s http_429_count=%s http_402_count=%s upstream_error_count=%s max_request_ms=%s median_request_ms=%s retry_count=%s wall_near_timeout=%s",
+            "proxy_meter.contention_covariates op=contention_covariates session_id=%s http_429_count=%s http_402_count=%s upstream_error_count=%s max_request_ms=%s median_request_ms=%s retry_count=%s",
             session_id,
             covariates.http_429_count,
             covariates.http_402_count,
@@ -90,7 +87,6 @@ class SpendMeter:
             covariates.max_request_ms,
             covariates.median_request_ms,
             covariates.retry_count,
-            covariates.wall_near_timeout,
         )
         return covariates
 

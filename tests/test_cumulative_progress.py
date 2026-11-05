@@ -376,7 +376,6 @@ def test_progress_vector_reports_absent_contention_seams() -> None:
         "http_402_count",
         "retry_count",
         "upstream_error_count",
-        "wall_near_timeout",
     )
     for seam in contention_seams:
         assert seam in progress.missing_telemetry_seams
@@ -702,24 +701,16 @@ def test_build_convergence_trend_resolved_total_none_when_all_missing() -> None:
 
 
 def test_snapshot_honesty_fields_lockstep_and_reach_the_convergence_point() -> None:
-    """WO-SNAP-03 half A: the four declared honesty fields are schema+plumbing.
+    """WO-SNAP-03 half A: the declared honesty fields are schema+plumbing.
 
     Defaults declare an unseeded cell; ``SessionRecord.to_dict``/``from_dict``
     preserve the fields in lockstep (and a pre-field checkpoint reads as
     unseeded defaults); ``ConvergencePoint.from_session_record`` reads them
     from the record's TOP-LEVEL attributes, never from ``record.progress``.
     """
-    skipped_build_cost = {
-        "turns": 4,
-        "total_tokens": 1200,
-        "wall_seconds": 30.5,
-        "wall_cost_usd": 0.25,
-    }
-
     unseeded = _session_record(0, progress=None)
     assert unseeded.seeded_from_snapshot is None
     assert unseeded.build_phase_ran is False
-    assert unseeded.skipped_build_cost is None
     assert unseeded.dev_mode is False
 
     seeded = SessionRecord(
@@ -734,14 +725,12 @@ def test_snapshot_honesty_fields_lockstep_and_reach_the_convergence_point() -> N
         progress=ProgressVector(full_green=True, resolved_count=1).to_dict(),
         seeded_from_snapshot="snap-abc123",
         build_phase_ran=False,
-        skipped_build_cost=dict(skipped_build_cost),
         dev_mode=False,
     )
 
     restored = SessionRecord.from_dict(seeded.to_dict())
     assert restored.seeded_from_snapshot == "snap-abc123"
     assert restored.build_phase_ran is False
-    assert restored.skipped_build_cost == skipped_build_cost
     assert restored.dev_mode is False
 
     # A checkpoint written before the fields existed reads as unseeded defaults.
@@ -749,21 +738,18 @@ def test_snapshot_honesty_fields_lockstep_and_reach_the_convergence_point() -> N
     for key in (
         "seeded_from_snapshot",
         "build_phase_ran",
-        "skipped_build_cost",
         "dev_mode",
     ):
         del legacy_payload[key]
     legacy = SessionRecord.from_dict(legacy_payload)
     assert legacy.seeded_from_snapshot is None
     assert legacy.build_phase_ran is False
-    assert legacy.skipped_build_cost is None
     assert legacy.dev_mode is False
 
     point = ConvergencePoint.from_session_record(seeded)
     assert point is not None
     assert point.seeded_from_snapshot == "snap-abc123"
     assert point.build_phase_ran is False
-    assert point.skipped_build_cost == skipped_build_cost
     assert point.dev_mode is False
 
     unseeded_point = ConvergencePoint.from_session_record(
@@ -772,7 +758,6 @@ def test_snapshot_honesty_fields_lockstep_and_reach_the_convergence_point() -> N
     assert unseeded_point is not None
     assert unseeded_point.seeded_from_snapshot is None
     assert unseeded_point.build_phase_ran is False
-    assert unseeded_point.skipped_build_cost is None
     assert unseeded_point.dev_mode is False
 
 

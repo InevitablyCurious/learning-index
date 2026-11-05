@@ -1,13 +1,16 @@
 // SOURCE: status-stream — the active run's manifest.status.jsonl, the
-// authoritative per-attempt record (gates, arm, verdict, tokens). Records:
+// authoritative per-attempt record (gates, arm, verdict). Records:
 // `attempt` (memory_mode, failed_gates, verdict, progress) and `turn_terminal`
 // (per anomalous turn). Appended at attempt end (~30 min), so it is not the live
 // pulse. It does not build the gate wall (that is GET /api/wall); failed_gates is
-// used here for resolved gates and the arm delta.
+// used here for resolved gates and the arm delta. Token totals are NOT read from
+// these rows — an attempt's counters are that attempt's — they come from each
+// cell's cost stamp (`cost.json` `phases.total`) below.
 
 import { parseGate, int, str, median, finalizeDelta, cellValidity } from "../contract.mjs";
 import { join } from "node:path";
 import { readTail, parseJsonl, activeRun, statOrNull } from "./_runtime.mjs";
+import { readCellCost } from "../../baselines.mjs";
 
 export const id = "status-stream";
 export const fields = ["arm_delta", "history"];
@@ -32,6 +35,7 @@ export async function read(ctx) {
   if (!cells.length) {
     return { ok: false, reason: "status stream present but carries no attempt records" };
   }
+  await attachCostStamp(cells, run.dir);
 
   cells.sort((a, b) => (b.last_seen ?? 0) - (a.last_seen ?? 0));
 
@@ -76,6 +80,7 @@ export async function readCell(ctx) {
   const records = parseJsonl(await readTail(path));
   const c = cellsFromRecords(records, ctx.cell.run_dir).find((x) => x.seq === ctx.cell.sequence_index);
   if (!c) return { ok: false, reason: "this cell has no attempt record yet — written at attempt end" };
+  await attachCostStamp([c], join(ctx.runsRoot, ctx.cell.run_dir));
   const one = [c];
 
   return {
@@ -91,6 +96,9 @@ export async function readCell(ctx) {
         tokens: {
           input: c.input_tokens,
           output: c.output_tokens,
+          reasoning: c.reasoning_tokens,
+          cache_read: c.cache_read_tokens,
+          cache_write: c.cache_write_tokens,
           injected_block: c.injected_block_est_tokens,
         },
       },
@@ -147,8 +155,14 @@ function cellsFromRecords(records, dirName) {
         complete: false,
         turns: null,
         wall_seconds: null,
+        // The cell's token totals, attached from cost.json `phases.total` (one
+        // read per cell). Never from an attempt row: those counters are the
+        // attempt's, and the last attempt is not the cell.
         input_tokens: null,
         output_tokens: null,
+        reasoning_tokens: null,
+        cache_read_tokens: null,
+        cache_write_tokens: null,
         injected_block_est_tokens: null,
         truncated_turns: 0,
         guard_aborted_turns: 0,
@@ -159,11 +173,8 @@ function cellsFromRecords(records, dirName) {
         served_failed: null,
         problems_before: null,
         problems_after: null,
-        // Void-instrument inputs (RUNBOOK 5.10; see contract.cellValidity).
-        full_green: false,
-        terminal_reason: null,
-        provider_truncations: 0,
-        unrecovered_anomaly_turns: 0,
+        // The harness's RUNBOOK 5.10 verdict, attached from cost.json.
+        void_instrument: false,
         last_seen: 0,
         resolved_gates: [],
       });
@@ -209,8 +220,6 @@ function cellsFromRecords(records, dirName) {
     const p = r.progress ?? {};
     c.turns = int(p.turns) ?? c.turns;
     c.wall_seconds = Math.round(Number(p.wall_seconds ?? 0)) || c.wall_seconds;
-    c.input_tokens = int(r.work_input_tokens) ?? int(p.input_tokens) ?? c.input_tokens;
-    c.output_tokens = int(r.work_output_tokens) ?? int(p.output_tokens) ?? c.output_tokens;
     c.injected_block_est_tokens = int(r.injected_block_est_tokens) ?? c.injected_block_est_tokens;
     c.truncated_turns = Math.max(c.truncated_turns, int(r.truncated_turns) ?? 0);
     c.guard_aborted_turns = Math.max(c.guard_aborted_turns, int(r.guard_aborted_turns) ?? 0);
@@ -224,21 +233,47 @@ function cellsFromRecords(records, dirName) {
     c.served_failed = int(p.served_failed) ?? c.served_failed;
     c.problems_before = int(p.problems_before) ?? c.problems_before;
     c.problems_after = int(p.problems_after) ?? c.problems_after;
-    // Validity inputs from the last (terminal) attempt, as the scorecard does.
-    c.full_green = p.full_green === true;
-    c.terminal_reason = str(r.terminal_reason) ?? c.terminal_reason;
-    c.provider_truncations = Math.max(c.provider_truncations, int(r.provider_truncations) ?? 0);
-    // The unrecovered subset decides validity; truncated_turns (which counts
-    // recovered loops too) feeds only the transport honesty figure.
-    c.unrecovered_anomaly_turns = Math.max(
-      c.unrecovered_anomaly_turns,
-      int(r.unrecovered_anomaly_turns) ?? 0,
-    );
     c.last_seen += 1;
   }
 
   for (const c of by.values()) c.resolved_gates = resolvedGates(c);
   return [...by.values()];
+}
+
+/**
+ * Attach what a cell's own cost stamp holds — both its RUNBOOK 5.10 verdict and
+ * its token totals — in ONE read per cell.
+ *
+ * The verdict: cost.json `void.is_void` (harness/cumulative/run_artifacts.py
+ * cell_void, written by scripts/run_cumulative/runner.py beside
+ * fingerprint.json) is the single truth. Re-deriving it from the status-stream
+ * signal fields here was a duplicate of that rule and had already drifted from
+ * it (it missed instrument_fault and observation_lost_turns). A cell with no
+ * stamp is pre-standard or still running — not void.
+ *
+ * The tokens: `phases.total` is the only place all five kinds exist, with
+ * `output_tokens` generation-only and `reasoning_tokens` beside it. A status
+ * row's `work_*` counters are per ATTEMPT, phase-scoped — reading them per cell
+ * by last-write-wins reported the last attempt as the whole cell. An absent key
+ * is null (unknown), never 0; a cell with no stamp shows null throughout.
+ */
+async function attachCostStamp(cells, runDir) {
+  for (const c of cells) {
+    const cellDir = join(
+      runDir,
+      `memory${String(c.arm ?? "unknown").toUpperCase()}`,
+      `cell-${String(c.seq).padStart(4, "0")}`,
+    );
+    const cost = await readCellCost(cellDir);
+    c.void_instrument = cost?.void?.is_void === true;
+    const total = cost?.phases?.total ?? null;
+    c.input_tokens = int(total?.input_tokens);
+    c.output_tokens = int(total?.output_tokens);
+    c.reasoning_tokens = int(total?.reasoning_tokens);
+    c.cache_read_tokens = int(total?.cache_read_tokens);
+    c.cache_write_tokens = int(total?.cache_write_tokens);
+  }
+  return cells;
 }
 
 /**

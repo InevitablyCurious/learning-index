@@ -108,6 +108,57 @@ test("VERIFY: a rebuilt worker image names worker_image", async () => {
   assert.equal(batch.void_input, "worker_image");
 });
 
+// The six identity ingredients are CODE: a harness edit, a new commit, a dirty
+// tree, a changed worker source, a new opencode version or a rebuilt grader
+// image means the floor was measured by a DIFFERENT instrument. Reporting it as
+// "same code" would measure a new run's Δ against a foreign median.
+const CHANGED_IDENTITY = {
+  harness_hash: "1".repeat(64),
+  source_commit: "d".repeat(40),
+  source_dirty: true,
+  worker_source_digest: "2".repeat(64),
+  opencode_version: "9.9.9-fixture",
+  grader_image: { image: "grader-img-2", source_digest: "gd2" },
+};
+
+test("VERIFY: every identity ingredient is CODE — a change supersedes the batch and names it", async (t) => {
+  for (const [name, changed] of Object.entries(CHANGED_IDENTITY)) {
+    await t.test(name, async () => {
+      const batch = syntheticBatch("/tmp/never-read");
+      const ch = await verifyAgainstCurrentCode(batch, {
+        current: { ...FIXTURE_CODE, [name]: changed },
+      });
+      assert.equal(ch, true, `${name} changed → the batch is void`);
+      assert.equal(batch.void, true);
+      assert.equal(batch.void_kind, "superseded");
+      assert.equal(batch.void_input, name, "the changed input is named");
+      assert.match(batch.void_reason, new RegExp(`^${name} changed since this batch ran`));
+      assert.deepEqual(batch.fingerprint.values, FIXTURE_FP, "the recorded fingerprint is kept");
+    });
+  }
+});
+
+test("VERIFY: a superseded batch refuses to be a floor even with a persisted selection", async (t) => {
+  const runsRoot = await fs.mkdtemp(path.join(os.tmpdir(), "batch-route-id-"));
+  t.after(() => fs.rm(runsRoot, { recursive: true, force: true }));
+
+  const rel = "camp-id";
+  const abs = path.join(runsRoot, rel);
+  const batch = syntheticBatch(abs);
+  selectRun(batch, 2);
+  await writeBatch(abs, batch);
+
+  // The worker image moved: the batch is current-checked against the new one.
+  const b = await baselineFor("m-x", [cell({ run_dir: rel, problems_before: 30, sequence_index: 2 })], {
+    runsRoot,
+    current: async () => ({ ...FIXTURE_CODE, opencode_version: "9.9.9-fixture" }),
+  });
+  assert.equal(b.exists, false);
+  assert.equal(b.voided, true);
+  assert.equal(b.reason, "batch_void");
+  assert.equal(b.void_input, "opencode_version", "the moved instrument is named, not the model");
+});
+
 test("VERIFY: model, challenge and compaction are the batch's own identity, never compared", async () => {
   const batch = syntheticBatch("/tmp/never-read", syntheticValues({ model: "another/model", compaction: true }));
   assert.equal(await verifyAgainstCurrentCode(batch, { current: FIXTURE_CODE }), false);

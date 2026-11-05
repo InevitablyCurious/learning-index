@@ -5,7 +5,7 @@
 // control plane owns which snapshot is armed; this panel posts and re-reads.
 // Every snapshot for the model is listed; ineligible ones carry their refusal.
 
-import { esc, nul, tok, dur } from "../board.js";
+import { esc, nul } from "../board.js";
 
 /** The control plane's last answer; never the truth about what is armed. */
 let state = { loaded: false, snapshots: [], armed: null, error: null, model: null };
@@ -145,23 +145,17 @@ export function sortSeedsByDepth(rows) {
 function seedRow(s, armed) {
   const on = s.id === armed;
   const g = s.gate_totals ?? {};
-  const c = s.build_cost ?? {};
   const gates =
     Number.isFinite(g.pass) && Number.isFinite(g.total)
       ? `${g.pass}/${g.total} gates passing`
       : nul("gate tally unobserved");
-  const skipped = [
-    Number.isFinite(c.turns) ? `${c.turns} turns` : null,
-    Number.isFinite(c.total_tokens) ? (tok(c.total_tokens) ?? null) : null,
-    Number.isFinite(c.wall_seconds) ? (dur(Math.round(c.wall_seconds)) ?? null) : null,
-  ].filter(Boolean);
 
   return `
     <button class="sn-row${on ? " on" : ""}" data-seed-pick="${esc(s.id)}" aria-pressed="${on}">
       <span class="sn-mark">${on ? "✓" : "○"}</span>
       <span class="sn-main">
         <span class="sn-id">${esc(s.id)}<span class="sn-when">${esc(s.created_at ? String(s.created_at).slice(0, 16).replace("T", " ") : "")}</span><span class="sn-depth">${esc(`n=${s.snapshot_depth ?? 1}`)}</span></span>
-        <span class="sn-meta">${gates}${skipped.length ? ` · skips ${esc(skipped.join(" · "))}` : ""}</span>
+        <span class="sn-meta">${gates}</span>
         ${driftLine(s)}
       </span>
     </button>`;
@@ -196,19 +190,13 @@ function refusedList(refused) {
 
 /**
  * The caution on the confirm frame (the .cwarn.override treatment): says this
- * is not a scorable floor, and what the seed saved.
+ * is not a scorable floor.
  */
 export function seedWarning() {
   const s = armedSnapshot();
   const id = armedSnapshotId();
   if (!id) return "";
-  const c = s?.build_cost ?? {};
   const g = s?.gate_totals ?? {};
-  const bought = [
-    Number.isFinite(c.turns) ? `${c.turns} turns` : null,
-    Number.isFinite(c.total_tokens) ? (tok(c.total_tokens) ?? null) : null,
-    Number.isFinite(c.wall_seconds) ? (dur(Math.round(c.wall_seconds)) ?? null) : null,
-  ].filter(Boolean);
 
   return `
     <div class="cwarn override" role="note">
@@ -219,9 +207,7 @@ export function seedWarning() {
         }, instead of building the scaffold. It runs no build chunks and begins at the first troubleshooting round.`,
       )}</span>
       <span class="cwarn-body">${esc(
-        bought.length
-          ? `It skips the ${bought.join(" · ")} that build cost — which is also why it can never be a floor: its totals sit on a different scale from every unseeded cell, so no delta measured against it would mean anything.`
-          : "It can never be a floor: its totals sit on a different scale from every unseeded cell, so no delta measured against it would mean anything.",
+        "It can never be a floor: its totals sit on a different scale from every unseeded cell, so no delta measured against it would mean anything.",
       )}</span>
       <span class="cwarn-body">${esc(
         "The board enforces this — a seeded cell is excluded from the ledger's floors and from the transfer curve's baseline, whether or not anyone reads this warning.",

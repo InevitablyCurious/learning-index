@@ -35,7 +35,12 @@ Each record describes ONE attempt/cell of a scored session. Keys:
   progress.
 
 Token accounting (injected-memory-block kept SEPARATE from work tokens):
-- ``work_input_tokens``, ``work_output_tokens``, ``work_total_tokens`` (int)
+- ``work_input_tokens``, ``work_output_tokens``, ``work_reasoning_tokens``,
+  ``work_cache_read_tokens``, ``work_cache_write_tokens``, and the derived
+  ``work_total_tokens`` (all int | None; PER ATTEMPT, not the cell total —
+  the cell total lives in ``cost.json``). A counter the adapter never reported
+  is an explicit None, never 0; ``work_total_tokens`` sums the counters present
+  and is None when none are present.
 - ``injected_block_est_tokens`` (int | None; None when mode off)
 
 Injection observability (null BY CONTRACT when mode off — that null is
@@ -408,7 +413,6 @@ class _ScoredSession:
         "progress",
         "seeded_from_snapshot",
         "build_phase_ran",
-        "skipped_build_cost",
         "dev_mode",
     )
 
@@ -421,7 +425,6 @@ class _ScoredSession:
         progress: dict[str, Any],
         seeded_from_snapshot: str | None = None,
         build_phase_ran: bool = False,
-        skipped_build_cost: dict[str, Any] | None = None,
         dev_mode: bool = False,
     ) -> None:
         self.sequence_index = sequence_index
@@ -430,8 +433,97 @@ class _ScoredSession:
         self.progress = progress
         self.seeded_from_snapshot = seeded_from_snapshot
         self.build_phase_ran = build_phase_ran
-        self.skipped_build_cost = skipped_build_cost
         self.dev_mode = dev_mode
+
+
+# A void whose terminal reason names itself keeps that name; anything else is a
+# provider-side truncation, the reason the original gate was built for.
+_VOID_REASON_BY_TERMINAL: dict[str, str] = {
+    "instrument_fault": "instrument_fault",
+    "compactions_before_grade": "compactions_before_grade",
+}
+
+# Terminal reasons that void a cell on their own: the harness never finished
+# measuring, so whatever the gates saw is not a capability result.
+_VOID_TERMINAL_REASONS: frozenset[str] = frozenset(
+    {"transport_incomplete", "instrument_fault", "compactions_before_grade"}
+)
+
+
+def _progress_full_green(progress: Any) -> bool:
+    """The ``full_green`` flag of a progress vector, True only when a real bool.
+
+    Fail-closed: a missing ``progress`` mapping, a missing key, or a non-bool
+    value reads as NOT green, so a malformed record can never be promoted to a
+    scored PASS.
+    """
+    if not isinstance(progress, Mapping):
+        return False
+    raw = progress.get("full_green", False)
+    return bool(raw) if isinstance(raw, bool) else False
+
+
+def cell_void(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Classify ONE cell's TERMINAL attempt record as VOID-INSTRUMENT or scored.
+
+    VOID-INSTRUMENT (RUNBOOK rule 5.10) means the instrument failed to measure,
+    so the cell is never scored as a capability FAIL. This is the single
+    definition of that rule — the scorecard builder and every downstream writer
+    (e.g. the cost.json writer) call this instead of re-deriving it.
+
+    Returns exactly ``{"is_void": bool, "reason": str | None}``; ``reason`` is
+    None when the cell is not void.
+
+    A green terminal attempt is never void, regardless of truncation seen on
+    earlier attempts of the same cell: the cell completed and was graded, so it
+    is scored PASS.
+
+    Signal set: ``terminal_reason`` in {"transport_incomplete",
+    "instrument_fault", "compactions_before_grade"} — the grader measured
+    nothing twice on the same code (Jerry, 2026-09-23;
+    harness/adapters/challenge/exceptions.py InstrumentFaultError), or the
+    harness ended the cell after two completed compactions with no grade; or
+    ``provider_truncations > 0`` (a stream that stopped short BELOW the cap);
+    or ``unrecovered_anomaly_turns > 0``; or ``observation_lost_turns > 0``
+    (D-SERVE-MESSAGE-500: the transcript read failed past every transient
+    retry, so the gates measured an unobserved worktree).
+
+    Two counters are deliberately NOT void signals:
+
+    * ``truncated_turns`` is ``len(turn_anomalies)`` — ALL anomalies, including
+      ``guard_abort``. Reading it as "a provider-side truncation signal"
+      voided a completed cell over a looping model the harness had caught and
+      recovered. Measured on run 1788599410: five graded attempts, 39/53
+      passing, discarded; all three "truncations" were ``terminal:
+      guard_abort, reason: loop_guard`` with ``finish_reason: "tool-calls"``
+      (a clean finish, not ``length``), ``truncations_seen: 0``,
+      ``provider_truncations: 0``, and ``retried: true`` (fixed 2026-09-05).
+    * ``instrument_anomaly_turns`` counts recoverable transport errors the
+      harness owns (``guard_abort``, ``provider_unavailable``,
+      ``stream_finalize_timeout``), so it still exists as data but is no
+      longer the void signal (fixed 2026-09-07, WO-I2).
+
+    The recovered-truncation rule: this leg voids on a NON-RECOVERABLE anomaly
+    only. Recovered/nudged anomalies NEVER void, regardless of retry status —
+    Jerry's ruling: nudging a looping model is model behaviour, not a void
+    classifier.
+    """
+    if _progress_full_green(record.get("progress")):
+        return {"is_void": False, "reason": None}
+
+    terminal_reason = str(record.get("terminal_reason") or "")
+    is_void = (
+        terminal_reason in _VOID_TERMINAL_REASONS
+        or int(record.get("provider_truncations") or 0) > 0
+        or int(record.get("unrecovered_anomaly_turns") or 0) > 0
+        or int(record.get("observation_lost_turns") or 0) > 0
+    )
+    if not is_void:
+        return {"is_void": False, "reason": None}
+    return {
+        "is_void": True,
+        "reason": _VOID_REASON_BY_TERMINAL.get(terminal_reason, "provider_truncation"),
+    }
 
 
 def build_scorecard(
@@ -499,74 +591,20 @@ def build_scorecard(
         best_by_cell[int(seq)] = record
 
     # VOID-INSTRUMENT gate (WO-NIGHT2-1b): a cell whose TERMINAL (last) attempt
-    # is non-green AND carries a provider-side truncation signal is VOID-
-    # INSTRUMENT per RUNBOOK rule 5.10 — never scored as a capability FAIL. The
-    # signal reads ONLY per-attempt truncation fields on the terminal attempt:
-    # terminal_reason=="transport_incomplete" OR provider_truncations>0 OR
-    # unrecovered_anomaly_turns>0 OR observation_lost_turns>0. A green terminal
-    # attempt is always scored PASS regardless of earlier truncation; a
-    # non-green terminal attempt with NO truncation signal is a genuine scored
-    # FAIL. Symmetric across ON/OFF — the rule branches on no mode flag.
-    def _terminal_full_green(record: dict[str, Any]) -> bool:
-        progress = record.get("progress")
-        if not isinstance(progress, Mapping):
-            return False
-        raw = progress.get("full_green", False)
-        return bool(raw) if isinstance(raw, bool) else False
-
-    def _truncation_signal(record: dict[str, Any]) -> bool:
-        if str(record.get("terminal_reason") or "") == "transport_incomplete":
-            return True
-        # The grader measured nothing twice on the same code (Jerry,
-        # 2026-09-23; harness/adapters/challenge/exceptions.py
-        # InstrumentFaultError): the instrument's failure, never the model's.
-        if str(record.get("terminal_reason") or "") == "instrument_fault":
-            return True
-        # The harness ended the cell after two completed compactions with no
-        # grade — not a capability result.
-        if str(record.get("terminal_reason") or "") == "compactions_before_grade":
-            return True
-        if int(record.get("provider_truncations") or 0) > 0:
-            return True
-        # ── NOT `truncated_turns` (fixed 2026-09-05), and NOT
-        # `instrument_anomaly_turns` either (fixed 2026-09-07, WO-I2) ───────
-        #
-        # `truncated_turns` is `len(turn_anomalies)` — ALL anomalies, including
-        # `guard_abort`. This clause read it as "a provider-side truncation
-        # signal", which it is not, and voided a completed cell over a looping
-        # model the harness had caught and recovered.
-        #
-        # Measured on run 1788599410: five graded attempts, 39/53 passing,
-        # discarded. All three "truncations" were `terminal: guard_abort,
-        # reason: loop_guard`, with `finish_reason: "tool-calls"` (a clean
-        # finish, not `length`), `truncations_seen: 0`, `provider_truncations: 0`,
-        # and `retried: true` on every one.
-        #
-        # The corrected rule: this leg voids on a NON-RECOVERABLE anomaly —
-        # `unrecovered_anomaly_turns > 0`, the producer-stated count of
-        # instrument anomalies the harness did NOT recover. Recovered/nudged
-        # anomalies (the recoverable classes `guard_abort`,
-        # `provider_unavailable`, `stream_finalize_timeout`) NEVER void,
-        # regardless of retry status; `instrument_anomaly_turns` still exists
-        # as data but is no longer the void signal, because it counts
-        # recoverable transport errors the harness owns. Jerry's ruling:
-        # nudging a looping model is model behaviour, not a void classifier.
-        if int(record.get("unrecovered_anomaly_turns") or 0) > 0:
-            return True
-        # D-SERVE-MESSAGE-500: the harness lost its window onto the session
-        # (transcript read failed past every transient retry). Whatever the
-        # gates then measured came from an unobserved worktree, so the cell is
-        # an instrument failure — never a capability FAIL (RUNBOOK rule 5.10).
-        if int(record.get("observation_lost_turns") or 0) > 0:
-            return True
-        return False
-
+    # is non-green AND carries an instrument-failure signal is VOID-INSTRUMENT
+    # per RUNBOOK rule 5.10 — never scored as a capability FAIL. The rule lives
+    # in ``cell_void`` alone; this loop only partitions the cells and keeps the
+    # reason it returned so the published entry and the classification can
+    # never disagree. Symmetric across ON/OFF — the rule branches on no mode
+    # flag.
     void_instrument_by_index: dict[int, dict[str, Any]] = {}
+    void_reason_by_index: dict[int, str] = {}
     for seq, record in best_by_cell.items():
-        if _terminal_full_green(record):
+        verdict = cell_void(record)
+        if not verdict["is_void"]:
             continue
-        if _truncation_signal(record):
-            void_instrument_by_index[seq] = record
+        void_instrument_by_index[seq] = record
+        void_reason_by_index[seq] = verdict["reason"]
 
     # The ONLY change to which cells enter the scored set: a not-scored cell
     # (whose attempt record may still exist from ``run_session``) and a
@@ -582,7 +620,6 @@ def build_scorecard(
             progress=dict(record["progress"]),
             seeded_from_snapshot=record.get("seeded_from_snapshot"),
             build_phase_ran=bool(record.get("build_phase_ran", False)),
-            skipped_build_cost=record.get("skipped_build_cost"),
             dev_mode=bool(record.get("dev_mode", False)),
         )
         for record in best_by_cell.values()
@@ -595,11 +632,7 @@ def build_scorecard(
     # feed ``build_convergence_trend`` (mirroring its ``full_green`` semantics),
     # so they are perfectly consistent with ``convergence`` — the cells that
     # ARE scored have their metrics unchanged.
-    def _session_full_green(session: _ScoredSession) -> bool:
-        raw = session.progress.get("full_green", False)
-        return bool(raw) if isinstance(raw, bool) else False
-
-    scored_pass = sum(1 for s in scored_sessions if _session_full_green(s))
+    scored_pass = sum(1 for s in scored_sessions if _progress_full_green(s.progress))
     scored_fail = len(scored_sessions) - scored_pass
 
     not_scored = [
@@ -611,23 +644,13 @@ def build_scorecard(
         for record in not_scored_by_index.values()
     ]
 
-    # A void whose terminal reason names itself keeps that name; anything else
-    # is a provider-side truncation, the reason the original gate was built for.
-    _void_reason_by_terminal = {
-        "instrument_fault": "instrument_fault",
-        "compactions_before_grade": "compactions_before_grade",
-    }
-
     void_instrument = [
         {
             "sequence_index": int(record["sequence_index"]),
             "memory_mode": str(record.get("memory_mode") or ""),
-            "void_reason": _void_reason_by_terminal.get(
-                str(record.get("terminal_reason") or ""),
-                "provider_truncation",
-            ),
+            "void_reason": void_reason_by_index[seq],
         }
-        for record in void_instrument_by_index.values()
+        for seq, record in void_instrument_by_index.items()
     ]
 
     # WO-ERRDATA: per-benchmark error-type totals for the dashboard footer.
@@ -683,6 +706,7 @@ __all__ = [
     "RunManifest",
     "StatusStream",
     "build_scorecard",
+    "cell_void",
     "default_scorecard_path",
     "write_scorecard",
     "default_run_manifest_path",

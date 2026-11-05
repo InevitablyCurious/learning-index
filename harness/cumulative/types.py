@@ -61,14 +61,6 @@ def _optional_float(value: Any) -> float | None:
     return float(value)
 
 
-def _optional_bool(value: Any) -> bool | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return value
-    return bool(value)
-
-
 def _optional_string(value: Any) -> str | None:
     if value is None:
         return None
@@ -277,7 +269,6 @@ class ProgressVector:
     upstream_error_count: int | None = None
     max_request_ms: int | None = None
     median_request_ms: int | None = None
-    wall_near_timeout: bool | None = None
     worker_image_id: str | None = None
     worker_image_created: str | None = None
     # WO-CHUNKVIS-1: one row per build chunk (complete / died / not_reached).
@@ -327,7 +318,6 @@ class ProgressVector:
                 "http_402_count": self.http_402_count,
                 "retry_count": self.retry_count,
                 "upstream_error_count": self.upstream_error_count,
-                "wall_near_timeout": self.wall_near_timeout,
             },
             excluded_seams=excluded_seams,
         )
@@ -371,7 +361,6 @@ class ProgressVector:
                 "http_402_count": self.http_402_count,
                 "retry_count": self.retry_count,
                 "upstream_error_count": self.upstream_error_count,
-                "wall_near_timeout": self.wall_near_timeout,
             },
             excluded_seams=excluded_seams,
         )
@@ -418,7 +407,6 @@ class ProgressVector:
             "upstream_error_count": self.upstream_error_count,
             "max_request_ms": self.max_request_ms,
             "median_request_ms": self.median_request_ms,
-            "wall_near_timeout": self.wall_near_timeout,
             "worker_image_id": self.worker_image_id,
             "worker_image_created": self.worker_image_created,
             "build_chunks": [dict(row) for row in self.build_chunks],
@@ -471,7 +459,6 @@ class ProgressVector:
             upstream_error_count=_optional_int(d.get("upstream_error_count")),
             max_request_ms=_optional_int(d.get("max_request_ms")),
             median_request_ms=_optional_int(d.get("median_request_ms")),
-            wall_near_timeout=_optional_bool(d.get("wall_near_timeout")),
             worker_image_id=_optional_string(d.get("worker_image_id")),
             worker_image_created=_optional_string(d.get("worker_image_created")),
             build_chunks=[
@@ -572,7 +559,6 @@ class SessionRecord:
     updated_at: str | None = None
     seeded_from_snapshot: str | None = None
     build_phase_ran: bool = False
-    skipped_build_cost: dict[str, Any] | None = None
     dev_mode: bool = False
     produced_snapshot_id: str | None = None
 
@@ -602,7 +588,6 @@ class SessionRecord:
             "updated_at": self.updated_at,
             "seeded_from_snapshot": self.seeded_from_snapshot,
             "build_phase_ran": self.build_phase_ran,
-            "skipped_build_cost": self.skipped_build_cost,
             "dev_mode": self.dev_mode,
             "produced_snapshot_id": self.produced_snapshot_id,
         }
@@ -645,9 +630,6 @@ class SessionRecord:
             updated_at=d.get("updated_at"),
             seeded_from_snapshot=d.get("seeded_from_snapshot"),
             build_phase_ran=bool(d.get("build_phase_ran", False)),
-            skipped_build_cost=dict(d["skipped_build_cost"])
-            if isinstance(d.get("skipped_build_cost"), Mapping)
-            else None,
             dev_mode=bool(d.get("dev_mode", False)),
             produced_snapshot_id=d.get("produced_snapshot_id"),
         )

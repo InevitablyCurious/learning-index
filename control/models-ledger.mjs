@@ -7,7 +7,9 @@
 //  3. Runs are serial PER MODEL: a cell in flight blocks its own model's
 //     launches, never another model's (the N-slot ledger, run-ledger.mjs).
 //
-// One floor per model; a void baseline counts as no baseline, with the reason.
+// A baseline is not rationed: every Run in OFF mode measures one, and repeats on
+// the same fingerprint are averaged (baselines.mjs `fingerprints`). A void
+// baseline counts as no baseline, with the reason.
 
 // The floor has one owner (baselines.mjs), shared with /api/baselines.
 import { readBaselines, collectCells } from "./baselines.mjs";
@@ -44,15 +46,13 @@ export async function readModelsLedger({ runsRoot, benchModels, inFlightModels =
     // This model's own in-flight state; no other model's cell matters here.
     const inFlight = inFlightModels.has(id);
 
-    // A baseline is gated by two things only: nothing in flight for THIS model,
-    // and no valid floor already for it. No other model's state matters.
+    // A baseline is gated by ONE thing: nothing in flight for THIS model. A
+    // floor already standing does not close the gate — a second measurement of
+    // the same fingerprint is how an average is earned, so re-baselining is an
+    // ordinary act, not a ceremony. No other model's state matters.
     const canBaseline = {
-      allowed: !inFlight && !baseline.scorable,
-      reason: inFlight
-        ? serialReasonFor(id)
-        : (baseline.scorable
-          ? `${id} already has a valid baseline; re-baselining is a declared act, not a button`
-          : null),
+      allowed: !inFlight,
+      reason: inFlight ? serialReasonFor(id) : null,
     };
 
     // An ON run needs a closed, valid floor of its own model — the same
@@ -100,6 +100,10 @@ export async function readModelsLedger({ runsRoot, benchModels, inFlightModels =
       inFlightModels,
     }),
     counts: baselines.counts ?? { complete: 0, running: 0, void: 0, exhausted: 0 },
+    // How many baselines were gathered on each exact code state and what one
+    // cost on average (baselines.mjs `fingerprints`). Surfaced at the root so the
+    // card reads it without digging into the floor index.
+    fingerprints: baselines.fingerprints ?? [],
     // Every model a new baseline could start on, both substrates, each with its
     // resolved gate (what the [+ BASELINE] modal renders).
     startable: startableModels({ eligible, baselines, cloud, inFlightModels }),
@@ -163,9 +167,10 @@ function baselineRows({ baselines, allCells, inFlightModels }) {
 
 /**
  * Every model a baseline could start on, one list with a `kind` field.
- * Refusals, in order: serial (a cell in flight for THIS model), floor (already
- * has one), key (cloud without a key — refused here, before a campaign folder
- * is built).
+ * Refusals, in order: serial (a cell in flight for THIS model), key (cloud
+ * without a key — refused here, before a campaign folder is built). A floor
+ * already standing is NOT a refusal: a repeat baseline on the same fingerprint
+ * is what the average is made of.
  */
 function startableModels({ eligible, baselines, cloud, inFlightModels }) {
   const out = [];
@@ -184,12 +189,8 @@ function startableModels({ eligible, baselines, cloud, inFlightModels }) {
       context: int(m.declared_context),
       has_baseline: b?.scorable === true,
       can_baseline: {
-        allowed: !inFlight && b?.scorable !== true,
-        reason: inFlight
-          ? serialReasonFor(id)
-          : (b?.scorable
-            ? `${id} already has a valid baseline (${b.id ?? "floor"}); re-baselining is a declared act, not a button`
-            : null),
+        allowed: !inFlight,
+        reason: inFlight ? serialReasonFor(id) : null,
       },
     });
   }
@@ -213,14 +214,12 @@ function startableModels({ eligible, baselines, cloud, inFlightModels }) {
       context_note: m.context_note ?? null,
       has_baseline: row?.scorable === true,
       can_baseline: {
-        allowed: !inFlight && row?.scorable !== true && keyed,
+        allowed: !inFlight && keyed,
         reason: inFlight
           ? serialReasonFor(m.key)
-          : (row?.scorable
-            ? `${m.key} already has a valid baseline (${row.id}); re-baselining is a declared act, not a button`
-            : keyed
-              ? null
-              : (cloud?.can_start_reason ?? "no cloud API key resolves, so a cloud cell cannot authenticate")),
+          : keyed
+            ? null
+            : (cloud?.can_start_reason ?? "no cloud API key resolves, so a cloud cell cannot authenticate"),
       },
     });
   }

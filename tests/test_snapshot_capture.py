@@ -49,7 +49,6 @@ PROVENANCE_KEYS = (
     "gate_totals",
     "failed_gates",
     "build_chunks",
-    "build_cost",
     "cell_void",
 )
 
@@ -119,17 +118,18 @@ def test_attempt_one_capture_writes_snapshot(
     for key in PROVENANCE_KEYS:
         assert key in payload, f"provenance key missing: {key}"
     # Producer-stated values in mock mode: no build ran, so the build facts are
-    # honest absences rather than invented numbers.
+    # honest absences rather than invented numbers. The snapshot carries NO
+    # cost: per-cell cost lives in the cell's cost.json (one writer, one rule),
+    # and a snapshot is a tree + its provenance, not a spend record.
     assert payload["author_model"] == "local-llm-proxy/okp-bench-worker"
     assert payload["provider"] == "local-llm-proxy"
     assert payload["run_id"] == "lbl"
     assert payload["build_chunks"] == []
-    assert payload["build_cost"] == {
-        "turns": None,
-        "total_tokens": None,
-        "wall_seconds": None,
-        "wall_cost_usd": None,
-    }
+    assert "build_cost" not in payload
+    # cell_void STAYS: it is the harness-limit flag on this tree, unrelated to
+    # cost — a snapshot taken of a cell the harness limited must never be read
+    # as a capability result.
+    assert payload["cell_void"] is False
     assert payload["cell_void"] is False
 
 
