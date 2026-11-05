@@ -524,6 +524,13 @@ def test_every_aspect_marker_has_its_gates_first_and_repeat_lines() -> None:
     assert unreadable == []
 
 
+# Needs edges that can never apply together with the reverse edge, so they form no
+# real cycle. F30's boardcolours waits on F29 only when the bar is drawn over a
+# point box; F29 fails its overlap aspect in exactly that case, before it reaches
+# its blend aspect, the only place it waits on F30 (run 1793876536 cell 1).
+_EXCLUSIVE_NEEDS: frozenset[tuple[str, str]] = frozenset({("F30", "F29")})
+
+
 def test_a_needed_check_exists_in_the_same_or_an_earlier_stage_and_never_in_a_cycle() -> (
     None
 ):
@@ -546,6 +553,8 @@ def test_a_needed_check_exists_in_the_same_or_an_earlier_stage_and_never_in_a_cy
             assert needed <= own_stage, (
                 f"{rel}: {owner} (stage {own_stage}) needs {ident} (stage {needed})"
             )
+            if (owner, ident) in _EXCLUSIVE_NEEDS:
+                continue
             graph.setdefault(owner, set()).add(ident)
     assert graph, "no needs markers found — the scan is not reading the suite"
 
