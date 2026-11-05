@@ -1696,8 +1696,8 @@
       "repeat": "The pieces of a stack still cascade off to the side — I expect each stack to stand as a single straight column."
     },
     "F61.rolls": {
-      "first": "When I open the game I never see the first roll that the player and the computer make to decide who moves first.",
-      "repeat": "I still never see the opening roll that decides who moves first."
+      "first": "On the opening roll the two dice just appear with their numbers — I never see them actually roll.",
+      "repeat": "On the opening roll the dice still just appear — I still never see them roll."
     },
     "F61.match": {
       "first": "On the opening sequence, when the two players roll, their dice don't match the colours of our pieces — I expect my die white like my pieces and the computer's die black like its pieces.",
