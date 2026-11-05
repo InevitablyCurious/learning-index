@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   PORT,
   api,
+  debugRoll,
   debugRollVerified,
   debugSetState,
   emptyPoints,
@@ -238,6 +239,110 @@ describe("Backgammon backend gates 13-16", () => {
       expect(typeof state.message, notice).toBe("string");
       expect(state.message.trim().length, notice).toBeGreaterThan(0);
       expect(state.message, notice).toMatch(/no moves available/i);
+    });
+  });
+
+  describe("[G15] REQ-COMPLETE — a full game reaches a winner with zero exceptions (via server)", () => {
+    let server: Awaited<ReturnType<typeof startServer>>;
+
+    beforeAll(async () => {
+      server = await startServer({ debug: true });
+      expect(server.baseUrl).toContain(`:${PORT}`);
+    });
+
+    afterAll(async () => {
+      await stopServer(server);
+    });
+
+    it("[G15] REQ-COMPLETE — plays a full game to a winner with fixed dice and no exceptions", async () => {
+      // A fixed non-tie opening roll: white (6) beats the computer (5) and plays first.
+      const OPENING_ROLL = [6, 5];
+      // Cycling forced dice for every subsequent roll, white's and the computer's alike.
+      const SCRIPTED_ROLLS = [[6, 6, 6, 6], [5, 4], [3, 1], [2, 1]];
+      let rollIndex = 0;
+      const nextRoll = () => {
+        const roll = SCRIPTED_ROLLS[rollIndex % SCRIPTED_ROLLS.length];
+        rollIndex++;
+        return [...roll];
+      };
+
+      // Why this bound, and why it can fail:
+      //  * A turn is at most 4 plies (doubles), and every accepted ply removes at
+      //    least 1 pip from the mover (singleMoves is forward-only), so a hit-free
+      //    game needs at most 167 plies per side = 334 total (game.ts).
+      //  * A hit recycles pips (<=24 back onto the victim) instead of ending the
+      //    game, so it stretches the game past 334; the reference engine's own
+      //    self-play harness guards a full game at 2000 turns (src/test.ts) and
+      //    observed a 554-turn maximum over 400 games.
+      //  * A turn costs at most 8 calls (1 debugRoll + 1 roll + <=4 moves + 1
+      //    endturn for the human; 1 debugRoll + 1 ai + 1 double-response for the
+      //    computer). 8000 calls covers ~1000 turns at 8 calls/turn — twice the
+      //    engine's own observed worst case. The no-progress detector, not this
+      //    ceiling, is what fails a stuck engine immediately.
+      const MAX_ITERATIONS = 8000;
+
+      let state = await api("/api/new", { difficulty: "medium" });
+      let iterations = 0;
+      let thrown: unknown = null;
+
+      try {
+        // Opening roll: force a non-tie, then roll. White wins and plays first.
+        await debugRoll(OPENING_ROLL);
+        state = await api("/api/roll", {});
+
+        while (!state.winner && iterations < MAX_ITERATIONS) {
+          iterations++;
+          const before = JSON.stringify(state);
+
+          if (state.turn === "white") {
+            if (state.phase === "roll") {
+              await debugRoll(nextRoll());
+              state = await api("/api/roll", {});
+            } else if (state.phase === "move") {
+              const legalMoves = (state.legalMoves ?? []) as Move[];
+              if (legalMoves.length > 0) {
+                const m = legalMoves[0];
+                state = await api("/api/move", { from: m.from, to: m.to, die: m.die });
+              } else if (state.turnOver) {
+                state = await api("/api/endturn", {});
+              } else {
+                throw new Error(`white in move phase: no legal moves and no turnOver (remainingDice=${JSON.stringify(state.remainingDice)})`);
+              }
+            } else {
+              throw new Error(`white: unexpected phase ${state.phase}`);
+            }
+          } else if (state.turn === "black") {
+            if (state.phase === "doubleOffered") {
+              state = await api("/api/double/respond", { accept: true });
+            } else if (state.phase === "move") {
+              // The computer won the opening roll (not reachable here — the
+              // opening is forced non-tie in white's favour) and must play the
+              // dice already on the table; /api/ai does so without rolling.
+              state = await api("/api/ai", {});
+            } else if (state.phase === "roll") {
+              await debugRoll(nextRoll());
+              state = await api("/api/ai", {});
+            } else {
+              throw new Error(`black: unexpected phase ${state.phase}`);
+            }
+          } else {
+            throw new Error(`no turn: turn=${state.turn}`);
+          }
+
+          if (!state.winner && JSON.stringify(state) === before) {
+            throw new Error(`no progress after iteration ${iterations}: turn=${state.turn} phase=${state.phase}`);
+          }
+        }
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(thrown).toBeNull();
+      expect(
+        state.winner,
+        `Expected a winner within ${MAX_ITERATIONS} iterations, but the loop stopped at ${iterations} without one.`,
+      ).toBeTruthy();
+      expect(["single", "gammon", "backgammon"]).toContain(state.winType);
     });
   });
 

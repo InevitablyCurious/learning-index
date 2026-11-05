@@ -33,20 +33,13 @@ directly.
 
 ## What is in here
 
-| gate | requirement | evidence | what is now unmeasured |
-|---|---|---|---|
-| `G15-req-complete.test.ts` | `REQ-COMPLETE` — a full game reaches a winner with no server exceptions | `02`: passed once in seven runs. 2026-09-11 in the grading container at one worker: failed once, then passed five times on the same candidate with the same command | "plays all the way to a winner with zero exceptions" is asserted nowhere; G13/G14 and the frontend win gates still cover turn flow, AI legality and the win screen |
+Nothing is currently quarantined. The rule and its rationale stay as the canon
+for when a test is determined flaky.
 
 ## How something leaves quarantine
 
-Not by being moved back. By being made deterministic, and then shown to be.
-
-For G15 specifically the flaw is in the assertion: its bound is
-`iterations <= 500` against an AI that is free to play badly, so it conflates
-"finishes" with "finishes efficiently" and a correct-but-weak engine fails it by
-chance. Re-admitting it means bounding the game by the engine's own legal-move
-exhaustion, or driving it with scripted dice that provably terminate — and then
-demonstrating it green across repeated runs on identical code.
+Not by being moved back. By being made deterministic, and then shown to be:
+green across repeated runs on identical code.
 
 ## Running these
 

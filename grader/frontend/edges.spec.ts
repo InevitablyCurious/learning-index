@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, pickUpAPiece, playerClick, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, rollAndCheck, setupState, test } from "./fixtures.ts";
 import { checkerAnimates, hintAnimates } from "../lib/acceptance.ts";
 import { BASE_URL } from "../lib/harness.ts";
 import { isPainted } from "./board-geometry.ts";
@@ -118,11 +118,20 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
     '[data-testid="checker"][data-color="white"][data-loc="bar"]',
   );
   await expect(whiteBarChecker).toHaveCount(1);
-  const hints = page.locator('[data-testid="hint"]');
+  // The roll animates before the state is applied: wait for the dice to stop
+  // changing so the bar checker is clickable when we click it.
   await expect
-    .poll(async () => hints.count(), { message: "[aspect: auto] [needs: F03]", timeout: 3_000 })
-    .toBeGreaterThan(0);
-  await playerClickUntilShown(whiteBarChecker, hints);
+    .poll(async () => {
+      const dice = page.locator('[data-testid="die"]');
+      if ((await dice.count()) < 2) return false;
+      const a = await dice.evaluateAll((els) => els.map((el) => el.innerHTML).join("|"));
+      await page.waitForTimeout(200);
+      const b = await dice.evaluateAll((els) => els.map((el) => el.innerHTML).join("|"));
+      return a === b;
+    })
+    .toBe(true);
+  const hints = page.locator('[data-testid="hint"]');
+  await playerClick(whiteBarChecker);
   await expect(hints, "[aspect: hints] [needs: F03]").toHaveCount(2);
   await playerClick(hints.first());
 

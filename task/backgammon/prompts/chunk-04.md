@@ -8,7 +8,7 @@ Render everything from the serialized state: checkers on points, bar and off, di
 What the game should feel like to play:
 
 - Clicks work anywhere in a point's column — the upright rectangle the point's triangle stands in, from the board's edge to the middle. Clicking anywhere in the column of a point holding one of your movable pieces picks up that point's top piece and shows its hints; with a piece picked up, clicking anywhere in the column of a point it can move to plays that move.
-- A hint appears for each playable die; when you must enter from the bar, the bar entry hints appear as soon as the dice have rolled, with no click on the bar piece, one hint per playable entry die. Clicking a hint executes that move, consuming the hint's die.
+- A hint appears for each playable die only after a piece is selected, and updates immediately when a different piece is selected; a piece on the bar is included — its entry hints appear only once it is clicked, one hint per playable entry die. Clicking a hint executes that move, consuming the hint's die.
 - Checkers slide between points rather than jumping; dice visibly roll. Animate with CSS transitions and CSS animations — each checker animates position changes through a `transition` covering `transform` (or `all`) with a non-zero duration, or through a CSS `animation`.
 - A move hint is a dimmed, light-green marker the size of a piece, and it does not animate.
 - Hitting sends the opponent's checker to the bar, and you can see it land there; a checker re-entering from the bar travels back onto the board; a checker borne off appears in the off tray.
@@ -24,6 +24,7 @@ What the game should feel like to play:
 - Each checker is a perfect circle, sized to about 80% of the width of the point it sits on (not counting the bar). A point's checkers stack from the board's edge toward the middle, each piece right against the last and stepping evenly, and a full stack of six sits a little tighter together; a point draws at most six checkers — from seven up it draws six, and the piece at the top of the stack (the sixth, farthest from the edge) shows the total number on the point. A move always takes the piece at the top of its stack, and the piece that arrives goes on top of the stack it joins.
 - The off tray sits at the right-hand end of the board, beside points 1 and 24, where the checkers are borne off. It runs the full height of the board and is at least as wide as a piece but no wider than one and a half points, so a borne-off piece fits in it lying on its side, its long edge parallel to the top and bottom of the board. It stands out from the board: a fill of its own, or a clear edge down the side that faces the points.
 - The page responds promptly — no action hangs or leaves a player waiting.
+- The page shows no errors in the browser console — on both localhost and 127.0.0.1.
 - Winning ends the game with a banner, and you can start a new game without reloading the page.
 - The computer's double and take messages are short and plain — they say the computer is offering, taking, or passing a double, and never show its win percentage, its pip counts, or its reasoning.
 - Difficulty and New Game: the difficulty control is a native `<select>` element; clicking New Game starts a new game at the selected difficulty (POST `/api/new` with `{difficulty}`).

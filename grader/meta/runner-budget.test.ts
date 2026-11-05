@@ -30,6 +30,11 @@ const timings = JSON.parse(
 const STARTUP_MS = 60_000;
 const MULTIPLIER = 1000;
 const FLAT_MS = 900_000;
+// A single gate file's golden (test-execution) time. A full game completes
+// in well under a second (G15 ~425 ms; historically gates-13-16 was ~1.63 s
+// when it held G14). Anything over this means the golden or the gate is
+// pathologically slow, not "slow but correct".
+const GOLDEN_MS_CEILING = 10_000;
 const budget = (goldenMs: number) =>
   Math.min(FLAT_MS, Math.round(STARTUP_MS + goldenMs * MULTIPLIER));
 
@@ -62,11 +67,11 @@ describe("the per-file budget is scaled to the reference time", () => {
     // went 1.63s -> 74.9s on the 2026-08-17 minimax-m3 cell, and G14's two
     // gates took 87s and 151s on another candidate.
     // The heavy engine file holds 3 tests x the 60s per-test limit + startup = 240s,
-    // well over the 151s worst gate measured; the server file holds 4 = 300s.
+    // well over the 151s worst gate measured; the server file holds 5 = 360s.
     const heavy = timings["backend/gates-14-30.test.ts"];
     expect(Math.min(budget(heavy), 60_000 + 3 * 60_000)).toBeGreaterThan(200_000);
     for (const [file, goldenMs] of Object.entries(timings)) {
-      expect(budget(goldenMs) / Math.max(goldenMs, 1)).toBeGreaterThan(1000);
+      expect(goldenMs, `${file} golden time exceeds the single-gate ceiling`).toBeLessThanOrEqual(GOLDEN_MS_CEILING);
       expect(budget(goldenMs), `${file} exceeds the flat ceiling`).toBeLessThanOrEqual(FLAT_MS);
     }
   });

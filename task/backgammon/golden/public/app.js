@@ -300,7 +300,7 @@ function applySelectable() {
       el.classList.add("selectable");
       el.onclick = () => selectSource(from);
       // J6: the point's whole COLUMN also picks up its top piece. BAR has no
-      // column — it stays checker-click (+ J7 auto-show).
+      // column — it stays checker-click.
       if (from !== BAR) pointDivs[from].onclick = () => selectSource(from);
     }
   });
@@ -392,15 +392,6 @@ async function doRoll() {
   if (state.turn === "black") {
     await runAi();
     return;
-  }
-  // J7: when the roll leaves a bar entry to make, show the entry hints right
-  // away — no click on the bar piece needed. MUST run after clearHints() above
-  // (updateUI->applySelectable also clears point clicks) or the hints are wiped.
-  // The bar checker's own click still works: it re-runs selectSource(BAR),
-  // which re-shows the same hints rather than hiding them.
-  if (!busy && state && state.turn === "white" && state.phase === "move" &&
-      state.legalMoves.some((m) => m.from === BAR)) {
-    selectSource(BAR);
   }
   maybeAutoEnd();
 }

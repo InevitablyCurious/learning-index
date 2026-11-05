@@ -84,6 +84,11 @@
       "what": "Every move the computer makes is legal, and hard really is stronger than easy.",
       "how": "200 random positions and rolls at each difficulty: every chosen move is replayed through the engine and must be legal and produce the board the computer claims. Then 25 full games with fixed dice, hard as black against easy as white: hard must win more."
     },
+    "G15": {
+      "name": "A full game reaches a winner",
+      "what": "A complete game, driven only through the public API with fixed dice, finishes with a winner and no crash partway.",
+      "how": "Starts a game at a fixed difficulty, fixes the opening roll and every later roll through the debug dice, plays white's legal moves one at a time and lets the computer play black, and requires the game to reach a winner (single, gammon or backgammon) with no server error, failing immediately if it stalls without a move."
+    },
     "G16": {
       "name": "Port 8002, and a clear error when taken",
       "what": "The server listens on port 8002, and a second copy fails clearly instead of hanging.",
@@ -272,7 +277,7 @@
     "F10": {
       "name": "Re-entering shown on the board",
       "what": "Coming back in from the bar is shown on the board.",
-      "how": "White on the bar with the roll fixed to 3-5. After Roll, the entry hints must show on their own, with no click on the bar piece; clicking the bar checker still leaves the two hints showing; clicking one must take the checker off the bar, the server must agree, and a white checker must appear on point 20 or 22."
+      "how": "White on the bar with the roll fixed to 3-5. After Roll, clicking the bar checker shows the two entry hints, one per playable entry die; clicking one must take the checker off the bar, the server must agree, and a white checker must appear on point 20 or 22."
     },
     "F11": {
       "name": "Borne-off checkers in the tray",
@@ -1081,7 +1086,8 @@
         "F53",
         "F12",
         "F51",
-        "F65"
+        "F65",
+        "G15"
       ]
     },
     {

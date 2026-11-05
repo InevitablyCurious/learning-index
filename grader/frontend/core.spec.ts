@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { expect, pickUpAPiece, playerClick, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, playerClickUntilShown, PORT, rollAndCheck, setupState, test } from "./fixtures.ts";
 import { readColumnBox, readPointBoxes, sampleBoxBrightness, sampleBoxContrast, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
@@ -247,16 +247,15 @@ test("[F27] REQ-RENDER — no console or page errors on load", async ({ page }) 
     pageErrors.push(err.stack ?? err.message);
   });
 
-  await page.goto("/");
-  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  // The other host name too (127.0.0.1 for localhost): errors only that
-  // address brings were F15's, told in the player's voice — but no player
-  // sees the browser console, so they are the team's, here (Jerry, 2026-10-17:
-  // team prose is for what a player would NEVER see).
-  const other = new URL(page.url()).origin.replace("localhost", "127.0.0.1");
-  if (other !== new URL(page.url()).origin) {
-    await page.goto(`${other}/`);
-    await expect(page.getByTestId("board"), "[needs: F01 F15]").toBeVisible();
+  const origins = [
+    `http://localhost:${PORT}`,
+    `http://127.0.0.1:${PORT}`,
+  ];
+  expect(new Set(origins).size, "the two origins must differ").toBe(2);
+
+  for (const origin of origins) {
+    await page.goto(`${origin}/`);
+    await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   }
 
   expect(consoleErrors).toEqual([]);

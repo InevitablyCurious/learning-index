@@ -235,10 +235,6 @@ describe("Backgammon backend gates 14-30 (the computer's engine)", () => {
     });
   });
 
-  // [G15] REQ-COMPLETE lived here and is QUARANTINED — it flipped on
-  // byte-identical code. See quarantine/G15-req-complete.test.ts for the
-  // evidence and what it would take to re-admit it.
-
   describe("[G30] REQ-HIGHER-DIE — the computer obeys the higher-die rule (seeded mp===1 trials)", () => {
     let game: any;
     let ai: any;

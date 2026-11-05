@@ -5,7 +5,7 @@
     "backend/edge/edge-gates.test.ts": 2.21,
     "backend/gates-01-08.test.ts": 3.54,
     "backend/gates-09-12.test.ts": 276.08,
-    "backend/gates-13-16.test.ts": 584.3,
+    "backend/gates-13-16.test.ts": 424.73,
     "backend/gates-14-30.test.ts": 306.97,
     "backend/server-path-integrity.test.ts": 126.17
   }

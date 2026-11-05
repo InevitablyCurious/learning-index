@@ -131,6 +131,10 @@
       "first": "The computer's skill setting doesn't seem to change anything — the toughest level is no more of a challenge, or it makes a move it shouldn't be able to",
       "repeat": "Switched between the levels again: the top setting still isn't any stronger, or it slips in a move that isn't allowed."
     },
+    "G15": {
+      "first": "The game can crash partway through before anyone wins",
+      "repeat": "It fell over on me again partway through, before either of us had finished."
+    },
     "G16": {
       "first": "They start a second copy of your server while one is already running, and it doesn't stop with an error saying the port is in use.",
       "repeat": "They started a second copy again, and it still doesn't stop with an error saying the port is in use."
@@ -1074,10 +1078,6 @@
     "F10.reentry": {
       "first": "I clicked a re-entry move and the piece didn't come off the bar — it stayed up there.",
       "repeat": "Tried to re-enter again and the piece still didn't come off the bar."
-    },
-    "F10.auto": {
-      "first": "I rolled while I had a piece on the bar, and the hints for bringing it in didn't show up on their own.",
-      "repeat": "I rolled again with a piece on the bar, and the hints for bringing it in still didn't show up on their own."
     },
     "F25.reveal": {
       "first": "I clicked a piece and the game didn't show me any hints for where it could go.",

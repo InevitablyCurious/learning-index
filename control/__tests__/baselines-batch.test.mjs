@@ -20,11 +20,12 @@ import { BENCH, FIXTURE_FP, setFixtureCode } from "./_shared.mjs";
 const FROZEN_SCAFFOLD_HASH = JSON.parse(
   await fs.readFile(path.join(BENCH, "task", "backgammon", "challenge.json"), "utf8"),
 ).scaffold_hash;
-// Re-pinned 2026-10-23 to the golden as of ca84fef (2026-10-18); Python's
-// harness/fingerprint.py dir_hash gives the same value. Prior 942369b1… (2026-09-25,
-// two dice on a double), before that 312720b5….
+// Re-pinned 2026-11-04 for WO-LI-SM-3 (bar entry hints show on click, not on
+// roll — golden app.js no longer auto-shows them); Python's
+// harness/fingerprint.py dir_hash gives the same value. Prior 7508909b…
+// (ca84fef, 2026-10-18), before that 942369b1…, before that 312720b5….
 const FROZEN_GOLDEN_HASH =
-  "7508909bad98d3ca1bfdf191dd6f1fb02484f9006c3e55b6aa46c36162a08a03";
+  "b089311f69da28b271ade909fb06304e5ee28abacb3ae8ad959089a91cee89c2";
 
 const INPUT_NAMES = FINGERPRINT_INPUTS.map((i) => i.name);
 

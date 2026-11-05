@@ -210,7 +210,7 @@ export async function spawnPhase(phase, cmd, args) {
 //   conformance     65 tests, work in beforeAll, 30s   ->  ~60s
 //   gates-01-08      8 tests x 60s (vitest testTimeout) ->  480s
 //   gates-09-12     14 tests x 60s                      ->  840s   <- the max
-//   gates-13-16      4 tests x 60s (the server gates)    ->  240s (300s with the allowance)
+//   gates-13-16      5 tests x 60s (the server gates)    ->  300s (360s with the allowance)
 //   gates-14-30      3 tests x 60s (the engine, self-play) -> 180s
 //   backend/edge     9 tests x 60s                      ->  540s
 //   frontend        15 tests x 30s (playwright default) ->  465s
@@ -294,7 +294,7 @@ const GOLDEN_TIMINGS = (() => {
 // without a test being stuck past its own limit. That is the ceiling for the
 // file, and it is far below the flat 900s for a small file: gates-14-30 (the
 // engine's self-play, the gates that hang) holds 3 tests, 240s; gates-13-16
-// holds 4, 300s. gates-09-12 holds 14, so it keeps its full 840s + allowance
+// holds 5, 360s. gates-09-12 holds 14, so it keeps its full 840s + allowance
 // (still clamped to the flat ceiling). Counted from the file itself, so a gate
 // added to a file raises its own ceiling and nothing has to be kept in step.
 const VITEST_TEST_TIMEOUT_MS = 60_000;
