@@ -21,7 +21,6 @@ from typing import Any, Mapping
 
 from harness import config
 from harness.adapters.challenge import ERROR_CAP_PER_TYPE, ErrorCapExceeded
-from harness.adapters.challenge.memory_record import compaction_timestamps
 from harness.benv import load_bench_env
 from harness.live_stream import run_notice
 from harness.cumulative.progress import progress_from_cell_result
@@ -45,6 +44,7 @@ from harness.spend_key import (
     resolve_worker_spend_proxy_base_url,
 )
 
+from .cost_from_disk import derive_cost_from_disk
 from .paths import (
     DEFAULT_ORG_ID,
     DEFAULT_PROXY_RUNS_DIR,
@@ -62,158 +62,32 @@ _LOG = logging.getLogger("run_cumulative")
 #: Per-cell cost artifact, written by ``run_session`` on EVERY exit.
 COST_FILENAME = "cost.json"
 
-#: The gate statuses that constitute a GRADED outcome (the vocabulary
-#: ``grader/gate-results.mjs`` publishes as GATE_STATUSES). ``not_run`` and
-#: ``error`` are the instrument's own silence and its own fault — they belong to
-#: a suite's denominator, never to a passed/failed count, because scoring them
-#: as failures would score the harness instead of the cell.
-_GRADED_GATE_STATUSES = frozenset({"pass", "fail"})
-
-#: Phase fields that ADD UP across a cell's two phases. ``context_peak`` is
-#: deliberately absent: peaks do not sum, they take the maximum.
-_ADDITIVE_PHASE_FIELDS = (
-    "input_tokens",
-    "output_tokens",
-    "reasoning_tokens",
-    "cache_read_tokens",
-    "cache_write_tokens",
-    "turns",
-    "compactions",
-    "wall_seconds",
-)
+#: The VOID-INSTRUMENT reason for each ending that never produced a finished
+#: cell. A stopped, crashed or compaction-aborted cell measured nothing usable,
+#: but it DID spend money — so it is void WITH a reason rather than absent from
+#: the ledger, and the reason says which thing went wrong.
+_VOID_REASON_BY_OUTCOME: dict[str, str] = {
+    "stopped": "stopped",
+    "crashed": "crashed",
+    "aborted_compaction": "compactions_before_grade",
+}
 
 
-def _read_json_object(path: Path) -> dict[str, Any] | None:
-    """Read one JSON object; None when it is missing, unreadable or not an object."""
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    return value if isinstance(value, dict) else None
-
-
-def _attempt_report_indices(run_dir: Path) -> list[int]:
-    """Attempt numbers whose ``attempt-N-report.json`` exists in the cell dir.
-
-    The FILES, not ``result.attempt_reports``: the cost writer runs in a
-    ``finally`` that must also cover the exits with no result at all (stopped,
-    crashed, capped), and the grader publishes each report before the loop can
-    die — so the files are the only grade source that survives every exit.
-    """
-    try:
-        names = [entry.name for entry in Path(run_dir).glob("attempt-*-report.json")]
-    except OSError:
-        return []
-    indices: list[int] = []
-    for name in names:
-        stem = name.removeprefix("attempt-").removesuffix("-report.json")
-        if stem.isdigit():
-            indices.append(int(stem))
-    return sorted(indices)
-
-
-def _grades_from_reports(run_dir: Path, attempts: list[int]) -> dict[str, int] | None:
-    """Graded gate outcomes across ``attempts``; None when nothing was graded.
-
-    ``total`` is the graded denominator (passed + failed), so the three numbers
-    are always internally consistent. ABSENT, never zeros, when no report in the
-    slice published a ``gate_results`` row with a decided status: a phase that
-    was never graded must not read as a phase that graded nothing and passed.
-    """
-    passed = 0
-    failed = 0
-    graded = False
-    for attempt in attempts:
-        report = _read_json_object(run_dir / f"attempt-{attempt}-report.json")
-        if report is None:
-            continue
-        rows = report.get("gate_results")
-        if not isinstance(rows, list):
-            continue
-        for row in rows:
-            if not isinstance(row, Mapping):
-                continue
-            status = row.get("status")
-            if status not in _GRADED_GATE_STATUSES:
-                continue
-            if status == "pass":
-                passed += 1
-            else:
-                failed += 1
-            graded = True
-    if not graded:
-        return None
-    return {"total": passed + failed, "passed": passed, "failed": failed}
-
-
-def _compactions_by_phase(
-    run_dir: Path, boundary_seconds: float | None
-) -> tuple[int | None, int | None]:
-    """Split the cell's completed compactions into (build, troubleshooting).
-
-    ``phase_boundary_wall_ts`` is the epoch-SECONDS wall clock the adapter
-    stamped when the build phase closed; the session DB stores ms-epoch
-    ``time_created``, so the comparison is in milliseconds. Either side missing
-    (no DB export, no boundary) yields ``(None, None)`` — an unplaceable
-    compaction is not attributed to a phase, and a phase with no compactions
-    observed carries the key ABSENT rather than a fabricated 0.
-    """
-    if boundary_seconds is None:
-        return (None, None)
-    stamps = compaction_timestamps(Path(run_dir) / "session-db" / "opencode.db")
-    if stamps is None:
-        return (None, None)
-    cutoff_ms = float(boundary_seconds) * 1000.0
-    build = sum(1 for stamp in stamps if stamp <= cutoff_ms)
-    return (build, len(stamps) - build)
-
-
-def _phase_dict(phase: Any) -> dict[str, Any]:
-    """A ``PhaseCost`` as a plain dict; ``{}`` when the phase was not observed."""
-    to_dict = getattr(phase, "to_dict", None)
-    if not callable(to_dict):
-        return {}
-    return dict(to_dict())
-
-
-def _total_phase(
-    build: Mapping[str, Any], troubleshooting: Mapping[str, Any]
-) -> dict[str, Any]:
-    """The cell's two phases recombined: additive fields sum, peaks take the max.
-
-    ``cost_usd`` is emitted only when EVERY observed phase carries it. A sum
-    across a priced and an unpriced phase would produce a total that is neither
-    (a local phase has no dollars at all), and a total missing half a cell's
-    spend is worse than an absent one: it reads as the whole cost.
-    """
-    phases = (build, troubleshooting)
-    total: dict[str, Any] = {}
-    for field in _ADDITIVE_PHASE_FIELDS:
-        values = [phase[field] for phase in phases if field in phase]
-        if values:
-            total[field] = sum(values)
-    peaks = [phase["context_peak"] for phase in phases if "context_peak" in phase]
-    if peaks:
-        total["context_peak"] = max(peaks)
-    grades: dict[str, int] = {}
-    for phase in phases:
-        for name, value in (phase.get("grades") or {}).items():
-            grades[name] = grades.get(name, 0) + int(value)
-    if grades:
-        total["grades"] = grades
-    observed = [phase for phase in phases if phase]
-    if observed and all("cost_usd" in phase for phase in observed):
-        total["cost_usd"] = sum(float(phase["cost_usd"]) for phase in observed)
-    return total
-
-
-def _void_for(result: Any) -> dict[str, Any]:
+def _void_for(outcome: str, result: Any) -> dict[str, Any]:
     """VOID-INSTRUMENT classification of this cell, via the single rule's owner.
 
-    A crash is NOT a void: it is a recorded crash. Nothing was measured, so
-    there is no measurement to discard — calling it void would let a harness
-    fault hide inside the same bucket as a cell the instrument failed to read.
+    A cell that DID NOT FINISH is void, and says why: stopped by an operator,
+    crashed, or aborted on ``compactions_before_grade``. Those are the endings
+    where the instrument never got to measure the cell, so nothing they produced
+    is a capability signal — while the spend they burned is precisely what an
+    operator needs priced, which is why this record exists at all.
+
+    A cell that FINISHED (``passed`` / ``failed``) defers to ``cell_void``, the
+    single rule's owner: there the verdict is about what the instrument lost
+    sight of WHILE measuring, not about how the cell ended.
     """
+    if outcome in _VOID_REASON_BY_OUTCOME:
+        return {"is_void": True, "reason": _VOID_REASON_BY_OUTCOME[outcome]}
     if result is None:
         return {"is_void": False, "reason": None}
     return cell_void(
@@ -242,51 +116,28 @@ def _cell_outcome(result: Any) -> str:
     return "passed" if progress_from_cell_result(result).full_green else "failed"
 
 
-def _cost_record(*, outcome: str, result: Any, run_dir: Path) -> dict[str, Any]:
-    """Assemble the per-cell cost.json body for one ended cell."""
-    indices = _attempt_report_indices(run_dir)
-    build_grades = _grades_from_reports(run_dir, [i for i in indices if i == 1])
-    troubleshooting_grades = _grades_from_reports(
-        run_dir, [i for i in indices if i > 1]
-    )
-    build_compactions: int | None = None
-    troubleshooting_compactions: int | None = None
-    if result is not None:
-        build_compactions, troubleshooting_compactions = _compactions_by_phase(
-            run_dir, getattr(result, "phase_boundary_wall_ts", None)
-        )
-    build = _phase_dict(getattr(result, "build_phase", None))
-    troubleshooting = _phase_dict(getattr(result, "troubleshooting_phase", None))
-    # An attempt-1 grade is the BUILD's grade only when a build actually ran.
-    # The adapter sets `build_phase` exactly then, so its absence (a seeded cell
-    # grading the seed tree, or a cell that died before the build closed) leaves
-    # attempt 1's grade unattributed rather than mislabelled onto a build.
-    if build:
-        if build_grades is not None:
-            build["grades"] = build_grades
-        if build_compactions is not None:
-            build["compactions"] = build_compactions
-    # Attempts 2..N are the troubleshooting rounds by construction — there is no
-    # alternative attribution for them — so they are kept even when the adapter
-    # never closed that phase aggregate (a cell that died mid-round).
-    if troubleshooting_grades is not None:
-        troubleshooting["grades"] = troubleshooting_grades
-    if troubleshooting_compactions is not None:
-        troubleshooting["compactions"] = troubleshooting_compactions
+def _cost_record(
+    *, outcome: str, run_dir: Path, void: dict[str, Any]
+) -> dict[str, Any]:
+    """Assemble the per-cell cost.json body from what landed ON DISK.
 
-    phases: dict[str, Any] = {}
-    if build:
-        phases["build"] = build
-    if troubleshooting:
-        phases["troubleshooting"] = troubleshooting
-    if phases:
-        phases["total"] = _total_phase(build, troubleshooting)
+    DERIVED FROM DISK, NOT FROM ``result`` — hence no ``result`` parameter at
+    all. This record has to survive the exits that produce no adapter result at
+    all (stopped, crashed, capped), and a cost assembled from in-memory state
+    goes blank on exactly those cells. The phases, the pause total and the
+    grade/compaction attribution all come from artifacts the cell published
+    before it could die — session DB, live stream, attempt reports — through the
+    one function that owns that derivation.
 
-    record: dict[str, Any] = {"outcome": outcome, "phases": phases}
-    paused = getattr(result, "paused_seconds", None) if result is not None else None
-    if paused is not None:
-        record["paused_seconds"] = float(paused)
-    record["void"] = _void_for(result)
+    The void verdict is passed IN rather than computed here: it reads the
+    adapter result when a cell finished, and that judgment belongs to
+    ``_void_for``, not to the cost ledger.
+    """
+    derived = derive_cost_from_disk(run_dir)
+    record: dict[str, Any] = {"outcome": outcome, "phases": derived["phases"]}
+    if derived["paused_seconds"] is not None:
+        record["paused_seconds"] = derived["paused_seconds"]
+    record["void"] = void
     return record
 
 
@@ -300,11 +151,19 @@ def _write_cost_json(run_dir: Path, *, outcome: str, result: Any) -> None:
     because they are the ones burning spend without producing a measurement.
     Written from a ``finally`` so no exit path can skip it.
 
+    SO IT DOES NOT TRUST MEMORY. The cost body is derived from the cell's own
+    on-disk artifacts (``_cost_record``), which is what makes the stopped and
+    crashed exits record anything at all. ``result`` is read ONLY for the void
+    verdict — where it exists, ``cell_void`` judges what the instrument lost
+    sight of; where it does not, ``outcome`` already says the cell never
+    finished and the record is void with that reason.
+
     Atomic (tmp + ``os.replace``), mirroring ``harness/fingerprint.py``
     ``write_cell_fingerprint``, so a reader never sees a half-written record.
     """
     try:
-        record = _cost_record(outcome=outcome, result=result, run_dir=run_dir)
+        void = _void_for(outcome, result)
+        record = _cost_record(outcome=outcome, run_dir=run_dir, void=void)
         run_dir.mkdir(parents=True, exist_ok=True)
         tmp = run_dir / f"{COST_FILENAME}.{os.getpid()}.tmp"
         tmp.write_text(

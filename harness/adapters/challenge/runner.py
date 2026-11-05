@@ -118,7 +118,6 @@ from .hold_ui import _hold_for_operator
 from .memory_record import MemoryRecordMixin
 from .models import (
     ChallengeCellResult,
-    PhaseCost,
     _OpencodeRunStats,
 )
 from .pricing import PricingMixin
@@ -827,35 +826,6 @@ class ChallengeRunner(
         told_open: set[str] = set()
         _worker_exit_annot: str | None = None
         first_run: _OpencodeRunStats | None = None
-        # Monotonic clock start of the chunked build, for the build phase's
-        # wall time. Stays None when no build drive ran (honest
-        # absence: no build ran, so no build wall exists to report).
-        build_started: float | None = None
-        # ── PER-PHASE COST SPLIT (build vs troubleshooting) ─────────────────
-        #
-        # The cell totals below fold EVERY phase into one number, so nothing on
-        # the result says which half spent the tokens — a build that burned the
-        # budget and a troubleshooting loop that ground for six rounds read
-        # identically. These carry the split beside the totals; NOTHING is
-        # subtracted from the totals, so every scored number is unchanged.
-        #
-        # All three stay None when no drive ran for the phase: the phase did
-        # not happen, and `PhaseCost.to_dict()` drops absent fields
-        # rather than claiming a phase that cost nothing.
-        build_phase_cost: PhaseCost | None = None
-        # Monotonic wall of the build drive only, kept so the troubleshooting
-        # wall can be derived as (cell wall - build wall) after the loop: the
-        # feedback rounds pass no clock in, so their wall is not measurable on
-        # its own.
-        build_wall_seconds: float | None = None
-        # EPOCH seconds at the instant the build drive returned. Epoch, not
-        # monotonic, because the writer that splits compaction events by phase
-        # reads the session DB, whose timestamps are epoch.
-        phase_boundary_wall_ts: float | None = None
-        # Troubleshooting is driven round by round, and a frozen PhaseCost
-        # cannot be summed into, so it accumulates here as a mutable dict and is
-        # frozen into one PhaseCost after the loop. None means no round ran.
-        feedback_phase_acc: dict[str, Any] | None = None
         # How many chunks the build SHOULD have run, for the completion rows
         # below: a chunk that never got a turn has no report to count.
         build_chunk_expected: int = 0
@@ -1118,7 +1088,6 @@ class ChallengeRunner(
                         "benchmark has one transport and there is no second "
                         "way to run this cell"
                     )
-                build_started = time.monotonic()
                 try:
                     first_run = self._run_opencode_serve_chunked(
                         active_cell=active_cell,
@@ -1145,17 +1114,6 @@ class ChallengeRunner(
                     f"PROGRESS run_label={run_label} step=serve-drive "
                     f"phase=initial status=used"
                 )
-                # PHASE BOUNDARY, captured the moment the build drive
-                # returns: after this line every real dollar belongs to
-                # troubleshooting. Epoch for the writer that splits
-                # session-db events; monotonic for the wall, which must not
-                # jump if the host clock steps.
-                phase_boundary_wall_ts = time.time()
-                build_wall_seconds = (
-                    time.monotonic() - build_started
-                    if build_started is not None
-                    else None
-                )
                 observed_attempt_costs.append(first_run.cost_usd)
                 cell_cost_usd += first_run.cost_usd
                 session_id = first_run.session_id
@@ -1179,29 +1137,6 @@ class ChallengeRunner(
                 unmetered_turn_wall_total += first_run.unmetered_turn_wall_s
                 prev_run_stats = first_run
                 worker_killed_reason = first_run.killed_reason
-                # The build phase, recorded from the drive's own stats. This
-                # is the ONLY place a build cost exists: the feedback loop
-                # below accumulates its own half, and the writer fills
-                # `compactions`/`grades` from the session DB and attempt
-                # reports (fields this site cannot observe).
-                #
-                # `output_tokens` is the RAW split, unlike the cell total
-                # above which folds reasoning into it — `reasoning_tokens`
-                # sits beside it here, so folding would double-count.
-                build_phase_cost = PhaseCost(
-                    input_tokens=first_run.input_tokens,
-                    output_tokens=first_run.output_tokens,
-                    reasoning_tokens=first_run.reasoning_tokens,
-                    cache_read_tokens=first_run.cache_read_tokens,
-                    cache_write_tokens=first_run.cache_write_tokens,
-                    turns=first_run.turns,
-                    wall_seconds=build_wall_seconds,
-                    context_peak=first_run.context_peak_tokens,
-                    # A LOCAL MODEL HAS NO DOLLARS: absent (None), never
-                    # 0.0 — a fabricated zero would let a local build
-                    # masquerade as a priced one in any aggregate.
-                    cost_usd=first_run.cost_usd if self.cloud else None,
-                )
                 self._progress(
                     f"PROGRESS run_label={run_label} step=worker-launch-end mode=real "
                     f"exit={first_run.exit_code} killed={first_run.killed_reason or 'none'} "
@@ -1946,41 +1881,6 @@ class ChallengeRunner(
                 unmetered_turn_wall_total += feedback_run.unmetered_turn_wall_s
                 prev_run_stats = feedback_run
                 worker_killed_reason = feedback_run.killed_reason
-                # Troubleshooting half of the per-phase split. Anthropic-shape
-                # accounting, same as the build phase: reasoning is its OWN
-                # field here, so it is summed separately rather than folded into
-                # `output_tokens` the way the cell total does it.
-                if feedback_phase_acc is None:
-                    feedback_phase_acc = {
-                        "input_tokens": 0,
-                        "output_tokens": 0,
-                        "reasoning_tokens": 0,
-                        "cache_read_tokens": 0,
-                        "cache_write_tokens": 0,
-                        "turns": 0,
-                        "context_peak": None,
-                        # Accumulated only for a remote model; a local one
-                        # reports no dollars at all (None, never 0.0).
-                        "cost_usd": 0.0 if self.cloud else None,
-                    }
-                feedback_phase_acc["input_tokens"] += feedback_run.input_tokens
-                feedback_phase_acc["output_tokens"] += feedback_run.output_tokens
-                feedback_phase_acc["reasoning_tokens"] += feedback_run.reasoning_tokens
-                feedback_phase_acc["cache_read_tokens"] += (
-                    feedback_run.cache_read_tokens
-                )
-                feedback_phase_acc["cache_write_tokens"] += (
-                    feedback_run.cache_write_tokens
-                )
-                feedback_phase_acc["turns"] += feedback_run.turns
-                if feedback_phase_acc["cost_usd"] is not None:
-                    feedback_phase_acc["cost_usd"] += feedback_run.cost_usd
-                peak = feedback_run.context_peak_tokens
-                if peak is not None:
-                    prior_peak = feedback_phase_acc["context_peak"]
-                    feedback_phase_acc["context_peak"] = (
-                        peak if prior_peak is None else max(prior_peak, peak)
-                    )
                 self._progress(
                     f"PROGRESS run_label={run_label} step=feedback-injection-done attempt={attempt} "
                     f"exit={feedback_run.exit_code} killed={feedback_run.killed_reason or 'none'} "
@@ -2215,33 +2115,6 @@ class ChallengeRunner(
             f"memory_mode={self.memory_mode}"
         )
 
-        # ── FREEZE THE TROUBLESHOOTING PHASE ────────────────────────────────
-        #
-        # The wall is DERIVED, not measured: the feedback rounds pass no clock
-        # in, so the only honest split is (cell wall - build wall). Same
-        # monotonic span on both sides, and operator pauses never overlap the
-        # build drive, so the subtraction cannot go negative.
-        troubleshooting_phase_cost: PhaseCost | None = None
-        if feedback_phase_acc is not None:
-            if build_wall_seconds is not None:
-                troubleshooting_wall: float | None = wall_seconds - build_wall_seconds
-            else:
-                # NO BUILD WALL WAS RECORDED: the whole cell wall IS the
-                # troubleshooting wall. Reporting None here would throw away a
-                # wall that was in fact measured.
-                troubleshooting_wall = wall_seconds
-            troubleshooting_phase_cost = PhaseCost(
-                input_tokens=feedback_phase_acc["input_tokens"],
-                output_tokens=feedback_phase_acc["output_tokens"],
-                reasoning_tokens=feedback_phase_acc["reasoning_tokens"],
-                cache_read_tokens=feedback_phase_acc["cache_read_tokens"],
-                cache_write_tokens=feedback_phase_acc["cache_write_tokens"],
-                turns=feedback_phase_acc["turns"],
-                wall_seconds=troubleshooting_wall,
-                context_peak=feedback_phase_acc["context_peak"],
-                cost_usd=feedback_phase_acc["cost_usd"],
-            )
-
         return ChallengeCellResult(
             build_chunks=build_chunk_completion(
                 chunk_reports=(first_run.chunk_reports if first_run else ()),
@@ -2336,9 +2209,6 @@ class ChallengeRunner(
             unmetered_turns=unmetered_turns_total,
             unmetered_turn_wall_s=unmetered_turn_wall_total,
             worker_image_fingerprint=worker_image_identity,
-            build_phase=build_phase_cost,
-            troubleshooting_phase=troubleshooting_phase_cost,
-            phase_boundary_wall_ts=phase_boundary_wall_ts,
         )
 
     def _run_operator_pause(

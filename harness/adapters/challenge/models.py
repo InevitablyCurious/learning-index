@@ -111,73 +111,6 @@ class _ProxyBudgetSnapshot:
     checkpoint_path: str
 
 
-@dataclass(frozen=True)
-class PhaseCost:
-    """Cost of ONE phase of a cell (build, or troubleshooting), per-cell record.
-
-    WHY every field is optional, and absent is ``None`` rather than ``0``: this
-    is a measurement of what the harness actually saw, mirrored into a per-cell
-    ``cost.json``. Two situations produce partial truth, and both must read as
-    MISSING, not as a zero:
-
-    * A cell that was stopped, crashed, or killed mid-phase has no complete
-      phase to report. Writing ``0`` there would claim the phase ran and cost
-      nothing — a false measurement that sums cleanly and silently understates
-      the run. ``None`` says "not observed".
-    * A local model has no dollars, ever. ``cost_usd`` absent (``None``) is the
-      honest encoding of "cost is not a property of this run"; ``0.0`` would
-      be indistinguishable from a genuinely free remote call and would let a
-      local cell masquerade as a priced one in any aggregate.
-
-    Absence is therefore the value, and ``to_dict`` drops absent keys rather
-    than nulling them, so a consumer can tell "this run never had the field"
-    from "this run had it and it was zero".
-    """
-
-    input_tokens: int | None = None
-    output_tokens: int | None = None
-    reasoning_tokens: int | None = None
-    cache_read_tokens: int | None = None
-    cache_write_tokens: int | None = None
-    turns: int | None = None
-    compactions: int | None = None
-    # {"total": .., "passed": .., "failed": ..}; None when the phase was never
-    # graded (a build phase, or a cell that died before a round closed).
-    grades: dict[str, int] | None = None
-    wall_seconds: float | None = None
-    # Largest per-request context observed in this phase; None = not recorded.
-    context_peak: int | None = None
-    # ABSENT (None) when the model is local — never 0.0. See class docstring.
-    cost_usd: float | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize, emitting ONLY observed fields.
-
-        Absent keys are omitted, not nulled, so downstream sums never absorb a
-        fabricated zero. ``grades`` is shallow-copied so the frozen dataclass's
-        caller cannot mutate the dict we handed out.
-        """
-        out: dict[str, Any] = {}
-        for key in (
-            "input_tokens",
-            "output_tokens",
-            "reasoning_tokens",
-            "cache_read_tokens",
-            "cache_write_tokens",
-            "turns",
-            "compactions",
-            "wall_seconds",
-            "context_peak",
-            "cost_usd",
-        ):
-            value = getattr(self, key)
-            if value is not None:
-                out[key] = value
-        if self.grades is not None:
-            out["grades"] = dict(self.grades)
-        return out
-
-
 @dataclass
 class ChallengeCellResult:
     verdict: str
@@ -307,16 +240,3 @@ class ChallengeCellResult:
     # surfaced to the run-manifest status stream so the prod dashboard can
     # join exported session-DB rows to bench cells.
     session_title: str | None = None
-    # ── PER-PHASE COST CONTRACT ───────────────────────────────────────────
-    # The totals above are cell-cumulative, which cannot answer the question
-    # the benchmark actually cares about: how much of a cell's cost was
-    # BUILDING it versus TROUBLESHOOTING it. The adapter folds each phase's
-    # stats into a PhaseCost; ``None`` means that phase never ran (or never
-    # closed), never "ran for free". Additive — no existing field changes.
-    build_phase: PhaseCost | None = None
-    troubleshooting_phase: PhaseCost | None = None
-    # epoch seconds (time.time()) at the build→troubleshoot switch; None if the
-    # cell never switched (build never went green, or it went green first try).
-    # The marker exists because per-phase wall times are measured by different
-    # invocations and must be attributable to a single point in time.
-    phase_boundary_wall_ts: float | None = None
