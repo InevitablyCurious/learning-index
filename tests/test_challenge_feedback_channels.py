@@ -366,7 +366,7 @@ def test_the_team_line_states_what_the_missing_thing_IS() -> None:
     """Naming a field is useless to a model that no longer knows what it is.
 
     THE CORRECTION (Jerry, 2026-09-05): the build prompt is NOT in context when
-    the model reads this. A normal run compacts between the six build chunks; a
+    the model reads this. A normal run compacts between the five build chunks; a
     SEEDED run never ran the build at all, so that model was never handed the
     spec in the first place. "There's no winType" is cryptic on both paths — the
     definition has to travel with the complaint.

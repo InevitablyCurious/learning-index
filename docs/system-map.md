@@ -11,8 +11,8 @@ docs.
 
 `bench` measures whether a pluggable memory layer mitigates an LLM's
 degradation. It runs one task — build a working backgammon game — repeatedly. A
-**memory OFF** baseline builds from a stripped scaffold; a **memory ON** run
-seeds the same task with what a prior run's memory layer captured. The measured
+**memory OFF** baseline builds from a stripped scaffold; a **memory ON** run is
+the same task with what the memory layer captured on earlier runs re-injected. The measured
 question: does re-injected memory reduce context growth, turn count, and gate
 failures? The game is only the instrument; the subject under test is the memory
 system.
@@ -24,7 +24,7 @@ system.
 | Harness | `harness/` | The Python measuring instrument: campaign sequencer + manifest, task adapters, scoring/scorecard, cell isolation, egress, image identity, blinding. |
 | Task | `task/backgammon/` | The instrument's task: `scaffold/` (stubs the model builds from), `golden/` (reference solution, never shown), `prompts/` (chunked build prompts). |
 | Grader | `grader/` | `report.mjs` + the gate suite (conformance / backend / frontend, plus `meta/` and `quarantine/`). The only component that sees the golden. |
-| Control plane | `control/` | Node stdlib-only `server.mjs`, loopback :8718 — the only process that reads run files (`control/board/sources/`) or changes anything; assembles and pushes the board, spawns the harness, N concurrent cells at a time, each tracked in a durable launch record (`cell-registry.mjs`, §9). Plays a selected cell's game (loopback-bound, §10) and serves per-attempt screenshots (`routes/screenshot.mjs`, §10). |
+| Control plane | `control/` | Node stdlib-only `server.mjs`, loopback :8718 — the only process that reads run files (`control/board/sources/`) or changes anything; assembles and pushes the board, spawns the harness — one cell per click, with a serial gate PER MODEL (§8) — each cell tracked in a durable launch record (`cell-registry.mjs`, §9). Plays a selected cell's game (loopback-bound, §10) and serves per-attempt screenshots (`routes/screenshot.mjs`, §10). |
 | Dashboard | `dashboard/` | Container at :8717: serves the board page and relays `/api/*` to the control plane (`lib/control-relay.mjs`, incl. a binary passthrough for `/api/screenshot`); holds no run data. Renders the LIVE BUILD reconciliation panel (`panels/build.js`, §10). Optional LAN publish (`docker-compose.lan.yml`) with a peer check (`lib/net-policy.mjs`). |
 | Images | `images/` | `worker/Dockerfile`, `grader/Dockerfile`, `sidecar/` (egress + loop-kill scanner + supervised shell). |
 | Scripts | `scripts/` | Entrypoints: `run_cumulative.py` (canonical), `rebuild_worker_image.py`, `rebuild_grader_image.py`, `bench_preflight.py`. |
@@ -35,12 +35,13 @@ system.
 
 1. **Campaign (durable).** `scripts/run_cumulative.py` builds a
    `CumulativeSequencer` over a `CumulativeManifest`
-   (`harness/cumulative/manifest.py`) — schema, roster, seed, config fingerprint,
-   schedule, session records.
-2. **Cell (executed).** One scheduled session per cell. The sequencer phase
+   (`harness/cumulative/manifest.py:51`) — task, org, roster, config fingerprint,
+   the append log (`schedule`, one entry per clicked cell, never precomputed) and
+   the session records.
+2. **Cell (executed).** One appended cell, driven once. The sequencer phase
    machine runs `PREPARE_FIXTURE → RUN_SESSION → DONE` (`HALTED_ON_GATE` on a
-   gate failure). The worker container builds the task in chunks via a chunked
-   opencode serve drive (`harness/adapters/challenge/serve.py`).
+   gate failure). The worker container builds the task in chunks over ONE
+   opencode serve session (`harness/adapters/challenge/serve.py`, §7).
 3. **Grading.** `harness/grader_run.py` runs the candidate's worktree through
    `bench-grader:<challenge>` (the challenge's gate suite, `ENTRYPOINT ["node", "report.mjs"]`), read-only
    and `--network none`, producing `report.json` (verdict, problems, failed
@@ -48,10 +49,12 @@ system.
 4. **Scorecard.** `run_artifacts.build_scorecard` aggregates the write-once
    manifest + append-only status stream into `manifest.scorecard.json` per cell.
 
-The **control plane** (`control/server.mjs`, binds 127.0.0.1:8718, no shell, N
-concurrent cells at a time) spawns the entrypoint
+The **control plane** (`control/server.mjs`, binds 127.0.0.1:8718, no shell, one
+cell per click) spawns the entrypoint
 `.venv/bin/python scripts/run_cumulative.py run --mode <arm>` and observes
-read-only. Every cell it spawns is written at launch as a durable launch
+read-only. A second cell for the SAME model is refused while the first is in
+flight (`lib/validate.mjs:62`, the serial gate of §8); a cell on a different
+model may run alongside it. Every cell it spawns is written at launch as a durable launch
 record (`runs/<treeId>/launches/<run_id>.json`, §9), so a control-plane restart
 re-adopts running cells instead of losing their pids. The board (`:8717`) is a
 separate, read-only viewer.
@@ -63,18 +66,20 @@ registry, and NO adapter. The integration surface is ONE "which plugin" pointer
 plus a few run-time settings a memory system with a server needs
 (docs/memory-systems.md).
 
-- **Schedule** (`harness/cumulative/ordering.py`): a full OFF baseline in roster
-  order, then a seeded ON schedule. Every model is its own control.
+- **One click, one cell** (`harness/cumulative/ordering.py` `append_session`): one
+  click appends ONE cell, in the arm picked on the click. Nothing is precomputed —
+  a cell's identity is its own (arm, model, config fingerprint), never a position
+  in a planned schedule. Every model is its own control.
 - **One image, both arms.** The memory plugin (`BENCH_PLUGIN_DIR`, any opencode
   plugin package) is baked into the worker image at `/opt/bench-plugin`
   (`images/worker/Dockerfile`); both arms run on that same image, and both start
   from the same worktree.
-- **OFF arm.** The cell's opencode config lists no memory plugin, and the cell
-  gets no memory route and no memory settings, so nothing is captured or
-  recalled. The per-model floor the ON arm is measured against — and since
-  2026-09-22 that floor is **not one run**: it is the operator's chosen run out
-  of an N-cell batch, reported as the **median problem count over scored runs**
-  (see §8).
+- **OFF arm.** The arm is picked on the click, and that run has no memory at all:
+  its opencode config lists no memory plugin, and the cell gets no memory route
+  and no memory settings, so nothing is captured or recalled. Every completed,
+  non-void OFF cell is one more baseline for its fingerprint, and the floor the
+  ON arm is measured against is the **average** over every baseline sharing that
+  fingerprint (§8) — never one picked run, never a median of a chosen batch.
 - **ON arm.** The cell's opencode config lists the baked plugin; the cell gets a
   route to the memory system's server through its egress sidecar
   (`BENCH_MEMORY_UPSTREAM`) and the plugin's own settings (`BENCH_MEMORY_ENV`).
@@ -83,7 +88,7 @@ plus a few run-time settings a memory system with a server needs
   (`BENCH_MEMORY_READY_CMD`, `BENCH_MEMORY_COST_CMD`). The OFF/ON toggle
   (`memory_mode` off/on) is the only memory-mode distinction.
 - **The harness reinjects nothing.** Capture, recall, and reinjection belong to
-  the plugin; the benchmark only schedules the arms and measures the Δ, from
+  the plugin; the benchmark only runs the arms and measures the Δ, from
   outside the memory system (each cell's `memory.json`).
 
 The plugin and any recall store it talks to live **outside** this repo; the
@@ -118,100 +123,134 @@ benchmark names no backend and is agnostic to which plugin is plugged in.
 - **`dashboard/check/board-check.mjs`** is the end-to-end check: it runs on
   every `dashboard/redeploy.sh` against 127.0.0.1 and the LAN address.
 
-## 7. Build snapshots — the dev-mode chain
+## 7. What one run is
 
-Snapshots are **dev-mode tooling, never a measurement surface**: a worktree is
-copied to `runs/snapshots/<id>/{tree/,snapshot.json}` (`capture_snapshot`,
-`harness/snapshot.py`) so a later cell can seed from it and skip the build. Full
-procedure in RUNBOOK §18.
+**One click on Run is one run.** The control plane spawns the harness for one
+cell, the harness appends exactly one cell to the campaign's log
+(`append_session`, `harness/cumulative/ordering.py:34`), and that cell is ONE
+opencode session from first prompt to last grade: every build chunk and every
+repair round drives the same `session_id` (`runner.py:2451`), so nothing restarts
+the model's history halfway.
 
-**Two capture triggers.** (1) **Attempt-1 build-completion** — every baseline
-captures its finished worktree at the first grade boundary
-(`harness/adapters/challenge/runner.py:1602-1603`). (2) **End-of-run chaining**
-— a *seeded* run that exhausts its attempts promotes its final worktree to a new
-snapshot (`_capture_end_of_run_snapshot`, `runner.py:565`), gated on
-`_seed_snapshot_tree is not None` (`runner.py:1641-1642`), so a dev-mode chain
-carries its accumulated fixes forward instead of discarding them.
+**The build is five chunk prompts inside that one session.**
+`task/backgammon/prompts/chunk-01..05.md` are driven one per user message, in
+order (`serve.py:1293`); with compaction on for the run the harness compacts the
+session once at each chunk boundary (`serve.py:1361` `_compact_after_chunk`), so
+the next chunk's prompt goes into the compacted session.
 
-**The depth field is `snapshot_depth`, never `cell_seq`.** `snapshot.json` carries
-`cell_seq` (the authoring cell's per-campaign `sequence_index` — 0 for the first
-cell), which is NOT a chain depth and must never be read as "n". The depth field
-is `snapshot_depth`: the attempt-1 capture omits it (read as 1 by default), while
-the end-of-run capture writes `seed_depth + 1` (`runner.py:595`). The control
-plane exposes `snapshot_depth ?? 1` and drops `cell_seq` (`control/snapshots.mjs:89`).
+**A chunk is over when the session goes idle.** That is the transport's verdict,
+not the model's: a drive returns when the session goes IDLE, and a non-zero exit
+ends the whole build there with every later chunk reported `not_reached`
+(`serve.py:1182`, `:1331`). Nothing the model writes is read for a boundary: the
+old marker string was a self-report standing in for an event the transport
+already reports, and it is gone from the prompts and the harness alike
+(`serve.py:1187-1191`).
 
-**The run→snapshot join key is end-of-run-only.** `produced_snapshot_id` on
-`manifest.session_records[]` (`harness/cumulative/types.py:582`) is populated ONLY
-by the end-of-run capture (`_capture_end_of_run_snapshot`, at the attempt ceiling
-or out of context, seeded or fresh), never the attempt-1 capture — so a baseline
-that passed reports null even though its build snapshot exists on disk. It is the
-durable link the run-delete path consumes, and the snapshot continuous mode
-chains from (`control/continuous.mjs`, RUNBOOK §19).
+**Troubleshooting runs in that same session, uncapped.** After the build the
+session is graded; while checks fail the harness sends ONE feedback message per
+round and grades again — `for attempt in itertools.count(1)`
+(`runner.py:1333`) — with no round cap and no time cap, until every check passes.
+opencode's own auto-compaction stays on at its vanilla default in this phase; the
+harness fires no compaction of its own here.
 
-**The manifest is campaign-nested, not at run root.** The manifest holding
-`session_records[].produced_snapshot_id` lives at
-`<runs_root>/<treeId>/<substrate>/<router>/<provider>/<model>/manifest.json`
-(`control/campaign.mjs:72-73`); archives nest deeper under
-`runs/backups/<newTreeId>/<oldTreeId>/<…>/manifest.json`.
+| Phase | Who compacts | Caps |
+|---|---|---|
+| build | the harness, once per chunk boundary (`serve.py:1361`) | none — five prompts are the plan, not a limit |
+| troubleshooting | opencode auto-compaction, vanilla default | none (`runner.py:1333`) |
 
-**Cleanup asymmetry.** Run deletion hard-deletes the snapshot(s) its manifest
-names via `produced_snapshot_id` (no cascade). A RESET does **not** sweep
-`runs/snapshots/` — `isBenchmarkData` has no `snapshots` case
-(`control/tree.mjs:271-296`), so snapshots survive a reset with no recorded
-owner.
+**One abort does end a run: two compactions before one grade.** In troubleshooting
+only, `compactions_since_grade >= 2` ends the cell as `compactions_before_grade`
+(`runner.py:2010`, constant `:160`): one compaction is a repair round rebuilding
+its context and carrying on, two with no grade between them is a round rewriting
+context instead of code. `cost.json` stamps that outcome `aborted_compaction`
+(`scripts/run_cumulative/runner.py:241`).
 
-## 8. Concurrency + median baselines (2026-09-22)
+**Endings are recorded by name.** `gates_green` is a pass; `context_exhausted` is
+a real ending — the session grew past what the model could compact at all
+(`runner.py:2042`) — and it is never repaired by starting a second session on a
+saved copy of the code. A dead worker, an instrument fault and an operator stop
+end a cell too, each on its own name.
 
-Landed as eight commits (`2ed2a73`…`08efbb2`, rollback `3ca2693`). Supersedes the
-single-cell model: the control plane runs N concurrent cells, and a model's floor
-is the median of a batch, not one run.
+**Dev mode pauses; normal mode never does.** `control/devmode.mjs` resolves the
+control plane's own mode (environment → state file → off) and the route passes
+`--pause-after-grade` when it is on (`routes/run.mjs:220`); the harness then holds
+after every graded round and once at run end (`runner.py:1902`, `:2081`), booting
+the artifact in the grader image so a person can play what the grader judged and
+read the lines the model is about to be told. Release is operator-explicit:
+`touch <run_dir>/RELEASE_HOLD` (`constants.py:110-114`). Paused seconds are
+excluded from wall time and recorded beside it (`paused_seconds`,
+`runner.py:2264`).
 
-**Cell identity.** A 12-hex `run_identity` (uuid4, once per process at
-`scripts/run_cumulative/__init__.py`) suffixes the worker container
-(`bench-cell-{label}-{run_identity}`) and keys the session-DB volume, the egress
-sidecar (`okp-egress-{sha256(run_identity)[:12]}`), and the grader container
-(`bench-grade-{run_identity}-{cell}-{stem}`). The reaper filter is anchored
-(`name=-{run_identity}$`), never a substring sweep; the sidecar gained a
-stale-name `docker rm -f` guard.
+**Stopping a run keeps its tree.** The launch record is ended `stopped by
+operator` and the run stays on disk with its `cost.json`; what disappears is the
+preview, because the play container is removed and the live-build loop feeding it
+stops with the run (`control/livebuild.mjs:38-46`). A build a person started by
+hand is left alone.
 
-**Live-view port.** Each cell's live-view serve gets its own free host port
-(`harness/free_port.py::resolve_serve_host_port`, allocated before the reaper reads
-it); the port rides the `cell.start` record and is surfaced by the board. The fixed
-`:8719` is retired.
+**Cell identity and the live-view port.** A 12-hex `run_identity` (uuid4, once
+per process, `scripts/run_cumulative/__init__.py:436`) suffixes the worker
+container (`bench-cell-{label}-{run_identity}`, `runner.py:944`) and keys the
+session-DB volume, the egress sidecar (`okp-egress-{sha256(...)[:12]}`,
+`harness/egress.py:62`) and the grader container
+(`bench-grade-{run_identity}-{cell}-{stem}`, `harness/grader_run.py:81`); the
+reaper filter is anchored, never a substring sweep. Each cell's live-view serve
+gets its own free host port (`harness/free_port.py:30`), which rides the
+`cell.start` record and is surfaced by the board; the fixed `:8719` is retired.
 
-**N-concurrent control plane.** `control/run-ledger.mjs` (the in-memory live-cell
-cache over the durable cell registry — see §9), `readRunState` returns `runs[]`,
-launch is gated **per model** (`inFlightModels` in `run-ledger.mjs`, consumed by
-`lib/validate.mjs:65`), and `allocateSequenceIndex` is atomic. `/api/run/start`
-accepts `concurrency` N (default 1) and pre-flights all N before spawning.
+## 8. Baselines, fingerprint and cost
 
-**Batch baseline.** `control/batch.mjs` computes the median of scored runs (voids
-excluded, never counted as failures) over a fingerprint of 8 inputs (build prompts,
-grader, model, challenge, compaction, scaffold, golden, worker image); the operator
-picks the artifact run and the record stores its signed deviation from the median.
-`control/baselines.mjs` no longer picks `scorable[length-1]`.
+**Every click is one more baseline; the floor is an average.** `control/baselines.mjs`
+is the one owner of "does model X have a baseline, and what it cost": every
+completed, non-void OFF cell is one baseline for its fingerprint, and the numbers
+an ON cell is measured against are the AVERAGE over every baseline sharing that
+fingerprint (`fingerprintBaselines`, `control/baselines.mjs:1148`; the averaged
+fields are `context_peak`, `wall_seconds`, `turns` and the five token kinds,
+`:1114-1123`). A field absent in every cell averages to null, never 0, and a void
+cell (it measured the harness, not the model) is no baseline — that verdict is the
+harness's own `cost.json` `void.is_void` stamp. No run is picked: the newest
+completed OFF cell only names the row on the card (`:929-940`), and choosing one
+cell WAS the old measuring method.
+
+**A cell's fingerprint has 14 inputs, recorded at the cell when it starts.**
+`control/batch.mjs:44` `FINGERPRINT_INPUTS` is the contract — prompts tree,
+grader, model, challenge, compaction, scaffold, golden, worker image, then the
+harness code, source commit, dirty bit, worker source digest, opencode version and
+grader image — and `harness/fingerprint.py:104` writes `fingerprint.json` beside
+the cell's live stream. An input nobody could read is ABSENT, never a placeholder,
+so a later change to it reads "not recorded" rather than as a match.
 
 **`chunk_plan_hash` hashes the WHOLE prompts tree, not the build steps.** The
-"build prompts" fingerprint input is `chunk_plan_hash` = `dir_hash(task_dir / "prompts")`
-(`harness/fingerprint.py:75`); `dir_hash` walks every regular file recursively
-(`harness/fingerprint.py:41-60`, no `chunk-*.md` filter). So adding or editing ANY
-prompt file — a repair opener, a nudge, a `failures/` line — silently moves
-`chunk_plan_hash` for the whole tree, and a pinned batch/campaign is voided as
-superseded naming `chunk_plan_hash` (`control/baselines.mjs:550-555`). Before
-touching a prompt file, check whether a live campaign or OFF baseline is pinned to it.
+"build prompts" input is `chunk_plan_hash` = `dir_hash(task_dir / "prompts")`
+(`harness/fingerprint.py:41-60`, no `chunk-*.md` filter), so adding or editing ANY
+prompt file — a repair opener, a nudge, a `failures/` line — moves the hash for
+the whole tree and voids a batch recorded on the old one as superseded, naming
+`chunk_plan_hash` (`verifyAgainstCurrentCode`, `control/baselines.mjs:772-788`).
+Before touching a prompt file, check what is pinned to it.
 
-**Contention covariates.** The 7 covariates (`http_429_count`, `http_402_count`,
-`retry_count`, `upstream_error_count`, `wall_near_timeout`, `max_request_ms`,
-`median_request_ms`) are surfaced on scored + batch records; the missing-telemetry
-seam was un-blinded (they left `CONSTRUCTION_DEFERRED_TELEMETRY_SEAMS`). Visibility
-only — never fingerprinted, never a gate.
+**`cost.json` prices every exit, in two phases.** `scripts/run_cumulative/runner.py:246`
+`_cost_record` writes it on EVERY exit — passed, failed, stopped, aborted,
+crashed — because the cells that burn spend without producing a measurement are
+exactly the ones an operator needs priced.
 
-**⚠ NOT YET MEASURED.** The N=1-vs-N=8 contention measurement (CONCURRENCY-SPEC §8)
-has not been run — whether the load-fragile in-gate timers (`pregate.ts:563` 250 ms,
-`core.spec.ts:54` 1.5 s, `gates-13-16.test.ts:372` 6 s) fire more often under load.
-"Verified concurrency safety" is not yet a measured claim.
+| Key | What it carries |
+|---|---|
+| `build`, `troubleshooting` | tokens by kind (`input`, `output`, `reasoning`, `cache_read`, `cache_write`), `turns`, `compactions`, `grades` (`total`/`passed`/`failed`), `wall_seconds` minus paused, `context_peak` |
+| `total` | additive fields summed, `context_peak` maxed, `grades` merged — never a fabricated zero |
+| `outcome`, `paused_seconds`, `void` | how the cell ended, operator-pause time, the instrument verdict |
 
-### Hard-won notes (charted from the concurrency workstream)
+**Tokens are the cost of every cell; dollars exist only for cloud models.**
+`cost_usd` rides each phase and `total`, and is ABSENT (never `0.0`) on a local
+model, where spend is not a property of the run; `total.cost_usd` is emitted only
+when every observed phase carries it, since a sum across a priced and an unpriced
+phase is neither (`_total_phase`, `scripts/run_cumulative/runner.py:179-207`).
+
+**The serial gate is per model.** `inFlightModels()` (the live-cell ledger, §9)
+feeds `lib/validate.mjs:62`: a second start for a model already in flight is
+refused `run_in_flight` — "this model is serial" — while another model may be in
+flight beside it. One click launches exactly ONE cell; `/api/run/start` reads no
+cell count and has no batch to pre-flight (`routes/run.mjs`).
+
+### Hard-won notes (charted from the control-plane workstream)
 
 - **run_id is triple-overloaded** — control-plane launch-record id, now DURABLE
   (it names the launch record `runs/<treeId>/launches/<run_id>.json`,
@@ -225,21 +264,19 @@ has not been run — whether the load-fragile in-gate timers (`pregate.ts:563` 2
   `cell.start` record at the HEAD of `live.jsonl`; the tail readers (`backend-feed.mjs`
   256 KB, `live-stream.mjs` 512 KB) miss them on long streams. Read via
   `runstate.mjs::cellServeUrl` (head-anchored), never the tail.
-- **checkpoint-clobber** — a cell with explicit `--sequence-index` rewrites the whole
-  manifest on every checkpoint (`sequencer.py:323-325`), so a control-plane bump of
-  `current_index` in a shared manifest is clobbered; the sequence cursor must stay
-  in-memory/sidecar.
-- **assembleBatch wipes selection** — `batch.mjs` `assembleBatch` sets `selection: null`
-  and `assembleBatchForCells` writes it unconditionally; callers must `readBatch` first
-  and assemble only when absent (`baselines.mjs` does).
+- **contention covariates are visibility, never a gate** — the six that ride records
+  (`http_429_count`, `http_402_count`, `retry_count`, `upstream_error_count`,
+  `max_request_ms`, `median_request_ms`, `harness/cumulative/progress.py:91-105`)
+  are never fingerprinted and never scored on.
 - **`baselines.mjs` `int()` null→0** — folding nullable telemetry through bare `int()`
   fabricates 0 for "not measured"; use the `measuredInt` guard.
 - **`session_records: []` before population** — the manifest hits disk empty
   (`manifest.py:224`) before the sequencer fills it; a JS mirror of the index bound must
   treat `[]` as absent (Python truthiness).
-- **cellDirForRun is `/^memory/i`-only** (`runstate.mjs:307`) — pre-arm-layout `sessions/`
-  cells are unresolvable and keyed reads yield empty, even though `runstate.mjs:180`
-  (`runDirOf`) recognizes `sessions/` in its run-dir regex (the two disagree in one file).
+- **cellDirForRun is `/^memory/i`-only** (`runstate.mjs:291`) — pre-arm-layout `sessions/`
+  cells are unresolvable and keyed reads yield empty, even though `runstate.mjs:164`
+  (`runDirOf`, defined `:159`) recognizes `sessions/` in its run-dir regex (the two
+  disagree in one file).
 - **gate PROGRESS ↔ sequence_index link is the `-sNNNN.log` filename** — the cell dir
   holds `live.jsonl`, not the `step=gate-` text `readGateActivity` parses; keyed gate
   reads depend on the launch-log `-sNNNN.log` suffix.
@@ -295,8 +332,10 @@ cache slot. `evictRun` is a pure cache delete.
 **Enumeration = records + process scan.** `readRunState` (`runstate.mjs`) enumerates from
 the durable records — the live set via `liveRuns()` (the cache) and the ended set via
 `listRecords()` (disk) — plus ONE `ps` scan (`findHarnessProcs`). The scan recovers a
-cell's address from its argv (`--manifest <campaign>/manifest.json`,
-`--sequence-index N`) via `parseHarnessArgv`; only a `run_cumulative.py` command line
+cell's run dir from its argv (`--manifest <campaign>/manifest.json`) via
+`parseHarnessArgv`, which returns `sequence_index: null` by design — the harness
+assigns it at append, so it is never on the command line (`runstate.mjs:99-107`) —
+and only a `run_cumulative.py` command line
 counts as a harness (the pid-reuse guard). Liveness = pid-in-scan, plus the PER-CELL
 heartbeat (`cellHeartbeatAge`, the cell's own `live.jsonl`) — never a run_dir-wide mtime
 proxy.
@@ -307,7 +346,7 @@ NEVER deleted. `sweepDocker` derives container names from the run's own launch l
 no log it derives nothing and sweeps nothing (it never guesses).
 
 **Cleanup folded in.** `run-ledger` evict-on-finish bounds the Map; the SIGKILLed-harness
-wedge (a log+run_dir with `finished:false` blocking its model via `lib/validate.mjs:65`
+wedge (a log+run_dir with `finished:false` blocking its model via `lib/validate.mjs:62`
 `inFlightModels`) is fixed by process reconciliation; `backend-feed.mjs` `errorScans` is
 FIFO-capped at 256 paths.
 
@@ -337,8 +376,10 @@ BUILD panel (right) in `.axes-row` (`minmax(0,1fr) minmax(0,1.25fr)`), with the
 GATE WALL moved to a full-width block below them. LIVE BUILD
 (`dashboard/panels/build.js`) shows a `data-preserve` sandboxed iframe of the
 played game (lazy-boot via `POST /api/play/start`) plus the numbered "user prose"
-feedback (`GET /api/feedback?run_dir=<arm-level>`), with attempt-snapshot tabs
-`1..max_attempts` + `live` that swap the viewport to `GET /api/screenshot`.
+feedback (`GET /api/feedback?run_dir=<arm-level>`), with an attempt tab per
+attempt the run actually reports (`observedAttempts`, `dashboard/panels/build.js:287-295`
+— never a configured cap) plus `live`; a numbered tab swaps the viewport to
+`GET /api/screenshot`, `live` frames the running play app.
 
 **Play-able pair.** Every `board.runs` card now carries `benchmark_id` + `cell`
 (cell-level path) alongside `run_dir`/`sequence_index` (15 keys), so the
@@ -353,12 +394,23 @@ read-only worktree copied into tmpfs, no host env, files or Docker socket, caps
 dropped and a 6 h lifetime; a forwarder container publishes `127.0.0.1:<port>`
 only. Supersedes the host spawn with `loopback-shim.mjs` (removed 2026-10-23).
 
+**Play containers are named per (run, cell).** The session identity is
+`<run>::<cell>` (`control/play.mjs:227`), hashed into every container and network
+name (`harness/play_container.py:104-117`), so two runs can never share one;
+`reap` finds them by the `okp.play=1` label and `except_names` protects the
+sessions still running (`:594-603`). Starting a build reaps every other one, and a
+finished run's build is stopped by the live-build loop that started it
+(`control/livebuild.mjs:38-46`) — which is why a stopped run's preview vanishes
+while its tree stays.
+
 **Per-attempt screenshots.** The grader captures a non-gating viewport PNG once
 per graded attempt (`attempt-<N>-board.png`, 1280×800, best-effort — absent is
-normal) into the cell dir. New `GET
+normal) into the cell dir. `GET
 /api/screenshot?run_dir=&sequence_index=&attempt=<N>` streams it as `image/png`
-(`no-store`), 404 JSON on absence (no fallback), attempt bound 1..10.
-`board.max_attempts` is exposed as a top-level constant (5).
+(`no-store`), 404 JSON on absence (no fallback), and any attempt int ≥ 1 is
+accepted — there is no round maximum (`control/routes/screenshot.mjs:12`).
+`board.max_attempts` is a top-level constant that is **null**: no cap, and
+consumers derive the observed count (`control/board/contract.mjs:27`).
 
 **Three "serve/view" things — do not conflate.** `serve_url`/`serve_host_port` =
 the cell's opencode AGENT attach endpoint (`opencode attach`); `POST
@@ -374,19 +426,23 @@ points at the play `url`.
   only populated live source; top-level `board.live` (`contract.mjs`) is an
   always-empty default no board-wide source populates. Panels must read
   `view.live` (client overlay) or `board.by_cell[key].live` — never `board.live`.
-- **`attempt.end` carries `told`/`withheld`/`unevaluated`** (plus `failed`,
-  `stage`, `stage_name`, `verdict`, `conformed`, `context_peak`,
-  `context_window`; `runner.py:1647-1664`) but the board's live-stream source
-  maps only `verdict`/`failed`/`stage`/`stage_name`/`withheld`
-  (`live-stream.mjs:141-155`) — `told` and `unevaluated` exist only in raw
-  `live.jsonl` / `manifest.status.jsonl`. (`told` is emitted directly, NOT
-  derived: `failed` counts failing checks, `told` counts checks shown to the
-  model.)
-- **`max_attempts` is not persisted per-run.** Env-only (`BENCH_MAX_ATTEMPTS`,
-  default 5, hard ceiling 10, `harness/config.py:213` / `constants.py:311`); no
-  writer puts `RunConfig.to_dict()` in the run tree, so the board exposes a
-  constant 5. A per-run value needs a harness write.
-- **`cellDirForRun` does no containment** (`runstate.mjs:285` joins `runsRoot` +
+- **`attempt.end` carries more than the board renders.** The producer emits
+  `told`/`withheld`/`unevaluated` plus `failed`, `stage`, `stage_name`, `verdict`,
+  `conformed`, `render_blocked`, `context_peak`, `context_window`
+  (`runner.py:1563-1580`); the board's live-stream source maps the verdict, the
+  stage, `withheld`/`told`/`unevaluated` and `render_blocked`
+  (`live-stream.mjs:148-162`), and leaves `conformed`, `context_peak` and
+  `context_window` to raw `live.jsonl` / `manifest.status.jsonl`. (`told` is
+  emitted directly, NOT derived: `failed` counts failing checks, `told` counts
+  checks shown to the model.)
+- **`max_attempts` is null, not a number.** There is no attempt cap and no env
+  knob for one: the board's `max_attempts` is a null constant
+  (`control/board/contract.mjs:27`) and every
+  consumer derives the observed count from the run's own attempts
+  (`dashboard/panels/build.js:287-295`; the harness states `max_attempts=None`
+  on the pause events, `runner.py:2376`). A reader that treats
+  null as a number invents a cap the run never had.
+- **`cellDirForRun` does no containment** (`runstate.mjs:287` joins `runsRoot` +
   `runDir` directly). Pair it with `resolveRunDir` (`wall.mjs:41-56`) first —
   never call `cellDirForRun` on raw wire input (path-traversal).
 - **Two parallel control planes.** Learning-Index `:8718` (live) vs the stale

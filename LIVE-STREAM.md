@@ -16,7 +16,9 @@ the entire life of every run — a reason indistinguishable from a run that neve
 wrote one. **Readers must resolve the path, never construct it**;
 `control/board/sources/_runtime.mjs::cellLiveStreamPath` is the one resolver,
 addressed by the cell (`run_dir`, `sequence_index`) — never "the newest stream
-in the campaign", which with concurrent cells changes with every write — and
+in the campaign", which changes with every write whenever several models each
+have a cell in flight (the serial gate is per model: one cell in flight per
+model, and different models may run concurrently) — and
 `scripts/bench_preflight.py::check_live_stream` blocks a launch when any cell's
 stream on disk does not resolve from that cell's own address.
 
@@ -65,7 +67,7 @@ a breaking change; readers must tolerate both.
 | `phase.start` | a build chunk or feedback round opens | `phase` |
 | `gate.result` | **one gate produces a verdict, at the moment it does** | `id`, `status`, `attempt`, `duration_ms` |
 | `attempt.end` | a feedback round closes | `attempt`, `verdict`, `conformed`, `failed`, `told`, `withheld`, `unevaluated`, `stage`, `stage_name` |
-| `pause.start` | an operator pause opens (WO-PAUSE-AFTER-GRADE) | `pause_kind` (`round`\|`final`), `attempt`, `max_attempts` |
+| `pause.start` | an operator pause opens (WO-PAUSE-AFTER-GRADE) | `pause_kind` (`round`\|`final`), `attempt`, `max_attempts` (always `null` — there is no round cap) |
 | `pause.end` | an operator pause is released | `pause_kind`, `attempt`, `held_s` (this pause's seconds) |
 | `cell.end` | cell reaches a terminal state | `verdict`, `terminal_reason` |
 | `backend` | a backend announces itself | `ns`, `name`, `version` |

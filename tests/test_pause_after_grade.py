@@ -1,8 +1,9 @@
 """WO-PAUSE-AFTER-GRADE — runner integration tests for the operator pause.
 
 These drive `_run_cell_impl` with the same fake-docker/fake-gate/fake-serve
-harness as test_challenge_budget_stop, and stub `_run_operator_pause` so no real
-node server boots. They assert the loop-level contract:
+harness as test_challenge_budget_stop, stubbing `_run_operator_pause` (or the
+`_hold_for_operator` hold inside it) so no real node server boots. They assert
+the loop-level contract:
 
   (a) the round pause happens AFTER the told lines are written and BEFORE the
       next drive;
@@ -13,7 +14,10 @@ node server boots. They assert the loop-level contract:
       click, build then troubleshoot to completion with no stops;
   (d) wall_seconds excludes paused time and paused_seconds is recorded;
   (e) a KeyboardInterrupt during a round pause ends the cell as stopped, and the
-      hand-stopped cell gets no second (final) pause on its way out.
+      hand-stopped cell gets no second (final) pause on its way out;
+  (f) a Stop during a pause KEEPS the run's tree on disk — the app the operator
+      was playing is not thrown away with the run — and the cell is recorded as
+      stopped BY HAND, not as a mystery ending.
 
 NO ROUND MAXIMUM EXISTS: the loop is unbounded, so every test here ends on a
 named legitimate ending — a gate that passes after an OBSERVED number of
@@ -147,9 +151,6 @@ def _patch_fake_docker(monkeypatch: pytest.MonkeyPatch) -> None:
         def completed_compactions_since(self, session_id: str, watermark: int) -> int:
             # No compactions are scripted in this suite.
             return 0
-
-        def assistant_texts_since(self, session_id: str, watermark: int) -> list[str]:
-            return [challenge_mod.CHUNK_MARKER]
 
     monkeypatch.setattr(challenge_mod, "ServeClient", _FakeServeClient)
 
@@ -493,6 +494,77 @@ def test_keyboard_interrupt_during_round_pause_ends_cell_as_stopped(
         "a KeyboardInterrupt stop must not add a final pause after the "
         f"interrupted round pause, got {pauses}"
     )
+
+
+def test_stop_during_a_pause_keeps_the_tree_and_records_stopped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(f) STOP DURING A PAUSE KEEPS THE TREE, AND IS RECORDED AS A HAND STOP.
+
+    The board's Stop sends SIGINT, which Python raises inside the hold as
+    KeyboardInterrupt. What the operator was playing IS the worktree on disk, so
+    the stop must leave that tree exactly as it was — the only rmtree on the
+    cell path is the START-OF-CELL reset (runner.py:742-743), which the cell is
+    already long past. The same stop must also be legible afterwards: the
+    `cell.end` live record carries `terminal_reason="stopped"` (runner.py:654-656,
+    emitted at :664-681), never `harness_error`.
+
+    Nothing here monkeypatches `_run_operator_pause`: the real body runs, and
+    only the hold inside it is stubbed — which is where the SIGINT actually
+    lands in a run.
+    """
+    import harness.adapters.challenge.runner as runner_mod
+
+    runner = _make_runner(tmp_path)
+    _patch_fake_docker(monkeypatch)
+    _drive(runner, monkeypatch, fail_count=2)
+
+    run_dir = tmp_path / "run-stop"
+    worktree = run_dir / "worktree"
+    played = worktree / "index.html"
+    held: list[str] = []
+
+    def _stop_during_hold(**kwargs: Any) -> None:
+        # The real `_hold_for_operator` boots the artifact and blocks here while
+        # the operator plays it. The Stop then arrives — there is no release.
+        played.write_text("<html>the app being played</html>", encoding="utf-8")
+        held.append(kwargs["kind"])
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(runner_mod, "_hold_for_operator", _stop_during_hold)
+    monkeypatch.setenv("BENCH_RUNS_DIR", str(tmp_path))
+
+    # `run_cell` is the wrapper that maps the interrupt to a terminal state;
+    # `_run_cell_impl` would only let it propagate unclassified.
+    with pytest.raises(KeyboardInterrupt):
+        runner.run_cell("stop-in-pause", run_dir, task_id="backgammon")
+
+    # The stop landed in the round pause that follows the first grade.
+    assert held == ["round"]
+
+    # (a) THE TREE SURVIVES THE STOP, in one piece.
+    assert worktree.is_dir(), "the run's worktree must still be on disk"
+    assert played.read_text(encoding="utf-8") == "<html>the app being played</html>"
+    assert (worktree / "AGENTS.md").is_file(), "the seeded tree survives too"
+
+    # (b) THE CELL IS RECORDED AS STOPPED BY HAND.
+    rows = [
+        json.loads(line)
+        for line in (run_dir / "live.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    # The REAL `_run_operator_pause` body ran and opened the round pause (it is
+    # never patched out here) — so the interrupt arrived inside the production
+    # hold, not in a stand-in for it.
+    pause_starts = [row for row in rows if row.get("kind") == "pause.start"]
+    assert [row["pause_kind"] for row in pause_starts] == ["round"]
+    # No `pause.end`: the hold never released, the run was stopped in it.
+    assert [row for row in rows if row.get("kind") == "pause.end"] == []
+    cell_end = [row for row in rows if row.get("kind") == "cell.end"]
+    assert cell_end, "expected a cell.end record for the stopped cell"
+    assert cell_end[-1]["terminal_reason"] == "stopped"
+    # The class name rides BESIDE the vocabulary word, not inside it.
+    assert cell_end[-1]["terminal_exception"] == "KeyboardInterrupt"
 
 
 def test_each_pause_reports_its_own_length_boot_included(

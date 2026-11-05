@@ -33,9 +33,13 @@ is an exercise in balance, and I am the key component in it. Agents do not yet k
 this way: to describe a problem as a player meets it, precisely enough to act on, without handing
 over the fix.
 
-**5. Context.** Context in this system is managed with care. Too much compression gave poor
-results: after each summary, the agent could no longer gauge where it had been, or which fixes it
-had already attempted. The result was a problem-fix oscillation, in which the model fixed a
-problem, broke it, and fixed it again, round after round. Compression now happens only at fixed
-points between build steps. Troubleshooting rounds keep their full history, and when a context
-fills, the chain continues in a fresh context rather than a summarised one.
+**5. Context.** Context in this system is managed with care, and the lesson cost real runs. Too
+much compression gave poor results: after each summary, the agent could no longer gauge where it
+had been, or which fixes it had already attempted. The result was a problem-fix oscillation, in
+which the model fixed a problem, broke it, and fixed it again, round after round. Compression is
+now bounded rather than free. A run is a single session: the build runs in five chunks and the
+harness compacts the session once after each chunk — never during repair — spending one model
+turn each time. Troubleshooting then continues in that same session, with opencode's own
+compaction left on, so a filled context summarises and the work carries on; its rounds have no
+cap. Because a summarising loop is exactly the failure above, that phase is guarded instead: two
+compactions completing before a single grade ends the run.

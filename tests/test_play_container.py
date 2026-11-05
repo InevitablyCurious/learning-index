@@ -3,6 +3,18 @@
 No docker and no subprocess: these assert the tokens later callers depend on —
 what the candidate may mount, which network it joins, and the one loopback port
 the operator's browser gets.
+
+WHY THE START IDEMPOTENCY INVARIANT IS PINNED HERE
+--------------------------------------------------
+Play container names are hashed from the session identity, so a container left
+up by an earlier run — or by an earlier boot of the same cell — still owned the
+``-cand``/``-fwd`` name and the next ``docker run --name`` died with rc 125,
+taking the preview down with it. ``start`` now force-removes its OWN two names
+before creating them; these tests pin that the removal precedes the create, that
+it never reaches a sibling cell's names, and that ``stop`` still addresses the
+very same names — the string is the teardown key, so the two must not diverge.
+The effectful seams (``_run``, ``assert_image_available``,
+``_resolve_start_command``) are substituted, so nothing here starts a container.
 """
 
 from __future__ import annotations
@@ -27,6 +39,10 @@ NETWORK = "okp-play-aaaaaaaabbbb-net"
 CANDIDATE = "okp-play-aaaaaaaabbbb-cand"
 FORWARDER = "okp-play-aaaaaaaabbbb-fwd"
 HOST_PORT = 45123
+# What control/play.mjs composes: ``${run}::${cell}``. The string is the whole
+# teardown key, so tests spell it the way the caller does.
+IDENTITY = "run-a1b2::cell-0000"
+OTHER_IDENTITY = "run-a1b2::cell-0001"
 
 
 def _values(argv: list[str], flag: str) -> list[str]:
@@ -61,6 +77,71 @@ def _forwarder(**overrides: object) -> list[str]:
     }
     kwargs.update(overrides)
     return build_forwarder_argv(**kwargs)  # type: ignore[arg-type]
+
+
+def _completed(
+    argv: list[str], code: int, stdout: str = "", stderr: str = ""
+) -> play.subprocess.CompletedProcess[str]:
+    return play.subprocess.CompletedProcess(argv, code, stdout=stdout, stderr=stderr)
+
+
+def _stub_start(
+    monkeypatch,
+    calls: list[list[str]],
+    *,
+    present: tuple[str, ...] = (),
+    stuck: tuple[str, ...] = (),
+) -> None:
+    """Make ``start``/``stop`` reachable with no docker, node or image.
+
+    ``present`` names containers a leftover run really left behind: each exists
+    until ``docker rm -f`` clears it, and ``docker ps --filter name=^X$``
+    answers for it, so a test can prove the removal is the thing that lets the
+    create succeed. ``stuck`` names a container whose removal reports success
+    while it is still there — the wedged-daemon case the re-check guards.
+    """
+    sitting = set(present)
+
+    def fake_run(argv: list[str]) -> play.subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        if argv[1:3] == ["rm", "-f"]:
+            target = argv[-1]
+            if target not in sitting:
+                return _completed(argv, 1, stderr=f"No such container: {target}")
+            if target not in stuck:
+                sitting.discard(target)
+            return _completed(argv, 0)
+        if argv[1:2] == ["ps"]:
+            wanted = argv[argv.index("--filter") + 1][len("name=^") : -1]
+            return _completed(argv, 0, stdout=wanted if wanted in sitting else "")
+        return _completed(argv, 0)
+
+    monkeypatch.setattr(play, "_run", fake_run)
+    monkeypatch.setattr(play, "assert_image_available", lambda image: None)
+    monkeypatch.setattr(
+        play, "_resolve_start_command", lambda root: ("/tmp/app/src/server.ts", [])
+    )
+
+
+def _start(identity: str) -> dict:
+    return play.start(
+        name=identity,
+        worktree=WORKTREE,
+        owner=OWNER,
+        cell=CELL,
+        host_port=HOST_PORT,
+        max_seconds=21600,
+    )
+
+
+def _created(calls: list[list[str]]) -> list[str]:
+    """Every container name a recorded ``docker run`` asked for, in order."""
+    return [_values(argv, "--name")[0] for argv in calls if argv[1:2] == ["run"]]
+
+
+def _removed(calls: list[list[str]]) -> list[str]:
+    """Every container name a recorded ``docker rm -f`` asked to remove."""
+    return [argv[-1] for argv in calls if argv[1:3] == ["rm", "-f"]]
 
 
 def test_candidate_carries_every_isolation_token() -> None:
@@ -180,6 +261,100 @@ def test_names_are_deterministic_distinct_and_label_safe() -> None:
     for value in first.values():
         assert value.startswith("okp-play-")
         assert len(value) <= 63
+
+
+def test_start_clears_its_own_leftover_containers_before_it_creates(
+    monkeypatch,
+) -> None:
+    names = _names(IDENTITY)
+    calls: list[list[str]] = []
+    _stub_start(
+        monkeypatch,
+        calls,
+        present=(names["candidate"], names["forwarder"]),
+    )
+
+    _start(IDENTITY)
+
+    # Exactly this identity's two names, candidate first (as ``stop`` does).
+    assert _removed(calls) == [names["candidate"], names["forwarder"]]
+
+    creates = [i for i, argv in enumerate(calls) if argv[1:2] == ["run"]]
+    removes = [i for i, argv in enumerate(calls) if argv[1:3] == ["rm", "-f"]]
+    assert len(creates) == 2
+    # Every removal precedes the first create: the name must be free BEFORE
+    # ``docker run --name`` reaches the daemon (rc 125 otherwise).
+    assert max(removes) < min(creates), [calls[i] for i in removes + creates]
+    assert _created(calls) == [names["candidate"], names["forwarder"]]
+
+    # --rm would delete the container, and the ``docker logs`` the operator is
+    # pointed at after a dev-mode pause; the pre-remove is the whole fix.
+    assert not any("--rm" in argv for argv in calls)
+
+
+def test_the_name_is_per_run_cell_so_a_reboot_reuses_only_its_own(
+    monkeypatch,
+) -> None:
+    first: list[list[str]] = []
+    _stub_start(monkeypatch, first)
+    _start(IDENTITY)
+
+    again: list[list[str]] = []
+    _stub_start(monkeypatch, again)
+    _start(IDENTITY)
+
+    other: list[list[str]] = []
+    _stub_start(monkeypatch, other)
+    _start(OTHER_IDENTITY)
+
+    # Same identity re-booted targets the same two names — that sameness is
+    # what lets the pre-remove clear its own leftover.
+    assert _created(first) == _created(again)
+    assert set(_created(first)).isdisjoint(_created(other))
+
+    # And a boot clears its own names only: a sibling cell is never touched.
+    other_names = _names(OTHER_IDENTITY)
+    assert _removed(other) == [other_names["candidate"], other_names["forwarder"]]
+    assert set(_removed(other)).isdisjoint(_removed(first))
+    assert set(_removed(other)).isdisjoint(_created(first))
+
+
+def test_stop_tears_down_exactly_the_names_start_created(monkeypatch) -> None:
+    starts: list[list[str]] = []
+    _stub_start(monkeypatch, starts)
+    _start(IDENTITY)
+    created = _created(starts)
+
+    stops: list[list[str]] = []
+    _stub_start(monkeypatch, stops)
+    play.stop(IDENTITY)
+
+    # The identity string is the teardown key: stop recomputes the same names
+    # start hashed, so the preview a user can see is the one stop removes.
+    assert _removed(stops) == created
+    assert ["docker", "network", "rm", _names(IDENTITY)["network"]] in stops
+
+
+def test_a_container_that_survives_removal_fails_the_start(monkeypatch) -> None:
+    names = _names(IDENTITY)
+    calls: list[list[str]] = []
+    _stub_start(
+        monkeypatch,
+        calls,
+        present=(names["candidate"],),
+        stuck=(names["candidate"],),
+    )
+
+    try:
+        _start(IDENTITY)
+    except play.PlayError as exc:
+        assert exc.code == "start_failed"
+        assert names["candidate"] in exc.reason
+    else:
+        raise AssertionError("a stale container that survives rm -f must fail start")
+
+    # Nothing is created on top of a name that is provably still taken.
+    assert _created(calls) == []
 
 
 def test_docker_worker_import_stays_inside_start() -> None:

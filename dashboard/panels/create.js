@@ -521,7 +521,7 @@ function compactOffWarning(defaultWasOn) {
           : "COMPACTION OFF",
       )}</span>
       <span class="cwarn-body">${esc(
-        "The six build chunks keep their full transcript, so the model reaches the " +
+        "The five build chunks keep their full transcript, so the model reaches the " +
           "troubleshooting phase with the build still in its context. On a model " +
           "whose window fills during the build, the context limit is reached mid-run " +
           "and the model loses sight of which steps it already solved and why — it " +

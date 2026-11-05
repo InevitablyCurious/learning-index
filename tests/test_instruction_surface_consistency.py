@@ -127,7 +127,7 @@ def _functions_the_gates_call() -> set[str]:
 
 
 def test_every_graded_function_is_published_in_the_contract() -> None:
-    # The published surface is the six build prompts: CONTRACT.md moved out of
+    # The published surface is the five build prompts: CONTRACT.md moved out of
     # the scaffold on 2026-09-15 and is no longer seeded into the work folder.
     contract = "\n".join(
         p.read_text(encoding="utf-8")

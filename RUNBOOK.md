@@ -1,5 +1,5 @@
 # RUNBOOK.md — the operative run card
-**Version:** 8 · **Status:** OPERATIVE · **Supersedes:** v7 (2026-09-04) · **Amended:** 2026-09-22 (concurrency + median baselines landed: N-concurrent cells, per-cell live-view port, batch-median baseline with fingerprint + operator selection — §0/§3/§7/§10; the live N=1-vs-N=8 contention measurement remains PENDING, §11)
+**Version:** 9 · **Status:** OPERATIVE · **Supersedes:** v8 (2026-09-22) · **Amended:** 2026-11-05 (one click = one run: concurrency gone — a cell blocks only its own model; five-chunk build with the HARNESS firing one compaction per chunk boundary; graded rounds uncapped in count and time; baselines average per fingerprint with no operator pick — §0/§3/§5.15)
 
 > This is the authoritative operations reference for the benchmark; where another document disagrees, this one governs.
 
@@ -63,9 +63,11 @@ requirement.
 
 ---
 
-## 0. OPERATOR QUICKSTART — start one cell (or N concurrent)
+## 0. OPERATOR QUICKSTART — start one cell
 
 Everything an operator needs to launch a run. Rationale and rules live in the sections cited.
+**One click on Run is one run:** a single opencode session, five build chunks, then troubleshooting in
+that same session until every check passes (§3).
 
 ### THE SHORT VERSION — preflight, then start
 
@@ -99,7 +101,9 @@ curl -s -X POST 127.0.0.1:8718/api/run/preview \
   -d '{"model":"qwen3.6-35b-a3b-bench","arm":"off"}'
 # CLOUD payload: {"model":"deepseek/deepseek-chat","arm":"off","kind":"cloud"}
 # (model = the {provider}/{model} roster key; ON cells add "org":"<org>")
-# N concurrent cells: add "concurrency":<N> (default 1) — the control plane sequences all N
+# The payload carries no cell count and no pause switch: one click is one run, and
+# the pause is derived by the control plane from its own dev-mode state (§3/§10),
+# never sent by the request.
 # → {"token":…, "restatement":…} — read the restatement, then confirm:
 curl -s -X POST 127.0.0.1:8718/api/run/start -d '{"confirm":"<token>"}'
 ```
@@ -186,9 +190,11 @@ A CLOUD cell (OrcaRouter, BILLED) takes the main-parser flags `--cloud --router 
 --provider <vendor> --model <model>` (e.g. `--provider deepseek --model deepseek-chat` = DeepSeek
 V3); the local `--model <bench-alias>` shape above does NOT apply to cloud.
 
-**Optional — pause after each grade (dev mode only).** Pass `--pause-after-grade` on the
-run (the control plane only allows it when DEV MODE is on). The cell is then held after EVERY
-graded pass — before the model is told anything — and once more at the end, so you can play the
+**Pause after each grade — DEV MODE only.** The mode is not a launch parameter and no start request
+carries a pause switch: the control plane derives the pause from its own dev-mode state and adds
+`--pause-after-grade` to the harness argv itself (`control/routes/run.mjs:218-220`), so both modes
+post the same request body. Normal mode NEVER pauses; Dev mode pauses after EVERY graded pass —
+before the model is told anything — and once more at the end, so you can play the
 app as it stands and read the exact lines the model is about to be told. During each pause the
 artifact's server boots inside the grader image (no host, no internet; `harness/play_container.py`)
 from a read-only copy of the worktree on a per-cell free `127.0.0.1` port — the exact code the
@@ -198,8 +204,7 @@ command; machine-readable state is `<run_dir>/hold-ui.json` (schema_version 2, w
 `attempt`, `told_text` and `grade`). Browse the UI (the live view also stays up), then release:
 `touch <run_dir>/RELEASE_HOLD` (or write `{"note": "..."}` to that file to journal a note that
 never reaches the model). Paused time is excluded from the cell's `wall_seconds` and recorded
-separately as `paused_seconds`. This replaced the old `BENCH_HOLD_UI` env hold. Never set this
-on an unattended cell — the run waits until released or killed, and a kill still tears the stack down.
+separately as `paused_seconds`. Never leave a Dev-mode cell unattended — the run waits until released or killed, and a kill still tears the stack down.
 
 **Recovery — "roster hash drift detected ... start a fresh run":** the manifest pins the
 model roster; a provider/model migration invalidates it. Archive (never delete) via the
@@ -388,96 +393,78 @@ with exit 2 (verified 2026-08-10). `--until-review` is DEAD (removed by `ba2947a
 
 ---
 
-## 3. THE CELL — N concurrent cells per start, one per invocation
+## 3. THE CELL — one run, one session, five chunks then troubleshooting
 
-> **Concurrency landed (2026-09-22).** This section once read "one per invocation, always — the
-> harness never runs cells concurrently." That is superseded. The control plane's `/api/run/start`
-> now accepts a `concurrency` count N (default 1) and launches N cells at once; the harness itself
-> still runs **one cell per invocation** and never loops, pairs arms, or decides what runs next. A
-> live cell blocks only **its own model's** next launch (per-model gate), so different models run
-> concurrently.
+> **The method, in one paragraph.** One click on Run launches ONE cell: one opencode session that
+> builds the fixture in five chunks — the harness compacts the session itself after each chunk —
+> and then troubleshoots in that SAME session, round after round, until every check passes. There is
+> no round cap and no time cap. A cell blocks only **its own model's** next launch (per-model gate,
+> `control/models-ledger.mjs:27-29`), so different models may be in flight at once; a single model
+> never is.
 
-**The first pass is chunked (2026-08-09).** Attempt 1 is a
-sequence of chunk prompts (`task/backgammon/prompts/chunk-01..06.md`), driven in order through
-the one serve session. Per chunk: drive → settle compaction → next
-chunk.
+**The first pass is chunked (2026-08-09; five chunks since 2026-11).** Attempt 1 is a
+sequence of chunk prompts (`task/backgammon/prompts/chunk-01..05.md`), driven in order through
+the one serve session. Per chunk: drive → the harness compacts the session once → next
+chunk. The count is the prompts directory's, never a constant: the harness globs
+`prompts/chunk-*.md` and expects exactly as many chunks as it found
+(`harness/adapters/challenge/bootstrap.py:203-207`, `runner.py:1079-1080`), so editing that
+directory — or the document claiming a number — changes it.
 
-- **A CHUNK IS OVER WHEN THE SESSION GOES IDLE. Nothing else (WO-MARKER-RIP, 2026-09-09).**
+- **A CHUNK IS OVER WHEN THE SESSION GOES IDLE AND THE DRIVE EXITED 0. Nothing else
+  (WO-MARKER-RIP, 2026-09-09).**
   The harness reads NOTHING the model wrote to decide a chunk is done. It used to: every chunk
-  prompt instructed the model to print `CHUNK FINISHED`, the harness scanned that chunk's own
-  messages for the string, and a chunk that went idle without it was re-driven with a nudge up to
-  ten times before failing the attempt on `marker_nudge_exhausted`. **All of that is deleted** —
-  the instruction is out of the six prompts, the scan and its nudge are out of the driver, the
-  `_MAX_MARKER_NUDGES` budget is gone, and `serve_client.last_assistant_text` /
-  `assistant_texts_since` (which existed only to serve it) are gone with them. The marker was a
-  SELF-REPORT standing in for an event the transport already reports: a model could print it
-  having written nothing, withhold it having written everything, and — because the instruction
-  lived only in the build prompts while repair runs in the SAME session — kept printing it out of
-  habit while fixing gate failures. Do not reintroduce a completion string, in any wording, for
-  any phase.
+  prompt instructed the model to print a completion string, the harness scanned that chunk's own
+  messages for it, and a chunk that went idle without it was re-driven up to ten times before
+  failing the attempt. **All of that is deleted** — the instruction is out of the five prompts, the
+  scan and its nudge are out of the driver, the nudge budget is gone, and
+  `serve_client.last_assistant_text` / `assistant_texts_since` (which existed only to serve it) are
+  gone with them. A marker was a SELF-REPORT standing in for an event the transport already
+  reports: a model could print it having written nothing, withhold it having written everything, and
+  — because the instruction lived only in the build prompts while repair runs in the SAME session —
+  kept printing it out of habit while fixing gate failures. Do not reintroduce a completion string,
+  in any wording, for any phase.
 - **Chunk state is the transport's verdict.** `build_chunk_completion` reports `complete` when the
   drive returned exit 0, `died` when it did not (with the named `killed_reason`), and
   `not_reached` for every chunk after a death. `stubs_remaining` beside it is what says whether the
   work was actually done — a `complete` chunk whose owned file still holds scaffold stubs is
   flagged on the board. The rows no longer carry a `marker` field, and the `nudges` column now
   counts UPSTREAM RECOVERIES (see below), the only re-drives that still exist.
-- **Inter-chunk compaction — RESTORED (2026-09-03), worker-side self-fire.** Removed by W1
-  (2026-08-27) and restored by WO-COMPACTION-RESTORE: the benchmark's own `images/worker/self-compact.ts`
-  (benchmark-native since 2026-09-15 — baked into EVERY worker image at `/opt/bench/self-compact.ts`,
-  with or without a memory plugin, so both arms compact identically) is wired into the image's
-  opencode plugin array with a hard-assert on its presence (`images/worker/Dockerfile`). **The trigger is `session.idle` and nothing the model wrote (2026-09-09).** There is no
-  model-called tool and no model-emitted string: on `session.idle`, when `BENCH_SELF_COMPACT=1` AND
-  the harness's phase sentinel reads `build` AND the session's fire budget is not spent AND a 60 s
-  cooldown has elapsed AND no fire is already in flight AND this assistant turn has not already
-  fired, the plugin fires `session.summarize({auto:true})` — disarm-first, model resolved from the
-  session. **Budget: 6 fires per session** (`MAX_FIRES_PER_SESSION`) — six build chunks, six
-  boundaries; a seventh fire is by definition not a boundary. The budget is the independent
-  backstop under the sentinel: if the sentinel were ever left stale on `build`, a runaway
-  compaction loop is bounded at six instead of running for the life of the session. It is spent at
-  FIRE TIME and is not refunded by a failed summarize.
-  Autocontinue is suppressed for self-fired compactions only (the harness sends the next chunk
-  prompt itself); overflow auto-compaction keeps its default autocontinue. Opt-in behind the
-  `--compact` flag (flag/UI passing unchanged) — the flag flows to the cell as env
-  `BENCH_SELF_COMPACT=1`. The harness only OBSERVES the fire: at each chunk boundary it runs a
-  bounded fail-closed wait (`_settle_after_chunk`, `_COMPACT_SETTLE_TIMEOUT_S=300` with a 20 s
-  start-grace) for the worker's own summarize to land a compaction part; no part within the wait
-  is `no_compaction_evidence` and aborts the cell. No fallback, backstop, or substitute summarize
-  exists anywhere — the harness never fires compaction itself.
-- **BUILD-PHASE-ONLY is enforced by a harness PHASE SENTINEL — and since 2026-09-09 the sentinel
-  is the WHOLE gate.** This line once read "the marker lands only at the end of each of the 6 build
-  steps, so compaction fires there and never during troubleshooting/repair." THAT WAS FALSE, and
-  run 1788462647 falsified it: the worker-side arm fired 9 times, and the 9th landed ~80 s before
-  the end of `feedback-2`. `CHUNK FINISHED` was a MODEL-EMITTED convention, not a harness event;
-  the instruction lived only in the six chunk prompts, but repair rounds run in the SAME session
-  with no system prompt and no phase framing, so the convention survived every compaction and the
-   model kept printing it while fixing gate failures (its own capture-tool labels read
-   `chunk7-*`/`chunk8-*`). It was also INVISIBLE: `_settle_after_chunk` runs only at build
-  boundaries, and VOID-INSTRUMENT (`run_artifacts.py`) catches only a compaction that was KILLED,
-  so a stray one that COMPLETED scored as a normal cell. Both arms were equally exposed, so the ON
-  leg was measuring "chunk compaction + stochastic repair compaction". **The marker condition is
-  now deleted, so there is no second gate to fall back on and the sentinel has to be exact.**
-  THE MECHANISM (A2): the phase is knowable exactly on the harness side, so the harness declares
-  it. `_run_opencode_serve` — the single choke point every scoring attempt passes through — writes
-  the current phase (`build` or `repair`, per `compact_phase_for`) to a host file before every
-  prompt; the file is bind-mounted READ-ONLY at `/okp-compact/phase` (outside `/work`, so the model
-  never sees it and the gates never score it) and the plugin re-reads it on every `session.idle`.
-  **EXACTLY ONE DRIVE PER CHUNK IS FLAGGED `build`**, which is what the plugin's six-fire budget
-  assumes: the chunk drive itself carries `build`. `feedback-*` and any
-  unrecognised phase map to `repair`. Mounted for BOTH arms whenever `--compact` is set.
-  FAIL-CLOSED IN EVERY DIRECTION: unset env, unreadable file, or any value other than `build`
-  means DO NOT FIRE, and a cell armed with `--compact` but no sentinel path refuses to launch.
-  A broken sentinel therefore surfaces as `no_compaction_evidence` at the first chunk boundary.
-  Preflight asserts the BAKED plugin actually reads `BENCH_COMPACT_PHASE_FILE`, so a stale image
-  cannot run an older arm.
-- **One fire per boundary (2026-09-03).** The arm previously stamped its cooldown on summarize
-  SUCCESS, so an idle arriving while a summarize was still in flight passed the 60 s cooldown and
-  re-fired off the same turn still in retained history — chunks 2 and 3 each compacted twice in
-  run 1788462647. Three debounce guards now cover three distinct windows: a synchronous in-flight
-  lock (concurrent idles), the cooldown stamped AT FIRE TIME rather than on success (the minute
-  after a fire), and the message id of the assistant turn that fired (that same turn, forever — a
-  compaction does not delete that turn from the transcript, so the cooldown alone was never
-  sufficient). A failed summarize keeps all three stamps AND its spent budget: the fail-closed
-  settle wait is what turns a genuinely absent compaction into an abort.
+- **Inter-chunk compaction is THE HARNESS'S OWN ACT (2026-11).** When a chunk's drive returns, the
+  harness compacts that session exactly once — before the next chunk's prompt goes in —
+  (`_compact_after_chunk`, `harness/adapters/challenge/serve.py:1351-1377`): a blocking
+  `POST /session/{id}/summarize` with `auto=False`, because that flag means auto-continue AFTER
+  compaction and the harness drives the next prompt itself. The chunk boundary is exactly where
+  opencode's own auto-compaction would fire **if** it fired on every boundary, which it does not: it
+  fires at a token threshold a chunk may reach mid-work and may never reach at all. The component
+  that owns the boundary is the one that compacts at it.
+- **The worker-side compaction plugin is GONE — do not re-add it.** `images/worker/self-compact.ts`
+  no longer exists, nor the `BENCH_SELF_COMPACT` switch that armed it, nor the `/okp-compact/phase`
+  sentinel host file it read. It was inverted on purpose: a worker plugin reacting to `session.idle`
+  was a second component deciding when a boundary had closed, and the harness then only OBSERVED the
+  fire and aborted the cell on `no_compaction_evidence` when the evidence was missing. Both arms
+  compact identically today because there is exactly one compactor, and it is the harness. The
+  preflight check that proved the baked plugin's wiring by name now proves the opposite — that the
+  harness owns compaction, counts only compaction that FINISHED, and that nothing still forces
+  opencode's auto-compaction off (`scripts/preflight/images.py:198-206`).
+- **opencode's auto-compaction is left ON — its vanilla default — in troubleshooting
+  (`harness/adapters/challenge/worker_config.py:45-49`).** A full context compacts and the session
+  continues; the harness does not force it off, and no per-cell `compaction` config key exists in
+  the worker config. Build compaction is fired and counted by the harness; troubleshooting
+  compaction is opencode's own business, measured rather than steered.
+- **Only FINISHED compactions count (2026-11).** A compaction message the relay's loop guard killed
+  mid-stream still carries `summary: true`, so a flag-keyed count is a lie that has already been
+  told: 68 of 73 compaction messages on run 1788415430 were killed mid-stream, yet a flag-keyed
+  count reported 68 compactions where none landed. The count requires the `finish` receipt
+  (`completed_compactions_since`, `harness/serve_client.py:288-341`).
+- **Two compactions before one grade ends a TROUBLESHOOTING round — never a build chunk (2026-11).**
+  The first compaction in a round is recovery; a second before any grade means the round rewrote
+  context instead of fixing anything. The watermark is the session message count at the last
+  completed grade, re-captured at every grade, and the rule is checked on the idle wait's own poll
+  ticks (`harness/serve_client.py:461-483`) as well as after the round returns
+  (`harness/adapters/challenge/runner.py:2008-2013`): two completed compactions with no grade →
+  `compactions_before_grade`, the cell ends, and `cost.json` records
+  `outcome: "aborted_compaction"` (`scripts/run_cumulative/runner.py:236-238`). Build chunks are
+  exempt by construction — the harness compacts once per chunk there, on purpose.
 - **THE NUDGING PROTOCOL FIRES ON UPSTREAM PROXY TERMINALS AND NOTHING ELSE (WO-MARKER-RIP,
   2026-09-09).** A closed set of three conditions, every one of them raised by the relay and none
   of them by the model:
@@ -488,9 +475,9 @@ chunk.
   | stream death | `relay_stream_finalize_timeout` **or** `relay_stream_incomplete` | `_FINALIZE_RECOVERY_NUDGE` (resume) |
   | provider outage | the relay relaying someone else's 5xx/"temporarily unavailable" | `_PROVIDER_RECOVERY_NUDGE` (resume, after a backoff) |
 
-  There is no fourth trigger, and none may be derived from what the model wrote. The deleted
-  fourth — a missing `CHUNK FINISHED` — is why this is now stated as a closed set: a nudge keyed on
-  model prose re-drives a model that is not stuck, into a context it just filled.
+  There is no fourth trigger, and none may be derived from what the model wrote: a missing
+  completion string is not a condition, because a nudge keyed on model prose re-drives a model that
+  is not stuck, into a context it just filled.
   **Matching keys on the relay's typed `type`/`code`, not its prose.** `extract_transcript_metrics`
   prefixes an assistant error's `name`/`data.type`/`data.code` onto its message before
   classification, so a relay build that reworded a message is still classified correctly; the prose
@@ -536,22 +523,45 @@ with zero new turns AND zero new tokens is a loud `silent_phase` failure, never 
    no poller, no LLM judge.
 3. **The cell ends.** Extraction is the next invocation, not part of this one.
 
-**One cell per invocation; N concurrent per start (2026-09-22, supersedes "never runs cells
-concurrently").** The control plane sequences and tracks all N cells itself — the dashboard sends ONE
-"run N cells" request, and the control plane allocates N distinct `sequence_index` values, opens N
-per-cell logs, and spawns N detached harnesses. The harness never loops over cells, never pairs arms,
-never pre-runs a baseline set, never decides what runs next. A cell of a given model blocks only that
-model's next launch (per-model gate, `models-ledger.mjs`); the baseline is no longer a single OFF run —
-it is the operator's chosen run out of an N-cell batch, reported as the batch median (see §10).
+**One cell per start; runs are serial PER MODEL.** A start request carries no cell count — one click
+launches exactly one harness for one model (`control/routes/run.mjs:280` carries the single `spawn`,
+and `control/__tests__/concurrent-cells.test.mjs:273-286` pins that the handler reads no such count). A
+cell of a given model blocks only that model's next launch (`control/models-ledger.mjs:27-29`), so
+different models may have cells in flight at once while no model is ever run beside itself. The
+harness never loops over cells, never pairs arms, never pre-runs a baseline set, never decides what
+runs next. The baseline is the OFF arm's cells averaged over everything that shares the cell's
+fingerprint — there is no operator pick out of a batch, and a baseline is never rationed to one run
+(`control/baselines.mjs:6-12`, §10).
 
-**What a cell does internally:** build from the fixture → gates run host-side regardless of how the
-worker terminated → problems-only feedback (§8) → repeat, `max_attempts` 5 → resolved problems →
-publish status → done.
+**What a cell does internally:** build the fixture in five chunks, the harness compacting the
+session after each → gates run host-side regardless of how the worker terminated → problems-only
+feedback (§8) → repeat until every check passes → resolved problems → publish status → done.
 
-**Resolution happens ACROSS attempts, not within one.** Attempt 1 builds; attempts 2–5 repair
+**There is NO round cap and NO time cap.** The round count is an OBSERVED count, never a declared
+one (`harness/adapters/challenge/runner.py:1327-1334`): the loop leaves only when the checks pass,
+the compactions-before-grade abort fires, the operator stops the cell, or a genuine fault ends it.
+The per-turn bounds that do exist are liveness guards on ONE turn — a 600 s no-progress stall
+timeout (`harness/adapters/challenge/constants.py:95-96`) that aborts the turn and re-drives it, a
+step cap and a gate-oracle wall-clock timeout — none of them is a bound on how many rounds a cell
+may take.
+
+**Resolution happens ACROSS rounds, not within one.** Attempt 1 builds; every later attempt repairs
 against problems-only feedback. That repair is what produces `resolved_count`, and `resolved_count`
 is what produces memories. A cell that cannot reach attempt 2 produces nothing, however good the
 artifact is.
+
+**A cell always ends with a priced record, and a stop never costs the tree.**
+`cost.json` is written on EVERY exit path — passed, failed, stopped, aborted, crashed — never
+altered by one (`scripts/run_cumulative/runner.py:1444`): per phase (build, troubleshooting, total)
+tokens by kind including cache reads and writes, turns, compactions, grades, `wall_seconds` minus
+`paused_seconds`, and the context peak; `cost_usd` accompanies it for cloud cells only, because a
+local model has no dollars and the field is ABSENT rather than `0.0`
+(`harness/adapters/challenge/models.py:115-151`). Stopping a cell sends one SIGINT so it runs its
+own teardown, and the run is recorded as `stopped` — a terminal state a reader can see, never a
+harness fault (`harness/adapters/challenge/runner.py:651-670`) — while the results tree stays where
+it is. `context_exhausted` remains a real ending too: a session too large to compact stops the
+build, grades nothing, and there is no snapshot-chaining into a fresh session to hide it
+(`harness/adapters/challenge/runner.py:1335-1345`).
 
 **The code fixture resets every run. The memory corpus persists.** Source edits are not
 organizational learning; corpus growth is. Per-run reset is **code fixture only** — never re-wipe
@@ -564,8 +574,10 @@ chain, Postgres or Qdrant, never reset corpus state.
 ## 4. THE INVARIANTS THAT MAKE THIS HOLD
 
 **RC-4 · Mode toggles exactly one thing.** `MODE` governs whether the recall/injection step runs
-before attempt 1. **Nothing else in the codebase may branch on mode.** Gates, feedback, attempt
-ceiling, extraction, teardown and scoring are byte-identical across ON and OFF. Fields that are null
+before attempt 1. **Nothing else in the codebase may branch on mode.** Gates, feedback, extraction,
+teardown and scoring are byte-identical across ON and OFF. There is no attempt ceiling to be
+identical about: rounds continue until every check passes, with no round cap anywhere
+(`harness/config.py:262`, `max_attempts: None`). Fields that are null
 by contract on OFF cells are not a branch; anything else is. This is enforceable by a test that
 fails on any mode-conditional branch outside the injection call site, and that test closes the
 entire class of "the arms were not comparable" defects that has voided runs before.
@@ -598,12 +610,17 @@ literal in `run_cumulative` (see the procedure below). Two intervening re-freeze
 comments = chunk-01 listing; 2026-09-25 header no longer names each side's home points) were recorded
 only in `tests/test_template_freeze_guard.py`. The 2026-09-15 freeze (`d7088d77…`) this section
 formerly declared is now historical: CONTRACT.md left the scaffold for `task/backgammon/reference/`,
-so the model is given the six build prompts and nothing else, and the prompts were rewritten to carry
-the graded contact points without the rules and design hints a candidate should supply itself. **Retired 2026-09-19:** `reference/CONTRACT.md` was DELETED and its
-29 `REQ-*` rules relocated into the six chunk prompts (engine rules + G05 higher-die → chunk-02; cube
-state → chunk-04; difficulty wiring → chunk-05; REQ-COMPLETE → chunk-06), reversing the 2026-09-15
-rule-thinning — the six prompts are now the complete specification and `reference/` holds only a
-README. This changes `chunk_plan_hash` (over `prompts/`), NOT the scaffold hash below. The published-surface guard
+so the model is given the **five** build prompts and nothing else, and the prompts were rewritten to
+carry the graded contact points without the rules and design hints a candidate should supply itself.
+**Retired 2026-09-19:** `reference/CONTRACT.md` was DELETED and its requirements folded into the five
+chunk prompts as prose (engine rules + G05 higher-die → chunk-02; cube
+state → chunk-04; difficulty wiring → chunk-05; the full-game-to-a-winner contact point → chunk-05),
+reversing the 2026-09-15 rule-thinning — the five prompts are now the complete specification and
+`reference/` holds only a README. No `REQ-*` identifier survives in the prompts. The count is
+**FIVE** and is DERIVED from the directory, never a constant — `prompts_dir.glob("chunk-*.md")`,
+`harness/adapters/challenge/bootstrap.py:239-241` — giving `chunk-01.md` … `chunk-05.md`, and each
+prompt self-declares "chunk N of 5". This changes `chunk_plan_hash` (over `prompts/`), NOT the
+scaffold hash below. The published-surface guard
 (`tests/test_instruction_surface_consistency.py`) now reads the prompts. Prior freeze history:
 the hash was `d2d2f0b798f586101bb34a698235eb1dea691b1ed760f66a316a53fd6ae42928` (re-baselined
 2026-08-30 by `2314693`: gate E08's `allSequences` + `REQ-SEQ-DEDUP` requirement published into
@@ -725,14 +742,25 @@ run has none of the isolation guarantees in §8 and would be scored as though it
     corrupting ON measurement by destroying the corpus) cannot arise until a cell exists.
 14. **Local runs are unmetered by construction.** Disclose that. Never synthesize a cost figure.
     There are no budget kills and no cost gates anywhere in the system.
-15. **A run ends only on:** natural completion, variance-policy completion, extraction-integrity
-    abort, a hung-process kill per the 900 s rule, or an explicit maintainer stop order.
-    **The 900 s rule, defined:** the signal is the status stream (RC-5), not a session database. If a
-    run publishes no progress for **900 s** after a **180 s warmup grace**, a hung-process kill is
-    authorized, and only then. **Log the evidence line first.** The kill is **process-scoped only** —
-    kill the worker process inside the container. **Never tear the container down mid-attempt.** If
-    the signal is absent or unreadable rather than stalled, the run is blind: **escalate, never
-    kill.**
+15. **A run ends only on:** natural completion — every check green, which has no round or time cap
+    above it — the compactions-before-grade abort, `context_exhausted`, a genuine fault, a
+    **maintainer stop order**, or the maintainer's own hung-process kill (below). None of the last
+    two is a harness mechanism; the harness's own bound on a silent turn is a different, shorter
+    thing.
+    **The 900 s rule — MAINTAINER POLICY, not code.** The signal is the status stream (RC-5), not a
+    session database. If a run publishes no progress for **900 s** after a **180 s warmup grace**, the
+    maintainer MAY authorize a hung-process kill, and only then. **Log the evidence line first.** The
+    kill is **process-scoped only** — kill the worker process inside the container. **Never tear the
+    container down mid-attempt.** If the signal is absent or unreadable rather than stalled, the run
+    is blind: **escalate, never kill.**
+    **Keep it distinct from the harness's own bound.** The harness never has a 900 s rule: its
+    no-progress bound is **600 s of a single turn with no new output**
+    (`DEFAULT_TURN_STALL_TIMEOUT_S`, `harness/adapters/challenge/constants.py:95-96`). That bound
+    cannot end a cell — it aborts the turn with a named cause and re-drives it inside the recovery
+    budget (§3), and streaming generation counts as progress through the serve's delta events, so a
+    long block of thinking is not a stall. The 900 s rule answers "may a human kill this run?"; the
+    600 s bound answers "is this one turn silent?". Neither is the other, and neither bounds how many
+    rounds a cell may take.
 16. **Never emit literal thinking tags.** See the notation rule at the head of this file.
 17. **The maintainer decides; agents do the work.** The maintainer does not run commands, paste files, or perform worker
     tasks. Escalate decisions, never chores.
@@ -803,7 +831,8 @@ budget. This is not a vibes choice; it is the only setting that survives scrutin
    injection), so it cancels out of the comparison. What would break the claim is the two arms
    thinking *differently* — which is why the posture is frozen, not why it is large.
 4. **Max gives each attempt its best shot** on a multi-hour agentic build task; the cost is bounded
-   by the attempt ceiling and the 900 s rule, not by reasoning length.
+   by the maintainer's 900 s hung-process kill policy (§5 rule 15), not by reasoning length — there
+   is no attempt ceiling (no round cap, `harness/config.py:262`).
 
 *Why MAX does not endanger the instrument.* Its one failure mode — reasoning eating the shared
 budget — is defended structurally, not by hope: bench aliases carry **output 32768** (2× the
@@ -1007,17 +1036,20 @@ preflight's `assert_no_docker_residue` checks the cell container, never a stale 
 (`docker_worker.py:374-375`) with no watcher, so a silently-restarted sidecar goes unnoticed.
 
 **Why no run can hang forever on a nudge loop anymore.** The pre-purge stdout transport re-spawned
-a fresh subprocess per zero-tool resume, so neither the control-plane stall detector (every nudge
-wrote a PROGRESS line, keeping the launch log fresh — liveness is now the per-cell heartbeat
-`cellHeartbeatAge`, `control/runstate.mjs:76-80`; log mtime is informational-only `log_silent_s`,
-`runstate.mjs:541-542`) nor the
-run-level `run_timeout_s` (default `5400`, `backgammon.py:641`) could bound it: each respawn reset
-the clock, and a text-only "done" ran forever with no automatic kill. That loop is gone. Every
-surviving nudge path has a budget that fails closed (`_MAX_SERVE_RECOVERY_NUDGES=20` per phase —
-one budget, since the per-chunk marker nudge and its budget were deleted 2026-09-09), and the
-serve attempt itself runs under `run_timeout_s`
-(`backgammon.py:3226`), so a wedged drive now self-terminates with a named cause. Hang detection on
-the status stream (§3) remains the operator's sensor, but is no longer the only exit.
+a fresh subprocess per zero-tool resume, so nothing in the system could bound it: there is **no
+run-level wall-clock budget at all** — `run_timeout_s` was REMOVED in `40a07f3` (2026-11-04,
+"remove the repair-round cap and the run-time budget"), so a run is uncapped in time by design.
+Liveness is now the per-cell heartbeat
+`cellHeartbeatAge`, `control/runstate.mjs:55`; log mtime is informational-only `log_silent_s`,
+`runstate.mjs:525`. That loop is gone. Every
+surviving nudge path has a budget that fails closed (`_MAX_SERVE_RECOVERY_NUDGES=20` per phase,
+`harness/adapters/challenge/constants.py:251` —
+one budget, since the per-chunk marker nudge and its budget were deleted 2026-09-09), and a wedged drive
+self-terminates through the two bounds that DO exist: the 600 s silent-turn bound
+(`DEFAULT_TURN_STALL_TIMEOUT_S`, `constants.py:95-96`) and the transport's own deadlines, each ending
+with a named cause. Hang detection on
+the status stream (§3) remains the operator's sensor, and the maintainer's 900 s kill policy (§5
+rule 15) remains the maintainer's; neither is the only exit.
 
 **Image rebuild is the single re-entry point for both regressions.** The sandbox hardening deployed
 through an image rebuild, and both regressions entered through it: the rebuilt image pulled a
@@ -1064,8 +1096,6 @@ flight.
   half-reset reading as clean. `POST /api/tree/reset` (preview: `POST /api/tree/reset/preview`).
   Two-step confirm-token flow: `POST /api/tree/reset/preview` returns `token` + `restatement` +
   `moves`/`keeps`; the commit `POST /api/tree/reset` requires the body `{"confirm": "<token>"}`.
-  **`runs/snapshots/` is NOT swept** — `isBenchmarkData` (`control/tree.mjs:271-296`) has no
-  `snapshots` case, so snapshots survive a reset unarchived and owner-less (§18 cleanup).
 - **RESTORE** — parks the live bench first, then restores. The current live tree is swept into its
   own fresh backup (so nothing is overwritten), then the chosen backup's contents are moved up into
   `runs/` and the emptied folder is removed. Reversible: the state you leave becomes the newest
@@ -1470,17 +1500,24 @@ fingerprint against an image built from the commit under test (§0 step 2).
 
 ## 10. VARIANCE POLICY — in full
 
-> **Two different N's (2026-09-22) — do not conflate them.** (a) **Baseline batch N** (§0
-> concurrency): the OFF floor is no longer one run. The control plane runs N concurrent cells, the
-> board reports the **median problem count over scored runs**, bound to a **fingerprint** of the eight
-> inputs that determine what was measured (build prompts, grader, model, challenge, compaction,
-> scaffold, golden, worker image), and the operator **picks** the artifact run — the record stores the
-> pick's **signed deviation** from the median. Any fingerprint input change **voids** the batch. (b)
-> **Scored-cell variance N** (this section): how a single scored cell's verdict is hardened against
-> noise. Separate dials.
+> **Two different N's (2026-09-22; rewritten 2026-11-05) — do not conflate them.** (a) **Baseline
+> N** (§0): the OFF floor is no longer one run, and no run is ever **picked**. Every completed,
+> non-void OFF cell is one more baseline — one click on Run, one baseline — and the numbers an ON cell
+> is measured against are the **per-fingerprint AVERAGE** over every baseline that shares its
+> fingerprint (`control/baselines.mjs:5-8`, `:1148-1190`). The fingerprint is the **14 ordered
+> inputs** that determine what was measured (`FINGERPRINT_INPUTS`, `control/batch.mjs:44`:
+> chunk_plan_hash, grader_hash, model, challenge, compaction, scaffold_hash, golden_hash,
+> worker_image, harness_hash, source_commit, source_dirty, worker_source_digest, opencode_version,
+> grader_image). A field absent in every cell averages to `null`, never 0 — an unmeasured covariate
+> is not a free one. Any fingerprint input change **voids** the batch and names the changed input.
+> The median scored-problem count and the Δ-vs-median survive as **VISIBILITY ONLY** on the board
+> (`control/batch.mjs:201`) — they are not how a cell is judged, and there is **no operator pick and
+> no batch/median selection** (`control/batch.mjs:1-6`). There is no round cap and no run timeout to
+> schedule a batch against either: a cell grades until every check passes. (b) **Scored-cell variance
+> N** (this section): how a single scored cell's verdict is hardened against noise. Separate dials.
 
 1. **Baseline: N=1 per scored cell.** (The scored cell itself starts at one run — the variance dial
-   (b) above, distinct from the baseline batch N (a).)
+   (b) above, distinct from the baseline N (a).)
 2. **Borderline cells repeat to N=3.** If any trigger below fires for a cell, **that cell and only
    that cell** re-runs to a total of three. The reported verdict is the **majority** for discrete
    outcomes and the **median** for continuous metrics. All three runs' raw artifacts are retained.
@@ -1489,17 +1526,22 @@ fingerprint against an image built from the commit under test (§0 step 2).
 
 Repetition budget is spent exactly where uncertainty lives, instead of pretending N=1 is statistics.
 
-**T1 — Gate margin ≤ 1.** The final attempt fails exactly one gate, or the cell passes only on its
-last permitted attempt. Either way the verdict sits within one gate or one round of the boundary.
+**T1 — Gate margin ≤ 1.** The cell's final graded round fails exactly **one** gate, so the verdict sits
+within one gate of the boundary. There is no "last permitted attempt" for T1 to name — rounds continue
+until every check passes, with no round cap (`harness/config.py:262`, `max_attempts: None`) — so a cell
+that ends red ended on its own evidence, never on a ceiling.
 
 **T2 — Lift sign fragile.** For an ON/OFF pair: the relative token delta is **under 15%**, or the
 attempts-to-green are equal so the sign rests on token and turn deltas alone. **A sign that flips
 within ±15% single-run noise is not a reportable sign at N=1.** The 15% is a manager-set constant
 and is vetoable.
 
-**T3 — Instrument anomaly.** The run log shows a wall-clock kill or timeout, a nonzero worker exit
-that was retried, or a mid-cell resume — while the cell still produced a scored verdict. Anomalous
-instrumentation invalidates N=1 confidence regardless of the verdict.
+**T3 — Instrument anomaly.** The run log shows a nonzero worker exit that was retried, a mid-cell
+resume, a recovery-budget exhaustion (`_MAX_SERVE_RECOVERY_NUDGES`, one budget per phase), or a run
+stopped by hand and relaunched — while the cell still produced a scored verdict. Anomalous
+instrumentation invalidates N=1 confidence regardless of the verdict. **A wall-clock kill is not in
+this list because it no longer exists:** there is no run timeout (`40a07f3`), and a silent turn ends
+the **turn** with a named cause, never the cell (§5 rule 15).
 
 **T4 — Classification flip.** The cell's result would re-classify the subject, or lands exactly on a
 class boundary. **A single run never re-classifies on its own.**
@@ -1538,8 +1580,7 @@ Fixed defects are not listed. They are in git.
 | **SERVE-MESSAGE-500** | 🟢 ROOT-CAUSED + FIXED 2026-08-11 | **NOT an opencode bug — the worker's SQLite session DB was CORRUPT.** `PRAGMA integrity_check` on the preserved DBs of BOTH 500-failing cells reports `database disk image is malformed`, with damaged pages in **tree 27 = the `part` table** — exactly the table in the failing `select … from "part" where "message_id" in (?×N)`. The 11:14 cell that never 500'd is **clean**. The IN-list size (36→50) was a **red herring**: a larger list touches more pages, so it meets a corrupt page sooner. **Cause:** the DB was bind-mounted from the macOS filesystem (osxfs/gRPC-FUSE), whose locking + fsync semantics SQLite cannot rely on. Pinning opencode never helped because the image was ALREADY pinned (`images/worker/Dockerfile:4`, 1.18.1). **Fix:** the session DB now lives on a **named Docker volume** (ext4 in the Linux VM), exported via `docker cp` at teardown to the same published host path; a per-cell volume is chowned to the worker uid (needs `--user 0:0` — the image bakes `USER worker`) and removed in a `finally` so a failed teardown cannot leak volumes. **Second defect closed:** extraction previously accepted any `is_file()` DB. SQLite corruption is PARTIAL — the corrupt DB answered `count(*)`=492 fine — so a corrupt substrate **silently under-reported memories** instead of failing. `harness/session_db_integrity.py` defines the fail-closed guard `require_sound_session_db` (`session_db_integrity.py:154-167`), which EXISTS but has NO non-test caller today — it is not wired into the run path, so a corrupt substrate is NOT caught. | was: intermittently, cell-voiding — now: cause removed, but a corrupt substrate is NOT caught today (the fail-closed guard `require_sound_session_db` exists but has no non-test caller — it is not on the run path) |
 | **RECALL-SELECTION-BIAS** | 🟡 OPEN — known, stated limitation | Recall fires only after a repeat — the second failure under the same stable `failureKey` while still red — so every serve is conditioned on an already-hard problem. Standing therefore measures **"works on stuck problems," not "works."** Defensible, and arguably the population that matters, but a further departure from the sim's uniform-serving assumption (recorded 2026-08-08; claim and limit travel together — the §1.1/§1.2 dual-carriage principle). | every standing/recall conclusion — disclosed, not blocking |
 | **CLOUD-MIRROR-DRIFT** | 🟢 CLOSED (reconciled, verified 2026-09-04) | The `control/cloud.mjs` `CLOUD_MODELS` mirror (`:114`) and `harness/config.py` `CLOUD_ORCAROUTER_PROVIDER["models"]` are now both **117** entries with identical key sets and matching context/output limits; the drift test `control/__tests__/models-ledger.test.mjs:329` (`DRIFT: the cloud catalogue matches CLOUD_ORCAROUTER_PROVIDER in config.py`) **passes**. The prior "87 mirrored vs 117" drift (30 refused models) is reconciled. Keep the drift test live — it is the guard that caught this class. | — |
-| **CONCURRENCY-MEASUREMENT** | 🟡 OPEN — **PENDING** | The live N=1-vs-N=8 measurement (CONCURRENCY-SPEC §8) has **NOT been run**. The concurrency feature (8 commits, suites green) is built, but "verified concurrency safety" is **not yet a measured claim**: the three load-fragile in-gate timers (`grader/conformance/pregate.ts:563` 250 ms, `grader/frontend/core.spec.ts:54` 1.5 s, `grader/backend/gates-13-16.test.ts:372` 6 s) could fire more often under N=8 contention and convert contention into extra failures — the measured quantity. Run the same fingerprint at N=1 and N=8 and compare before advertising the feature as verified. | §8 measurement integrity |
-| **STACK-LEDGER-FLOOR-DRIFT** | 🟡 OPEN — code-owner | `control/board/sources/stack-ledger.mjs:109-111` still picks `scorable[scorable.length - 1]` for the transfer-curve floor while `control/baselines.mjs` moved to batch-median + operator selection; its `:104` comment "Same rule as control/baselines.mjs" is now false. The card (baselines.mjs) and the curve (stack-ledger.mjs) will disagree until it too reads the batch. | transfer curve vs baseline card |
+| **CONCURRENCY-MEASUREMENT** | 🟢 CLOSED 2026-11-05 — subject removed from code | The concurrency feature this measurement gated was **removed** in the two-modes cleanup. The gate is per model, not global: `control/lib/validate.mjs:63` rejects a second in-flight cell for the same model ("this model is serial"), with the same advisory at `control/routes/run.mjs:126`. With no N-way mode there is nothing to compare, so the N=1-vs-N=8 measurement (and the load-fragile in-gate timer analysis that made it load-bearing) is **moot**, not deferred. Kept as the recorded resolution, not as pending work. | — |
 
 **Memory is not a constraint — CLOSED, do not re-investigate.** Zero swap, ~211 GB wired headroom.
 The trap that misled two sessions is `top`'s "unused" line, which excludes inactive pages macOS
@@ -1580,14 +1621,23 @@ work.
 
 ## 13. WALL-CLOCK
 
-Measured locally on the 27B model: OFF cell attempt 1 = **4,369 s ≈ 72.8 min**. Full gate suite = **25.3
-s**, negligible. Essentially all cost is model time.
+Measured locally on the 27B model, before the cap removal: the build leg (`chunk-01` … `chunk-05`,
+one session) = **4,369 s ≈ 72.8 min**. Full gate suite = **25.3 s**, negligible.
+Essentially all cost is model time.
 
-A full 5-attempt cell's wall-clock is **unmeasured** — the prior 3-attempt cell ran **~2–3.5 h**;
-repair attempts should be shorter than the initial build, but that is **unmeasured — measure, do not
-assume.** OFF plus a handful of ON cells is
-**days**. Size N from measured local numbers only. At ~72 min per attempt, an N=5 escalation is
-several hours minimum, so a paired OFF/ON difference at N=1 is not a result.
+**Wall-clock is wall time with paused time excluded.** `cost.json` reports `wall_seconds` net of
+operator holds, with the held time reported beside it as `paused_seconds`
+(`harness/adapters/challenge/models.py:299-303`: "seconds the cell was HELD for operator review,
+already excluded from `wall_seconds`") — so a dev-mode cell, which pauses after **every** grade and
+once more at the end, is never inflated by the review it waited on, and a normal-mode cell carries
+`paused_seconds: 0`. Read build, troubleshooting and total walls from the artifact; never derive them.
+
+**A whole cell's wall-clock is unbounded by construction.** There is no round cap and no run timeout
+(`40a07f3`), so a cell grades until every check passes and its round count is read from the data,
+never assumed. Troubleshooting rounds should be shorter than the build leg, but that is
+**unmeasured — measure, do not assume.** OFF plus a handful of ON cells is **days**. Size N from
+measured local numbers only: multiplying a per-round figure by an expected round count is exactly the
+arithmetic the cap removal retired, so an OFF/ON difference at N=1 is not a result.
 
 ---
 
@@ -1698,6 +1748,11 @@ defect declared resolved on a config change whose proof was never run.
 
 **Every one of these is a claim of a negative or of a bound, asserted without evidence.**
 
+**Dated note, 2026-11-05 — the first claim above is now historical only:** attempt ceilings were
+later removed. There is no round cap: `harness/config.py:262` reports `max_attempts: None`,
+unbounded by construction (WO-LI-SM-2-CAPS). The record stands as a past wrong claim; it is not a
+live bound to check.
+
 **Work-order format that works** (prescriptive step lists do not — they break on the first wrong
 assumption about repo structure and fill context fast):
 
@@ -1744,197 +1799,3 @@ cells, so no OFF cell can ever prove them — and no standalone smoke can either
 recall requires a full session + extraction + approval, which only a real cell produces. Read the
 first ON cell's status stream: non-null `injected_count` / `injected_block_chars` /
 `injected_block_est_tokens` / `consumer_injected_count` = delivery proven; null = rule-18 walk-back.
-
----
-
-## 18. BUILD-SNAPSHOT REUSE (DEV MODE)
-
-A **development** feature, never a measurement surface. It captures the finished
-worktree after the first grade so a later cell can skip the build and iterate on
-the prompt gradient fast. **A seeded cell is never a scorable floor** — it is a
-fast-iteration tool, not a data point.
-
-### Capture — two triggers
-
-**Attempt-1 build-completion (automatic, every baseline).** At the attempt-1
-grade boundary every baseline run captures its whole worktree into
-`runs/snapshots/<id>/{tree/,snapshot.json}` (`capture_snapshot`,
-`harness/snapshot.py`; boundary at `harness/adapters/challenge/runner.py:1602-1603`).
-Capture can never fail the run: on failure it writes no `snapshot.json` (so the
-snapshot is structurally ineligible) and emits a `notice`. Excluded: `.git/`,
-`.okp/`, `AGENTS.md`, `opencode.json`, `test-results/`; `test/*.cjs` are included
-(genuinely model-authored).
-
-**End-of-run chaining (every stuck run).** A run that reaches the attempt
-ceiling (`attempt_ceiling_reached`, regardless of verdict/void) or runs out of
-context (`context_exhausted`) promotes its final graded worktree into a NEW
-snapshot — `_capture_end_of_run_snapshot` (`harness/adapters/challenge/runner.py`,
-one call at each of those two exits) — so the next run carries its accumulated
-fixes forward instead of discarding them. Seeded and fresh runs alike: a fresh
-baseline that never passes leaves its attempt-1 build snapshot (depth 1) AND its
-end snapshot (depth 2), which is what continuous mode (§19) chains from after its
-first run. Exits that leave no final checkpoint (`harness_error`,
-`transport_incomplete`) and a run that passes (`gates_green`) capture no end. The
-new snapshot's depth is the seed's depth + 1, a fresh run counting as depth 1.
-Seeding FROM any snapshot stays dev-mode only.
-
-### The chain model — `snapshot_depth`, not `cell_seq`
-
-- **`cell_seq`** is the *authoring cell's per-campaign `sequence_index`* (0 for
-  the first cell of a campaign), carried in `snapshot.json` — NOT a chain depth.
-  It must never be repurposed as "n".
-- **`snapshot_depth`** is the chain-depth field. The attempt-1 capture omits it;
-  only the end-of-run chaining capture writes it (`seed_depth + 1`,
-  `runner.py:595`). The read side defaults it to 1 when absent
-  (`harness/snapshot.py:165`); the control plane exposes
-  `snapshot_depth: manifest.snapshot_depth ?? 1` and drops `cell_seq` on read
-  (`control/snapshots.mjs:89`). The board sorts the armable seed list by depth
-  descending and labels each row `n=<depth>`; the `n=` counter is the armed
-  snapshot's real depth, not a hardcoded 1.
-- **`produced_snapshot_id`** is the durable run→snapshot join key, written onto
-  `manifest.session_records[]` (`harness/cumulative/types.py:582`) ONLY by the
-  end-of-run chaining capture — never the attempt-1 capture, so a baseline that
-  passed reports null even though its attempt-1 snapshot exists on disk. The run
-  manifest is **campaign-nested**, NOT at run root:
-  `<runs_root>/<treeId>/<substrate>/<router>/<provider>/<model>/manifest.json`
-  (`control/campaign.mjs:72-73`), and under
-  `runs/backups/<newTreeId>/<oldTreeId>/<…>/manifest.json` once archived.
-
-### Cleanup — run deletion removes the produced snapshot, reset does not sweep
-
-- **Run deletion** hard-deletes the snapshot(s) its manifest names via
-  `session_records[].produced_snapshot_id` (`control/rundelete.mjs`), with NO
-  cascade — downstream snapshots seeded from them are left untouched. A run with
-  no `produced_snapshot_id` deletes only the run folder, no error, no guessing.
-- **Reset** archives the run but leaves its snapshot behind permanently: the
-  sweep is an allow-list (`isBenchmarkData`, `control/tree.mjs:271-296`) with NO
-  `snapshots` case, so `runs/snapshots/` is neither swept into `runs/backups/`
-  nor owner-recorded. Orphaned snapshots survive resets and must be reconciled by
-  hand if undesired.
-
-### Dev mode — control-plane state
-
-The gate is `GET`/`POST /api/devmode` (`control/server.mjs:1076`, `:1086`),
-persisted env → state file → default OFF (`control/devmode.mjs:75-162`). The
-board never holds its own belief — it POSTs/reads the server and renders the
-server's answer. A topbar marker shows while on.
-
-### Seeding — the board step, or `--seed-snapshot`
-
-Arm a snapshot from the board (dev mode on): the baseline sequence inserts a
-step **"BASELINE · 2b — Seed from a build snapshot?"** (`dashboard/panels/create.js:630`)
-between model selection and confirm; picking a row POSTs `/api/snapshots/arm`
-(`control/server.mjs:1040`); the confirm frame shows the red caution
-**"SEEDED FROM A BUILD SNAPSHOT — NOT A SCORABLE FLOOR"**
-(`dashboard/panels/snapshot.js:268`). CLI equivalent: `--seed-snapshot <id>`
-(`scripts/run_cumulative.py:1878`). Both plumb the id into the harness argv as
-`--seed-snapshot` (`control/server.mjs:1814`).
-
-The seed **skips the six build chunks** and re-grades before the first feedback
-round. The list of armable snapshots is same-model only (`seedableBy`,
-`control/snapshots.mjs:188-203`); `GET /api/snapshots` lists everything and
-annotates per-row seedability (`control/server.mjs:1020`).
-
-> Arming AND disarming are both gated behind dev mode (`dev_mode_off` 409 at
-> `control/server.mjs:1046` — the gate precedes the disarm branch). To clear a
-> stale armed snapshot while dev mode is off, delete `config/armed-snapshot.json`
-> (or unset `BENCH_SEED_SNAPSHOT`) — the API cannot disarm it.
-
-### The dev-mode validity exception (D-SNAP-DEVMODE-EXCEPTIONS)
-
-`source_commit` / `chunk_plan_hash` / `template_hash` drift does **not** block
-seeding — it is reported (`notice` `snapshot_validity_relaxed`) and proceeds
-(`harness/snapshot.py:192-208`). Absent, unreadable, and model-mismatched
-snapshots still refuse — one `SEED SNAPSHOT REFUSED:` line, exit 2, never a
-scaffold fallback (`scripts/run_cumulative.py:1732-1744`).
-
-### Why a seeded cell is not a floor
-
-It sits on a different turn/token scale than a floor (it skipped the build), so
-it folds `scorable:false` with a stated reason (`control/baselines.mjs:517-535`)
-and is excluded from the transfer curve's baseline
-(`control/board/sources/stack-ledger.mjs:106-108`). It never appears in the ledger's
-`baseline_rows`.
-
-### Honesty fields
-
-A seeded run's status record carries `seeded_from_snapshot` (the id),
-`build_phase_ran:false`, `skipped_build_cost` (the snapshot's `build_cost`), and
-`dev_mode:true` — declared at one write seam (`scripts/run_cumulative.py:1400-1417`)
-and carried through `SessionRecord` / `ConvergencePoint`
-(`harness/cumulative/types.py:578-581`, `harness/cumulative/convergence.py:92-95`).
-The chaining additions ride the same single-writer seam: `produced_snapshot_id`
-(the run→snapshot join key, `SessionRecord`, `types.py:582`, end-of-run capture
-only) and the seed's `snapshot_depth` threaded into the cell
-(`scripts/run_cumulative/runner.py:1115`).
-
-### The two env vars (also in ENV-VARS.md)
-
-- `BENCH_SEED_SNAPSHOT` — pins the armed snapshot id; unset it to arm from the board.
-- `BENCH_SEED_SNAPSHOT_FILE` — overrides the armed-state file (default `config/armed-snapshot.json`).
-## 19. CONTINUOUS MODE
-
-The way the benchmark is meant to be run once the system is judged healthy: the
-operator starts ONE baseline with **CONTINUOUS: ON** (the + baseline sequence's
-confirm frame), and from then on every run that ends stuck is followed by the next
-run, started from its end snapshot (§18), until the model passes everything. There
-is no analysis between runs and no judgement of faults — it only chains.
-
-### What it does between runs (`control/continuous.mjs`)
-
-A watcher in the control plane looks at the chain every 15 s. When the chain's run
-is no longer in flight it writes down how the run ended — `verdict` and
-`terminal_reason` from the cell's own `cell.end`, the end snapshot from the
-campaign manifest's `produced_snapshot_id` — and then drives the control plane's
-OWN routes in the order an operator's run takes:
-
-1. `POST /api/tree/reset/preview` → `POST /api/tree/reset` (the finished run is
-   archived into `runs/backups/`, as a hand reset does);
-2. `POST /api/snapshots/arm` with the end snapshot;
-3. `GET /api/preflight` (compaction checked unless the payload turned it off);
-4. `POST /api/run/preview` — the token must carry `snapshotId=<that snapshot>`;
-5. `POST /api/run/start` with the operator's original payload and that token.
-
-So a chained run passes every gate a hand-started run does and is refused for the
-same reasons. The outcome is written BEFORE the reset, so a restart mid-chain never
-needs to read a run that has moved, and a restart after the reset does not reset
-again.
-
-### When it stops
-
-It ENDS — never retries — and the board's banner says why:
-
-| code | when |
-|---|---|
-| `passed` | the run's `cell.end` verdict is PASS (`gates_green`) — the model passed everything |
-| `run_stopped` | the run's `cell.end` says `stopped` |
-| `operator_stop` | the operator pressed STOP (the run stop ends the chain first) |
-| `operator_end` | END AFTER THIS RUN on the banner — the run in flight finishes, no next run starts |
-| `no_end_snapshot` | the run ended without an end snapshot (`harness_error`, `transport_incomplete`, a budget stop, …) |
-| `dev_mode_off` | dev mode was turned off — every chained run is seeded |
-| `cell_in_flight` | another cell is running — the chain never resets the tree under it |
-| `reset_refused`, `arm_refused`, `preflight_failed`, `preview_refused`, `start_refused` | that step was refused; the server's own code and reason are kept |
-| `not_seeded` | the preview was not seeded from the armed snapshot — the chain never starts a fresh build in its place |
-| `chain_error` | anything that threw |
-
-It only WAITS (the next tick) while a substrate refresh (a `blocks_runs` tool job)
-is running; the banner shows what it is waiting for.
-
-### Starting it
-
-The start request carries `continuous: true`. The start refuses it on the MEMORY
-ON arm (`continuous_baseline_only`), with more than one cell
-(`continuous_one_cell`), with dev mode off (`dev_mode_off`), and while another
-chain is active (`continuous_active`). It is in the confirmation token
-(`continuous=on`) and the restatement, so a confirmation for one run never starts
-a chain.
-
-### State and routes
-
-- State: `config/continuous.json` (override `BENCH_CONTINUOUS_FILE`), beside the
-  armed snapshot, so a tree reset never moves it: `active`, the original
-  `payload`, `links[]` (one per run: `run_id`, `run_dir`, `sequence_index`,
-  `log_path`, `seeded_from`, `outcome`), `waiting`, `ended {at, code, reason}`.
-- `GET /api/continuous` — the chain (null when none was ever started); the board
-  carries the same object as `board.continuous`.
-- `POST /api/continuous/stop` — END AFTER THIS RUN.

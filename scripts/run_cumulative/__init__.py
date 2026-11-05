@@ -243,7 +243,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     # carried a default of its own there would be two rules deciding the same
     # thing, and the one the operator confirmed would not necessarily be the one
     # that ran. Omitting both flags leaves compaction OFF — the pre-2026-09-02
-    # behaviour — so a hand-typed CLI invocation never acquires six extra model
+    # behaviour — so a hand-typed CLI invocation never acquires five extra model
     # turns it did not ask for.
     compact_group = run_parser.add_mutually_exclusive_group()
     compact_group.add_argument(
@@ -252,11 +252,10 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help=(
-            "Compact the session at each chunk boundary (after every CHUNK "
-            "FINISHED, including the last) and never during the repair phase. "
-            "Trades spent build narration for room the troubleshooting phase "
-            "needs. Costs one model turn per chunk, metered into the cell "
-            "totals and reported separately."
+            "Compact the session after each build chunk (never during the "
+            "repair phase), costing one model turn per chunk. Trades spent "
+            "build narration for room the troubleshooting phase needs; the "
+            "turns are metered into the cell totals and reported separately."
         ),
     )
     compact_group.add_argument(

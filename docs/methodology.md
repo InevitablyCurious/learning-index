@@ -1,9 +1,8 @@
 # Methodology
 
 > **Status: proof of concept.** The no-memory baseline runs today, and memory-on runs are built,
-> with Honcho as the first memory system ([memory systems](memory-systems.md)). Scoring a whole
-> chain and changing the task between runs are designed here but not built yet — see
-> [Not built yet](#not-built-yet).
+> with Honcho as the first memory system ([memory systems](memory-systems.md)). Changing the task
+> between runs is designed here but not built yet — see [Not built yet](#not-built-yet).
 
 ## Why this exists
 
@@ -56,49 +55,81 @@ Everything except the memory system — and, for question 3, the one change made
 |---|---|
 | Model | Qwen3.6-35B-A3B-MTPLX-Optimized-Speed, served locally on a Mac Studio (M3 Ultra, 256 GB) |
 | Harness | opencode, at the version pinned in the worker image |
-| Challenge | Build a playable backgammon game in five build steps, graded by more than 150 checks in seven stages |
+| Challenge | Build a playable backgammon game in five build chunks, graded by more than 150 checks in seven stages |
 | Grader | Deterministic: it runs the built game. No language model judges anything |
-| Chain rules | How a chain is run (below), including where context is compacted and where it is cleared |
+| Run rules | How a run is driven (below): one session, a compaction after each chunk, no round or time cap |
 
-Every run records a fingerprint of eight inputs: build prompts, grader, model, challenge,
-compaction, starting files, reference solution and worker image. Runs are compared only when their
-fingerprints match; changing any input starts a new baseline.
+Every run records a fingerprint of fourteen inputs. The first eight are the build prompts, the
+grader, the model, the challenge, whether the harness compacts at each chunk boundary, the starter
+files, the reference solution and the worker image.
 
-## The chain: the unit of measurement
+The other six are the harness code itself; the source commit the run stood on and whether that tree
+was dirty; what was baked into the worker image from that tree; the opencode version; and the grader
+image. They are recorded only when they were observed — an input nobody could read is absent, never
+filled with a placeholder, so a later change to it reads as "not recorded" rather than as a match.
 
-The model cannot build and fix the whole game inside one context window, so the work runs as a
-**chain** of sessions:
+Runs are compared only when their fingerprints match. Changing any input starts a new baseline.
 
-1. **First cell.** A fresh build in five steps, with the context compacted at each step boundary.
-   Then four troubleshooting rounds in the same context. After each round the grader runs the game,
-   and the agent hears what is still broken: the earliest stage that fails, written the way a
-   player would complain.
-2. **Later cells.** The code is saved and the context is cleared. The next cell starts from the
-   saved code with a fresh context and gets four more troubleshooting rounds.
-3. **The end.** The chain ends when the game passes every check (**finished**) or when the operator
-   stops it (**stopped**).
+## The run: the unit of measurement
 
-Every chain starts with a fresh build, and one chain is one data point.
+One click on Run is one run, and one run is one opencode session.
 
-The chain rules are part of the fixed setup, not a detail. Compacting and clearing at fixed points
-is what stopped problems oscillating — fixed, broken, fixed again — when a single context carried
-the whole troubleshooting history.
+Runs of one model are serial: a click for a model that already has a run in flight is refused, not
+queued. Different models may run at the same time, because nothing in one model's run determines
+another's.
+
+The model builds the game in five chunks in that session, and the harness compacts the context after
+each chunk so the next one starts with room. It then troubleshoots in the same session: the grader
+runs the game after every round, and the model is told what is still broken — the earliest stage
+that fails, written the way a player would complain.
+
+A chunk is over when the session goes idle and the drive exits zero. That is the transport's
+verdict, not the model's. No marker string ends a chunk: a model could print one having written
+nothing, and withhold one having written everything.
+
+Troubleshooting has no round cap and no time cap. The rounds continue until every check passes, and
+opencode's own compaction stays on at its vanilla default, so a long troubleshooting history is
+summarised as it fills rather than dropped.
+
+One limit does end a run: two compactions completing before one grade. That is a run compacting
+instead of fixing, and it ends under that name, in troubleshooting only.
+
+A run can also end without passing. Out of context is a real ending: the session grew past what the
+model could compact at all. It is recorded as that ending, and never repaired by starting a second
+session on a saved copy of the code. A dead worker, a harness fault and an operator stop are endings
+too, each recorded by name.
+
+Dev mode pauses after every grade, and once at the end; normal mode never pauses. A pause boots the
+artifact inside the grader image so the operator can play it and read the lines the model is about to
+be told, then waits — polling for a `RELEASE_HOLD` file in the run's directory. Paused time is
+excluded from the run's wall time and recorded beside it.
+
+Stopping a run keeps its tree. The launch record is ended as "stopped by operator", `cost.json` is
+still written, and the run stays on disk. What disappears is the preview, because the play container
+is removed and the build loop feeding it stops with the run; a build a person started by hand is
+left alone.
+
+Play containers are named for the run they belong to, so two runs can never share one.
+Starting a build reaps every other, and a finished run's are cleaned up.
 
 ## Two arms
 
 | Arm | Memory recall | Memory accrual | Role |
 |---|---|---|---|
-| **OFF** | off | off | The baseline: what the model and the chain do alone |
-| **ON** | on | on | Real use: memory is read and written as the chains run |
+| **off** | off | off | The baseline: what the model does alone |
+| **on** | on | on | Real use: memory is read and written as runs go |
 
-**OFF.** Five chains with no memory. Their spread shows how much chains vary by chance alone:
-the model does not do the same thing twice, so two chains under identical conditions can differ a
-lot.
+**Off.** The arm is picked on the click, and an off run has no memory at all: it neither reads nor
+writes one.
 
-**ON.** A **series** of chains with the memory system switched on, starting from empty memory.
-Each chain reads what the memory system has kept so far, and the memory system learns from it.
-Chain 1 starts empty, chain 2 has memory from chain 1, and so on until the operator stops the
-series.
+Every off run that finishes and is not void is one more baseline for its fingerprint. There is no
+picked floor and no selection: the numbers an on run is measured against are the average over every
+baseline sharing its fingerprint, so baselines are never rationed, and adding one is the only thing
+that moves the comparison.
+
+**On.** A run with the memory system switched on. It reads what the memory system has kept, and the
+memory system learns from it. The first run of a series starts from empty memory; each later one
+reads what the earlier ones wrote ([memory systems](memory-systems.md)).
 
 Two other arrangements may be added later as cross-checks, for memory systems that support them:
 reading from a frozen copy of the memory without learning, which measures one memory state several
@@ -133,41 +164,51 @@ Two rules follow.
 The memory system's configuration — which background jobs run, how often, and how much it may
 inject — is part of what is measured. It is recorded and held fixed for a whole series.
 
-## What is measured per chain
+## What is measured per run
 
-**Primary: the effort to finish.**
+Every run writes `cost.json`, and it writes it on every exit — a run that was stopped, crashed or
+cut short still carries its cost, which is the run an operator most needs priced.
 
-- Turns (model calls).
-- Tokens, by type: input, output (reasoning included), cache read and cache write.
-- Wall time.
+It records three phases — build, troubleshooting and the total — and each carries:
 
-**Guardrail: finished or stopped.** A memory that makes chains cheaper but stops them finishing has
-not helped. A stopped chain is recorded with how far it got, and never counts as a success.
+- Tokens by kind: input, output (reasoning included), cache read and cache write.
+- Turns, compactions and grades.
+- Wall time with paused time removed, and the peak context the model was sent.
+
+A field the harness never observed is absent, never zero, so a partial phase reads as missing rather
+than as a phase that cost nothing.
+
+**Guardrail: passing or not.** A memory that makes runs cheaper but stops them passing has not
+helped. A run that ends without every check passing is recorded with how far it got, and never
+counts as a success.
+
+Cost is measured in tokens. A local model is never billed, so `cost_usd` is absent, not zero; a
+cloud run is billed and carries `cost_usd` beside the same tokens.
 
 **Also recorded:**
 
 - Problems after the build (the first grading).
-- Cells and rounds used.
 - Problems fixed, and problems broken that had been working, in each round.
-- The size of each cell's first model request, in both arms. What an ON cell's carries beyond the
-  OFF range is the memory delivered into the agent's context.
-- ON only: whether the plugin reached its memory server, and how those requests ended.
-- ON only: the memory system's background cost — its own model calls' tokens, and the time it took
-  to finish its background work after each cell.
+- The size of the run's first model request, in both arms. What an on run's carries beyond the off
+  range is the memory delivered into the agent's context.
+- On only: whether the plugin reached its memory server, and how those requests ended.
+- On only: the memory system's background cost — its own model calls' tokens, and the time that
+  background work took.
 
 ## Reading the results
 
-1. **The normal range.** The OFF chains give the range that chance alone produces. An ON chain
-   counts as better or worse only when it falls outside that range.
-2. **Compare with OFF, not with the first ON chain.** The first ON chain is a single run, and its
-   luck would be built into every comparison.
-3. **Trends, not single chains.** Results are read in groups of consecutive chains — 1–3, 4–6,
-   7–9 — so one lucky or unlucky chain cannot move the answer.
-4. **The index.** The group where the trend turns from improving to getting worse. It is reported
-   only when two separate series, each started from empty memory, show the turn in the same place.
-5. **The bridge.** The first chain of a series starts with empty memory, so any gain it shows comes
-   from memory written earlier in the same chain and carried across its own context resets. It is
-   reported as its own number.
+1. **The baseline average.** Every off run sharing a fingerprint is averaged — turns, tokens, wall —
+   and an on run is read against that average rather than against a single off run, whose luck would
+   be built into every comparison.
+2. **The spread.** The same off runs give the range that chance alone produces, because the model
+   does not do the same thing twice. An on run inside that range is not evidence of anything.
+3. **The comparison is per fingerprint.** Change one input and the average no longer belongs to the
+   run: a new fingerprint starts a new baseline.
+4. **The index.** The point where memory's gains turn into losses. It is read off the order in which
+   the runs of a series accumulated memory, and reported only when two separate series, each started
+   from empty memory, show the turn in the same place.
+5. **The bridge.** The first run of a series starts with empty memory, so any gain it shows comes
+   from memory written and read back inside that same run. It is reported as its own number.
 
 ## Memory under change (question 3)
 
@@ -198,14 +239,14 @@ many more:
 The challenge is configurable, so the benchmark can make these changes happen on purpose and watch
 what the memory system does.
 
-- **The switch.** Run an ON series on version A of a challenge until memory has built up, then
-  switch to version B for the chains that follow. Each version has its own OFF baseline.
-- **The hit.** How much worse the first chains after the switch are than version B's OFF chains:
+- **The switch.** Run an on series on version A of a challenge until memory has built up, then
+  switch to version B for the runs that follow. Each version has its own off baseline.
+- **The hit.** How much worse the first runs after the switch are than version B's off runs:
   memory carrying the old way into the new task.
-- **The recovery.** How many chains it takes to get back inside version B's normal range.
+- **The recovery.** How many runs it takes to get back inside version B's normal range.
 - **Old-way checks.** Each change comes with checks that recognise the old behaviour, so the grader
   shows directly when memory pulls the agent back to version A, rather than leaving it to be
-  inferred from slower chains.
+  inferred from slower runs.
 
 A change is only measurable if it follows these rules:
 
@@ -231,9 +272,9 @@ changes.
 ## Rules that keep the numbers honest
 
 - **No language model judges anything.** The grader runs the game; each check passes or fails.
-- **Void, not failed.** A chain spoiled by the instrument — a provider cut-off, a grading fault —
+- **Void, not failed.** A run spoiled by the instrument — a provider cut-off, a grading fault —
   is listed as void and left out. It is never scored as a failure.
-- **Unverified memory is not memory on.** An ON chain whose memory delivery cannot be verified is
+- **Unverified memory is not memory on.** An on run whose memory delivery cannot be verified is
   listed as unmeasured and left out.
 - **Three kinds of nothing.** "Not measured", "not connected" and "measured, and zero" are reported
   separately, never merged.
@@ -244,23 +285,23 @@ changes.
 
 - **One model, one harness, one challenge.** Results describe this setup. They are not claims about
   memory, or models, in general.
-- **The same task every time.** Until the task is changed on purpose (question 3), every chain
-  builds the same game, so memory from earlier chains holds fixes for the same problems. Questions
-  1 and 2 therefore measure how well a memory system carries fixes forward and keeps them useful
-  as they pile up. Learning that transfers to new tasks needs varied challenges.
+- **The same task every time.** Until the task is changed on purpose (question 3), every run builds
+  the same game, so memory from earlier runs holds fixes for the same problems. Questions 1 and 2
+  therefore measure how well a memory system carries fixes forward and keeps them useful as they
+  pile up. Learning that transfers to new tasks needs varied challenges.
 - **The specification comes from a stronger model.** The reference game, and the checks built
   around it, started from a solution a frontier model wrote in close to one pass. Some requirements
   may be that solution's choices rather than rules of backgammon; the reference is reviewed by
   play to catch them.
 - **Chance.** The model samples, and its serving varies with load, so no run can be reproduced
-  exactly. The OFF range is the guard against reading chance as an effect.
+  exactly. The baseline average and the off range are the guard against reading chance as an
+  effect.
 - **Shared hardware.** The agent and the memory system's background jobs share one machine, so
   memory's work can slow the agent down. That is part of memory's real cost on local hardware, but
   it makes wall time noisier than turns or tokens.
 
 ## Not built yet
 
-- Scoring a whole chain. Today each cell is scored on its own, and continued cells are marked as
-  not a measurement.
-- Memory under change: challenge versions, a schedule saying which version each chain runs, and
+- Memory under change: challenge versions, a schedule saying which version each run builds, and
   old-way checks.
+

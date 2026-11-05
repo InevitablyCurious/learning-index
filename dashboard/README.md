@@ -174,8 +174,10 @@ The top of the board is the **reconciliation view**: TRANSFER CURVE (left) and a
 with the GATE WALL moved to a full-width block below. LIVE BUILD frames the
 played game in a `data-preserve` sandboxed iframe (`POST /api/play/start`,
 lazy-boot on an explicit click) beside the numbered "user prose"
-(`GET /api/feedback`) and attempt-snapshot tabs `1..max_attempts` + `live`
-(`GET /api/screenshot`, relayed byte-exact by the control-relay binary branch).
+(`GET /api/feedback`) and attempt-snapshot tabs — `1..N` observed attempts,
+then `live` (`GET /api/screenshot`, relayed byte-exact by the control-relay
+binary branch). There is no round cap (`board.max_attempts` is `null`), so the
+strip is as long as the attempts the cell actually produced.
 Each `board.runs` card now carries `benchmark_id` + `cell` so the panel can
 `POST /api/play/start` from the selected card for live AND archived runs.
 

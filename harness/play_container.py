@@ -450,10 +450,18 @@ def start(
     """Start a candidate + its forwarder inside the grader image.
 
     Order matters: the image is asserted before anything is created (grading
-    and play must run the same toolchain), the network exists before the
-    candidate joins it, and the CANDIDATE starts before the forwarder — a
-    forwarder whose target never came up would publish a port that answers
-    nothing.
+    and play must run the same toolchain), a container left at either of THIS
+    identity's two names by an earlier run — or by an earlier boot of the same
+    cell — is force-removed, the network exists before the candidate joins it,
+    and the CANDIDATE starts before the forwarder — a forwarder whose target
+    never came up would publish a port that answers nothing.
+
+    The pre-remove is what makes ``start`` idempotent for its own identity: the
+    names are hashed from the session identity, so a surviving container would
+    otherwise fail the next ``docker run --name`` with rc 125. It touches
+    exactly these two names, never a sibling's. ``--rm`` is deliberately NOT
+    used on either ``docker run``: it would destroy the container — and the
+    ``docker logs`` the operator is pointed at after a dev-mode pause.
     """
     try:
         assert_image_available(IMAGE)
@@ -494,6 +502,20 @@ def start(
         candidate_name=names["candidate"],
         max_seconds=max_seconds,
     )
+
+    # A container from an earlier run, or from an earlier boot of this same
+    # cell, still owns these names; ``docker run --name`` would then fail with
+    # rc 125. Clear exactly this identity's two names first — nothing here
+    # enumerates or removes beyond them, so a sibling cell is never touched.
+    for key in ("candidate", "forwarder"):
+        _rm_container(names[key], code="start_failed")
+        # ``docker rm -f`` can exit 0 while a container lingers on a wedged
+        # daemon; ask docker what actually exists rather than trust the rc.
+        if _container_lingering(names[key]):
+            raise PlayError(
+                "start_failed",
+                f"failed to remove stale play container {names[key]}",
+            )
 
     started = _run(candidate_argv)
     if started.returncode != 0:

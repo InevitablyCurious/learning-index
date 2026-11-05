@@ -170,7 +170,7 @@ _HOLD_UI_HEARTBEAT_S = 30.0
 # re-driven turn retries at safe granularity
 # (~150 lines ≈ 1.5K output tokens; every observed sub-1K-token generation
 # finalized cleanly, the killed ones were ~4.9K+). ONE NUMBER, EVERYWHERE:
-# ~150 lines is also what the six chunk prompts and AGENTS.md say, so the model
+# ~150 lines is also what the five chunk prompts and AGENTS.md say, so the model
 # is never handed two different limits by two different voices.
 _WRITE_CHUNKING_DIRECTIVE = _PACK.text("nudges/write-limit.md")
 _LOOP_RECOVERY_NUDGE = _PACK.nudge("nudges/loop.md")

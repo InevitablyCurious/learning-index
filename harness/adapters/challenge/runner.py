@@ -176,7 +176,7 @@ COMPACTIONS_BEFORE_GRADE = "compactions_before_grade"
 # WHY. The marker was a SELF-REPORT standing in for an event the harness
 # already observes directly. It could be printed by a model that had written
 # nothing, it was withheld by a model that had finished, and — because the
-# instruction lives only in the six build prompts while repair rounds run in the
+# instruction lives only in the five build prompts while repair rounds run in the
 # SAME session — the model kept printing it out of habit while fixing gate
 # failures, firing compactions in the middle of the phase the measurement is
 # actually about (run 1788462647). Idle is a fact the transport reports; the

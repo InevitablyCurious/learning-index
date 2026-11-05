@@ -208,11 +208,6 @@ def _patch_fake_docker(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
                 found += 1
             return found
 
-        def assistant_texts_since(self, session_id: str, watermark: int) -> list[str]:
-            # Every chunk closes cleanly: the marker gate has its own tests, and
-            # nudging here would add turns these tests count.
-            return [challenge_mod.CHUNK_MARKER]
-
     monkeypatch.setattr(challenge_mod, "ServeClient", _FakeServeClient)
     return state
 
@@ -696,8 +691,10 @@ def test_harness_limit_kill_does_not_force_budget_stop_and_loop_can_continue(
     def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:
         opencode_calls["count"] += 1
         if opencode_calls["count"] == 1:
-            # The build chunk completes cleanly (the fake ServeClient reports
-            # the CHUNK_MARKER), so the WO-ABORT guard sees a complete build.
+            # The build chunk completes cleanly — its drive reached idle with
+            # exit 0, which is what marks a chunk complete (serve.py:1293-1334
+            # records exit_code; feedback.py:263 reads clean = exit_code == 0)
+            # — so the WO-ABORT guard sees a complete build.
             return _stats(
                 session_id="sess-1", killed_reason=None, exit_code=0, cost_usd=0.4
             )
@@ -781,8 +778,10 @@ def test_stalled_feedback_turn_increments_cell_stalled_turns_exactly_once(
     def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:
         opencode_calls["count"] += 1
         if opencode_calls["count"] == 1:
-            # The build completes cleanly (the fake ServeClient reports the
-            # CHUNK_MARKER), so the WO-ABORT guard sees a complete build.
+            # The build completes cleanly — its drive reached idle with exit 0,
+            # which is what marks a chunk complete (serve.py:1293-1334 records
+            # exit_code; feedback.py:263 reads clean = exit_code == 0) — so the
+            # WO-ABORT guard sees a complete build.
             return _stats(
                 session_id="sess-1", killed_reason=None, exit_code=0, cost_usd=0.0
             )
@@ -911,10 +910,11 @@ def test_chunked_build_failure_aborts_and_never_reruns_as_one_joined_prompt(
 
     Historically this also pinned that the build must not restart as a single
     joined six-chunk prompt on the stdout path — that salvage erased the chunk
-    boundaries (where the marker gate fires and where compaction happens), so
-    the rescued cell measured a different experiment while reporting under the
-    same name. The stdout transport is purged (2026-09-03), so the guarantee
-    is now structural: there is no second route to restart on.
+    boundaries (each chunk's drive ending idle with exit 0, and the compaction
+    the harness performs there), so the rescued cell measured a different
+    experiment while reporting under the same name. The stdout transport is
+    purged (2026-09-03), so the guarantee is now structural: there is no second
+    route to restart on.
     """
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
@@ -964,11 +964,12 @@ def test_partial_chunked_build_aborts_with_incomplete_build_error(
     def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:
         opencode_calls["count"] += 1
         if opencode_calls["count"] == 1:
-            # Chunk 1 completes cleanly (marker lands via the fake ServeClient).
+            # Chunk 1 completes cleanly: its drive reached idle with exit 0.
             return _stats(
                 session_id="sess-1", killed_reason=None, exit_code=0, cost_usd=0.1
             )
-        # Chunk 2 stalls: harness-limit kill, no marker -> state "died".
+        # Chunk 2 stalls: harness-limit kill, exit 1, so feedback.py:263 records
+        # this chunk "died".
         return _stats(
             session_id="sess-1", killed_reason="turn_stalled", exit_code=1, cost_usd=0.1
         )
