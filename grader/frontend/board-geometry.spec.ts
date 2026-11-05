@@ -362,11 +362,13 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
   ).toBeGreaterThanOrEqual(piece - 2);
   // And no wider than one and a half points (the build prompt): a tray that wide
   // takes the board's room (run 1791358018: 124 px beside 76 px points). The
-  // reference's is 1.28 points at both sizes.
+  // reference's is 1.28 points at both sizes. The same 2 px rounding as the
+  // narrow side: run 1793908891 round 3's tray was 112 px beside 74 px points,
+  // a pixel over 1.5, and was told "far too wide".
   expect(
     tray.width,
     `[aspect: wide] the off tray is ${tray.width.toFixed(0)} px wide; a point is ${pointWidth(points).toFixed(0)} px`,
-  ).toBeLessThanOrEqual(1.5 * pointWidth(points));
+  ).toBeLessThanOrEqual(1.5 * pointWidth(points) + 2);
   // And a tray a player can see: it stands out from the board by its fill, its
   // outline or both, as the bar does (F29). A tray with the board's colour and no
   // edge of its own is a strip of nothing at the end.
