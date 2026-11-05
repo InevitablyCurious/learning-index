@@ -147,6 +147,22 @@ export async function rollAndCheck(page: Page, dice: number[], click: () => Prom
   }
   const response = await answered;
   if (!response) {
+    // A greyed-out Roll is dead only when it is the player's roll. When the game
+    // has moved past it — the opening played itself on load (run 1793897465
+    // round 10) — the press was never the player's to make: that is F61's
+    // autoroll finding, not "I pressed Roll and nothing happened".
+    if (!pressed) {
+      const state = await page.request
+        .post("/api/state", { data: {} })
+        .then((r) => r.json())
+        .catch(() => null);
+      const rollable = state?.turn === "white" && (state?.phase === "openingRoll" || state?.phase === "roll");
+      if (state && !rollable) {
+        throw new Error(
+          `[needs: F61 F89] Roll was not the player's to press: the game was at phase ${state.phase}, ${state.turn} to play`,
+        );
+      }
+    }
     throw new Error(`${ROLL_DEAD} [needs: F89]: ${pressed ? "pressing Roll made no roll" : "Roll could not be pressed"}`);
   }
   const body = await response.json().catch(() => null);

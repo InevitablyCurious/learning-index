@@ -1699,6 +1699,10 @@
       "first": "On the opening roll the two dice just appear with their numbers — I never see them actually roll.",
       "repeat": "On the opening roll the dice still just appear — I still never see them roll."
     },
+    "F61.autoroll": {
+      "first": "When I opened the game, the opening roll had already been played by itself — I never got to press Roll.",
+      "repeat": "The opening roll still plays itself as soon as the game opens — I never get to press Roll."
+    },
     "F61.match": {
       "first": "On the opening sequence, when the two players roll, their dice don't match the colours of our pieces — I expect my die white like my pieces and the computer's die black like its pieces.",
       "repeat": "On the opening sequence, when the two players roll, their dice still don't match the colours of our pieces."

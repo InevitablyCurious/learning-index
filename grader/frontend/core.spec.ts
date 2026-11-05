@@ -904,6 +904,17 @@ test("[F61] REQ-OPENING — the opening roll shows both dice and the winner play
   // game opens with the tie queued: a debug queue may outlive a new game (the
   // golden's does), so nothing is queued that this game does not roll. ──
   await openWith([4, 4]);
+  // Nothing rolls before the player presses Roll (chunk-04: a new game waits
+  // for the press; nothing rolls by itself when the page opens). Run 1793897465
+  // round 10 played the opening on load, and every check that went on to press
+  // Roll was told "I pressed Roll and nothing happened" about a button greyed
+  // out because the opening was already over.
+  await page.waitForTimeout(2_500);
+  const untouched = await readState(page);
+  expect(
+    untouched.phase === "openingRoll" && (untouched.dice ?? []).length === 0,
+    `[aspect: autoroll] [needs: F01] the opening roll was played before Roll was pressed: phase ${untouched.phase}, dice ${JSON.stringify(untouched.dice)}`,
+  ).toBe(true);
   const canRoll = await page
     .getByTestId("rollBtn")
     .click({ trial: true, timeout: 5_000 })

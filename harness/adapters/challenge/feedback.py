@@ -651,8 +651,20 @@ class FeedbackMixin:
 
     @classmethod
     def _complaint_aspect(cls, record: dict[str, Any]) -> str | None:
-        """The aspect a problem names, or None (the check's general line)."""
-        m = _ASPECT_RE.search(str(record.get("observed", "") or ""))
+        """The aspect a problem names, or None (the check's general line).
+
+        A press of Roll that rolled nothing and a board that never settles are
+        complaints of their own whatever check met them (roll_dead_line,
+        restless_line): a check told its own line last round and Roll-dead now
+        is a NEW complaint, never "I pressed Roll again" (run 1793897465 round
+        10 told the repeat beside the first sighting in one message).
+        """
+        observed = str(record.get("observed", "") or "")
+        if ROLL_DEAD in observed:
+            return "rolldead"
+        if BOARD_RESTLESS in observed:
+            return "restless"
+        m = _ASPECT_RE.search(observed)
         return m.group(1) if m else None
 
     @classmethod
@@ -666,11 +678,7 @@ class FeedbackMixin:
         could have said it.
         """
         raw = str(record.get("check", "")).strip()
-        aspect = (
-            m.group(1)
-            if (m := _ASPECT_RE.search(str(record.get("observed", "") or "")))
-            else None
-        )
+        aspect = cls._complaint_aspect(record)
         return f"{raw} [aspect: {aspect}]" if aspect else raw
 
     @classmethod
@@ -900,7 +908,12 @@ class FeedbackMixin:
         # twice, in one message.
         def line_of(record: dict[str, Any]) -> tuple[str, str | None]:
             raw = str(record.get("check", "")).strip()
-            return (check_id(raw) or raw, cls._complaint_aspect(record))
+            aspect = cls._complaint_aspect(record)
+            # One Roll-dead line and one restless line however many checks met
+            # them: they share one pass kind, so they render as one sentence.
+            if aspect in ("rolldead", "restless"):
+                return (aspect, None)
+            return (check_id(raw) or raw, aspect)
 
         repeat_lines = {line_of(r) for r in records if cls._complaint_id(r) in repeats}
 

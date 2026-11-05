@@ -360,6 +360,28 @@ _HELPER_MARKERS = {
         "F76",
         "F84",
     ),
+    # rollAndCheck (fixtures.ts): Roll greyed out because the game was past the
+    # player's roll (the opening played itself) waits on F61's autoroll and F89.
+    # F61 itself asserts autoroll before it ever presses Roll, so it is not here.
+    ("frontend/fixtures.ts", "[needs: F61 F89]"): (
+        "F03",
+        "F04",
+        "F05",
+        "F10",
+        "F24",
+        "F25",
+        "F33",
+        "F39",
+        "F45",
+        "F47",
+        "F48",
+        "F58",
+        "F60",
+        "F63",
+        "F75",
+        "F76",
+        "F84",
+    ),
     ("frontend/core.spec.ts", "[aspect: format]"): ("F06",),  # readInt
     ("frontend/core.spec.ts", "[needs: F69]"): ("F06",),  # readInt
     # bearOffTheLastPiece: the player's own last bear-off, shared by the end-of-game checks.

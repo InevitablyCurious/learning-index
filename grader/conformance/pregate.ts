@@ -397,12 +397,31 @@ export async function runPreGate(): Promise<PreGateResult> {
     resolve("REQ-DEBUG/debug.setState");
 
     try {
+      // TWO rolls queued, taken in order (chunk-03: "Enqueue dice as the next
+      // roll"). One queued roll could not tell a queue from a single slot that
+      // the last call overwrites, or one that never clears: run 1793897465
+      // round 10 kept only the last of two and answered it to every roll after,
+      // and every check that queued an opening then a turn was told about the
+      // dice it had not set up.
       await debugRoll([6, 1]);
+      await debugRoll([5, 2]);
       const rolled = await api("/api/roll");
-      const dice = sortedDice((rolled as any)?.dice);
-      const honored = dice !== null && dice.length === 2 && dice[0] === 1 && dice[1] === 6;
-      if (!honored) {
-        add("REQ-DEBUG/debug.roll — the debug roll queue is honored by /api/roll", "dice [1,6] after /api/roll", asObserved((rolled as any)?.dice));
+      const first = sortedDice((rolled as any)?.dice);
+      const firstOk = first !== null && first.length === 2 && first[0] === 1 && first[1] === 6;
+      // Back to a roll for white on a legal board, then the second queued roll.
+      const back = emptyPoints();
+      back[6] = 15;
+      back[24] = -15;
+      await api("/api/debug/state", makeState({ points: back, turn: "white", phase: "roll" }));
+      const again = await api("/api/roll");
+      const second = sortedDice((again as any)?.dice);
+      const secondOk = second !== null && second.length === 2 && second[0] === 2 && second[1] === 5;
+      if (!firstOk || !secondOk) {
+        add(
+          "REQ-DEBUG/debug.roll — the debug roll queue is honored by /api/roll",
+          "dice [1,6] then [2,5] after queuing [6,1] then [5,2]",
+          `${asObserved((rolled as any)?.dice)} then ${asObserved((again as any)?.dice)}`,
+        );
       }
       resolve("REQ-DEBUG/debug.roll");
     } catch (error) {

@@ -755,6 +755,42 @@ def test_a_press_of_roll_that_rolled_nothing_is_told_as_that_in_any_gate() -> No
         assert repeat == "I pressed Roll again and still nothing happened."
 
 
+def test_roll_dead_is_one_line_whose_repeat_follows_the_roll_line_itself() -> None:
+    # Run 1793897465 round 10: two checks met a dead Roll; one had been told its
+    # OWN line last round, so it was keyed a repeat and the message carried both
+    # "I pressed Roll and nothing happened." and "...again and still nothing
+    # happened." A Roll-dead complaint is its own complaint, told once.
+    from harness.adapters.challenge import ChallengeRunner as R
+
+    observed = "Error: ROLL DEAD [needs: F89]: Roll could not be pressed"
+    problems = [
+        {
+            "check": "[F03] REQ-HINT — clicking a piece shows its moves",
+            "observed": observed,
+        },
+        {
+            "check": "[F85] REQ-OPENING — a tied opening never freezes the game",
+            "observed": observed,
+        },
+    ]
+    # F85 told its own line last round: that is not the Roll line.
+    msg = R._build_feedback_prompt(
+        problems=problems,
+        repeat_complaints={"[F85] REQ-OPENING — a tied opening never freezes the game"},
+    )
+    assert msg.count("I pressed Roll") == 1
+    assert "I pressed Roll and nothing happened." in msg
+    # Told as Roll-dead last round: now the repeat, still once.
+    msg = R._build_feedback_prompt(
+        problems=problems,
+        repeat_complaints={
+            R._complaint_id(problems[1]),
+        },
+    )
+    assert msg.count("I pressed Roll") == 1
+    assert "I pressed Roll again and still nothing happened." in msg
+
+
 def test_a_board_that_never_settles_is_told_as_that_once_whatever_gates_met_it() -> (
     None
 ):
