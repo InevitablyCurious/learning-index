@@ -699,16 +699,23 @@ async function main() {
   const renderBlocked = deriveRenderBlocked(problems);
   if (renderBlocked) {
     const reason = renderBlocked.reason;
-    // SUPPRESS THE REDUNDANT COUNT SYMPTOM. When the board is render-blocked,
-    // REQ-RENDER/checker's "incorrect number of pieces" count is a symptom of
-    // the same collapse (nothing drew, so the observed count is 0), not an
-    // independent signal — telling it misdirects the model at the data instead
-    // of the render. The gate still scores in gate_results and failedGates;
-    // only the TOLD problem set drops it. Runs after deriveRenderBlocked so
-    // the classification is undisturbed. `problems` is const, so splice in
-    // place, descending, to keep the remaining indices valid.
+    // TELL THE CAUSE, NOT ITS SYMPTOMS. Every gate in renderBlocked.gates
+    // died on the same render-blocked throw before reaching its own subject,
+    // so its own line ("the triangles point outward", "the buttons aren't
+    // labelled", "console errors") states something nobody observed — run
+    // 1793876536 told a player 30 such lines about triangles that never drew.
+    // REQ-RENDER/checker's "incorrect number of pieces" is the same collapse
+    // (nothing drew, so the count is 0). These gates still score in
+    // gate_results and failedGates; only the TOLD problem set drops them, and
+    // the one cause line below stands for all of them. Runs after
+    // deriveRenderBlocked so the classification is undisturbed. `problems` is
+    // const, so splice in place, descending, to keep indices valid.
+    const blockedChecks = new Set(renderBlocked.gates);
     for (let i = problems.length - 1; i >= 0; i -= 1) {
-      if (problems[i].check.includes("REQ-RENDER/checker")) {
+      if (
+        blockedChecks.has(problems[i].check) ||
+        problems[i].check.includes("REQ-RENDER/checker")
+      ) {
         problems.splice(i, 1);
       }
     }
