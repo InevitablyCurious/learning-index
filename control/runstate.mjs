@@ -59,6 +59,14 @@ export async function cellHeartbeatAge({ runsRoot, runDir, sequenceIndex, now = 
 }
 
 /** True iff a process with this pid currently exists. */
+/**
+ * How long after spawn a recorded, still-alive pid that does not yet look like
+ * a harness counts as starting rather than gone (see the reconcile in
+ * readRunState). Three times confirmAlive's window: a slow interpreter start
+ * must never end a live cell.
+ */
+export const STARTUP_GRACE_MS = 60000;
+
 export function pidAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
@@ -449,6 +457,13 @@ export async function readRunState({ runsRoot, launchers = liveRuns(), scan = fi
         // stays live and is never ended here.
         continue;
       }
+      // A process just spawned is not yet recognisable as a harness (the
+      // interpreter has not exec'd its argv): run 1793876536 cell 2 was ended
+      // here 11 ms after launch while it ran on for hours, and the board lost
+      // it. A recorded pid that is still alive inside the startup grace is
+      // starting, not gone; past it, a live non-harness pid is a reused pid.
+      const age = Date.now() - (rec.started_at ?? 0);
+      if (rec.pid != null && age < STARTUP_GRACE_MS && pidAlive(rec.pid)) continue;
       endRecord(runsRoot, rec.run_dir, rec.run_id, {
         at: Date.now(),
         code: null,

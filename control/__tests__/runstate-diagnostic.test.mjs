@@ -13,7 +13,7 @@ import { join } from "node:path";
 
 import { campaignDirName } from "../campaign.mjs";
 import { initLedger, registerRun, evictRun } from "../run-ledger.mjs";
-import { readRunState } from "../runstate.mjs";
+import { readRunState, STARTUP_GRACE_MS } from "../runstate.mjs";
 import { DEFAULT_RUN_DIR, foldGateStates, readWall } from "../wall.mjs";
 import { firstMeaningfulLine, runnerFailureObserved } from "../../grader/gate-results.mjs";
 import { BENCH, writeCampaignCell } from "./_shared.mjs";
@@ -128,6 +128,52 @@ test("RUN STATE: a recorded cell whose process is gone is listed ENDED, not sile
     assert.equal(state.can_start, true, "nothing live: the launch gate clears");
   } finally {
     evictRun("r-ended");
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("RUN STATE: a cell just spawned is starting, not ended, while its pid lives", async () => {
+  // Run 1793876536 cell 2 was ended "exit not observed" 11 ms after launch —
+  // its interpreter had not exec'd a harness argv yet — and the board lost a
+  // cell that ran on for hours. A live recorded pid inside the startup grace
+  // is starting; past the grace, a live non-harness pid is a reused pid.
+  const root = mkdtempSync(join(tmpdir(), "runstate-starting-"));
+  const runs = join(root, "runs");
+  const record = (run_id, started_at) => ({
+    run_id,
+    run_dir: "cumulative",
+    sequence_index: 0,
+    model: "m-start",
+    arm: "off",
+    kind: "local",
+    org: null,
+    manifest_arg: null,
+    pid: process.pid,
+    started_at,
+    log_path: null,
+    finished: false,
+    terminal_status: null,
+    terminal_ok: null,
+  });
+  try {
+    initLedger(runs);
+    registerRun(record("r-starting", Date.now()));
+    registerRun(record("r-reused", Date.now() - STARTUP_GRACE_MS - 1000));
+    const state = await readRunState({
+      runsRoot: runs,
+      scan: async () => ({ bound: [], other: [] }),
+    });
+    assert.ok(
+      !state.ended.some((e) => e.run_id === "r-starting"),
+      "a live pid inside the startup grace is never ended",
+    );
+    assert.ok(
+      state.ended.some((e) => e.run_id === "r-reused" && e.ended?.reason === "exit not observed"),
+      "past the grace, a live pid that is not a harness is a reused pid: ended",
+    );
+  } finally {
+    evictRun("r-starting");
+    evictRun("r-reused");
     rmSync(root, { recursive: true, force: true });
   }
 });
