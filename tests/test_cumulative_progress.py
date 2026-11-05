@@ -732,11 +732,9 @@ def test_manifest_session_records_support_done_state_equivalent_convergence() ->
         org_id="org-progress-test",
         roster=roster,
         roster_hash=roster_hash(roster),
-        seed=17,
         config_fingerprint="cfg-progress-test",
         schedule=schedule,
         session_records=records,
-        current_index=2,
         updated_at="2026-07-24T00:00:01Z",
     )
 

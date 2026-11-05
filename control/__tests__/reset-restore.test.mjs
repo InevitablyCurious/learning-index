@@ -139,6 +139,7 @@ async function benchWithHistory(runs, { now = 1787310000_000 } = {}) {
   const tree = await mintTree(runs, { now });
   const dir = join(runs, tree.active, "local", "local-llm-proxy", "omlx", "model-a");
   mkdirSync(join(dir, "memoryOFF", "cell-0000"), { recursive: true });
+  mkdirSync(join(dir, "memoryON", "cell-0001"), { recursive: true });
   writeFileSync(
     join(dir, "manifest.json"),
     JSON.stringify({
@@ -146,12 +147,21 @@ async function benchWithHistory(runs, { now = 1787310000_000 } = {}) {
       org_id: "okp-org-0",
       task: "backgammon-cumulative-primary",
       seed: 20260709,
+      // The append log of clicks. A backup's counts come from the CELL
+      // DIRECTORIES under memoryOFF/ and memoryON/, never from this.
       schedule: [
         { memory_mode: "off", model: "orcarouter/kimi/kimi-k2.5", sequence_index: 0 },
         { memory_mode: "on", model: "orcarouter/kimi/kimi-k2.5", sequence_index: 1 },
       ],
     }),
   );
+  // Each cell's own stamp, which is where a reader finds its arm and model.
+  for (const [seq, arm] of [[0, "off"], [1, "on"]]) {
+    writeFileSync(
+      join(dir, `memory${arm.toUpperCase()}`, `cell-000${seq}`, "live.jsonl"),
+      `${JSON.stringify({ kind: "cell.start", cell_seq: seq, arm, model: "orcarouter/kimi/kimi-k2.5" })}\n`,
+    );
+  }
   writeFileSync(join(dir, "manifest.status.jsonl"), '{"type":"attempt"}\n{"type":"attempt"}\n');
   writeFileSync(join(runs, "baselines.json"), "{}");
   writeFileSync(join(runs, "off-cell-20260820T154843.log"), "x");
@@ -189,6 +199,43 @@ test("RESTORE: the list describes a backup by its CONTENT, not just its timestam
     assert.equal(b.check.ok, true);
     // The id IS the moment, so the two can never disagree.
     assert.equal(b.created_at, new Date(1787320000_000).toISOString());
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("RESTORE: a backup's cell counts come from the cell DIRECTORIES, never the click log", async () => {
+  // THE FAILURE THIS PREVENTS. The counts used to be derived from
+  // `manifest.schedule` — the precomputed address list. Under the append-per-
+  // click world that key is a log of clicks, so a backup whose cells were
+  // renumbered reports `cells: 0` while holding every cell on disk — the exact
+  // shape that reads as data loss on the restore screen.
+  const { root, runs } = treeFixture();
+  try {
+    mkdirSync(runs, { recursive: true });
+    const tree = await mintTree(runs, { now: 1787330000_000 });
+    const dir = join(runs, tree.active, "local", "local-llm-proxy", "omlx", "model-a");
+    mkdirSync(join(dir, "memoryOFF", "cell-0000"), { recursive: true });
+    mkdirSync(join(dir, "memoryON", "cell-0001"), { recursive: true });
+    writeFileSync(join(dir, "manifest.json"), JSON.stringify({
+      created_at: "2026-08-21T00:00:00Z",
+      // Renumbered: these indices address no cell dir below.
+      schedule: [{ sequence_index: 90, memory_mode: "off" }, { sequence_index: 91, memory_mode: "on" }],
+    }));
+    for (const [seq, arm] of [[0, "off"], [1, "on"]]) {
+      writeFileSync(
+        join(dir, `memory${arm.toUpperCase()}`, `cell-000${seq}`, "live.jsonl"),
+        `${JSON.stringify({ kind: "cell.start", cell_seq: seq, arm, model: "local-llm-proxy/model-a" })}\n`,
+      );
+    }
+
+    await resetAll(runs, { now: 1787330000_500 });
+    const list = await listBackups(runs);
+    const r = list[0].results[0];
+    assert.equal(r.cells, 2, "two cells on disk is two cells, whatever the log says");
+    assert.equal(r.cells_off, 1);
+    assert.equal(r.cells_on, 1);
+    assert.deepEqual(r.models, ["local-llm-proxy/model-a"], "each cell names the model it ran");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -1,5 +1,6 @@
-// CAMPAIGN LAYOUT — which campaign (manifest) a cell writes to. Pure path
-// resolution, kept apart from server.mjs so it can be tested.
+// CAMPAIGN LAYOUT — which campaign (manifest) a cell writes to, and the ordinal
+// the harness will stamp on the cell this launch appends. Read-only resolution,
+// kept apart from server.mjs so it can be tested.
 
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -50,8 +51,11 @@ export async function manifestArgFor(model, runsRoot) {
 
 /**
  * Where this cell will land, resolved before launch and echoed back. The
- * sequence_index is the manifest's own current_index, read just before spawn —
- * a claim to verify against the cell found later, not an address to trust.
+ * sequence_index is the ordinal the harness will stamp on the cell this launch
+ * appends, derived from the campaign's RECORDED log (see appendOrdinalOf) — a
+ * claim to verify against the cell found later, not an address to trust, and
+ * never a counter this process keeps. The harness owns the append; its own
+ * ordinal is the authority.
  */
 export async function campaignTargetFor(subject, runsRoot) {
   // A bare model string is still accepted: a local cell is just its model.
@@ -72,8 +76,7 @@ export async function campaignTargetFor(subject, runsRoot) {
     const rel = join(treeId, ...campaignSegments(s));
     const manifestArg = join(runsRoot, rel, "manifest.json");
     const manifest = await readJsonOrNull(manifestArg);
-    const current = Number.isFinite(manifest?.current_index) ? Number(manifest.current_index) : 0;
-    return { manifest_arg: manifestArg, run_dir: rel, sequence_index: current, tree: treeId };
+    return { manifest_arg: manifestArg, run_dir: rel, sequence_index: appendOrdinalOf(manifest), tree: treeId };
   }
 
   // ── LEGACY FLAT LAYOUT ── only when the pointer is missing or broken.
@@ -81,87 +84,22 @@ export async function campaignTargetFor(subject, runsRoot) {
   const dir = manifestArg ? campaignDirName(model) : "cumulative";
   const manifest = await readJsonOrNull(join(runsRoot, dir, "manifest.json"));
 
-  // No manifest yet: the first cell is index 0.
-  const current = Number.isFinite(manifest?.current_index) ? Number(manifest.current_index) : 0;
-
-  return { manifest_arg: manifestArg, run_dir: dir, sequence_index: current, tree: null };
-}
-
-// ── Sequence-index allocation ──────────────────────────────────────────────
-// The control plane owns the launch counter: N concurrent starts each get a
-// DISTINCT index, handed to the harness via --sequence-index. The cursor is
-// in-memory only — seeded once per manifest from manifest.current_index and
-// NEVER written back, because a running cell's _checkpoint is a full-manifest
-// atomic_write (harness/cumulative/sequencer.py:323-325) that would silently
-// clobber any control-plane write. Restart durability is an accepted
-// limitation: a restart re-seeds from the manifest, and --sequence-index runs
-// never advance current_index, so indices handed out before a restart can be
-// re-issued afterward.
-//
-// THE CURSOR HAS NO BOUND. The harness refuses --sequence-index >=
-// len(session_records) (sequencer.py:207-215), but that length is not frozen:
-// a launch whose --off-replicates plans a LONGER OFF schedule EXTENDS the
-// manifest — strictly an append, every recorded entry surviving in place
-// (sequencer.py:138-174). So allocation hands out the next contiguous index
-// and the launcher grows the schedule to cover it (routes/run.mjs sends the
-// accumulated OFF slot count as --off-replicates). A bound frozen at first
-// seed is exactly what made a second, third and Nth Run click fail: the plan
-// held only the first batch's slots, so the next index was "out of range".
-const sequenceCursors = new Map(); // manifestArg -> next index to hand out
-// In-flight seed promises. The seed read is async, so without this guard two
-// concurrent first-calls would both see the cursor unset, both await the seed
-// and both hand out the same index — a check-then-act race across the await.
-// Deduplicating the seed keeps the get/increment below synchronous and atomic.
-const seeding = new Map(); // manifestArg -> Promise<{seed}>
-
-/** The cursor seed for `manifestArg`, from its manifest. */
-async function seedCursor(manifestArg) {
-  const manifest = await readJsonOrNull(manifestArg);
-  // Fail loud on a manifest that exists but cannot be read: silently seeding 0
-  // would collide with the cells already run. A manifest that does not exist
-  // yet is a fresh campaign whose first cell is index 0 — the harness creates
-  // it at current_index 0 (resume_or_create), matching campaignTargetFor above.
-  if (manifest === null && existsSync(manifestArg)) {
-    throw new Error(
-      `cannot allocate sequence_index: campaign manifest ${manifestArg} exists but cannot be read`,
-    );
-  }
-  const seed = Number.isFinite(manifest?.current_index) ? Number(manifest.current_index) : 0;
-  return { seed };
+  return { manifest_arg: manifestArg, run_dir: dir, sequence_index: appendOrdinalOf(manifest), tree: null };
 }
 
 /**
- * Allocate the next distinct sequence_index for `manifestArg`. The first call
- * for a manifest lazily seeds the cursor from manifest.current_index; every
- * call then reads and increments the in-memory cursor synchronously, so N
- * concurrent starts in this single Node process each get a distinct index.
- * There is no upper bound: an index past the current schedule is a REQUEST to
- * grow it, which the harness honours by appending the planned slots
- * (sequencer.py:138-174) — the launcher sizes --off-replicates to cover the
- * highest index it allocates. Never writes to the manifest.
+ * The ordinal the harness will stamp on the cell this launch appends: the
+ * length of the campaign's recorded schedule. That is the harness's own rule —
+ * append_session sets `sequence_index = len(existing)` (harness/cumulative/
+ * ordering.py) because "a counter can be re-seeded by a restart and cannot be
+ * recovered without trusting whoever wrote it last; the log's own length cannot
+ * disagree with the log" (sequencer.py append_cell). Reading it from the
+ * durable manifest on every click is what makes a restart harmless: there is no
+ * cursor here to re-seed. A campaign with no manifest yet is its first cell, 0.
  */
-export async function allocateSequenceIndex(manifestArg) {
-  if (!sequenceCursors.has(manifestArg)) {
-    let seedPromise = seeding.get(manifestArg);
-    if (!seedPromise) {
-      seedPromise = seedCursor(manifestArg);
-      seeding.set(manifestArg, seedPromise);
-    }
-    try {
-      const { seed } = await seedPromise;
-      // Only the first caller to land sets the cursor; the rest find it set.
-      if (!sequenceCursors.has(manifestArg)) {
-        sequenceCursors.set(manifestArg, seed);
-      }
-    } finally {
-      seeding.delete(manifestArg);
-    }
-  }
-  // Synchronous read-then-increment: no await between get and set, so the
-  // single Node process makes this atomic across concurrent starts.
-  const next = sequenceCursors.get(manifestArg);
-  sequenceCursors.set(manifestArg, next + 1);
-  return next;
+function appendOrdinalOf(manifest) {
+  const recorded = manifest?.schedule;
+  return Array.isArray(recorded) ? recorded.length : 0;
 }
 
 /**

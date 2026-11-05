@@ -709,17 +709,6 @@ a:hover{color:var(--type)}
 
 .ledger-lead{display:flex;flex-direction:column;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--hairline)}
 .big{display:flex;flex-direction:column;gap:4px;font:700 13px var(--font)}
-/* ── PAUSE-AFTER-EACH-GRADE TOGGLE (panels/create.js confirm step, dev mode) ──
-   A row with an on/off toggle and one plain line under it, so the confirm step
-   reads as one surface. */
-.cpause{display:flex;flex-direction:column;gap:6px;margin-top:2px}
-.cpause-btn{
-  font:700 12px var(--font);letter-spacing:.12em;color:var(--fg);
-  background:transparent;border:1px solid var(--border-strong);border-radius:var(--radius-sm);
-  padding:8px 14px;cursor:pointer;text-align:left;align-self:flex-start;
-}
-.cpause-btn:hover:not(:disabled){color:var(--type);border-color:var(--fg)}
-.cpause-btn[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
 .muted-box{padding:8px 10px;border:1px solid var(--danger);border-radius:var(--radius-sm)}
 
 /* THE FREEZE REFUSAL. Rendered where the click happened, because a refusal the
@@ -805,8 +794,6 @@ a:hover{color:var(--type)}
 .ccompact-btn{font:400 11px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;cursor:pointer}
 .ccompact-btn:hover{border-color:var(--border-strong)}
 .ccompact-btn.override{border:1px solid var(--danger);color:var(--danger)}
-.cconcurrent-btn{font:400 11px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:5px 9px;cursor:pointer}
-.cconcurrent-btn:hover{border-color:var(--border-strong)}
 .ctitle{font:700 14px/1.35 var(--font);color:var(--type)}
 .cbody{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
 .cnote{font:400 11.5px/1.5 var(--font);color:var(--dim)}
@@ -838,8 +825,6 @@ a:hover{color:var(--type)}
 .cfilters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .csearch,.cprov{font:400 12px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:6px 9px}
 .csearch{flex:1;min-width:140px}
-.cconcurrent-n{font:400 12px var(--font);color:var(--fg);background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:6px 9px;width:64px}
-.cconcurrent-n:disabled{opacity:.55;cursor:not-allowed}
 .cshown{font:400 10.5px var(--font);color:var(--dim);white-space:nowrap}
 
 /* THE KEY REPORT. Bordered like a statement, never like a field — there is no

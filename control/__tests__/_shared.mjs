@@ -8,7 +8,7 @@
 // BENCH = <repo>).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,9 @@ import { setCodeInputsProvider } from "../baselines.mjs";
 
 export const HERE = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const BENCH = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+/** The cell containers a campaign home holds (scripts/run_cumulative/paths.py). */
+const CELL_CONTAINERS = ["memoryOFF", "memoryON", "memoryUNKNOWN"];
 
 /**
  * What every fixture cell records it ran on (harness/fingerprint.py writes the
@@ -67,6 +70,23 @@ export function writeCellFingerprint(runDir, seq, { arm = "off", values = FIXTUR
 }
 
 /**
+ * A cell's `cell.start` on its live stream (harness/live_stream.py): the record
+ * the harness writes BEFORE any work, naming the arm and the model the cell
+ * actually runs. A cell is addressed by its DIRECTORY now, so this — plus the
+ * dir name itself — is where its identity is read from.
+ */
+export function writeCellLiveStart(runDir, seq, { arm = "off", model = "m-a" } = {}) {
+  const cell = join(runDir, `memory${String(arm).toUpperCase()}`, `cell-${String(seq).padStart(4, "0")}`);
+  mkdirSync(cell, { recursive: true });
+  const records = [
+    { kind: "run.start", task: "backgammon" },
+    { kind: "cell.start", cell_seq: seq, session_id: `sess-${seq}`, arm, model },
+  ];
+  writeFileSync(join(cell, "live.jsonl"), `${records.map((r) => JSON.stringify(r)).join("\n")}\n`);
+  return cell;
+}
+
+/**
  * A cell's cost stamp, where the harness writes it
  * (scripts/run_cumulative/runner.py; sibling of fingerprint.json). `record` is
  * the whole body: { outcome, phases: { build?, troubleshooting?, total? },
@@ -87,15 +107,21 @@ export function costStamp(total = null, { outcome = "failed" } = {}) {
   };
 }
 
-/** A run dir on disk: one schedule slot plus its status record. */
+/**
+ * A run dir on disk: its manifest (an EMPTY append log — a cell exists because
+ * its directory does, not because a slot does), the cell's `cell.start` stamp,
+ * and its status record.
+ */
 export function writeRun(root, dir, { seq = 0, model = "m-a", arm = "off", status = null }) {
   const d = join(root, dir);
   mkdirSync(d, { recursive: true });
   writeFileSync(join(d, "manifest.json"), JSON.stringify({
     created_at: "2026-08-13T00:00:00Z",
-    // The arm field is `memory_mode` and the model is bare in `provider_pin`.
-    schedule: [{ sequence_index: seq, memory_mode: arm, provider_pin: model }],
+    // The harness appends one entry per clicked cell (harness/cumulative/
+    // manifest.py); no reader may take an address from it.
+    schedule: [],
   }));
+  writeCellLiveStart(d, seq, { arm, model });
   if (status) {
     writeFileSync(join(d, "manifest.status.jsonl"), `${JSON.stringify(status)}\n`);
     writeCellFingerprint(d, seq, { arm });
@@ -104,23 +130,31 @@ export function writeRun(root, dir, { seq = 0, model = "m-a", arm = "off", statu
 }
 
 /**
- * A MULTI-SLOT campaign: one schedule, both arms, one status record per slot.
+ * A MULTI-CELL campaign: one campaign home, both arms, one status record and
+ * one cell directory per slot.
  *
  * This is the shape a real campaign has — `harness/cumulative/ordering.py`
  * schedules ONE model per directory, slot 0 as the OFF floor and every later
  * slot an ON repetition of it — and it is what the runs of a baseline are read
- * from. `writeRun` above is the single-slot case kept for the gate tests.
+ * from. Each slot writes a REAL cell directory, so a reader that enumerates by
+ * scan finds it; the manifest is left as the append log it is on disk. Any cell
+ * dirs already there are cleared first, so re-writing a campaign is not a way to
+ * accumulate orphans.
  */
 export function writeCampaign(root, dir, slots, { model = "m-a" } = {}) {
   const d = join(root, dir);
   mkdirSync(d, { recursive: true });
+  for (const name of CELL_CONTAINERS) rmSync(join(d, name), { recursive: true, force: true });
   writeFileSync(join(d, "manifest.json"), JSON.stringify({
     created_at: "2026-08-13T00:00:00Z",
     schedule: slots.map((s) => ({ sequence_index: s.seq, memory_mode: s.arm, provider_pin: model })),
   }));
   const status = slots.filter((s) => s.status).map((s) => JSON.stringify(s.status)).join("\n");
   if (status) writeFileSync(join(d, "manifest.status.jsonl"), `${status}\n`);
-  for (const s of slots) if (s.status) writeCellFingerprint(d, s.seq, { arm: s.arm });
+  for (const s of slots) {
+    writeCellLiveStart(d, s.seq, { arm: s.arm, model });
+    if (s.status) writeCellFingerprint(d, s.seq, { arm: s.arm });
+  }
   return d;
 }
 

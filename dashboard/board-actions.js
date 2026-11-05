@@ -9,7 +9,7 @@
 import { board, render, controlReachability, nul } from "./board.js";
 import { armReset, commitReset } from "./panels/treereset.js";
 import { loadRouters, saveRouterKey } from "./panels/routers.js";
-import { setDevMode, isDevModeBusy, isDevModeOn } from "./panels/devmode.js";
+import { setDevMode, isDevModeBusy } from "./panels/devmode.js";
 import { launchCell } from "./panels/create.js";
 import { loadTools, runTool } from "./panels/tools.js";
 import { loadBackups, armRestore, commitRestore } from "./panels/restore.js";
@@ -67,7 +67,9 @@ export async function doLaunchBaseline(opts) {
   // The launch frame is switched before the first await, so the checklist shows
   // while preflight runs.
   render();
-  await launchCell({ ...opts, devOn: isDevModeOn(board) });
+  // The launch is mode-blind: the control plane derives the dev-mode pause from
+  // its own dev-mode state, so nothing about the mode travels with the request.
+  await launchCell(opts);
   render();
 }
 

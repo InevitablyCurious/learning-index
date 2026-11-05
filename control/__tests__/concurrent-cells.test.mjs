@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// N-CONCURRENT-CELLS TESTS — the semantics the launcher→ledger migration
-// introduced: readRunState reports EVERY live run (per-run can_start), the
-// run ledger tracks N slots at once, the sequence-index cursor is atomic
-// across concurrent starts, and /api/run/start launches a batch of N.
+// LIVE-RUN SET + ONE-CLICK LAUNCH TESTS — the semantics the launcher→ledger
+// migration introduced: readRunState reports EVERY live run (per-run
+// can_start), the run ledger tracks N slots at once, and /api/run/start
+// launches exactly ONE cell per request.
 //
 // server.mjs listens at import and spawn has no mock seam, so the start
 // handler is pinned as SOURCE TEXT — the existing precedent
@@ -14,9 +14,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
-import { allocateSequenceIndex, campaignDirName } from "../campaign.mjs";
+import { campaignDirName, campaignTargetFor } from "../campaign.mjs";
 import {
   evictRun,
   inFlightModels,
@@ -219,124 +219,58 @@ test("RUN-LEDGER: N slots are tracked at once; finishing one frees its model onl
   assert.equal(runCount(), 0, "module state leaves no residue for the next test");
 });
 
-// ── the atomic sequence-index cursor ────────────────────────────────────────
+// ── the cell's ordinal: the campaign log's own length ───────────────────────
 
-test("CAMPAIGN: allocateSequenceIndex is atomic across concurrent starts, seeded from the manifest it never writes", async () => {
-  const root = mkdtempSync(join(tmpdir(), "conc-seq-"));
+test("CAMPAIGN: the target's sequence_index is the recorded log's length — a restart re-derives it, never re-issues it", async () => {
+  const root = mkdtempSync(join(tmpdir(), "conc-ordinal-"));
   try {
-    const manifestArg = join(root, "cumulative-m-a", "manifest.json");
-    mkdirSync(dirname(manifestArg), { recursive: true });
-    writeFileSync(
-      manifestArg,
-      JSON.stringify({
-        created_at: "2026-09-20T00:00:00Z",
-        current_index: 7,
-        // A manifest whose plan already covers 20 slots: the cursor starts at
-        // current_index and counts on from there, whatever the schedule holds
-        // (allocation is unbounded — growing the plan is the launcher's job).
-        schedule: Array.from({ length: 20 }, (_, i) => ({ sequence_index: i })),
-      }),
-    );
-    const before = readFileSync(manifestArg, "utf8");
+    const runs = join(root, "runs");
+    const dir = campaignDirName("m-a");
+    mkdirSync(join(runs, dir), { recursive: true });
+    const manifestArg = join(runs, dir, "manifest.json");
 
-    // Sequential calls: consecutive from the seed.
-    const seq = [];
-    for (let i = 0; i < 5; i += 1) seq.push(await allocateSequenceIndex(manifestArg));
-    assert.deepEqual(seq, [7, 8, 9, 10, 11], "seeded from manifest.current_index, +1 per call");
+    // A fresh campaign: no manifest yet, so this click appends cell 0.
+    const fresh = await campaignTargetFor({ model: "m-a", kind: "local" }, runs);
+    assert.equal(fresh.manifest_arg, manifestArg);
+    assert.equal(fresh.sequence_index, 0, "no recorded log means the first click is ordinal 0");
 
-    // CONCURRENT calls — the N-start batch racing a sibling request: every
-    // caller gets its own index. The seed promise is deduplicated and the
-    // read-then-increment is synchronous, so no await sits between get and set.
-    const conc = await Promise.all(
-      Array.from({ length: 8 }, () => allocateSequenceIndex(manifestArg)),
-    );
-    assert.equal(new Set(conc).size, 8, "no two concurrent starts share an index");
-    assert.deepEqual(
-      [...conc].sort((a, b) => a - b),
-      [12, 13, 14, 15, 16, 17, 18, 19],
-      "the concurrent batch continues the same consecutive run",
+    // One cell recorded — and a STALE current_index, which is exactly what made
+    // a restart re-issue an index: the control plane used to seed a cursor from
+    // it, and a --sequence-index run never advanced it. The log's own length is
+    // the ordinal the harness will stamp.
+    writeFileSync(manifestArg, JSON.stringify({
+      created_at: "2026-09-20T00:00:00Z",
+      current_index: 0,
+      schedule: [{ sequence_index: 0, memory_mode: "off" }],
+      session_records: [{ sequence_index: 0 }],
+    }));
+
+    const first = await campaignTargetFor({ model: "m-a", kind: "local" }, runs);
+    assert.equal(first.sequence_index, 1, "the next append is the log's length, never a stored counter");
+    assert.equal(
+      (await campaignTargetFor({ model: "m-a", kind: "local" }, runs)).sequence_index,
+      1,
+      "a second read of the same durable state answers the same thing — there is no cursor to carry",
     );
 
-    // The cursor is in-memory only: the manifest is NEVER written — a running
-    // cell's _checkpoint is a full-manifest atomic_write that would clobber it.
-    assert.equal(readFileSync(manifestArg, "utf8"), before, "the manifest is untouched");
-
-    // An absent manifest is a fresh campaign: no plan exists yet, and its
-    // first cell is index 0 with the launcher planning the slot for it.
-    const fresh = join(root, "no-such-campaign", "manifest.json");
-    assert.deepEqual(
-      [await allocateSequenceIndex(fresh), await allocateSequenceIndex(fresh)],
-      [0, 1],
+    // The harness appends; the next click follows the grown log.
+    writeFileSync(manifestArg, JSON.stringify({
+      schedule: [{ sequence_index: 0 }, { sequence_index: 1 }],
+      session_records: [{ sequence_index: 0 }, { sequence_index: 1 }],
+    }));
+    assert.equal(
+      (await campaignTargetFor({ model: "m-a", kind: "local" }, runs)).sequence_index,
+      2,
+      "each click appends one cell and the next click reads the grown log",
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test("CAMPAIGN: allocateSequenceIndex allocates past the schedule length — the launcher grows the plan to cover it", async () => {
-  const root = mkdtempSync(join(tmpdir(), "conc-seq-grow-"));
-  try {
-    const manifestArg = join(root, "cumulative-m-b", "manifest.json");
-    mkdirSync(dirname(manifestArg), { recursive: true });
-    writeFileSync(
-      manifestArg,
-      JSON.stringify({
-        created_at: "2026-09-20T00:00:00Z",
-        current_index: 0,
-        schedule: Array.from({ length: 3 }, (_, i) => ({ sequence_index: i })),
-      }),
-    );
+// ── the start endpoint: ONE click = ONE run, source-pinned ───────────────────
 
-    // Within the schedule: seeded-consecutive, exactly as before.
-    assert.deepEqual(
-      [
-        await allocateSequenceIndex(manifestArg),
-        await allocateSequenceIndex(manifestArg),
-        await allocateSequenceIndex(manifestArg),
-      ],
-      [0, 1, 2],
-      "indices inside the schedule length allocate as before",
-    );
-
-    // The 4th allocation is PAST the schedule and is ACCEPTED: the harness
-    // reserves its range check for an index no plan covers, and a launch that
-    // plans more slots EXTENDS the manifest by appending them (sequencer.py:138-174)
-    // — strictly an append, never a reshuffle. So the cursor hands out the next
-    // contiguous index and the launcher sizes --off-replicates to (index + 1),
-    // which is what makes it in range (routes/run.mjs). No throw, no clamp.
-    assert.equal(
-      await allocateSequenceIndex(manifestArg),
-      3,
-      "an index past the schedule length is allocated, not refused",
-    );
-    assert.equal(
-      await allocateSequenceIndex(manifestArg),
-      4,
-      "and the cursor keeps counting — every click gets the next index",
-    );
-
-    // A second and third CLICK (a fresh campaign, one cell per click): index 0,
-    // then 1, then 2, each with the launcher growing the plan to index + 1.
-    const clickManifest = join(root, "cumulative-m-click", "manifest.json");
-    mkdirSync(dirname(clickManifest), { recursive: true });
-    writeFileSync(
-      clickManifest,
-      JSON.stringify({ created_at: "2026-09-20T00:00:00Z", current_index: 0, schedule: [] }),
-    );
-    const clicks = [
-      await allocateSequenceIndex(clickManifest),
-      await allocateSequenceIndex(clickManifest),
-      await allocateSequenceIndex(clickManifest),
-    ];
-    assert.deepEqual(clicks, [0, 1, 2], "three clicks, three consecutive cells, no refusal");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// ── the start endpoint, source-pinned ───────────────────────────────────────
-
-test("START: one request launches N cells — concurrency, atomic indices, per-cell argv/logs/ledger slots", () => {
+test("START: one request launches exactly ONE cell — no concurrency, no cursor, no plan band", () => {
   const src = readFileSync(join(HERE, "routes", "run.mjs"), "utf8");
   const start = src.indexOf('path: "/api/run/start"');
   assert.notEqual(start, -1, "the /api/run/start route disappeared");
@@ -346,113 +280,44 @@ test("START: one request launches N cells — concurrency, atomic indices, per-c
   assert.notEqual(end, -1, "could not find the end of the start handler");
   const handler = src.slice(start, end);
 
-  // 1. concurrency is parsed from the payload, defaults to 1, and a bad value
-  //    is a named 400 — never a silent fallback.
-  assert.match(handler, /payload\.concurrency/, "the handler reads concurrency from the payload");
-  assert.match(handler, /concurrency === undefined \? 1/, "absent concurrency means 1");
-  assert.match(handler, /bad_concurrency/, "a bad concurrency is refused by name");
+  // 1. There is no batch: no count is parsed, nothing is refused for one, and
+  //    no loop launches more than the single cell this request is.
+  assert.doesNotMatch(handler, /concurrency/, "the handler must not read a cell count from the payload");
+  assert.doesNotMatch(handler, /bad_concurrency/, "no cell count means no count refusal");
+  assert.doesNotMatch(handler, /for \(let i = 0/, "a request is not a loop over cells");
+
+  // 2. The sequence cursor is gone: the harness appends the cell itself, so the
+  //    launcher allocates nothing and hands over no index or plan size.
+  assert.doesNotMatch(handler, /allocateSequenceIndex/, "the launcher allocates no index");
+  assert.doesNotMatch(handler, /"--sequence-index"/, "the harness assigns its own append ordinal");
+  assert.doesNotMatch(handler, /"--off-replicates"/, "there is no band to plan");
+  assert.doesNotMatch(handler, /"--on-budget"/, "there is no band to grow");
+  assert.doesNotMatch(handler, /offBand|recordedOffBand|no_baseline|on_band_mismatch/,
+    "the recorded-band refusals went with the band");
+
+  // 3. Exactly one process: the argv array is spawned once, as built.
+  const spawns = [...handler.matchAll(/spawn\(PYTHON/g)];
+  assert.equal(spawns.length, 1, `expected exactly one spawn, found ${spawns.length}`);
+  assert.match(handler, /spawn\(PYTHON, argv,/, "the one spawn takes the single argv array");
   assert.match(
     handler,
-    /Number\.isInteger\(concurrency\) \|\| concurrency < 1/,
-    "positive integers only",
+    /argv\.push\("run", "--mode", arm, compact \? "--compact" : "--no-compact"\)/,
+    "the harness is told the arm and nothing about cell position",
   );
 
-  // 2. The whole batch is pre-flighted BEFORE the first spawn: N indices from
-  //    the atomic cursor, N open logs — a half-launched batch is refused whole.
-  assert.match(handler, /for \(let i = 0; i < concurrency; i \+= 1\)/, "the pre-flight loop runs N times");
-  const allocAt = handler.indexOf("allocateSequenceIndex(");
-  assert.ok(allocAt > -1, "the batch allocates from the campaign's atomic cursor");
-  const spawnAt = handler.indexOf("spawn(PYTHON");
-  assert.ok(spawnAt > -1, "the handler spawns the harness");
-  assert.ok(allocAt < spawnAt, "every index is allocated in pre-flight, before any spawn");
+  // 4. One ledger slot, one durable record, keyed on this run's id.
+  assert.equal([...handler.matchAll(/registerRun\(\{/g)].length, 1, "one run, one ledger slot");
+  assert.match(handler, /run_id: runId/, "the slot is keyed on the control-plane run_id");
+  assert.match(handler, /sequence_index: sequenceIndex/, "the record carries the campaign's claim");
 
-  // 3. The per-cell argv differs in exactly one flag: its --sequence-index.
-  assert.match(
-    handler,
-    /"--sequence-index", String\(cell\.sequence_index\)/,
-    "each cell carries its own index on argv",
-  );
+  // 5. The response is the single-run shape the dashboard consumer reads — not
+  //    a per-cell runs[] array.
+  assert.match(handler, /sendJson\(res, 200, \{ ok: true, pid, log_path: logPath, tree_error \}\)/);
+  assert.doesNotMatch(handler, /\bruns,\n/, "no runs[] array in the response");
 
-  // 4. The arm splice: the OFF arm plans the campaign's ACCUMULATED slot count
-  //    — the highest allocated index + 1 — never this batch's own N, so an index
-  //    past the current plan grows the harness's schedule (append) instead of
-  //    tripping its range check (sequencer.py:207-215). The ON arm plans the
-  //    baseline's own OFF prefix PLUS the budget that grows the ON band to
-  //    contain its index (see the ON-budget test below).
-  assert.ok(
-    handler.includes('["--off-replicates", String(batch[batch.length - 1].sequence_index + 1)]'),
-    "the OFF arm plans the accumulated schedule, not the batch's own N",
-  );
-
-  // 5. Every spawned cell takes an N-slot ledger slot, keyed on its run_id.
-  assert.match(handler, /registerRun\(\{/, "each launched cell registers in the run ledger");
-  assert.match(handler, /run_id: cell\.run_id/, "the slot is keyed on the control-plane run_id");
-
-  // 6. N logs of one second stay distinct: the padded index suffix (and the
-  //    name keeps runstate.mjs's /^(off|on)-cell-|^cell-/ scan pattern).
-  assert.ok(
-    handler.includes('${arm}-cell-${stamp}-s${String(sequenceIndex).padStart(4, "0")}.log'),
-    "per-cell log names carry the padded sequence index — N logs of one second never collide",
-  );
-
-  // 7. The response is per cell: runs[] plus the tree health, never a bare ok.
-  assert.match(handler, /ok: true,\s*\n\s*runs,/, "success carries runs[], one record per cell");
-  assert.match(handler, /tree_error/, "and the tree health rides along");
+  // 6. The pause is the SERVER's dev mode, never a request field.
+  assert.match(handler, /resolveDevMode\(\{ benchRoot: BENCH_ROOT \}\)/, "dev mode is read server-side");
+  assert.match(handler, /if \(devPause\) argv\.push\("--pause-after-grade"\)/);
+  assert.doesNotMatch(handler, /payload\.pauseAfterGrade/, "the pause never comes off the wire");
 });
 
-// ── THE ON ARM'S PLAN BUDGET ─────────────────────────────────────────────────
-//
-// The standard method is ONE session from build to completion, and the harness
-// plans ONE schedule: the OFF baseline, then the ON band STARTING at the OFF
-// slot count (harness/cumulative/ordering.py build_schedule, start_index =
-// len(off_order)). The memory-ON arm therefore cannot follow a plan of any
-// length unless the launch tells the harness to GROW that band: it pushed no
-// `--on-budget` at all, so build_on_order kept its default budget of 0 and
-// every memory-ON cell was refused seconds after launch. The plan budget is
-// what makes a memory-ON run work in BOTH modes, for any number of rounds.
-
-test("START: the memory-ON arm's argv carries the plan budget that grows the ON band", () => {
-  const src = readFileSync(join(HERE, "routes", "run.mjs"), "utf8");
-  const start = src.indexOf('path: "/api/run/start"');
-  assert.notEqual(start, -1, "the /api/run/start route disappeared");
-  const end = src.indexOf('path: "/api/run/stop/preview"', start);
-  assert.notEqual(end, -1, "could not find the end of the start handler");
-  const handler = src.slice(start, end);
-
-  // The ON arm: the baseline's own OFF prefix — the band starts at the OFF slot
-  // count, so a different plan prefix would be schedule drift — PLUS the budget
-  // that grows the band to contain this batch's index.
-  assert.ok(
-    handler.includes(
-      '["--off-replicates", String(offBand.replicates), "--on-budget", String(onBudget)]',
-    ),
-    "the ON arm must push BOTH --off-replicates and --on-budget — without the budget " +
-      "the harness plans a zero-length ON band and refuses every memory-ON cell",
-  );
-
-  // The OFF arm plans the accumulated schedule only: it has no band to grow, and
-  // a budget there would change what a baseline measures.
-  assert.ok(
-    handler.includes('["--off-replicates", String(batch[batch.length - 1].sequence_index + 1)]'),
-    "the OFF arm pushes --off-replicates alone",
-  );
-
-  // The budget is DERIVED from the campaign's recorded schedule, never from this
-  // batch's own N: index N sits N − off_slots slots into the ON band, so the
-  // band needs that many slots to contain it.
-  assert.match(
-    handler,
-    /arm === "on" \? batch\[batch\.length - 1\]\.sequence_index - offBand\.off_slots \+ 1 : null/,
-    "the ON budget is the index's offset into the ON band (N − off_slots + 1)",
-  );
-  // …and the schedule it is derived from is READ from the campaign manifest, not guessed.
-  assert.match(handler, /recordedOffBand\(sequenceManifest\)/);
-
-  // The band cannot be sized without a baseline: a campaign with no recorded OFF
-  // slot is refused BEFORE anything spawns, by name — never sized from a blind 0.
-  assert.match(handler, /"no_baseline"/, "an ON cell with no OFF baseline is refused by name");
-  assert.match(handler, /"manifest_unreadable"/, "an unreadable manifest is refused, never guessed");
-  // …and an index that lands BELOW the recorded OFF baseline is refused rather
-  // than handed a non-positive budget.
-  assert.match(handler, /"on_band_mismatch"/);
-});

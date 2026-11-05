@@ -10,8 +10,8 @@ from harness.cumulative.manifest import (
     roster_hash,
     validate_or_fail,
 )
-from harness.cumulative.ordering import build_schedule
-from harness.cumulative.types import RosterEntry
+from harness.cumulative.ordering import append_session
+from harness.cumulative.types import RosterEntry, SessionRecord
 
 
 def _sample_roster() -> list[RosterEntry]:
@@ -39,14 +39,22 @@ def _sample_roster() -> list[RosterEntry]:
 
 def _sample_manifest() -> CumulativeManifest:
     roster = _sample_roster()
-    seed = 12345
     computed_roster_hash = roster_hash(roster)
-    schedule = build_schedule(
-        roster,
-        seed=seed,
-        roster_hash=computed_roster_hash,
-        on_budget=5,
-    )
+    schedule = []
+    for arm in ("off", "on"):
+        schedule.append(append_session(roster, existing=schedule, memory_mode=arm))
+    records = [
+        SessionRecord(
+            sequence_index=entry.sequence_index,
+            model=entry.model,
+            provider_pin=entry.provider_pin,
+            memory_mode=entry.memory_mode,
+            phase_group=entry.phase_group,
+            phase="DONE",
+            org_id="org-test",
+        )
+        for entry in schedule
+    ]
 
     return CumulativeManifest(
         created_at="2026-07-23T12:00:00Z",
@@ -54,11 +62,9 @@ def _sample_manifest() -> CumulativeManifest:
         org_id="org-test",
         roster=roster,
         roster_hash=computed_roster_hash,
-        seed=seed,
         config_fingerprint="cfg-12345",
         schedule=schedule,
-        session_records=[],
-        current_index=2,
+        session_records=records,
         updated_at="2026-07-23T12:30:00Z",
     )
 
@@ -98,7 +104,6 @@ def test_validate_or_fail_accepts_match_and_rejects_each_drift() -> None:
     validate_or_fail(
         manifest,
         expected_roster=manifest.roster,
-        expected_seed=manifest.seed,
         expected_task=manifest.task,
     )
 
@@ -106,7 +111,6 @@ def test_validate_or_fail_accepts_match_and_rejects_each_drift() -> None:
         validate_or_fail(
             replace(manifest, schema_version=manifest.schema_version + 1),
             expected_roster=manifest.roster,
-            expected_seed=manifest.seed,
             expected_task=manifest.task,
         )
 
@@ -114,15 +118,6 @@ def test_validate_or_fail_accepts_match_and_rejects_each_drift() -> None:
         validate_or_fail(
             manifest,
             expected_roster=list(reversed(manifest.roster)),
-            expected_seed=manifest.seed,
-            expected_task=manifest.task,
-        )
-
-    with pytest.raises(ValueError, match="seed drift"):
-        validate_or_fail(
-            manifest,
-            expected_roster=manifest.roster,
-            expected_seed=manifest.seed + 1,
             expected_task=manifest.task,
         )
 
@@ -130,7 +125,6 @@ def test_validate_or_fail_accepts_match_and_rejects_each_drift() -> None:
         validate_or_fail(
             manifest,
             expected_roster=manifest.roster,
-            expected_seed=manifest.seed,
             expected_task=f"{manifest.task}-other",
         )
 
@@ -138,7 +132,6 @@ def test_validate_or_fail_accepts_match_and_rejects_each_drift() -> None:
         validate_or_fail(
             replace(manifest, chunk_plan_hash="stale-hash"),
             expected_roster=manifest.roster,
-            expected_seed=manifest.seed,
             expected_task=manifest.task,
             expected_chunk_plan_hash="fresh-hash",
         )
@@ -154,65 +147,88 @@ def test_validate_or_fail_accepts_match_and_rejects_each_drift() -> None:
         validate_or_fail(
             legacy,
             expected_roster=legacy.roster,
-            expected_seed=legacy.seed,
             expected_task=legacy.task,
             expected_chunk_plan_hash="fresh-hash",
         )
 
 
-def test_resume_or_create_create_then_resume_without_clobber(tmp_path) -> None:
+def test_a_manifest_carrying_retired_keys_still_loads() -> None:
+    """No migration is written: a cursor and a seed are simply dropped.
+
+    Both belonged to the precomputed-schedule design (a plan needed a seed, a
+    cursor selected from it), and neither is read any more. Asserting the drop
+    here is what makes "delete the fields" safe for manifests on disk.
+    """
+    payload = _sample_manifest().to_dict()
+    payload["seed"] = 12345
+    payload["current_index"] = 2
+
+    loaded = CumulativeManifest.from_dict(payload)
+
+    assert not hasattr(loaded, "seed")
+    assert not hasattr(loaded, "current_index")
+    assert loaded.schedule == _sample_manifest().schedule
+    assert "seed" not in loaded.to_dict()
+    assert "current_index" not in loaded.to_dict()
+
+
+def test_resume_or_create_creates_an_empty_log_then_resumes_without_clobber(
+    tmp_path,
+) -> None:
     manifest_path = tmp_path / "manifest.json"
     roster = _sample_roster()
-    seed = 555
     task = "backgammon"
     org_id = "org-resume"
     config_fingerprint = "cfg-resume"
-    computed_roster_hash = roster_hash(roster)
-    schedule = build_schedule(
-        roster,
-        seed=seed,
-        roster_hash=computed_roster_hash,
-        on_budget=7,
-    )
 
     created = resume_or_create(
         manifest_path,
         roster=roster,
-        seed=seed,
         task=task,
         org_id=org_id,
         config_fingerprint=config_fingerprint,
-        schedule=schedule,
     )
 
     assert manifest_path.exists()
-    assert created.current_index == 0
+    # Nothing is planned at creation: the log starts empty and the first click
+    # appends into it, so the append ordinal starts at len([]) == 0.
+    assert created.schedule == []
     assert created.session_records == []
 
-    bumped = replace(created, current_index=3, updated_at="2026-07-23T13:00:00Z")
-    atomic_write(manifest_path, bumped)
+    appended = append_session(roster, existing=created.schedule, memory_mode="off")
+    created.schedule.append(appended)
+    created.session_records.append(
+        SessionRecord(
+            sequence_index=appended.sequence_index,
+            model=appended.model,
+            provider_pin=appended.provider_pin,
+            memory_mode=appended.memory_mode,
+            phase_group=appended.phase_group,
+            phase="DONE",
+            org_id=org_id,
+        )
+    )
+    created.updated_at = "2026-07-23T13:00:00Z"
+    atomic_write(manifest_path, created)
 
     resumed = resume_or_create(
         manifest_path,
         roster=roster,
-        seed=seed,
         task=task,
         org_id=org_id,
         config_fingerprint=config_fingerprint,
-        schedule=schedule,
     )
 
-    assert resumed == bumped
-    assert resumed.current_index == 3
-    assert load(manifest_path) == bumped
+    assert resumed == created
+    # The append ordinal is the log's length — never a stored cursor.
+    assert resumed.session_records[-1].sequence_index == len(resumed.schedule) - 1
+    assert load(manifest_path) == created
 
-    with pytest.raises(ValueError, match="seed drift"):
+    with pytest.raises(ValueError, match="roster hash drift"):
         resume_or_create(
             manifest_path,
-            roster=roster,
-            seed=seed + 1,
+            roster=list(reversed(roster)),
             task=task,
             org_id=org_id,
             config_fingerprint=config_fingerprint,
-            schedule=schedule,
         )

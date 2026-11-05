@@ -288,15 +288,13 @@ test("BASELINES-BATCH: per-run contention rides onto batch.runs[] and the summar
 test("BASELINES-BATCH: collectCells folds the six contention covariates out of the status stream's progress dicts", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "baselines-contention-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
-  const camp = path.join(root, "cumulative");
-  await fs.mkdir(camp, { recursive: true });
-  await fs.writeFile(path.join(camp, "manifest.json"), JSON.stringify({
-    created_at: "2026-09-22T00:00:00Z",
-    schedule: [
-      { sequence_index: 0, memory_mode: "off", provider_pin: "m-a" },
-      { sequence_index: 1, memory_mode: "off", provider_pin: "m-a" },
-    ],
-  }), "utf8");
+  const { writeCampaign } = await import("./_shared.mjs");
+  // Two OFF cells, addressed by their DIRECTORIES — the manifest is the append
+  // log a campaign really carries, and carries no measurement.
+  const camp = writeCampaign(root, "cumulative", [
+    { seq: 0, arm: "off" },
+    { seq: 1, arm: "off" },
+  ]);
 
   // The covariates arrive FLAT in `progress` (ProgressVector.to_dict).
   const a1 = {
@@ -348,9 +346,11 @@ test("BASELINES-BATCH: collectCells reads each cell's recorded fingerprint, null
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const status = { type: "attempt", sequence_index: 0, attempt: 1, verdict: "FAIL", progress: { problems_before: 4 } };
   writeRun(root, "with-fp", { status });
+  // A cell directory that exists but recorded no fingerprint (it died before
+  // writing one): the cell is on disk, its code state is not.
   const bare = path.join(root, "without-fp");
-  await fs.mkdir(bare, { recursive: true });
-  await fs.writeFile(path.join(bare, "manifest.json"), JSON.stringify({ schedule: [{ sequence_index: 0, memory_mode: "off", provider_pin: "m-b" }] }));
+  await fs.mkdir(path.join(bare, "memoryOFF", "cell-0000"), { recursive: true });
+  await fs.writeFile(path.join(bare, "manifest.json"), JSON.stringify({ schedule: [] }));
   await fs.writeFile(path.join(bare, "manifest.status.jsonl"), `${JSON.stringify(status)}\n`);
 
   const cells = await collectCells(root);

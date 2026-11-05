@@ -151,8 +151,10 @@ function writeTwoAttemptRun(root, { chunksOnFirst = true } = {}) {
   mkdirSync(d, { recursive: true });
   writeFileSync(join(d, "manifest.json"), JSON.stringify({
     created_at: "2026-08-26T00:00:00Z",
-    schedule: [{ sequence_index: 0, memory_mode: "off", provider_pin: "m-a" }],
+    // The append log is empty: the cell is on disk at memoryOFF/cell-0000.
+    schedule: [],
   }));
+  writeCellFingerprint(d, 0);
   const a1 = { type: "attempt", sequence_index: 0, attempt: 1, verdict: "FAIL",
     progress: { turns: 9, total_tokens: 400,
       build_chunks: chunksOnFirst ? CHUNKS_ATTEMPT_1 : [] } };
@@ -214,7 +216,8 @@ function writeStampedRun(root, { verdict = "FAIL", stamp = null } = {}) {
   mkdirSync(d, { recursive: true });
   writeFileSync(join(d, "manifest.json"), JSON.stringify({
     created_at: "2026-09-04T00:00:00Z",
-    schedule: [{ sequence_index: 0, memory_mode: "off", provider_pin: "m-a" }],
+    // The append log is empty: the cell is on disk at memoryOFF/cell-0000.
+    schedule: [],
   }));
   const a1 = {
     type: "attempt", sequence_index: 0, attempt: 5, verdict,

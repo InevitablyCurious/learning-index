@@ -125,7 +125,7 @@ export const STALL_THRESHOLD_S = 900;
  * The confirmation token is a pure function of the submitted parameters, so a
  * preview for one configuration cannot confirm a different one.
  */
-export function confirmationToken({ model, arm, org, kind, compact, pauseAfterGrade = false }) {
+export function confirmationToken({ model, arm, org, kind, compact, devPause = false }) {
   const parts = [
     `model=${model ?? ""}`,
     `arm=${arm ?? ""}`,
@@ -136,10 +136,11 @@ export function confirmationToken({ model, arm, org, kind, compact, pauseAfterGr
     // Compaction is in the token: it changes what the cell does and its scale.
     `compact=${compact === true ? "on" : "off"}`,
   ];
-  // Operator pause between grades (WO-PAUSE-AFTER-GRADE) changes what the run
-  // does (halts for a human every grade), so it is bound into the token: a
-  // preview shown without it must not start a run that pauses. Present only when on.
-  if (pauseAfterGrade === true) parts.push("pauseAfterGrade=on");
+  // The pause after each grade is the SERVER's dev mode, not a request field,
+  // and it changes what the run does (halts for a human every grade) — so it is
+  // bound into the token: a preview shown with dev mode off must not start a run
+  // that pauses. Present only when on.
+  if (devPause === true) parts.push("dev_pause=on");
   return parts.join("|");
 }
 
@@ -147,7 +148,7 @@ export function confirmationToken({ model, arm, org, kind, compact, pauseAfterGr
  * The restatement shown before START, composed by the server so the words read
  * are the words acted on.
  */
-export function restatement({ model, arm, org, kind, cloud = null, compact = false, pauseAfterGrade = false }) {
+export function restatement({ model, arm, org, kind, cloud = null, compact = false, devPause = false }) {
   const armWord = arm === "on" ? "MEMORY ON" : arm === "off" ? "CONTROL" : "UNKNOWN ARM";
   const isCloud = kind === "cloud";
   return [
@@ -168,11 +169,12 @@ export function restatement({ model, arm, org, kind, cloud = null, compact = fal
       : "compaction: OFF — the build runs uncompacted, and the repair phase " +
         "starts with whatever context the build left",
     org ? `org: ${org}` : "org: not applicable to a control cell",
-    // Stated only when on: the run halts for a human after every grade.
-    ...(pauseAfterGrade
-      ? ["pause after each grade: ON — the run stops after every graded pass (and once at " +
-          "the end) so you can play the app and read what the model is about to be told before " +
-          "anything is sent; release each pause to continue"]
+    // Stated only when on: the run halts for a human after every grade, because
+    // this control plane is in dev mode — not because the request asked for it.
+    ...(devPause
+      ? ["pause: dev mode is ON — this run stops after every graded pass (and once at " +
+          "the end) for operator review, so you can play the app and read what the model is " +
+          "about to be told before anything is sent; release each pause to continue"]
       : []),
   ].join("\n");
 }

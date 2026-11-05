@@ -16,7 +16,7 @@
 //     measured whole, and the average is what a Δ is over. There is no
 //     panels/batch.js to import and no route to post to.
 //
-// Mock-fetch idiom from concurrency.test.mjs: globalThis.fetch is assigned
+// Mock-fetch idiom from two-mode.test.mjs: globalThis.fetch is assigned
 // BEFORE the module import; nothing reaches the network.
 // ─────────────────────────────────────────────────────────────────────────────
 

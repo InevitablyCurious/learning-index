@@ -7,13 +7,13 @@ import { join } from "node:path";
 
 import { confirmationToken } from "../contract.mjs";
 import { readCloud, resolveCloudModel, cloudCatalog, CLOUD_MODELS, CONTEXT_ADVISORY_FLOOR } from "../cloud.mjs";
-import { readBaselines, BASELINES_FILE, isArchivedRun, baselineId, identifyCell, collectOffCells, assembleBatchForCells } from "../baselines.mjs";
+import { readBaselines, BASELINES_FILE, isArchivedRun, baselineId, identifyCell, collectCells, collectOffCells, assembleBatchForCells } from "../baselines.mjs";
 import { writeBatch, markVoid } from "../batch.mjs";
 import { manifestArgFor, campaignDirName } from "../campaign.mjs";
 import { mintTree } from "../tree.mjs";
 import { readModelsLedger } from "../models-ledger.mjs";
 
-import { BENCH, FIXTURE_FP, writeRun, writeCampaign, OFF_PASS, treeFixture, writeCellFingerprint, writeCellCost, costStamp } from "./_shared.mjs";
+import { BENCH, FIXTURE_FP, writeRun, writeCampaign, OFF_PASS, treeFixture, writeCellFingerprint, writeCellCost, writeCellLiveStart, costStamp } from "./_shared.mjs";
 
 test("LEDGER: a completed OFF cell IS the baseline, and it opens + run — and + baseline stays open for a repeat", async () => {
   const root = mkdtempSync(join(tmpdir(), "okp-mled-"));
@@ -643,13 +643,16 @@ test("BASELINE: the list is rooted in cells, so a cloud floor appears without a 
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "manifest.json"), JSON.stringify({
     created_at: "2026-08-15T00:00:00Z",
-    schedule: [{ sequence_index: 0, memory_mode: "off", model: "orcarouter/anthropic/claude-opus-5", provider_pin: "orcarouter" }],
+    schedule: [],
   }));
   writeFileSync(join(dir, "manifest.status.jsonl"), `${JSON.stringify({
     type: "attempt", sequence_index: 0, attempt: 1, verdict: "PASS",
     gate_totals: { pass: 69, fail: 2, error: 0, not_run: 0, total: 71 },
     progress: { turns: 31, total_tokens: 900, wall_seconds: 120 },
   })}\n`);
+  // The cell's own stamp: the cloud slug it ran, written before any work. No
+  // roster names this model — the cell is the only place it exists.
+  writeCellLiveStart(dir, 0, { model: "orcarouter/anthropic/claude-opus-5" });
   writeCellFingerprint(dir, 0);
 
   // NOTE the empty roster: this is the cold case where the local proxy is down.
@@ -683,9 +686,10 @@ test("BASELINES: a tree-layout campaign carries the FULL relative run_dir, not t
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "manifest.json"), JSON.stringify({
       created_at: "2026-08-20T00:00:00Z",
-      schedule: [{ sequence_index: 0, memory_mode: "off", provider_pin: "m-a" }],
+      schedule: [],
     }));
     writeFileSync(join(dir, "manifest.status.jsonl"), `${JSON.stringify(OFF_PASS)}\n`);
+    writeCellLiveStart(dir, 0, { model: "local-llm-proxy/m-a" });
     writeCellFingerprint(dir, 0);
 
     // A legacy flat campaign beside the tree. A DIFFERENT model, because the
@@ -917,5 +921,85 @@ test("LEDGER: adding a baseline is the only thing that moves a Δ", async () => 
   const own = s.led.fingerprints.find((f) => f.fingerprint_hash === s.run.delta.fingerprint);
   assert.equal(own.baseline_count, 3, "this fingerprint still holds exactly its three baselines");
   assert.equal(own.avg.turns, 30);
+  rmSync(root, { recursive: true, force: true });
+});
+
+// ── A CELL IS ITS DIRECTORY, NOT A SCHEDULE ADDRESS ─────────────────────────
+//
+// THE FAILURE THIS PREVENTS. Cells used to be enumerated THROUGH the campaign's
+// `manifest.schedule`: the slot's `sequence_index` was the seq and the slot's
+// `memory_mode` was the arm, so the reader built `memory<ARM>/cell-<NNNN>` from
+// the slot. That is an ADDRESS taken from a list — and the list is now the
+// campaign's append log of clicks, which stops matching the directories the
+// moment anything is renumbered or orphaned (a restore, an archived cell, a
+// hand-fixed index). The reader then finds nothing, `fingerprints` comes back
+// EMPTY, and every ON Δ degrades to "no baselines on this fingerprint" while
+// every suite stays green. So: enumerate the directories, and take the arm and
+// the model from the cell itself.
+test("REGRESSION: a non-contiguous click history still averages the OFF cells and yields a Δ", async () => {
+  const root = mkdtempSync(join(tmpdir(), "okp-mled-noncontig-"));
+  // CS 1: OFF, ON, OFF, OFF, ON — the arm is interleaved, so neither arm is a
+  // prefix of the sequence and no slot index addresses two cells at once.
+  const dir = writeCampaign(root, "cumulative", [
+    { seq: 0, arm: "off", status: { type: "attempt", sequence_index: 0, attempt: 1, verdict: "FAIL", progress: { turns: 20, problems_before: 7 } } },
+    { seq: 1, arm: "on", status: { type: "attempt", sequence_index: 1, attempt: 1, verdict: "PASS", progress: { turns: 32, problems_before: 5 } } },
+    { seq: 2, arm: "off", status: { type: "attempt", sequence_index: 2, attempt: 1, verdict: "FAIL", progress: { turns: 30, problems_before: 7 } } },
+    { seq: 3, arm: "off", status: { type: "attempt", sequence_index: 3, attempt: 1, verdict: "FAIL", progress: { turns: 40, problems_before: 7 } } },
+    { seq: 4, arm: "on", status: { type: "attempt", sequence_index: 4, attempt: 1, verdict: "PASS", progress: { turns: 25, problems_before: 5 } } },
+  ]);
+  // The three OFF cost stamps are what a fingerprint's average is made of.
+  for (const [seq, turns] of [[0, 20], [2, 30], [3, 40]]) {
+    writeCellCost(dir, seq, { record: costStamp({ turns }) });
+  }
+  // AND THE LOG NO LONGER LANDS ON ANY OF THEM: the campaign was renumbered, so
+  // its append log's indices address cell dirs that do not exist. A reader that
+  // takes its addresses from the log sees zero cells here.
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify({
+    created_at: "2026-08-13T00:00:00Z",
+    schedule: [
+      { sequence_index: 90, memory_mode: "off", provider_pin: "m-a" },
+      { sequence_index: 91, memory_mode: "on", provider_pin: "m-a" },
+    ],
+  }));
+  writeFileSync(join(dir, "manifest.status.jsonl"), [
+    { type: "attempt", sequence_index: 0, attempt: 1, verdict: "FAIL", progress: { turns: 20, problems_before: 7 } },
+    { type: "attempt", sequence_index: 1, attempt: 1, verdict: "PASS", progress: { turns: 32, problems_before: 5 } },
+    { type: "attempt", sequence_index: 2, attempt: 1, verdict: "FAIL", progress: { turns: 30, problems_before: 7 } },
+    { type: "attempt", sequence_index: 3, attempt: 1, verdict: "FAIL", progress: { turns: 40, problems_before: 7 } },
+    { type: "attempt", sequence_index: 4, attempt: 1, verdict: "PASS", progress: { turns: 25, problems_before: 5 } },
+  ].map((r) => JSON.stringify(r)).join("\n") + "\n");
+
+  // Every cell is found by scanning, with its OWN arm and sequence.
+  const cells = await collectCells(root);
+  assert.deepEqual(
+    cells.map((c) => [c.arm, c.sequence_index]),
+    [["off", 0], ["off", 2], ["off", 3], ["on", 1], ["on", 4]],
+    "the directories are the cells — not the log's 90/91",
+  );
+  assert.equal(cells.length, 5);
+  for (const c of cells) assert.equal(c.model, "m-a", "each cell names its own model");
+
+  const led = await readModelsLedger({
+    runsRoot: root,
+    benchModels: [{ id: "m-a", bench_eligible: true }],
+  });
+
+  // The baseline is the AVERAGE of the three OFF cells on this fingerprint.
+  assert.equal(led.fingerprints.length, 1, "one fingerprint family, not an empty index");
+  const [fp] = led.fingerprints;
+  assert.equal(fp.baseline_count, 3, "all three OFF cells count, interleaved with the ON ones");
+  assert.equal(fp.avg.turns, 30, "(20 + 30 + 40) / 3");
+
+  // The ON delta for cell-0004 is measured against that average — never
+  // "no baselines on this fingerprint".
+  const run = led.models[0].runs.find((r) => r.sequence_index === 4);
+  assert.ok(run, "the ON cell is a run even though no slot addresses it");
+  assert.equal(run.delta.computable, true, `Δ not computable: ${run.delta.reason}`);
+  assert.notEqual(run.delta.reason, "no baselines on this fingerprint");
+  assert.equal(run.delta.baseline_count, 3, "it says how many baselines it is measured over");
+  assert.equal(run.delta.turns, 25 - 30, "cell-0004's turns minus the three-cell average");
+  assert.equal(run.delta.better, true);
+  assert.equal(run.delta.fingerprint, fp.fingerprint_hash, "measured on the family the OFF cells formed");
+
   rmSync(root, { recursive: true, force: true });
 });

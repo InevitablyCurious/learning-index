@@ -20,7 +20,6 @@ from harness.cumulative.run_artifacts import (
 from harness.cumulative.run_context import collect_run_context, compare_run_context
 from harness.cumulative.results_ledger import append_run_records, read_tree_id
 from harness.cumulative.sequencer import CumulativeSequencer
-from harness.cumulative.types import SessionRecord
 
 from .paths import (
     DEFAULT_ORG_ID,
@@ -82,15 +81,11 @@ def _build_context(args: argparse.Namespace, *, require_runtime: bool) -> CliCon
         manifest_path=str(layout.manifest_path),
         runner=runner,
         roster=roster,
-        seed=int(args.seed),
         task=str(args.task),
         org_id=str(args.org),
         config_fingerprint=config_fingerprint,
-        on_budget=int(args.on_budget),
         run_context=current_run_context,
         chunk_plan_hash=compute_task_template_hash(PROMPTS_DIR) or "",
-        sequence_index=args.sequence_index,
-        off_replicates=getattr(args, "off_replicates", 1) or 1,
     )
     recorded_run_context = getattr(getattr(sequencer, "_manifest"), "run_context", None)
     drift = compare_run_context(recorded_run_context, current_run_context)
@@ -101,15 +96,14 @@ def _build_context(args: argparse.Namespace, *, require_runtime: bool) -> CliCon
     )
 
 
-def _current_session_or_raise(sequencer: CumulativeSequencer) -> SessionRecord:
-    session = sequencer.current_session()
-    if session is None:
-        raise RuntimeError("sequencer is done; no current session")
-    return session
+def _append_results_ledger(
+    args: argparse.Namespace, layout: PathLayout, *, sequence_index: int
+) -> None:
+    """Fail-open host-side ledger append for one terminal-complete cell.
 
-
-def _append_results_ledger(args: argparse.Namespace, layout: PathLayout) -> None:
-    """Fail-open host-side ledger append for one terminal-complete run.
+    ``sequence_index`` is the ONE cell this process appended and ran. The
+    campaign's scorecard holds every cell scored so far, so appending all of
+    them would record a sibling's cell a second time.
 
     The ledger is instrumentation. A failure appends no records and logs —
     it never breaks a finished run.
@@ -126,8 +120,7 @@ def _append_results_ledger(args: argparse.Namespace, layout: PathLayout) -> None
                 status_stream_path=default_status_stream_path(
                     str(layout.manifest_path)
                 ),
-                # One cell per process under --sequence-index: its record only.
-                sequence_index=getattr(args, "sequence_index", None),
+                sequence_index=sequence_index,
             )
         )
     except Exception as exc:  # noqa: BLE001 -- fail-open, never break a finished run

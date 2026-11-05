@@ -13,7 +13,7 @@ from .types import (
     SessionRecord,
 )
 from .manifest import CumulativeManifest, roster_hash
-from .ordering import build_schedule
+from .ordering import append_session
 from .progress import progress_from_cell_result
 from .sequencer import CumulativeSequencer, SessionRunner
 
@@ -28,7 +28,7 @@ __all__ = [
     "MISSING_TELEMETRY_SEAMS",
     "CumulativeManifest",
     "roster_hash",
-    "build_schedule",
+    "append_session",
     "progress_from_cell_result",
     "CumulativeSequencer",
     "SessionRunner",

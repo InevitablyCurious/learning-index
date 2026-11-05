@@ -54,11 +54,12 @@ class CumulativeManifest:
     org_id: str
     roster: list[RosterEntry]
     roster_hash: str
-    seed: int
     config_fingerprint: str
+    # THE APPEND LOG: one entry per clicked cell, in click order. Never
+    # precomputed — ``sequence_index`` is this list's ordinal, so appending is
+    # the only way a cell comes into existence.
     schedule: list[ScheduledSession]
     session_records: list[SessionRecord]
-    current_index: int
     updated_at: str
     schema_version: int = CUMULATIVE_SCHEMA_VERSION
     run_context: dict[str, Any] | None = None
@@ -72,11 +73,9 @@ class CumulativeManifest:
             "org_id": self.org_id,
             "roster": [entry.to_dict() for entry in self.roster],
             "roster_hash": self.roster_hash,
-            "seed": int(self.seed),
             "config_fingerprint": self.config_fingerprint,
             "schedule": [session.to_dict() for session in self.schedule],
             "session_records": [record.to_dict() for record in self.session_records],
-            "current_index": int(self.current_index),
             "updated_at": self.updated_at,
             "run_context": self.run_context,
             "chunk_plan_hash": self.chunk_plan_hash,
@@ -95,11 +94,9 @@ class CumulativeManifest:
             org_id=str(d["org_id"]),
             roster=[RosterEntry.from_dict(item) for item in roster_data],
             roster_hash=str(d["roster_hash"]),
-            seed=int(d["seed"]),
             config_fingerprint=str(d["config_fingerprint"]),
             schedule=[ScheduledSession.from_dict(item) for item in schedule_data],
             session_records=[SessionRecord.from_dict(item) for item in records_data],
-            current_index=int(d["current_index"]),
             updated_at=str(d["updated_at"]),
             run_context=dict(d["run_context"])
             if isinstance(d.get("run_context"), Mapping)
@@ -150,7 +147,6 @@ def validate_or_fail(
     manifest: CumulativeManifest,
     *,
     expected_roster: list[RosterEntry],
-    expected_seed: int,
     expected_task: str,
     expected_chunk_plan_hash: str = "",
 ) -> None:
@@ -165,12 +161,6 @@ def validate_or_fail(
         raise ValueError(
             "cannot resume: roster hash drift detected "
             f"(manifest={manifest.roster_hash} expected={expected_hash}); start a fresh run"
-        )
-
-    if manifest.seed != expected_seed:
-        raise ValueError(
-            "cannot resume: seed drift detected "
-            f"(manifest={manifest.seed} expected={expected_seed}); start a fresh run"
         )
 
     if manifest.task != expected_task:
@@ -191,11 +181,9 @@ def resume_or_create(
     path: str | os.PathLike[str],
     *,
     roster: list[RosterEntry],
-    seed: int,
     task: str,
     org_id: str,
     config_fingerprint: str,
-    schedule: list[ScheduledSession],
     run_context: Mapping[str, Any] | None = None,
     chunk_plan_hash: str = "",
 ) -> CumulativeManifest:
@@ -205,7 +193,6 @@ def resume_or_create(
         validate_or_fail(
             existing,
             expected_roster=roster,
-            expected_seed=seed,
             expected_task=task,
             expected_chunk_plan_hash=chunk_plan_hash,
         )
@@ -218,11 +205,11 @@ def resume_or_create(
         org_id=org_id,
         roster=list(roster),
         roster_hash=roster_hash(roster),
-        seed=int(seed),
         config_fingerprint=config_fingerprint,
-        schedule=list(schedule),
+        # A new campaign has clicked nothing yet: the log starts empty and the
+        # first cell is appended by the launch that creates the manifest.
+        schedule=[],
         session_records=[],
-        current_index=0,
         updated_at=now,
         schema_version=CUMULATIVE_SCHEMA_VERSION,
         run_context=dict(run_context) if run_context is not None else None,

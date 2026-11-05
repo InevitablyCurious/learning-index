@@ -10,7 +10,6 @@ import {
   CLOUD_API_KEY_ENV,
   COMPACT_DEFAULT_CEILING,
 } from "../cloud.mjs";
-import { resolveDevMode } from "../devmode.mjs";
 import { substrateRefreshInFlight } from "../tooljobs.mjs";
 // The serial gate's one source of in-flight truth: the N-slot run ledger.
 import { inFlightModels } from "../run-ledger.mjs";
@@ -19,13 +18,15 @@ import { args, BENCH_ROOT } from "../state.mjs";
 /**
  * Validate a start request. Preview runs every parameter check but cannot
  * require the confirmation token (minting it is what preview is for); start
- * requires it.
+ * requires it. `devPause` is the SERVER's dev mode (devmode.mjs), resolved by
+ * the route: it is not a request field, and it is bound into the token so a
+ * preview shown in one mode cannot start a run in the other.
  */
 export async function validateStart(
   payload,
   roster,
   run,
-  { requireConfirm = true, runsRoot = null, allowRefresh = false } = {},
+  { requireConfirm = true, runsRoot = null, allowRefresh = false, devPause = false } = {},
 ) {
   const model = typeof payload?.model === "string" ? payload.model.trim() : "";
   const arm = payload?.arm === "on" || payload?.arm === "off" ? payload.arm : null;
@@ -36,9 +37,6 @@ export async function validateStart(
     payload?.compact === true ? true : payload?.compact === false ? false : null;
   // Plain boolean: no server default, so absent means off.
   const requireTodos = payload?.requireTodos === true;
-  // Operator pause between grades (WO-PAUSE-AFTER-GRADE): a dev-mode capability,
-  // refused below (finishValidate) when dev mode is off. Absent means off.
-  const pauseAfterGrade = payload?.pauseAfterGrade === true;
   // Absent = the installation's default challenge. Named, it must exist and be
   // runnable.
   const challengeId = typeof payload?.challenge === "string" ? payload.challenge.trim() : "";
@@ -114,8 +112,8 @@ export async function validateStart(
       retired_reason: null,
     };
     return await finishValidate(
-      { model, arm, org, kind, entry: cloudEntry, cloud, compactRequested, requireTodos, graderWorkerTarget, challengeId, pauseAfterGrade },
-      { requireConfirm, runsRoot, payload },
+      { model, arm, org, kind, entry: cloudEntry, cloud, compactRequested, requireTodos, graderWorkerTarget, challengeId },
+      { requireConfirm, runsRoot, payload, devPause },
     );
   }
 
@@ -140,8 +138,8 @@ export async function validateStart(
   }
 
   return await finishValidate(
-    { model, arm, org, kind, entry, cloud: null, compactRequested, requireTodos, challengeId, pauseAfterGrade },
-    { requireConfirm, runsRoot, payload },
+    { model, arm, org, kind, entry, cloud: null, compactRequested, requireTodos, challengeId },
+    { requireConfirm, runsRoot, payload, devPause },
   );
 }
 
@@ -165,8 +163,8 @@ export function compactDefaultFor(entry) {
 }
 
 export async function finishValidate(
-  { model, arm, org, kind, entry, cloud, compactRequested = null, requireTodos = false, graderWorkerTarget = null, challengeId = "", pauseAfterGrade = false },
-  { requireConfirm, runsRoot, payload },
+  { model, arm, org, kind, entry, cloud, compactRequested = null, requireTodos = false, graderWorkerTarget = null, challengeId = "" },
+  { requireConfirm, runsRoot, payload, devPause = false },
 ) {
   // The org is an optional label on an ON cell (the memory system's own settings
   // say where its memory lives); a CONTROL cell must not carry one.
@@ -185,18 +183,10 @@ export async function finishValidate(
   // The operator's explicit choice wins; otherwise the model's window decides.
   const compact = compactRequested ?? compactDefaultFor(entry);
 
-  // ── OPERATOR PAUSE BETWEEN GRADES (WO-PAUSE-AFTER-GRADE) ── a dev-mode
-  // capability: it halts the run for a human every grade, which is not a
-  // scorable automated measurement. The gate needs the mode, so it is read here.
-  const devMode = await resolveDevMode({ benchRoot: BENCH_ROOT });
-  if (pauseAfterGrade && !devMode.enabled) {
-    return refuse("dev_mode_off",
-      "pause-after-grade holds the run after every graded pass so an operator can review " +
-        "what the model is about to be told — a development capability, not an unattended " +
-        "measurement — turn dev mode on in SETTINGS first");
-  }
-
-  const expected = confirmationToken({ model, arm, org, kind, compact, pauseAfterGrade });
+  // The pause after each grade is the server's dev mode (devmode.mjs), derived
+  // by the route and passed in: it halts the run for a human every grade, which
+  // is not a scorable automated measurement, and no request field can turn it on.
+  const expected = confirmationToken({ model, arm, org, kind, compact, devPause });
   if (requireConfirm && payload?.confirm !== expected) {
     return refuse(
       "bad_confirmation",
@@ -204,7 +194,7 @@ export async function finishValidate(
         "preview was shown. Review the restatement and confirm again.",
       {
         expected_token: expected,
-        restatement: restatement({ model, arm, org, kind, cloud, compact, pauseAfterGrade }),
+        restatement: restatement({ model, arm, org, kind, cloud, compact, devPause }),
       },
     );
   }
@@ -222,5 +212,5 @@ export async function finishValidate(
     }
   }
 
-  return { ok: true, model, arm, org, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, challenge, pauseAfterGrade };
+  return { ok: true, model, arm, org, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, challenge };
 }

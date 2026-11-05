@@ -11,7 +11,8 @@ import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 
-import { BACKUPS_DIR, isBenchmarkData, isTreeId, sweepToBackup } from "./tree.mjs";
+import { BACKUPS_DIR, isBenchmarkData, isTreeId, listCellDirs, sweepToBackup } from "./tree.mjs";
+import { readCellModel } from "./baselines.mjs";
 import { listDir } from "./lib/fs.mjs";
 
 async function readJsonOrNull(path) {
@@ -60,21 +61,23 @@ async function dirBytes(dir, budget = { files: 20000 }) {
 }
 
 /**
- * What a result folder shows at a glance, read from its manifest (never the
- * folder name).
+ * What a result folder shows at a glance, read from its manifest and its CELL
+ * DIRECTORIES (never the folder name, never the manifest's click log).
  */
 async function describeResult(dir, name) {
   const manifest = await readJsonOrNull(join(dir, "manifest.json"));
   if (!manifest) return { name, readable: false };
 
-  const schedule = Array.isArray(manifest.schedule) ? manifest.schedule : [];
-  const models = [...new Set(schedule.map((c) => c?.model).filter(Boolean))];
-  let off = 0;
-  let on = 0;
-  for (const c of schedule) {
-    if (c?.memory_mode === "off") off += 1;
-    else if (c?.memory_mode === "on") on += 1;
-  }
+  // The cells are the DIRECTORIES — `memory<ARM>/cell-<NNNN>` — so the counts
+  // and the models come from what is actually in the backup. Counting the
+  // manifest's `schedule` (now an append log of clicks) reported zero for a
+  // backup full of renumbered or orphaned cells.
+  const cellDirs = await listCellDirs(dir);
+  const models = [...new Set(
+    (await Promise.all(cellDirs.map((c) => readCellModel(c.dir)))).filter(Boolean),
+  )].sort();
+  const off = cellDirs.filter((c) => c.arm === "off").length;
+  const on = cellDirs.filter((c) => c.arm === "on").length;
 
   let attempts = 0;
   try {
@@ -92,7 +95,7 @@ async function describeResult(dir, name) {
     task: manifest.task ?? null,
     seed: manifest.seed ?? null,
     created_at: manifest.created_at ?? null,
-    cells: schedule.length,
+    cells: cellDirs.length,
     cells_off: off,
     cells_on: on,
     attempts,

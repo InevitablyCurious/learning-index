@@ -76,11 +76,15 @@ const execFileAsync = promisify(execFile);
 const HARNESS_SCRIPT = /run_cumulative\.py/;
 
 /**
- * The cell address a harness carries on its command line:
+ * The cell address recoverable from a harness's command line:
  * { run_dir, sequence_index, arm, model }, each null when absent.
  * run_dir comes from the --manifest path, which campaign.mjs builds as
  * <runsRoot>/<run_dir>/manifest.json — so the run_dir is what sits between
- * the runs root and the manifest name.
+ * the runs root and the manifest name. arm comes from --mode, model from
+ * --model. sequence_index is always null: the harness assigns it at append
+ * (sequence_index = len(existing)), so it never appears on the command line.
+ * A control-plane launch is addressed through its ledger record instead; an
+ * external CLI launch has no sequence index recoverable from argv at all.
  */
 export function parseHarnessArgv(cmd) {
   const s = String(cmd ?? "");
@@ -90,12 +94,13 @@ export function parseHarnessArgv(cmd) {
     const m = /\/runs\/(.+)\/manifest\.json$/.exec(manifest[1]);
     if (m) run_dir = m[1];
   }
-  const seq = /--sequence-index\s+(\d+)/.exec(s);
   const arm = /--mode\s+(on|off)/.exec(s);
   const model = /--model\s+(\S+)/.exec(s);
   return {
     run_dir,
-    sequence_index: seq ? Number(seq[1]) : null,
+    // Assigned by the harness at append, so never carried on the command line;
+    // a control-plane launch is addressed by its ledger record, not by argv.
+    sequence_index: null,
     arm: arm ? arm[1] : null,
     model: model ? model[1] : null,
   };

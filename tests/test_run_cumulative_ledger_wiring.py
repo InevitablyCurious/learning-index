@@ -8,7 +8,9 @@ the fail-open try/except inside `_append_results_ledger` could apply — crashin
 
 This test monkeypatches `_build_context` and `_append_results_ledger` so the
 handler runs without any runtime, then asserts the `layout` argument reaching
-the ledger append is a `PathLayout` resolved from the handler's `--manifest`.
+the ledger append is a `PathLayout` resolved from the handler's `--manifest`,
+and that the append is told which ONE cell it just ran (the appended ordinal —
+without it the ledger would re-record every sibling cell of the campaign).
 """
 
 from __future__ import annotations
@@ -27,11 +29,11 @@ import run_cumulative  # noqa: E402
 
 
 class _StubSequencer:
-    def current_session(self) -> Any:
-        class _Session:
-            memory_mode = "off"
+    def append_cell(self, memory_mode: str) -> Any:
+        class _Appended:
+            sequence_index = 0
 
-        return _Session()
+        return _Appended()
 
     def step_until_done(self) -> dict[str, Any]:
         return {"status": "done", "convergence": {}}
@@ -56,9 +58,12 @@ def test_handle_run_resolves_layout_for_ledger_append(
 
     captured: dict[str, Any] = {}
 
-    def _capture_ledger(args: argparse.Namespace, layout: Any) -> None:
+    def _capture_ledger(
+        args: argparse.Namespace, layout: Any, *, sequence_index: int
+    ) -> None:
         captured["args"] = args
         captured["layout"] = layout
+        captured["sequence_index"] = sequence_index
 
     monkeypatch.setattr(run_cumulative, "_append_results_ledger", _capture_ledger)
 
@@ -71,3 +76,4 @@ def test_handle_run_resolves_layout_for_ledger_append(
     assert isinstance(layout, run_cumulative.PathLayout)
     assert layout.manifest_path == manifest.resolve()
     assert captured["args"] is args
+    assert captured["sequence_index"] == 0

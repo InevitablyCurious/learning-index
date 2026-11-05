@@ -1,19 +1,19 @@
 """Cumulative phase-machine sequencer for benchmark session orchestration.
 
-Sequences the measurement-only campaign: every scheduled session (OFF
-baseline cells, then ON cells) walks PREPARE_FIXTURE -> RUN_SESSION, then
-the sequencer advances to the next session until all sessions are done.
-Recall during ON cells is auto-injected by the worker plugin; there are no
-extract, coordinator-review, or leader-commit stages.
+Sequences the measurement-only campaign ONE CLICK AT A TIME: a launch appends
+exactly one cell to the campaign's log and walks it PREPARE_FIXTURE ->
+RUN_SESSION -> DONE. Recall during ON cells is auto-injected by the worker
+plugin; there are no extract, coordinator-review, or leader-commit stages.
+
+THERE IS NO CURSOR AND NO "NEXT". The cell a launch runs is the cell that
+launch appended, and a campaign's identity is the log of cells it recorded —
+never a position in a plan. A precomputed schedule made the arm and the order a
+function of the launching arguments, and it put a mutable counter in the
+manifest that a restart re-seeded and an explicit-index run never advanced, so
+horizontal cells could claim an address that had already run.
 
 This module owns *only* deterministic sequencing + checkpointing.
 All side effects are injected through ``SessionRunner``.
-
-Constructed with an explicit ``sequence_index`` (control-plane allocated),
-the sequencer runs exactly that one session from ``session_records`` and
-never advances ``manifest.current_index`` — the control plane owns the
-counter, reserving distinct indices so concurrent runs cannot collide on
-the same cell.
 """
 
 from __future__ import annotations
@@ -26,8 +26,8 @@ from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
 
 from .convergence import build_convergence_trend
 from ..live_stream import run_notice
-from .manifest import atomic_write, resume_or_create, roster_hash
-from .ordering import build_schedule
+from .manifest import atomic_write, resume_or_create
+from .ordering import append_session
 from .progress import progress_from_cell_result
 from .run_artifacts import build_scorecard
 from .types import (
@@ -80,15 +80,11 @@ class CumulativeSequencer:
         *,
         runner: SessionRunner,
         roster: list[RosterEntry],
-        seed: int,
         task: str,
         org_id: str,
         config_fingerprint: str,
-        on_budget: int,
         run_context: Mapping[str, Any] | None = None,
         chunk_plan_hash: str = "",
-        sequence_index: int | None = None,
-        off_replicates: int = 1,
     ) -> None:
         if not isinstance(runner, SessionRunner):
             raise ValueError("runner must implement SessionRunner")
@@ -97,27 +93,12 @@ class CumulativeSequencer:
         if not normalized_manifest_path:
             raise ValueError("manifest_path must be a non-empty path")
 
-        planned_roster_hash = roster_hash(roster)
-        # N cells of one configuration are N sessions in the schedule. Every
-        # process of a batch passes the SAME off_replicates, so whichever one
-        # creates the manifest plans all N slots and the rest resume it and
-        # find their own index valid.
-        planned_schedule = build_schedule(
-            roster,
-            seed=seed,
-            roster_hash=planned_roster_hash,
-            on_budget=on_budget,
-            off_replicates=off_replicates,
-        )
-
         manifest = resume_or_create(
             normalized_manifest_path,
             roster=roster,
-            seed=seed,
             task=task,
             org_id=org_id,
             config_fingerprint=config_fingerprint,
-            schedule=planned_schedule,
             run_context=run_context,
             chunk_plan_hash=chunk_plan_hash,
         )
@@ -133,51 +114,12 @@ class CumulativeSequencer:
                 f"(manifest={manifest.config_fingerprint!r} expected={config_fingerprint!r})"
             )
 
-        manifest_schedule = [item.to_dict() for item in manifest.schedule]
-        expected_schedule = [item.to_dict() for item in planned_schedule]
-        # A LATER BATCH MAY ADD REPLICATES, AND MAY ONLY ADD.
-        #
-        # A baseline is the median of N runs of one configuration, and running
-        # more of them later is how an operator sharpens it — so a plan that is
-        # the recorded schedule plus further sessions EXTENDS the campaign
-        # instead of being refused as drift.
-        #
-        # Strictly an append: every recorded entry must survive unchanged, in
-        # place. That is what keeps `session_records[i].sequence_index == i`,
-        # which explicit-index mode selects on, and it is why a reshuffle (an
-        # ON phase growing under a longer OFF prefix, a changed roster order)
-        # still fails loudly rather than silently renumbering cells that have
-        # already run.
-        grew = (
-            len(expected_schedule) > len(manifest_schedule)
-            and expected_schedule[: len(manifest_schedule)] == manifest_schedule
-        )
-        if manifest_schedule != expected_schedule and not grew:
-            raise ValueError(
-                "cannot resume: schedule drift detected; start a fresh run"
-            )
-        if grew:
-            added = planned_schedule[len(manifest.schedule) :]
-            manifest.schedule = list(planned_schedule)
-            manifest.session_records = list(manifest.session_records) + [
-                SessionRecord(
-                    sequence_index=session.sequence_index,
-                    model=session.model,
-                    provider_pin=session.provider_pin,
-                    memory_mode=session.memory_mode,
-                    phase_group=session.phase_group,
-                    phase=SessionPhase.PREPARE_FIXTURE.value,
-                    org_id=org_id,
-                )
-                for session in added
-            ]
-            atomic_write(normalized_manifest_path, manifest)
-
         self._manifest_path = normalized_manifest_path
         self._runner = runner
         self._manifest = manifest
 
-        if not self._manifest.session_records:
+        # The log is the authority; session_records are its materialized cells.
+        if not self._manifest.session_records and self._manifest.schedule:
             self._manifest.session_records = [
                 SessionRecord(
                     sequence_index=session.sequence_index,
@@ -190,84 +132,70 @@ class CumulativeSequencer:
                 )
                 for session in self._manifest.schedule
             ]
-            self._manifest.current_index = 0
             self._checkpoint()
 
-        if self._manifest.current_index < 0:
-            raise ValueError("manifest.current_index must be non-negative")
-        if self._manifest.current_index > len(self._manifest.session_records):
-            raise ValueError(
-                "manifest.current_index exceeds session_records length "
-                f"({self._manifest.current_index} > {len(self._manifest.session_records)})"
-            )
+    def append_cell(self, memory_mode: str) -> SessionRecord:
+        """Append ONE cell of ``memory_mode`` to the campaign log, then checkpoint.
 
-        # Explicit-index mode (control-plane allocated): validate against the
-        # populated session_records BEFORE any side effect and fail loudly —
-        # never clamp, never degrade to current_index selection.
-        if sequence_index is not None and not (
-            0 <= sequence_index < len(self._manifest.session_records)
-        ):
-            raise ValueError(
-                f"sequence_index {sequence_index} out of range: manifest has "
-                f"{len(self._manifest.session_records)} session_record(s); "
-                f"valid indices are 0..{len(self._manifest.session_records) - 1}"
-            )
-        self._explicit_sequence_index = sequence_index
+        The ordinal is the length of the existing log — never a stored counter.
+        A counter can be re-seeded by a restart and cannot be recovered without
+        trusting whoever wrote it last; the log's own length cannot disagree
+        with the log.
+        """
+        entry = append_session(
+            self._manifest.roster,
+            existing=self._manifest.schedule,
+            memory_mode=memory_mode,
+        )
+        record = SessionRecord(
+            sequence_index=entry.sequence_index,
+            model=entry.model,
+            provider_pin=entry.provider_pin,
+            memory_mode=entry.memory_mode,
+            phase_group=entry.phase_group,
+            phase=SessionPhase.PREPARE_FIXTURE.value,
+            org_id=self._manifest.org_id,
+        )
+        self._manifest.schedule.append(entry)
+        self._manifest.session_records.append(record)
+        self._checkpoint()
+        return record
 
     def current_session(self) -> SessionRecord | None:
-        if self._explicit_sequence_index is not None:
-            # Explicit-index mode: this process runs exactly the assigned
-            # session, selected by position (session_records[i].sequence_index
-            # == i by schedule construction). DONE maps to None so
-            # step_until_done terminates with the done state instead of
-            # re-entering the finished session; HALTED_ON_GATE deliberately
-            # does not, so the halted descriptor is still emitted.
-            session = self._manifest.session_records[self._explicit_sequence_index]
-            if self._phase_of(session) == SessionPhase.DONE:
-                return None
-            return session
-
-        index = self._manifest.current_index
-        if index < 0:
-            raise ValueError("manifest.current_index must be non-negative")
-
-        if index >= len(self._manifest.session_records):
+        """This launch's cell: the last one appended to the log, if any."""
+        if not self._manifest.session_records:
             return None
-        return self._manifest.session_records[index]
+        return self._manifest.session_records[-1]
 
     def state(self) -> dict[str, Any]:
+        records = self._manifest.session_records
         session = self.current_session()
-        total_sessions = len(self._manifest.session_records)
-        completed = min(max(self._manifest.current_index, 0), total_sessions)
-        remaining = max(total_sessions - completed, 0)
+        completed = sum(
+            1 for record in records if self._phase_of(record) == SessionPhase.DONE
+        )
         phase = (
             SessionPhase.DONE.value
             if session is None
             else self._phase_of(session).value
         )
         return {
-            "current_index": self._manifest.current_index,
             "phase": phase,
             "totals": {
-                "sessions": total_sessions,
+                "sessions": len(records),
                 "completed": completed,
-                "remaining": remaining,
+                "remaining": len(records) - completed,
             },
         }
 
     def step_until_done(self) -> StepUntilDoneResult:
-        """Run every scheduled session and return the done state.
+        """Walk this launch's appended cell to DONE and return the done state.
 
-        Each session (OFF baseline cell, then ON cell) walks
-        PREPARE_FIXTURE -> RUN_SESSION; the worker plugin auto-injects
-        recall during ON cells. After RUN_SESSION completes, the sequencer
-        advances to the next session. A failing walk gate that stops the
-        walk checkpoints the session in the HALTED_ON_GATE side-state and
-        returns its halted descriptor instead of continuing.
-
-        In explicit-index mode (``sequence_index`` given at construction),
-        runs exactly the assigned session and never advances
-        ``manifest.current_index``.
+        Each cell (an OFF baseline point or an ON measurement) walks
+        PREPARE_FIXTURE -> RUN_SESSION; the worker plugin auto-injects recall
+        during ON cells. There is no advance afterwards: the next cell is the
+        next click's append, never this process's business. A failing walk gate
+        that stops the walk checkpoints the session in the HALTED_ON_GATE
+        side-state and returns its halted descriptor instead of continuing.
         """
         while True:
             session = self.current_session()
@@ -280,11 +208,7 @@ class CumulativeSequencer:
                 return self._halted_descriptor(session)
 
             if phase == SessionPhase.DONE:
-                # Resume-safe: this session already ran to completion; a
-                # crash between its DONE checkpoint and the index advance
-                # lands here.
-                self._advance_to_next_session(session)
-                continue
+                return self._done_state()
 
             if phase == SessionPhase.PREPARE_FIXTURE:
                 _LOG.info(
@@ -327,36 +251,10 @@ class CumulativeSequencer:
                 session.complete_gate = True
                 session.set_phase(SessionPhase.DONE)
                 self._checkpoint()
-                self._advance_to_next_session(session)
                 continue
 
             raise ValueError(
                 f"unsupported session phase for step_until_done: {phase.value!r}"
-            )
-
-    def _advance_to_next_session(self, session: SessionRecord) -> None:
-        """Advance the manifest past a completed session and prime the next one."""
-        if self._explicit_sequence_index is not None:
-            # Explicit-index mode: manifest.current_index belongs to the
-            # control plane, which reads, bumps, and writes back the counter
-            # and hands each run its reserved index. This process ran exactly
-            # its assigned session; advancing — or drift-checking — the shared
-            # counter here would race the control plane and sibling runs.
-            return
-        if self._manifest.current_index == session.sequence_index:
-            self._manifest.current_index += 1
-            if self._manifest.current_index < len(self._manifest.session_records):
-                next_session = self._manifest.session_records[
-                    self._manifest.current_index
-                ]
-                next_session.org_id = self._manifest.org_id
-                if self._phase_of(next_session) != SessionPhase.PREPARE_FIXTURE:
-                    next_session.set_phase(SessionPhase.PREPARE_FIXTURE)
-            self._checkpoint()
-        elif self._manifest.current_index != session.sequence_index + 1:
-            raise ValueError(
-                "manifest.current_index drift detected during session advance "
-                f"(current_index={self._manifest.current_index}, session.sequence_index={session.sequence_index})"
             )
 
     def _checkpoint(self) -> None:

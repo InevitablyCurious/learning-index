@@ -287,52 +287,42 @@ test("REQUIRE TODOS: the preflight handler does NOT pass a flag preflight cannot
   );
 });
 
-test("PAUSE AFTER GRADE: validateStart accepts it, refuses it with dev mode off, and returns it", async () => {
-  // WO-PAUSE-AFTER-GRADE — the dev-mode-gated operator pause. It must be
-  // accepted (and returned) when dev mode is on, refused with dev_mode_off when
-  // it is off, and bound into the confirmation token so preview and start agree.
-  const saved = { ...process.env };
-  try {
-    process.env.BENCH_DEV_MODE = "on";
-    const ok = await finishValidate(
-      { model: "m-a", arm: "off", org: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: true },
-      { requireConfirm: false, runsRoot: null, payload: { pauseAfterGrade: true } },
-    );
-    assert.equal(ok.ok, true);
-    assert.equal(ok.pauseAfterGrade, true);
-
-    process.env.BENCH_DEV_MODE = "off";
-    const off = await finishValidate(
-      { model: "m-a", arm: "off", org: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: true },
-      { requireConfirm: false, runsRoot: null, payload: { pauseAfterGrade: true } },
-    );
-    assert.equal(off.ok, false);
-    assert.equal(off.code, "dev_mode_off");
-
-    // Without the flag, dev mode off is not an obstacle.
-    const noFlag = await finishValidate(
-      { model: "m-a", arm: "off", org: null, kind: "local", entry: {}, cloud: null, pauseAfterGrade: false },
-      { requireConfirm: false, runsRoot: null, payload: {} },
-    );
-    assert.equal(noFlag.ok, true);
-  } finally {
-    process.env = saved;
-  }
-});
-
-test("PAUSE AFTER GRADE: the flag is bound into the confirmation token and the argv push exists", () => {
+test("PAUSE AFTER GRADE: the pause is derived from dev mode, bound into the token, and has no operator flag", async () => {
+  // The pause after each grade is a capability of the SERVER's dev mode
+  // (devmode.mjs), not a request field: an unattended measurement is never
+  // paused by a payload, and a dev-mode run never needs one. What the token
+  // binds is the mode, so a preview shown in one mode cannot start a run in
+  // the other.
   const p = { model: "m", arm: "off", org: null, kind: "local", compact: false };
-  assert.equal(confirmationToken(p), confirmationToken({ ...p, pauseAfterGrade: false }), "off leaves the token as it was");
-  assert.notEqual(confirmationToken({ ...p, pauseAfterGrade: true }), confirmationToken(p));
-  assert.match(confirmationToken({ ...p, pauseAfterGrade: true }), /pauseAfterGrade=on/);
+  assert.equal(
+    confirmationToken(p),
+    confirmationToken({ ...p, devPause: false }),
+    "dev mode off leaves the token as it was",
+  );
+  assert.notEqual(confirmationToken({ ...p, devPause: true }), confirmationToken(p));
+  assert.match(confirmationToken({ ...p, devPause: true }), /dev_pause=on/);
+  assert.match(restatement({ ...p, devPause: true }), /dev mode is ON/);
+  assert.doesNotMatch(restatement(p), /pause/i, "no pause line while dev mode is off");
 
-  // The launch argv must carry the flag when the operator asked for it.
+  // The route reads the mode itself; validation refuses nothing for it, because
+  // there is no operator flag left to accept or refuse.
   const src = readFileSync(join(BENCH, "control", "routes", "run.mjs"), "utf8");
-  assert.match(src, /if \(pauseAfterGrade\) argv\.push\("--pause-after-grade"\)/);
-  // The preview/start destructures must carry pauseAfterGrade too.
-  const destructures = src.match(/const \{ model, arm, org, kind, cloud, compact[^}]*\} = check;/g) ?? [];
-  assert.ok(destructures.length >= 2, "expected the preview and launch destructures");
-  for (const d of destructures) assert.match(d, /pauseAfterGrade/);
+  assert.match(src, /resolveDevMode\(\{ benchRoot: BENCH_ROOT \}\)/, "the route reads the server's dev mode");
+  assert.match(src, /if \(devPause\) argv\.push\("--pause-after-grade"\)/, "the one pause flag reaches the harness");
+  assert.doesNotMatch(src, /payload\.pauseAfterGrade/, "no pause flag is accepted off the wire");
+
+  const validate = readFileSync(join(BENCH, "control", "lib", "validate.mjs"), "utf8");
+  assert.doesNotMatch(validate, /dev_mode_off/, "nothing is refused: the flag it gated is gone");
+  assert.doesNotMatch(validate, /payload\?\.pauseAfterGrade/, "validation reads no pause from the payload");
+
+  // Dev mode off is not an obstacle to any start, and the old flag is not part
+  // of the validated shape anymore.
+  const off = await finishValidate(
+    { model: "m-a", arm: "off", org: null, kind: "local", entry: {}, cloud: null, challengeId: "" },
+    { requireConfirm: false, runsRoot: null, payload: {}, devPause: false },
+  );
+  assert.equal(off.ok, true);
+  assert.equal("pauseAfterGrade" in off, false, "the per-run flag is not part of the shape");
 });
 
 test("every refusal carries a human-readable reason", () => {

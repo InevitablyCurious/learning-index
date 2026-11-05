@@ -19,7 +19,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from run_cumulative import (  # noqa: E402
     DEFAULT_MANIFEST_PATH,
-    DEFAULT_ON_BUDGET,
     DEFAULT_ORG_ID,
     DEFAULT_PROXY_RUNS_DIR,
     DEFAULT_SEED,
@@ -41,7 +40,6 @@ from run_cumulative import (  # noqa: E402
     _build_real_runner,
     _build_roster,
     _compose_cloud_slug,
-    _current_session_or_raise,
     _discover_bench_ports,
     _emit_predicate_outcomes,
     _handle_run,

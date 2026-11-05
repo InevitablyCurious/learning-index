@@ -3,12 +3,17 @@
 //
 //     cd dashboard && node --test
 //
-// The run modal offers exactly two modes, and they differ in ONE way:
+// The run modal offers exactly two modes, and they differ in ONE way — on the
+// SERVER, after the launch has arrived:
 //
-//   Normal — one click, no pauses. The payload carries neither `pauseAfterGrade`
-//            nor any chain key.
+//   Normal — one click, no pauses.
 //   Dev    — the same method, but the run pauses after every grade and once at
-//            the end. The payload carries `pauseAfterGrade: true`.
+//            the end.
+//
+// The mode is not a launch parameter. The control plane derives the pause from
+// its own dev-mode state, so both modes post the SAME body and the modal has no
+// mode-specific step. There is no per-run pause flag and no per-run concurrency
+// flag to send: one click is one cell, one run.
 //
 // What this file pins:
 //
@@ -16,12 +21,13 @@
 //      were machinery for chaining runs from snapshots; the control plane's
 //      /api/continuous* and /api/snapshots* routes are gone, so a modal that
 //      still offered them would be a button that can only fail.
-//   B. A normal start sends no `continuous` key and no `pauseAfterGrade` key —
+//   B. The confirm frame is byte-identical in both modes: no pause row, no
+//      concurrency row, nothing mode-shaped to render.
+//   C. A start sends neither `continuous`, `pauseAfterGrade` nor `concurrency` —
 //      ABSENCE, not false (absent = the server's own default).
-//   C. A dev start sends `pauseAfterGrade: true` and still no `continuous` key.
 //
 // Drives the REAL launchCell path against a pure mock fetch — the body-capture
-// idiom from pause-toggle.test.mjs / concurrency.test.mjs (no server, no DOM).
+// idiom from two-mode's siblings (no server, no DOM).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from "node:test";
@@ -88,48 +94,39 @@ for (const [label, board] of [["normal mode", BOARD], ["dev mode", DEV_BOARD]]) 
   }
 }
 
-test("dev mode adds a pause row, and that is the ONLY difference between the modes", () => {
+// ── B: the frame has no mode-specific step ───────────────────────────────────
+
+test("the confirm frame is identical in both modes, and still offers one START", () => {
   openCellConfirm({ model: "a/model", kind: "local", arm: "off" });
   const normal = renderCreate(BOARD);
   openCellConfirm({ model: "a/model", kind: "local", arm: "off" });
   const dev = renderCreate(DEV_BOARD);
 
-  assert.ok(!normal.includes("data-create-pause"), "normal mode shows no pause toggle");
-  assert.ok(dev.includes("data-create-pause"), "dev mode shows the pause toggle");
-  // Both frames carry the still-meaningful configurables.
+  // The mode lives on the server, not in this frame: a per-run pause row or a
+  // concurrency row here would be a second control over the same thing.
+  assert.equal(dev, normal, "dev mode adds nothing to the confirm frame");
   for (const html of [normal, dev]) {
-    assert.ok(html.includes("data-create-concurrency"), "concurrency survives in both modes");
+    assert.ok(!html.includes("data-create-pause"), "no pause toggle");
+    assert.ok(!html.includes("data-create-concurrency"), "no concurrency toggle");
+    // Both frames carry the still-meaningful configurables.
     assert.ok(html.includes("data-create-compact"), "compaction survives in both modes");
     assert.ok(html.includes("data-create-baseline-continue"), "one START in both modes");
   }
 });
 
-// ── B: normal mode sends neither key ─────────────────────────────────────────
+// ── C: a start sends no mode key, no pause key, no concurrency key ───────────
 
-test("a normal-mode start sends neither continuous nor pauseAfterGrade", async () => {
+test("a start sends neither continuous, pauseAfterGrade nor concurrency", async () => {
   const seen = mockControlPlane();
   openCellConfirm({ model: "a/model", kind: "local", arm: "off" });
 
-  await launchCell({ devOn: false });
+  await launchCell();
 
   assert.equal(starts(seen).length, 1, "exactly one start POST");
   const body = JSON.parse(starts(seen)[0].opts.body);
   assert.ok(!("continuous" in body), "there is no chain key to send");
-  assert.ok(!("pauseAfterGrade" in body), "no pauses: the key is ABSENT, not false");
+  assert.ok(!("pauseAfterGrade" in body), "the pause is the server's dev-mode state, not a flag");
+  assert.ok(!("concurrency" in body), "one click is one cell");
   assert.equal(body.arm, "off");
   assert.equal(body.model, "a/model");
-});
-
-// ── C: dev mode sends the pause, and still no chain key ──────────────────────
-
-test("a dev-mode start sends pauseAfterGrade true and no continuous key", async () => {
-  const seen = mockControlPlane();
-  openCellConfirm({ model: "a/model", kind: "local", arm: "off" });
-
-  await launchCell({ devOn: true });
-
-  assert.equal(starts(seen).length, 1, "exactly one start POST");
-  const body = JSON.parse(starts(seen)[0].opts.body);
-  assert.equal(body.pauseAfterGrade, true, "the pauses the operator asked for");
-  assert.ok(!("continuous" in body), "no chain key in either mode");
 });

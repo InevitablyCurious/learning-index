@@ -38,7 +38,6 @@ DEFAULT_TASK_LABEL = default_spec().run_label
 # hold a campaign's first cell hostage — it is instrumentation, not grading.
 GATE_ROSTER_TIMEOUT_S = 300
 DEFAULT_SEED = config.RunConfig().rng_seed
-DEFAULT_ON_BUDGET = 0
 
 
 class PathLayout(NamedTuple):
@@ -146,9 +145,9 @@ def _mode_dir(memory_mode: str) -> str:
     phase are two folders a human can point at.
 
     The campaign home stays ABOVE this split, and deliberately: one manifest
-    carries the whole schedule (OFF baseline then seeded ON phase, see
-    ``cumulative/ordering.py:build_schedule``), so hoisting the mode any higher
-    would split one manifest across two directories.
+    carries the whole campaign — every clicked cell, in both arms, as one
+    append log (see ``cumulative/ordering.py:append_session``) — so hoisting
+    the mode any higher would split one manifest across two directories.
     """
     mode = str(memory_mode or "").strip().lower()
     if mode == "on":

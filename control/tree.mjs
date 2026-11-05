@@ -246,6 +246,62 @@ export async function listLiveCampaignDirs(runsRoot, opts = {}) {
   });
 }
 
+// ── the cells inside a campaign home ────────────────────────────────────────
+
+/** A cell's arm, from its `memory<ARM>` container name. */
+const CELL_ARM_DIR = /^memory([A-Za-z]+)$/;
+/** A cell's sequence, from its `cell-<NNNN>` name. */
+const CELL_SEQ_DIR = /^cell-(\d+)$/;
+
+/**
+ * Every cell directory inside one campaign home, sorted arm-then-sequence.
+ *
+ * The two facts a reader needs are IN THE PATH: the arm is the `memory<ARM>`
+ * container's name and the sequence is the `cell-<NNNN>` name. Nothing else
+ * ADDRESSES a cell — the campaign's manifest is an append log of clicks, not an
+ * address list, so a cell that was renumbered or orphaned is still found here.
+ * `seq` is the integer the harness wrote in the dir name, never re-derived.
+ *
+ * Never throws: an unreadable campaign is no cells.
+ */
+export async function listCellDirs(campaignDir) {
+  let entries;
+  try {
+    entries = await fs.readdir(campaignDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  const cells = [];
+  for (const ent of entries) {
+    if (!ent.isDirectory()) continue;
+    const armMatch = CELL_ARM_DIR.exec(ent.name);
+    if (!armMatch) continue;
+    const armDir = join(campaignDir, ent.name);
+
+    let cellEntries;
+    try {
+      cellEntries = await fs.readdir(armDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const cell of cellEntries) {
+      if (!cell.isDirectory()) continue;
+      const seqMatch = CELL_SEQ_DIR.exec(cell.name);
+      if (!seqMatch) continue;
+      cells.push({
+        // Lowercased, because every reader compares against "off"/"on".
+        arm: armMatch[1].toLowerCase(),
+        seq: Number(seqMatch[1]),
+        dir: join(armDir, cell.name),
+      });
+    }
+  }
+
+  cells.sort((a, b) => (a.arm < b.arm ? -1 : a.arm > b.arm ? 1 : 0) || a.seq - b.seq);
+  return cells;
+}
+
 /**
  * The live tree, minted on first use, so a fresh checkout's first run works
  * without pressing reset.

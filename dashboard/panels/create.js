@@ -2,13 +2,13 @@
 // Every frame before the last is free; only START commits.
 // An ON run starts at [+ run] on a baseline row and lands in this file's confirm
 // frame (openCellConfirm), so both arms are configured through one surface.
-// There is one method and two modes: dev mode adds a pause after every grade
-// (and once at the end); normal mode is one click with no pauses. Nothing else
-// about the launch differs, so this modal has no mode-specific step.
+// There is one method and two modes: in dev mode the run pauses after every grade
+// (and once at the end); normal mode is one click with no pauses. The pause is
+// the SERVER's, derived from dev mode — this modal sends no mode flag and has no
+// mode-specific step, so both arms are configured through one surface.
 
 import { esc } from "../board.js";
 import { graderWorkerTarget, requireTodosOn } from "./switches.js";
-import { isDevModeOn } from "./devmode.js";
 import {
   challengeById,
   refreshChallenges,
@@ -38,16 +38,6 @@ const ui = {
   // Tri-state: null = the server's default stands (it knows the context window);
   // true/false = the operator's override.
   compact: null,
-  // Toggle, default OFF = the current single-cell behaviour.
-  concurrency: false,
-  // String; the count N, default the verified ceiling. Stored as a string so a
-  // half-typed value survives; parsed at launch.
-  concurrencyN: "8",
-  // Pause after each grade, default ON (the row is only shown in dev mode and
-  // is only ever sent then). The run stops after a grade so the operator can
-  // play the game and read what the model will be told before anything is sent.
-  // This toggle IS the dev-mode signal: normal mode sends no pause at all.
-  pauseAfterGrade: true,
 
   // "Working" and "refused" are different facts; never shown as each other.
   pending: false,
@@ -78,9 +68,6 @@ export function openCreate() {
   ui.arm = "off";
   ui.org = null;
   ui.compact = null;
-  ui.concurrency = false;
-  ui.concurrencyN = "8";
-  ui.pauseAfterGrade = true;
   ui.pending = false;
   ui.refusal = null;
   ui.launch = null;
@@ -173,19 +160,6 @@ export function setCreateQuery(q) {
   ui.query = String(q ?? "");
 }
 
-export function toggleCreateConcurrency() {
-  ui.concurrency = !ui.concurrency;
-}
-
-/** Flip the pause-after-each-grade toggle relative to what is shown. */
-export function toggleCreatePause() {
-  ui.pauseAfterGrade = !ui.pauseAfterGrade;
-}
-
-export function setCreateConcurrencyN(v) {
-  ui.concurrencyN = String(v ?? "");
-}
-
 export function setCreateProvider(p) {
   ui.provider = String(p ?? "all");
 }
@@ -209,7 +183,7 @@ function frame(board, ledger) {
     case "b1": return baselineKind(ledger);
     case "b2": return baselineModel(ledger);
     case "bc": return baselineChallenge(board);
-    case "b3": return baselineConfirm(ledger, board);
+    case "b3": return baselineConfirm(ledger);
     case "b4": return launchProgress(board);
     // An unknown step is a map bug; fall back to the first frame.
     default: return baselineKind(ledger);
@@ -457,7 +431,7 @@ function baselineChallenge(board) {
   });
 }
 
-function baselineConfirm(ledger, board) {
+function baselineConfirm(ledger) {
   const m = (ledger?.startable ?? []).find((x) => x.id === ui.model) ?? null;
   const cloud = ledger?.cloud ?? null;
   const isCloud = ui.kind === "cloud";
@@ -508,9 +482,7 @@ function baselineConfirm(ledger, board) {
           kind: "ghost",
         })
       : line({ glyph: "·", text: "this cell IS the floor", meta: "an OFF baseline is measured against nothing — it is what everything else is subtracted from", kind: "ghost" })}
-    ${compactOn ? "" : compactOffWarning(compactDefault)}
-    ${isOn ? "" : concurrencyControl()}
-    ${isDevModeOn(board) ? pauseControl() : ""}`;
+    ${compactOn ? "" : compactOffWarning(compactDefault)}`;
 
   return shell({
     step: isOn ? "RUN · 1" : "BASELINE · 4",
@@ -534,56 +506,6 @@ function compactControl(compactOn, compactDefault) {
     <button class="ccompact-btn${overrideOff ? " override" : ""}" data-create-compact="${compactOn ? "on" : "off"}" aria-pressed="${compactOn}">
       COMPACT: ${compactOn ? "ON" : "OFF"}
     </button>`;
-}
-
-/**
- * The concurrency control: how many cells this launch starts at once. OFF is
- * the single-cell behaviour the board has always had. A count that is not a
- * positive integer is refused here loudly — it never reaches the server as a
- * guess. Above the verified ceiling of 8 is warned, never blocked.
- */
-function concurrencyControl() {
-  const n = Number(ui.concurrencyN);
-  const valid = Number.isInteger(n) && n >= 1;
-  let note = "";
-  if (ui.concurrency && !valid) {
-    note = `
-      <div class="cwarn override" role="alert">
-        <span class="cwarn-head">${esc("CONCURRENT COUNT INVALID — LAUNCH WILL BE REFUSED")}</span>
-        <span class="cwarn-body">${esc(
-          `The number of cells at once must be a positive integer — got ${JSON.stringify(ui.concurrencyN)}.`,
-        )}</span>
-      </div>`;
-  } else if (ui.concurrency && n > 8) {
-    note = `
-      <div class="cwarn" role="note">
-        <span class="cwarn-head">${esc("ABOVE THE VERIFIED CEILING")}</span>
-        <span class="cwarn-body">${esc(
-          `${n} cells at once exceeds the verified ceiling of 8 — throughput may degrade, but it is allowed.`,
-        )}</span>
-      </div>`;
-  }
-  return `
-    <button class="cconcurrent-btn" data-create-concurrency="${ui.concurrency ? "on" : "off"}" aria-pressed="${ui.concurrency}">
-      CONCURRENT: ${ui.concurrency ? "ON" : "OFF"}
-    </button>
-    <input class="cconcurrent-n" data-create-concurrency-n="1" value="${esc(ui.concurrencyN)}" inputmode="numeric" aria-label="cells at once"${ui.concurrency ? "" : " disabled"}>
-    ${note}`;
-}
-
-/**
- * Pause after each grade — dev mode only. Shown as a row with an on/off toggle
- * (default ON) and one plain line under it. Hidden entirely when dev mode is
- * off, and never sent then (see launchCell).
- */
-function pauseControl() {
-  return `
-    <div class="cpause">
-      <button class="cpause-btn" data-create-pause="${ui.pauseAfterGrade ? "on" : "off"}" aria-pressed="${ui.pauseAfterGrade}">
-        PAUSE AFTER EACH GRADE: ${ui.pauseAfterGrade ? "ON" : "OFF"}
-      </button>
-      <div class="note">The run stops after every grade so you can play the game and read what the model will be told, before anything is sent.</div>
-    </div>`;
 }
 
 /**
@@ -681,14 +603,12 @@ export function openCellConfirm({ model, kind, arm = "off", org = null } = {}) {
   ui.arm = arm;
   ui.org = org;
   ui.compact = null;
-  ui.concurrency = false;
-  ui.pauseAfterGrade = true;
   ui.refusal = null;
   ui.launch = null;
   ui.step = "b3";
 }
 
-export async function launchCell({ model, kind, arm = null, org = null, devOn = false } = {}) {
+export async function launchCell({ model, kind, arm = null, org = null } = {}) {
   // The [+ run] path: the selection comes from a baseline row.
   if (model) { ui.model = model; ui.kind = kind ?? ui.kind; }
   ui.open = true;
@@ -719,30 +639,11 @@ export async function launchCell({ model, kind, arm = null, org = null, devOn = 
     }
 
     ui.launch.start = { state: ROW.running };
-    // Concurrency: only the OFF/baseline arm. A count that is not a positive
-    // integer is a hard client-side refusal — never posted, never silently
-    // defaulted.
-    let concurrency = null;
-    if (ui.concurrency && (ui.arm ?? "off") !== "on") {
-      const n = Number(ui.concurrencyN);
-      if (!Number.isInteger(n) || n < 1) {
-        ui.launch.start = { state: ROW.fail, detail: `concurrency must be a positive integer — got ${JSON.stringify(ui.concurrencyN)}` };
-        return;
-      }
-      concurrency = n;
-    }
     // Org is never guessed; an ON cell runs without one.
     const payload = { model: ui.model, arm: ui.arm ?? "off", kind: ui.kind };
     if ((ui.arm ?? "off") === "on" && ui.org) payload.org = ui.org;
     // Sent only when touched; an absent key applies the server's default.
     if (ui.compact !== null) payload.compact = ui.compact;
-    // Sent only when the operator turned the toggle on; absent = the server's
-    // default of 1. (The value is already validated above.)
-    if (concurrency !== null) payload.concurrency = concurrency;
-    // Pause after each grade is dev-mode only: the toggle is hidden (and the
-    // state is default-on) when dev mode is off, so it is sent only when dev
-    // mode is actually on and the operator left the pause on.
-    if (devOn && ui.pauseAfterGrade) payload.pauseAfterGrade = true;
     // The challenge: the server refuses an unknown one, or a second challenge on a
     // baseline that already built another.
     if (ui.challenge) payload.challenge = ui.challenge;

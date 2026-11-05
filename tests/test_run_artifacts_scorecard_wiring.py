@@ -121,7 +121,7 @@ def _make_sequencer(
     runner: FakeRunner,
 ) -> CumulativeSequencer:
     manifest_path = tmp_path / "manifest.json"
-    return CumulativeSequencer(
+    sequencer = CumulativeSequencer(
         manifest_path,
         runner=runner,
         roster=[
@@ -132,12 +132,13 @@ def _make_sequencer(
                 config_identity={"slot": 1},
             )
         ],
-        seed=17,
         task="backgammon",
         org_id="org-wiring-test",
         config_fingerprint="cfg-wiring-test",
-        on_budget=1,
     )
+    # ONE click appends ONE cell; these tests drive that cell to done.
+    sequencer.append_cell("off")
+    return sequencer
 
 
 def test_done_state_sources_scorecard_and_creates_artifacts(tmp_path: Path) -> None:

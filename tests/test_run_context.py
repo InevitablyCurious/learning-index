@@ -5,7 +5,7 @@ from harness.cumulative.manifest import (
     resume_or_create,
     roster_hash,
 )
-from harness.cumulative.ordering import build_schedule
+from harness.cumulative.ordering import append_session
 from harness.cumulative.run_context import compare_run_context
 from harness.cumulative.types import RosterEntry
 
@@ -22,8 +22,7 @@ def _roster() -> list[RosterEntry]:
 
 
 def _schedule(roster: list[RosterEntry]):
-    computed = roster_hash(roster)
-    return build_schedule(roster, seed=17, roster_hash=computed, on_budget=1)
+    return [append_session(roster, existing=[], memory_mode="off")]
 
 
 def test_manifest_round_trip_with_and_without_run_context() -> None:
@@ -41,11 +40,9 @@ def test_manifest_round_trip_with_and_without_run_context() -> None:
         org_id="org-test",
         roster=roster,
         roster_hash=roster_hash(roster),
-        seed=17,
         config_fingerprint="cfg",
         schedule=schedule,
         session_records=[],
-        current_index=0,
         updated_at="2026-07-30T01:00:00Z",
         run_context=context,
     )
@@ -59,7 +56,6 @@ def test_manifest_round_trip_with_and_without_run_context() -> None:
 
 def test_resume_keeps_original_run_context(tmp_path) -> None:
     roster = _roster()
-    schedule = _schedule(roster)
     path = tmp_path / "manifest.json"
     first_context = {
         "status": "available",
@@ -73,21 +69,17 @@ def test_resume_keeps_original_run_context(tmp_path) -> None:
     created = resume_or_create(
         path,
         roster=roster,
-        seed=17,
         task="backgammon",
         org_id="org-test",
         config_fingerprint="cfg",
-        schedule=schedule,
         run_context=first_context,
     )
     resumed = resume_or_create(
         path,
         roster=roster,
-        seed=17,
         task="backgammon",
         org_id="org-test",
         config_fingerprint="cfg",
-        schedule=schedule,
         run_context=second_context,
     )
 

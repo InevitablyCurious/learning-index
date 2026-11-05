@@ -30,11 +30,9 @@ from .context import (
     CliContext,
     _append_results_ledger,
     _build_context,
-    _current_session_or_raise,
 )
 from .paths import (
     DEFAULT_MANIFEST_PATH,
-    DEFAULT_ON_BUDGET,
     DEFAULT_ORG_ID,
     DEFAULT_PROXY_RUNS_DIR,
     DEFAULT_SEED,
@@ -90,12 +88,10 @@ def _handle_run(args: argparse.Namespace) -> int:
         )
 
     context = _build_context(args, require_runtime=True)
-    session = _current_session_or_raise(context.sequencer)
-    mode_arg = str(getattr(args, "mode", "") or "").strip().lower() or None
-    if mode_arg is not None and mode_arg != str(session.memory_mode):
-        raise RuntimeError(
-            f"--mode {mode_arg} requested but current cell is memory_mode={session.memory_mode}"
-        )
+    # ONE CLICK, ONE CELL: this launch appends its cell to the campaign log and
+    # runs exactly that cell. There is nothing to select and nothing to advance
+    # afterwards — the appended record IS the run's identity.
+    cell = context.sequencer.append_cell(str(args.mode))
 
     result = context.sequencer.step_until_done()
     # step_until_done returns status:done (with convergence) or
@@ -109,12 +105,13 @@ def _handle_run(args: argparse.Namespace) -> int:
         str(getattr(args, "manifest", None) or DEFAULT_MANIFEST_PATH)
     )
     if result.get("status") == "done":
-        # WO-43a: append the completed run's scored-cell records to the
-        # HOST-side results ledger. The printed `result` carries only
-        # {status, convergence}; the schema fields come from the scorecard
-        # (run-manifest + status stream — the same authoritative seam the
-        # done state itself sources from) and `runs/active-tree.json`.
-        _append_results_ledger(args, layout)
+        # WO-43a: append THIS cell's scored records to the HOST-side results
+        # ledger. The printed `result` carries only {status, convergence}; the
+        # schema fields come from the scorecard (run-manifest + status stream —
+        # the same authoritative seam the done state itself sources from) and
+        # `runs/active-tree.json`. The cell index keeps a campaign's other
+        # scored cells out of this launch's append.
+        _append_results_ledger(args, layout, sequence_index=cell.sequence_index)
     return 0
 
 
@@ -154,13 +151,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--seed",
         type=int,
         default=DEFAULT_SEED,
-        help=f"Deterministic schedule seed (default: {DEFAULT_SEED}).",
-    )
-    parser.add_argument(
-        "--on-budget",
-        type=int,
-        default=DEFAULT_ON_BUDGET,
-        help=f"ON-phase session budget (default: {DEFAULT_ON_BUDGET}).",
+        help=(
+            f"RNG seed recorded in each cell's run manifest (default: {DEFAULT_SEED})."
+        ),
     )
     parser.add_argument(
         "--task",
@@ -198,38 +191,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--off-replicates",
-        type=int,
-        default=1,
-        help=(
-            "How many OFF cells of EACH rostered model the schedule plans — "
-            "the N of a baseline batch. A baseline is the MEDIAN of N runs, "
-            "because one run was never a baseline: identical prompts and "
-            "identical model have produced 23, 25 and 62 problems on this "
-            "task. Every process of a batch passes the SAME value, so "
-            "whichever one creates the manifest plans all N slots and the "
-            "rest resume it. Applies to the OFF arm only: an ON cell is a "
-            "single measurement against that floor, and replicating it would "
-            "average away what the benchmark exists to observe."
-        ),
-    )
-    parser.add_argument(
-        "--sequence-index",
-        type=int,
-        default=None,
-        help=(
-            "Run exactly the session at this index of the manifest's "
-            "session_records (the record's sequence_index drives the "
-            "cell-000K / cumulative-000K-... labels) instead of selecting "
-            "via manifest.current_index, and never advance current_index: "
-            "the caller (control plane) owns the counter, reserving distinct "
-            "indices so concurrent runs cannot collide on the same cell. An "
-            "index out of range for session_records fails loudly. Omit for "
-            "the default behaviour: read current_index, advance after the "
-            "session."
-        ),
-    )
-    parser.add_argument(
         "--cloud",
         action="store_true",
         default=False,
@@ -250,15 +211,16 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser(
         "run",
-        help="Build/resume manifest and step every scheduled session to done.",
+        help="Append one cell of the given arm to the campaign and step it to done.",
     )
     run_parser.add_argument(
         "--mode",
         choices=["on", "off"],
-        default=None,
+        required=True,
         help=(
-            "Validate the current cell's memory_mode matches on/off; errors if "
-            "it does not. Does NOT restructure the schedule."
+            "The arm of the ONE cell this launch appends: 'off' adds a point to "
+            "the baseline floor, 'on' takes one memory measurement against it. "
+            "Every click appends exactly one cell; nothing is precomputed."
         ),
     )
     run_parser.add_argument(

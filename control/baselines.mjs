@@ -23,7 +23,7 @@ import path, { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { listLiveCampaignDirs } from "./tree.mjs";
+import { listCellDirs, listLiveCampaignDirs } from "./tree.mjs";
 import { readTail } from "./runstate.mjs";
 import {
   CODE_INPUTS,
@@ -43,6 +43,20 @@ import {
 export function baselineId(runDir, sequenceIndex) {
   const h = createHash("sha256").update(`${runDir}::${sequenceIndex}`).digest("hex");
   return `base-${h.slice(0, 4)}`;
+}
+
+/**
+ * The provider pin a model slug implies, exactly as the harness derives it
+ * (`scripts/run_cumulative/roster.py` `_provider_pin_from_model`): a
+ * `local-llm-proxy/<alias>` slug is pinned to the alias, anything else to its
+ * first segment. The schedule entry used to carry this beside the model; a cell
+ * read off disk has only its slug, so the rule is applied here.
+ */
+export function pinFromSlug(slug) {
+  const parts = String(slug ?? "").split("/").filter(Boolean);
+  if (!parts.length) return null;
+  if (parts.length >= 2 && parts[0] === "local-llm-proxy") return parts[1];
+  return parts[0];
 }
 
 /**
@@ -66,8 +80,9 @@ export function identifyCell(slot, manifest) {
     };
   }
 
-  // Local: provider_pin is the bare bench alias, which matches the roster ids.
-  const pin = str(slot?.provider_pin);
+  // Local: the pin is the bare bench alias, which matches the roster ids — a
+  // slot that states one wins, else it is derived from the slug (pinFromSlug).
+  const pin = str(slot?.provider_pin) ?? pinFromSlug(slug);
   const id = pin ?? (parts.length ? parts[parts.length - 1] : null);
   return {
     id,
@@ -166,9 +181,10 @@ function contentionOf(p, prev) {
 }
 
 /**
- * Every OFF cell on disk, folded per model. Identity from the schedule,
- * measurement from the status stream, so a crashed cell still appears.
- * `includeBackups` reaches the rotated trees under runs/backups (history).
+ * Every OFF cell on disk, folded per model. Identity from the cell's own
+ * directory and files, measurement from the status stream, so a crashed cell
+ * still appears. `includeBackups` reaches the rotated trees under
+ * runs/backups (history).
  */
 export async function collectOffCells(runsRoot, opts) {
   return (await collectCells(runsRoot, opts)).filter((c) => c.arm === OFF_ARM);
@@ -193,8 +209,14 @@ export async function collectCells(runsRoot, { includeBackups = false } = {}) {
     const manifest = await readJsonOrNull(join(dir, "manifest.json"));
     if (!manifest) continue;
 
-    const schedule = Array.isArray(manifest.schedule) ? manifest.schedule : [];
-    if (!schedule.length) continue;
+    // THE CELLS ARE THE DIRECTORIES. `memory<ARM>/cell-<NNNN>` carries both
+    // facts a reader needs — the arm in the container's name, the sequence in
+    // the cell's. Enumeration no longer goes through the manifest: its
+    // `schedule` is an APPEND LOG of clicks, not an address list, so reading
+    // cells through it silently dropped every cell that no longer sat at a slot
+    // index (renumbered, orphaned, clicked out of order).
+    const cellDirs = await listCellDirs(dir);
+    if (!cellDirs.length) continue;
 
     const status = await readJsonlOrEmpty(join(dir, "manifest.status.jsonl"));
 
@@ -235,28 +257,23 @@ export async function collectCells(runsRoot, { includeBackups = false } = {}) {
       });
     }
 
-    for (let i = 0; i < schedule.length; i += 1) {
-      const slot = schedule[i] ?? {};
-
-      // The harness writes `memory_mode`; the wrong key silently yields no OFF cells.
-      const arm = str(slot.memory_mode) ?? str(slot.mode) ?? str(slot.arm);
-
-      const seq = int(slot.sequence_index) ?? i;
+    for (const cell of cellDirs) {
+      // Arm and sequence are the PATH, read verbatim: the harness names a cell's
+      // container `memory<ARM>` and the cell itself `cell-<NNNN>`.
+      const arm = cell.arm;
+      const seq = cell.seq;
+      const cellDir = cell.dir;
       const meas = folded.get(seq) ?? null;
 
-      // See identifyCell().
-      const who = identifyCell(slot, manifest);
-      const model = who.id;
-
-      // The harness's own verdict on whether it measured the model or itself:
-      // cost.json's `void.is_void` (harness/cumulative/run_artifacts.py cell_void,
-      // written by scripts/run_cumulative/runner.py beside fingerprint.json) is
-      // the single truth. Re-deriving it from the status stream here duplicated
-      // the rule and had already drifted from it.
-      const cellDir = join(dir, `memory${String(arm ?? "unknown").toUpperCase()}`, `cell-${String(seq).padStart(4, "0")}`);
       // What the cell recorded it ran on, at its start (harness/fingerprint.py);
       // null for a cell that recorded nothing.
       const fingerprint = await readCellFingerprint(cellDir);
+
+      // See identifyCell(). The model is read from the cell's OWN files — the
+      // schedule slot that used to carry it was never an address.
+      const who = identifyCell({ model: await readCellModel(cellDir) }, manifest);
+      const model = who.id;
+
       // The cell's cost stamp, and with it the void verdict; null for a cell
       // that ended before the stamp existed (pre-standard, not void).
       const cost = await readCellCost(cellDir);
@@ -271,7 +288,7 @@ export async function collectCells(runsRoot, { includeBackups = false } = {}) {
         run_dir: ent.relative,
         sequence_index: seq,
         model,
-        // Local or cloud, and who served it, from the manifest.
+        // Local or cloud, and who served it, derived from the cell's own slug.
         kind: who.kind,
         provider: who.provider,
         router: who.router,
@@ -348,6 +365,64 @@ export async function readCellEnd(cellDir) {
 async function readCellFingerprint(cellDir) {
   const rec = await readJsonOrNull(join(cellDir, "fingerprint.json"));
   return rec?.values && typeof rec.values === "object" ? rec.values : null;
+}
+
+/**
+ * How much of a cell's live stream is read looking for `cell.start`. The record
+ * is emitted BEFORE any work (harness/adapters/challenge/runner.py), so it sits
+ * at the head of the file; the rest of the stream is long and is never read
+ * here (readCellEnd reads the tail).
+ */
+const CELL_START_HEAD_BYTES = 256 * 1024;
+
+/**
+ * The model slug on a cell's `cell.start` record, or null. The record's `arm` is
+ * deliberately NOT read: the arm is the `memory<ARM>` directory's name, which is
+ * the address, and a second source could only disagree with it.
+ *
+ * The head is read, not the tail: this record is the stream's opening.
+ */
+async function readCellStartModel(cellDir) {
+  let head;
+  try {
+    const handle = await fs.open(join(cellDir, "live.jsonl"), "r");
+    try {
+      const buf = Buffer.alloc(CELL_START_HEAD_BYTES);
+      const { bytesRead } = await handle.read(buf, 0, CELL_START_HEAD_BYTES, 0);
+      head = buf.subarray(0, bytesRead).toString("utf8");
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return null;
+  }
+
+  for (const line of head.split("\n")) {
+    // A line cut by the head boundary fails JSON.parse below and is skipped.
+    if (!line.includes('"cell.start"')) continue;
+    try {
+      const rec = JSON.parse(line);
+      if (rec?.kind !== "cell.start") continue;
+      return str(rec.model);
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * The model slug a cell RAN, from the cell's own files. `cell.start` leads: it
+ * is stamped before any work, even for a cell that dies before recording its
+ * fingerprint. `fingerprint.json`'s `values.model` is the fallback — the same
+ * slug the harness hashes into the fingerprint — and null when the cell left
+ * neither on disk (there is no identity to invent).
+ */
+export async function readCellModel(cellDir) {
+  const started = await readCellStartModel(cellDir);
+  if (started) return started;
+  const values = await readCellFingerprint(cellDir);
+  return str(values?.model);
 }
 
 /**
