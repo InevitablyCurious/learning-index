@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   foldGateResults,
+  layerVerdict,
   loadRoster,
   makeMatcher,
 } from "./gate-results.mjs";
@@ -14,6 +15,7 @@ import { runConformancePhase } from "./lib/conformance.mjs";
 import { runBackendPhase } from "./lib/backend.mjs";
 import { runFrontendPhase } from "./lib/frontend.mjs";
 import { dedupeProblems, dedupeStrings, stripAnsi, truncate } from "./lib/parse.mjs";
+import { loadLayerMap } from "./roster.mjs";
 
 export const GATES_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -74,6 +76,53 @@ const outArg = argValue("--out");
 const rosterArg = argValue("--roster");
 const attemptArg = argValue("--attempt");
 
+// ── LAYERS — grade a prefix of the suite ─────────────────────────────────────
+//
+// `--layer N` grades layers 1..N and reports every gate above N as
+// `not_graded` (never `fail`): it did not fail, it was not asked. The layer of
+// a gate is authored once in grader/layers.json and stamped onto the roster
+// (roster.mjs), so the selector never carries a second copy of that map.
+const layerArg = argValue("--layer");
+const layerParsed = layerArg == null ? null : Number.parseInt(layerArg, 10);
+if (layerArg != null && !(Number.isInteger(layerParsed) && layerParsed >= 1 && layerParsed <= 3)) {
+  process.stderr.write(`[report] invalid --layer ${JSON.stringify(layerArg)}: must be 1, 2, or 3\n`);
+  process.exit(2);
+}
+const LAYER = layerParsed;
+
+// The layer a told problem belongs to, as layers.json places it: the check's own
+// entry (a number or {layer}) — `[F03] …` → F03, `conformance:REQ-RENDER/x — …`
+// → that requirement, a key ending in "/" covering its family — else the layer of
+// the stage checks.json files it under. An id neither names is kept in every
+// layer (1), never silently dropped.
+const LAYER_MAP = LAYER == null ? null : loadLayerMap(GATES_DIR);
+const STAGE_KEYS = LAYER == null
+  ? []
+  : (JSON.parse(fs.readFileSync(path.join(GATES_DIR, "checks.json"), "utf8")).stages ?? []).map((st) => ({
+      stage: String(st.stage),
+      keys: (st.checks ?? []).map(String),
+    }));
+const layerValue = (v) => (typeof v === "number" ? v : typeof v?.layer === "number" ? v.layer : null);
+function problemLayer(check) {
+  const raw = String(check ?? "");
+  const id = /^\[([A-Z]+\d+)\]/.exec(raw)?.[1] ?? /(?:^|:)(REQ-[A-Z]+\/[^\s—]*)/.exec(raw)?.[1];
+  if (!id) return 1;
+  const own = layerValue(LAYER_MAP.checks[id]);
+  if (own != null) return own;
+  let best = null;
+  for (const [key, v] of Object.entries(LAYER_MAP.checks)) {
+    if (key.endsWith("/") && id.startsWith(key) && (best == null || key.length > best[0].length)) best = [key, v];
+  }
+  if (best && layerValue(best[1]) != null) return layerValue(best[1]);
+  for (const { stage, keys } of STAGE_KEYS) {
+    if (keys.some((k) => k === id || (k.endsWith("/") && id.startsWith(k)))) {
+      const v = layerValue(LAYER_MAP.stages?.[stage]);
+      if (v != null) return v;
+    }
+  }
+  return 1;
+}
+
 // Null when absent or unparseable — the phase notice omits a null `attempt`
 // from its detail rather than putting one on the wire (absence is a state).
 const attemptParsed = Number.parseInt(attemptArg ?? "", 10);
@@ -82,7 +131,13 @@ const ATTEMPT = Number.isNaN(attemptParsed) ? null : attemptParsed;
 export const TARGET = path.resolve(
   targetArg || process.env.BENCH_TARGET || path.join(GATES_DIR, "..", "task", "backgammon", "golden"),
 );
-const env = { ...process.env, BENCH_TARGET: TARGET };
+const env = {
+  ...process.env,
+  BENCH_TARGET: TARGET,
+  // The runners are this process's own children, so the selected layer travels
+  // the same way the target does — one env read, no argv duplication.
+  ...(LAYER != null ? { BENCH_LAYER: String(LAYER) } : {}),
+};
 
 const nowIso = new Date().toISOString();
 const defaultOut = path.join(
@@ -126,6 +181,21 @@ function phaseLogPath(label) {
 // done beside a live cell.
 export const ROSTER = loadRoster(rosterArg);
 export const MATCHER = makeMatcher(ROSTER);
+
+// A LAYER RUN NEEDS LAYERS. Without them every phase is unplaceable, so a
+// pass would either grade nothing or grade everything under a header claiming
+// otherwise — both are a confident verdict about a scope nobody chose. Refuse
+// at the door instead, with the reason on stderr.
+if (LAYER != null && !ROSTER.available) {
+  process.stderr.write(
+    `[report] --layer requires a roster to scope the pass: ${ROSTER.reason ?? "no roster"}\n`,
+  );
+  process.exit(2);
+}
+if (LAYER != null && ROSTER.gates.some((g) => g.layer == null)) {
+  process.stderr.write("[report] --layer requires a roster carrying per-gate layer (regenerate with roster.mjs); the supplied roster does not\n");
+  process.exit(2);
+}
 
 /**
  * Announce the gate set a phase is about to execute.
@@ -615,6 +685,48 @@ async function runPhase(phase, fn) {
   return result;
 }
 
+/**
+ * Does this phase hold any gate the requested layers cover?
+ *
+ * A phase whose gates are ALL above the requested layer has nothing to measure,
+ * so running it would spend the board's time to produce rows that are reported
+ * `not_graded` regardless. `backend` is the case that matters: it carries no
+ * layer-1 or layer-2 gate at all, so `--layer 1|2` must not boot it.
+ */
+function phaseSelected(phase) {
+  if (LAYER == null) return true;
+  return ROSTER.gates.some(
+    (g) => g.phase === phase && typeof g.layer === "number" && g.layer <= LAYER,
+  );
+}
+
+/**
+ * A phase this pass did not select. It never ran, so every field is neutral.
+ *
+ * THE SHAPE MIRRORS THE THREE RUNNERS' (lib/conformance.mjs,
+ * lib/backend.mjs, lib/frontend.mjs) because `main()` and `gradability()` read
+ * these fields directly: nothing aborted, nothing timed out, nothing was lost to
+ * the suite budget, and `passed` is true — the phase did not fail, it was not
+ * asked. No `[report] phase=` line is emitted for it, so the adapter opens no
+ * phase the board would then wait to see close.
+ */
+function skippedPhase(phase) {
+  process.stderr.write(`[report] skip phase=${phase} reason=no gate selected at layer ${LAYER}\n`);
+  return {
+    passed: true,
+    problems: [],
+    failedGates: [],
+    gateResults: [],
+    unreadable: false,
+    timedOut: false,
+    skipped: false,
+    aborted: false,
+    abortedFiles: [],
+    timedOutFiles: [],
+    skippedFiles: [],
+  };
+}
+
 // ── BOARD CAPTURE — best-effort artifact, never a gate ──────────────────────
 //
 // Runs AFTER writeReport and after the verdict is decided, so there is nothing
@@ -670,9 +782,16 @@ async function captureBoard() {
 }
 
 async function main() {
-  const conformance = await runPhase("conformance", runConformancePhase);
-  const backend = await runPhase("backend", runBackendPhase);
-  const frontend = await runPhase("frontend", runFrontendPhase);
+  const conformance = phaseSelected("conformance")
+    ? await runPhase("conformance", runConformancePhase)
+    : skippedPhase("conformance");
+  const backend = phaseSelected("backend")
+    ? await runPhase("backend", runBackendPhase)
+    : skippedPhase("backend");
+  const frontend = phaseSelected("frontend")
+    ? await runPhase("frontend", runFrontendPhase)
+    : skippedPhase("frontend");
+  const skippedPhases = ["conformance", "backend", "frontend"].filter((p) => !phaseSelected(p));
 
   const results = {
     conformance: conformance.passed,
@@ -680,11 +799,15 @@ async function main() {
     frontend: frontend.passed,
   };
 
+  // A LAYER RUN TELLS ONLY ITS LAYERS. The verdict is scoped by the fold; the
+  // problem list is what the harness turns into told lines, so it is scoped the
+  // same way. A layer-1 pass of the golden listed REQ-RENDER/die-reload (layer 3)
+  // as "never evaluated", which would reach a model building only the board.
   const problems = dedupeProblems([
     ...conformance.problems,
     ...backend.problems,
     ...frontend.problems,
-  ]);
+  ]).filter((p) => LAYER == null || problemLayer(p.check) <= LAYER);
   const failedGates = dedupeStrings([
     ...conformance.failedGates,
     ...backend.failedGates,
@@ -740,8 +863,6 @@ async function main() {
     });
   }
 
-  const verdict = Object.values(results).every(Boolean) ? "PASS" : "FAIL";
-
   // A phase "ran" when its runner produced at least one per-test result. That
   // distinguishes "the phase executed and this gate still has no result" from
   // "the phase never got far enough to execute anything", which are different
@@ -757,7 +878,18 @@ async function main() {
     observed: [...conformance.gateResults, ...backend.gateResults, ...frontend.gateResults],
     phaseRan,
     timedOutFiles: new Set(backend.timedOutFiles ?? []),
+    layer: LAYER,
   });
+
+  // THE VERDICT IS DECIDED AFTER THE FOLD, because only the fold knows which
+  // gates this pass was asked to grade. Unscoped it stays exactly the phase
+  // conjunction it always was; scoped it is the conjunction over layers 1..N,
+  // where everything above N came back `not_graded` and is out of the
+  // denominator rather than failing it.
+  const verdict =
+    LAYER == null
+      ? (Object.values(results).every(Boolean) ? "PASS" : "FAIL")
+      : (layerVerdict(folded.gate_results, LAYER) ? "PASS" : "FAIL");
 
   const report = {
     target: TARGET,
@@ -771,6 +903,11 @@ async function main() {
     failed_gates: failedGates,
     // WO-GATE-ROSTER additions. Purely additive — nothing above is altered.
     ...folded,
+    // WHICH PASS THIS WAS. Only present on a `--layer` run: an unscoped report
+    // keeps its exact prior shape, and a scoped one states both the layers it
+    // covered and the phases that therefore never booted — so a reader can tell
+    // "not measured" from "not asked for" without diffing two reports.
+    ...(LAYER != null ? { layer: LAYER, skipped_phases: skippedPhases } : {}),
     // ── IS THIS ATTEMPT A MEASUREMENT AT ALL? ────────────────────────────
     ...gradability({ backend, frontend, conformance, folded }),
     // AFTER both spreads, deliberately: nothing may shadow this field.

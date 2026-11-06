@@ -108,6 +108,7 @@ def gate_argv(
     workers: int | None = None,
     image: str = IMAGE,
     run_identity: str | None = None,
+    layer: int | None = None,
 ) -> list[str]:
     """`docker run ...` for one grading pass.
 
@@ -146,4 +147,9 @@ def gate_argv(
         argv += ["--roster", ROSTER]
     if attempt is not None:
         argv += ["--attempt", str(attempt)]
+    # Which pass to grade, as an argument of the grading run itself. Never an
+    # env var: the note above keeps the operator's knobs and the run's scope
+    # apart, and the container must not inherit a layer from its environment.
+    if layer is not None:
+        argv += ["--layer", str(layer)]
     return argv

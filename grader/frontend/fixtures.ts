@@ -96,12 +96,12 @@ async function gameReady(page: Page): Promise<void> {
     await waitForBoardSettled(page);
   } catch (err) {
     throw new Error(
-      `[needs: REQ-RENDER/point REQ-RENDER/checker REQ-TESTID/point REQ-TESTID/checker] ${(err as Error).message}`,
+      `[needs: REQ-RENDER/point REQ-TESTID/point] ${(err as Error).message}`,
     );
   }
   if (!(await boardGeometryDrawn(page))) {
     throw new Error(
-      `[needs: REQ-RENDER/point REQ-RENDER/checker] board geometry never drew: no point renders a visible triangle within 5000ms`,
+      `[needs: REQ-RENDER/point] board geometry never drew: no point renders a visible triangle within 5000ms`,
     );
   }
 }

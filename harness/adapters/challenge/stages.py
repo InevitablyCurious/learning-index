@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +37,9 @@ class Stage:
     number: int
     name: str
     keys: tuple[str, ...]
+    # Which layer this stage's work belongs to, from ``grader/layers.json``
+    # (sibling of ``checks.json``). None when the challenge ships no layer map.
+    layer: int | None = None
 
 
 @dataclass(frozen=True)
@@ -102,6 +105,101 @@ def needs_of(problem: dict[str, Any]) -> tuple[str, ...]:
     return tuple(n for m in _NEEDS_RE.finditer(observed) for n in m.group(1).split())
 
 
+_LAYER_TEMPLATE = "{x}"
+
+
+def _template_pattern(template: str) -> re.Pattern[str]:
+    """``REQ-STATE/state.{x}`` → the per-key names that instance it."""
+    literal = re.escape(template).replace(re.escape(_LAYER_TEMPLATE), r"[^.]+")
+    return re.compile(rf"\A{literal}\Z")
+
+
+def _canonical(check: str) -> str:
+    """``[F01] board appears`` → ``F01``; ``conformance:REQ-RENDER/point — …`` →
+    ``REQ-RENDER/point``. The key a layer map names, whatever wording a gate set."""
+    raw = str(check or "").strip()
+    if m := _TOKEN_RE.match(raw):
+        return m.group(1)
+    token = raw.split()[0] if raw.split() else ""
+    return token.removeprefix("conformance:")
+
+
+@dataclass(frozen=True)
+class LayerMap:
+    """Which layer each check belongs to (``grader/layers.json``).
+
+    A layer is a pass over the challenge: 1 is the board/controls surface, and a
+    later number is only reachable once the earlier ones hold. The map declares
+    layers per check, with a per-stage default for checks it names no key for.
+    """
+
+    checks: dict[str, int]
+    stages: dict[int, int]
+
+    def layer_of(self, check: str, stages: Sequence[Stage]) -> int:
+        candidate = _canonical(check)
+        if (layer := self.checks.get(candidate)) is not None:
+            return layer
+        # A setup key that is not named one by one is an instance of a `{x}`
+        # template (`REQ-STATE/state.off.white` of `REQ-STATE/state.{x}`).
+        for template, layer in self.checks.items():
+            if _LAYER_TEMPLATE not in template:
+                continue
+            if _template_pattern(template).match(candidate):
+                return layer
+        try:
+            number: int | None = stage_of(check, stages).number
+        except UnstagedCheckError:
+            number = None
+        if number is not None and (layer := self.stages.get(number)) is not None:
+            return layer
+        raise UnstagedCheckError(
+            f"check {check!r} has no layer in grader/layers.json — its layer decides "
+            "which pass may report it, so it must be declared, never guessed"
+        )
+
+
+def _layer_int(layers_json: Path, where: str, value: Any) -> int:
+    """A layer is written as a bare int, or as ``{"layer": int, "reason": str}``."""
+    layer = value if isinstance(value, int) and not isinstance(value, bool) else None
+    if layer is None and isinstance(value, dict):
+        inner = value.get("layer")
+        layer = (
+            inner if isinstance(inner, int) and not isinstance(inner, bool) else None
+        )
+    if layer is None:
+        raise RuntimeError(f"{layers_json}: {where} has no integer layer: {value!r}")
+    if not 1 <= layer <= 3:
+        raise RuntimeError(f"{layers_json}: {where} layer {layer} is outside 1..3")
+    return layer
+
+
+def load_layers(layers_json: Path) -> LayerMap:
+    """Read the layer map beside ``checks.json``. Never an empty map: a challenge
+    that ships a map means it, and a silently empty one would layer nothing."""
+    path = Path(layers_json)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"{path}: cannot read the layer map: {exc}") from exc
+    checks_data = data.get("checks")
+    stages_data = data.get("stages")
+    if not isinstance(checks_data, dict) or not isinstance(stages_data, dict):
+        raise RuntimeError(f"{path}: the layer map needs `checks` and `stages` objects")
+    checks = {
+        str(key): _layer_int(path, f"check {key!r}", value)
+        for key, value in checks_data.items()
+    }
+    stages: dict[int, int] = {}
+    for key, value in stages_data.items():
+        try:
+            number = int(str(key))
+        except ValueError as exc:
+            raise RuntimeError(f"{path}: stage key {key!r} is not a number") from exc
+        stages[number] = _layer_int(path, f"stage {number}", value)
+    return LayerMap(checks=checks, stages=stages)
+
+
 def load_stages(checks_json: Path) -> list[Stage]:
     data = json.loads(Path(checks_json).read_text(encoding="utf-8"))
     stages = [
@@ -114,7 +212,16 @@ def load_stages(checks_json: Path) -> list[Stage]:
     ]
     if not stages:
         raise UnstagedCheckError(f"{checks_json} declares no stages")
-    return sorted(stages, key=lambda s: s.number)
+    ordered = sorted(stages, key=lambda s: s.number)
+    # The layer map rides beside the stage list: it is built from the same
+    # file, and grading a challenge that ships none must keep working.
+    layers_json = Path(checks_json).with_name("layers.json")
+    if layers_json.is_file():
+        layers = load_layers(layers_json)
+        ordered = [
+            replace(stage, layer=layers.stages.get(stage.number)) for stage in ordered
+        ]
+    return ordered
 
 
 def check_id(check: str) -> str | None:

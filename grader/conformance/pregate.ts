@@ -10,7 +10,8 @@ import {
   startServer,
   stopServer,
 } from "../lib/harness.ts";
-import { overlaps } from "../frontend/board-geometry.ts";
+import { overlaps, readOffTray } from "../frontend/board-geometry.ts";
+import { countDrawnCheckers } from "./checker-drawn.ts";
 
 export interface Problem {
   check: string;
@@ -180,6 +181,111 @@ function sortedDice(value: unknown): number[] | null {
   return [...value].sort((a, b) => a - b);
 }
 
+/** One tagged population, counted by whether it is DRAWN rather than tagged. */
+type DrawnCheckers = { count: number; rejected: string[] };
+
+/**
+ * Count the checkers a player can actually SEE.
+ *
+ * The universe is every `[data-color][data-loc]` element, but membership in
+ * that population is the page's CLAIM about the board, not a piece painted on
+ * it — the selector is attribute-shaped too, so counting it alone grades the
+ * attributes twice and the drawing never. The computed style and the box are
+ * read here, in the page, and folded through `countDrawnCheckers` in Node: the
+ * criteria stay in `checker-drawn.ts`, and not one of them is re-derived
+ * against a live DOM here.
+ *
+ * A page that tags thirty checkers and paints none of them returns
+ * `{ count: 0, rejected: [30 reasons] }` — zero drawn, never a silent zero.
+ */
+async function readDrawnCheckers(page: import("@playwright/test").Page): Promise<DrawnCheckers> {
+  const rows = await page.locator("[data-color][data-loc]").evaluateAll((elements) => {
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    return elements.map((element) => {
+      const el = element as HTMLElement;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return {
+        color: el.dataset.color ?? "",
+        loc: el.dataset.loc ?? "",
+        display: style.display,
+        visibility: style.visibility,
+        opacity: Number(style.opacity),
+        width: rect.width,
+        height: rect.height,
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        viewportWidth,
+        viewportHeight,
+      };
+    });
+  });
+  return countDrawnCheckers(rows);
+}
+
+/**
+ * Whether the off tray is actually DRAWN, not merely tagged.
+ *
+ * Same two-part shape as the checkers: `renderSelector` is the universe, and
+ * `readDrawn` is the verdict. The tray's universe used to be dead — the golden
+ * draws it as `class="offtray"` (no hyphen, no `id="off-tray"`, no `data-loc`
+ * on the tray div: task/backgammon/golden/public/app.js:69-70) — so nothing
+ * matched and `REQ-RENDER/off-tray` was satisfied by the tag alone. A board that
+ * tagged the tray and hid it (`display:none`) passed: markup nobody drew.
+ *
+ * Existence and visibility are NOT re-derived here. `readOffTray` answers both,
+ * with the one threshold for "not visibly rendered" the grader uses everywhere:
+ * `visible` is true only for a non-empty box that is not `display:none`, not
+ * `visibility:hidden`, and not faded below `opacity` 0.05.
+ *
+ * Three outcomes: drawn -> 1; tagged but not visible -> 0 with the reason (a
+ * REQ-RENDER finding, and the only honest one — a player sees an empty board);
+ * no tag at all -> 0 and no rejection, because nothing claims to be a tray to
+ * reject.
+ */
+async function readDrawnOffTray(page: import("@playwright/test").Page): Promise<DrawnCheckers> {
+  const tray = await readOffTray(page);
+  if (!tray.exists) {
+    return { count: 0, rejected: [] };
+  }
+  if (tray.visible) {
+    return { count: 1, rejected: [] };
+  }
+  return {
+    count: 0,
+    rejected: ["the off tray is tagged but not visible (display:none / hidden / zero-size / faded)"],
+  };
+}
+
+/**
+ * Wait until `expected` checkers are actually DRAWN, or the deadline passes.
+ *
+ * Best effort on purpose: a board that never draws its checkers is the render
+ * check's finding, not an exception thrown out of the pre-gate. The count that
+ * settles this wait is the same predicate that grades it, so the wait cannot
+ * come to rest on a state the check would go on to reject — a page that settles
+ * here has passed what is measured below.
+ */
+async function waitForDrawnCheckers(
+  page: import("@playwright/test").Page,
+  expected: number,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  try {
+    while (Date.now() < deadline) {
+      const { count } = await readDrawnCheckers(page);
+      if (count >= expected) return;
+      await page.waitForTimeout(50);
+    }
+  } catch {
+    // A page mid-navigation answers nothing; the check that reads it reports.
+  }
+}
+
 /**
  * Ask a counted element's two questions separately.
  *
@@ -189,10 +295,21 @@ function sortedDice(value: unknown): number[] | null {
  *   drawn, not labelled   -> REQ-TESTID/*  (only a programmatic consumer sees it)
  *   not drawn             -> REQ-RENDER/*  (the tester sees it while playing)
  *
- * Never both, and never the attribute complaint alone: an element that was
- * never drawn cannot be said to be missing an attribute, and reporting it that
- * way would send an integration complaint about a board that is simply not
- * there.
+ * WHO MEASURES THE DRAW is per-label, and the difference is not cosmetic. A
+ * label whose own render selector already means "this was painted" only needs
+ * its render selector read when the tag is missing, so it keeps the tag-count
+ * early return: `if (tagOk) return;`. A label whose render selector is
+ * attribute-shaped too cannot be trusted to answer the question at all — for
+ * `checker` the `[data-color][data-loc]` population is exactly the claim under
+ * test — and such a label passes `readDrawn`, which measures whether each
+ * element is actually painted. There the drawn count is taken UP FRONT and a
+ * pass needs BOTH answers: a tag count that is right while the draw is not is
+ * the defect that override exists to catch.
+ *
+ * Never both complaints, and never the attribute complaint alone: an element
+ * that was never drawn cannot be said to be missing an attribute, and
+ * reporting it that way would send an integration complaint about a board that
+ * is simply not there.
  */
 async function countedElement(opts: {
   add: (check: string, expected: string, observed: string) => void;
@@ -204,26 +321,43 @@ async function countedElement(opts: {
   exact: boolean;
   renderText: string;
   testIdText: string;
+  readDrawn?: (page: import("@playwright/test").Page) => Promise<DrawnCheckers>;
 }): Promise<void> {
   const { add, page, label, expected, exact } = opts;
-  const withTestId = await page.locator(opts.testIdSelector).count();
-  const ok = exact ? withTestId === expected : withTestId >= expected;
-  if (ok) return;
-
-  const drawn = await page.locator(opts.renderSelector).count();
-  const drawnOk = exact ? drawn === expected : drawn >= expected;
+  const meets = (count: number) => (exact ? count === expected : count >= expected);
   const want = exact ? String(expected) : `>=${expected}`;
+  const withTestId = await page.locator(opts.testIdSelector).count();
+  const tagOk = meets(withTestId);
 
-  if (drawnOk) {
-    // It is on screen and correct; it simply cannot be selected.
+  /** One finding, chosen by whether the thing was drawn — never both. */
+  const report = (drawn: number, rejected: string[]) => {
+    if (meets(drawn)) {
+      // It is on screen and correct; it simply cannot be selected.
+      add(
+        `REQ-TESTID/${label} — ${opts.testIdText}`,
+        want,
+        `${withTestId} (${drawn} drawn without the attribute)`,
+      );
+      return;
+    }
     add(
-      `REQ-TESTID/${label} — ${opts.testIdText}`,
+      `REQ-RENDER/${label} — ${opts.renderText}`,
       want,
-      `${withTestId} (${drawn} drawn without the attribute)`,
+      rejected.length > 0
+        ? `${drawn} drawn, ${rejected.length} rejected — ${rejected.slice(0, 8).join("; ")}`
+        : String(drawn),
     );
+  };
+
+  if (opts.readDrawn) {
+    const drawn = await opts.readDrawn(page);
+    if (tagOk && meets(drawn.count)) return;
+    report(drawn.count, drawn.rejected);
     return;
   }
-  add(`REQ-RENDER/${label} — ${opts.renderText}`, want, String(drawn));
+
+  if (tagOk) return;
+  report(await page.locator(opts.renderSelector).count(), []);
 }
 
 export async function runPreGate(): Promise<PreGateResult> {
@@ -480,52 +614,64 @@ export async function runPreGate(): Promise<PreGateResult> {
       // click landed ~100 ms early, no roll was sent, and "the dice are drawn
       // after a roll" read 0 while a player's roll drew them). Bounded like
       // every wait here; a page that never draws its checkers is the checker
-      // render check's finding.
-      await page
-        .waitForFunction(() => document.querySelectorAll('[data-testid="checker"]').length === 30, undefined, {
-          timeout: 5_000,
-        })
-        .catch(() => undefined);
-      await debugRoll([3, 1]);
-      // Bounded: a Roll button that is disabled (an app that opens a game with
-      // the opening roll already made) was retried for Playwright's default
-      // 30s — the whole pre-gate budget — so a candidate that passed every
-      // conformance check overran it and the pass was published ungradable
-      // (run 1790200233: 30.46s against the reference's 0.61s).
-      // Whether the roll happened at all: a Roll button that cannot be clicked
-      // at the start of a game is F61's finding, and the checks after it never
-      // reached their subject — they are not told (run 1790769627's page kept
-      // Roll disabled through the opening roll).
-      const rolled = await page
-        .locator('[data-testid="rollBtn"]')
-        .click({ timeout: 2_000 })
-        .then(() => true, () => false);
-      await page
-        .waitForFunction(
-          () => document.querySelectorAll('[data-testid="die"]').length >= 2,
-          undefined,
-          { timeout: 2_000 },
-        )
-        .catch(() => undefined);
+      // render check's finding. Settled on the DRAWN count, the same predicate
+      // that grades it below — a page can carry the tags and paint nothing.
+      await waitForDrawnCheckers(page, 30, 5_000);
 
-      // NON-RELOAD render check: did the roll draw the dice at all? Distinct
-      // from the reload-survival check below — "the dice didn't draw" vs "the
-      // board reset wiped the roll away" are different failures.
-      const drawnBefore = await page.locator('[data-testid="dice"] *, .die').count();
-      if (drawnBefore < 2) {
-        add("REQ-RENDER/die — the dice are drawn after a roll", ">=2", rolled ? String(drawnBefore) : "never evaluated — the Roll button could not be clicked at the start of a game");
+      // ── WHICH LAYERS THE PAGE WORK BELOW BELONGS TO ──────────────────────
+      //
+      // A layer-scoped grade exports BENCH_LAYER for this child process
+      // (report.mjs); a full grade sets nothing at all. L1 (board geometry) and
+      // L2 (the pieces that are drawn) are both answered before a game is ever
+      // played, so the gameplay steps below are the only ones that can spend the
+      // whole conformance phase: a Roll button that clicks and does nothing
+      // burns the hint-flow loop's four turns of rolls, clicks and waits past
+      // the phase deadline, the phase aborts with every conformance gate
+      // unmeasured, and the run is ungradable — so an L3 gameplay fault fails
+      // the L1 and L2 grades it has nothing to do with.
+      const gameplayScoped =
+        process.env.BENCH_LAYER == null || process.env.BENCH_LAYER === "3";
+
+      // What the two L3 gates below read to say whether they had a subject at
+      // all. Out of scope it stays false, so they report "never evaluated"
+      // rather than a finding about a roll nobody made.
+      let rolled = false;
+      if (gameplayScoped) {
+        await debugRoll([3, 1]);
+        // Bounded: a Roll button that is disabled (an app that opens a game with
+        // the opening roll already made) was retried for Playwright's default
+        // 30s — the whole pre-gate budget — so a candidate that passed every
+        // conformance check overran it and the pass was published ungradable
+        // (run 1790200233: 30.46s against the reference's 0.61s).
+        // Whether the roll happened at all: a Roll button that cannot be clicked
+        // at the start of a game is F61's finding, and the checks after it never
+        // reached their subject — they are not told (run 1790769627's page kept
+        // Roll disabled through the opening roll).
+        rolled = await page
+          .locator('[data-testid="rollBtn"]')
+          .click({ timeout: 2_000 })
+          .then(() => true, () => false);
+        await page
+          .waitForFunction(
+            () => document.querySelectorAll('[data-testid="die"]').length >= 2,
+            undefined,
+            { timeout: 2_000 },
+          )
+          .catch(() => undefined);
+
+        // NON-RELOAD render check: did the roll draw the dice at all? Distinct
+        // from the reload-survival check below — "the dice didn't draw" vs "the
+        // board reset wiped the roll away" are different failures.
+        const drawnBefore = await page.locator('[data-testid="dice"] *, .die').count();
+        if (drawnBefore < 2) {
+          add("REQ-RENDER/die — the dice are drawn after a roll", ">=2", rolled ? String(drawnBefore) : "never evaluated — the Roll button could not be clicked at the start of a game");
+        }
       }
 
       await page.reload({ waitUntil: "domcontentloaded" });
       await page.waitForSelector('[data-testid="board"]', { timeout: 5_000 });
 
-      await page
-        .waitForFunction(
-          () => document.querySelectorAll('[data-testid="checker"]').length === 30,
-          undefined,
-          { timeout: 2_000 },
-        )
-        .catch(() => undefined);
+      await waitForDrawnCheckers(page, 30, 2_000);
       await page
         .waitForFunction(
           () => document.querySelectorAll('[data-testid="die"]').length >= 2,
@@ -568,7 +714,11 @@ export async function runPreGate(): Promise<PreGateResult> {
         page,
         label: "checker",
         testIdSelector: '[data-testid="checker"]',
+        // The universe, not the answer: `readDrawn` decides which of these
+        // elements are actually painted, so a rigged board that emits the
+        // attributes and draws nothing fails here.
         renderSelector: "[data-color][data-loc]",
+        readDrawn: readDrawnCheckers,
         expected: 30,
         exact: true,
         renderText: "board renders 30 checkers (15 per side)",
@@ -592,7 +742,12 @@ export async function runPreGate(): Promise<PreGateResult> {
         page,
         label: "off-tray",
         testIdSelector: '[data-testid="off-tray"]',
-        renderSelector: '#off-tray, .off-tray, [data-loc="off"]',
+        // The universe, not the answer — and it now contains what the golden
+        // actually draws (`class="offtray"`, no hyphen, app.js:69): the old
+        // selectors matched nothing, so the tag count stood alone and a tray
+        // that was never painted passed. `readDrawn` decides the draw question.
+        renderSelector: '#off-tray, .off-tray, .offtray, [data-loc="off"]',
+        readDrawn: readDrawnOffTray,
         expected: 1,
         exact: false,
         renderText: "the board shows an off tray",
@@ -662,65 +817,71 @@ export async function runPreGate(): Promise<PreGateResult> {
       // button will not click (the player then holds dice, and no hints is the
       // finding). Run 1791304274: the player's next Roll showed hints, and the line
       // told the model they never appeared.
-      let ordinaryRoll = rolled;
-      let hintCount = 0;
-      for (let turn = 0; turn < 4 && hintCount < 1; turn++) {
-        if (turn > 0) {
-          await debugRoll([3, 1]);
-          const again = await page
-            .locator('[data-testid="rollBtn"]')
-            .click({ timeout: 2_000 })
-            .then(() => true, () => false);
-          if (!again) break;
-          ordinaryRoll = true;
-          await page
-            .waitForFunction(() => document.querySelectorAll('[data-testid="die"]').length >= 2, undefined, {
-              timeout: 2_000,
-            })
-            .catch(() => undefined);
-        }
-        hintCount = await page.locator('[data-testid="hint"]').count();
-        if (hintCount < 1) {
-          const whiteCheckers = page.locator('[data-testid="checker"][data-color="white"]');
-          const whiteCount = await whiteCheckers.count();
-          for (let i = 0; i < whiteCount; i++) {
-            try {
-              // A player's click: bring the piece into view and press the mouse on
-              // it. A synthetic click event reaches only pages that listen for
-              // "click"; run 1791381075's page listened for the mouse itself, showed
-              // hints to every player, and was told "nothing shows me where it can
-              // go" because the grader pressed nothing.
-              const piece = whiteCheckers.nth(i);
-              await piece.scrollIntoViewIfNeeded({ timeout: 1_000 });
-              const box = await piece.boundingBox();
-              if (box) await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-            } catch {
-              // Keep probing other white checkers.
-            }
-            // A player waits to see the hints come up. Hints that appear after a
-            // short pause were read as none, and the next press on another piece
-            // then put them away (WO-AUDIT-A class a).
+      //
+      // Gameplay only, for the reason the roll above is: this loop is the one step
+      // that can spend the whole phase budget (four turns of rolls, clicks and
+      // 1.5s waits), and at L1/L2 it is asking about a game that is not in scope.
+      if (gameplayScoped) {
+        let ordinaryRoll = rolled;
+        let hintCount = 0;
+        for (let turn = 0; turn < 4 && hintCount < 1; turn++) {
+          if (turn > 0) {
+            await debugRoll([3, 1]);
+            const again = await page
+              .locator('[data-testid="rollBtn"]')
+              .click({ timeout: 2_000 })
+              .then(() => true, () => false);
+            if (!again) break;
+            ordinaryRoll = true;
             await page
-              .waitForFunction(() => document.querySelectorAll('[data-testid="hint"]').length > 0, undefined, {
-                timeout: 900,
+              .waitForFunction(() => document.querySelectorAll('[data-testid="die"]').length >= 2, undefined, {
+                timeout: 2_000,
               })
               .catch(() => undefined);
-            hintCount = await page.locator('[data-testid="hint"]').count();
-            if (hintCount > 0) {
-              break;
+          }
+          hintCount = await page.locator('[data-testid="hint"]').count();
+          if (hintCount < 1) {
+            const whiteCheckers = page.locator('[data-testid="checker"][data-color="white"]');
+            const whiteCount = await whiteCheckers.count();
+            for (let i = 0; i < whiteCount; i++) {
+              try {
+                // A player's click: bring the piece into view and press the mouse on
+                // it. A synthetic click event reaches only pages that listen for
+                // "click"; run 1791381075's page listened for the mouse itself, showed
+                // hints to every player, and was told "nothing shows me where it can
+                // go" because the grader pressed nothing.
+                const piece = whiteCheckers.nth(i);
+                await piece.scrollIntoViewIfNeeded({ timeout: 1_000 });
+                const box = await piece.boundingBox();
+                if (box) await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+              } catch {
+                // Keep probing other white checkers.
+              }
+              // A player waits to see the hints come up. Hints that appear after a
+              // short pause were read as none, and the next press on another piece
+              // then put them away (WO-AUDIT-A class a).
+              await page
+                .waitForFunction(() => document.querySelectorAll('[data-testid="hint"]').length > 0, undefined, {
+                  timeout: 900,
+                })
+                .catch(() => undefined);
+              hintCount = await page.locator('[data-testid="hint"]').count();
+              if (hintCount > 0) {
+                break;
+              }
             }
           }
+          // The computer may be moving: give it time before the player rolls again.
+          if (hintCount < 1) await page.waitForTimeout(1_500);
         }
-        // The computer may be moving: give it time before the player rolls again.
-        if (hintCount < 1) await page.waitForTimeout(1_500);
-      }
 
-      if (hintCount < 1) {
-        add(
-          "REQ-HINT/hint — selecting a movable checker shows move hints",
-          "hints appear after selecting a movable checker",
-          ordinaryRoll ? "none" : "never evaluated — the Roll button could not be clicked at the start of a game",
-        );
+        if (hintCount < 1) {
+          add(
+            "REQ-HINT/hint — selecting a movable checker shows move hints",
+            "hints appear after selecting a movable checker",
+            ordinaryRoll ? "none" : "never evaluated — the Roll button could not be clicked at the start of a game",
+          );
+        }
       }
 
       await page.close();

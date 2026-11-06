@@ -386,9 +386,19 @@ export async function isPainted(target: Locator): Promise<boolean> {
  * `data-loc` to exist: an unplaced checker parked off-board is trivially
  * motionless, and settling on it (or on bare points) would measure the board
  * before it was drawn. Throws when the board never settles.
+ *
+ * A PIECES-ABSENT pass (layer 1: `BENCH_LAYER=1`) is dealt no pieces at all,
+ * so there is no placed checker to anchor on and the board's own structure is
+ * what has to hold still: it waits for a point to exist and settles on the
+ * points alone. Every other pass — full grading (no `BENCH_LAYER`), layer 2,
+ * layer 3 — keeps the checker-anchored settle unchanged.
  */
 export async function waitForBoardSettled(page: Page): Promise<void> {
-  const settled = await page.evaluate(async () => {
+  // Read on the NODE side: the callback below runs in the browser, which has no
+  // `process`. report.mjs sets BENCH_LAYER only when a layer was selected, so
+  // an absent value (full grading) means pieces are dealt.
+  const piecesAbsent = process.env.BENCH_LAYER === "1";
+  const settled = await page.evaluate(async (piecesAbsent) => {
     const TIMEOUT_MS = 5000;
     // Must exceed the checker's 340ms transform transition (golden
     // style.css:134 `transition: transform .34s cubic-bezier(.34,.9,.4,1)`,
@@ -406,15 +416,16 @@ export async function waitForBoardSettled(page: Page): Promise<void> {
           return loc !== undefined && /^\d+$/.test(loc);
         },
       );
-    // One string of 2-decimal rects for the full measured set, or null while
-    // no placed checker exists (a board with nothing to settle on).
+    // The board's own structure: every point in document order.
+    const points = (): HTMLElement[] =>
+      Array.from(document.querySelectorAll<HTMLElement>('[data-testid="point"]'));
+    // One string of 2-decimal rects for the full measured set, or null while the
+    // set it anchors on is empty (a board with nothing to settle on) — the
+    // placed checkers, or on a pieces-absent pass the points themselves.
     const snapshot = (): string | null => {
-      const checkers = placedCheckers();
-      if (checkers.length === 0) return null;
-      const elements = [
-        ...checkers,
-        ...Array.from(document.querySelectorAll<HTMLElement>('[data-testid="point"]')),
-      ];
+      const anchor = piecesAbsent ? points() : placedCheckers();
+      if (anchor.length === 0) return null;
+      const elements = piecesAbsent ? anchor : [...anchor, ...points()];
       return elements
         .map((element) => {
           const rect = element.getBoundingClientRect();
@@ -423,10 +434,12 @@ export async function waitForBoardSettled(page: Page): Promise<void> {
         .join("|");
     };
 
-    while (placedCheckers().length === 0) {
+    while ((piecesAbsent ? points().length : placedCheckers().length) === 0) {
       if (performance.now() > deadline) {
         throw new Error(
-          `board never settled: no [data-testid="checker"] with a numeric data-loc appeared within ${TIMEOUT_MS}ms`,
+          piecesAbsent
+            ? `board never settled: no [data-testid="point"] appeared within ${TIMEOUT_MS}ms`
+            : `board never settled: no [data-testid="checker"] with a numeric data-loc appeared within ${TIMEOUT_MS}ms`,
         );
       }
       await frame();
@@ -439,7 +452,8 @@ export async function waitForBoardSettled(page: Page): Promise<void> {
       const now = performance.now();
       const current = snapshot();
       if (current === null) {
-        // The page re-rendered and dropped the placed checkers — restart the
+        // The page re-rendered and dropped what the settle anchors on — the
+        // placed checkers, or a pieces-absent board's points — so restart the
         // stability window against the fresh element set.
         previous = null;
         unchangedSince = null;
@@ -456,10 +470,7 @@ export async function waitForBoardSettled(page: Page): Promise<void> {
     // Never identical to the hundredth of a pixel. A player only sees whole
     // pixels: one more second at that grain decides whether anything moves.
     const coarse = () =>
-      [
-        ...placedCheckers(),
-        ...Array.from(document.querySelectorAll<HTMLElement>('[data-testid="point"]')),
-      ]
+      (piecesAbsent ? points() : [...placedCheckers(), ...points()])
         .map((element) => {
           const rect = element.getBoundingClientRect();
           return [rect.x, rect.y, rect.width, rect.height].map((v) => Math.round(v)).join(",");
@@ -472,10 +483,12 @@ export async function waitForBoardSettled(page: Page): Promise<void> {
       if (coarse() !== first) return false;
     }
     return true;
-  });
+  }, piecesAbsent);
   if (!settled) {
     throw new Error(
-      `${BOARD_RESTLESS}: board never settled: the pieces and points kept moving on screen for more than 5 s`,
+      piecesAbsent
+        ? `${BOARD_RESTLESS}: board never settled: the board kept moving on screen for more than 5 s`
+        : `${BOARD_RESTLESS}: board never settled: the pieces and points kept moving on screen for more than 5 s`,
     );
   }
 }

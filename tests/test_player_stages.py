@@ -401,9 +401,9 @@ _HELPER_MARKERS = {
     ),  # clickOpeningRoll
     (
         "frontend/fixtures.ts",
-        "[needs: REQ-RENDER/point REQ-RENDER/checker REQ-TESTID/point REQ-TESTID/checker]",
+        "[needs: REQ-RENDER/point REQ-TESTID/point]",
     ): _FRONTEND,
-    ("frontend/fixtures.ts", "[needs: REQ-RENDER/point REQ-RENDER/checker]"): _FRONTEND,
+    ("frontend/fixtures.ts", "[needs: REQ-RENDER/point]"): _FRONTEND,
     ("frontend/layout.spec.ts", "[needs: F01]"): _LAYOUT,
     ("frontend/layout.spec.ts", "[needs: REQ-RENDER/point]"): _LAYOUT,
     # Every spec's shared open-the-page helper waits on the board check: with no

@@ -214,6 +214,101 @@ function gatesFromRows(rows, phase, tiers) {
   });
 }
 
+// ── layers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Load the authored layer map (`layers.json`).
+ *
+ * One hand-written file holds the layer of every check and every stage. It is
+ * deliberately never defaulted here: an unreadable map is a hard failure,
+ * because a fallback layer would publish a confident verdict about a gate
+ * nobody classified — the same "absence is indistinguishable from success"
+ * defect the roster exists to remove.
+ */
+export function loadLayerMap(gatesDir) {
+  const file = path.join(gatesDir, "layers.json");
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (err) {
+    throw new Error(`[roster] layer map unreadable at ${file}: ${err?.message ?? err}`);
+  }
+  if (!parsed || typeof parsed.checks !== "object" || parsed.checks === null) {
+    throw new Error(`[roster] layer map at ${file} carries no \`checks\` object`);
+  }
+  return { checks: parsed.checks, stages: parsed.stages };
+}
+
+/** Escape a literal string so it matches itself inside a RegExp. */
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Compile `checks.json`'s `setup` titles into title matchers, most specific first.
+ *
+ * A conformance gate carries `gate_token:"CONF"` and nothing else — its real
+ * identity lives only in the title — so the title is the join key back to the
+ * REQ-* requirement, and `setup[].title` is that same title verbatim. Matching
+ * is anchored and exact, with every `{x}` template slot left open, and the
+ * literal-length sort makes the most specific entry win.
+ */
+export function setupTitlePatterns(gatesDir) {
+  const file = path.join(gatesDir, "checks.json");
+  let parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (err) {
+    throw new Error(`[roster] setup checks unreadable at ${file}: ${err?.message ?? err}`);
+  }
+  const rows = Array.isArray(parsed?.setup) ? parsed.setup : [];
+  const entries = rows.map((row) => {
+    const title = String(row?.title ?? "");
+    return {
+      pattern: new RegExp(`^${title.split("{x}").map(escapeRegExp).join('[^"]*')}$`),
+      key: String(row?.key ?? ""),
+      // Specificity is the literal text the pattern pins, template slots excluded.
+      literalLength: title.replace(/\{x\}/g, "").length,
+    };
+  });
+  entries.sort((a, b) => b.literalLength - a.literalLength);
+  return entries.map(({ pattern, key }) => ({ pattern, key }));
+}
+
+/**
+ * Stamp the authored `layer` onto every gate, and refuse to publish a partial map.
+ *
+ * A conformance gate is keyed by the REQ-* its title resolves to; every other
+ * phase is keyed by its own `gate_token`. Any gate the map does not resolve
+ * throws, because one unmapped gate would otherwise be graded as though every
+ * layer passed.
+ */
+export function stampLayers(gates, { gatesDir = GATES_DIR } = {}) {
+  const layerMap = loadLayerMap(gatesDir);
+  const setup = setupTitlePatterns(gatesDir);
+  const unmapped = [];
+
+  for (const gate of gates) {
+    const key =
+      gate.phase === "conformance"
+        ? (setup.find((entry) => entry.pattern.test(gate.title))?.key ?? null)
+        : gate.gate_token;
+    const entry = key === null ? undefined : layerMap.checks[key];
+    // The map holds either the integer, or the integer alongside its reasoning.
+    const layer = entry !== null && typeof entry === "object" ? entry.layer : entry;
+    if (!Number.isInteger(layer) || layer < 1 || layer > 3) {
+      unmapped.push({ id: gate.id, key, phase: gate.phase });
+      continue;
+    }
+    gate.layer = layer;
+  }
+
+  if (unmapped.length > 0) {
+    throw new Error("layer map incomplete — unmapped gates: " + JSON.stringify(unmapped));
+  }
+  return gates;
+}
+
 /**
  * Assign final ids.
  *
@@ -291,6 +386,9 @@ export function enumerateGates({ gatesDir = GATES_DIR, timeoutMs = 180_000 } = {
   }
 
   assignIds(gates);
+  // Every gate must carry its authored layer before the roster is published;
+  // stampLayers throws rather than leaving one unclassified.
+  stampLayers(gates, { gatesDir });
 
   return {
     gates,
