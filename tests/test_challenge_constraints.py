@@ -14,7 +14,7 @@ Three responsibilities, one group each below:
    check IDs are the ones tests/test_challenge_feedback_channels.py proved
    resolve to failure overrides), never through a stubbed string.
 2. A BIDIRECTIONAL drift guard between constraints.md and the build steps
-   (chunk-03.md owns the routes and the state keys, chunk-04.md the
+   (chunk-03.md owns the routes and the state keys, the three frontend chunks the
    data-testid tags). A name in the block the build steps never mention is a
    typo or an extra name; a name the build steps require that the block omits
    is a silent rename waiting to happen.
@@ -34,7 +34,11 @@ from harness.adapters.challenge.stages import load_stages, player_view
 REPO = Path(__file__).resolve().parents[1]
 PROMPTS = REPO / "task" / "backgammon" / "prompts"
 CHUNK_03 = PROMPTS / "chunk-03.md"  # the server chunk: routes + serialized state
-CHUNK_04 = PROMPTS / "chunk-04.md"  # the frontend chunk: data-testid tags
+FRONTEND_CHUNKS = [
+    PROMPTS / "chunk-04-l1-board.md",  # layer 1: board + controls + their tags
+    PROMPTS / "chunk-04-l2-pieces.md",  # layer 2: pieces + their tags
+    PROMPTS / "chunk-04-l3-gameplay.md",  # layer 3: gameplay + its tags
+]
 
 STAGES = load_stages(_GRADER_DIR / "checks.json")
 
@@ -264,7 +268,7 @@ def test_every_name_in_the_block_is_in_the_build_steps() -> None:
     that owns it. This catches a typo or an extra name in the block: the
     model would be told to preserve something the spec never asked for."""
     chunk03 = CHUNK_03.read_text(encoding="utf-8")
-    chunk04 = CHUNK_04.read_text(encoding="utf-8")
+    chunk04 = "\n".join(p.read_text(encoding="utf-8") for p in FRONTEND_CHUNKS)
     static, dynamic = _parsed_testids()
     routes = _parsed_routes()
     keys = _parsed_state_keys()
@@ -274,7 +278,8 @@ def test_every_name_in_the_block_is_in_the_build_steps() -> None:
 
     absent = [t for t in static + dynamic if t not in chunk04]
     assert not absent, (
-        f"data-testid tags named in constraints.md but absent from chunk-04.md: {absent}"
+        "data-testid tags named in constraints.md but absent from the frontend "
+        f"chunks: {absent}"
     )
     absent = [r for r in routes if r not in chunk03]
     assert not absent, (
@@ -317,11 +322,11 @@ def test_the_authoritative_sets_stay_pinned_to_the_build_steps() -> None:
     sets above, this fails instead of the sets silently guarding a surface the
     build no longer asks for."""
     chunk03 = CHUNK_03.read_text(encoding="utf-8")
-    chunk04 = CHUNK_04.read_text(encoding="utf-8")
+    chunk04 = "\n".join(p.read_text(encoding="utf-8") for p in FRONTEND_CHUNKS)
 
     absent = [t for t in STATIC_TESTIDS + DYNAMIC_TESTIDS if t not in chunk04]
     assert not absent, (
-        f"authoritative data-testid tags absent from chunk-04.md: {absent}"
+        f"authoritative data-testid tags absent from the frontend chunks: {absent}"
     )
     absent = [r for r in ALL_ROUTES if r not in chunk03]
     assert not absent, f"authoritative routes absent from chunk-03.md: {absent}"

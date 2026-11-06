@@ -99,7 +99,7 @@ def test_worker_run_argv_omits_output_token_env_when_unclamped(tmp_path: Path) -
 def test_load_chunk_prompts_in_order_with_protocol_on_first_chunk(
     tmp_path: Path,
 ) -> None:
-    """The chunk plan is the six task prompts and NOTHING ELSE.
+    """The chunk plan is the seven task prompts and NOTHING ELSE.
 
     Chunk 1 used to carry an appended 193-line producer capture protocol
     instructing discovery-capture emission. It is deleted (2026-08-26):
@@ -110,7 +110,7 @@ def test_load_chunk_prompts_in_order_with_protocol_on_first_chunk(
     """
     runner_off = _make_runner(tmp_path)
     chunks = runner_off._load_chunk_prompts()
-    assert len(chunks) == 5
+    assert len(chunks) == 7
     assert not chunks[0].startswith("WORKING STYLE")
     # WO-MARKER-RIP: no chunk asks the model to print a completion string. A
     # chunk ends when the session goes idle, and the harness reads nothing the
@@ -118,7 +118,7 @@ def test_load_chunk_prompts_in_order_with_protocol_on_first_chunk(
     assert all("CHUNK FINISHED" not in c for c in chunks)
 
     # No capture PROTOCOL, and no discovery-schema instruction, in ANY chunk.
-    # The build phase is never told HOW to capture — the six corpus files carry
+    # The build phase is never told HOW to capture — the seven corpus files carry
     # no capture-protocol instructions.
     for c in chunks:
         assert "CAPTURE & COMPLIANCE PROTOCOL" not in c
@@ -128,7 +128,7 @@ def test_load_chunk_prompts_in_order_with_protocol_on_first_chunk(
         )
 
     # THE CORPUS FILE IS UNTOUCHED. Chunk 1 is the on-disk file and nothing else —
-    # the six prompt files are the fixed test environment and the memory layer must
+    # the seven prompt files are the fixed test environment and the memory layer must
     # not edit them. (2026-09-08 reversal: the do-not-capture note and its splice
     # are gone; build chunks carry only the chunk body.)
     on_disk = (TASK_DIR / "prompts" / "chunk-01.md").read_text(encoding="utf-8")

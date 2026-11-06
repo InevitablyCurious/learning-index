@@ -36,7 +36,7 @@ def test_the_example_challenge_provides_every_prompt_the_run_uses() -> None:
         "nudges/write-limit.md",
     ):
         assert pack.text(name).strip()
-    assert len(pack.chunks()) == 5
+    assert len(pack.chunks()) == 7
 
 
 def test_a_missing_prompt_is_loud() -> None:

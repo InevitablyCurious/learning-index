@@ -180,9 +180,9 @@ def test_chunk_prompts_carry_the_write_chunking_directive() -> None:
     """
     from harness.adapters.challenge import _WORKER_AGENTS_MD, _WRITE_CHUNKING_DIRECTIVE
 
-    for index in range(1, 6):
-        text = (TASK_DIR / "prompts" / f"chunk-0{index}.md").read_text(encoding="utf-8")
-        assert "~150 lines" in text, f"chunk-0{index}.md lost the chunking directive"
+    for path in sorted((TASK_DIR / "prompts").glob("chunk-*.md")):
+        text = path.read_text(encoding="utf-8")
+        assert "~150 lines" in text, f"{path.name} lost the chunking directive"
     assert "150 lines" in _WORKER_AGENTS_MD, "AGENTS.md must state the same limit"
     assert "200-400" not in _WORKER_AGENTS_MD, (
         "AGENTS.md must not state a SECOND, larger write limit"
@@ -197,8 +197,8 @@ def test_no_prompt_asks_the_model_to_print_a_completion_string() -> None:
     the same session and the model kept printing it — and it stood in for an
     event (session idle) the harness already observes directly.
     """
-    for index in range(1, 6):
-        text = (TASK_DIR / "prompts" / f"chunk-0{index}.md").read_text(encoding="utf-8")
+    for path in sorted((TASK_DIR / "prompts").glob("chunk-*.md")):
+        text = path.read_text(encoding="utf-8")
         assert "CHUNK FINISHED" not in text, (
-            f"chunk-0{index}.md still asks for the deleted completion marker"
+            f"{path.name} still asks for the deleted completion marker"
         )
