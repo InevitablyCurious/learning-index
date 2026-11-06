@@ -27,9 +27,13 @@ def test_an_aspect_asked_later_in_its_own_loop_proves_the_earlier_one() -> None:
 
 
 def test_an_aspect_asked_twice_is_proved_only_after_its_last_ask() -> None:
-    # F87 counts leftover bars before "place" and compares the picture after it.
-    assert not asked_after(ORDER, "F87", "place", "stale")
-    assert asked_after(ORDER, "F87", "size", "stale")
+    # G03 asks "doublemoves" more than once, with "plainmoves" between two of
+    # those asks: plainmoves does not come after doublemoves' last ask.
+    assert not asked_after(ORDER, "G03", "plainmoves", "doublemoves")
+    # F87 counts leftover bars (stale) early and compares the picture (changed)
+    # last: the picture is asked after the count.
+    assert asked_after(ORDER, "F87", "changed", "stale")
+    assert not asked_after(ORDER, "F87", "stale", "changed")
 
 
 def test_aspects_asked_piece_by_piece_in_one_loop_prove_nothing_about_each_other() -> (

@@ -1871,6 +1871,10 @@
       "first": "When I change the size of my browser window, the pieces don't stay in proportion with the points — they come out too big or too small for the board.",
       "repeat": "Resized my window again and the pieces still don't stay in proportion with the points."
     },
+    "F87.changed": {
+      "first": "When I change the size of my browser window and then put it back, the game doesn't come back looking the way it did — the pieces come back a different size.",
+      "repeat": "Resized my window and put it back again, and the game still doesn't come back looking the way it did."
+    },
     "F87.stale": {
       "first": "When I change the size of my browser window, the board is left a mess — old copies of parts of the board stay drawn over the game.",
       "repeat": "Resized my window again, and old copies of the board are still left drawn over the game."

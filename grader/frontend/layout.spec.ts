@@ -699,9 +699,14 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
       `[aspect: small] [needs: F35] ${where} the board fills ${Math.round(fit.fills * 100)}% of the window at most, either way`,
     ).toBe(true);
   }
+  // Back at full size the game must look as it did. A picture that differs is
+  // told as that, not as "old copies left drawn": copies are counted above
+  // (stale). Run 1793908891 rounds 9-11 restored every element (30 checkers,
+  // one bar, one tray) but drew its pieces another size, and was told about
+  // copies that were not there. Lines approved by Jerry, 2026-11-06.
   expect(
     changed <= 0.02,
-    `[aspect: stale] after the window changed shape and was made full size again, ${(changed * 100).toFixed(1)}% of the screen looks different from before`,
+    `[aspect: changed] after the window changed shape and was made full size again, ${(changed * 100).toFixed(1)}% of the screen looks different from before`,
   ).toBe(true);
   for (const { where, fit } of seen) {
     expect(
