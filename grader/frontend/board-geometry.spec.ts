@@ -132,6 +132,15 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
     bar.width,
     `[aspect: thin] the bar is ${bar.width.toFixed(0)} px wide; a piece that has been hit needs ${pieceForBar.toFixed(0)} px`,
   ).toBeGreaterThanOrEqual(pieceForBar - 2);
+  // And no wider than a piece with a few pixels of room each side (the build
+  // prompt; Jerry, 2026-11-05: "about as wide as one of the pieces with a bit of
+  // extra space (a few px) allocated on each side"). The reference is 1.07
+  // pieces at both sizes; 1.4 is where "far too wide" is true (run 1793908891
+  // round 4: a 121 px bar beside 60 px pieces).
+  expect(
+    bar.width,
+    `[aspect: wide] the bar is ${bar.width.toFixed(0)} px wide; a piece is ${pieceForBar.toFixed(0)} px`,
+  ).toBeLessThanOrEqual(1.4 * pieceForBar + 2);
   // And a bar a player can SEE: it stands out from the board by its fill, its
   // outline or both (how is the builder's choice). A bar that is the colour of the
   // board with no edge of its own is a gap down the middle, wide enough to pass the

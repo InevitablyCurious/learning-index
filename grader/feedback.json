@@ -891,6 +891,10 @@
       "first": "The bar down the middle is just a thin line — I expect it wide enough for a piece I've hit to sit on it.",
       "repeat": "The bar down the middle is still just a thin line — I expect it wide enough for a piece that's been hit to sit on it."
     },
+    "F29.wide": {
+      "first": "The bar down the middle is far too wide — I expect it about as wide as one of the pieces with a bit of extra space (a few px) allocated on each side.",
+      "repeat": "The bar down the middle is still far too wide — I expect it about as wide as one of the pieces with a bit of extra space (a few px) on each side."
+    },
     "F29.blend": {
       "first": "The bar down the middle blends into the board, so I can't pick it out — I expect it to stand out from the board.",
       "repeat": "The bar down the middle still blends into the board, so I still can't pick it out — I expect it to stand out from the board."
