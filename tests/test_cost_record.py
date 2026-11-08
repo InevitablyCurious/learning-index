@@ -44,6 +44,12 @@ sys.path.insert(0, str(REPO / "scripts"))
 from run_cumulative import runner as runner_mod
 from run_cumulative.cost_from_disk import derive_cost_from_disk
 
+#: The real plan's phase names, for the fixtures built inline below. The
+#: derivation carries whatever name a label gives it, so these only have to look
+#: like a cell's own labels — one backend phase, one layer.
+BACKEND_PHASE = "Backend 1 — engine"
+LAYER_PHASE = "Layer 1 — board and controls"
+
 
 def _cell_result(**overrides: Any) -> ChallengeCellResult:
     """A real ``ChallengeCellResult`` for a cell that ran and was graded.
@@ -159,6 +165,21 @@ def _read_cost(run_dir: Path) -> dict[str, Any]:
     path = run_dir / runner_mod.COST_FILENAME
     assert path.is_file(), f"cost.json missing at {path}"
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _assert_bucket_matches(actual: dict[str, Any], expected: dict[str, Any]) -> None:
+    """``actual`` is ``expected`` — same fields, same numbers, wall to the second.
+
+    Two buckets that disagree on their FIELD SET are a bug in either case: a key
+    one path invents or drops is exactly the "absent, never zero" failure these
+    tests exist for, so the sets are compared before the values.
+    """
+    assert set(actual) == set(expected)
+    for field, value in expected.items():
+        if field == "wall_seconds":
+            assert actual[field] == pytest.approx(value), field
+        else:
+            assert actual[field] == value, field
 
 
 # ── THE SIX ENDINGS, EACH RECORDED ──────────────────────────────────────────
@@ -277,7 +298,7 @@ def test_a_cell_with_no_artifacts_records_no_phase_at_all(
     record = _read_cost(runner._state_for_session(session).run_dir)
     assert record["outcome"] == "crashed"
     assert record["phases"] == {}
-    assert "paused_seconds" not in record
+    assert record["paused_seconds"] is None
     # A crash is void: the cell never finished, so it measured nothing.
     assert record["void"] == {"is_void": True, "reason": "crashed"}
 
@@ -290,11 +311,14 @@ def test_a_cell_stopped_while_paused_still_records_its_full_cost(
     ``run_session`` sees only a ``KeyboardInterrupt``; the adapter returned
     nothing at all. Every figure below is read back out of the cell's disk
     artifacts, so this asserts the end-to-end path — outcome, void, the 140.793s
-    the operator's pause held, and the build's tokens, turns, compactions,
-    grades, peak and net wall.
+    the operator's pause held, and the phase's own build: tokens, turns,
+    compactions, grades, peak and net wall.
 
     The numbers are hardcoded, not recomputed from the fixture: a test that
-    re-derived them would agree with any fixture it was handed.
+    re-derived them would agree with any fixture it was handed. The wall is
+    checked TWICE — once as its value and once as the identity it has to satisfy
+    (the cell's whole span MINUS the 140.793s the pause held), because a wall
+    that silently kept the pause would still be "a number".
     """
     runner = _build_runner(tmp_path, monkeypatch, _stopped_while_paused)
     session = _session(0)
@@ -308,10 +332,15 @@ def test_a_cell_stopped_while_paused_still_records_its_full_cost(
     assert record["paused_seconds"] == pytest.approx(140.793)
 
     phases = record["phases"]
-    # Stopped before any troubleshooting round: the phase never opened, and its
-    # (0.052s) span is folded into the build's wall rather than dropped.
-    assert "troubleshooting" not in phases
-    build = phases["build"]
+    assert set(phases["by_phase"]) == {"1"}
+    phase = phases["by_phase"]["1"]
+    assert phase["name"] == cost_fixture.STOPPED_PHASE_NAME
+    # A backend phase carries no grader layer, and the cell was stopped before
+    # any troubleshooting round, so its repair bucket never opened.
+    assert "layer" not in phase
+    assert set(phase) == {"name", "build"}
+
+    build = phase["build"]
     assert build["input_tokens"] == 6_300
     assert build["output_tokens"] == 2_100
     assert build["reasoning_tokens"] == 1_120
@@ -324,10 +353,17 @@ def test_a_cell_stopped_while_paused_still_records_its_full_cost(
         "count": 1,
         "last": {"total": 2, "passed": 1, "failed": 1},
     }
-    assert build["wall_seconds"] == pytest.approx(5_781.029)
-    assert phases["total"]["wall_seconds"] == pytest.approx(5_781.029)
-    assert phases["total"]["turns"] == 3
-    assert phases["total"]["compactions"] == 5
+    # Phase start → cell end is 5_921.819s, the pause held 140.793s of it, and
+    # the wall is NET of that hold: 5_781.026s.
+    held_ms = cost_fixture.CELL_END_MS - cost_fixture.PAUSE_START_MS
+    gross_ms = cost_fixture.CELL_END_MS - cost_fixture.STOPPED_PHASE_START_MS
+    assert build["wall_seconds"] == pytest.approx(5_781.026)
+    assert build["wall_seconds"] == pytest.approx((gross_ms - held_ms) / 1000.0)
+    # One phase, one build: every roll-up IS that bucket, and no repair roll-up
+    # exists because no repair bucket ever opened.
+    assert "troubleshooting" not in phases
+    _assert_bucket_matches(phases["build"], build)
+    _assert_bucket_matches(phases["total"], build)
 
 
 def test_cell_outcome_names_the_compaction_abort_not_a_failure() -> None:
@@ -348,11 +384,13 @@ def test_cell_outcome_names_the_compaction_abort_not_a_failure() -> None:
 def test_build_and_troubleshooting_partition_and_the_total_combines(
     tmp_path: Path,
 ) -> None:
-    """Cost answers "building vs troubleshooting"; the total recombines them.
+    """Cost answers "building vs troubleshooting" PER PHASE, and recombines them.
 
-    Additive fields SUM, ``context_peak`` takes the MAX (peaks do not add), and
-    the phases are split on the live stream's attempt-1 ``attempt.end`` — the
-    first graded round's end — not on any timestamp the DB carries.
+    One layered phase that was built, graded, repaired and graded again: the
+    build interval is everything up to the phase's own first ``attempt.end``, the
+    repair interval is everything after it, and the two roll-ups are the
+    arithmetic recombinations of those buckets — additive fields SUM,
+    ``context_peak`` takes the MAX (peaks do not add), grade counts ADD.
     """
     run_dir = tmp_path / "cell-0000"
     run_dir.mkdir()
@@ -363,14 +401,19 @@ def test_build_and_troubleshooting_partition_and_the_total_combines(
         run_dir=run_dir,
         void={"is_void": False, "reason": None},
     )["phases"]
-    build = phases["build"]
+    assert set(phases["by_phase"]) == {str(cost_fixture.PARTITION_PHASE_INDEX)}
+    entry = phases["by_phase"][str(cost_fixture.PARTITION_PHASE_INDEX)]
+    assert entry["name"] == cost_fixture.PARTITION_PHASE_NAME
+    assert entry["layer"] == cost_fixture.PARTITION_PHASE_LAYER
+
+    build = entry["build"]
     assert build["input_tokens"] == 2_100
     assert build["turns"] == 2
     assert build["compactions"] == 1
     assert build["context_peak"] == 2_000
     assert build["wall_seconds"] == pytest.approx(100.0)
 
-    troubleshooting = phases["troubleshooting"]
+    troubleshooting = entry["troubleshooting"]
     assert troubleshooting["input_tokens"] == 2_220
     assert troubleshooting["turns"] == 1
     assert troubleshooting["compactions"] == 1
@@ -387,6 +430,20 @@ def test_build_and_troubleshooting_partition_and_the_total_combines(
     assert total["compactions"] == 2
     assert total["wall_seconds"] == pytest.approx(160.0)
     assert total["context_peak"] == 3_000  # a peak, not a sum
+
+    # RULE: each roll-up IS the sum over the per-phase buckets — no second
+    # accounting, so a bucket that stopped being folded shows up here.
+    _assert_bucket_matches(
+        phases["build"], cost_fixture.recombine_buckets(phases, "build")
+    )
+    _assert_bucket_matches(
+        phases["troubleshooting"],
+        cost_fixture.recombine_buckets(phases, "troubleshooting"),
+    )
+    _assert_bucket_matches(
+        phases["total"],
+        cost_fixture.recombine_buckets(phases, "build", "troubleshooting"),
+    )
     # Wall is net of pauses, and this cell held none.
     assert runner_mod._cost_record(
         outcome="passed",
@@ -396,57 +453,100 @@ def test_build_and_troubleshooting_partition_and_the_total_combines(
 
 
 def test_attempt_reports_grade_the_phase_they_belonged_to(tmp_path: Path) -> None:
-    """Attempt 1 is the BUILD's grade; attempts 2..N are troubleshooting's.
+    """A report grades the phase its own ``attempt.end`` LABELLED, not a number.
 
-    ``not_run`` / ``error`` are the instrument's own silence, so they belong to
-    no denominator: the graded total counts decided rows only.
+    The numbers here are deliberately OUT OF ORDER: attempt **2** finished the
+    first phase's build and attempt **1** is the second phase's repair round. An
+    attempt number is a cell-global counter — reading it as "attempt 1 is the
+    build" is what billed six of seven build phases as troubleshooting — so
+    attempt 1 must land on phase 4's troubleshooting and nowhere else.
+
+    ``not_run`` / ``error`` are the instrument's own silence and belong to no
+    denominator, and a report whose attempt has no label at all is in NO bucket:
+    nothing on disk says which phase graded it, and a guess is the inference this
+    replaced.
     """
     run_dir = tmp_path / "cell-0000"
     run_dir.mkdir()
-    cost_fixture.write_partitioned(run_dir)
+    base_ms = 1_794_000_000_000
+    backend = BACKEND_PHASE
+    layer = LAYER_PHASE
+    cost_fixture.write_live(
+        run_dir,
+        [
+            {"v": 1, "ts": base_ms, "kind": "cell.start"},
+            cost_fixture.phase_start(1, backend, "build", base_ms),
+            cost_fixture.attempt_end(2, 1, backend, "build", base_ms + 50_000),
+            cost_fixture.phase_start(4, layer, "build", base_ms + 50_000, 1),
+            cost_fixture.attempt_end(
+                1, 4, layer, "troubleshooting", base_ms + 90_000, 1
+            ),
+            {"v": 1, "ts": base_ms + 90_000, "kind": "cell.end"},
+        ],
+    )
+    # Attempt 1 (the number that "must be the build's") is phase 4's repair.
+    cost_fixture.write_report(run_dir, 1, ["pass", "pass"])
+    cost_fixture.write_report(run_dir, 2, ["pass", "fail", "not_run"])
+    # Attempt 3 published a report but no ``attempt.end`` labelled it.
+    cost_fixture.write_report(run_dir, 3, ["pass"])
 
-    phases = runner_mod._cost_record(
-        outcome="passed",
-        run_dir=run_dir,
-        void={"is_void": False, "reason": None},
-    )["phases"]
-    assert phases["build"]["grades"] == {
+    phases = derive_cost_from_disk(run_dir)["phases"]
+    assert phases["by_phase"]["1"]["build"]["grades"] == {
         "count": 1,
         "last": {"total": 2, "passed": 1, "failed": 1},
     }
-    troubleshooting = phases["troubleshooting"]["grades"]
-    assert troubleshooting["last"] == {"total": 2, "passed": 2, "failed": 0}
-    # Gate counts are never summed across passes: the total keeps the pass count
-    # and the latest pass's outcome.
+    assert "grades" not in phases["by_phase"]["4"]["build"]
+    assert phases["by_phase"]["4"]["troubleshooting"]["grades"] == {
+        "count": 1,
+        "last": {"total": 2, "passed": 2, "failed": 0},
+    }
+    # Gate counts are never summed across passes, and the unlabelled report is
+    # in no count at all: 1 build pass + 1 repair pass.
     assert phases["total"]["grades"] == {
-        "count": 1 + troubleshooting["count"],
+        "count": 2,
         "last": {"total": 2, "passed": 2, "failed": 0},
     }
 
 
 def test_grades_alone_still_open_the_phase_they_belong_to(tmp_path: Path) -> None:
-    """A report with no session DB and no anchors still grades its phase.
+    """A labelled grade opens its phase even with no session DB and no anchors.
 
     The reports are published before the loop can die, so they are the only
-    grade source that survives every exit — and a phase that was graded opened
-    even when nothing else about it was observed. Nothing is invented to fill
-    the rest: no token sums, no wall.
+    grade source that survives every exit — and a phase whose ``attempt.end``
+    named it was graded, so its bucket opens on that grade alone. Nothing is
+    invented to fill the rest: no token sums, no turns, and no wall, because no
+    ``phase.start`` was ever recorded to measure a span from.
     """
     run_dir = tmp_path / "cell-0000"
     run_dir.mkdir()
+    base_ms = 1_794_000_000_000
+    cost_fixture.write_live(
+        run_dir,
+        [
+            cost_fixture.attempt_end(1, 1, BACKEND_PHASE, "build", base_ms),
+            cost_fixture.attempt_end(
+                2, 1, BACKEND_PHASE, "troubleshooting", base_ms + 40_000
+            ),
+            cost_fixture.attempt_end(3, 4, LAYER_PHASE, "build", base_ms + 140_000, 1),
+        ],
+    )
     cost_fixture.write_report(run_dir, 1, ["pass", "fail", "not_run"])
     cost_fixture.write_report(run_dir, 2, ["pass"])
+    cost_fixture.write_report(run_dir, 3, ["pass", "pass", "pass"])
 
-    phases = runner_mod._cost_record(
-        outcome="passed",
-        run_dir=run_dir,
-        void={"is_void": False, "reason": None},
-    )["phases"]
-    assert set(phases["build"]) == {"grades"}
-    assert set(phases["troubleshooting"]) == {"grades"}
-    assert phases["total"]["grades"] == {
-        "count": 2,
-        "last": {"total": 1, "passed": 1, "failed": 0},
+    phases = derive_cost_from_disk(run_dir)["phases"]
+    assert set(phases["by_phase"]) == {"1", "4"}
+    backend = phases["by_phase"]["1"]
+    assert backend["name"] == BACKEND_PHASE
+    assert set(backend["build"]) == {"grades"}
+    assert set(backend["troubleshooting"]) == {"grades"}
+    assert set(phases["by_phase"]["4"]["build"]) == {"grades"}
+    # No wall was observed anywhere, so no roll-up may carry one.
+    assert phases["build"] == {
+        "grades": {"count": 2, "last": {"total": 3, "passed": 3, "failed": 0}}
+    }
+    assert phases["total"] == {
+        "grades": {"count": 3, "last": {"total": 1, "passed": 1, "failed": 0}}
     }
 
 
@@ -464,34 +564,37 @@ def test_an_empty_cell_derives_no_phases_and_no_pause(tmp_path: Path) -> None:
         outcome="crashed", run_dir=run_dir, void={"is_void": True, "reason": "crashed"}
     )
     assert record["phases"] == {}
-    assert "paused_seconds" not in record
+    assert record["paused_seconds"] is None
 
 
-def test_a_db_only_cell_omits_wall_and_grades(tmp_path: Path) -> None:
-    """No live stream means no wall; no report means no grades — both ABSENT.
+def test_a_db_only_cell_invents_no_phases_without_labels(tmp_path: Path) -> None:
+    """A session DB alone names no phase, so NO phase is derived — not a guess.
 
-    ``0.0`` seconds would claim the phase took no time and ``{"total": 0}``
-    would claim it graded nothing and passed, when neither was observed.
+    Token sums are worthless without knowing which phase spent them, and the
+    only thing that says so is the live stream's labels. A cell whose DB survived
+    but whose stream did not therefore reports no phases at all: no wall, no
+    grades, no tokens. A zeroed build would claim the phase ran and cost nothing
+    — a measurement that sums cleanly and understates the run.
     """
     run_dir = tmp_path / "cell-0000"
     run_dir.mkdir()
     cost_fixture.write_session_db(run_dir, cost_fixture.PARTITION_MESSAGES[:2])
 
-    phases = derive_cost_from_disk(run_dir)["phases"]
-    assert set(phases) == {"build", "total"}
-    assert "wall_seconds" not in phases["build"]
-    assert "grades" not in phases["build"]
-    assert "wall_seconds" not in phases["total"]
-    assert "grades" not in phases["total"]
-    assert phases["build"]["turns"] == 2
-    assert phases["build"]["compactions"] == 0
+    assert derive_cost_from_disk(run_dir) == {"phases": {}, "paused_seconds": None}
+    record = runner_mod._cost_record(
+        outcome="crashed", run_dir=run_dir, void={"is_void": True, "reason": "crashed"}
+    )
+    assert record["phases"] == {}
+    assert record["paused_seconds"] is None
 
 
 def test_a_live_only_cell_records_wall_and_nothing_else(tmp_path: Path) -> None:
-    """Anchors alone give the whole net wall; no tokens, turns or grades exist.
+    """A labelled span alone gives the whole net wall; nothing else is claimed.
 
-    Wall is enough to make a build — a cell that ran consumed real time — and
-    with no troubleshooting activity the entire span is the build's.
+    Wall is enough to make a phase — a cell that ran consumed real time — and
+    with no message and no grade in its repair interval that interval never
+    opened as a PHASE, so its 60s folds into the build's wall rather than being
+    dropped. No tokens, no turns, no grades: none of them were observed.
     """
     run_dir = tmp_path / "cell-0000"
     run_dir.mkdir()
@@ -499,22 +602,37 @@ def test_a_live_only_cell_records_wall_and_nothing_else(tmp_path: Path) -> None:
         run_dir,
         [
             {"v": 1, "ts": cost_fixture.PARTITION_START_MS, "kind": "cell.start"},
-            {
-                "v": 1,
-                "ts": cost_fixture.PARTITION_BOUNDARY_MS,
-                "kind": "attempt.end",
-                "attempt": 1,
-            },
+            cost_fixture.phase_start(
+                cost_fixture.PARTITION_PHASE_INDEX,
+                cost_fixture.PARTITION_PHASE_NAME,
+                "build",
+                cost_fixture.PARTITION_START_MS,
+                cost_fixture.PARTITION_PHASE_LAYER,
+            ),
+            cost_fixture.attempt_end(
+                1,
+                cost_fixture.PARTITION_PHASE_INDEX,
+                cost_fixture.PARTITION_PHASE_NAME,
+                "build",
+                cost_fixture.PARTITION_BOUNDARY_MS,
+                cost_fixture.PARTITION_PHASE_LAYER,
+            ),
             {"v": 1, "ts": cost_fixture.PARTITION_END_MS, "kind": "cell.end"},
         ],
     )
 
     derived = derive_cost_from_disk(run_dir)
     phases = derived["phases"]
-    assert set(phases) == {"build", "total"}
+    assert set(phases) == {"by_phase", "build", "total"}
+    assert set(phases["by_phase"]) == {str(cost_fixture.PARTITION_PHASE_INDEX)}
+    phase = phases["by_phase"][str(cost_fixture.PARTITION_PHASE_INDEX)]
+    assert set(phase) == {"name", "layer", "build"}
+    assert set(phase["build"]) == {"wall_seconds"}
+    assert phase["build"]["wall_seconds"] == pytest.approx(160.0)
     assert set(phases["build"]) == {"wall_seconds"}
     assert phases["build"]["wall_seconds"] == pytest.approx(160.0)
     assert set(phases["total"]) == {"wall_seconds"}
+    assert phases["total"]["wall_seconds"] == pytest.approx(160.0)
     assert "troubleshooting" not in phases
 
 
@@ -522,7 +640,9 @@ def test_the_derivation_never_emits_cost_usd(tmp_path: Path) -> None:
     """The disk path has no pricing: the KEY is absent everywhere, not ``0.0``.
 
     A local cell has no dollars at all, and a zero would be indistinguishable
-    from a genuinely free remote call in any aggregate.
+    from a genuinely free remote call in any aggregate. That has to hold for every
+    bucket — each phase's build and repair, and each roll-up — because a dollar
+    total is only ever read off the roll-up.
     """
     run_dir = tmp_path / "cell-0000"
     run_dir.mkdir()
@@ -533,9 +653,15 @@ def test_the_derivation_never_emits_cost_usd(tmp_path: Path) -> None:
         run_dir=run_dir,
         void={"is_void": False, "reason": None},
     )["phases"]
-    for name, phase in phases.items():
-        assert "cost_usd" not in phase, f"{name} carries cost_usd"
-    assert set(phases) == {"build", "troubleshooting", "total"}
+    assert set(phases) == {"by_phase", "build", "troubleshooting", "total"}
+    for index, entry in phases["by_phase"].items():
+        for kind in ("build", "troubleshooting"):
+            assert kind in entry, f"phase {index} opened no {kind} bucket"
+            assert "cost_usd" not in entry[kind], (
+                f"phase {index} {kind} carries cost_usd"
+            )
+    for name in ("build", "troubleshooting", "total"):
+        assert "cost_usd" not in phases[name], f"{name} carries cost_usd"
 
 
 # ── ONE VOID RULE ────────────────────────────────────────────────────────────

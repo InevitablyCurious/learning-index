@@ -51,6 +51,8 @@ class GradingMixin:
         log_path: Path,
         attempt: int | None = None,
         run_identity: str | None = None,
+        layer: int | None = None,
+        gates_dir: Path | None = None,
     ) -> dict[str, Any]:
         """Run the gate oracle, STREAMING its output to ``log_path`` as it runs.
 
@@ -106,6 +108,8 @@ class GradingMixin:
             attempt=attempt,
             worker_target=self.grader_worker_target,
             run_identity=run_identity,
+            layer=layer,
+            gates_dir=gates_dir,
         )
         # `docker` is invoked from the repo root; the gates travel inside the
         # image, so there is no gates directory for this process to stand in.
@@ -238,6 +242,8 @@ class GradingMixin:
         log_path: Path,
         attempt: int | None = None,
         run_identity: str | None = None,
+        layer: int | None = None,
+        gates_dir: Path | None = None,
     ) -> dict[str, Any]:
         """Grade, and regrade ONCE a pass that measured nothing (see
         InstrumentFaultError). The failed pass's report and log are kept beside
@@ -251,6 +257,8 @@ class GradingMixin:
                     log_path=log_path,
                     attempt=attempt,
                     run_identity=run_identity,
+                    layer=layer,
+                    gates_dir=gates_dir,
                 )
                 if report.get("gradable") is not False:
                     return report

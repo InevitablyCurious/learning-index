@@ -10,6 +10,7 @@ import os
 import tempfile
 from typing import Any, Mapping
 
+from .epoch import SYSTEM_EPOCH
 from .types import (
     CUMULATIVE_SCHEMA_VERSION,
     RosterEntry,
@@ -62,12 +63,17 @@ class CumulativeManifest:
     session_records: list[SessionRecord]
     updated_at: str
     schema_version: int = CUMULATIVE_SCHEMA_VERSION
+    #: The data-contract epoch this manifest was written under. Always present
+    #: on the wire; sourced from ``harness.cumulative.epoch`` so every artifact
+    #: in the system names the same epoch.
+    system_epoch: str = SYSTEM_EPOCH
     run_context: dict[str, Any] | None = None
     chunk_plan_hash: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": int(self.schema_version),
+            "system_epoch": self.system_epoch,
             "created_at": self.created_at,
             "task": self.task,
             "org_id": self.org_id,
@@ -98,6 +104,7 @@ class CumulativeManifest:
             schedule=[ScheduledSession.from_dict(item) for item in schedule_data],
             session_records=[SessionRecord.from_dict(item) for item in records_data],
             updated_at=str(d["updated_at"]),
+            system_epoch=str(d.get("system_epoch") or SYSTEM_EPOCH),
             run_context=dict(d["run_context"])
             if isinstance(d.get("run_context"), Mapping)
             else None,
@@ -156,6 +163,13 @@ def validate_or_fail(
             f"({manifest.schema_version} vs {CUMULATIVE_SCHEMA_VERSION}); start a fresh run"
         )
 
+    if manifest.system_epoch != SYSTEM_EPOCH:
+        raise ValueError(
+            "cannot resume: system epoch drift detected "
+            f"(manifest={manifest.system_epoch!r} expected={SYSTEM_EPOCH!r}); "
+            "start a fresh run"
+        )
+
     expected_hash = roster_hash(expected_roster)
     if manifest.roster_hash != expected_hash:
         raise ValueError(
@@ -212,6 +226,7 @@ def resume_or_create(
         session_records=[],
         updated_at=now,
         schema_version=CUMULATIVE_SCHEMA_VERSION,
+        system_epoch=SYSTEM_EPOCH,
         run_context=dict(run_context) if run_context is not None else None,
         chunk_plan_hash=chunk_plan_hash,
     )

@@ -16,6 +16,7 @@ from harness.adapters.challenge import (
     ChallengeCellResult,
     ChallengeRunner,
 )
+from harness.prompt_pack import PromptPack
 
 
 TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
@@ -31,23 +32,26 @@ def _make_runner(tmp_path: Path, *, memory_mode: str = "on") -> ChallengeRunner:
     )
 
 
-def test_load_chunk_prompts_returns_exactly_the_on_disk_chunks(
-    tmp_path: Path,
-) -> None:
-    # The signature IS the invariant: `self` is the only parameter — the
-    # removed memory kwarg cannot come back without failing here.
-    params = list(inspect.signature(ChallengeRunner._load_chunk_prompts).parameters)
-    assert params == ["self"]
+def test_the_pack_serves_exactly_the_on_disk_chunk_bytes() -> None:
+    """The build text is the raw on-disk bytes — memory is never formatted in.
 
-    runner = _make_runner(tmp_path, memory_mode="on")
+    The loader is `PromptPack` now (harness/prompt_pack.py): the runner reads
+    `phases()` and builds one phase at a time, so the invariant that used to
+    sit on a runner method sits on the pack. The signature IS the invariant
+    too — the removed memory kwarg cannot come back without failing here.
+    """
+    params = list(inspect.signature(PromptPack.__init__).parameters)
+    assert params == ["self", "prompts_dir"]
 
-    chunks = runner._load_chunk_prompts()
+    pack = PromptPack(TASK_DIR / "prompts")
+    phases = pack.phases()
 
-    on_disk = sorted((TASK_DIR / "prompts").glob("chunk-*.md"))
-    assert len(on_disk) == 7
-    # Byte-identical to disk: nothing is prepended, appended, or formatted in.
-    assert chunks == [p.read_text(encoding="utf-8") for p in on_disk]
-    assert all("# OKP MEMORY CONTEXT" not in c for c in chunks)
+    assert len(phases) == 7
+    for phase in phases:
+        on_disk = (TASK_DIR / "prompts" / phase.file).read_text(encoding="utf-8")
+        # Byte-identical to disk: nothing is prepended, appended, or formatted in.
+        assert phase.text == on_disk.rstrip("\n")
+        assert "# OKP MEMORY CONTEXT" not in phase.text
 
 
 def test_run_cell_forwards_cell_identity_and_no_memory(
@@ -113,7 +117,7 @@ def test_challenge_source_has_no_direct_injection_seam() -> None:
     seam_param = "injected" + "_memory"
     seam_helper = "_format" + "_memory"
 
-    prompt_source = inspect.getsource(ChallengeRunner._load_chunk_prompts)
+    prompt_source = inspect.getsource(PromptPack)
     run_cell_source = inspect.getsource(ChallengeRunner.run_cell)
 
     for source in (prompt_source, run_cell_source):

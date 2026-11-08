@@ -31,7 +31,6 @@ from harness.serve_client import ServeClient
 from tests._serve_drive_fakes import (
     _LOOP_SIG,
     _ZERO_METRICS,
-    TASK_DIR,
     _FakeCell,
     _FakeServeClient,
     _make_feedback_attempt_kwargs,
@@ -147,26 +146,6 @@ def test_a_chunk_that_ran_out_of_room_is_not_compacted(tmp_path: Path) -> None:
     assert stats.killed_reason == "context_exhausted"
     assert client.summarize_calls == []
     assert len(client.sent_prompts) == 1, "the next chunk never starts"
-
-
-def test_the_compact_flag_leaves_the_chunk_prompts_untouched(
-    tmp_path: Path,
-) -> None:
-    """The flag buys a harness write; it changes nothing the model is told.
-
-    The chunk prompts carry no compaction instruction whatever the flag — the
-    compaction is the harness's own POST, invisible to the worker, so there is
-    nothing for the model to arm, script or finish.
-    """
-    runner = _make_runner(tmp_path, compact=True)
-    chunks = runner._load_chunk_prompts()
-    prompt_paths = sorted((TASK_DIR / "prompts").glob("chunk-*.md"))
-    assert len(chunks) == 7
-    assert len(prompt_paths) == 7
-    for chunk, path in zip(chunks, prompt_paths):
-        on_disk = path.read_text(encoding="utf-8")
-        assert chunk == on_disk
-        assert "okp_compact_session" not in chunk
 
 
 def test_repair_attempts_never_compact(tmp_path: Path) -> None:

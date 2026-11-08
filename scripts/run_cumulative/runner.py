@@ -21,9 +21,11 @@ from typing import Any, Mapping
 
 from harness import config
 from harness.adapters.challenge import ERROR_CAP_PER_TYPE, ErrorCapExceeded
+from harness.adapters.challenge.pricing import PricingMixin
 from harness.benv import load_bench_env
-from harness.live_stream import run_notice
+from harness.cumulative.epoch import SYSTEM_EPOCH
 from harness.cumulative.progress import progress_from_cell_result
+from harness.live_stream import run_notice
 from harness.cumulative.run_artifacts import (
     RunManifest,
     StatusStream,
@@ -44,7 +46,7 @@ from harness.spend_key import (
     resolve_worker_spend_proxy_base_url,
 )
 
-from .cost_from_disk import derive_cost_from_disk
+from .cost_from_disk import derive_cost_from_disk, derive_cost_meta
 from .paths import (
     DEFAULT_ORG_ID,
     DEFAULT_PROXY_RUNS_DIR,
@@ -116,6 +118,22 @@ def _cell_outcome(result: Any) -> str:
     return "passed" if progress_from_cell_result(result).full_green else "failed"
 
 
+def _price_for(model: str | None) -> dict[str, float] | None:
+    """The pricing row for ``model``; ``None`` when it has no dollars.
+
+    A ``local-llm-proxy`` model is served on this machine: its cost is real but
+    it is not dollars, so the honest price is ``None`` — not a zeroed row that
+    would read as "priced at nothing". A remote model gets
+    :meth:`PricingMixin._pricing_row_for_model`'s row, and ``None`` when that
+    model is unpriced (absent, never zero-filled).
+    """
+    if not model:
+        return None
+    if model.partition("/")[0] == "local-llm-proxy":
+        return None
+    return PricingMixin._pricing_row_for_model(model)
+
+
 def _cost_record(
     *, outcome: str, run_dir: Path, void: dict[str, Any]
 ) -> dict[str, Any]:
@@ -127,18 +145,46 @@ def _cost_record(
     goes blank on exactly those cells. The phases, the pause total and the
     grade/compaction attribution all come from artifacts the cell published
     before it could die — session DB, live stream, attempt reports — through the
-    one function that owns that derivation.
+    two functions that own that derivation.
+
+    SCHEMA 2. The record names its ``system_epoch`` (the manifest's own epoch
+    constant, never a copy of the literal) and the cell's served identity and
+    terminal reason, so a ledger row can say WHICH instrument and WHICH model
+    produced it without the reader opening the run manifest. The wall is carried
+    twice: ``cell_wall_seconds`` as the clock ran, and ``measured_wall_seconds``
+    with operator pauses removed — the axis the phase walls and the compaction
+    positions are measured on.
+
+    EVERY KEY IS ALWAYS PRESENT, and an unobserved value is ``null`` — including
+    ``paused_seconds``. A missing key means "not observed" to one reader and
+    "this schema has no such field" to another; the schema version is what says
+    which, so a v2 record states its nulls instead of relying on absence.
+    ``price`` is the model's pricing row (``null`` for a local model) and
+    ``cost_usd`` is always ``null``: no remote cost is computed here, and a zero
+    would claim a measured total nobody measured.
 
     The void verdict is passed IN rather than computed here: it reads the
     adapter result when a cell finished, and that judgment belongs to
     ``_void_for``, not to the cost ledger.
     """
     derived = derive_cost_from_disk(run_dir)
-    record: dict[str, Any] = {"outcome": outcome, "phases": derived["phases"]}
-    if derived["paused_seconds"] is not None:
-        record["paused_seconds"] = derived["paused_seconds"]
-    record["void"] = void
-    return record
+    meta = derive_cost_meta(run_dir)
+    return {
+        "schema_version": 2,
+        "system_epoch": SYSTEM_EPOCH,
+        "model": meta["model"],
+        "provider": meta["provider"],
+        "outcome": outcome,
+        "terminal_reason": meta["terminal_reason"],
+        "void": void,
+        "cell_wall_seconds": meta["cell_wall_seconds"],
+        "measured_wall_seconds": meta["measured_wall_seconds"],
+        "paused_seconds": derived["paused_seconds"],
+        "price": _price_for(meta["model"]),
+        "cost_usd": None,
+        "phases": derived["phases"],
+        "compactions": meta["compactions"],
+    }
 
 
 def _write_cost_json(run_dir: Path, *, outcome: str, result: Any) -> None:
@@ -861,6 +907,38 @@ class RealSessionRunner:
                     attempt_record["failed_gates"] = list(
                         attempt.get("failed_gates", []) or []
                     )
+                    # THE SCOPED FAILURE LIST. `failed_gates` above is
+                    # CUMULATIVE by design (the grader does not scope it), so a
+                    # check in a layer the model was never asked for yet appears
+                    # there as a failure of this round. This is the in-scope
+                    # subset the round was actually judged on — carried so a
+                    # scorecard reading only the manifest cannot mistake an
+                    # above-scope failure for this round's work. None (not [])
+                    # when the report predates the field: "not published" and
+                    # "published nothing" are different facts.
+                    scoped_failures = attempt.get("failed_gates_scoped")
+                    attempt_record["failed_gates_scoped"] = (
+                        list(scoped_failures)
+                        if isinstance(scoped_failures, list)
+                        else None
+                    )
+                    # THE PHASE THIS ROUND BELONGS TO, as its own record labels
+                    # it (``phase_index``/``phase_name``/``phase_layer``/
+                    # ``phase_kind``, one spelling from
+                    # ``harness.prompt_pack.phase_label``). Lifted only when the
+                    # report carries them: writing ``None`` would state
+                    # "labelled, absent" about a round that predates the labels,
+                    # and the cost derivation reads an unlabelled round as
+                    # belonging to NO phase. A phase is what the record says it
+                    # is — never what its attempt number implies.
+                    for label_key in (
+                        "phase_index",
+                        "phase_name",
+                        "phase_layer",
+                        "phase_kind",
+                    ):
+                        if label_key in attempt:
+                            attempt_record[label_key] = attempt[label_key]
                     # WO-GATE-ROSTER: per-gate outcomes alongside the legacy
                     # failing-only list. `failed_gates` keeps its exact prior
                     # shape and meaning for every existing consumer; these carry

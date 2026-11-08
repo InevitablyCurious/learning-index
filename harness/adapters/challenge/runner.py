@@ -32,7 +32,6 @@ importing it directly is correct -- same rationale as serve.py
 
 from __future__ import annotations
 
-import itertools
 import os
 import re
 import shutil
@@ -70,6 +69,7 @@ from ...cell_isolation import (
     assert_clean_worktree,
     assert_no_docker_residue,
 )
+from ...prompt_pack import Phase, PromptPack, phase_label
 from ..docker_worker import (
     WORKER_IMAGE,
     ImageFingerprint,
@@ -79,9 +79,11 @@ from ..mapping import write_session_mapping
 from ..transcript import write_session_transcript
 from .bootstrap import BootstrapMixin
 from .stages import (
+    LayerMap,
     Stage,
     aspect_order,
     check_id,
+    load_layers,
     load_stages,
     player_order,
     player_view,
@@ -157,6 +159,15 @@ from .worker_config import bench_session_title
 # the same split `termination_reason = CONTEXT_EXHAUSTED` /
 # `attempts_to_green = "CONTEXT_EXHAUSTED"` uses.
 COMPACTIONS_BEFORE_GRADE = "compactions_before_grade"
+
+# ── HOW LONG THE GATE ROSTER ENUMERATION MAY TAKE ───────────────────────────
+#
+# One enumeration per CAMPAIGN, host-side, and it executes no test: `roster.mjs`
+# shells out to `vitest list` and `playwright test --list` only. The value
+# mirrors scripts/run_cumulative/paths.py GATE_ROSTER_TIMEOUT_S; the harness
+# cannot import it from there (the campaign layer sits above the adapter, never
+# below it), so the number is stated here rather than reached for.
+_GATE_ROSTER_TIMEOUT_S = 300
 
 # WO-77: the first pass is a sequence of chunk prompts (task/backgammon/prompts/
 # chunk-NN.md), driven one per user message over the one serve session.
@@ -264,6 +275,26 @@ def _regressed_checks(
     }
 
 
+def _failed_gates_scoped(gate_results: Any) -> list[str]:
+    """The failure NAMES scoped to this round's graded layer.
+
+    ``report["failed_gates"]`` is CUMULATIVE by design — the grader does not
+    scope it (grader/report.mjs), so a check in a layer above this round's
+    ``--layer`` scope appears there as a failure the model was never asked to
+    fix. The folded ``gate_results`` rows ARE the scoped view: a gate beyond the
+    scope is folded ``not_run``/``not_graded``, never ``fail``. So
+    ``status == "fail"`` is exactly the in-scope failures, by name.
+
+    ``failed_gates`` itself is never narrowed to this — the two keys answer two
+    different questions and both are published.
+    """
+    return [
+        str(row["id"])
+        for row in (gate_results or [])
+        if isinstance(row, dict) and row.get("status") == "fail"
+    ]
+
+
 def _pause_grade(report: dict[str, Any], report_path: Path) -> dict[str, Any]:
     """The grade an operator pause shows (WO-PAUSE-AFTER-GRADE): values the
     attempt's report already carries, plus its path. Nothing is re-derived."""
@@ -273,13 +304,40 @@ def _pause_grade(report: dict[str, Any], report_path: Path) -> dict[str, Any]:
         "report_path": str(report_path),
         "verdict": report.get("verdict"),
         "conformed": report.get("conformed"),
+        # CUMULATIVE, kept verbatim from the grader: a failing check that sits in
+        # a layer above the one graded this round is still in here. The scoped
+        # subset is the SECOND key below, never a rewrite of this one.
         "failed_gates": [str(g) for g in gates] if isinstance(gates, list) else [],
+        "failed_gates_scoped": _failed_gates_scoped(report.get("gate_results")),
         "n_problems": len(problems) if isinstance(problems, list) else 0,
     }
     results = report.get("results")
     if isinstance(results, dict):
         grade["results"] = {str(k): bool(v) for k, v in results.items()}
     return grade
+
+
+def _live_cell_outcome(verdict: str | None, terminal_reason: str | None) -> str:
+    """How the cell ENDED, in the one vocabulary ``cost.json`` already uses.
+
+    ``cell.end`` is written from ``run_cell``'s ``finally``, which cannot see
+    the graded report — only the verdict the adapter settled on and the
+    termination reason. That is enough for five of the six endings; the sixth
+    (``error_cap``) is raised by the campaign layer AFTER ``run_cell`` returns,
+    so it is not reachable here and is deliberately not produced.
+
+    Order matters: ``compactions_before_grade`` is decided before the verdict
+    because an aborted-before-grade cell may still carry a ``FAIL`` verdict.
+    """
+    if terminal_reason == "compactions_before_grade":
+        return "aborted_compaction"
+    if verdict == "PASS":
+        return "passed"
+    if verdict in ("FAIL", "BUDGET_STOP"):
+        return "failed"
+    if terminal_reason == "stopped":
+        return "stopped"
+    return "crashed"
 
 
 class ChallengeRunner(
@@ -385,6 +443,12 @@ class ChallengeRunner(
         self.gate_timeout_s = int(gate_timeout_s)
         if self.gate_timeout_s <= 0:
             raise ValueError("gate_timeout_s must be > 0")
+        # Optional READ-ONLY overlay of the grader source over the image's
+        # /gates, for a stale image that must not be rebuilt. ``None`` (the
+        # default) grades the baked source. Set directly by a caller/test; no
+        # constructor kwarg, because it is not an operator knob — it is a
+        # workaround for one known-stale image, not a supported run condition.
+        self.grader_gates_dir: Path | None = None
         # ── HOW MUCH OF THE MACHINE GRADING MAY USE ────────────────────────
         #
         # Passed INTO the container, never read from this host: the container
@@ -611,6 +675,12 @@ class ChallengeRunner(
         verdict = None
         terminal_reason = None
         terminal_exception = None
+        # The pause total lives on the instance because `cell.end` is written
+        # HERE, after `_run_cell_impl` has returned — a local of that method is
+        # out of scope in this `finally`. Initialized before the call so the
+        # terminal record can still carry a pause total when `_run_cell_impl`
+        # raises before it starts accumulating.
+        self._paused_seconds = 0.0
         try:
             # The memory measurements bracket the cell, outside its wall time
             # (memory_record.py): a memory-ON cell waits for the memory system
@@ -660,11 +730,29 @@ class ChallengeRunner(
             # the stream is the terminal one and no beat can arrive after it to
             # suggest the cell is still going.
             self._heartbeat.stop()
+            # MEASURED WALL, derived from the epoch rather than from a clock
+            # this `finally` does not have: `_cell_ts` is the cell's wall epoch
+            # (set in `_run_cell_impl`, absent if the cell never got that far —
+            # in which case the field is dropped rather than guessed). Paused
+            # time is subtracted because it is not the cell's own time; the
+            # same subtraction the result's `wall_seconds` makes.
+            _cell_ts = getattr(self, "_cell_ts", None)
+            _paused = getattr(self, "_paused_seconds", 0.0)
+            measured_wall = None
+            if _cell_ts is not None:
+                measured_wall = round((time.time() - _cell_ts) - _paused, 3)
             self._live.emit(
                 "cell.end",
                 cell_seq=cell_seq,
                 verdict=verdict,
                 terminal_reason=terminal_reason,
+                # The v2 terminal vocabulary, so a reader of the stream does not
+                # have to re-derive "how did this end" from verdict + reason.
+                outcome=_live_cell_outcome(verdict, terminal_reason),
+                measured_wall_seconds=measured_wall,
+                # Always present: a genuinely zero-pause cell says 0.0 rather
+                # than staying silent, so "no pause" and "no record" differ.
+                paused_seconds=round(_paused, 3),
                 # Dropped when None, like every other null on this stream — so a
                 # clean cell carries no exception field at all rather than an
                 # empty one a reader has to interpret.
@@ -725,7 +813,10 @@ class ChallengeRunner(
         # WO-PAUSE-AFTER-GRADE: seconds the cell spent HELD for operator review.
         # Accumulated across every round + final pause and excluded from
         # `wall_seconds`; also recorded beside it as `paused_seconds`.
-        paused_seconds = 0.0
+        # INSTANCE attribute, not a local: `cell.end` is emitted from
+        # `run_cell`'s `finally` and has to be able to read the total. Re-set
+        # here so a DIRECT caller of `_run_cell_impl` (tests do) starts at zero.
+        self._paused_seconds = 0.0
         # WO-STRIP-2b: capture the cell epoch ONCE so every surface of this
         # cell (serve session, first-run argv, result, status stream) carries
         # the identical deterministic title, stable across attempts/resumes.
@@ -803,14 +894,20 @@ class ChallengeRunner(
         attempt_reports: list[dict[str, Any]] = []
         final_report: dict[str, Any] = {}
         verdict = "FAIL"
-        attempts_to_green: int | str = "FAIL"
+        # WHAT THE CELL REPORTED AS "PASSES THAT WERE NOT GREEN": the SUM of the
+        # failed grades each layer needed (a layer that passed first try adds 0,
+        # as `attempt - 1` did when there was one end-of-cell grade). A terminal
+        # path replaces it with its own word, exactly as before.
+        attempts_to_green: int | str = 0
         termination_reason = "pending"
-        # CONTEXT EXHAUSTED — a session that overflowed past what compaction can
-        # recover (ContextOverflowError) — ends the cell where it happens:
-        # during the build nothing is graded; during a repair round the last
-        # graded round stands. A context that merely reached the token threshold
-        # is compacted and the session continues, so it never sets this.
-        context_stop = False
+        # The build's completion rows, one per PHASE, concatenated across the
+        # phase loop — the joined build the cell reports (and grades the all-or-
+        # nothing WO-ABORT check on).
+        chunk_reports: list[dict[str, Any]] = []
+        # Transport resumes the cell performed. An exit-1 stream-incomplete build
+        # is resumed in place, never re-driven from scratch, and every resume
+        # anywhere in the sequence counts here.
+        transport_resume_count = 0
         # PLAYER ORDER (stages.py): the checks the model was told about last
         # round, and the complaints it was told that have failed in every grade
         # since. "That fixed it" names only checks it was told about; the
@@ -824,10 +921,8 @@ class ChallengeRunner(
         # it" quotes what was actually said (feedback.py _build_pass_verdict).
         told_first_label: dict[str, str] = {}
         told_open: set[str] = set()
-        _worker_exit_annot: str | None = None
-        first_run: _OpencodeRunStats | None = None
-        # How many chunks the build SHOULD have run, for the completion rows
-        # below: a chunk that never got a turn has no report to count.
+        # How many phases the build SHOULD have run, for the completion rows
+        # below: a phase that never got a turn has no report to count.
         build_chunk_expected: int = 0
 
         worker_killed_reason: str | None = None
@@ -1046,12 +1141,26 @@ class ChallengeRunner(
                         f"PROGRESS step=live-view marker_write_failed detail={exc}"
                     )
 
-            chunk_prompts = self._load_chunk_prompts()
-            build_chunk_expected = len(chunk_prompts)
-            task_prompt = self._joined_chunk_prompt(chunk_prompts)
+            # THE PACK IS THE PLAN. `phases()` is the challenge's own
+            # declaration (prompts/phase-plan.json): order, names, and the
+            # grader layer each phase is graded against. Nothing below counts
+            # phases or knows which of them carry a layer.
+            pack = PromptPack(self.task_dir / "prompts")
+            phases = pack.phases()
+            build_chunk_expected = len(phases)
+            # THE LAST PHASE THIS CELL ACTUALLY REACHED, held OUTSIDE the loop
+            # below because the FINAL pause fires after it. A `for` variable is
+            # not a scope: if the loop never ran (a budget stop before the first
+            # phase), reading `phase` there would raise NameError, and the pause
+            # that must still label the cell would crash instead. None means "no
+            # phase was reached" and the label is then simply absent.
+            last_phase: Phase | None = None
+            # Only a character count for the launch line below — the cell is
+            # driven phase-by-phase over serve, one build message at a time.
+            task_prompt = pack.whole_spec()
             self._progress(
                 f"PROGRESS run_label={run_label} step=worker-launch-start mode=real model={self.model} "
-                f"pure={pure} prompt_chars={len(task_prompt)} prompt_chunks={len(chunk_prompts)} "
+                f"pure={pure} prompt_chars={len(task_prompt)} prompt_chunks={len(phases)} "
                 "prompt_delivery=stdin"
             )
             self._emit_cost_target_warning_if_reached(
@@ -1074,903 +1183,1115 @@ class ChallengeRunner(
                 attempts_to_green = "BUDGET_STOP"
                 termination_reason = "attempts_exhausted_by_budget"
             else:
-                # ── THE CHUNKED BUILD IS THE ONLY BUILD ─────────────────
+                # ── THE OWNER'S SEQUENCE, ONE PHASE AT A TIME ───────────────
                 #
-                # A transport fault here used to restart the entire build on
-                # the stdout path with all six chunks JOINED INTO ONE PROMPT.
-                # That is not the same experiment: the chunk boundaries are
-                # where the compactions happen, so
-                # the salvaged cell measured a different thing under the same
-                # name. It aborts instead.
-                if self._serve_client is None or self._cell_session_id is None:
-                    raise ServeTransportError(
-                        "no serve session for the chunked build — the "
-                        "benchmark has one transport and there is no second "
-                        "way to run this cell"
+                # The build is SEVEN phases and the pack's declaration is the
+                # only thing that orders them (harness/prompt_pack.py): three
+                # backend phases, then four layered frontend ones, each with the
+                # grader layer it must be graded against. Nothing here counts
+                # phases or knows which of them carry a layer — `phase.layer`
+                # is the declaration read back, so the two `--layer 3` passes
+                # (after "Layer 3 — gameplay" and again after "Wire and
+                # verify") fall out of the data rather than a special case.
+                #
+                # PER PHASE: drive that phase's build message over the one serve
+                # session, then — for a LAYERED phase — grade `--layer N` and
+                # troubleshoot until that layer PASSes before the next phase is
+                # built. A BACKEND phase (layer None) is build + harness
+                # compaction only: nothing is scoped to grade yet.
+                #
+                # A LAYER ADVANCES ONLY ON A SCOPED PASS. Building layer 2 over
+                # layer 1's unresolved failures would measure a task nobody was
+                # asked for: the model is told one layer at a time, and repaired
+                # one layer at a time.
+                #
+                # ONE TRANSPORT, AND NO SALVAGE. A transport fault in any
+                # phase's build used to restart the whole build on the stdout
+                # path with all chunks JOINED INTO ONE PROMPT. That is not the
+                # same experiment — the phase boundaries are where the
+                # compactions happen — so it aborts.
+                attempt = 0
+                # Set by every path that ends the CELL rather than ending one
+                # troubleshooting stretch. `break` leaves the innermost `while`,
+                # so a terminal verdict marks this and the phase loop honours it.
+                cell_terminal = False
+
+                for phase in phases:
+                    last_phase = phase
+                    if self._serve_client is None or self._cell_session_id is None:
+                        raise ServeTransportError(
+                            "no serve session for the chunked build — the "
+                            "benchmark has one transport and there is no second "
+                            "way to run this cell"
+                        )
+                    self._progress(
+                        f"PROGRESS run_label={run_label} step=build-phase-start "
+                        f"phase={phase.index} name='{phase.name}' "
+                        f"layer={'none' if phase.layer is None else phase.layer}"
                     )
-                try:
-                    first_run = self._run_opencode_serve_chunked(
-                        active_cell=active_cell,
-                        serve_client=self._serve_client,
-                        session_id=self._cell_session_id,
-                        prompts=chunk_prompts,
-                        run_label=run_label,
-                        sidecar_path=user_events_path,
-                        prior_cost_usd=cell_cost_usd,
-                        kill_hook=active_cell.kill_worker_processes,
-                    )
-                except ServeTransportError:
-                    raise
-                except Exception as exc:
+                    try:
+                        build_run = self._run_opencode_serve_chunked(
+                            active_cell=active_cell,
+                            serve_client=self._serve_client,
+                            session_id=self._cell_session_id,
+                            prompts=[pack.build_step_message(phase.index)],
+                            phase_index=phase.index,
+                            phase_label=phase_label(phase, "build"),
+                            run_label=run_label,
+                            sidecar_path=user_events_path,
+                            prior_cost_usd=cell_cost_usd,
+                            kill_hook=active_cell.kill_worker_processes,
+                        )
+                    except ServeTransportError:
+                        raise
+                    except Exception as exc:
+                        self._progress(
+                            f"PROGRESS run_label={run_label} step=serve-drive "
+                            f"phase=initial-chunk-{phase.index} status=abort "
+                            f"reason=exception detail={exc}"
+                        )
+                        raise ServeTransportError(
+                            f"the chunked build failed on the serve transport "
+                            f"({exc}) — aborting rather than salvaging it by "
+                            "another route"
+                        ) from exc
                     self._progress(
                         f"PROGRESS run_label={run_label} step=serve-drive "
-                        f"phase=initial status=abort reason=exception detail={exc}"
+                        f"phase=initial-chunk-{phase.index} status=used"
                     )
-                    raise ServeTransportError(
-                        f"the chunked build failed on the serve transport ({exc}) "
-                        "— aborting rather than salvaging it by another route"
-                    ) from exc
-                self._progress(
-                    f"PROGRESS run_label={run_label} step=serve-drive "
-                    f"phase=initial status=used"
-                )
-                observed_attempt_costs.append(first_run.cost_usd)
-                cell_cost_usd += first_run.cost_usd
-                session_id = first_run.session_id
-                input_tokens_total += first_run.input_tokens
-                output_tokens_total += (
-                    first_run.output_tokens + first_run.reasoning_tokens
-                )
-                reasoning_tokens_total += first_run.reasoning_tokens
-                cache_read_total += first_run.cache_read_tokens
-                cache_write_total += first_run.cache_write_tokens
-                turns_total += first_run.turns
-                provider_truncations_total += first_run.provider_truncations
-                cap_cutoffs_total += first_run.cap_cutoffs
-                cap_cutoffs_nudged_total += first_run.cap_cutoffs_nudged
-                zero_tool_turns_total += first_run.zero_tool_turns
-                zero_tool_resumes_total += first_run.zero_tool_resumes
-                if first_run.zero_tool_turn_honest_fail:
-                    zero_tool_turn_honest_fails_total += 1
-                turn_anomalies_all.extend(first_run.turn_anomalies)
-                unmetered_turns_total += first_run.unmetered_turns
-                unmetered_turn_wall_total += first_run.unmetered_turn_wall_s
-                prev_run_stats = first_run
-                worker_killed_reason = first_run.killed_reason
-                self._progress(
-                    f"PROGRESS run_label={run_label} step=worker-launch-end mode=real "
-                    f"exit={first_run.exit_code} killed={first_run.killed_reason or 'none'} "
-                    f"turns={first_run.turns} input={first_run.input_tokens} "
-                    f"output={first_run.output_tokens} reasoning={first_run.reasoning_tokens} "
-                    f"session_id={session_id or 'none'} cost_usd={first_run.cost_usd:.4f} "
-                    f"cell_cost_usd={cell_cost_usd:.4f}"
-                )
+                    # THE DRIVER NUMBERED ITS ONE PROMPT "1". A completion row's
+                    # `chunk` is the PHASE, not the prompt's position inside a
+                    # single-prompt call — otherwise seven phases fold into
+                    # seven rows all claiming chunk 1, six of them reported
+                    # `not_reached`.
+                    for row in build_run.chunk_reports or ():
+                        chunk_reports.append({**row, "chunk": phase.index})
+                    observed_attempt_costs.append(build_run.cost_usd)
+                    cell_cost_usd += build_run.cost_usd
+                    session_id = build_run.session_id
+                    input_tokens_total += build_run.input_tokens
+                    output_tokens_total += (
+                        build_run.output_tokens + build_run.reasoning_tokens
+                    )
+                    reasoning_tokens_total += build_run.reasoning_tokens
+                    cache_read_total += build_run.cache_read_tokens
+                    cache_write_total += build_run.cache_write_tokens
+                    turns_total += build_run.turns
+                    provider_truncations_total += build_run.provider_truncations
+                    cap_cutoffs_total += build_run.cap_cutoffs
+                    cap_cutoffs_nudged_total += build_run.cap_cutoffs_nudged
+                    zero_tool_turns_total += build_run.zero_tool_turns
+                    zero_tool_resumes_total += build_run.zero_tool_resumes
+                    if build_run.zero_tool_turn_honest_fail:
+                        zero_tool_turn_honest_fails_total += 1
+                    turn_anomalies_all.extend(build_run.turn_anomalies)
+                    unmetered_turns_total += build_run.unmetered_turns
+                    unmetered_turn_wall_total += build_run.unmetered_turn_wall_s
+                    prev_run_stats = build_run
+                    worker_killed_reason = build_run.killed_reason
+                    self._progress(
+                        f"PROGRESS run_label={run_label} step=worker-launch-end "
+                        f"mode=real phase={phase.index} exit={build_run.exit_code} "
+                        f"killed={build_run.killed_reason or 'none'} "
+                        f"turns={build_run.turns} input={build_run.input_tokens} "
+                        f"output={build_run.output_tokens} "
+                        f"reasoning={build_run.reasoning_tokens} "
+                        f"session_id={session_id or 'none'} "
+                        f"cost_usd={build_run.cost_usd:.4f} "
+                        f"cell_cost_usd={cell_cost_usd:.4f}"
+                    )
 
-                if first_run.killed_reason == WORKER_DIED:
-                    verdict = "FAIL"
-                    attempts_to_green = "WORKER_DIED"
-                    termination_reason = WORKER_DIED
-                    context_stop = True  # grade nothing: the worker is gone
-                elif first_run.context_exhausted:
-                    # The genuine residual: the session raised
-                    # ContextOverflowError, i.e. it was too large to compact
-                    # at all. A build that merely filled its context was
-                    # compacted and kept going, so it never arrives here.
-                    verdict = "FAIL"
-                    attempts_to_green = "CONTEXT_EXHAUSTED"
-                    termination_reason = CONTEXT_EXHAUSTED
-                    context_stop = True
-                elif first_run.budget_stop_detected:
-                    verdict = "BUDGET_STOP"
-                    attempts_to_green = "BUDGET_STOP"
-                    termination_reason = "budget_stop_mid_attempt"
-                elif first_run.zero_tool_turn_honest_fail:
-                    verdict = "FAIL"
-                    attempts_to_green = "FAIL"
-                    termination_reason = "zero_tool_turn_honest_fail"
-                elif (
-                    first_run.exit_code not in (0, None)
-                    and first_run.killed_reason not in _HARNESS_LIMIT_REASONS
-                ):
-                    # D-EXIT1-TERMINAL: stream-incomplete is transport, not terminal.
-                    # Resume from checkpoint; keep _can_feedback=True.
-                    if first_run.exit_code == 1 and self._detect_stream_incomplete(
-                        first_run
-                    ):
+                    # A PHASE THAT DID NOT FINISH ENDS THE CELL: it is not
+                    # graded, and the next phase is never built on top of it.
+                    # In the one-build flow a broken build was still graded
+                    # (D-GATE-COUPLE: gates run regardless of
+                    # `termination_reason`) because there was exactly one
+                    # end-of-cell grade and its evidence was worth having. That
+                    # reason does not survive the sequence: layer 1 graded
+                    # against a backend that never finished reports failures the
+                    # model was never given a chance to avoid, and layer 2 built
+                    # over a dead layer 1 measures nothing at all.
+                    if build_run.killed_reason == WORKER_DIED:
+                        verdict = "FAIL"
+                        attempts_to_green = "WORKER_DIED"
+                        termination_reason = WORKER_DIED
+                        cell_terminal = True  # grade nothing: the worker is gone
+                    elif build_run.context_exhausted:
+                        # The genuine residual: the session raised
+                        # ContextOverflowError, i.e. it was too large to compact
+                        # at all. A build that merely filled its context was
+                        # compacted and kept going, so it never arrives here.
+                        verdict = "FAIL"
+                        attempts_to_green = "CONTEXT_EXHAUSTED"
+                        termination_reason = CONTEXT_EXHAUSTED
                         self._progress(
-                            f"PROGRESS run_label={run_label} step=transport-stoppage "
-                            f"phase=initial exit_code=1 finish_reason=stream-incomplete "
-                            f"resume_budget={self.resume_budget} session_id={first_run.session_id or 'none'}"
+                            f"PROGRESS run_label={run_label} "
+                            f"step=context-exhausted-stop phase=build graded=0"
                         )
-                        first_run = _OpencodeRunStats(
-                            input_tokens=first_run.input_tokens,
-                            output_tokens=first_run.output_tokens,
-                            reasoning_tokens=first_run.reasoning_tokens,
-                            turns=first_run.turns,
-                            session_id=first_run.session_id,
-                            killed_reason=None,
-                            exit_code=None,
-                            cost_usd=first_run.cost_usd,
-                            budget_stop_detected=first_run.budget_stop_detected,
-                            budget_stop_signature=first_run.budget_stop_signature,
-                            provider_truncations=first_run.provider_truncations,
-                            cap_cutoffs=first_run.cap_cutoffs,
-                            cap_cutoffs_nudged=first_run.cap_cutoffs_nudged,
-                            context_peak_tokens=first_run.context_peak_tokens,
-                            zero_tool_turns=first_run.zero_tool_turns,
-                            terminal_zero_tool_turn=first_run.terminal_zero_tool_turn,
-                            zero_tool_resumes=first_run.zero_tool_resumes,
-                            zero_tool_turn_honest_fail=first_run.zero_tool_turn_honest_fail,
-                            resume_count=1,
-                            turn_anomalies=first_run.turn_anomalies,
-                            unmetered_turns=first_run.unmetered_turns,
-                            unmetered_turn_wall_s=first_run.unmetered_turn_wall_s,
-                        )
-                        if self.resume_budget > 0:
-                            self._progress(
-                                f"PROGRESS run_label={run_label} step=transport-resume-allowed "
-                                f"phase=initial resume_count=1 budget={self.resume_budget}"
-                            )
-                        # _can_feedback stays True (_worker_exit_annot is still None)
-                    else:
+                        cell_terminal = True
+                    elif build_run.budget_stop_detected:
+                        verdict = "BUDGET_STOP"
+                        attempts_to_green = "BUDGET_STOP"
+                        termination_reason = "budget_stop_mid_attempt"
+                        cell_terminal = True
+                    elif build_run.zero_tool_turn_honest_fail:
                         verdict = "FAIL"
                         attempts_to_green = "FAIL"
-                        termination_reason = "harness_error"
-                        _worker_exit_annot = "harness_error"
-
-            # WO-ABORT: a build that fell through every recovery branch with a
-            # chunk missing is an incomplete build — abort, never grade. The
-            # branches above (budget_stop, zero-tool honest fail,
-            # stream-incomplete resume, harness_error) each already made their
-            # own terminal/resume decision for a partial build; this fires only
-            # on the case none of them claimed (e.g. a chunk stalled on a
-            # HARNESS-LIMIT reason and the driver early-returned).
-            if (
-                first_run is not None
-                and build_chunk_expected
-                and not first_run.context_exhausted
-                and first_run.killed_reason != WORKER_DIED
-                and not first_run.budget_stop_detected
-                and not first_run.zero_tool_turn_honest_fail
-                and first_run.resume_count == 0
-                and _worker_exit_annot is None
-            ):
-                completion = build_chunk_completion(
-                    chunk_reports=first_run.chunk_reports,
-                    expected=build_chunk_expected,
-                )
-                incomplete = [row for row in completion if row["state"] != "complete"]
-                if incomplete:
-                    detail = ", ".join(
-                        f"chunk {row['chunk']} {row['state']}" for row in incomplete
-                    )
-                    raise IncompleteBuildError(
-                        f"chunked build incomplete: {detail} "
-                        f"(expected {build_chunk_expected} chunks)"
-                    )
-
-            # D-GATE-COUPLE: gates run regardless of termination_reason.
-            # harness_error is an ANNOTATION on the cell, not a skip.
-            _can_feedback = _worker_exit_annot is None
-            # The compaction watermark: the session message count at the moment
-            # the last grade completed. Declared here so it is always bound for
-            # the two-compactions check below, and re-captured at EVERY grade
-            # (right after `final_report = report`) so what that check counts is
-            # always "compactions since the last grade". None means no grade has
-            # been observed with a readable session yet, and skips the check.
-            compaction_watermark: int | None = None
-            # NO ROUND MAXIMUM. The round count here is an OBSERVED count, never
-            # a declared one: the loop leaves only when the checks pass, the
-            # compactions-before-grade abort fires, the operator stops the cell,
-            # or a genuine fault ends it. Every `break`/`continue` below is
-            # unchanged — `itertools.count` yields 1, 2, 3, ... like the old
-            # `range` did, it just never runs out.
-            for attempt in itertools.count(1):
-                if context_stop:
-                    # The worker died, or its session raised ContextOverflowError
-                    # (too large to compact): stop the run, grade nothing.
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=context-exhausted-stop "
-                        f"phase=build graded=0"
-                    )
-                    break
-                report_json = run_dir / f"attempt-{attempt}-report.json"
-                gate_log = run_dir / f"attempt-{attempt}-gate.log"
-                self._progress(
-                    f"PROGRESS run_label={run_label} step=gate-attempt-start attempt={attempt} target={worktree}"
-                )
-                try:
-                    report = self._grade_measured(
-                        worktree=worktree,
-                        report_path=report_json,
-                        log_path=gate_log,
-                        attempt=attempt,
-                        run_identity=run_identity,
-                    )
-                except GateTimeoutError as exc:
-                    # A STALL IS NOT A VERDICT (WO-FEEDBACK-1).
-                    #
-                    # This exception was raised and never caught anywhere in the
-                    # repo, so a timed-out gate propagated out of run_cell and
-                    # ABORTED THE CAMPAIGN. The evidence existed (gate log,
-                    # `step=gate-timeout`) but never reached the scored
-                    # artifacts, so the canonical impractical-not-impossible
-                    # event was the one outcome the record could not express.
-                    #
-                    # The gate was KILLED: nothing was measured. That is not the
-                    # model failing, and it must never be recorded as such —
-                    # hence its own termination_reason, and an
-                    # `attempts_to_green` that says so in words rather than
-                    # borrowing FAIL.
-                    verdict = "FAIL"
-                    attempts_to_green = "GATE_TIMEOUT"
-                    termination_reason = "gate_timeout"
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=gate-timeout-recorded "
-                        f"attempt={attempt} termination_reason=gate_timeout detail={exc}"
-                    )
-                    if _worker_exit_annot != "harness_error":
-                        # Computed once inside the guard for both consumers:
-                        # the attempt record and the check-point. A
-                        # harness_error-annotated gate-timeout gets neither,
-                        # matching the normal-path hook's guard.
-                        attempt_state_hash = _snapshot_state_hash(worktree)
-                        attempt_reports.append(
-                            {
-                                "attempt": attempt,
-                                "verdict": "FAIL",
-                                "conformed": False,
-                                "n_problems": 0,
-                                # Empty, NOT populated with the suite: no gate
-                                # failed, the runner was killed before it could
-                                # say. Inventing failures here would attribute a
-                                # harness death to the model.
-                                "failed_gates": [],
-                                # None, not [] — "not published" rather than
-                                # "published and empty" (invariants I-2 / I-4).
-                                "gate_results": None,
-                                "gate_totals": None,
-                                "state_hash": attempt_state_hash,
-                                "state_alg": STATE_ALG,
-                                "gate_timeout": True,
-                                "parity_pending": True,
-                            }
-                        )
-                        self._record_checkpoint(
-                            run_dir=run_dir,
-                            worktree=worktree,
-                            attempt=attempt,
-                            phase=(
-                                "initial" if attempt == 1 else f"feedback-{attempt - 1}"
-                            ),
-                            state_hash=attempt_state_hash,
-                            run_label=run_label,
-                        )
-                    break
-                except InstrumentFaultError as exc:
-                    # A GRADING PASS THAT MEASURED NOTHING, TWICE (Jerry,
-                    # 2026-09-23). _grade_measured already regraded once:
-                    # an unreadable report or a pass the grader itself
-                    # marked not gradable. Twice on the same code is the
-                    # instrument's failure, never the model's — the cell
-                    # ends VOID (run_artifacts), counts toward no median,
-                    # and says why. It must never abort the campaign.
-                    verdict = "FAIL"
-                    attempts_to_green = "INSTRUMENT_FAULT"
-                    termination_reason = "instrument_fault"
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=instrument-fault-recorded "
-                        f"attempt={attempt} termination_reason=instrument_fault detail={exc}"
-                    )
-                    if _worker_exit_annot != "harness_error":
-                        # Computed once inside the guard for both consumers:
-                        # the attempt record and the check-point. A
-                        # harness_error-annotated gate-timeout gets neither,
-                        # matching the normal-path hook's guard.
-                        attempt_state_hash = _snapshot_state_hash(worktree)
-                        attempt_reports.append(
-                            {
-                                "attempt": attempt,
-                                "verdict": "FAIL",
-                                "conformed": False,
-                                "n_problems": 0,
-                                # Empty, NOT populated with the suite: no gate
-                                # failed, the runner was killed before it could
-                                # say. Inventing failures here would attribute a
-                                # harness death to the model.
-                                "failed_gates": [],
-                                # None, not [] — "not published" rather than
-                                # "published and empty" (invariants I-2 / I-4).
-                                "gate_results": None,
-                                "gate_totals": None,
-                                "state_hash": attempt_state_hash,
-                                "state_alg": STATE_ALG,
-                                "instrument_fault": True,
-                                "parity_pending": True,
-                            }
-                        )
-                        self._record_checkpoint(
-                            run_dir=run_dir,
-                            worktree=worktree,
-                            attempt=attempt,
-                            phase=(
-                                "initial" if attempt == 1 else f"feedback-{attempt - 1}"
-                            ),
-                            state_hash=attempt_state_hash,
-                            run_label=run_label,
-                        )
-                    break
-                final_report = report
-
-                # ── THE WATERMARK IS RESET AT EVERY GRADE ───────────────────
-                #
-                # This is the one place every graded pass reaches, so it is the
-                # only honest statement of "a grade just completed". The session
-                # message count here is the waterline the next repair round is
-                # measured from: every compaction at or after this index is one
-                # that round caused.
-                #
-                # A failed read leaves the watermark None, which skips the
-                # check for this round entirely. A transport hiccup must never
-                # end a cell that may be making progress.
-                compaction_watermark = None
-                if self._serve_client is not None and session_id:
-                    try:
-                        compaction_watermark = len(
-                            self._serve_client.get_messages(session_id)
-                        )
-                    except ServeClientError:
-                        compaction_watermark = None
-
-                attempt_verdict = str(report.get("verdict", "FAIL"))
-                conformed = bool(report.get("conformed", False))
-                problems = (
-                    report.get("problems")
-                    if isinstance(report.get("problems"), list)
-                    else []
-                )
-                failed_gates_raw = report.get("failed_gates")
-                failed_gates = (
-                    [str(item) for item in failed_gates_raw]
-                    if isinstance(failed_gates_raw, list)
-                    else []
-                )
-                # WO-GATE-ROSTER. Carried through as-published, or None when the
-                # gate runner did not emit them (no roster, or an older report).
-                # None and [] mean different things here and must stay distinct:
-                # [] would assert "the suite ran and held no gates".
-                gate_results_raw = report.get("gate_results")
-                gate_results = (
-                    gate_results_raw if isinstance(gate_results_raw, list) else None
-                )
-                gate_totals_raw = report.get("gate_totals")
-                gate_totals = (
-                    gate_totals_raw if isinstance(gate_totals_raw, dict) else None
-                )
-                render_blocked = report.get("render_blocked")
-
-                # ── LIVE: ONE RECORD PER GATE, AS THE VERDICT LANDS ─────────
-                # `attempt_reports` below is written to manifest.status.jsonl
-                # only when the whole CELL finishes, so a wall fed from that
-                # file snaps from empty to final and shows nothing across the
-                # four verdict-passes in between. These records are the same
-                # facts, emitted at the moment they become true.
-                #
-                # This is NOT a second derivation of gate state: the payload is
-                # the runner's own published `gate_results` rows, passed through
-                # untouched. There is no in-flight or provisional square — a
-                # gate appears only once it has a real recorded verdict.
-                # THE STAGE A PLAYER HAS REACHED: the earliest one still failing.
-                stage_view = player_view(
-                    problems,
-                    self._player_stages(),
-                    is_infra=self._is_harness_infra_check,
-                )
-                context_peak = (
-                    prev_run_stats.context_peak_tokens
-                    if prev_run_stats is not None
-                    else None
-                )
-                context_window = (
-                    model_limits(self.model)["context"]
-                    if prev_run_stats is not None
-                    else None
-                )
-                live = getattr(self, "_live", None)
-                if live is not None:
-                    # No `phase.start` here: this site is where an attempt
-                    # ENDS. Each gate row carries its own `phase` from the
-                    # runner, which is the phase fact the wall actually needs.
-                    for row in gate_results or []:
-                        if not isinstance(row, dict):
-                            continue
-                        live.emit(
-                            "gate.result",
-                            cell_seq=getattr(self, "_cell_seq", None),
-                            session_id=session_id,
-                            attempt=attempt,
-                            id=row.get("id"),
-                            status=row.get("status"),
-                            phase=row.get("phase"),
-                            duration_ms=row.get("duration_ms"),
-                        )
-                    live.emit(
-                        "attempt.end",
-                        cell_seq=getattr(self, "_cell_seq", None),
-                        session_id=session_id,
-                        attempt=attempt,
-                        verdict=attempt_verdict,
-                        conformed=conformed,
-                        failed=len(failed_gates),
-                        stage=stage_view.stage.number if stage_view.stage else None,
-                        stage_name=stage_view.stage.name if stage_view.stage else None,
-                        # What the model is told this round, stated — not
-                        # left for readers to derive as failed - withheld.
-                        told=len(stage_view.visible),
-                        withheld=len(stage_view.withheld),
-                        unevaluated=len(stage_view.unevaluated),
-                        render_blocked=render_blocked,
-                        context_peak=context_peak,
-                        context_window=context_window,
-                    )
-
-                if _worker_exit_annot != "harness_error":
-                    attempt_state_hash = _snapshot_state_hash(worktree)
-                    # THIS ATTEMPT'S OWN VOLUME, so a status stream can write a
-                    # per-attempt row instead of re-deriving the split from the
-                    # cell totals. `prev_run_stats` is the drive that produced
-                    # the tree just graded — the chunked build for attempt 1,
-                    # the feedback round before it otherwise. None means no
-                    # model ran this attempt: the fields are then ABSENT,
-                    # never 0, because a zero would claim a measured turn that
-                    # never happened.
-                    attempt_tokens: dict[str, Any] = (
-                        {
-                            "input_tokens": prev_run_stats.input_tokens,
-                            "output_tokens": prev_run_stats.output_tokens,
-                            "reasoning_tokens": prev_run_stats.reasoning_tokens,
-                            "cache_read_tokens": prev_run_stats.cache_read_tokens,
-                            "cache_write_tokens": prev_run_stats.cache_write_tokens,
-                            "turns": prev_run_stats.turns,
-                        }
-                        if prev_run_stats is not None
-                        else {}
-                    )
-                    attempt_reports.append(
-                        {
-                            "attempt": attempt,
-                            "verdict": attempt_verdict,
-                            "conformed": conformed,
-                            "n_problems": len(problems),
-                            "failed_gates": failed_gates,
-                            "gate_results": gate_results,
-                            "gate_totals": gate_totals,
-                            # Captured NOW, not reconstructed later: this is the
-                            # only moment this attempt's code exists on disk.
-                            "state_hash": attempt_state_hash,
-                            "state_alg": STATE_ALG,
-                            **attempt_tokens,
-                            # PLAYER ORDER: the stage this round reached, and how
-                            # many failing checks lay beyond it (graded, not told).
-                            "player_stage": stage_view.stage.number
-                            if stage_view.stage
-                            else None,
-                            "player_stage_name": stage_view.stage.name
-                            if stage_view.stage
-                            else None,
-                            "told_checks": len(stage_view.visible),
-                            "withheld_checks": len(stage_view.withheld),
-                            "unevaluated_checks": len(stage_view.unevaluated),
-                            "context_peak": context_peak,
-                            "context_window": context_window,
-                            # Scored cell whose metering awaits parity confirmation against the
-                            # first scored cell / the proxy log before it is treated as data.
-                            "parity_pending": True,
-                        }
-                    )
-                    self._record_checkpoint(
-                        run_dir=run_dir,
-                        worktree=worktree,
-                        attempt=attempt,
-                        phase=(
-                            "initial" if attempt == 1 else f"feedback-{attempt - 1}"
-                        ),
-                        state_hash=attempt_state_hash,
-                        run_label=run_label,
-                    )
-                self._progress(
-                    f"PROGRESS gate attempt={attempt} verdict={attempt_verdict} "
-                    f"conformed={conformed} problems={len(problems)}"
-                )
-
-                if attempt_verdict == "PASS":
-                    verdict = "PASS"
-                    attempts_to_green = attempt - 1
-                    termination_reason = "gates_green"
-                    break
-
-                if worker_killed_reason in _HARNESS_LIMIT_REASONS:
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=attempt-harness-limit attempt={attempt} "
-                        f"reason={worker_killed_reason} decision=continue_if_budget"
-                    )
-                elif worker_killed_reason is not None:
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=attempt-harness-limit attempt={attempt} "
-                        f"reason={worker_killed_reason} decision=stop"
-                    )
-                    verdict = "FAIL"
-                    attempts_to_green = "DID_NOT_CONFORM" if not conformed else "FAIL"
-                    termination_reason = "harness_error"
-                    break
-
-                if _can_feedback is False:
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=feedback-skip attempt={attempt} "
-                        f"reason={_worker_exit_annot} no_working_session"
-                    )
-                    if _worker_exit_annot == "harness_error":
-                        termination_reason = "harness_error"
-                    elif _worker_exit_annot is not None:
-                        termination_reason = "transport_incomplete"
-                    else:
-                        termination_reason = "gates_failed"
-                    break
-
-                if not session_id:
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=feedback-stop attempt={attempt} "
-                        "reason=session_id_missing"
-                    )
-                    verdict = "FAIL"
-                    attempts_to_green = "DID_NOT_CONFORM" if not conformed else "FAIL"
-                    termination_reason = "harness_error"
-                    break
-
-                next_attempt = attempt + 1
-                budget_decision = self._budget_decision_for_attempt(
-                    run_label=run_label,
-                    attempt=next_attempt,
-                    observed_attempt_costs=observed_attempt_costs,
-                )
-                if budget_decision == "harness_error":
-                    verdict = "FAIL"
-                    attempts_to_green = "DID_NOT_CONFORM" if not conformed else "FAIL"
-                    termination_reason = "harness_error"
-                    break
-                if budget_decision == "budget_stop":
-                    verdict = "BUDGET_STOP"
-                    attempts_to_green = "BUDGET_STOP"
-                    termination_reason = "attempts_exhausted_by_budget"
-                    break
-
-                # D-EXIT1-TERMINAL: check transport resume budget
-                if self.resume_budget <= 0:
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=transport-resume-exhausted "
-                        f"attempt={attempt} resume_budget=0"
-                    )
-                    verdict = "FAIL"
-                    attempts_to_green = "FAIL"
-                    termination_reason = "transport_incomplete"
-                    break
-
-                # Never pass tool_choice="required" via worker config/CLI for these
-                # runs; provider path rejects it and the harness guard test enforces this.
-
-                # PLAYER ORDER: only what the player reported last round can be
-                # reported fixed — a check the model never heard about passing
-                # is not news to it.
-                now_failing = [
-                    (str(p.get("check", "")).strip(), self._complaint_aspect(p))
-                    for p in problems
-                    if isinstance(p, dict)
-                ]
-                with_record = {check for check, _ in now_failing}
-                now_failing += [
-                    (str(g).strip(), None)
-                    for g in attempt_reports[-1]["failed_gates"]
-                    if str(g).strip() not in with_record
-                ]
-                fixed = set(
-                    told_complaints_fixed(
-                        told_last_round.values(), now_failing, self._aspect_order()
-                    )
-                )
-                # In the order a player meets them, like the problems
-                # themselves — not alphabetically, which put a setup check
-                # after every bracketed gate (WO-LI-GRADER-ORIENTATION).
-                newly_passing = sorted(
-                    (c for c, told in told_last_round.items() if told in fixed),
-                    key=lambda c: player_order(c, self._player_stages()),
-                )
-                still_failing = sorted(set(attempt_reports[-1]["failed_gates"]))
-                self._progress(
-                    f"PROGRESS run_label={run_label} step=feedback-verdict-composed attempt={attempt} "
-                    f"newly_passing_count={len(newly_passing)} still_failing_count={len(still_failing)}"
-                )
-
-                next_attempt_cost_usd = 0.0
-                # WO-FEEDBACK-ONEPHASE: ONE prompt per troubleshooting round.
-                # The pass verdict is no longer a separate `_run_cell_attempt`
-                # (`verdict-pass-N`); it is folded into the single feedback
-                # message below. Empty string when nothing newly passed.
-                pass_verdict = self._build_pass_verdict(
-                    newly_passing=newly_passing, told=told_first_label
-                )
-
-                feedback_checks = [
-                    str(p.get("check", "")).strip()
-                    for p in problems
-                    if isinstance(p, dict) and str(p.get("check", "")).strip()
-                ]
-                # THE GRADIENT (WO-FEEDBACK-1): a gate that ALSO failed last
-                # attempt gets one line of observed evidence attached, so the
-                # message the model receives actually changes when its fix did
-                # not work. Keyed on the raw gate id — the same strings
-                # `failed_gates` carries — so the match is exact. Harness-infra
-                # check names are excluded on BOTH sides: they are not gates,
-                # and a repeat infra failure must not leak into the prompt as
-                # if it were model-repairable work.
-                # PLAYER ORDER: the message carries only the earliest failing
-                # stage's problems. A check gets its second-sighting line only
-                # if the model has been told about it before — first time it
-                # appears (a later stage just unlocked) it is a first report.
-                visible_checks = {
-                    str(p.get("check", "")).strip() for p in stage_view.visible
-                }
-                # Per COMPLAINT, not per check: a check that now says something
-                # new gets its first-sighting line (_complaint_id). And only a
-                # complaint that has failed in every grade since it was told is
-                # "still" there: one that was fixed and came back is a new
-                # sighting. Keyed on everything told, run 1790357047 told "The
-                # off tray is still drawn over some of the points." two rounds
-                # after "That fixed it" — the model had undone its own fix.
-                told_open &= {
-                    self._complaint_id(p) for p in problems if isinstance(p, dict)
-                }
-                visible_complaints = {self._complaint_id(p) for p in stage_view.visible}
-                repeat_complaints = visible_complaints & told_open
-                self._progress(
-                    f"PROGRESS run_label={run_label} step=player-stage attempt={attempt} "
-                    f"stage={stage_view.stage.number if stage_view.stage else 'none'} "
-                    f"told={len(visible_checks)} withheld={len(stage_view.withheld)} "
-                    f"unevaluated={len(stage_view.unevaluated)} "
-                    f"failing_total={len(feedback_checks)}"
-                )
-                told_last_round = {
-                    self._complaint_id(p): (
-                        str(p.get("check", "")).strip(),
-                        self._complaint_aspect(p),
-                    )
-                    for p in stage_view.visible
-                    if str(p.get("check", "")).strip()
-                }
-                told_open |= visible_complaints
-                for p in stage_view.visible:
-                    complaint = self._complaint_id(p)
-                    if (
-                        str(p.get("check", "")).strip()
-                        and complaint not in told_first_label
+                        termination_reason = "zero_tool_turn_honest_fail"
+                        cell_terminal = True
+                    elif (
+                        build_run.exit_code not in (0, None)
+                        and build_run.killed_reason not in _HARNESS_LIMIT_REASONS
                     ):
-                        told_first_label[complaint] = self._told_label(
-                            p, pass_kind="first"
-                        )[0]
-                # A check told this round that PASSED the immediately-previous
-                # graded round is a REGRESSION — the model's own fix undid code
-                # that worked — and is told under its own opener (feedback.py).
-                regressions = _regressed_checks(attempt_reports, stage_view.visible)
-                feedback = self._build_feedback_prompt(
-                    problems=stage_view.visible,
-                    # The repeats also choose the opener (feedback.py): "I'm
-                    # still seeing these problems" heads a list of repeats only.
-                    repeat_complaints=repeat_complaints,
-                    withheld=stage_view.withheld,
-                    unevaluated=stage_view.unevaluated,
-                    regressions=regressions,
-                    respec=self._respec_for(
-                        [p for p in problems if isinstance(p, dict)],
-                        stage_view.visible,
-                        stage_view.stage,
-                        self._player_stages(),
-                    ),
-                )
-                # WO-FEEDBACK-ONEPHASE: fold the pass verdict into the single
-                # round message — the player acknowledges what is fixed, then
-                # lists what is still broken. One prompt, not two.
-                if pass_verdict:
-                    feedback = f"{pass_verdict}\n\n{feedback}"
-                # A ROUND THAT CHANGED NOTHING: the graded code is byte-identical
-                # to the round before. Said first, before anything else the
-                # player reports. Unknown hashes (None) never count as unchanged,
-                # and a round where something newly passed is never called
-                # unchanged — "nothing changed" beside "that fixed it" would
-                # contradict itself (identical code can only pass differently
-                # through a flaky check, which is not the model's news).
-                code_unchanged = not pass_verdict and _code_unchanged_since_last_round(
-                    attempt_reports
-                )
-                if code_unchanged:
-                    feedback = f"{_NO_CHANGE_NOTE}\n\n{feedback}"
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=feedback-code-unchanged attempt={attempt}"
-                    )
-                # FIRST TROUBLESHOOTING MESSAGE ONLY: orient the model with the
-                # GOAL/PROBLEM/TASK frame. Chunk (build) prompts are a separate
-                # emission path (serve.py, before this loop), so this prepend
-                # touches only the round-1 feedback message — never a build
-                # chunk and never a later round.
-                if attempt == 1:
-                    feedback = f"{_FIRST_MESSAGE_PREAMBLE}\n\n{feedback}"
-                self._progress(
-                    f"PROGRESS run_label={run_label} step=feedback-problems-only-built attempt={attempt} "
-                    f"checks={len(feedback_checks)} repeats={len(repeat_complaints)}"
-                )
-                self._progress(
-                    f"PROGRESS run_label={run_label} step=feedback-injection attempt={attempt} "
-                    f"problem_count={len(problems)} session_id={session_id}"
-                )
-
-                self._emit_cost_target_warning_if_reached(
-                    run_label=run_label,
-                    phase=f"feedback-{attempt}",
-                    cumulative_cost_usd=cell_cost_usd,
-                )
-
-                self._append_user_event(
-                    kind="feedback",
-                    run_label=run_label,
-                    sidecar_path=user_events_path,
-                    attempt=next_attempt,
-                    text=feedback,
-                )
-
-                self._write_worker_permission_config(worktree=worktree)
-
-                # WO-PAUSE-AFTER-GRADE: ROUND pause. Reaching this point means
-                # this graded pass (attempt `attempt`) is NOT the final one and
-                # the loop WILL drive `next_attempt` below — so this is exactly
-                # one pause per non-final graded pass. The told lines for the
-                # next round are already on disk (`_append_user_event` above),
-                # and nothing has been sent to the model yet. Hold for the
-                # operator; released seconds are excluded from wall time.
-                if self.pause_after_grade:
-                    paused_seconds += self._run_operator_pause(
-                        run_label=run_label,
-                        run_dir=run_dir,
-                        worktree=worktree,
-                        active_cell=active_cell,
-                        session_id=session_id,
-                        kind="round",
-                        attempt=attempt,
-                        told_text=feedback,
-                        grade=_pause_grade(report, report_json),
-                    )
-
-                self._mark_harness_resume(prev_run_stats)
-                feedback_run = self._run_cell_attempt(
-                    active_cell=active_cell,
-                    run_label=run_label,
-                    phase=f"feedback-{attempt}",
-                    prior_cost_usd=cell_cost_usd,
-                    kill_hook=active_cell.kill_worker_processes,
-                    stdin_text=feedback,
-                    attempt=next_attempt,
-                    compaction_watermark=compaction_watermark,
-                )
-                next_attempt_cost_usd += feedback_run.cost_usd
-                observed_attempt_costs.append(next_attempt_cost_usd)
-                cell_cost_usd += feedback_run.cost_usd
-                if feedback_run.session_id:
-                    session_id = feedback_run.session_id
-
-                input_tokens_total += feedback_run.input_tokens
-                output_tokens_total += (
-                    feedback_run.output_tokens + feedback_run.reasoning_tokens
-                )
-                turns_total += feedback_run.turns
-                provider_truncations_total += feedback_run.provider_truncations
-                cap_cutoffs_total += feedback_run.cap_cutoffs
-                cap_cutoffs_nudged_total += feedback_run.cap_cutoffs_nudged
-                zero_tool_turns_total += feedback_run.zero_tool_turns
-                zero_tool_resumes_total += feedback_run.zero_tool_resumes
-                if feedback_run.zero_tool_turn_honest_fail:
-                    zero_tool_turn_honest_fails_total += 1
-                turn_anomalies_all.extend(feedback_run.turn_anomalies)
-                unmetered_turns_total += feedback_run.unmetered_turns
-                unmetered_turn_wall_total += feedback_run.unmetered_turn_wall_s
-                prev_run_stats = feedback_run
-                worker_killed_reason = feedback_run.killed_reason
-                self._progress(
-                    f"PROGRESS run_label={run_label} step=feedback-injection-done attempt={attempt} "
-                    f"exit={feedback_run.exit_code} killed={feedback_run.killed_reason or 'none'} "
-                    f"turns={feedback_run.turns} input={feedback_run.input_tokens} "
-                    f"output={feedback_run.output_tokens} reasoning={feedback_run.reasoning_tokens} "
-                    f"cost_usd={feedback_run.cost_usd:.4f} cell_cost_usd={cell_cost_usd:.4f}"
-                )
-                # ── TWO COMPACTIONS BEFORE A GRADE ENDS THE CELL ────────────
-                #
-                # Enforced IN-DRIVE now: `_run_opencode_serve` counts completed
-                # compactions since the grade watermark at every turn end (the
-                # loop that already watches turn ends, recovery and context
-                # overflow) and ends the drive at the second one, carrying the
-                # count back on `compactions_since_grade`. This block maps that
-                # signal to the cell terminal — the SAME verdict, reason, notice
-                # and progress line the post-drive check used to emit. There is
-                # no post-drive recount: after the drive returns the model has
-                # stopped, and the next grade re-captures the watermark, so the
-                # in-drive count is complete and a second counting path would
-                # only double-report.
-                #
-                # FEEDBACK-ONLY BY CONSTRUCTION: the watermark is passed only by
-                # `_run_cell_attempt` (feedback). The chunked build never passes
-                # it, so build compaction is never counted. ONE IS HEALTHY, TWO
-                # IS STUCK: the first compaction is recovery; a second before any
-                # grade means the round rewrote context instead of fixing.
-                if feedback_run.compactions_since_grade >= 2:
-                    verdict = "FAIL"
-                    attempts_to_green = "COMPACTIONS_BEFORE_GRADE"
-                    termination_reason = COMPACTIONS_BEFORE_GRADE
-                    live = getattr(self, "_live", None)
-                    if live is not None:
-                        live.notice(
-                            "harness",
-                            "compactions_before_grade",
-                            level="error",
-                            cell_seq=getattr(self, "_cell_seq", None),
-                            session_id=session_id,
-                            detail={
-                                "phase": f"feedback-{attempt}",
-                                "compactions": feedback_run.compactions_since_grade,
-                                "attempt": attempt,
-                            },
+                        # D-EXIT1-TERMINAL: stream-incomplete is transport, not
+                        # terminal. Resume from checkpoint and keep building.
+                        if build_run.exit_code == 1 and self._detect_stream_incomplete(
+                            build_run
+                        ):
+                            self._progress(
+                                f"PROGRESS run_label={run_label} "
+                                f"step=transport-stoppage "
+                                f"phase=initial-chunk-{phase.index} exit_code=1 "
+                                "finish_reason=stream-incomplete "
+                                f"resume_budget={self.resume_budget} "
+                                f"session_id={build_run.session_id or 'none'}"
+                            )
+                            build_run = _OpencodeRunStats(
+                                input_tokens=build_run.input_tokens,
+                                output_tokens=build_run.output_tokens,
+                                reasoning_tokens=build_run.reasoning_tokens,
+                                turns=build_run.turns,
+                                session_id=build_run.session_id,
+                                killed_reason=None,
+                                exit_code=None,
+                                cost_usd=build_run.cost_usd,
+                                budget_stop_detected=build_run.budget_stop_detected,
+                                budget_stop_signature=build_run.budget_stop_signature,
+                                provider_truncations=build_run.provider_truncations,
+                                cap_cutoffs=build_run.cap_cutoffs,
+                                cap_cutoffs_nudged=build_run.cap_cutoffs_nudged,
+                                context_peak_tokens=build_run.context_peak_tokens,
+                                zero_tool_turns=build_run.zero_tool_turns,
+                                terminal_zero_tool_turn=build_run.terminal_zero_tool_turn,
+                                zero_tool_resumes=build_run.zero_tool_resumes,
+                                zero_tool_turn_honest_fail=build_run.zero_tool_turn_honest_fail,
+                                resume_count=1,
+                                turn_anomalies=build_run.turn_anomalies,
+                                unmetered_turns=build_run.unmetered_turns,
+                                unmetered_turn_wall_s=build_run.unmetered_turn_wall_s,
+                            )
+                            if self.resume_budget > 0:
+                                self._progress(
+                                    f"PROGRESS run_label={run_label} "
+                                    f"step=transport-resume-allowed "
+                                    f"phase=initial-chunk-{phase.index} "
+                                    f"resume_count=1 budget={self.resume_budget}"
+                                )
+                        else:
+                            verdict = "FAIL"
+                            attempts_to_green = "FAIL"
+                            termination_reason = "harness_error"
+                            cell_terminal = True
+                    transport_resume_count += build_run.resume_count
+                    if cell_terminal:
+                        self._progress(
+                            f"PROGRESS run_label={run_label} step=build-phase-end "
+                            f"phase={phase.index} graded=0 "
+                            f"termination_reason={termination_reason}"
                         )
-                    self._progress(
-                        f"PROGRESS run_label={run_label} "
-                        f"step=compactions-before-grade phase=feedback-{attempt} "
-                        f"compactions={feedback_run.compactions_since_grade} "
-                        f"attempt={attempt} action=end-cell"
-                    )
-                    break
-                if feedback_run.killed_reason == WORKER_DIED:
-                    # The worker container stopped mid-round. The round graded
-                    # before this one stands; nothing more can run.
-                    verdict = "FAIL"
-                    attempts_to_green = "WORKER_DIED"
-                    termination_reason = WORKER_DIED
-                    break
-                if feedback_run.context_exhausted:
-                    # ContextOverflowError mid-repair: the session was too large
-                    # to compact, so nothing can continue. Stop the run; the
-                    # round graded before this one is the cell's result.
-                    verdict = "FAIL"
-                    attempts_to_green = "CONTEXT_EXHAUSTED"
-                    termination_reason = CONTEXT_EXHAUSTED
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=context-exhausted-stop "
-                        f"phase=feedback-{attempt} graded={len(attempt_reports)}"
-                    )
-                    break
-                if feedback_run.budget_stop_detected:
-                    verdict = "BUDGET_STOP"
-                    attempts_to_green = "BUDGET_STOP"
-                    termination_reason = "budget_stop_mid_attempt"
-                    break
-                if feedback_run.zero_tool_turn_honest_fail:
-                    verdict = "FAIL"
-                    attempts_to_green = "DID_NOT_CONFORM" if not conformed else "FAIL"
-                    termination_reason = "zero_tool_turn_honest_fail"
-                    if attempt_reports:
-                        attempt_reports[-1]["zero_tool_turn_honest_fail"] = True
-                    break
-                if (
-                    feedback_run.exit_code not in (0, None)
-                    and feedback_run.killed_reason not in _HARNESS_LIMIT_REASONS
-                ):
-                    verdict = "FAIL"
-                    attempts_to_green = "DID_NOT_CONFORM" if not conformed else "FAIL"
-                    termination_reason = "harness_error"
-                    break
+                        break
+
+                    # WO-ABORT: a phase whose own completion row is not
+                    # `complete` is an incomplete build — abort, never grade,
+                    # never advance. Folded up to THIS phase, so earlier phases
+                    # are re-checked while a later phase's absence cannot trip
+                    # it. A resumed stream-incomplete build is skipped, as
+                    # before: its row records the transport fault already
+                    # handled above.
+                    if build_run.resume_count == 0:
+                        completion = build_chunk_completion(
+                            chunk_reports=tuple(chunk_reports),
+                            expected=phase.index,
+                        )
+                        incomplete = [
+                            row for row in completion if row["state"] != "complete"
+                        ]
+                        if incomplete:
+                            detail = ", ".join(
+                                f"chunk {row['chunk']} {row['state']}"
+                                for row in incomplete
+                            )
+                            raise IncompleteBuildError(
+                                f"chunked build incomplete: {detail} "
+                                f"(expected {build_chunk_expected} chunks)"
+                            )
+
+                    if phase.layer is None:
+                        # BACKEND PHASE: built and compacted, nothing to grade.
+                        self._progress(
+                            f"PROGRESS run_label={run_label} step=build-phase-end "
+                            f"phase={phase.index} graded=0"
+                        )
+                        continue
+
+                    # ONE ROSTER FOR THE WHOLE CELL, BEFORE THE FIRST GRADED
+                    # PASS. A layered grade reads it to say which gates never
+                    # ran (grader/report.mjs); a campaign that already wrote one
+                    # keeps its roster — it is the denominator every grade in
+                    # the campaign is compared against, so it is written once
+                    # and never re-baselined.
+                    self._ensure_gate_roster(run_dir=run_dir, run_label=run_label)
+
+                    # THE WATERMARK IS RE-ARMED AT THE START OF EVERY
+                    # TROUBLESHOOTING STRETCH. The 2-compactions rule counts
+                    # compactions SINCE THE LAST GRADE, and a build step never
+                    # counts. Carrying a previous layer's watermark into this
+                    # one would charge this layer's repair for compactions it
+                    # did not cause.
+                    compaction_watermark: int | None = None
+                    # EDGE-TRIGGERED SPEC RE-HAND, ARMED FROM TWO SOURCES.
+                    # Both are compactions that can leave the model's context
+                    # without the spec it was handed at build time:
+                    #   (i) THE HARNESS'S OWN BUILD COMPACTION. The chunked
+                    #       build fires one summarize after every chunk
+                    #       (serve.py, `if self.compact`), so a build that
+                    #       returned successfully compacted IFF self.compact —
+                    #       and this stretch therefore OPENS armed, with the
+                    #       FIRST feedback message carrying the spec back.
+                    #  (ii) A LIVE `session.compacted` DURING A DRIVE. Counted
+                    #       per drive and read back after it returns, arming
+                    #       the NEXT message mid-stretch.
+                    # Either way the flag is consumed (and cleared) by the very
+                    # next feedback composition, so it never repeats on the
+                    # following rounds: one event — build-built or live —
+                    # yields exactly one re-hand, never two in a row.
+                    # Independent of the >= 2 abort: one compaction is healthy
+                    # and still worth re-handing.
+                    spec_rehand_pending = self.compact
+                    # The attempt number this layer's FIRST grade will take, so
+                    # `attempts_to_green` can count this layer's failed grades
+                    # (0 when it passes first try) on top of the cell total.
+                    layer_first_attempt = attempt + 1
+                    while True:
+                        attempt += 1
+                        report_json = run_dir / f"attempt-{attempt}-report.json"
+                        gate_log = run_dir / f"attempt-{attempt}-gate.log"
+                        self._progress(
+                            f"PROGRESS run_label={run_label} step=gate-attempt-start attempt={attempt} target={worktree}"
+                        )
+                        try:
+                            # THE LAYER IS A GRADER ARGUMENT, NEVER AN ENV VAR:
+                            # `--layer N` scopes the pass to the checks this
+                            # phase was built for, so layer 1's grade cannot
+                            # report a layer-3 check the model has not been
+                            # asked for yet.
+                            report = self._grade_measured(
+                                worktree=worktree,
+                                report_path=report_json,
+                                log_path=gate_log,
+                                attempt=attempt,
+                                run_identity=run_identity,
+                                layer=phase.layer,
+                                gates_dir=self.grader_gates_dir,
+                            )
+                        except GateTimeoutError as exc:
+                            # A STALL IS NOT A VERDICT (WO-FEEDBACK-1).
+                            #
+                            # This exception was raised and never caught anywhere in the
+                            # repo, so a timed-out gate propagated out of run_cell and
+                            # ABORTED THE CAMPAIGN. The evidence existed (gate log,
+                            # `step=gate-timeout`) but never reached the scored
+                            # artifacts, so the canonical impractical-not-impossible
+                            # event was the one outcome the record could not express.
+                            #
+                            # The gate was KILLED: nothing was measured. That is not the
+                            # model failing, and it must never be recorded as such —
+                            # hence its own termination_reason, and an
+                            # `attempts_to_green` that says so in words rather than
+                            # borrowing FAIL.
+                            verdict = "FAIL"
+                            attempts_to_green = "GATE_TIMEOUT"
+                            termination_reason = "gate_timeout"
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=gate-timeout-recorded "
+                                f"attempt={attempt} termination_reason=gate_timeout detail={exc}"
+                            )
+                            # Computed once for both consumers: the attempt
+                            # record and the check-point.
+                            attempt_state_hash = _snapshot_state_hash(worktree)
+                            attempt_reports.append(
+                                {
+                                    # A terminal row names its phase too: this
+                                    # attempt is still an attempt in a phase,
+                                    # and a row without one cannot be placed.
+                                    **phase_label(
+                                        phase,
+                                        "build"
+                                        if attempt == layer_first_attempt
+                                        else "troubleshooting",
+                                    ),
+                                    "attempt": attempt,
+                                    "verdict": "FAIL",
+                                    "conformed": False,
+                                    "n_problems": 0,
+                                    # Empty, NOT populated with the suite: no gate
+                                    # failed, the runner was killed before it could
+                                    # say. Inventing failures here would attribute a
+                                    # harness death to the model.
+                                    "failed_gates": [],
+                                    # None, not [] — "not published" rather than
+                                    # "published and empty" (invariants I-2 / I-4).
+                                    "gate_results": None,
+                                    "gate_totals": None,
+                                    "state_hash": attempt_state_hash,
+                                    "state_alg": STATE_ALG,
+                                    "gate_timeout": True,
+                                    "parity_pending": True,
+                                }
+                            )
+                            self._record_checkpoint(
+                                run_dir=run_dir,
+                                worktree=worktree,
+                                attempt=attempt,
+                                phase=(
+                                    "initial"
+                                    if attempt == 1
+                                    else f"feedback-{attempt - 1}"
+                                ),
+                                state_hash=attempt_state_hash,
+                                run_label=run_label,
+                            )
+                            cell_terminal = True
+                            break
+                        except InstrumentFaultError as exc:
+                            # A GRADING PASS THAT MEASURED NOTHING, TWICE (Jerry,
+                            # 2026-09-23). _grade_measured already regraded once:
+                            # an unreadable report or a pass the grader itself
+                            # marked not gradable. Twice on the same code is the
+                            # instrument's failure, never the model's — the cell
+                            # ends VOID (run_artifacts), counts toward no median,
+                            # and says why. It must never abort the campaign.
+                            verdict = "FAIL"
+                            attempts_to_green = "INSTRUMENT_FAULT"
+                            termination_reason = "instrument_fault"
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=instrument-fault-recorded "
+                                f"attempt={attempt} termination_reason=instrument_fault detail={exc}"
+                            )
+                            # Computed once for both consumers: the attempt
+                            # record and the check-point.
+                            attempt_state_hash = _snapshot_state_hash(worktree)
+                            attempt_reports.append(
+                                {
+                                    # A terminal row names its phase too: this
+                                    # attempt is still an attempt in a phase,
+                                    # and a row without one cannot be placed.
+                                    **phase_label(
+                                        phase,
+                                        "build"
+                                        if attempt == layer_first_attempt
+                                        else "troubleshooting",
+                                    ),
+                                    "attempt": attempt,
+                                    "verdict": "FAIL",
+                                    "conformed": False,
+                                    "n_problems": 0,
+                                    # Empty, NOT populated with the suite: no gate
+                                    # failed, the runner was killed before it could
+                                    # say. Inventing failures here would attribute a
+                                    # harness death to the model.
+                                    "failed_gates": [],
+                                    # None, not [] — "not published" rather than
+                                    # "published and empty" (invariants I-2 / I-4).
+                                    "gate_results": None,
+                                    "gate_totals": None,
+                                    "state_hash": attempt_state_hash,
+                                    "state_alg": STATE_ALG,
+                                    "instrument_fault": True,
+                                    "parity_pending": True,
+                                }
+                            )
+                            self._record_checkpoint(
+                                run_dir=run_dir,
+                                worktree=worktree,
+                                attempt=attempt,
+                                phase=(
+                                    "initial"
+                                    if attempt == 1
+                                    else f"feedback-{attempt - 1}"
+                                ),
+                                state_hash=attempt_state_hash,
+                                run_label=run_label,
+                            )
+                            cell_terminal = True
+                            break
+                        final_report = report
+
+                        # ── THE WATERMARK IS RESET AT EVERY GRADE ───────────────────
+                        #
+                        # This is the one place every graded pass reaches, so it is the
+                        # only honest statement of "a grade just completed". The session
+                        # message count here is the waterline the next repair round is
+                        # measured from: every compaction at or after this index is one
+                        # that round caused.
+                        #
+                        # A failed read leaves the watermark None, which skips the
+                        # check for this round entirely. A transport hiccup must never
+                        # end a cell that may be making progress.
+                        compaction_watermark = None
+                        if self._serve_client is not None and session_id:
+                            try:
+                                compaction_watermark = len(
+                                    self._serve_client.get_messages(session_id)
+                                )
+                            except ServeClientError:
+                                compaction_watermark = None
+
+                        attempt_verdict = str(report.get("verdict", "FAIL"))
+                        conformed = bool(report.get("conformed", False))
+                        problems = (
+                            report.get("problems")
+                            if isinstance(report.get("problems"), list)
+                            else []
+                        )
+                        failed_gates_raw = report.get("failed_gates")
+                        failed_gates = (
+                            [str(item) for item in failed_gates_raw]
+                            if isinstance(failed_gates_raw, list)
+                            else []
+                        )
+                        # WO-GATE-ROSTER. Carried through as-published, or None when the
+                        # gate runner did not emit them (no roster, or an older report).
+                        # None and [] mean different things here and must stay distinct:
+                        # [] would assert "the suite ran and held no gates".
+                        gate_results_raw = report.get("gate_results")
+                        gate_results = (
+                            gate_results_raw
+                            if isinstance(gate_results_raw, list)
+                            else None
+                        )
+                        gate_totals_raw = report.get("gate_totals")
+                        gate_totals = (
+                            gate_totals_raw
+                            if isinstance(gate_totals_raw, dict)
+                            else None
+                        )
+                        render_blocked = report.get("render_blocked")
+
+                        # ── LIVE: ONE RECORD PER GATE, AS THE VERDICT LANDS ─────────
+                        # `attempt_reports` below is written to manifest.status.jsonl
+                        # only when the whole CELL finishes, so a wall fed from that
+                        # file snaps from empty to final and shows nothing across the
+                        # four verdict-passes in between. These records are the same
+                        # facts, emitted at the moment they become true.
+                        #
+                        # This is NOT a second derivation of gate state: the payload is
+                        # the runner's own published `gate_results` rows, passed through
+                        # untouched. There is no in-flight or provisional square — a
+                        # gate appears only once it has a real recorded verdict.
+                        # THE STAGE A PLAYER HAS REACHED: the earliest one still failing.
+                        stage_view = player_view(
+                            problems,
+                            self._player_stages(),
+                            is_infra=self._is_harness_infra_check,
+                            layer=phase.layer,
+                            layer_map=self._player_layers(),
+                        )
+                        context_peak = (
+                            prev_run_stats.context_peak_tokens
+                            if prev_run_stats is not None
+                            else None
+                        )
+                        context_window = (
+                            model_limits(self.model)["context"]
+                            if prev_run_stats is not None
+                            else None
+                        )
+                        live = getattr(self, "_live", None)
+                        # WHICH KIND OF GRADE THIS IS: the first grade of a
+                        # troubleshooting stretch reads the tree the phase's
+                        # build message produced ("build"); every later one
+                        # reads a feedback round ("troubleshooting"). It is a
+                        # fact about this ATTEMPT, so it belongs beside the
+                        # phase identity on every record the attempt writes.
+                        grade_kind = (
+                            "build"
+                            if attempt == layer_first_attempt
+                            else "troubleshooting"
+                        )
+                        if live is not None:
+                            # No `phase.start` here: this site is where an attempt
+                            # ENDS. The phase identity is the canonical label, on
+                            # the attempt record and on every gate row — one
+                            # spelling, from `phase_label`.
+                            for row in gate_results or []:
+                                if not isinstance(row, dict):
+                                    continue
+                                live.emit(
+                                    "gate.result",
+                                    cell_seq=getattr(self, "_cell_seq", None),
+                                    session_id=session_id,
+                                    attempt=attempt,
+                                    id=row.get("id"),
+                                    status=row.get("status"),
+                                    # The GRADER's grouping (conformance|backend|
+                                    # frontend) is not a phase; it is renamed so
+                                    # `phase` means one thing only.
+                                    gate_phase=row.get("phase"),
+                                    duration_ms=row.get("duration_ms"),
+                                    **phase_label(phase, grade_kind),
+                                )
+                            live.emit(
+                                "attempt.end",
+                                cell_seq=getattr(self, "_cell_seq", None),
+                                session_id=session_id,
+                                attempt=attempt,
+                                verdict=attempt_verdict,
+                                conformed=conformed,
+                                failed=len(failed_gates),
+                                stage=stage_view.stage.number
+                                if stage_view.stage
+                                else None,
+                                stage_name=stage_view.stage.name
+                                if stage_view.stage
+                                else None,
+                                # What the model is told this round, stated — not
+                                # left for readers to derive as failed - withheld.
+                                told=len(stage_view.visible),
+                                withheld=len(stage_view.withheld),
+                                unevaluated=len(stage_view.unevaluated),
+                                render_blocked=render_blocked,
+                                context_peak=context_peak,
+                                context_window=context_window,
+                                **phase_label(phase, grade_kind),
+                            )
+
+                        attempt_state_hash = _snapshot_state_hash(worktree)
+                        # THIS ATTEMPT'S OWN VOLUME, so a status stream can write a
+                        # per-attempt row instead of re-deriving the split from the
+                        # cell totals. `prev_run_stats` is the drive that produced
+                        # the tree just graded — the phase build for this layer's
+                        # first grade, the feedback round before it otherwise. None
+                        # means no model ran this attempt: the fields are then
+                        # ABSENT, never 0, because a zero would claim a measured
+                        # turn that never happened.
+                        attempt_tokens: dict[str, Any] = (
+                            {
+                                "input_tokens": prev_run_stats.input_tokens,
+                                "output_tokens": prev_run_stats.output_tokens,
+                                "reasoning_tokens": prev_run_stats.reasoning_tokens,
+                                "cache_read_tokens": prev_run_stats.cache_read_tokens,
+                                "cache_write_tokens": prev_run_stats.cache_write_tokens,
+                                "turns": prev_run_stats.turns,
+                            }
+                            if prev_run_stats is not None
+                            else {}
+                        )
+                        attempt_reports.append(
+                            {
+                                # The durable row carries the same canonical
+                                # phase identity as the live `attempt.end`
+                                # beside it: one spelling, from `phase_label`.
+                                **phase_label(phase, grade_kind),
+                                "attempt": attempt,
+                                "verdict": attempt_verdict,
+                                "conformed": conformed,
+                                "n_problems": len(problems),
+                                "failed_gates": failed_gates,
+                                # The in-scope subset of the cumulative list
+                                # above: this round's layer only. Both are
+                                # published because they answer different
+                                # questions — "what is wrong" vs "what was this
+                                # round asked to fix" — and neither is derived
+                                # from the other later.
+                                "failed_gates_scoped": _failed_gates_scoped(
+                                    gate_results
+                                ),
+                                "gate_results": gate_results,
+                                "gate_totals": gate_totals,
+                                # Captured NOW, not reconstructed later: this is the
+                                # only moment this attempt's code exists on disk.
+                                "state_hash": attempt_state_hash,
+                                "state_alg": STATE_ALG,
+                                **attempt_tokens,
+                                # PLAYER ORDER: the stage this round reached, and how
+                                # many failing checks lay beyond it (graded, not told).
+                                "player_stage": stage_view.stage.number
+                                if stage_view.stage
+                                else None,
+                                "player_stage_name": stage_view.stage.name
+                                if stage_view.stage
+                                else None,
+                                "told_checks": len(stage_view.visible),
+                                "withheld_checks": len(stage_view.withheld),
+                                "unevaluated_checks": len(stage_view.unevaluated),
+                                "context_peak": context_peak,
+                                "context_window": context_window,
+                                # Scored cell whose metering awaits parity confirmation against the
+                                # first scored cell / the proxy log before it is treated as data.
+                                "parity_pending": True,
+                            }
+                        )
+                        self._record_checkpoint(
+                            run_dir=run_dir,
+                            worktree=worktree,
+                            attempt=attempt,
+                            phase=(
+                                "initial" if attempt == 1 else f"feedback-{attempt - 1}"
+                            ),
+                            state_hash=attempt_state_hash,
+                            run_label=run_label,
+                        )
+                        self._progress(
+                            f"PROGRESS gate attempt={attempt} verdict={attempt_verdict} "
+                            f"conformed={conformed} problems={len(problems)}"
+                        )
+
+                        if attempt_verdict == "PASS":
+                            # A SCOPED PASS IS THE ONLY THING THAT ADVANCES A
+                            # LAYER: `break` leaves this layer's troubleshooting
+                            # `while` and the phase loop builds the next phase.
+                            # The cell total counts the passes this layer was not
+                            # green on (0 when it passed first try), which is
+                            # exactly what the single-grade flow counted.
+                            verdict = "PASS"
+                            attempts_to_green += attempt - layer_first_attempt
+                            termination_reason = "gates_green"
+                            break
+
+                        if worker_killed_reason in _HARNESS_LIMIT_REASONS:
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=attempt-harness-limit attempt={attempt} "
+                                f"reason={worker_killed_reason} decision=continue_if_budget"
+                            )
+                        elif worker_killed_reason is not None:
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=attempt-harness-limit attempt={attempt} "
+                                f"reason={worker_killed_reason} decision=stop"
+                            )
+                            verdict = "FAIL"
+                            attempts_to_green = (
+                                "DID_NOT_CONFORM" if not conformed else "FAIL"
+                            )
+                            termination_reason = "harness_error"
+                            cell_terminal = True
+                            break
+
+                        if not session_id:
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=feedback-stop attempt={attempt} "
+                                "reason=session_id_missing"
+                            )
+                            verdict = "FAIL"
+                            attempts_to_green = (
+                                "DID_NOT_CONFORM" if not conformed else "FAIL"
+                            )
+                            termination_reason = "harness_error"
+                            cell_terminal = True
+                            break
+
+                        next_attempt = attempt + 1
+                        budget_decision = self._budget_decision_for_attempt(
+                            run_label=run_label,
+                            attempt=next_attempt,
+                            observed_attempt_costs=observed_attempt_costs,
+                        )
+                        if budget_decision == "harness_error":
+                            verdict = "FAIL"
+                            attempts_to_green = (
+                                "DID_NOT_CONFORM" if not conformed else "FAIL"
+                            )
+                            termination_reason = "harness_error"
+                            cell_terminal = True
+                            break
+                        if budget_decision == "budget_stop":
+                            verdict = "BUDGET_STOP"
+                            attempts_to_green = "BUDGET_STOP"
+                            termination_reason = "attempts_exhausted_by_budget"
+                            cell_terminal = True
+                            break
+
+                        # D-EXIT1-TERMINAL: check transport resume budget
+                        if self.resume_budget <= 0:
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=transport-resume-exhausted "
+                                f"attempt={attempt} resume_budget=0"
+                            )
+                            verdict = "FAIL"
+                            attempts_to_green = "FAIL"
+                            termination_reason = "transport_incomplete"
+                            cell_terminal = True
+                            break
+
+                        # Never pass tool_choice="required" via worker config/CLI for these
+                        # runs; provider path rejects it and the harness guard test enforces this.
+
+                        # PLAYER ORDER: only what the player reported last round can be
+                        # reported fixed — a check the model never heard about passing
+                        # is not news to it.
+                        now_failing = [
+                            (str(p.get("check", "")).strip(), self._complaint_aspect(p))
+                            for p in problems
+                            if isinstance(p, dict)
+                        ]
+                        with_record = {check for check, _ in now_failing}
+                        now_failing += [
+                            (str(g).strip(), None)
+                            for g in attempt_reports[-1]["failed_gates"]
+                            if str(g).strip() not in with_record
+                        ]
+                        fixed = set(
+                            told_complaints_fixed(
+                                told_last_round.values(),
+                                now_failing,
+                                self._aspect_order(),
+                            )
+                        )
+                        # In the order a player meets them, like the problems
+                        # themselves — not alphabetically, which put a setup check
+                        # after every bracketed gate (WO-LI-GRADER-ORIENTATION).
+                        newly_passing = sorted(
+                            (c for c, told in told_last_round.items() if told in fixed),
+                            key=lambda c: player_order(c, self._player_stages()),
+                        )
+                        still_failing = sorted(set(attempt_reports[-1]["failed_gates"]))
+                        self._progress(
+                            f"PROGRESS run_label={run_label} step=feedback-verdict-composed attempt={attempt} "
+                            f"newly_passing_count={len(newly_passing)} still_failing_count={len(still_failing)}"
+                        )
+
+                        next_attempt_cost_usd = 0.0
+                        # WO-FEEDBACK-ONEPHASE: ONE prompt per troubleshooting round.
+                        # The pass verdict is no longer a separate `_run_cell_attempt`
+                        # (`verdict-pass-N`); it is folded into the single feedback
+                        # message below. Empty string when nothing newly passed.
+                        pass_verdict = self._build_pass_verdict(
+                            newly_passing=newly_passing, told=told_first_label
+                        )
+
+                        feedback_checks = [
+                            str(p.get("check", "")).strip()
+                            for p in problems
+                            if isinstance(p, dict) and str(p.get("check", "")).strip()
+                        ]
+                        # THE GRADIENT (WO-FEEDBACK-1): a gate that ALSO failed last
+                        # attempt gets one line of observed evidence attached, so the
+                        # message the model receives actually changes when its fix did
+                        # not work. Keyed on the raw gate id — the same strings
+                        # `failed_gates` carries — so the match is exact. Harness-infra
+                        # check names are excluded on BOTH sides: they are not gates,
+                        # and a repeat infra failure must not leak into the prompt as
+                        # if it were model-repairable work.
+                        # PLAYER ORDER: the message carries only the earliest failing
+                        # stage's problems. A check gets its second-sighting line only
+                        # if the model has been told about it before — first time it
+                        # appears (a later stage just unlocked) it is a first report.
+                        visible_checks = {
+                            str(p.get("check", "")).strip() for p in stage_view.visible
+                        }
+                        # Per COMPLAINT, not per check: a check that now says something
+                        # new gets its first-sighting line (_complaint_id). And only a
+                        # complaint that has failed in every grade since it was told is
+                        # "still" there: one that was fixed and came back is a new
+                        # sighting. Keyed on everything told, run 1790357047 told "The
+                        # off tray is still drawn over some of the points." two rounds
+                        # after "That fixed it" — the model had undone its own fix.
+                        told_open &= {
+                            self._complaint_id(p)
+                            for p in problems
+                            if isinstance(p, dict)
+                        }
+                        visible_complaints = {
+                            self._complaint_id(p) for p in stage_view.visible
+                        }
+                        repeat_complaints = visible_complaints & told_open
+                        self._progress(
+                            f"PROGRESS run_label={run_label} step=player-stage attempt={attempt} "
+                            f"stage={stage_view.stage.number if stage_view.stage else 'none'} "
+                            f"told={len(visible_checks)} withheld={len(stage_view.withheld)} "
+                            f"unevaluated={len(stage_view.unevaluated)} "
+                            f"failing_total={len(feedback_checks)}"
+                        )
+                        told_last_round = {
+                            self._complaint_id(p): (
+                                str(p.get("check", "")).strip(),
+                                self._complaint_aspect(p),
+                            )
+                            for p in stage_view.visible
+                            if str(p.get("check", "")).strip()
+                        }
+                        told_open |= visible_complaints
+                        for p in stage_view.visible:
+                            complaint = self._complaint_id(p)
+                            if (
+                                str(p.get("check", "")).strip()
+                                and complaint not in told_first_label
+                            ):
+                                told_first_label[complaint] = self._told_label(
+                                    p, pass_kind="first"
+                                )[0]
+                        # A check told this round that PASSED the immediately-previous
+                        # graded round is a REGRESSION — the model's own fix undid code
+                        # that worked — and is told under its own opener (feedback.py).
+                        regressions = _regressed_checks(
+                            attempt_reports, stage_view.visible
+                        )
+                        feedback = self._build_feedback_prompt(
+                            problems=stage_view.visible,
+                            # The repeats also choose the opener (feedback.py): "I'm
+                            # still seeing these problems" heads a list of repeats only.
+                            repeat_complaints=repeat_complaints,
+                            withheld=stage_view.withheld,
+                            unevaluated=stage_view.unevaluated,
+                            regressions=regressions,
+                            respec=self._respec_for(
+                                [p for p in problems if isinstance(p, dict)],
+                                stage_view.visible,
+                                stage_view.stage,
+                                self._player_stages(),
+                            ),
+                        )
+                        # WO-FEEDBACK-ONEPHASE: fold the pass verdict into the single
+                        # round message — the player acknowledges what is fixed, then
+                        # lists what is still broken. One prompt, not two.
+                        if pass_verdict:
+                            feedback = f"{pass_verdict}\n\n{feedback}"
+                        # A ROUND THAT CHANGED NOTHING: the graded code is byte-identical
+                        # to the round before. Said first, before anything else the
+                        # player reports. Unknown hashes (None) never count as unchanged,
+                        # and a round where something newly passed is never called
+                        # unchanged — "nothing changed" beside "that fixed it" would
+                        # contradict itself (identical code can only pass differently
+                        # through a flaky check, which is not the model's news).
+                        code_unchanged = (
+                            not pass_verdict
+                            and _code_unchanged_since_last_round(attempt_reports)
+                        )
+                        if code_unchanged:
+                            feedback = f"{_NO_CHANGE_NOTE}\n\n{feedback}"
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=feedback-code-unchanged attempt={attempt}"
+                            )
+                        # FIRST TROUBLESHOOTING MESSAGE ONLY: orient the model with the
+                        # GOAL/PROBLEM/TASK frame. Chunk (build) prompts are a separate
+                        # emission path (serve.py, before this loop), so this prepend
+                        # touches only the round-1 feedback message — never a build
+                        # chunk and never a later round.
+                        if attempt == 1:
+                            feedback = f"{_FIRST_MESSAGE_PREAMBLE}\n\n{feedback}"
+                        # AFTER A COMPACTION, THE SPEC GOES BACK IN. The context
+                        # that compaction rewrote may no longer carry the spec the
+                        # build handed over, so the first feedback message after an
+                        # observed compaction re-hands it — the SAME composer the
+                        # build step uses, so there is one string for the plan and
+                        # never a second paraphrase. Consumed here and cleared, so
+                        # exactly one message carries it.
+                        if spec_rehand_pending:
+                            feedback = (
+                                f"{pack.build_step_message(phase.index)}\n\n{feedback}"
+                            )
+                            spec_rehand_pending = False
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=spec-rehand "
+                                f"phase={phase.index} attempt={attempt}"
+                            )
+                        self._progress(
+                            f"PROGRESS run_label={run_label} step=feedback-problems-only-built attempt={attempt} "
+                            f"checks={len(feedback_checks)} repeats={len(repeat_complaints)}"
+                        )
+                        self._progress(
+                            f"PROGRESS run_label={run_label} step=feedback-injection attempt={attempt} "
+                            f"problem_count={len(problems)} session_id={session_id}"
+                        )
+
+                        self._emit_cost_target_warning_if_reached(
+                            run_label=run_label,
+                            phase=f"feedback-{attempt}",
+                            cumulative_cost_usd=cell_cost_usd,
+                        )
+
+                        self._append_user_event(
+                            kind="feedback",
+                            run_label=run_label,
+                            sidecar_path=user_events_path,
+                            attempt=next_attempt,
+                            text=feedback,
+                        )
+
+                        self._write_worker_permission_config(worktree=worktree)
+
+                        # WO-PAUSE-AFTER-GRADE: ROUND pause. Reaching this point means
+                        # this graded pass (attempt `attempt`) is NOT the final one and
+                        # the loop WILL drive `next_attempt` below — so this is exactly
+                        # one pause per non-final graded pass. The told lines for the
+                        # next round are already on disk (`_append_user_event` above),
+                        # and nothing has been sent to the model yet. Hold for the
+                        # operator; released seconds are excluded from wall time.
+                        if self.pause_after_grade:
+                            self._paused_seconds += self._run_operator_pause(
+                                run_label=run_label,
+                                run_dir=run_dir,
+                                worktree=worktree,
+                                active_cell=active_cell,
+                                session_id=session_id,
+                                kind="round",
+                                attempt=attempt,
+                                told_text=feedback,
+                                grade=_pause_grade(report, report_json),
+                                phase_label=phase_label(phase, "troubleshooting"),
+                            )
+
+                        self._mark_harness_resume(prev_run_stats)
+                        feedback_run = self._run_cell_attempt(
+                            active_cell=active_cell,
+                            run_label=run_label,
+                            phase=f"feedback-{attempt}",
+                            phase_label=phase_label(phase, "troubleshooting"),
+                            prior_cost_usd=cell_cost_usd,
+                            kill_hook=active_cell.kill_worker_processes,
+                            stdin_text=feedback,
+                            attempt=next_attempt,
+                            compaction_watermark=compaction_watermark,
+                        )
+                        next_attempt_cost_usd += feedback_run.cost_usd
+                        observed_attempt_costs.append(next_attempt_cost_usd)
+                        cell_cost_usd += feedback_run.cost_usd
+                        if feedback_run.session_id:
+                            session_id = feedback_run.session_id
+
+                        input_tokens_total += feedback_run.input_tokens
+                        output_tokens_total += (
+                            feedback_run.output_tokens + feedback_run.reasoning_tokens
+                        )
+                        turns_total += feedback_run.turns
+                        provider_truncations_total += feedback_run.provider_truncations
+                        cap_cutoffs_total += feedback_run.cap_cutoffs
+                        cap_cutoffs_nudged_total += feedback_run.cap_cutoffs_nudged
+                        zero_tool_turns_total += feedback_run.zero_tool_turns
+                        zero_tool_resumes_total += feedback_run.zero_tool_resumes
+                        if feedback_run.zero_tool_turn_honest_fail:
+                            zero_tool_turn_honest_fails_total += 1
+                        turn_anomalies_all.extend(feedback_run.turn_anomalies)
+                        unmetered_turns_total += feedback_run.unmetered_turns
+                        unmetered_turn_wall_total += feedback_run.unmetered_turn_wall_s
+                        prev_run_stats = feedback_run
+                        worker_killed_reason = feedback_run.killed_reason
+                        self._progress(
+                            f"PROGRESS run_label={run_label} step=feedback-injection-done attempt={attempt} "
+                            f"exit={feedback_run.exit_code} killed={feedback_run.killed_reason or 'none'} "
+                            f"turns={feedback_run.turns} input={feedback_run.input_tokens} "
+                            f"output={feedback_run.output_tokens} reasoning={feedback_run.reasoning_tokens} "
+                            f"cost_usd={feedback_run.cost_usd:.4f} cell_cost_usd={cell_cost_usd:.4f}"
+                        )
+                        # ARM THE RE-HAND FOR THE NEXT MESSAGE. This drive is the
+                        # only place the model's live compaction count reaches the
+                        # runner, so the flag is set here — after the drive returns
+                        # — and read at the NEXT feedback composition. ONE observed
+                        # compaction is enough: it is recovery, not the >= 2 stuck
+                        # signal below, but the spec still has to go back in.
+                        if feedback_run.compactions_observed >= 1:
+                            spec_rehand_pending = True
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=spec-rehand-armed "
+                                f"phase={phase.index} attempt={attempt} "
+                                f"compactions_observed={feedback_run.compactions_observed}"
+                            )
+                        # ── TWO COMPACTIONS BEFORE A GRADE ENDS THE CELL ────────────
+                        #
+                        # Enforced IN-DRIVE now: `_run_opencode_serve` counts completed
+                        # compactions since the grade watermark at every turn end (the
+                        # loop that already watches turn ends, recovery and context
+                        # overflow) and ends the drive at the second one, carrying the
+                        # count back on `compactions_since_grade`. This block maps that
+                        # signal to the cell terminal — the SAME verdict, reason, notice
+                        # and progress line the post-drive check used to emit. There is
+                        # no post-drive recount: after the drive returns the model has
+                        # stopped, and the next grade re-captures the watermark, so the
+                        # in-drive count is complete and a second counting path would
+                        # only double-report.
+                        #
+                        # FEEDBACK-ONLY BY CONSTRUCTION: the watermark is passed only by
+                        # `_run_cell_attempt` (feedback). The chunked build never passes
+                        # it, so build compaction is never counted. ONE IS HEALTHY, TWO
+                        # IS STUCK: the first compaction is recovery; a second before any
+                        # grade means the round rewrote context instead of fixing.
+                        if feedback_run.compactions_since_grade >= 2:
+                            verdict = "FAIL"
+                            attempts_to_green = "COMPACTIONS_BEFORE_GRADE"
+                            termination_reason = COMPACTIONS_BEFORE_GRADE
+                            live = getattr(self, "_live", None)
+                            if live is not None:
+                                live.notice(
+                                    "harness",
+                                    "compactions_before_grade",
+                                    level="error",
+                                    cell_seq=getattr(self, "_cell_seq", None),
+                                    session_id=session_id,
+                                    detail={
+                                        "phase": f"feedback-{attempt}",
+                                        "compactions": feedback_run.compactions_since_grade,
+                                        "attempt": attempt,
+                                    },
+                                )
+                            self._progress(
+                                f"PROGRESS run_label={run_label} "
+                                f"step=compactions-before-grade phase=feedback-{attempt} "
+                                f"compactions={feedback_run.compactions_since_grade} "
+                                f"attempt={attempt} action=end-cell"
+                            )
+                            cell_terminal = True
+                            break
+                        if feedback_run.killed_reason == WORKER_DIED:
+                            # The worker container stopped mid-round. The round graded
+                            # before this one stands; nothing more can run.
+                            verdict = "FAIL"
+                            attempts_to_green = "WORKER_DIED"
+                            termination_reason = WORKER_DIED
+                            cell_terminal = True
+                            break
+                        if feedback_run.context_exhausted:
+                            # ContextOverflowError mid-repair: the session was too large
+                            # to compact, so nothing can continue. Stop the run; the
+                            # round graded before this one is the cell's result.
+                            verdict = "FAIL"
+                            attempts_to_green = "CONTEXT_EXHAUSTED"
+                            termination_reason = CONTEXT_EXHAUSTED
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=context-exhausted-stop "
+                                f"phase=feedback-{attempt} graded={len(attempt_reports)}"
+                            )
+                            cell_terminal = True
+                            break
+                        if feedback_run.budget_stop_detected:
+                            verdict = "BUDGET_STOP"
+                            attempts_to_green = "BUDGET_STOP"
+                            termination_reason = "budget_stop_mid_attempt"
+                            cell_terminal = True
+                            break
+                        if feedback_run.zero_tool_turn_honest_fail:
+                            verdict = "FAIL"
+                            attempts_to_green = (
+                                "DID_NOT_CONFORM" if not conformed else "FAIL"
+                            )
+                            termination_reason = "zero_tool_turn_honest_fail"
+                            if attempt_reports:
+                                attempt_reports[-1]["zero_tool_turn_honest_fail"] = True
+                            cell_terminal = True
+                            break
+                        if (
+                            feedback_run.exit_code not in (0, None)
+                            and feedback_run.killed_reason not in _HARNESS_LIMIT_REASONS
+                        ):
+                            verdict = "FAIL"
+                            attempts_to_green = (
+                                "DID_NOT_CONFORM" if not conformed else "FAIL"
+                            )
+                            termination_reason = "harness_error"
+                            cell_terminal = True
+                            break
+
+                    if cell_terminal:
+                        break
 
             # WO-PAUSE-AFTER-GRADE: FINAL pause. Every normal loop-exit path
             # converges here; this is the last statement inside the cell
@@ -1982,7 +2303,7 @@ class ChallengeRunner(
                 final_attempt = (
                     attempt_reports[-1]["attempt"] if attempt_reports else None
                 )
-                paused_seconds += self._run_operator_pause(
+                self._paused_seconds += self._run_operator_pause(
                     run_label=run_label,
                     run_dir=run_dir,
                     worktree=worktree,
@@ -1999,6 +2320,14 @@ class ChallengeRunner(
                             run_dir / f"attempt-{final_attempt}-report.json",
                         )
                     ),
+                    # The phase the cell stopped on. `last_phase` is held outside
+                    # the loop for exactly this: a cell that never reached a
+                    # phase publishes NO label rather than a stale or invented one.
+                    phase_label=(
+                        phase_label(last_phase, "troubleshooting")
+                        if last_phase is not None
+                        else None
+                    ),
                 )
 
         if termination_reason == "pending":
@@ -2006,7 +2335,7 @@ class ChallengeRunner(
             attempts_to_green = "FAIL"
             termination_reason = "harness_error"
 
-        wall_seconds = time.monotonic() - started - paused_seconds
+        wall_seconds = time.monotonic() - started - self._paused_seconds
         problems_final = self._normalize_problems(final_report.get("problems"))
         failed_gates_final = self._normalize_string_list(
             final_report.get("failed_gates")
@@ -2117,7 +2446,7 @@ class ChallengeRunner(
 
         return ChallengeCellResult(
             build_chunks=build_chunk_completion(
-                chunk_reports=(first_run.chunk_reports if first_run else ()),
+                chunk_reports=tuple(chunk_reports),
                 expected=build_chunk_expected,
                 worktree=worktree,
             )
@@ -2134,7 +2463,7 @@ class ChallengeRunner(
             cache_write_tokens=cache_write_total,
             turns=turns_total,
             wall_seconds=wall_seconds,
-            paused_seconds=round(paused_seconds, 3),
+            paused_seconds=round(self._paused_seconds, 3),
             delivery=delivery,
             failed_gates=failed_gates_final,
             problems_final=problems_final,
@@ -2166,7 +2495,7 @@ class ChallengeRunner(
             zero_tool_turns=zero_tool_turns_total,
             zero_tool_resumes=zero_tool_resumes_total,
             zero_tool_turn_honest_fails=zero_tool_turn_honest_fails_total,
-            transport_resume_count=first_run.resume_count if first_run else 0,
+            transport_resume_count=transport_resume_count,
             turn_anomalies=turn_anomalies_all,
             truncated_turns=len(turn_anomalies_all),
             truncated_turns_retried=sum(
@@ -2223,6 +2552,7 @@ class ChallengeRunner(
         attempt: int | None,
         told_text: str | None,
         grade: dict[str, Any] | None,
+        phase_label: dict[str, Any] | None = None,
     ) -> float:
         """Run ONE operator pause (WO-PAUSE-AFTER-GRADE).
 
@@ -2231,7 +2561,10 @@ class ChallengeRunner(
         `pause.start`/`pause.end` live events, and returns the seconds this
         pause took — the artifact boot included — so the caller can exclude
         them from wall time. `kind` is "round" (a graded pass, feedback not yet
-        sent) or "final" (run end).
+        sent) or "final" (run end). `phase_label` is the canonical phase identity
+        (:func:`harness.prompt_pack.phase_label`) of the phase the cell is on, so
+        both pause records name it in the same spelling as every other record —
+        absent, never null, when no phase was reached.
         """
         live = getattr(self, "_live", None)
         cell_seq = getattr(self, "_cell_seq", None)
@@ -2244,6 +2577,7 @@ class ChallengeRunner(
                 attempt=attempt,
                 # None = unbounded: a round count is observed, never declared.
                 max_attempts=None,
+                **(phase_label or {}),
             )
         started = time.monotonic()
         _hold_for_operator(
@@ -2268,6 +2602,7 @@ class ChallengeRunner(
                 pause_kind=kind,
                 attempt=attempt,
                 held_s=round(held_s, 3),
+                **(phase_label or {}),
             )
         return held_s
 
@@ -2282,6 +2617,7 @@ class ChallengeRunner(
         stdin_text: str,
         attempt: int | None = None,
         compaction_watermark: int | None = None,
+        phase_label: dict[str, Any] | None = None,
     ) -> _OpencodeRunStats:
         """Run ONE cell attempt, delivered over the serve session.
 
@@ -2326,6 +2662,11 @@ class ChallengeRunner(
                 kill_hook=kill_hook,
                 attempt=attempt,
                 compaction_watermark=compaction_watermark,
+                # The phase identity travels with the DRIVE, not with the
+                # `feedback-{attempt}` transport string: the string is a
+                # position on the wire the dashboard reads, the label is which
+                # phase of the plan this round belongs to.
+                phase_label=phase_label,
             )
         except ServeTransportError:
             raise
@@ -2407,6 +2748,91 @@ class ChallengeRunner(
             cached = load_stages(_GRADER_DIR / "checks.json")
             cls._PLAYER_STAGES_CACHE = cached
         return cached
+
+    @classmethod
+    def _player_layers(cls) -> LayerMap:
+        """Which layer each check belongs to (grader/layers.json), loaded once.
+
+        A layered grade is scoped by `--layer N`, and the repair message has to
+        be scoped the same way: a layer-1 pass must not tell the model about a
+        layer-3 check it has not been asked for yet. `player_view` drops those
+        against this map.
+        """
+        cached = getattr(cls, "_PLAYER_LAYERS_CACHE", None)
+        if cached is None:
+            cached = load_layers(_GRADER_DIR / "layers.json")
+            cls._PLAYER_LAYERS_CACHE = cached
+        return cached
+
+    def _ensure_gate_roster(self, *, run_dir: Path, run_label: str) -> Path:
+        """Make sure a gate roster exists for this cell's grades; return it.
+
+        WHY A LAYERED GRADE NEEDS ONE. `report.mjs` refuses to report a pass it
+        cannot scope: the roster is how a scoped grade says which gates exist
+        and therefore which ones never ran (grader/report.mjs). A campaign also
+        writes one before its first cell, and that roster is the denominator
+        every grade in the campaign is compared against — so an existing file is
+        used exactly as it is and never re-baselined (invariant I-6). Only when
+        there is none (a direct cell run, or a campaign whose enumeration
+        failed) is one produced here, at `run_dir/gate-roster.json`.
+
+        ONCE, NEVER PER GRADE: the file check below short-circuits every call
+        after the first, and the enumeration itself executes no test.
+
+        FAIL LOUD. A layered grade without a roster cannot report what did not
+        run, and a cell that silently graded blind would look identical to one
+        that graded the whole suite.
+        """
+        existing = self.gate_roster_path
+        if existing is not None and existing.is_file():
+            return existing
+
+        target = Path(run_dir) / "gate-roster.json"
+        script = _GRADER_DIR / "roster.mjs"
+        if not script.is_file():
+            raise RuntimeError(
+                f"layered grading needs a gate roster but {script} is missing — "
+                "the grader's enumerator is not in the image this harness was "
+                "built against"
+            )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            completed = subprocess.run(
+                [
+                    "node",
+                    str(script),
+                    "--out",
+                    str(target),
+                    # The roster is metadata for the challenge this cell runs;
+                    # `--task` is the label the artifact carries, and the
+                    # challenge names itself by its directory (as task_id does).
+                    "--task",
+                    self.task_dir.name,
+                ],
+                cwd=str(script.parent),
+                capture_output=True,
+                text=True,
+                timeout=_GATE_ROSTER_TIMEOUT_S,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise RuntimeError(
+                f"could not enumerate the gate roster for a layered grade "
+                f"({type(exc).__name__}: {exc})"
+            ) from exc
+        if not target.is_file():
+            raise RuntimeError(
+                f"the gate roster enumeration wrote nothing to {target} "
+                f"(exit={completed.returncode}, "
+                f"stderr={(completed.stderr or '').strip()[:400] or 'none'}) — "
+                "a layered grade needs it to say which gates never ran"
+            )
+        self.gate_roster_path = target
+        self._progress(
+            f"PROGRESS run_label={run_label} step=gate-roster path={target} "
+            f"exit={completed.returncode}"
+        )
+        return target
 
     _TESTER_CONF_EXACT = ("REQ-BIND/boot",)
 

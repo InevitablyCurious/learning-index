@@ -1,7 +1,4 @@
-GOAL: We are building a fully functional backgammon game in Node + TypeScript that runs on localhost. This is the frontend build, layer 1 of 3 (board and controls, no pieces) — chunk 4 of 7. The backend (engine, AI, API) is complete from chunks 1-3.
-REQUIREMENT — the game state MUST survive page reloads. A reload must carry over every piece of information from before the reload: the board, the dice, the score, whose turn it is, the difficulty, the doubling cube, and the remaining dice. Load the current state from the server when the page opens — do not start a new game on load.
-
-TASK: Build the board and controls in `public/index.html`, `public/style.css`, and `public/app.js` — the board (points, bar, off tray), the buttons and the game-info panels, laid out to fit the window. No pieces are drawn yet; a later layer adds them.
+TASK: Build the board and controls in `public/index.html`, `public/style.css`, and `public/app.js` — the board (points, bar, off tray), the buttons and the game-info panels, laid out to fit the window.
 
 Render everything from the serialized state: checkers on points, bar and off, dice, cube, pip counts, score, turn indicator, messages.
 
@@ -14,7 +11,7 @@ What the game should feel like to play:
 - The board is drawn as you'd see it sitting at a real board as white: point 24 at the top right, the top row running 13 to 24 left to right and the bottom row 12 down to 1 left to right, each row split into two halves of six by the bar, which runs down the middle the full height of the board, so the two halves are the same width. The bar is about as wide as a piece, with a few pixels of room on each side, so a piece that has been hit fits on it.
 - Each point is a long triangle that stands out from the board, its wide end on the board's edge and its tip reaching most of the way to the middle, leaving a gap of about 24% of half the board's height between a top point's tip and the tip of the point directly across the middle. The board itself is one plain colour, and the points are drawn on it in two other colours that alternate side by side. All 24 points are the same size.
 - The off tray sits at the right-hand end of the board, beside points 1 and 24, where the checkers are borne off. It runs the full height of the board and is at least as wide as a piece but no wider than one and a half points, so a borne-off piece fits in it lying on its side, its long edge parallel to the top and bottom of the board. It stands out from the board: a fill of its own, or a clear edge down the side that faces the points.
-- No pieces are drawn in this layer. Where a line sizes the bar or the off tray against a piece, a piece is a checker about 80% of a point's width (not counting the bar) — size the bar and the off tray to leave room for that.
+- Where a line sizes the bar or the off tray against a piece, a piece is a checker about 80% of a point's width (not counting the bar) — size the bar and the off tray to leave room for that.
 
 Wording the page uses: the buttons read Roll, Double, Undo, End Turn and New Game — a longer label such as "Roll Dice" is fine as long as it contains the name — and all five are on screen from the start, the same size as each other, each at least 60 px wide and 24 px tall; a button the player can't use is clearly greyed out — visibly fainter than any button they can use.
 
@@ -29,5 +26,3 @@ Required `data-testid` hooks (EXACT — the UI automation selects on these; stat
 - The off tray: `data-testid="off-tray"`, containing `data-testid="off-you"`, where your borne-off checkers go.
 
 **Before you hand it over, look at it.** Load the page in a browser and look at the board you built — the points, the bar, the off tray, the buttons and the game-info panels, sized to the window. The notes in this folder show how to open the page in a browser.
-
-**Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.

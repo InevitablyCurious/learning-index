@@ -283,6 +283,9 @@ def test_wait_idle_detailed_without_a_marker_keeps_stall_and_timeout(
         def count(self) -> int:
             return 0
 
+        def compacted_count(self) -> int:
+            return 0
+
         def close(self) -> None:
             pass
 

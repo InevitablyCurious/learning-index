@@ -272,10 +272,20 @@ def player_view(
     stages: list[Stage],
     *,
     is_infra: Callable[[str], bool],
+    layer: int | None = None,
+    layer_map: LayerMap | None = None,
 ) -> PlayerView:
     """The problems of the earliest failing stage; the rest are withheld, and
     checks the grader never reached, or that stopped at a step another failing
-    check reports, are told to no one."""
+    check reports, are told to no one.
+
+    ``layer`` scopes the told problems to one grader pass: a problem whose CHECK
+    belongs to another layer is dropped before staging, so a pass over layer 1
+    never widens its repair message to a later pass's gates. The layer is the
+    check's own (``layer_map.layer_of``), never its stage's: layer 2 has no
+    stage of its own — stages 2-14 default to layer 3 — so reading ``Stage.layer``
+    here would drop every layer-2 problem. Without a scope the result is
+    unchanged."""
     records = [p for p in problems if isinstance(p, dict)]
     # A check the grader never reached is not a failure a player met, so it cannot
     # excuse another check from being told: both would reach no one.
@@ -290,6 +300,12 @@ def player_view(
     for problem in records:
         check = str(problem.get("check", "")).strip()
         if not check or is_infra(check):
+            continue
+        if (
+            layer is not None
+            and layer_map is not None
+            and layer_map.layer_of(check, stages) != layer
+        ):
             continue
         if is_unevaluated(problem) or any(n in failed for n in needs_of(problem)):
             unevaluated.append(check)

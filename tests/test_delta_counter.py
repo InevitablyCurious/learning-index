@@ -18,7 +18,7 @@ import time
 
 import pytest
 
-from harness.serve_client import DeltaCounter, ServeClientError
+from harness.serve_client import DeltaCounter, ServeClient, ServeClientError
 
 
 def _event(kind: str, session: str) -> dict:
@@ -85,6 +85,60 @@ def test_counts_only_this_sessions_streamed_tokens():
     finally:
         counter.close()
         server.shutdown()
+
+
+def test_counts_this_sessions_compactions_apart_from_tokens():
+    server, _, url = _serve(
+        [
+            [
+                _event("session.compacted", "ses_A"),
+                _event("session.compacted", "ses_B"),  # another session compacted
+                _event("session.compacted", "ses_A"),
+                _event("message.part.delta", "ses_A"),
+            ]
+        ]
+    )
+    counter = DeltaCounter(url, "ses_A")
+    try:
+        assert _until(lambda: counter.compacted_count() == 2)
+        time.sleep(0.2)
+        assert counter.compacted_count() == 2, "only this session's compactions count"
+        # A compaction is a fact, not token progress: the stall bound reads
+        # count() as liveness, so the two must never be folded together.
+        assert counter.count() == 1
+    finally:
+        counter.close()
+        server.shutdown()
+
+
+def test_a_wait_folds_its_compactions_into_the_client(monkeypatch):
+    # The counter is per stream; the client's total outlives every stream it
+    # opened, so a later chunk can report what the drive actually saw.
+    class _Compacted:
+        def count(self) -> int:
+            return 0
+
+        def compacted_count(self) -> int:
+            return 2
+
+        def close(self) -> None:
+            pass
+
+    client = ServeClient("http://127.0.0.1:4096", poll_interval=0.0)
+    monkeypatch.setattr(client, "session_busy", lambda sid: False)
+    monkeypatch.setattr(client, "open_delta_counter", lambda sid: _Compacted())
+    assert client.live_compactions_observed() == 0
+
+    assert client.wait_idle_detailed("ses_A", timeout_s=1.0, stall_timeout_s=5.0) == (
+        True,
+        "idle",
+    )
+    assert client.live_compactions_observed() == 2
+    assert client.wait_idle_detailed("ses_A", timeout_s=1.0, stall_timeout_s=5.0) == (
+        True,
+        "idle",
+    )
+    assert client.live_compactions_observed() == 4
 
 
 def test_keeps_counting_across_a_dropped_stream():

@@ -158,7 +158,14 @@ def test_no_namespace_exports_path_only(tmp_path):
 def test_heartbeat_beats_on_wall_time_and_carries_the_phase(tmp_path):
     stream = LiveStream.for_run(tmp_path, run_id="r1")
     hb = Heartbeat(stream, interval_s=0.05, cell_seq=0)
-    hb.set_phase("initial-chunk-1", attempt=1)
+    # TWO SPELLINGS OF ONE PHASE: the string the board regexes, and the
+    # structured label from harness.prompt_pack.phase_label. Both ride every
+    # beat after this call, so a reader can key on either.
+    hb.set_phase(
+        "initial-chunk-1",
+        attempt=1,
+        label={"phase_index": 1, "phase_name": "x", "phase_kind": "build"},
+    )
     hb.start()
     try:
         _wait_for(lambda: len(_lines(tmp_path / STREAM_FILENAME)) >= 3)
@@ -168,6 +175,11 @@ def test_heartbeat_beats_on_wall_time_and_carries_the_phase(tmp_path):
     beats = [r for r in _lines(tmp_path / STREAM_FILENAME) if r["kind"] == "heartbeat"]
     assert len(beats) >= 3, "a heartbeat must beat on a clock, not on work"
     assert beats[-1]["phase"] == "initial-chunk-1"
+    # The phase string is the DRIVE phase; the label is the same phase's
+    # structured identity, flattened in unchanged — never a second spelling.
+    assert beats[-1]["phase_index"] == 1
+    assert beats[-1]["phase_name"] == "x"
+    assert beats[-1]["phase_kind"] == "build"
     assert beats[-1]["attempt"] == 1
     assert beats[-1]["cell_seq"] == 0
     # since_ms is monotonic: a reader uses it to tell a fresh cell from a long one.

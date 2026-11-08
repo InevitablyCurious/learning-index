@@ -14,9 +14,16 @@ from typing import Any
 
 import pytest
 
+import harness.adapters.challenge.runner as runner_mod
 from harness.adapters.challenge import _OpencodeRunStats
 from harness.serve_client import WORKER_DIED, ServeClient, ServeClientError
-from tests._serve_drive_fakes import _FakeCell, _FakeServeClient, _make_runner
+from tests._serve_drive_fakes import (
+    _FakeCell,
+    _FakeServeClient,
+    _make_runner,
+    _one_layer_phase,
+    _pack_factory,
+)
 
 
 class _Unreachable(ServeClient):
@@ -97,7 +104,7 @@ def test_a_worker_that_dies_in_a_repair_round_ends_the_cell_keeping_the_last_gra
 
     runner = make(tmp_path)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(runner, "_load_chunk_prompts", lambda *a, **k: ["CHUNK"])
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
     grades = {"n": 0}
 
     def _gate(**kwargs: Any) -> dict[str, Any]:

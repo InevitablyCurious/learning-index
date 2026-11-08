@@ -36,6 +36,11 @@ class _FakeDeltas:
             self._n += 1
         return self._n
 
+    def compacted_count(self) -> int:
+        # Wait-idle tests drive stalls, not compactions: this stream never
+        # compacts. The compaction fold-in is covered in test_delta_counter.
+        return 0
+
     def close(self) -> None:
         self.closed = True
 
@@ -53,6 +58,7 @@ class _FakeClient(ServeClient):
         streaming=False,
         tool_running=True,
     ):
+        super().__init__("")
         self.poll_interval = 0.0
         self._tokens = list(tokens or [])
         self._busy = busy

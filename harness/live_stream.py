@@ -144,6 +144,7 @@ CORE_KINDS = (
     "backend",  # a backend announcing itself: ns, name, version
     "heartbeat",  # the cell is ALIVE, and here is what it is doing
     "notice",  # a PROCESS reporting something it did or something done to it
+    "compaction",  # the cell's context was compacted, and by how much
 )
 
 #: WHO IS TALKING. The `source` axis of a ``notice``, and the ONLY values it may
@@ -386,6 +387,13 @@ class Heartbeat:
     The current phase travels with the beat, so a reader can say *what* the
     cell is doing rather than only that it is doing something. It is set by the
     harness at each phase boundary and is otherwise carried unchanged.
+
+    TWO SPELLINGS OF THE SAME PHASE, on purpose. ``phase`` is the drive-phase
+    string (``initial-chunk-3``) the dashboard regex-parses; ``phase_label`` is
+    the structured identity (``phase_index``/``phase_name``/``phase_kind``/
+    ``phase_layer``) from :func:`harness.prompt_pack.phase_label`, flattened in
+    unchanged. The string is kept exactly as it was so nothing downstream of it
+    changes meaning; the label is what a record reader keys on.
     """
 
     def __init__(
@@ -399,6 +407,7 @@ class Heartbeat:
         self._interval_s = float(interval_s)
         self._fields = dict(fields)
         self._phase: str | None = None
+        self._phase_label: dict[str, Any] | None = None
         self._attempt: int | None = None
         self._lock = threading.Lock()
         self._stop = threading.Event()
@@ -407,11 +416,25 @@ class Heartbeat:
         self.beats = 0
 
     # ── what the beat carries ───────────────────────────────────────────────
-    def set_phase(self, phase: str | None = None, attempt: int | None = None) -> None:
-        """Update what the next beat reports. Cheap, thread-safe, never raises."""
+    def set_phase(
+        self,
+        phase: str | None = None,
+        attempt: int | None = None,
+        *,
+        label: dict[str, Any] | None = None,
+    ) -> None:
+        """Update what the next beat reports. Cheap, thread-safe, never raises.
+
+        ``label`` is the structured identity for the same phase
+        (:func:`harness.prompt_pack.phase_label`). Given, it replaces the label
+        the previous beats carried, so no beat can report a phase index that
+        belongs to an earlier phase.
+        """
         with self._lock:
             if phase is not None:
                 self._phase = str(phase)
+            if label is not None:
+                self._phase_label = dict(label)
             if attempt is not None:
                 self._attempt = int(attempt)
 
@@ -421,11 +444,13 @@ class Heartbeat:
             return False
         with self._lock:
             phase, attempt = self._phase, self._attempt
+            phase_label = dict(self._phase_label or {})
         return self._stream.emit(
             "heartbeat",
             phase=phase,
             attempt=attempt,
             since_ms=int((time.monotonic() - self._started_at) * 1000),
+            **phase_label,
             **self._fields,
         )
 

@@ -18,6 +18,17 @@ ANONYMIZED ON PURPOSE. Session id, directory, task and model are placeholders.
 The wall anchors of the stopped-while-paused fixture are the real values
 measured on run 1793876536, because the paused/wall arithmetic is the thing
 those numbers exist to test.
+
+EVERY LIVE RECORD HERE IS LABELLED. Cost reads which phase a round belonged to
+off ``phase.start`` and ``attempt.end`` alone (``harness.prompt_pack.phase_label``
+writes both), so a fixture that published an unlabelled ``attempt.end`` would
+describe a pre-standard cell and derive no phases at all. The builders below
+emit exactly the keys that function emits — ``phase_layer`` OMITTED for a
+backend phase, never written as ``None``.
+
+:func:`recombine_buckets` is the one ARITHMETIC this module owns: it is how the
+roll-ups must relate to the per-phase buckets, so both cost test files assert
+that relationship once instead of each spelling it out.
 """
 
 from __future__ import annotations
@@ -32,13 +43,20 @@ from typing import Any
 SESSION_ID = "ses_anon"
 
 #: Wall anchors of the real cell stopped inside an operator pause (run
-#: 1793876536). ``BOUNDARY_MS`` is attempt 1's ``attempt.end`` — the moment the
-#: build phase ended — and ``PAUSE_START_MS`` is a ``pause.start`` that never
-#: got its ``pause.end`` because the operator killed the cell 140.793s later.
+#: 1793876536). ``STOPPED_PHASE_START_MS`` is that cell's first ``phase.start``,
+#: ``BOUNDARY_MS`` is the phase's own ``attempt.end`` — the grade that reads its
+#: build — and ``PAUSE_START_MS`` is a ``pause.start`` that never got its
+#: ``pause.end`` because the operator killed the cell 140.793s later.
 CELL_START_MS = 1_793_876_565_499
+STOPPED_PHASE_START_MS = 1_793_876_565_502
 BOUNDARY_MS = 1_793_882_346_476
 PAUSE_START_MS = 1_793_882_346_528
 CELL_END_MS = 1_793_882_487_321
+
+#: The one phase that cell opened, and the identity every record about it
+#: carries. A backend phase: no grader layer, so ``phase_layer`` is absent.
+STOPPED_PHASE_INDEX = 1
+STOPPED_PHASE_NAME = "Backend 1 — engine"
 
 #: Context peak the whole stopped-while-paused fixture reports (its largest
 #: assistant message), mirrored onto the live stream's own peak rows.
@@ -133,10 +151,15 @@ def write_live(run_dir: Path, events: Iterable[dict[str, Any]]) -> Path:
 
 
 def write_report(run_dir: Path, attempt: int, statuses: list[str]) -> Path:
-    """Publish ``attempt-N-report.json`` whose gate rows carry ``statuses``."""
+    """Publish ``attempt-N-report.json`` whose gate rows carry ``statuses``.
+
+    Rows are keyed ``id``, as the grader publishes them: the cost derivation
+    reads ``status`` alone, so a fixture keyed differently would pass here and
+    describe a report no grader ever wrote.
+    """
     run_dir.mkdir(parents=True, exist_ok=True)
     rows = [
-        {"gate": f"g{index}", "status": status} for index, status in enumerate(statuses)
+        {"id": f"g{index}", "status": status} for index, status in enumerate(statuses)
     ]
     path = run_dir / f"attempt-{attempt}-report.json"
     path.write_text(
@@ -146,11 +169,117 @@ def write_report(run_dir: Path, attempt: int, statuses: list[str]) -> Path:
     return path
 
 
+def _label(index: int, name: str, kind: str, layer: int | None) -> dict[str, Any]:
+    """A record's phase identity, in ``phase_label``'s wire shape.
+
+    ``phase_layer`` is OMITTED, not ``None``, for a backend phase: the live
+    stream drops ``None`` fields, so a written ``None`` would be a record no
+    producer emits and a reader could not tell from "unrecorded".
+    """
+    label: dict[str, Any] = {
+        "phase_index": index,
+        "phase_name": name,
+        "phase_kind": kind,
+    }
+    if layer is not None:
+        label["phase_layer"] = layer
+    return label
+
+
+def phase_start(
+    index: int, name: str, kind: str, ts: int, layer: int | None = None
+) -> dict[str, Any]:
+    """A ``phase.start``: the instant that phase's build drive began.
+
+    This is the label cost opens a phase's span on — its build runs from here to
+    its OWN first ``attempt.end``.
+    """
+    return {"v": 1, "ts": ts, "kind": "phase.start", **_label(index, name, kind, layer)}
+
+
+def attempt_end(
+    attempt: int,
+    index: int,
+    name: str,
+    kind: str,
+    ts: int,
+    layer: int | None = None,
+    verdict: str = "FAIL",
+    context_peak: int | None = None,
+) -> dict[str, Any]:
+    """An ``attempt.end``: one grade, labelled with the phase and round it read.
+
+    ``attempt`` is the cell-global counter and says NOTHING about which phase
+    this graded — ``index`` and ``kind`` do, and cost reads only those.
+    """
+    event: dict[str, Any] = {
+        "v": 1,
+        "ts": ts,
+        "kind": "attempt.end",
+        "attempt": attempt,
+        "verdict": verdict,
+        **_label(index, name, kind, layer),
+    }
+    if context_peak is not None:
+        event["context_peak"] = context_peak
+    return event
+
+
+#: Bucket fields that ADD when buckets are recombined. ``context_peak`` is
+#: deliberately absent: peaks do not sum, they take the maximum.
+_ADDITIVE = (
+    "input_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+    "cache_read_tokens",
+    "cache_write_tokens",
+    "turns",
+    "compactions",
+    "wall_seconds",
+)
+
+
+def recombine_buckets(phases: dict[str, Any], *kinds: str) -> dict[str, Any]:
+    """The roll-up ``kinds`` MUST equal, computed from ``phases["by_phase"]``.
+
+    Additive fields sum, ``context_peak`` takes the max (peaks do not add) and
+    the grade counts add while ``last`` is the latest graded bucket's pass — the
+    same fold ``cost_from_disk`` applies. ``kinds`` is applied OUTERMOST so the
+    chronological order (builds before repairs, phase by phase) is the one the
+    derivation folds, which is what makes ``grades.last`` the latest pass.
+    """
+    buckets = [
+        entry[kind]
+        for kind in kinds
+        for entry in phases["by_phase"].values()
+        if kind in entry
+    ]
+    assert buckets, f"no {kinds} bucket to recombine"
+    combined: dict[str, Any] = {}
+    for field in _ADDITIVE:
+        values = [bucket[field] for bucket in buckets if field in bucket]
+        if values:
+            combined[field] = sum(values)
+    peaks = [bucket["context_peak"] for bucket in buckets if "context_peak" in bucket]
+    if peaks:
+        combined["context_peak"] = max(peaks)
+    graded = [bucket["grades"] for bucket in buckets if "grades" in bucket]
+    if graded:
+        combined["grades"] = {
+            "count": sum(grade["count"] for grade in graded),
+            "last": graded[-1]["last"],
+        }
+    return combined
+
+
 # ── THE STOPPED-WHILE-PAUSED CELL ────────────────────────────────────────────
 #
-# Three build turns and five completed compactions, all at or before the
-# boundary. Chosen so every figure the record asserts is small enough to read
-# off the fixture: token totals 1000/2000/500/4000/600/700/800/900.
+# ONE phase, opened, graded, then held. Three build turns and five completed
+# compactions all land inside that phase's own build span
+# (``STOPPED_PHASE_START_MS`` → its first ``attempt.end``), and the grade that
+# reads them is the phase's only grade. Chosen so every figure the record
+# asserts is small enough to read off the fixture: token totals
+# 1000/2000/500/4000/600/700/800/900.
 
 STOPPED_WHILE_PAUSED_MESSAGES: tuple[dict[str, Any], ...] = (
     {
@@ -241,23 +370,21 @@ def write_stopped_while_paused(run_dir: Path) -> None:
                 "session_id": SESSION_ID,
                 "cell_seq": 0,
             },
-            *(
-                {
-                    "v": 1,
-                    "ts": 1_793_876_565_502 + index * 1_000_000,
-                    "kind": "phase.start",
-                    "phase": f"initial-chunk-{index + 1}",
-                }
-                for index in range(5)
+            phase_start(
+                STOPPED_PHASE_INDEX,
+                STOPPED_PHASE_NAME,
+                "build",
+                STOPPED_PHASE_START_MS,
             ),
-            {
-                "v": 1,
-                "ts": BOUNDARY_MS,
-                "kind": "attempt.end",
-                "attempt": 1,
-                "verdict": "FAIL",
-                "context_peak": STOPPED_PEAK_TOKENS,
-            },
+            attempt_end(
+                1,
+                STOPPED_PHASE_INDEX,
+                STOPPED_PHASE_NAME,
+                "build",
+                BOUNDARY_MS,
+                verdict="FAIL",
+                context_peak=STOPPED_PEAK_TOKENS,
+            ),
             {
                 "v": 1,
                 "ts": PAUSE_START_MS,
@@ -280,14 +407,22 @@ def write_stopped_while_paused(run_dir: Path) -> None:
 
 # ── A CELL THAT GOT THROUGH ITS BUILD AND INTO TROUBLESHOOTING ───────────────
 #
-# Messages on BOTH sides of the boundary: two build turns and a build
-# compaction, then a troubleshooting turn and a troubleshooting compaction, with
-# one report per phase. Walls are round numbers (100s build, 60s troubleshooting)
-# so a wrong fold shows up as an obviously wrong number.
+# ONE LAYERED phase, built, graded, then repaired and graded again — the two
+# intervals the record has to keep apart, both inside the same phase. Messages
+# sit on both sides of the grade: two build turns and a build compaction before
+# it, a repair turn and a repair compaction after it, and where a phase's repair
+# rounds end is the cell's own end. Walls are round numbers (100s build, 60s
+# troubleshooting) so a wrong fold shows up as an obviously wrong number.
 
 PARTITION_START_MS = 1_793_000_000_000
 PARTITION_BOUNDARY_MS = 1_793_000_100_000
 PARTITION_END_MS = 1_793_000_160_000
+
+#: Phase 4 of the real plan — the first layer. The index matters: a layer is
+#: phase 4..7, and only ``phase_layer`` carries it, never the index.
+PARTITION_PHASE_INDEX = 4
+PARTITION_PHASE_NAME = "Layer 1 — board and controls"
+PARTITION_PHASE_LAYER = 1
 
 PARTITION_MESSAGES: tuple[dict[str, Any], ...] = (
     {
@@ -343,20 +478,39 @@ def write_partitioned(run_dir: Path) -> None:
                 "session_id": SESSION_ID,
                 "cell_seq": 0,
             },
-            {
-                "v": 1,
-                "ts": PARTITION_BOUNDARY_MS,
-                "kind": "attempt.end",
-                "attempt": 1,
-                "verdict": "FAIL",
-                "context_peak": 2_000,
-            },
+            phase_start(
+                PARTITION_PHASE_INDEX,
+                PARTITION_PHASE_NAME,
+                "build",
+                PARTITION_START_MS,
+                PARTITION_PHASE_LAYER,
+            ),
+            attempt_end(
+                1,
+                PARTITION_PHASE_INDEX,
+                PARTITION_PHASE_NAME,
+                "build",
+                PARTITION_BOUNDARY_MS,
+                PARTITION_PHASE_LAYER,
+                verdict="FAIL",
+                context_peak=2_000,
+            ),
+            attempt_end(
+                2,
+                PARTITION_PHASE_INDEX,
+                PARTITION_PHASE_NAME,
+                "troubleshooting",
+                PARTITION_END_MS,
+                PARTITION_PHASE_LAYER,
+                verdict="PASS",
+                context_peak=3_000,
+            ),
             {
                 "v": 1,
                 "ts": PARTITION_END_MS,
                 "kind": "cell.end",
                 "terminal_reason": "gates_green",
-                "context_peak": 2_000,
+                "context_peak": 3_000,
             },
         ],
     )

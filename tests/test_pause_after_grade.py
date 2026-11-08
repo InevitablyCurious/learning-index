@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -37,9 +36,10 @@ from typing import Any
 import pytest
 
 import harness.adapters.challenge as challenge_mod
+import harness.adapters.challenge.runner as runner_mod
 from harness.adapters.challenge import ChallengeRunner, _OpencodeRunStats
 from harness.adapters.docker_worker import ImageFingerprint
-
+from tests._serve_drive_fakes import _one_layer_phase, _pack_factory
 
 TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
@@ -185,9 +185,7 @@ def _gate_sequence(fail_count: int):
 
 def _drive(runner: ChallengeRunner, monkeypatch: pytest.MonkeyPatch, fail_count: int):
     """Wire the fake gate + fake serve drive; return the delivered prompts."""
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
     monkeypatch.setattr(runner, "_run_gate_report", _gate_sequence(fail_count))
     delivered: list[str | None] = []
 
@@ -350,9 +348,7 @@ def test_compaction_abort_gets_one_final_pause_and_no_further_round_pause(
     runner = _make_runner(tmp_path)
     _patch_fake_docker(monkeypatch)
     # The build is a clean one-chunk drive.
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
     monkeypatch.setattr(
         runner,
         "_run_opencode_serve",

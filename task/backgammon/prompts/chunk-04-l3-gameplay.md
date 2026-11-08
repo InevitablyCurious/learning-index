@@ -1,7 +1,4 @@
-GOAL: We are building a fully functional backgammon game in Node + TypeScript that runs on localhost. This is the frontend build, layer 3 of 3 (gameplay) — chunk 4 of 7. The backend (chunks 1-3), layer 1 (board and controls) and layer 2 (pieces) are complete.
-REQUIREMENT — the game state MUST survive page reloads. A reload must carry over every piece of information from before the reload: the board, the dice, the score, whose turn it is, the difficulty, the doubling cube, and the remaining dice. Load the current state from the server when the page opens — do not start a new game on load.
-
-TASK: Add the gameplay in `public/index.html`, `public/style.css`, and `public/app.js` — rolling, opening, hints, moves, the computer's turn, the cube, bearing off and game over, on top of the board (layer 1) and pieces (layer 2) already built.
+TASK: Add the gameplay in `public/index.html`, `public/style.css`, and `public/app.js` — rolling, opening, hints, moves, the computer's turn, the cube, bearing off and game over.
 
 Call the API with root-relative paths (`fetch('/api/state', …)`) so the page works whichever host name it was loaded from.
 Never use an absolute base such as `http://127.0.0.1:8002/api/state` — a browser treats `localhost` and `127.0.0.1` as distinct origins.
@@ -40,5 +37,3 @@ Required `data-testid` hooks (EXACT — the UI automation selects on these; stat
 - During the opening roll the page shows BOTH dice — the player's die and the computer's die — each marked with a `data-owner` of `you` (the player's) or `ai` (the computer's) so the player can tell whose is whose. The tie message contains the words `Tie — roll again`; the tied dice stay up and the page waits for the player to press Roll, which rolls both dice again — as many times as it takes until they differ. The winner of the opening plays those two numbers: the player's hints use them, and the computer's first move uses them.
 
 **Before you hand it over, look at it.** Load the page in a browser and play it — click a checker, take a move, roll again, watch the computer reply. What the server returns is not what a player sees, so a page that looks right in the API can still be broken on screen. The notes in this folder show how to drive a browser from a script.
-
-**Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.

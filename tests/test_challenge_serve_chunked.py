@@ -169,20 +169,23 @@ def test_serve_drive_zero_delta_phase_is_loud_not_clean_zero(tmp_path: Path) -> 
 # ---------------------------------------------------------------------------
 def test_chunk_prompts_carry_the_write_chunking_directive() -> None:
     """Walter 2026-08-10: the finalize kills were oversized single generations
-    (whole-file writes); every chunk prompt must carry the write-in-chunks
+    (whole-file writes); the whole spec must carry the write-in-chunks
     directive — a prompt edit that drops it re-opens the
     stream_finalize_exhausted cell death.
 
-    ONE NUMBER, THREE VOICES. The same ~150 lines appears in the chunk prompts,
-    in the seeded AGENTS.md and in the recovery nudges. It used to be ~150 in
-    two of them and ~200-400 in AGENTS.md, which handed the model two limits
-    from two directions and made the standing one dead weight.
+    ONE NUMBER, THREE VOICES. The same ~150 lines appears once in the build
+    spec (deduped to chunk-01), in the seeded AGENTS.md and in the recovery
+    nudges. It used to be ~150 in two of them and ~200-400 in AGENTS.md, which
+    handed the model two limits from two directions and made the standing one
+    dead weight.
     """
     from harness.adapters.challenge import _WORKER_AGENTS_MD, _WRITE_CHUNKING_DIRECTIVE
+    from harness.prompt_pack import default_pack
 
-    for path in sorted((TASK_DIR / "prompts").glob("chunk-*.md")):
-        text = path.read_text(encoding="utf-8")
-        assert "~150 lines" in text, f"{path.name} lost the chunking directive"
+    spec = default_pack().whole_spec()
+    assert spec.count("~150 lines") == 1, (
+        "the write-chunking directive must appear exactly once in the whole spec"
+    )
     assert "150 lines" in _WORKER_AGENTS_MD, "AGENTS.md must state the same limit"
     assert "200-400" not in _WORKER_AGENTS_MD, (
         "AGENTS.md must not state a SECOND, larger write limit"

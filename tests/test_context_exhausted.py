@@ -20,6 +20,7 @@ from typing import Any
 
 import pytest
 
+import harness.adapters.challenge.runner as runner_mod
 from harness.adapters.challenge import ChallengeRunner, _OpencodeRunStats
 from harness.adapters.challenge.worker_config import build_worker_opencode_config
 from harness.context_budget import (
@@ -29,7 +30,13 @@ from harness.context_budget import (
     latest_context_tokens,
 )
 from harness.serve_client import ServeClient
-from tests._serve_drive_fakes import _FakeCell, _FakeServeClient, _make_runner
+from tests._serve_drive_fakes import (
+    _FakeCell,
+    _FakeServeClient,
+    _layered_phases,
+    _make_runner,
+    _pack_factory,
+)
 
 QWEN = "local-llm-proxy/qwen3.6-35b-a3b-bench"
 
@@ -268,9 +275,9 @@ def _cell(
 
     runner = make(tmp_path)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *a, **k: ["CHUNK ONE", "CHUNK TWO"]
-    )
+    # TWO layered phases, so "the next step never starts" has a next step: the
+    # build runs one phase per drive and grades each one it finishes.
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_layered_phases(2)))
     grades = {"count": 0}
 
     def _gate(**kwargs: Any) -> dict[str, Any]:

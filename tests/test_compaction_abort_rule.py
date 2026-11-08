@@ -37,9 +37,11 @@ from typing import Any
 
 import pytest
 
+import harness.adapters.challenge.runner as runner_mod
 from harness.adapters.challenge import _OpencodeRunStats
 from harness.adapters.challenge.runner import COMPACTIONS_BEFORE_GRADE
 from harness.live_stream import LiveStream
+from tests._serve_drive_fakes import _layered_phases, _one_layer_phase, _pack_factory
 from tests.test_challenge_budget_stop import (
     REAL_CHECK,
     _make_runner,
@@ -75,9 +77,7 @@ def test_fires_at_the_second_troubleshoot_compaction_before_a_grade(
     """
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["CHUNK ONE"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
     monkeypatch.setattr(runner, "_run_gate_report", _always_fail_gate)
 
     def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:
@@ -118,11 +118,9 @@ def test_build_compactions_never_trigger_the_abort(
     """
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner,
-        "_load_chunk_prompts",
-        lambda *args, **kwargs: ["CHUNK ONE", "CHUNK TWO", "CHUNK THREE"],
-    )
+    # TWO build drives, so "every build phase's signal is ignored" is stated
+    # over more than one of them.
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_layered_phases(2)))
 
     grades = {"count": 0}
 
@@ -192,9 +190,7 @@ def test_the_count_resets_at_each_grade(
     """
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["CHUNK ONE"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
 
     grades = {"count": 0}
 
@@ -270,9 +266,7 @@ def test_a_live_stream_notice_is_emitted_when_the_rule_fires(
     )
     runner._live = LiveStream.for_run(run_dir, run_id="notice-cell")
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["CHUNK ONE"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
     monkeypatch.setattr(runner, "_run_gate_report", _always_fail_gate)
 
     def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:

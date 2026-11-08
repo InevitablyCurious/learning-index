@@ -1,25 +1,26 @@
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
 import subprocess
 import sys
-import textwrap
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 import harness.adapters.challenge as challenge_mod
+import harness.adapters.challenge.runner as runner_mod
 from harness.adapters.challenge import (
     REASON_TOOL_CALL_TIMEOUT,
     TURN_TERMINAL_STALLED,
     ChallengeRunner,
     _OpencodeRunStats,
 )
-from harness.adapters.docker_worker import ImageFingerprint
 from harness.adapters.challenge.constants import _REGRESSION_HEADER
 from harness.adapters.challenge.runner import _FIRST_MESSAGE_PREAMBLE
+from harness.adapters.docker_worker import ImageFingerprint
+from harness.prompt_pack import Phase
+from tests._serve_drive_fakes import _one_layer_phase, _pack_factory
 
 
 def _told(checks):
@@ -75,6 +76,7 @@ def _stats(
     terminal_zero_tool_turn: bool = False,
     turn_anomalies: tuple[dict[str, Any], ...] = (),
     compactions_since_grade: int = 0,
+    compactions_observed: int = 0,
 ) -> _OpencodeRunStats:
     return _OpencodeRunStats(
         input_tokens=10,
@@ -90,6 +92,7 @@ def _stats(
         terminal_zero_tool_turn=terminal_zero_tool_turn,
         turn_anomalies=turn_anomalies,
         compactions_since_grade=compactions_since_grade,
+        compactions_observed=compactions_observed,
     )
 
 
@@ -208,6 +211,21 @@ def _patch_fake_docker(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
                 found += 1
             return found
 
+        def summarize(
+            self,
+            session_id: str,
+            *,
+            provider_id: str,
+            model_id: str,
+            auto: bool = False,
+        ) -> None:
+            """No-op: the hermetic stub owns no real session to rewrite.
+
+            The real signature is mirrored exactly because a ``compact=True``
+            cell drives ``_compact_after_chunk`` once per build chunk, and this
+            client is the transport that call reaches.
+            """
+
     monkeypatch.setattr(challenge_mod, "ServeClient", _FakeServeClient)
     return state
 
@@ -221,15 +239,11 @@ def test_prompts_are_delivered_over_the_serve_session_never_on_argv(
     The original form of this test asserted that the prompt never appeared as a
     positional argument on the `opencode run` argv. That argv no longer exists:
     serve is the only transport, so a prompt has no way to reach a command line.
-    What is still worth pinning is the delivery itself — the initial task prompt
-    and the repair feedback both arrive, in order, as session prompts."""
+    What is still worth pinning is the delivery itself — the phase-1 build
+    message and the repair feedback both arrive, in order, as session prompts."""
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
-
-    task_prompt = "D6 initial prompt marker"
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: [task_prompt]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
 
     gate_calls = {"count": 0}
 
@@ -267,7 +281,12 @@ def test_prompts_are_delivered_over_the_serve_session_never_on_argv(
 
     assert result.verdict == "PASS"
     feedback_prompt = runner._build_feedback_prompt(checks=[REAL_CHECK])
-    assert delivered == [task_prompt, f"{_FIRST_MESSAGE_PREAMBLE}\n\n{feedback_prompt}"]
+    # The build text is the PACK's message for the phase being built
+    # (`build_step_message(1)`), never a chunk list the runner assembled.
+    assert delivered == [
+        "BUILD STEP 1",
+        f"{_FIRST_MESSAGE_PREAMBLE}\n\n{feedback_prompt}",
+    ]
 
 
 def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fidelity(
@@ -276,9 +295,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
 ) -> None:
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
 
     gate_calls = {"count": 0}
 
@@ -395,7 +412,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     ]
 
     # Verify the initial prompt is correct
-    assert prompt_texts[0] == "INITIAL PROMPT"
+    assert prompt_texts[0] == "BUILD STEP 1"
     # Feedback 1 — the player's FIRST report, so the first-pass opener. Nothing
     # newly passed after attempt 1, so no pass verdict rides along.
     assert prompt_texts[
@@ -436,7 +453,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     # WO-FEEDBACK-ONEPHASE records ONE prompt per round.
     assert len(sidecar_rows) == 4
     assert not any(row["kind"] == "pass_verdict" for row in sidecar_rows)
-    assert sidecar_rows[0]["text"] == "INITIAL PROMPT"
+    assert sidecar_rows[0]["text"] == "BUILD STEP 1"
     assert sidecar_rows[1]["attempt"] == 2  # feedback-1
     # The attempt-2 round's row carries the FOLDED message, byte-exact.
     assert sidecar_rows[2]["text"] == f"{pass_verdict}\n\n{failure_feedback}"
@@ -450,9 +467,7 @@ def test_zero_progress_gap_has_no_pass_verdict_and_uses_false_header(
 ) -> None:
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
 
     gate_calls = {"count": 0}
 
@@ -511,7 +526,7 @@ def test_zero_progress_gap_has_no_pass_verdict_and_uses_false_header(
     ]
     # 3 rows: initial + feedback-1 + feedback-2
     assert len(sidecar_rows) == 3
-    assert sidecar_rows[0]["text"] == "INITIAL PROMPT"
+    assert sidecar_rows[0]["text"] == "BUILD STEP 1"
 
 
 def test_a_complaint_that_was_fixed_and_came_back_is_not_still_there(
@@ -526,9 +541,7 @@ def test_a_complaint_that_was_fixed_and_came_back_is_not_still_there(
     # second-sighting line under "I'm still seeing these problems".
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
     # Both stage 1: CAME_BACK is told, fixed while STAYS is told, then returns.
     came_back, stays = REAL_CHECK, REAL_PASS1
     rounds = iter([[came_back], [stays], [came_back, stays]])
@@ -607,9 +620,7 @@ def test_a_genuine_fault_ending_still_records_the_fail_label_and_parity_pending(
     """
     runner = _make_runner(tmp_path)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["CHUNK ONE"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
     monkeypatch.setattr(
         runner,
         "_run_gate_report",
@@ -662,9 +673,7 @@ def test_harness_limit_kill_does_not_force_budget_stop_and_loop_can_continue(
     """
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     docker_state = _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["PROMPT"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
 
     gate_calls = {"count": 0}
 
@@ -749,9 +758,7 @@ def test_stalled_feedback_turn_increments_cell_stalled_turns_exactly_once(
     """
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["INITIAL PROMPT"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
 
     gate_calls = {"count": 0}
 
@@ -821,9 +828,7 @@ def test_non_budget_nonzero_worker_exit_classifies_as_harness_error(
 ) -> None:
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["PROMPT"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
     monkeypatch.setattr(
         runner,
         "_run_opencode_serve",
@@ -878,10 +883,8 @@ def test_serve_session_create_failure_aborts_the_cell(
     cell in the campaign used, sitting in the ledger looking identical to them.
     """
     runner = _make_runner(tmp_path, cost_limit_usd=None)
+    # No build plan is needed: the cell dies before a single phase is built.
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["PROMPT"]
-    )
 
     class _DeadServeClient:
         def __init__(self, base_url: str, **kwargs: Any) -> None:
@@ -918,11 +921,7 @@ def test_chunked_build_failure_aborts_and_never_reruns_as_one_joined_prompt(
     """
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
-    monkeypatch.setattr(
-        runner,
-        "_load_chunk_prompts",
-        lambda *args, **kwargs: ["CHUNK ONE", "CHUNK TWO"],
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
 
     def _die(**kwargs: Any) -> _OpencodeRunStats:
         raise RuntimeError("transport died mid-build")
@@ -943,20 +942,31 @@ def test_partial_chunked_build_aborts_with_incomplete_build_error(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """WO-ABORT: a build that does not deliver every chunk aborts, never graded.
+    """WO-ABORT: a phase that does not finish aborts the cell, never graded.
 
-    Chunk 2 stalls (``turn_stalled`` — a HARNESS-LIMIT reason, so no recovery
-    branch claims it) and the chunked driver early-returns: chunk 3 is never
-    sent. The cell must raise IncompleteBuildError (whole-run abort), never
-    reach the grader, and record the abort as a harness_error on the cell.end
-    live record.
+    Phase 2 stalls (``turn_stalled`` — a HARNESS-LIMIT reason, so no recovery
+    branch claims it). The build now runs ONE PHASE PER DRIVE, so the cell
+    stops at the dead phase: phase 3 is never sent. The cell must raise
+    IncompleteBuildError (whole-run abort), never reach the grader, and record
+    the abort as a harness_error on the cell.end live record.
+
+    The abort's ``not_reached`` rows are a property of folding a report list,
+    which is now per phase — a phase that was never attempted has no row to
+    report (that three-state fold is pinned at the function level in
+    tests/test_build_chunk_completion.py).
     """
     runner = _make_runner(tmp_path, cost_limit_usd=None)
     _patch_fake_docker(monkeypatch)
     monkeypatch.setattr(
-        runner,
-        "_load_chunk_prompts",
-        lambda *args, **kwargs: ["CHUNK ONE", "CHUNK TWO", "CHUNK THREE"],
+        runner_mod,
+        "PromptPack",
+        _pack_factory(
+            [
+                Phase(1, "Backend 1 — engine", None, "chunk-01.md", "BACKEND SPEC"),
+                Phase(2, "Backend 2 — state", None, "chunk-02.md", "BACKEND SPEC"),
+                Phase(3, "Backend 3 — api", None, "chunk-03.md", "BACKEND SPEC"),
+            ]
+        ),
     )
 
     opencode_calls = {"count": 0}
@@ -964,12 +974,12 @@ def test_partial_chunked_build_aborts_with_incomplete_build_error(
     def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:
         opencode_calls["count"] += 1
         if opencode_calls["count"] == 1:
-            # Chunk 1 completes cleanly: its drive reached idle with exit 0.
+            # Phase 1 completes cleanly: its drive reached idle with exit 0.
             return _stats(
                 session_id="sess-1", killed_reason=None, exit_code=0, cost_usd=0.1
             )
-        # Chunk 2 stalls: harness-limit kill, exit 1, so feedback.py:263 records
-        # this chunk "died".
+        # Phase 2 stalls: harness-limit kill, exit 1, so feedback.py:263 records
+        # this phase "died".
         return _stats(
             session_id="sess-1", killed_reason="turn_stalled", exit_code=1, cost_usd=0.1
         )
@@ -990,14 +1000,14 @@ def test_partial_chunked_build_aborts_with_incomplete_build_error(
     with pytest.raises(challenge_mod.IncompleteBuildError) as excinfo:
         runner.run_cell("incomplete-build", run_dir, task_id="backgammon")
 
-    # Chunk 3 was never sent (driver early-returned after chunk 2 died).
+    # Phase 3 was never sent: the cell ended at the phase that died.
     assert opencode_calls["count"] == 2
     # The grader never ran.
     assert gate_calls["count"] == 0
-    # The message names the dead and not-reached chunks.
+    # The message names the phase that died, and nothing it never attempted.
     msg = str(excinfo.value)
     assert "chunk 2 died" in msg
-    assert "chunk 3 not_reached" in msg
+    assert "chunk 3" not in msg, "a phase never attempted has no row to report"
 
     # The abort is recorded as a harness error on the cell.end live record.
     rows = [

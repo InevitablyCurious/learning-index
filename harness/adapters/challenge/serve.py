@@ -96,6 +96,7 @@ class ServeMixin:
         prompt: str,
         run_label: str,
         phase: str,
+        phase_label: dict[str, Any] | None = None,
         prior_cost_usd: float = 0.0,
         kill_hook: Callable[[], None] | None = None,
         attempt: int | None = None,
@@ -160,16 +161,22 @@ class ServeMixin:
         # compaction boundary at all -- the phases that make up most of a run
         # would never emit, leaving the board to fall back on a lagging scrape
         # of the log.
+        #
+        # BOTH SPELLINGS RIDE THE EVENT. ``phase`` is the drive-phase string a
+        # dashboard regexes; ``phase_label`` is the structured identity from
+        # :func:`harness.prompt_pack.phase_label`, flattened in unchanged so the
+        # event and every following heartbeat carry the same four keys.
         live = getattr(self, "_live", None)
         if live is not None:
             live.emit(
                 "phase.start",
                 cell_seq=getattr(self, "_cell_seq", None),
                 phase=str(phase),
+                **(phase_label or {}),
             )
         heartbeat = getattr(self, "_heartbeat", None)
         if heartbeat is not None:
-            heartbeat.set_phase(str(phase))
+            heartbeat.set_phase(str(phase), label=phase_label)
 
         # Surface every transient observation-read retry on the progress
         # stream. A retry nobody can see is indistinguishable from a serve that
@@ -318,6 +325,13 @@ class ServeMixin:
         # count (it covers a model that never goes idle); this variable only
         # carries the verdict onto the stats. >= 2 ends the drive.
         compactions_seen = 0
+        # THE SESSION'S OWN COMPACTION CLOCK, DIFFED PER DRIVE. The client's
+        # accumulator spans every wait this session ever ran, so the pre-drive
+        # reading is the baseline and the drive's report is the difference —
+        # compactions the runner can act on (re-hand the spec to a context that
+        # no longer holds it). Distinct from `compactions_seen`, which is the
+        # wait's in-drive verdict and drives the >= 2 abort.
+        compactions_observed_baseline = serve_client.live_compactions_observed()
         # WORKER DIED: asked only when the serve stops answering. A cell with no
         # liveness check (a test fake) never reports a death.
         worker_state = getattr(active_cell, "worker_state", None)
@@ -1161,6 +1175,8 @@ class ServeMixin:
             context_limit_tokens=context_limit,
             context_peak_tokens=context_peak,
             compactions_since_grade=compactions_seen,
+            compactions_observed=serve_client.live_compactions_observed()
+            - compactions_observed_baseline,
         )
 
     def _run_opencode_serve_chunked(
@@ -1170,6 +1186,8 @@ class ServeMixin:
         serve_client: ServeClient,
         session_id: str,
         prompts: list[str],
+        phase_index: int | None = None,
+        phase_label: dict[str, Any] | None = None,
         run_label: str,
         sidecar_path: Path | None = None,
         prior_cost_usd: float = 0.0,
@@ -1191,6 +1209,17 @@ class ServeMixin:
 
         Aggregates are the sum of per-chunk deltas (the per-phase metering in
         :meth:`_run_opencode_serve` is delta-true).
+
+        ``phase_index`` names the phase from the pack, not from the chunk's
+        position in ``prompts``: a caller driving ONE phase per call passes its
+        1-based pack index so ``initial-chunk-K`` survives. Omitted, the
+        position names the chunk — which is what a multi-chunk direct call
+        means.
+
+        ``phase_label`` is the structured identity for that same phase
+        (:func:`harness.prompt_pack.phase_label`). There is no emit here: every
+        chunk drives through :meth:`_run_opencode_serve`, so the label rides the
+        one ``phase.start`` each drive publishes and every heartbeat after it.
         """
         sum_input = 0
         sum_output = 0
@@ -1265,6 +1294,7 @@ class ServeMixin:
                 prompt=prompt,
                 run_label=run_label,
                 phase=phase,
+                phase_label=phase_label,
                 prior_cost_usd=prior_cost_usd + sum_cost,
                 kill_hook=kill_hook,
                 attempt=1,
@@ -1291,7 +1321,16 @@ class ServeMixin:
             return stats
 
         for index, chunk_prompt in enumerate(prompts, start=1):
-            phase = f"initial-chunk-{index}"
+            # The phase NAME is the pack's own 1-based index when the caller
+            # drives one phase per call (`phase_index`). It must NOT be derived
+            # from the sort position there: a single-element `prompts` always
+            # enumerates to 1, which would label every phase `initial-chunk-1`
+            # and erase phase identity from `phase.start` and the heartbeat.
+            phase = (
+                f"initial-chunk-{phase_index}"
+                if phase_index is not None
+                else f"initial-chunk-{index}"
+            )
             if sidecar_path is not None:
                 self._append_user_event(
                     kind="chunk",
@@ -1354,11 +1393,22 @@ class ServeMixin:
                     session_id=session_id,
                     run_label=run_label,
                     chunk=index,
+                    phase_label=phase_label,
+                    tokens_before=sum_context_peak,
                 )
 
         return _aggregate(exit_code=0, killed_reason=None)
 
-    def _compact_after_chunk(self, *, serve_client, session_id, run_label, chunk):
+    def _compact_after_chunk(
+        self,
+        *,
+        serve_client,
+        session_id,
+        run_label,
+        chunk,
+        phase_label: dict[str, Any] | None = None,
+        tokens_before: int | None = None,
+    ):
         """Compact the session once, after this build chunk (POST /summarize).
 
         The harness — not any worker plugin — fires the compaction now, and it
@@ -1366,7 +1416,21 @@ class ServeMixin:
         rewrite completes; ``auto=False`` because that flag means auto-continue
         AFTER compaction (inject the synthetic continue turn), and the harness
         drives the next chunk prompt itself.
+
+        The ``compaction`` live event is emitted BEFORE the summarize, because
+        it marks where the rewrite happened: once the session is rewritten the
+        pre-compaction size is unrecoverable from the session. ``tokens_after``
+        is never emitted — ``ServeClient.summarize`` returns ``None``, so no
+        after-count exists and fabricating one would be a lie on the wire.
         """
+        live = getattr(self, "_live", None)
+        if live is not None:
+            live.emit(
+                "compaction",
+                cell_seq=getattr(self, "_cell_seq", None),
+                **(phase_label or {}),
+                tokens_before=tokens_before,
+            )
         provider_id, _, model_id = self.model.partition("/")
         serve_client.summarize(
             session_id, provider_id=provider_id, model_id=model_id, auto=False

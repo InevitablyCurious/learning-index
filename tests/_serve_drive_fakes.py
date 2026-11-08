@@ -28,6 +28,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from harness.adapters.challenge import ChallengeRunner
+from harness.prompt_pack import Phase
 from harness.serve_client import (
     COMPACTIONS_BEFORE_GRADE_WAIT_REASON,
     LOOP_KILL_WAIT_REASON,
@@ -122,6 +123,16 @@ class _FakeServeClient:
         # is how many FINISHED compactions that turn appends to the transcript
         # after its user message. Empty (the default) appends none.
         self.compactions_per_send: list[int] = []
+
+    def live_compactions_observed(self) -> int:
+        """No live stream here: compactions arrive as transcript rows.
+
+        The real client accumulates compactions as it reads the session; this
+        fake models them through ``compactions_per_send`` and the wait's
+        ``compactions_before_grade`` reason instead, so the drive's per-drive
+        diff (``_run_opencode_serve`` baselines this) stays at zero.
+        """
+        return 0
 
     def send_prompt(self, session_id: str, prompt: str) -> None:
         self.sent_prompts.append((session_id, prompt))
@@ -352,6 +363,74 @@ class _FakeServeClient:
             self._baseline_served = True
             return self.metrics_baseline
         return self.metrics_result
+
+
+def _pack_factory(phases: list[Phase]) -> type:
+    """A fake ``PromptPack`` that serves a test's chosen build plan.
+
+    THE PLAN IS DATA NOW. The runner reads ``PromptPack.phases()`` and builds
+    one phase at a time, constructing the pack INLINE
+    (harness/adapters/challenge/runner.py), so the seam a test scripts is the
+    class in the RUNNER MODULE's namespace:
+
+        import harness.adapters.challenge.runner as runner_mod
+        monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory([...]))
+
+    (``harness.adapters.challenge`` re-exports the class the runner is built
+    from, not the name the runner module reads — patching the package leaves
+    the runner untouched.)
+
+    The phase list IS the whole plan: one entry per build step, each carrying
+    the grader layer the runner must grade after that build (``None`` for the
+    backend phases, which are built and never graded). The directory argument
+    is deliberately not read — a test's plan must not depend on the challenge
+    files on disk.
+    """
+
+    class _FakePack:
+        def __init__(self, _dir: Path | str) -> None:
+            self.dir = Path(_dir)
+
+        def phases(self) -> list[Phase]:
+            return list(phases)
+
+        def build_step_message(self, k: int) -> str:
+            return f"BUILD STEP {k}"
+
+        def whole_spec(self) -> str:
+            return "\n\n".join(p.text for p in phases)
+
+    return _FakePack
+
+
+def _layered_phases(count: int) -> list[Phase]:
+    """``count`` consecutive LAYERED phases — build each, grade each.
+
+    ``index`` is POSITION, not taste: `PromptPack.phases()` refuses any other
+    numbering, and the runner's per-phase WO-ABORT check folds the completion
+    rows up to ``phase.index``, so a plan whose indices skip a number reports
+    the skipped phases ``not_reached`` and aborts the cell.
+
+    ``layer`` is 3 because the cell tests drive the loop with real gate ids
+    (G01/G02/G03), which `grader/layers.json` declares at layer 3: grading at
+    any other layer scopes every one of them out of the told set and the repair
+    message degrades to the generic fallback. Names and files are labels only —
+    the fake pack reads nothing off disk.
+    """
+    return [
+        Phase(k, f"Layer 3 — build {k}", 3, f"chunk-0{k}-layer-3.md", f"L3 SPEC {k}")
+        for k in range(1, count + 1)
+    ]
+
+
+def _one_layer_phase() -> list[Phase]:
+    """One layered phase: one build, then one grade+troubleshoot loop.
+
+    The shortest plan that still reproduces the old single-build,
+    single-grade-loop shape, so a test about the REPAIR loop states exactly
+    that and nothing about how many phases the real challenge declares.
+    """
+    return _layered_phases(1)
 
 
 def _make_runner(tmp_path: Path, *, compact: bool = False) -> ChallengeRunner:

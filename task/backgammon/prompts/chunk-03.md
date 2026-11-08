@@ -1,6 +1,3 @@
-GOAL: We are building a fully functional backgammon game in Node + TypeScript that runs on localhost. This is chunk 3 of 7. The engine (`src/game.ts`) and AI (`src/ai.ts`) are complete.
-REQUIREMENT — the game state MUST survive page reloads. A reload must carry over every piece of information from before the reload: the board, the dice, the score, whose turn it is, the difficulty, the doubling cube, and the remaining dice. Load the current state from the server when the page opens — do not start a new game on load.
-
 TASK: Implement the HTTP server and the full game API in `src/server.ts`, wiring the engine and AI into a playable backend.
 
 Binding: listen on `PORT`, or **8002** when it is unset; print a startup line with the URL; if the port is taken, exit non-zero after a clear single-line message that names the port and says it is already in use.
@@ -51,5 +48,3 @@ Debug seam — gated by env `DEBUG_API=1`; when `DEBUG_API` is not `1` these rou
 A position supplied to `/api/debug/state` is a real backgammon position — exactly 15 checkers per side across points, bar and off.
 
 **Before you hand it over, run it.** Start the server and drive it — every route, with real bodies, including the ones that should fail. Play a turn through: roll, move, end the turn, let the AI answer. Read the responses rather than assuming them. The notes in this folder show how to start a server, test it, and stop it in one command.
-
-**Write in chunks:** never emit more than ~150 lines in a single write/edit tool call — build large files up in ~150-line chunks across several calls, never one giant call.

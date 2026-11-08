@@ -160,6 +160,11 @@ class DeltaCounter:
     makes generation progress, while a wedged tool call or a silent model
     still counts nothing.
 
+    It also counts this session's ``session.compacted`` events, kept in a
+    SEPARATE field: a compaction is a fact observed on the same stream, while
+    ``count()`` is token progress the stall bound reads as liveness. Folding the
+    two would make a compaction look like a streamed token.
+
     The stream is opened in the constructor and fails loud (ServeClientError):
     without it every long thought would read as a stall again. After that a
     daemon thread reads it, reconnecting after a read timeout (a quiet stream,
@@ -175,6 +180,7 @@ class DeltaCounter:
         self._session_id = session_id
         self._read_timeout_s = read_timeout_s
         self._count = 0
+        self._compacted = 0
         self._stop = threading.Event()
         first = self._open()
         self._thread = threading.Thread(
@@ -184,6 +190,10 @@ class DeltaCounter:
 
     def count(self) -> int:
         return self._count
+
+    def compacted_count(self) -> int:
+        """This session's ``session.compacted`` events seen on the stream."""
+        return self._compacted
 
     def close(self) -> None:
         self._stop.set()
@@ -220,12 +230,15 @@ class DeltaCounter:
             event = json.loads(line[len("data:") :])
         except ValueError:
             return
-        if (
-            isinstance(event, dict)
-            and event.get("type") == "message.part.delta"
-            and (event.get("properties") or {}).get("sessionID") == self._session_id
-        ):
+        if not isinstance(event, dict):
+            return
+        properties = event.get("properties") or {}
+        if properties.get("sessionID") != self._session_id:
+            return
+        if event.get("type") == "message.part.delta":
             self._count += 1
+        elif event.get("type") == "session.compacted":
+            self._compacted += 1
 
 
 class ServeClient:
@@ -255,6 +268,11 @@ class ServeClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.poll_interval = poll_interval
+        # Compactions observed live on the event stream, summed over every idle
+        # wait this client ran. Distinct from the transcript-derived
+        # compactions-before-grade count: this is what the stream SAID, and it
+        # survives even if the stored receipt never appears.
+        self._live_compactions_observed = 0
 
     def _url(self, path: str) -> str:
         return self.base_url + path
@@ -443,6 +461,10 @@ class ServeClient:
     def open_delta_counter(self, session_id: str) -> DeltaCounter:
         """Start counting this session's streamed deltas (``GET /event``)."""
         return DeltaCounter(self._url("/event"), session_id)
+
+    def live_compactions_observed(self) -> int:
+        """``session.compacted`` events seen live across this client's waits."""
+        return self._live_compactions_observed
 
     def session_tool_running(self, session_id: str) -> bool:
         """:func:`tool_call_running` over the session's stored messages."""
@@ -656,6 +678,9 @@ class ServeClient:
                 time.sleep(self.poll_interval)
         finally:
             if deltas is not None:
+                # Fold in before closing: the counter is the only reader of this
+                # stream, so what it saw is lost once it is gone.
+                self._live_compactions_observed += deltas.compacted_count()
                 deltas.close()
 
     def wait_busy(self, session_id: str, *, timeout_s: float = 60.0) -> bool:

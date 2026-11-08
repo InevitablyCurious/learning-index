@@ -21,6 +21,17 @@ Exactly three things, and only one of them writable:
   /roster.json the gate roster, read-only
   /out         the cell directory, where the one report is written
 
+A caller may OPTIONALLY pass ``gates_dir`` to overlay the grader source over
+``/gates``, file by file and READ-ONLY. That exists for one situation: the
+image is stale (built before the source on disk) and must not be rebuilt —
+overlaying the current source makes the grade measure with today's grader
+instead of the baked one. The file list is ``baked_paths``, the same
+"what is baked" definition the builder hashes, so the overlay cannot drift
+from the image by a hard-coded list. It never covers ``node_modules``: the
+image's copy is the linux build the container runs, and a host copy would
+shadow it. Absent ``gates_dir`` nothing changes — grading runs the baked
+source, which is the normal case.
+
 No network (``--network none``): every server the gates start is local to the
 container, so nothing legitimate needs egress, and a candidate that tries to
 reach the outside during grading should fail rather than succeed quietly.
@@ -30,13 +41,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from harness.grader_image import IMAGE, image_digest
+from harness.grader_image import IMAGE, baked_paths, image_digest
 
 #: Mount points inside the container. Fixed by the image, so no caller has to
 #: agree with them separately.
 CANDIDATE = "/candidate"
 ROSTER = "/roster.json"
 OUT = "/out"
+GATES = "/gates"
 
 
 class GraderImageMissing(RuntimeError):
@@ -109,11 +121,20 @@ def gate_argv(
     image: str = IMAGE,
     run_identity: str | None = None,
     layer: int | None = None,
+    gates_dir: Path | None = None,
 ) -> list[str]:
     """`docker run ...` for one grading pass.
 
     ``report_path`` must sit inside the cell directory: its PARENT is mounted as
     the only writable path, and the report is written by name inside it.
+
+    ``gates_dir`` is the optional source overlay: when given, every file
+    ``baked_paths`` says the image bakes is mounted read-only over its
+    ``/gates`` path, so a stale image still grades with the source on disk. It
+    is for a stale image that must NOT be rebuilt — the normal case passes
+    nothing and grades the baked source. ``node_modules`` is never overlaid:
+    the image's is the linux build the container runs, and a host copy mounted
+    over it would shadow it.
     """
     out_dir = report_path.parent.resolve()
     argv = [
@@ -141,6 +162,22 @@ def gate_argv(
         argv += ["-e", f"BENCH_WORKER_TARGET={worker_target}"]
     if workers is not None:
         argv += ["-e", f"BENCH_WORKERS={int(workers)}"]
+
+    # ── OPTIONAL SOURCE OVERLAY (stale image, no rebuild) ──────────────────
+    #
+    # Read-only, one mount per baked file, so the container's /gates is the
+    # source on disk. The list comes from `baked_paths` — the builder's own
+    # definition of what is baked — never a hand-maintained list here: two
+    # definitions of "the grader source" would drift and the overlay would
+    # silently stop covering a new file. `node_modules` is excluded by that
+    # same definition, and it must stay excluded: the image's copy is the
+    # linux build, and a host copy would shadow it.
+    if gates_dir is not None:
+        for path in baked_paths(gates_dir):
+            argv += [
+                "-v",
+                f"{path.resolve()}:{GATES}/{path.relative_to(gates_dir).as_posix()}:ro",
+            ]
 
     argv += [image, "--target", CANDIDATE, "--out", f"{OUT}/{report_path.name}"]
     if roster_path is not None and roster_path.is_file():

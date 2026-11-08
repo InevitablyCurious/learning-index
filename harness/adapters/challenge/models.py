@@ -99,6 +99,11 @@ class _OpencodeRunStats:
     # terminal. 0 for the build (which never counts) and for a feedback round
     # that stayed under the threshold.
     compactions_since_grade: int = 0
+    # The live ``session.compacted`` count observed on the event stream while the
+    # drive ran (``ServeClient.live_compactions_observed``). Distinct from the
+    # receipt-derived count above: this is what the stream said, observed turn by
+    # turn, and 0 when the stream was not watched.
+    compactions_observed: int = 0
 
 
 @dataclass(frozen=True)

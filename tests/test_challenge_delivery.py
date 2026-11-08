@@ -24,7 +24,7 @@ from harness.adapters.challenge import (
     _scan_injected_block_chars,
 )
 from harness.adapters.docker_worker import BakedPlugin, ImageFingerprint
-
+from tests._serve_drive_fakes import _one_layer_phase, _pack_factory
 
 TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve()
 
@@ -128,7 +128,7 @@ def _patch_fake_real_arm(monkeypatch: pytest.MonkeyPatch) -> None:
 def _make_runner(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, memory_mode: str = "on"
 ) -> ChallengeRunner:
-    """A real-arm runner with a clean one-chunk build; no container, no model."""
+    """A real-arm runner with a clean one-phase build; no container, no model."""
     _patch_fake_real_arm(monkeypatch)
     runner = ChallengeRunner(
         task_dir=TASK_DIR,
@@ -136,9 +136,7 @@ def _make_runner(
         model="openrouter/anthropic/claude-opus-4.8",
         memory_mode=memory_mode,
     )
-    monkeypatch.setattr(
-        runner, "_load_chunk_prompts", lambda *args, **kwargs: ["BUILD PROMPT"]
-    )
+    monkeypatch.setattr(runner_mod, "PromptPack", _pack_factory(_one_layer_phase()))
 
     def _fake_chunked(**kwargs: Any) -> _OpencodeRunStats:
         # A clean one-chunk build: the transport reached idle on its chunk.
