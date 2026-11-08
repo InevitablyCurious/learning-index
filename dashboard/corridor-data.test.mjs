@@ -14,7 +14,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { corridorRunsFromBoard, isLocalRun, observed } from "./panels/corridor-data.js";
+import {
+  corridorRunsFromBoard,
+  isLocalRun,
+  observed,
+  tokenBarFromProgress,
+} from "./panels/corridor-data.js";
 
 const NULL_BUCKET = {
   turns: null,
@@ -431,4 +436,185 @@ test("observed is a finite number, and nothing else", () => {
   assert.equal(observed(NaN), false);
   assert.equal(observed(Infinity), false);
   assert.equal(observed("3"), false, "a numeric string is not a measured number");
+});
+
+// ── the live token bar: during-the-run geometry ────────────────────────────
+// `tokenBarFromProgress` is a PURE read of `live.progress` (folded by
+// control/board/sources/live-stream.mjs): per-lane normalization, widths from
+// each turn's delta, and three states that never collapse into a zero-fill.
+
+function tokDelta(input = 0, output = 0, reasoning = 0, cacheRead = 0, cacheWrite = 0) {
+  return {
+    input,
+    output,
+    reasoning,
+    cache_read: cacheRead,
+    cache_write: cacheWrite,
+    total: input + output + reasoning + cacheRead + cacheWrite,
+  };
+}
+
+/** A progress payload whose totals/segments agree, exactly as the folder emits it. */
+function progressOf(deltas, over = {}) {
+  let running = 0;
+  const totals = tokDelta();
+  const segments = deltas.map((delta, i) => {
+    const start_total = running;
+    running += delta.total;
+    totals.input += delta.input;
+    totals.output += delta.output;
+    totals.reasoning += delta.reasoning;
+    totals.cache_read += delta.cache_read;
+    totals.cache_write += delta.cache_write;
+    totals.total += delta.total;
+    return {
+      phase_index: 0,
+      phase_kind: i % 2 === 0 ? "build" : "troubleshooting",
+      phase_name: `phase-${i}`,
+      ts: 1000 + i,
+      delta,
+      start_total,
+      end_total: running,
+    };
+  });
+  return {
+    available: true,
+    paused: false,
+    totals,
+    byKind: {},
+    byPhaseKind: [],
+    segments,
+    boundaries: [],
+    compactions: [],
+    ...over,
+  };
+}
+
+const sumWidths = (bar) => bar.segments.reduce((n, s) => n + s.widthPct, 0);
+
+test("live token bar: segment widths sum to 100 at every payload", () => {
+  const bar = tokenBarFromProgress(progressOf([tokDelta(20), tokDelta(50), tokDelta(30)]));
+  assert.equal(bar.available, true);
+  assert.equal(bar.empty, false);
+  assert.equal(bar.total, 100);
+  assert.deepEqual(bar.segments.map((s) => s.widthPct), [20, 50, 30]);
+  assert.ok(Math.abs(sumWidths(bar) - 100) < 1e-9, "every step tiles the run's own 100%");
+});
+
+test("live token bar: a later turn rescales earlier widths, never the other way", () => {
+  const before = tokenBarFromProgress(progressOf([tokDelta(20), tokDelta(50), tokDelta(30)]));
+  const after = tokenBarFromProgress(
+    progressOf([tokDelta(20), tokDelta(50), tokDelta(30), tokDelta(100)]),
+  );
+  assert.equal(after.total, 200);
+  assert.ok(Math.abs(sumWidths(after) - 100) < 1e-9, "the new total is still 100% of the bar");
+  for (let i = 0; i < before.segments.length; i += 1) {
+    assert.ok(
+      after.segments[i].widthPct <= before.segments[i].widthPct,
+      `segment ${i} must shrink (or hold), never grow: ${after.segments[i].widthPct} > ${before.segments[i].widthPct}`,
+    );
+  }
+});
+
+test("live token bar: a zero-delta segment freezes prior geometry at zero width", () => {
+  const base = tokenBarFromProgress(progressOf([tokDelta(20), tokDelta(50), tokDelta(30)]));
+  const withZero = tokenBarFromProgress(
+    progressOf([tokDelta(20), tokDelta(50), tokDelta(30), tokDelta(0)]),
+  );
+  assert.equal(withZero.total, base.total, "a zero delta does not move the total");
+  assert.deepEqual(
+    withZero.segments.slice(0, base.segments.length).map((s) => s.widthPct),
+    base.segments.map((s) => s.widthPct),
+    "prior segments keep the exact same geometry",
+  );
+  assert.equal(withZero.segments.at(-1).widthPct, 0);
+});
+
+test("live token bar: boundaries and compactions are offsets on the token axis", () => {
+  const progress = progressOf([tokDelta(20), tokDelta(50), tokDelta(30)], {
+    boundaries: [
+      { phase_index: 1, phase_kind: "troubleshooting", offset: 70 },
+      { phase_index: 2, phase_kind: "build", offset: NaN },
+    ],
+    compactions: [
+      { ts: 2000, tokens_before: 99999, offset: 90 },
+      { ts: 2001, tokens_before: 1, offset: Infinity },
+    ],
+  });
+  const bar = tokenBarFromProgress(progress);
+  assert.deepEqual(bar.boundaries, [
+    { phase_index: 1, phase_kind: "troubleshooting", offsetPct: 70 },
+  ], "a non-finite offset is not a position");
+  assert.deepEqual(bar.compactions, [{ ts: 2000, tokens_before: 99999, offsetPct: 90 }]);
+});
+
+test("live token bar: an available-but-unspent run is the empty state, not a zero bar", () => {
+  const bar = tokenBarFromProgress({
+    available: true,
+    paused: true,
+    totals: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0, total: 0 },
+    byKind: null,
+    segments: [],
+    boundaries: [],
+    compactions: [],
+  });
+  assert.deepEqual(bar, {
+    available: true,
+    empty: true,
+    paused: true,
+    total: 0,
+    segments: [],
+    boundaries: [],
+    compactions: [],
+  });
+});
+
+test("live token bar: absence is unavailable, never zeros", () => {
+  for (const p of [null, undefined, {}, { available: false }]) {
+    assert.deepEqual(
+      tokenBarFromProgress(p),
+      { available: false },
+      `no live token stream for ${JSON.stringify(p)}`,
+    );
+  }
+});
+
+test("live token bar: each lane is 100% of its OWN total (per-lane independence)", () => {
+  const board = {
+    runs: {
+      list: [
+        runCard({ run_dir: "rA", benchmark_id: "1700000001" }),
+        runCard({ run_dir: "rB", benchmark_id: "1700000002" }),
+      ],
+    },
+    by_cell: {
+      "rA::0": { live: { progress: progressOf([tokDelta(60), tokDelta(40)]) } },
+      "rB::0": { live: { progress: progressOf([tokDelta(10), tokDelta(30)]) } },
+    },
+    models_ledger: LEDGER,
+  };
+  const runs = corridorRunsFromBoard(board).runs;
+  const a = tokenBarFromProgress(runs.find((r) => r.key === "rA::0").progress);
+  const b = tokenBarFromProgress(runs.find((r) => r.key === "rB::0").progress);
+
+  assert.equal(a.total, 100);
+  assert.equal(b.total, 40);
+  assert.deepEqual(a.segments.map((s) => s.widthPct), [60, 40]);
+  assert.deepEqual(b.segments.map((s) => s.widthPct), [25, 75], "each bar is normalized to itself");
+});
+
+test("run.progress is the raw cell-view payload, or null when no stream exists", () => {
+  const withLive = corridorRunsFromBoard({
+    runs: { list: [runCard({ run_dir: "rL", benchmark_id: "1700000003" })] },
+    by_cell: { "rL::0": { live: { progress: { available: false, paused: false } } } },
+    models_ledger: null,
+  }).runs[0];
+  assert.deepEqual(withLive.progress, { available: false, paused: false });
+
+  const without = corridorRunsFromBoard({
+    runs: { list: [runCard({ run_dir: "rN", benchmark_id: "1700000004" })] },
+    by_cell: {},
+    models_ledger: null,
+  }).runs[0];
+  assert.equal(without.progress, null, "no cell view is no progress, never a fabricated object");
 });

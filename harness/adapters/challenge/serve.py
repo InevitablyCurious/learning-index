@@ -83,6 +83,7 @@ from .constants import (
 )
 from .exceptions import ServeTransportError
 from .models import _OpencodeRunStats
+from .token_metrics import compute_delta, has_token_data, metrics_to_cumulative
 from .transport import _build_truncation_evidence, _provider_backoff_seconds
 
 
@@ -578,6 +579,37 @@ class ServeMixin:
                 m_window = {}
                 if exit_code == 0:
                     exit_code = 1
+
+            # WO-LIVE-02: the turn finished and its session-cumulative metrics
+            # are in hand. Publish THIS turn's spend -- the delta against the
+            # previous completed turn of the same session -- so the board can
+            # draw a realtime token bar from the record instead of scraping a
+            # log. `_token_prev` survives the retry loop (and later phases that
+            # reuse the session) because it keyed on session_id, not on `self`.
+            #
+            # OBSERVATION-LOST IS NOT A TURN. That arm fabricates `m` from the
+            # phase baseline, so emitting from it would publish a fake zero
+            # delta; an unobservable read emits NOTHING rather than zeros.
+            if not observation_lost and has_token_data(m):
+                live = getattr(self, "_live", None)
+                if live is not None:
+                    cur = metrics_to_cumulative(m)
+                    token_prev = getattr(self, "_token_prev", None)
+                    if token_prev is None:
+                        token_prev = {}
+                        self._token_prev = token_prev
+                    prev = token_prev.get(session_id)
+                    label = phase_label or {}
+                    live.emit(
+                        "turn.tokens",
+                        cell_seq=getattr(self, "_cell_seq", None),
+                        phase_index=label.get("phase_index"),
+                        phase_name=label.get("phase_name"),
+                        phase_kind=label.get("phase_kind"),
+                        delta=compute_delta(prev, cur),
+                        cumulative=cur,
+                    )
+                    token_prev[session_id] = cur
 
             if observation_lost:
                 # The classifier cannot see anything (m_window is empty), so

@@ -2565,20 +2565,61 @@ a:hover{color:var(--type)}
   color:var(--bg);background:var(--type);border-radius:2px;padding:0 3px;
 }
 
-/* A RUN THAT HAS ONLY JUST STARTED. A stub, not an empty lane: something is
-   already on the track, it just has no distance behind it yet.
-   FULL LANE HEIGHT, LIKE A BAND. An 8px sliver floated to the middle of the lane
-   read as a rendering fragment, not as a run. A band is lane-height, so the stub
-   is too: the same object at the same scale, just short. And a floor on its
-   width (~38px, the model caption's own size), because 96 measured seconds
-   against a 6102-second axis is 1.6% of the lane — 16px at 1440 and 7px at
-   1024, i.e. a sliver wider at one size than the other. Seconds still set the
-   width above the floor: the floor says "visible", the inline width says "how
-   far". */
-.corr-stub{
-  flex:0 0 auto;align-self:stretch;min-width:38px;
-  background:color-mix(in srgb,var(--corr-build) 75%,transparent);
-  border-radius:2px;
+/* ── THE LIVE TOKEN BAR ────────────────────────────────────────────────────
+   A RUNNING lane's body. Its axis is TOKENS SPENT SO FAR, not seconds: one flex
+   segment per turn, its inline width the turn's share of this run's own total.
+   The left edge is the run's start, the right edge is now. It is ALWAYS the
+   lane's full width and never scrolls or grows: `overflow:hidden` cuts a segment
+   that rounds past 100%, and `box-sizing:border-box` keeps the empty/unavailable
+   frames inside the lane. Colour is the same KEY as the bands (blue build, red
+   troubleshooting); an unknown kind is neutral `--dim`, never a fabricated
+   category. Boundaries are hairlines, compactions green notches — both are
+   instants on the token axis, not durations. */
+.corr-tokenbar{
+  position:relative;display:flex;flex-direction:row;
+  flex:1 1 100%;width:100%;min-width:0;height:100%;box-sizing:border-box;
+  overflow:hidden;
+  background:color-mix(in srgb,var(--fg) 6%,transparent);
+}
+.corr-tseg{flex:0 0 auto;height:100%;min-width:0;background:var(--dim)}
+.corr-tseg-build{background:var(--corr-build)}
+.corr-tseg-ts{background:var(--corr-trouble)}
+/* A phase/grade change on the token axis. 1px of bright seam, centred on the
+   offset, so it reads between two same-coloured builds too — never a segment. */
+.corr-tboundary{
+  position:absolute;top:0;bottom:0;width:1px;margin-left:-.5px;
+  background:color-mix(in srgb,var(--type) 62%,transparent);pointer-events:none;
+}
+/* A compaction is an instant, so it is a notch at the top edge — the same green
+   as the track's compaction rule, a different geometry at bar scale. */
+.corr-tnotch{
+  position:absolute;top:0;height:5px;width:2px;margin-left:-1px;
+  background:var(--corr-compact);pointer-events:none;
+}
+/* THE TWO ABSENCES SAY SO IN WORDS. "Unavailable" is an older run with no
+   turn.tokens stream; "empty" is a run that has spent nothing yet. Neither is a
+   zero-width bar and neither prints a numeral. */
+.corr-tbar-unavailable,.corr-tbar-empty{
+  align-items:center;justify-content:center;
+  border:1px dashed var(--border-strong);background:transparent;
+}
+.corr-tbar-empty{border-color:var(--dim)}
+.corr-tbar-note{
+  font:500 9.5px var(--font);letter-spacing:.06em;color:var(--dim);
+  padding:0 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* The pause gate rides the bar's right edge, compact and at the FOOT: the
+   lane's detail chips sit at its top-right, so the full-height 34px track gate
+   collided with them. Same glyph (posts + painted pause under a lintel), 18px
+   tall, below the chips — position only, `.corr-gate` keeps the shape. */
+.corr-tokenbar .corr-gate{
+  left:auto;right:3px;top:auto;bottom:2px;transform:none;margin-left:0;
+  width:13px;height:18px;
+}
+.corr-tokenbar .corr-gate-bar{width:2px;height:14px}
+.corr-tokenbar .corr-gate-pause{
+  width:5px;height:9px;
+  background:linear-gradient(90deg,var(--type) 0 1.5px,transparent 1.5px 3px,var(--type) 3px 4.5px);
 }
 
 /* THE EMPTY TRACK — ONE HEADLINE, SEVEN SECONDARY STATIONS.

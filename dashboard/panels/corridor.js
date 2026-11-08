@@ -27,7 +27,7 @@
 //     oldest runs behind a cap and reports how many. The corridor states the count
 //     and offers the toggle that draws them.
 
-import { corridorRunsFromBoard, observed } from "./corridor-data.js";
+import { corridorRunsFromBoard, observed, tokenBarFromProgress } from "./corridor-data.js";
 import { esc } from "../board.js";
 
 // The corridor's seven stations, verbatim from the mock (PHASE_STATIONS). Fixed
@@ -703,9 +703,71 @@ function capHtml(leftPct) {
   );
 }
 
-/** A just-started run is a stub at the gate, not an empty lane. */
-function stubHtml(widthPct) {
-  return `<span class="corr-stub"${pctStyle(widthPct)}></span>`;
+// ── the live token bar ──────────────────────────────────────────────────────
+// A running lane has no post-run cost to draw, so its body is the DURING-THE-RUN
+// token axis instead: one segment per turn, width = the turn's share of this
+// run's own total (corridor-data.tokenBarFromProgress). It is always the lane's
+// full width — the left edge is the run's start, the right edge the tokens spent
+// so far. Three states stay distinct: unavailable (no payload / an old run),
+// empty (no token spent yet), and a bar. Nothing is zero-filled.
+
+/** A segment's colour class: the two named kinds, everything else neutral. */
+function tsegClass(kind) {
+  if (kind === "build") return "corr-tseg-build";
+  if (kind === "troubleshooting") return "corr-tseg-ts";
+  return "";
+}
+
+function tokenBarHtml(run) {
+  const bar = tokenBarFromProgress(run?.progress);
+
+  if (!bar.available) {
+    return (
+      `<div class="corr-tokenbar corr-tbar-unavailable" title="no live token stream for this run">` +
+      `<span class="corr-tbar-note">live token data unavailable</span>` +
+      `</div>`
+    );
+  }
+  if (bar.empty) {
+    return (
+      `<div class="corr-tokenbar corr-tbar-empty" title="no token spent yet">` +
+      `<span class="corr-tbar-note">awaiting first token</span>` +
+      `</div>`
+    );
+  }
+
+  const segments = bar.segments
+    .map((s) => {
+      const tokens = s.tokens?.total;
+      const title = `${s.phase_name ?? "turn"} · ${tok(tokens)} tokens`;
+      return `<span class="corr-tseg ${tsegClass(s.phase_kind)}" style="width:${s.widthPct.toFixed(2)}%" title="${esc(title)}"></span>`;
+    })
+    .join("");
+
+  // The phase/grade boundaries, on the token axis. The 0%/100% edges are where
+  // the bar itself begins and ends — a line there would just be the frame.
+  const boundaries = bar.boundaries
+    .filter((b) => b.offsetPct > 0 && b.offsetPct < 100)
+    .map((b) => `<span class="corr-tboundary" style="left:${b.offsetPct.toFixed(2)}%"></span>`)
+    .join("");
+
+  // A compaction is an instant on the same axis — a notch, never a segment.
+  const compactions = bar.compactions
+    .map((c) => `<span class="corr-tnotch" style="left:${c.offsetPct.toFixed(2)}%" title="compaction"></span>`)
+    .join("");
+
+  // A hold gate rides the bar's right edge — the tokens stop here because the
+  // run is paused. Reuse the corridor's gate glyph; the bar scopes its position.
+  const gate = bar.paused ? gateHtml(null) : "";
+
+  return (
+    `<div class="corr-tokenbar" title="live tokens spent">` +
+    segments +
+    boundaries +
+    compactions +
+    gate +
+    `</div>`
+  );
 }
 
 // ── lanes ────────────────────────────────────────────────────────────────────
@@ -716,13 +778,13 @@ function stubHtml(widthPct) {
  * place segments on, so the lane is ONE full-width "not observed" band — dashed,
  * no fabricated widths — with the run's real status overlay on top. The run's
  * real tokens/turns stay visible in the cumulative panel.
+ *
+ * A running lane does NOT take this band: its body is the live token bar, which
+ * is its own 100%-width axis (see tokenBarHtml).
  */
-function blankBandHtml(running) {
-  // A running lane also gets the stub at the left; the band flexes to the rest
-  // of the lane so the two together still span exactly its width.
-  const sizing = running ? ` style="flex:1 1 auto"` : ` style="width:100%"`;
+function blankBandHtml() {
   return (
-    `<div class="corr-band" data-observed="false"${sizing}` +
+    `<div class="corr-band" data-observed="false" style="width:100%"` +
     ` title="not observed"><span class="corr-bandnum">not observed</span></div>`
   );
 }
@@ -735,24 +797,25 @@ function laneHtml(run, i, axis, isSelected) {
   const endPct = observedLane ? (pctOf(span, axis) ?? 0) : 100;
   const parts = [];
 
-  if (observedLane) {
-    if (status === "running") {
-      parts.push(stubHtml(pctOf(span, axis)));
-    } else {
-      const bands = bandLookup(run);
-      const peak = peakBandTokens(run);
-      for (const s of phaseSpans(run)) parts.push(segHtml(run, s, axis, bands, peak));
-    }
+  if (status === "running") {
+    // A live run is measured in tokens-spent-so-far, not in a post-run cost.
+    parts.push(tokenBarHtml(run));
+  } else if (observedLane) {
+    const bands = bandLookup(run);
+    const peak = peakBandTokens(run);
+    for (const s of phaseSpans(run)) parts.push(segHtml(run, s, axis, bands, peak));
   } else {
-    parts.push(blankBandHtml(status === "running"));
-    if (status === "running") parts.push(stubHtml(pctOf(span, axis)));
+    parts.push(blankBandHtml());
   }
 
-  if (isHeld(run)) parts.push(gateHtml(endPct));
+  // The token bar carries its own pause gate, so a running lane does not also
+  // draw the measured-time barrier.
+  if (status !== "running" && isHeld(run)) parts.push(gateHtml(endPct));
   if (status === "failed") parts.push(capHtml(endPct));
   // Compaction rules ride ON the lane, over every band — but only an observed
-  // lane has the time axis they are measured against.
-  if (observedLane) parts.push(compactionsHtml(run, axis));
+  // lane has the time axis they are measured against. A running lane's
+  // compactions are notches on the token bar instead.
+  if (status !== "running" && observedLane) parts.push(compactionsHtml(run, axis));
 
   const model = run?.model ?? NOT_OBSERVED;
   return (

@@ -218,6 +218,9 @@ function runFrom(card, board) {
   // current-tree cell view. Card first, per the board's source documentation.
   const cost = isObj(card.cost) ? card.cost : isObj(view.cost) ? view.cost : null;
   const c = cost ?? {};
+  // Only the CELL view carries the during-the-run stream (`live`), never a card:
+  // a living run's token progress lives at by_cell[key].live.progress.
+  const progress = isObj(view.live?.progress) ? view.live.progress : null;
 
   const model = run.model ?? card.model ?? c.model ?? null;
   const total = totalFrom(c);
@@ -239,6 +242,91 @@ function runFrom(card, board) {
     total,
     phases: phasesFrom(c),
     compaction: compactionFrom(c, total.compactions),
+    progress,
+  };
+}
+
+// ── live token progress → bar geometry ──────────────────────────────────────
+
+/** One turn's share of the run's own running total, clamped to the bar. */
+function sharePct(part, whole) {
+  if (!observed(part) || !observed(whole) || whole <= 0) return 0;
+  return Math.min(100, Math.max(0, (part / whole) * 100));
+}
+
+/**
+ * The PROGRESS bar's geometry for a LIVE run, folded from the board's
+ * `live.progress` payload (control/board/sources/live-stream.mjs). Three honest
+ * states, never a zero-fill:
+ *
+ *   · `available:false` — the payload is absent, or the run predates
+ *     `turn.tokens`. No totals, no segments: the renderer says "unavailable".
+ *   · `empty:true` — progress exists but no token has been spent yet. The total
+ *     is 0 by construction and the bar says "awaiting first token".
+ *   · a bar — one segment per turn, its width the turn's share of THIS run's
+ *     total; boundary lines and compaction notches are offsets on that same
+ *     axis. Every render is a pure function of the latest payload: a later turn
+ *     rescales earlier widths, it never adds a fabricated one.
+ *
+ * Per-lane normalization: `total` is the run's own, so each lane's bar is 100%
+ * of itself.
+ */
+export function tokenBarFromProgress(progress) {
+  if (!isObj(progress) || progress.available !== true) return { available: false };
+
+  const paused = progress.paused === true;
+  const total = isObj(progress.totals) ? num(progress.totals.total) : null;
+  if (total === null || total <= 0) {
+    return {
+      available: true,
+      empty: true,
+      paused,
+      total: 0,
+      segments: [],
+      boundaries: [],
+      compactions: [],
+    };
+  }
+
+  const segments = (Array.isArray(progress.segments) ? progress.segments : []).map((raw) => {
+    const s = isObj(raw) ? raw : {};
+    const delta = isObj(s.delta) ? s.delta : {};
+    return {
+      phase_index: num(s.phase_index),
+      phase_kind: str(s.phase_kind),
+      phase_name: str(s.phase_name),
+      ts: num(s.ts),
+      tokens: s.delta ?? null,
+      widthPct: sharePct(delta.total, total),
+    };
+  });
+
+  const boundaries = (Array.isArray(progress.boundaries) ? progress.boundaries : [])
+    .filter((b) => isObj(b) && observed(b.offset))
+    .map((b) => ({
+      phase_index: num(b.phase_index),
+      phase_kind: str(b.phase_kind),
+      offsetPct: sharePct(b.offset, total),
+    }));
+
+  const compactions = (Array.isArray(progress.compactions) ? progress.compactions : [])
+    .filter((x) => isObj(x) && observed(x.offset))
+    .map((x) => ({
+      ts: num(x.ts),
+      tokens_before: num(x.tokens_before),
+      offsetPct: sharePct(x.offset, total),
+    }));
+
+  return {
+    available: true,
+    empty: false,
+    paused,
+    total,
+    totals: progress.totals,
+    byKind: progress.byKind,
+    segments,
+    boundaries,
+    compactions,
   };
 }
 

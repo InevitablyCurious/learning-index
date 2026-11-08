@@ -299,3 +299,82 @@ test("no runs renders the empty track and no toggle", () => {
   assert.match(html, /class="corr-empty"/);
   assert.ok(!html.includes("corr-toggle"), "nothing is hidden when there is nothing to draw");
 });
+
+// ── 6. a RUNNING lane draws the live token bar, not a stub ───────────────────
+
+function liveProgress(over = {}) {
+  return {
+    available: true,
+    paused: false,
+    totals: {
+      input: 600,
+      output: 200,
+      reasoning: 100,
+      cache_read: 100,
+      cache_write: 0,
+      total: 1000,
+    },
+    byKind: {},
+    byPhaseKind: [],
+    segments: [
+      { phase_index: 0, phase_kind: "build", phase_name: "Backend 1", ts: 1000, delta: { input: 600, output: 0, reasoning: 0, cache_read: 0, cache_write: 0, total: 600 }, start_total: 0, end_total: 600 },
+      { phase_index: 1, phase_kind: "troubleshooting", phase_name: "Fix it", ts: 2000, delta: { input: 300, output: 0, reasoning: 0, cache_read: 0, cache_write: 0, total: 300 }, start_total: 600, end_total: 900 },
+      { phase_index: 2, phase_kind: "build", phase_name: "Backend 2", ts: 3000, delta: { input: 0, output: 100, reasoning: 0, cache_read: 0, cache_write: 0, total: 100 }, start_total: 900, end_total: 1000 },
+    ],
+    boundaries: [{ phase_index: 1, phase_kind: "troubleshooting", offset: 600 }],
+    compactions: [{ ts: 2500, tokens_before: 99999, offset: 900 }],
+    ...over,
+  };
+}
+
+function runningBoard(progress) {
+  const card = runCard({
+    run_dir: "live-run",
+    benchmark_id: "1791152000",
+    status: "live",
+    system_epoch: "2026-11-08",
+    cost: null,
+  });
+  const cell = { run: { state: "running" }, live: progress ? { progress } : {} };
+  return board([card], { by_cell: { "live-run::0": cell } });
+}
+
+test("a running lane renders the live token bar from its own progress", () => {
+  const html = renderCorridor(runningBoard(liveProgress({ paused: true })));
+
+  assert.match(html, /class="corr-tokenbar"/, "the lane body is the token bar");
+  // One flex segment per turn, in order, each its share of the run's total.
+  assert.match(html, /class="corr-tseg corr-tseg-build" style="width:60\.00%"/, "build is blue, 60%");
+  assert.match(html, /class="corr-tseg corr-tseg-ts" style="width:30\.00%"/, "troubleshooting is red, 30%");
+  assert.match(html, /class="corr-tseg corr-tseg-build" style="width:10\.00%"/, "the later build turn tiles the remainder");
+  // Boundary at 600/1000 and a compaction notch at 900/1000.
+  assert.match(html, /class="corr-tboundary" style="left:60\.00%"/, "the phase boundary is on the token axis");
+  assert.match(html, /class="corr-tnotch" style="left:90\.00%"/, "a compaction is a notch, not a segment");
+  // Paused rides the bar's right edge as the corridor's own gate glyph.
+  assert.match(html, /class="corr-gate"/, "a paused live run shows the hold gate on the bar");
+  // The bar is the ONLY body of a running lane now — the old stub is gone.
+  assert.ok(!html.includes("corr-stub"), "no stub remains on a running lane");
+});
+
+test("a running lane with no live stream states it is unavailable, never zeros", () => {
+  const noLive = renderCorridor(runningBoard(null));
+  assert.match(noLive, /class="corr-tokenbar corr-tbar-unavailable"/, "a distinct unavailable element");
+  assert.match(noLive, /live token data unavailable/, "and it says why in words");
+  assert.ok(!noLive.includes("corr-tseg"), "no fabricated zero-width segments");
+
+  const oldRun = renderCorridor(runningBoard({ available: false, paused: false }));
+  assert.match(oldRun, /live token data unavailable/, "an old run with no turn.tokens is the same absence");
+});
+
+test("a running lane with no token spent yet is the designed empty state", () => {
+  const progress = liveProgress({
+    totals: { input: 0, output: 0, reasoning: 0, cache_read: 0, cache_write: 0, total: 0 },
+    segments: [],
+    boundaries: [],
+    compactions: [],
+  });
+  const html = renderCorridor(runningBoard(progress));
+  assert.match(html, /class="corr-tokenbar corr-tbar-empty"/);
+  assert.match(html, /awaiting first token/);
+  assert.ok(!html.includes("corr-tseg"), "an unspent run has no segments yet");
+});

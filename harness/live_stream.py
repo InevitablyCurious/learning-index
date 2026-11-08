@@ -145,6 +145,7 @@ CORE_KINDS = (
     "heartbeat",  # the cell is ALIVE, and here is what it is doing
     "notice",  # a PROCESS reporting something it did or something done to it
     "compaction",  # the cell's context was compacted, and by how much
+    "turn.tokens",  # one completed turn's token DELTA + session cumulative
 )
 
 #: WHO IS TALKING. The `source` axis of a ``notice``, and the ONLY values it may

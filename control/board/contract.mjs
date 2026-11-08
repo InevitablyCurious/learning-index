@@ -164,6 +164,37 @@ export function emptyBoard() {
       attempts: [],
       backends: [],
       ext: [],
+      // ── LIVE TOKEN PROGRESS ── folded from the WHOLE live.jsonl, in ts
+      // order (a 512KB tail would silently undercount early turns). `totals`
+      // is the sum of every turn.tokens DELTA's five fields, never the
+      // session-scoped `cumulative` (a new session resets it). `segments` is
+      // one per turn record: start_total is the running total before that
+      // turn's delta, end_total after (delta.total may be 0 — kept). A
+      // `boundaries` entry is emitted whenever consecutive segments change
+      // (phase_index, phase_kind), offset = the new segment's start_total.
+      // A compaction's `offset` is the end_total of the last segment at or
+      // before its ts (0 when none); its `tokens_before` is the harness's
+      // context peak, kept verbatim and NEVER used as the offset.
+      //   available: false when no turn.tokens record exists (older runs) —
+      //   no totals/byKind/segments keys are emitted, never zero-filled.
+      progress: {
+        available: false,
+        paused: false, // pause.start -> true, pause.end -> false (ts order)
+        totals: null, // {input, output, reasoning, cache_read, cache_write, total}
+        byKind: null, // {build: {five+total}, troubleshooting: {…}, unknown: {…}}
+        // [{ phase_index, phase_kind, tokens: {five+total} }] — one per
+        // distinct (phase_index, phase_kind), chronological.
+        byPhaseKind: [],
+        // [{ phase_index, phase_kind, phase_name, ts, delta: {five+total},
+        //    start_total, end_total }] — turn-ordered.
+        segments: [],
+        // [{ phase_index, phase_kind, offset }] — offset = start_total of the
+        // segment that begins a new (phase_index, phase_kind).
+        boundaries: [],
+        // [{ ts, tokens_before, offset }] — offset = end_total of the last
+        // segment with ts <= compaction.ts (0 if none).
+        compactions: [],
+      },
     },
 
     provenance: {
