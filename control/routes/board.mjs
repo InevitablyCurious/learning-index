@@ -5,7 +5,9 @@
 // the whole board (board/lib/board-build.mjs) and pushes it to browsers over
 // server-sent events; the dashboard container only serves the page and relays.
 //
-//   GET /api/board     the assembled board, once
+//   GET /api/board     the assembled board, once — v2-epoch runs only;
+//                      `?include_historical=1` widens runs.list to every
+//                      preserved run (the pre-v2 cards render `—` downstream)
 //   GET /api/stream    the push channel: the full board on connect, then patches
 //   GET /api/run-view  ONE run's per-cell view — the click target behind a
 //                      board.runs card, and the only way to view an ARCHIVED
@@ -23,6 +25,7 @@ import { statOrNull } from "../lib/fs.mjs";
 import { resolveRunDir } from "../wall.mjs";
 import { streamClients } from "../board/lib/state.mjs";
 import { getBoard, buildCellViews, cellKey } from "../board/lib/board-build.mjs";
+import { filterBoard } from "../board/contract.mjs";
 import { boardWithoutEvents, tick } from "../board/lib/broadcast.mjs";
 import { TUI_STREAM_MS, tuiTick } from "../board/lib/tui.mjs";
 
@@ -39,12 +42,25 @@ export function startBoardLoops() {
   setInterval(() => void tuiTick(cfg), TUI_STREAM_MS).unref?.();
 }
 
+/** Query flag: 1 / true / yes / on (case-insensitive); anything else is false. */
+function queryFlag(url, name) {
+  const v = url?.searchParams.get(name);
+  if (v === null || v === undefined) return false;
+  return ["1", "true", "yes", "on"].includes(v.trim().toLowerCase());
+}
+
 export const routes = [
   {
+    // ── GET /api/board ── the assembled board, once, narrowed to the v2 system
+    // epoch: runs.list filtered and runs.counts recomputed from the filtered
+    // cards (contract.mjs filterBoard). `?include_historical=1` returns every
+    // preserved run instead. The filter is a view over a SHALLOW COPY — runs is
+    // the only section replaced; getBoard's shared cache is never mutated.
     method: "GET",
     path: "/api/board",
-    async handle(req, res) {
-      sendJson(res, 200, await getBoard(cfg));
+    async handle(req, res, url) {
+      const includeHistorical = queryFlag(url, "include_historical");
+      sendJson(res, 200, filterBoard(await getBoard(cfg), { includeHistorical }));
     },
   },
   {

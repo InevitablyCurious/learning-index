@@ -21,6 +21,7 @@ import * as liveStream from "../sources/live-stream.mjs";
 import * as toolJobs from "../sources/tool-jobs.mjs";
 import * as cells from "../sources/cells.mjs";
 import * as runs from "../sources/runs.mjs";
+import * as cost from "../sources/cost.mjs";
 
 // Every source is always on: each one reports its own absence ("unwired",
 // with a reason) instead of being switched off by configuration.
@@ -37,7 +38,7 @@ const MODS = [
 // write, and the board showed whichever cell wrote last under the strip's
 // selection. Merge order as ORDER: the status stream, then the log pulse, then
 // the live stream, then the serve API (freshest).
-const CELL_MODS = [statusStream, runLog, liveStream, opencodeServe, gateSuite];
+const CELL_MODS = [statusStream, runLog, liveStream, opencodeServe, gateSuite, cost];
 
 /** The address a cell is keyed by everywhere: `<run_dir>::<sequence_index>`. */
 export function cellKey(cell) {
@@ -76,6 +77,9 @@ const ORDER = [
   // Owns `suite` alone (split from control-plane so a slow suite can't hold the
   // TUI); position not load-bearing.
   "gate-suite",
+  // Owns `cost` alone (per cell, and reused for the run cards). Listed for the
+  // same reason as cells/runs: an unlisted source sorts FIRST.
+  "cost",
 ];
 
 async function buildBoard(cfg) {

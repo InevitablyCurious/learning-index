@@ -71,13 +71,13 @@ test("GET /api/run-view on an archived run → { ok:true, view } with the per-ce
   const view = res.body.view;
   assert.ok(view, "the view object is present");
 
-  // The SAME five per-cell sources the board's by_cell runs, each stating its
+  // The SAME per-cell sources the board's by_cell runs, each stating its
   // own ok/reason. (`learning` was a per-cell source reading the removed
   // seeded-snapshot/chunk metadata; it went with that machinery.)
   assert.ok(Array.isArray(view.sources), "view.sources is an array");
   assert.deepEqual(
     view.sources.map((s) => s.id).sort(),
-    ["gate-suite", "live-stream", "opencode-serve", "run-log", "status-stream"],
+    ["cost", "gate-suite", "live-stream", "opencode-serve", "run-log", "status-stream"],
   );
   for (const s of view.sources) {
     assert.equal(typeof s.ok, "boolean");

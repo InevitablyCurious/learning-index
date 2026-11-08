@@ -36,7 +36,7 @@ const CARD_KEYS = [
   "run_dir", "sequence_index", "benchmark_id", "cell", "archived", "model",
   "arm", "status", "problems_before", "problems_after", "problems_fixed",
   "problems_broke", "context_peak", "context_window", "turns", "loop_errors",
-  "stalled_limit_errors",
+  "stalled_limit_errors", "system_epoch", "cost",
 ];
 
 const notice = (event, terminal) =>
@@ -236,6 +236,8 @@ test("runs source: each card carries EXACTLY the contract keys, with the stated 
       turns: 42,
       loop_errors: 1,
       stalled_limit_errors: 2, // 1 turn_stalled + 1 length_cutoff
+      system_epoch: null, // the fixture's manifest.json declares no epoch
+      cost: null, // the fixture writes no cost.json (and no v2 run exists yet)
     });
 
     // Archived: no manifest.status.jsonl, an empty ledger — every unrecorded
@@ -259,6 +261,8 @@ test("runs source: each card carries EXACTLY the contract keys, with the stated 
       turns: null,
       loop_errors: 2, // turn_truncated_retried + recovery_budget_exhausted, guard_abort
       stalled_limit_errors: 2, // 1 turn_stalled + 1 length_cutoff
+      system_epoch: null, // its manifest.json declares no epoch
+      cost: null, // no cost.json on disk
     });
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });

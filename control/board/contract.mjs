@@ -17,6 +17,64 @@ export const CONTRACT_VERSION = "2.0";
 /** Permanent provenance label. Never a badge. Never a tier. */
 export const ATTESTATION = "bench-mock/self-declared";
 
+// ── THE SYSTEM EPOCH ────────────────────────────────────────────────────────
+// A run state its own epoch in manifest.json (`system_epoch`, read onto every
+// card by sources/runs.mjs) or it never did, and the card says null. The 263
+// pre-v2 runs on disk declared nothing; v2 runs declare this string.
+//
+// The board's DEFAULT VIEW is the v2 epoch alone. The old runs are preserved on
+// disk and stay reachable (`includeHistorical`), they are simply not what the
+// current contract measures — so `GET /api/board` narrows runs.list, and
+// `?include_historical=1` widens it back to every card (a v1 card renders `—`
+// downstream for each field it never stated).
+
+export const SYSTEM_EPOCH = "2026-11-08";
+
+/** Is this run card a v2-epoch run? Missing or null epoch is not. */
+export function isV2Run(card) {
+  return card?.system_epoch === SYSTEM_EPOCH;
+}
+
+/**
+ * Filter a runs.list to one epoch. Pure: never mutates the input (that array is
+ * part of getBoard's shared cache). Default = the v2 epoch only;
+ * `includeHistorical: true` = all runs. A non-array list is returned unchanged —
+ * an unwired source states its own absence, and a filter must not invent an
+ * empty list in its place.
+ */
+export function filterBoardRuns(list, opts = {}) {
+  const { epoch = SYSTEM_EPOCH, includeHistorical = false } = opts;
+  if (!Array.isArray(list)) return list;
+  if (includeHistorical) return list;
+  return list.filter((r) => r?.system_epoch === epoch);
+}
+
+/**
+ * The board for ONE response: a SHALLOW COPY whose runs.list is the
+ * epoch-filtered cards and whose runs.counts is recomputed from those cards
+ * (the exact shape sources/runs.mjs emits). Every other section is the cached
+ * object itself, untouched; the cache is never mutated.
+ */
+export function filterBoard(board, opts = {}) {
+  const list = board?.runs?.list;
+  if (!Array.isArray(list)) return board;
+  const filtered = filterBoardRuns(list, opts);
+  return {
+    ...board,
+    runs: {
+      ...board.runs,
+      list: filtered,
+      counts: {
+        total: filtered.length,
+        live: filtered.filter((c) => c.status === "live").length,
+        scored: filtered.filter((c) => c.status === "scored").length,
+        void: filtered.filter((c) => c.status === "void").length,
+        harness_error: filtered.filter((c) => c.status === "harness_error").length,
+      },
+    },
+  };
+}
+
 /** The empty board every source merges into; zero wired sources still renders. */
 export function emptyBoard() {
   return {

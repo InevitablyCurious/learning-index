@@ -43,18 +43,20 @@
 // sequence_index ASCENDING — so the current tree leads and archived runs
 // follow, newest first.
 
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { readdir, readFile } from "node:fs/promises";
 
 import { int, str } from "../contract.mjs";
 import {
   parseJsonl,
   readTextCapped,
+  readJson,
   statOrNull,
   cellLiveStreamPath,
   activeTreeId,
   isTreeId,
 } from "./_runtime.mjs";
+import { readV2Cost } from "./cost.mjs";
 import { readRunState } from "../../runstate.mjs";
 import { readBatch } from "../../batch.mjs";
 import { listRunCells } from "../../history.mjs";
@@ -419,6 +421,9 @@ export async function read(ctx) {
   const manifestCache = new Map();
   const ledgerCache = new Map();
   const scorecardCache = new Map();
+  // A card's run-level manifest.json is read once per run_dir: 262 archived
+  // cards share ~260 run dirs, and `system_epoch` is a property of the run.
+  const runManifestCache = new Map();
   const cards = [];
   for (const b of bases) {
     const modelDir = b.run_dir ? join(ctx.runsRoot, b.run_dir) : null;
@@ -491,6 +496,20 @@ export async function read(ctx) {
       contextWindow = contextWindow ?? int(stream.cell_end.context_window);
     }
 
+    // The run's declared system epoch and the cell's v2 cost stamp. Both are
+    // read from artifacts the card's own identity names: manifest.json in the
+    // MODEL dir (b.run_dir, relative to runsRoot; deduped per poll) and the cell
+    // dir the card's live path already points into (the same slice gradedCounts
+    // takes). Absent either is null — a v1 cost stamp is not this contract, and
+    // a run that never declared an epoch did not state one.
+    const systemEpoch = b.run_dir
+      ? await memo(runManifestCache, b.run_dir, async () =>
+          (await readJson(join(ctx.runsRoot, b.run_dir, "manifest.json")))?.system_epoch ?? null,
+        )
+      : null;
+    const cellDir = b.live_path ? dirname(b.live_path) : null;
+    const cost = await readV2Cost(cellDir);
+
     cards.push({
       sort_key: b.sort_key,
       card: {
@@ -514,6 +533,8 @@ export async function read(ctx) {
         turns: man?.turns ?? int(ledger?.turns) ?? null,
         loop_errors: loopErrors,
         stalled_limit_errors: stalledLimit,
+        system_epoch: str(systemEpoch),
+        cost,
       },
     });
   }
