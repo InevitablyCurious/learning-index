@@ -67,7 +67,7 @@ test("a healthy attempt paints no flag", () => {
 
 test("a build with no live feed still renders, and shows no flag", () => {
   const html = renderBuild({ max_attempts: null });
-  assert.ok(html.includes("LIVE BUILD"));
+  assert.ok(html.includes("BUILD"));
   assert.ok(!html.includes("render blocked"));
 });
 

@@ -783,7 +783,7 @@ function renderEmpty() {
   ).join("");
   return (
     `<div class="corr-empty">` +
-    `<span class="corr-empty-note">no run has crossed the wall yet — the corridor fills as cells run</span>` +
+    `<span class="corr-empty-note">no run has crossed the wall yet — progress fills as cells run</span>` +
     `<div class="corr-stations">${stations}</div>` +
     `</div>`
   );
@@ -793,13 +793,13 @@ function renderEmpty() {
 
 const HEAD =
   `<div class="phead">` +
-  `<span class="ttl">THE CORRIDOR</span>` +
+  `<span class="ttl">PROGRESS</span>` +
   `<span class="sub">measured wall time, not attempts</span>` +
   `</div>`;
 
 function shell(body) {
   return (
-    `<section class="panel corridor" aria-label="THE CORRIDOR">` +
+    `<section class="panel corridor" aria-label="PROGRESS">` +
     HEAD +
     body +
     `</section>`

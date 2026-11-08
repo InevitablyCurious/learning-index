@@ -317,7 +317,7 @@ export function renderBuild(board) {
   return `
     <section class="panel build">
       <div class="phead">
-        <span class="ttl">LIVE BUILD</span>
+        <span class="ttl">BUILD</span>
         <span class="build-id">${id}</span>
         <span class="build-note" data-preserve="1"></span>
         <span class="build-blocked">${flag}</span>

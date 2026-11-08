@@ -42,6 +42,11 @@ const ui = {
   focus: null,
   focusReason: null,
   focusScrolled: false,
+  // ARCHIVE — the last verb's own answer, and why it failed. The run COUNT is
+  // never held here: it is the board's (runs.counts.legacy), so a stale copy
+  // can never disagree with the cards on screen.
+  archiveResult: null,
+  archiveError: null,
 };
 
 export function isToolsOpen() {
@@ -154,6 +159,41 @@ export async function runTool(id) {
         `${String(err?.message ?? err)} — the control plane did not answer. ` +
         `If a tool just restarted it, give it a few seconds and press run again.`,
     };
+  }
+}
+
+/**
+ * ARCHIVE HISTORICAL — move the pre-v2 ("legacy") runs still sitting in the
+ * living runs root into the sibling archive root. The record is kept and the
+ * runs in flight are never touched; only the root a run is addressed under
+ * changes. Returns whether the verb succeeded — the caller refreshes on it.
+ *
+ * No confirm here: the drawer has no confirm pattern, and nothing is deleted.
+ */
+export async function archiveHistorical() {
+  ui.archiveResult = null;
+  ui.archiveError = null;
+  try {
+    const res = await fetch(`/api/archive/historical`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || data.ok === false) {
+      ui.archiveError =
+        data && data.ok === false
+          ? data.reason ?? "the control plane refused"
+          : `HTTP ${res.status}`;
+      return false;
+    }
+    const moved = Number(data.moved ?? 0);
+    const skipped = Number(data.skipped ?? 0);
+    ui.archiveResult = `moved ${moved}${skipped > 0 ? ` · skipped ${skipped}` : ""}`;
+    return true;
+  } catch (err) {
+    ui.archiveError = `${String(err?.message ?? err)} — the control plane did not answer`;
+    return false;
   }
 }
 
@@ -271,6 +311,8 @@ export function renderToolsDrawer(board) {
 
           ${renderGradingSection()}
 
+          ${renderArchiveSection(board)}
+
           <section class="mn-sec">
             <span class="mn-h">MODES</span>
             <p class="dw-lede">
@@ -353,6 +395,39 @@ function renderGradingSection() {
         </div>
         <div class="gt-opts" role="group" aria-label="Machine share">${choices}</div>
       </div>
+    </section>`;
+}
+
+/**
+ * ARCHIVE — the pre-v2 runs still addressed under the living runs root. The
+ * count is the board's own (runs.counts.legacy): absent until the first frame,
+ * which renders 0 and correctly disables the verb. Zero is a state worth
+ * showing — the button stays visible reading (0) rather than vanishing.
+ */
+function renderArchiveSection(board) {
+  const raw = board?.runs?.counts?.legacy;
+  const legacy = Number.isFinite(raw) ? raw : 0;
+  return `
+    <section class="mn-sec">
+      <span class="mn-h">ARCHIVE</span>
+      <p class="dw-lede">
+        Runs from before the current layout that are still on the living runs root.
+        Archiving moves them to the sibling archive root — the record is kept, the board
+        stops carrying them, and a run in flight is never moved.
+      </p>
+      <button class="btn destroy solid" data-archive-historical="1"${
+        legacy === 0 ? " disabled" : ""
+      }>Archive Historical (${legacy})</button>
+      ${
+        ui.archiveResult
+          ? `<div class="tool-result ok"><span class="tr-code">${esc(ui.archiveResult)}</span></div>`
+          : ""
+      }
+      ${
+        ui.archiveError
+          ? `<div class="tool-result bad"><span class="tr-code">${esc(ui.archiveError)}</span></div>`
+          : ""
+      }
     </section>`;
 }
 

@@ -11,7 +11,7 @@ export function renderLiveView(board) {
   return `
     <section class="panel curve">
       <div class="phead">
-        <span class="ttl">LIVE VIEW</span>
+        <span class="ttl">AGENT</span>
         <span class="sub"></span>
       </div>
       ${renderTuiBody(board)}

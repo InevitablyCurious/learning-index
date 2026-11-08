@@ -350,6 +350,7 @@ import {
   doLaunchBaseline,
   doLoadTools,
   doRunTool,
+  doArchiveHistorical,
   detachTui,
   doLoadBackups,
   doArmRestore,
@@ -547,7 +548,7 @@ export function followActiveCell(b, repaint) {
 }
 
 function onClick(e) {
-  const t = e.target.closest(".corr-lane,.corr-legend-item,.corr-toggle,[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-cell-pick]");
+  const t = e.target.closest(".corr-lane,.corr-legend-item,.corr-toggle,[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-archive-historical],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-cell-pick]");
   if (!t) return;
 
   if (t.closest(".corr-lane, .corr-legend-item, .corr-toggle")) {
@@ -625,6 +626,13 @@ function onClick(e) {
     // A tool has side effects: a double-click would be two runs.
     if (debounced(`tool:${t.dataset.toolRun}`)) return;
     void doRunTool(t.dataset.toolRun);
+    return;
+  }
+  // ARCHIVE HISTORICAL — one press, no confirm: the record is kept, only the
+  // root it lives under changes. A double-click would be two moves.
+  if (t.hasAttribute("data-archive-historical")) {
+    if (debounced("archive:historical")) return;
+    void doArchiveHistorical();
     return;
   }
 

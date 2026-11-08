@@ -170,8 +170,8 @@ docker-compose.yml    loopback publish; docker-compose.lan.yml adds the LAN
 ```
 
 The top of the board is the **reconciliation view**: TRANSFER CURVE (left) and a
-**LIVE BUILD** panel (`panels/build.js`, right) in `.axes-row` (`1fr 1.25fr`),
-with the GATE WALL moved to a full-width block below. LIVE BUILD frames the
+**BUILD** panel (`panels/build.js`, right) in `.axes-row` (`1fr 1.25fr`),
+with the GATE WALL moved to a full-width block below. BUILD frames the
 played game in a `data-preserve` sandboxed iframe (`POST /api/play/start`,
 lazy-boot on an explicit click) beside the numbered "user prose"
 (`GET /api/feedback`) and attempt-snapshot tabs — `1..N` observed attempts,
@@ -227,8 +227,8 @@ the board renders without it.
 ### Preserved subtrees — who owns each panel
 
 Some panels own their subtree and the DOM-morpher must not touch it. The
-`#sc-events` and `#sc-backend` feed boxes, the xterm TUI terminal, and the LIVE
-BUILD iframe host all carry a `data-preserve` attribute;
+`#sc-events` and `#sc-backend` feed boxes, the xterm TUI terminal, and the BUILD
+iframe host all carry a `data-preserve` attribute;
 `dom.js::patchElement` (`dom.js:112`) syncs the
 container's own attributes, then returns at `dom.js:116` **before** recursing
 into the children of a preserved node.
@@ -281,7 +281,7 @@ real boundary. Writes must also be same-origin (no cross-site posts).
 A **play preview** runs the built game on a separate port. Since 2026-10-23 it
 runs inside the grader image (`harness/play_container.py`) with no route to the
 host or the internet, published on `127.0.0.1` only. It lives until stopped or
-for 6 h at most; the LIVE BUILD panel stops it (`POST /api/play/stop`) on
+for 6 h at most; the BUILD panel stops it (`POST /api/play/stop`) on
 teardown, and the control plane reaps leftovers when it starts.
 
 ---

@@ -6,12 +6,12 @@
 // clicked (the board can lose the control plane between render and click);
 // dom-patch.test.mjs pins that.
 
-import { board, render, controlReachability, nul } from "./board.js";
+import { board, render, controlReachability, nul, resubscribe } from "./board.js";
 import { armReset, commitReset } from "./panels/treereset.js";
 import { loadRouters, saveRouterKey } from "./panels/routers.js";
 import { setDevMode, isDevModeBusy } from "./panels/devmode.js";
 import { launchCell } from "./panels/create.js";
-import { loadTools, runTool } from "./panels/tools.js";
+import { loadTools, runTool, archiveHistorical } from "./panels/tools.js";
 import { loadBackups, armRestore, commitRestore } from "./panels/restore.js";
 import { previewStop, commitStop } from "./panels/runstart.js";
 import { cancelDetach } from "./panels/tui.js";
@@ -90,6 +90,27 @@ export async function doRunTool(id) {
   // failed re-read keeps the rows and says they may be stale.
   await loadTools();
   render();
+}
+
+/**
+ * ARCHIVE HISTORICAL — move the pre-v2 runs still on the living root into the
+ * archive root. The move is the server's; this handler paints the verb's own
+ * answer and then resubscribes, because the count on the button and the cards
+ * on the board both come from the stream — waiting for the next tick's patch
+ * would leave a moved run on screen next to a count that says it left.
+ */
+export async function doArchiveHistorical() {
+  const reach = controlReachability(board);
+  if (!reach.ok) {
+    console.error(`archive unavailable — ${reach.code}: ${reach.reason}`);
+    render();
+    return;
+  }
+  render();
+  const moved = await archiveHistorical();
+  render();
+  // A refused verb changed nothing, so there is nothing to re-read.
+  if (moved) resubscribe();
 }
 
 export async function detachTui() {
