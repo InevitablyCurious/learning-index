@@ -12,23 +12,29 @@
 // Deliberately absent (they don't exist upstream): verification tiers,
 // ablation receipts, shadow recall.
 
+import { SYSTEM_EPOCH, classifyRun } from "./lib/run-class.mjs";
+
 export const CONTRACT_VERSION = "2.0";
 
 /** Permanent provenance label. Never a badge. Never a tier. */
 export const ATTESTATION = "bench-mock/self-declared";
 
-// ── THE SYSTEM EPOCH ────────────────────────────────────────────────────────
-// A run state its own epoch in manifest.json (`system_epoch`, read onto every
-// card by sources/runs.mjs) or it never did, and the card says null. The 263
-// pre-v2 runs on disk declared nothing; v2 runs declare this string.
+// ── THE RUN LANES ───────────────────────────────────────────────────────────
+// A run dir is classified ONCE, at the walk, by lib/run-class.mjs: "archived"
+// (its path is under an archive root — pruned from the board entirely),
+// "living" (it declares this epoch) or "legacy" (pre-v2, preserved on disk and
+// reachable through `includeHistorical`). sources/runs.mjs stamps `class` on
+// every card it emits; this module is the re-export home the rest of the board
+// imports the epoch from, so there is exactly one wire literal.
 //
-// The board's DEFAULT VIEW is the v2 epoch alone. The old runs are preserved on
-// disk and stay reachable (`includeHistorical`), they are simply not what the
-// current contract measures — so `GET /api/board` narrows runs.list, and
-// `?include_historical=1` widens it back to every card (a v1 card renders `—`
-// downstream for each field it never stated).
+// The board's DEFAULT VIEW is the living lane alone. The legacy runs stay
+// reachable (`includeHistorical`), they are simply not what the current
+// contract measures — so `GET /api/board` narrows runs.list, and
+// `?include_historical=1` widens it back (a legacy card renders `—` downstream
+// for each field it never stated). An archived card is never served in either
+// mode.
 
-export const SYSTEM_EPOCH = "2026-11-08";
+export { SYSTEM_EPOCH };
 
 /** Is this run card a v2-epoch run? Missing or null epoch is not. */
 export function isV2Run(card) {
@@ -36,24 +42,45 @@ export function isV2Run(card) {
 }
 
 /**
- * Filter a runs.list to one epoch. Pure: never mutates the input (that array is
- * part of getBoard's shared cache). Default = the v2 epoch only;
- * `includeHistorical: true` = all runs. A non-array list is returned unchanged —
- * an unwired source states its own absence, and a filter must not invent an
- * empty list in its place.
+ * The card's lane. The card states it (`class`, stamped at the walk); a card
+ * without one — a stale cache, an unwired source — is re-classified from the
+ * path + epoch it does state, so the filter never invents a lane the classifier
+ * would not have.
+ */
+function runClass(card) {
+  if (card?.class === "archived" || card?.class === "living" || card?.class === "legacy") {
+    return card.class;
+  }
+  return classifyRun({ relative: card?.run_dir, systemEpoch: card?.system_epoch });
+}
+
+/**
+ * Filter a runs.list to the lanes the view shows. Pure: never mutates the input
+ * (that array is part of getBoard's shared cache). Default = the living lane
+ * only; `includeHistorical: true` = living + legacy. An archived card is never
+ * served in either mode — the source prunes archive roots at the walk, so this
+ * drop is defensive. A non-array list is returned unchanged — an unwired source
+ * states its own absence, and a filter must not invent an empty list in its
+ * place.
  */
 export function filterBoardRuns(list, opts = {}) {
-  const { epoch = SYSTEM_EPOCH, includeHistorical = false } = opts;
+  const { includeHistorical = false } = opts;
   if (!Array.isArray(list)) return list;
-  if (includeHistorical) return list;
-  return list.filter((r) => r?.system_epoch === epoch);
+  return list.filter((r) => {
+    const cls = runClass(r);
+    if (cls === "archived") return false;
+    return includeHistorical ? true : cls === "living";
+  });
 }
 
 /**
  * The board for ONE response: a SHALLOW COPY whose runs.list is the
- * epoch-filtered cards and whose runs.counts is recomputed from those cards
- * (the exact shape sources/runs.mjs emits). Every other section is the cached
- * object itself, untouched; the cache is never mutated.
+ * lane-filtered cards and whose runs.counts is recomputed from those cards
+ * (the exact shape sources/runs.mjs emits). archived_excluded is the ONE count
+ * that is a source-level fact, not a property of the filtered list — it is
+ * passed through, never recomputed, so filtering cannot make the archive look
+ * as though it never existed. Every other section is the cached object itself,
+ * untouched; the cache is never mutated.
  */
 export function filterBoard(board, opts = {}) {
   const list = board?.runs?.list;
@@ -70,6 +97,9 @@ export function filterBoard(board, opts = {}) {
         scored: filtered.filter((c) => c.status === "scored").length,
         void: filtered.filter((c) => c.status === "void").length,
         harness_error: filtered.filter((c) => c.status === "harness_error").length,
+        living: filtered.filter((c) => runClass(c) === "living").length,
+        legacy: filtered.filter((c) => runClass(c) === "legacy").length,
+        archived_excluded: board.runs.counts?.archived_excluded ?? 0,
       },
     },
   };
@@ -209,9 +239,11 @@ export function emptyBoard() {
     // on. Null until a run exists; never a partial object.
     cells: null,
 
-    // ── THE PER-RUN CARDS ── owned by sources/runs.mjs: one card per run,
-    // current-tree cells plus archived backups, newest tree first, with the
-    // status breakdown. Null until the source answers; never a partial object.
+    // ── THE PER-RUN CARDS ── owned by sources/runs.mjs: one card per cell of the
+    // LIVE tree (archive roots pruned at the walk), newest tree first, each
+    // stamped `living` or `legacy`, with the status breakdown plus
+    // counts.archived_excluded. Null until the source answers; never a partial
+    // object.
     runs: null,
 
     sources: [],

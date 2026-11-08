@@ -1,13 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// THE SYSTEM-EPOCH VIEW — contract.mjs SYSTEM_EPOCH / isV2Run /
-// filterBoardRuns / filterBoard, the helpers GET /api/board serves through.
+// THE RUN-LANE VIEW — contract.mjs SYSTEM_EPOCH / isV2Run / filterBoardRuns /
+// filterBoard, the helpers GET /api/board serves through.
 //
-// The board's default view is the v2 epoch alone: the 263 pre-v2 runs declared
-// no `system_epoch` (null on their cards) and are reachable only with
-// `include_historical`. These tests pin that the default drops them, the
-// historical view returns the SAME array, the filter never mutates the shared
-// cache input, and the per-response copy recomputes runs.counts while leaving
-// every other board section untouched.
+// A card's lane comes from lib/run-class.mjs: "archived" (its path is under an
+// archive root — the source prunes these at the walk, and the filter drops one
+// defensively), "living" (v2 epoch) or "legacy" (pre-v2). The default view is
+// the living lane alone; `includeHistorical` adds legacy; archived never
+// surfaces. counts.archived_excluded is a SOURCE fact and is passed through
+// untouched, so filtering cannot make the archive look like it never existed.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from "node:test";
@@ -19,54 +19,67 @@ import {
   filterBoardRuns,
   filterBoard,
 } from "./contract.mjs";
+import { SYSTEM_EPOCH as CLASSIFIER_EPOCH } from "./lib/run-class.mjs";
 
-const v2 = (over = {}) => ({
-  run_dir: "runs/a",
+const living = (over = {}) => ({
+  run_dir: "9999999999/local/model-a",
   sequence_index: 0,
   status: "scored",
   system_epoch: SYSTEM_EPOCH,
+  class: "living",
   ...over,
 });
 
-const v1 = (over = {}) => ({
-  run_dir: "runs/b",
+const legacy = (over = {}) => ({
+  run_dir: "legacy-model",
   sequence_index: 0,
   status: "scored",
   system_epoch: null,
+  class: "legacy",
   ...over,
 });
 
-test("SYSTEM_EPOCH is the v2 wire epoch", () => {
+const archivedCard = (over = {}) => ({
+  run_dir: "backups/1790000001/1780000001/local/model-old",
+  sequence_index: 0,
+  status: "scored",
+  system_epoch: null,
+  class: "archived",
+  ...over,
+});
+
+test("SYSTEM_EPOCH is the v2 wire epoch, re-exported from the classifier", () => {
   assert.equal(SYSTEM_EPOCH, "2026-11-08");
+  assert.equal(SYSTEM_EPOCH, CLASSIFIER_EPOCH, "one literal, never a second copy");
 });
 
 test("isV2Run: true only for the exact epoch string", () => {
-  assert.equal(isV2Run(v2()), true);
-  assert.equal(isV2Run(v1()), false);
+  assert.equal(isV2Run(living()), true);
+  assert.equal(isV2Run(legacy()), false);
   assert.equal(isV2Run({}), false);
   assert.equal(isV2Run({ system_epoch: "2026-11-09" }), false);
   assert.equal(isV2Run({ system_epoch: " 2026-11-08 " }), false); // not trimmed
   assert.equal(isV2Run(null), false);
 });
 
-test("filterBoardRuns: default keeps v2-epoch cards and drops null/missing", () => {
-  const list = [v2(), v1(), { run_dir: "runs/c", status: "live" }];
-  const kept = filterBoardRuns(list);
-  assert.deepEqual(kept, [list[0]]);
+test("filterBoardRuns: default keeps the living lane and drops legacy + archived", () => {
+  const list = [living(), legacy(), archivedCard()];
+  assert.deepEqual(filterBoardRuns(list), [list[0]]);
 });
 
-test("filterBoardRuns: the 263-card pre-v2 board collapses to the v2 set (empty today)", () => {
-  const list = Array.from({ length: 263 }, (_, i) =>
-    v1({ run_dir: `backups/${i}`, sequence_index: i }),
-  );
-  assert.deepEqual(filterBoardRuns(list), []);
+test("filterBoardRuns: includeHistorical keeps living + legacy, never archived", () => {
+  const list = [living(), legacy(), archivedCard(), archivedCard({ class: "archived", system_epoch: SYSTEM_EPOCH })];
+  const kept = filterBoardRuns(list, { includeHistorical: true });
+  assert.deepEqual(kept, [list[0], list[1]], "an archived path never surfaces, even declaring the v2 epoch");
 });
 
-test("filterBoardRuns: includeHistorical returns ALL runs", () => {
-  const list = [v2(), v1(), { run_dir: "runs/c" }];
-  const all = filterBoardRuns(list, { includeHistorical: true });
-  assert.equal(all.length, 3);
-  assert.deepEqual(all, list);
+test("filterBoardRuns: a card with no class is re-classified from its path and epoch", () => {
+  // No `class` (a stale cache / an unwired source): the classifier decides.
+  const v2 = { run_dir: "9999999999/x", system_epoch: SYSTEM_EPOCH, status: "scored" };
+  const old = { run_dir: "legacy-model", system_epoch: null, status: "scored" };
+  const gone = { run_dir: "backups/1/2/x", system_epoch: null, status: "scored" };
+  assert.deepEqual(filterBoardRuns([v2, old, gone]), [v2]);
+  assert.deepEqual(filterBoardRuns([v2, old, gone], { includeHistorical: true }), [v2, old]);
 });
 
 test("filterBoardRuns: a non-array list is returned unchanged, never invented", () => {
@@ -76,16 +89,11 @@ test("filterBoardRuns: a non-array list is returned unchanged, never invented", 
   assert.equal(filterBoardRuns(obj), obj);
 });
 
-test("filterBoardRuns: an explicit epoch overrides the default", () => {
-  const list = [v2(), v1({ system_epoch: "2026-11-09" })];
-  assert.deepEqual(filterBoardRuns(list, { epoch: "2026-11-09" }), [list[1]]);
-});
-
 test("filterBoardRuns never mutates the (cached) input array", () => {
-  const list = [v2(), v1()];
+  const list = [living(), legacy(), archivedCard()];
   filterBoardRuns(list);
   filterBoardRuns(list, { includeHistorical: true });
-  assert.equal(list.length, 2);
+  assert.equal(list.length, 3);
 });
 
 // ── the per-response board: filtered list + truthful counts, nothing else ──
@@ -96,50 +104,88 @@ function fixture() {
     generated_at: 1,
     runs: {
       list: [
-        v2({ run_dir: "runs/a", sequence_index: 0, status: "scored" }),
-        v2({ run_dir: "runs/a", sequence_index: 1, status: "live" }),
-        v2({ run_dir: "runs/d", sequence_index: 0, status: "harness_error" }),
-        v2({ run_dir: "runs/e", sequence_index: 0, status: "void" }),
-        v1({ run_dir: "backups/1", sequence_index: 0, status: "scored" }),
-        v1({ run_dir: "backups/2", sequence_index: 0, status: "void" }),
-        { run_dir: "backups/3", sequence_index: 0, status: "scored" },
+        living({ run_dir: "9999999999/a", sequence_index: 0, status: "scored" }),
+        living({ run_dir: "9999999999/a", sequence_index: 1, status: "live" }),
+        living({ run_dir: "9999999999/d", sequence_index: 0, status: "harness_error" }),
+        living({ run_dir: "9999999999/e", sequence_index: 0, status: "void" }),
+        legacy({ run_dir: "legacy-1", sequence_index: 0, status: "scored" }),
+        legacy({ run_dir: "legacy-2", sequence_index: 0, status: "void" }),
+        archivedCard({ run_dir: "backups/1/2/x", sequence_index: 0, status: "scored" }),
       ],
-      counts: { total: 7, live: 1, scored: 3, void: 2, harness_error: 1 },
+      counts: {
+        total: 7,
+        live: 1,
+        scored: 3,
+        void: 2,
+        harness_error: 1,
+        living: 4,
+        legacy: 2,
+        archived_excluded: 261,
+      },
     },
     // Sections that must survive the filter by reference, untouched.
     provenance: { attestation: "bench-mock/self-declared" },
-    by_cell: { "runs/a::0": { run: {} } },
+    by_cell: { "9999999999/a::0": { run: {} } },
     sources: [{ id: "runs", ok: true, fields: [], reason: null, ms: 1 }],
     cells: { ok: true, list: [] },
   };
 }
 
-test("filterBoard: default → v2-epoch list only, counts recomputed from it", () => {
+test("filterBoard: default → the living lane only, counts recomputed from it", () => {
   const board = fixture();
   const out = filterBoard(board);
 
   assert.equal(out.runs.list.length, 4);
-  assert.ok(out.runs.list.every(isV2Run));
+  assert.ok(out.runs.list.every((c) => c.class === "living"));
   assert.deepEqual(out.runs.counts, {
     total: 4,
     live: 1,
     scored: 1,
     void: 1,
     harness_error: 1,
+    living: 4,
+    legacy: 0,
+    archived_excluded: 261,
   });
 });
 
-test("filterBoard: includeHistorical → every card, counts match the full list", () => {
+test("filterBoard: includeHistorical → living + legacy, counts match the full list", () => {
   const board = fixture();
   const out = filterBoard(board, { includeHistorical: true });
 
-  assert.equal(out.runs.list.length, 7);
+  assert.equal(out.runs.list.length, 6);
+  assert.equal(out.runs.list.some((c) => c.class === "archived"), false);
   assert.deepEqual(out.runs.counts, {
-    total: 7,
+    total: 6,
     live: 1,
-    scored: 3,
+    scored: 2,
     void: 2,
     harness_error: 1,
+    living: 4,
+    legacy: 2,
+    archived_excluded: 261,
+  });
+});
+
+test("filterBoard: archived_excluded survives a view where every card is filtered out", () => {
+  const board = fixture();
+  board.runs.list = [legacy(), legacy({ run_dir: "legacy-3" })];
+  board.runs.counts = {
+    total: 2, live: 0, scored: 2, void: 0, harness_error: 0,
+    living: 0, legacy: 2, archived_excluded: 261,
+  };
+
+  const out = filterBoard(board);
+  assert.deepEqual(out.runs.list, []);
+  assert.deepEqual(out.runs.counts, {
+    total: 0,
+    live: 0,
+    scored: 0,
+    void: 0,
+    harness_error: 0,
+    living: 0,
+    legacy: 0,
+    archived_excluded: 261,
   });
 });
 
@@ -171,20 +217,4 @@ test("filterBoard never mutates the cached board (list, counts, runs identity)",
 test("filterBoard: an unwired runs section (null) is passed through, not invented", () => {
   const board = { ...fixture(), runs: null };
   assert.equal(filterBoard(board), board);
-});
-
-test("filterBoard: an all-pre-v2 board serves an empty list with truthful zero counts", () => {
-  const board = fixture();
-  board.runs.list = [v1(), v1()];
-  board.runs.counts = { total: 2, live: 0, scored: 2, void: 0, harness_error: 0 };
-
-  const out = filterBoard(board);
-  assert.deepEqual(out.runs.list, []);
-  assert.deepEqual(out.runs.counts, {
-    total: 0,
-    live: 0,
-    scored: 0,
-    void: 0,
-    harness_error: 0,
-  });
 });

@@ -28,6 +28,7 @@ Thumbs.db
 # Okp: NEVER commit the corpus, keys, tokens, or run artifacts.
 # The adapter is open-sourced; the corpus/keys/epoch_sk are NOT.
 runs/
+/runs-archive/
 *.catalog.jsonl
 *.review.jsonl
 *.private.json

@@ -1,6 +1,9 @@
-// SOURCE: runs — one card per run: every cell of the current tree PLUS every
-// archived run under runs/backups, newest tree first. The dashboard's per-run
-// cards read this section; the browser itself never touches the filesystem.
+// SOURCE: runs — one card per run: every cell of the LIVE tree, newest tree
+// first. Archive roots (runs/backups/, runs/_archived-*/) are PRUNED at the
+// walk — never enumerated, never rendered — and only their size is reported
+// (counts.archived_excluded), so a lane that disappears is explainable. The
+// dashboard's per-run cards read this section; the browser never touches the
+// filesystem.
 //
 // ── WHY THIS IS ITS OWN SOURCE ──────────────────────────────────────────────
 //
@@ -14,9 +17,9 @@
 // ── PRODUCER STATES, CONSUMER READS ─────────────────────────────────────────
 //
 // Every measurement on a card is a field some artifact states, read in a fixed
-// precedence: manifest.status.jsonl (the attempt records) → the archived
-// backup's results-ledger.jsonl → the cell's own live.jsonl. A field no
-// artifact recorded is null — "not recorded" — never 0 and never derived.
+// precedence: manifest.status.jsonl (the attempt records) → the grader's
+// per-attempt reports → the cell's own live.jsonl. A field no artifact recorded
+// is null — "not recorded" — never 0 and never derived.
 //
 // The notice counts (loop kills, stalls, cap cut-offs) read the cell's WHOLE
 // live.jsonl, not a tail: a tail-bounded read would silently undercount
@@ -32,21 +35,27 @@
 // ── ENUMERATION ─────────────────────────────────────────────────────────────
 //
 // Current cells mirror sources/cells.mjs (readRunState + the campaign's
-// batch.json) without calling it — one read of each, never two. Archived runs
-// come from history.listRunCells, which already walks runs/backups with
-// listCampaignDirs(root, { includeBackups: true }); its rows carry `cell`
-// relative to runs/backups ("<stamp>/<oldTree>/…/<model>/memory<ARM>/cell-NNNN")
-// and `tree_id` (the inner archived tree id, null on an unrecognised layout).
+// batch.json) without calling it — one read of each, never two. Campaigns the
+// run state does not name are found by walking the LIVE root only
+// (tree.listLiveCampaignDirs, whose walk skips runs/backups/) and their cells by
+// tree.listCellDirs; a cell the state path already emitted is skipped, so every
+// (run_dir, sequence_index) appears exactly once.
 //
-// Sort: the run's tree id DESCENDING (current = its run_dir's leading tree id,
-// falling back to the active pointer; archived = the inner oldTreeId), then
-// sequence_index ASCENDING — so the current tree leads and archived runs
-// follow, newest first.
+// Archive roots are pruned, not filtered: no cell under runs/backups/ or
+// runs/_archived-*/ is ever read or emitted. lib/run-class.mjs is the single
+// decider — isArchivePath is the second gate for roots tree.mjs does not know.
+// Their size is counts.archived_excluded: one per archived campaign home (the
+// run dirs the pre-prune board built cards from; it emitted a card per CELL and
+// a campaign's cells share a home, so the old card count can sit a few above).
+//
+// Sort: the run's tree id DESCENDING (a tree campaign = its leading tree id, a
+// legacy flat campaign = the active pointer's), then sequence_index ASCENDING.
 
 import { dirname, join, relative, sep } from "node:path";
 import { readdir, readFile } from "node:fs/promises";
 
 import { int, str } from "../contract.mjs";
+import { classifyRun, isArchivePath } from "../lib/run-class.mjs";
 import {
   parseJsonl,
   readTextCapped,
@@ -55,17 +64,17 @@ import {
   cellLiveStreamPath,
   activeTreeId,
   isTreeId,
+  LIVE_STREAM_FILENAME,
 } from "./_runtime.mjs";
 import { readV2Cost } from "./cost.mjs";
 import { readRunState } from "../../runstate.mjs";
 import { readBatch } from "../../batch.mjs";
-import { listRunCells } from "../../history.mjs";
-import { listLiveCampaignDirs, BACKUPS_DIR } from "../../tree.mjs";
+import { listCampaignDirs, listCellDirs, listLiveCampaignDirs } from "../../tree.mjs";
 
 export const id = "runs";
 export const fields = ["runs"];
 export function describe() {
-  return "one card per run — current-tree cells plus archived runs, newest tree first";
+  return "one card per run — every cell of the live tree, newest tree first; archive roots are pruned";
 }
 
 // ── the cell's own live.jsonl ────────────────────────────────────────────────
@@ -230,37 +239,6 @@ function foldManifest(recs) {
   return out;
 }
 
-// ── the archived backup's results-ledger.jsonl ───────────────────────────────
-
-/**
- * One backup stamp's results-ledger rows. Often an EMPTY file (0 lines) —
- * parseJsonl yields [] and the ledger simply states nothing. Memoized per
- * stamp per read() call: every archived cell of one backup shares the file.
- */
-async function ledgerRows(stampDir) {
-  const text = await readTextCapped(join(stampDir, "results-ledger.jsonl"));
-  return text === null ? [] : parseJsonl(text);
-}
-
-/**
- * The ledger row for one archived cell, or null. Matched on ALL THREE stated
- * identity fields (tree_id, run_id = the model dir name, sequence_index):
- * one backup can hold several campaigns whose sequence indexes overlap, and a
- * row that cannot be tied to exactly one cell vouches for none. The ledger is
- * append-only, so the LAST match is the newest statement.
- */
-function matchLedger(rows, treeId, modelName, seq) {
-  if (treeId === null || seq === null) return null;
-  let found = null;
-  for (const r of rows) {
-    if (String(r?.tree_id ?? "") !== treeId) continue;
-    if (str(r?.run_id) !== modelName) continue;
-    if (int(r?.sequence_index) !== seq) continue;
-    found = r;
-  }
-  return found;
-}
-
 // ── the read ─────────────────────────────────────────────────────────────────
 
 async function memo(cache, key, make) {
@@ -268,10 +246,33 @@ async function memo(cache, key, make) {
   return cache.get(key);
 }
 
+/** The identity a card is keyed by everywhere: one card per cell. */
+function cellKey(base) {
+  return `${base.run_dir ?? ""}::${base.sequence_index ?? ""}`;
+}
+
+/**
+ * How many run entries the board excluded because their path is under an
+ * archive root. Unit: archived campaign HOMES — a directory bearing a manifest,
+ * i.e. the run dirs the pre-prune board built cards from. That board emitted one
+ * card per CELL and a campaign's cells share one home, so the old card count can
+ * sit a few above this. Directory walk only: no artifact is read and no card is
+ * built from these dirs. 0 when the walk finds nothing, never an invented count.
+ */
+async function countArchivedCampaigns(runsRoot) {
+  try {
+    const all = await listCampaignDirs(runsRoot, { includeBackups: true });
+    return all.filter((c) => isArchivePath(c.relative)).length;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * The play-able pair for a LIVE cell — the same {benchmark_id, cell} shape
- * history.listRunCells emits, derived from the cell's on-disk stream path (no
- * second scan): the first segment relative to runsRoot is the resolvable
+ * history.listRunCells emits (a shared wire shape, not a call: this source
+ * reads the live root directly), derived from the cell's on-disk stream path
+ * (no second scan): the first segment relative to runsRoot is the resolvable
  * benchmark_id, the rest is the cell. Both null when the cell has no stream.
  */
 function livePlayPair(runsRoot, livePath) {
@@ -334,7 +335,6 @@ export async function read(ctx) {
       model: r.model ?? null,
       arm: r.arm ?? null,
       running: true,
-      archived: false,
       sort_key: null, // filled below, once the active tree id is known
       live_path: livePath,
     });
@@ -352,7 +352,6 @@ export async function read(ctx) {
       model: e?.model ?? null,
       arm: e?.arm ?? "off",
       running: false,
-      archived: false,
       sort_key: null,
       live_path: livePath,
     });
@@ -371,61 +370,78 @@ export async function read(ctx) {
       model: e.model ?? null,
       arm: e.arm ?? "off",
       running: false,
-      archived: false,
       sort_key: null,
       live_path: livePath,
     });
     seen.add(idx);
   }
 
-  // ── ARCHIVED RUNS ── every cell of every backup, from the history reader
-  // that already walks runs/backups. Its `cell` is relative to runs/backups:
-  // "<stamp>/<oldTree>/…/<model>/memory<ARM>/cell-NNNN"; stripping the last
-  // two segments leaves the archived run's model dir.
-  for (const row of await listRunCells(ctx.runsRoot)) {
-    if (row.archived !== true) continue;
-    const parts = String(row.cell ?? "").split(sep);
-    const seqMatch = /^cell-(\d+)$/i.exec(parts[parts.length - 1] ?? "");
-    const armMatch = /^memory(.+)$/i.exec(parts[parts.length - 2] ?? "");
-    bases.push({
-      sequence_index: seqMatch ? Number(seqMatch[1]) : null,
-      run_dir: [BACKUPS_DIR, ...parts.slice(0, -2)].join("/"),
-      benchmark_id: row.benchmark_id ?? null,
-      cell: row.cell ?? null,
-      model: null,
-      arm: armMatch ? armMatch[1].toLowerCase() : null,
-      running: false,
-      archived: true,
-      // The inner archived tree id (null on an unrecognised layout → sorts oldest).
-      sort_key: Number(row.tree_id) || 0,
-      stamp: parts[0],
-      model_name: parts[parts.length - 3] ?? null,
-      tree_id: row.tree_id ?? null,
-      live_path: join(ctx.runsRoot, BACKUPS_DIR, row.cell, "live.jsonl"),
-    });
+  // ── LIVE-ROOT CAMPAIGNS ── every campaign the run state did not name, from
+  // the PRUNED walk: tree.listLiveCampaignDirs skips runs/backups/ at the
+  // readdir, so an archive is never enumerated and no archived cell is read. A
+  // cell the state path already emitted (it carries the launch record's model
+  // and arm) is skipped, never overwritten.
+  const emitted = new Set(bases.map(cellKey));
+  let campaigns = [];
+  try {
+    campaigns = await listLiveCampaignDirs(ctx.runsRoot);
+  } catch {
+    campaigns = [];
+  }
+  for (const campaign of campaigns) {
+    // The classifier's second gate: an archive root tree.mjs does not know
+    // about (runs/_archived-<date>/) never becomes a card either.
+    if (isArchivePath(campaign.relative)) continue;
+    let cells = [];
+    try {
+      cells = await listCellDirs(campaign.dir);
+    } catch {
+      continue; // the campaign vanished between the listing and the read
+    }
+    const relParts = campaign.relative.split(sep);
+    const campaignRoot = join(ctx.runsRoot, campaign.relative);
+    for (const cell of cells) {
+      if (emitted.has(`${campaign.relative}::${cell.seq}`)) continue;
+      emitted.add(`${campaign.relative}::${cell.seq}`);
+      // `cell` is the resolvable pair half: relative to the benchmark root (the
+      // campaign path's first segment), the same shape livePlayPair emits.
+      bases.push({
+        sequence_index: cell.seq,
+        run_dir: campaign.relative,
+        benchmark_id: relParts[0] ?? null,
+        cell: [...relParts.slice(1), ...relative(campaignRoot, cell.dir).split(sep)].join("/"),
+        model: null,
+        arm: cell.arm,
+        running: false,
+        sort_key: null,
+        live_path: join(cell.dir, LIVE_STREAM_FILENAME),
+      });
+    }
   }
 
-  // Current cards sort by their own tree: the run_dir's leading segment when
-  // it is a tree id, else the active pointer's (a legacy flat campaign belongs
-  // to the era the pointer names).
+  // The state path can name a run that has since been archived (a launch record
+  // outlives its tree). Its path is the fact: it is never rendered. Nothing is
+  // counted here — archived_excluded is the archive root's own size.
+  const visible = bases.filter((b) => !isArchivePath(b.run_dir));
+
+  // Cards sort by their own tree: the run_dir's leading segment when it is a
+  // tree id, else the active pointer's (a legacy flat campaign belongs to the
+  // era the pointer names).
   const activeId = Number(await activeTreeId(ctx.runsRoot)) || 0;
-  for (const b of bases) {
-    if (b.sort_key !== null) continue;
+  for (const b of visible) {
     const head = String(b.run_dir ?? "").split("/")[0];
     b.sort_key = isTreeId(head) ? Number(head) : activeId;
   }
 
-  // ── CARD FIELDS ── per-cell artifacts, memoized per run_dir / stamp for
-  // this call only (a per-call memo cannot go stale; nothing is cached across
-  // polls).
+  // ── CARD FIELDS ── per-cell artifacts, memoized per run_dir for this call
+  // only (a per-call memo cannot go stale; nothing is cached across polls).
   const manifestCache = new Map();
-  const ledgerCache = new Map();
   const scorecardCache = new Map();
-  // A card's run-level manifest.json is read once per run_dir: 262 archived
-  // cards share ~260 run dirs, and `system_epoch` is a property of the run.
+  // A card's run-level manifest.json is read once per run_dir: the cells of one
+  // campaign share it, and `system_epoch`/`class` are properties of the run.
   const runManifestCache = new Map();
   const cards = [];
-  for (const b of bases) {
+  for (const b of visible) {
     const modelDir = b.run_dir ? join(ctx.runsRoot, b.run_dir) : null;
 
     let man = null;
@@ -437,18 +453,10 @@ export async function read(ctx) {
 
     const stream = await readCellStream(b.live_path);
 
-    let ledger = null;
-    if (b.archived) {
-      const rows = await memo(ledgerCache, b.stamp, () =>
-        ledgerRows(join(ctx.runsRoot, BACKUPS_DIR, b.stamp)),
-      );
-      ledger = matchLedger(rows, b.tree_id, b.model_name, b.sequence_index);
-    }
-
     // A run that aborted before its status stream was written (run 1790202713,
     // harness_error) still has the grader's own per-attempt reports beside its
     // stream: the problem counts they state, first and last MEASURED attempt.
-    const graded = man || ledger ? null : await gradedCounts(b.live_path);
+    const graded = man ? null : await gradedCounts(b.live_path);
 
     // status: live → harness_error → scored → void, in that precedence.
     const terminalReason =
@@ -509,6 +517,7 @@ export async function read(ctx) {
       : null;
     const cellDir = b.live_path ? dirname(b.live_path) : null;
     const cost = await readV2Cost(cellDir);
+    const epoch = str(systemEpoch);
 
     cards.push({
       sort_key: b.sort_key,
@@ -517,23 +526,27 @@ export async function read(ctx) {
         sequence_index: b.sequence_index ?? null,
         benchmark_id: b.benchmark_id ?? null,
         cell: b.cell ?? null,
-        archived: b.archived,
-        model: b.model ?? man?.model ?? (b.archived ? str(ledger?.model) : null) ?? null,
-        arm: b.arm ?? man?.arm ?? (b.archived ? str(ledger?.arm) : null) ?? null,
+        archived: false,
+        // The run's lane: "living" (v2 epoch) or "legacy" (declares none).
+        // "archived" is unrepresentable here — archive roots are pruned at the
+        // walk, which is what makes the lane disappear instead of shrinking.
+        class: classifyRun({ relative: b.run_dir, systemEpoch: epoch }),
+        model: b.model ?? man?.model ?? null,
+        arm: b.arm ?? man?.arm ?? null,
         status,
-        problems_before: man?.problems_before ?? int(ledger?.problems_before) ?? graded?.first ?? null,
-        problems_after: man?.problems_after ?? int(ledger?.problems_after) ?? graded?.last ?? null,
+        problems_before: man?.problems_before ?? graded?.first ?? null,
+        problems_after: man?.problems_after ?? graded?.last ?? null,
         // Identity delta: only the manifest's attempt records carry gate
-        // identities — the ledger and the grader reports state counts alone,
-        // so the archived fallbacks leave these null ("not recorded").
+        // identities — the grader reports state counts alone, so that fallback
+        // leaves these null ("not recorded").
         problems_fixed: man?.problems_fixed ?? null,
         problems_broke: man?.problems_broke ?? null,
         context_peak: contextPeak,
         context_window: contextWindow,
-        turns: man?.turns ?? int(ledger?.turns) ?? null,
+        turns: man?.turns ?? null,
         loop_errors: loopErrors,
         stalled_limit_errors: stalledLimit,
-        system_epoch: str(systemEpoch),
+        system_epoch: epoch,
         cost,
       },
     });
@@ -555,6 +568,14 @@ export async function read(ctx) {
           scored: list.filter((c) => c.status === "scored").length,
           void: list.filter((c) => c.status === "void").length,
           harness_error: list.filter((c) => c.status === "harness_error").length,
+          // The lanes of the emitted list. `living` is the v2 epoch (what the
+          // default board view keeps), `legacy` the pre-v2 runs still on the
+          // live root. Distinct from `live`, which is STATUS (a running process).
+          living: list.filter((c) => c.class === "living").length,
+          legacy: list.filter((c) => c.class === "legacy").length,
+          // Not a card count: the archive roots' own size, so a vanished lane
+          // is explained rather than silently gone.
+          archived_excluded: await countArchivedCampaigns(ctx.runsRoot),
         },
       },
     },

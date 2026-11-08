@@ -34,6 +34,7 @@ import { routes as rosterRoutes } from "./routes/roster.mjs";
 import { routes as snapshotRoutes } from "./routes/snapshots.mjs";
 import { routes as runRoutes } from "./routes/run.mjs";
 import { routes as treeRoutes } from "./routes/tree.mjs";
+import { routes as archiveRoutes } from "./routes/archive.mjs";
 import { routes as toolRoutes } from "./routes/tools.mjs";
 import { routes as challengeRoutes } from "./routes/challenges.mjs";
 import { routes as eventRoutes } from "./routes/events.mjs";
@@ -53,6 +54,7 @@ for (const r of [
   ...snapshotRoutes,
   ...runRoutes,
   ...treeRoutes,
+  ...archiveRoutes,
   ...toolRoutes,
 ...challengeRoutes,
   ...eventRoutes,

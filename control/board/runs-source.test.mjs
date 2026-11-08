@@ -1,42 +1,46 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// SOURCE: runs — one card per run (current-tree cells + archived backups).
+// SOURCE: runs — one card per cell of the LIVE tree, and NOTHING from an
+// archive root.
 //
-// The fixture is a whole bench in a tmpdir: an active tree with one scored
-// cell (launch record + batch + manifest.status.jsonl + live.jsonl) and one
-// archived run under backups/<stamp>/<oldTree>/… whose live.jsonl carries
-// synthetic notices (guard_abort / turn_stalled / length_cutoff) and a
-// cell.end with terminal_reason "harness_error", with an EMPTY results
-// ledger — the common archived shape. No run artifact on disk today carries
-// length_cutoff / context_peak / cap_cutoffs (they landed in 3fbe190), so
-// these fixtures are the only place the counting is pinned.
+// The fixture is a whole bench in a tmpdir:
+//   · an active tree with one scored v2 cell (launch record + batch + manifest
+//     with `system_epoch`, status stream, live.jsonl)                 → living
+//   · a legacy FLAT campaign (manifest without `system_epoch`, no status
+//     stream, an empty-ish live.jsonl ending harness_error)            → legacy
+//   · an archived campaign under backups/<stamp>/<oldTree>/…           → PRUNED
+//
+// The archived campaign is a complete, readable run on purpose: its absence
+// from the list is the prune, not a missing fixture.
 //
 // Tree ids are chosen so the fixture outranks any real tree (9999999999) and
-// the archive under-ranks it (1780000001): the newest-first order assertion
-// holds even if a real bench is running while the suite runs (readRunState's
-// process scan is machine-wide). Assertions target the fixture's cards by
-// run_dir rather than the whole list, for the same reason.
+// the archive under-ranks it (1780000001): order assertions hold even if a real
+// bench is running while the suite runs (readRunState's process scan is
+// machine-wide). Assertions target the fixture's cards by run_dir for the same
+// reason.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { read, id, fields, attemptDelta } from "./sources/runs.mjs";
+import { getBoard } from "./lib/board-build.mjs";
 
 const CURRENT_TREE = "9999999999";
 const CURRENT_RUN = `${CURRENT_TREE}/local/local-llm-proxy/omlx/model-a`;
+const LEGACY_RUN = "legacy-model";
 const STAMP = "1790000001";
 const OLD_TREE = "1780000001";
 const ARCHIVED_RUN = `backups/${STAMP}/${OLD_TREE}/local/local-llm-proxy/omlx/model-old`;
 
 /** The card contract: EXACTLY these keys, in this order, on every card. */
 const CARD_KEYS = [
-  "run_dir", "sequence_index", "benchmark_id", "cell", "archived", "model",
-  "arm", "status", "problems_before", "problems_after", "problems_fixed",
-  "problems_broke", "context_peak", "context_window", "turns", "loop_errors",
-  "stalled_limit_errors", "system_epoch", "cost",
+  "run_dir", "sequence_index", "benchmark_id", "cell", "archived", "class",
+  "model", "arm", "status", "problems_before", "problems_after",
+  "problems_fixed", "problems_broke", "context_peak", "context_window",
+  "turns", "loop_errors", "stalled_limit_errors", "system_epoch", "cost",
 ];
 
 const notice = (event, terminal) =>
@@ -77,7 +81,7 @@ function attemptRec(attempt, fails, passes, failedGates = G10_TITLES) {
 function fixture() {
   const runsRoot = mkdtempSync(join(tmpdir(), "runs-source-"));
 
-  // ── the active tree ──
+  // ── the active tree: a v2 campaign ──
   writeFileSync(
     join(runsRoot, "active-tree.json"),
     JSON.stringify({ active: CURRENT_TREE, created_at: null, history: [] }),
@@ -87,7 +91,8 @@ function fixture() {
   writeFileSync(
     join(campaign, "manifest.json"),
     JSON.stringify({
-      created_at: "2026-09-01T00:00:00Z",
+      created_at: "2026-11-08T00:00:00Z",
+      system_epoch: "2026-11-08", // the v2 declaration → class "living"
       schedule: [{ sequence_index: 0, memory_mode: "off", provider_pin: "m-current" }],
     }),
   );
@@ -141,16 +146,13 @@ function fixture() {
     ].join("\n") + "\n",
   );
 
-  // ── the archived run ── backups/<stamp>/<oldTree>/…/model-old
-  const oldCampaign = join(runsRoot, ARCHIVED_RUN);
-  mkdirSync(join(oldCampaign, "memoryOFF", "cell-0000"), { recursive: true });
-  // The campaign manifest (discovery), but NO manifest.status.jsonl and an
-  // EMPTY results ledger: the common archived shape — the stream is the only
-  // source that states anything.
-  writeFileSync(join(oldCampaign, "manifest.json"), JSON.stringify({ created_at: "2026-08-01T00:00:00Z" }));
-  writeFileSync(join(runsRoot, "backups", STAMP, "results-ledger.jsonl"), "");
+  // ── a LEGACY FLAT campaign: no tree id, no system_epoch, and (the common
+  // old shape) no manifest.status.jsonl — the stream is the only witness. ──
+  const legacy = join(runsRoot, LEGACY_RUN);
+  mkdirSync(join(legacy, "memoryOFF", "cell-0000"), { recursive: true });
+  writeFileSync(join(legacy, "manifest.json"), JSON.stringify({ created_at: "2026-08-01T00:00:00Z" }));
   writeFileSync(
-    join(oldCampaign, "memoryOFF", "cell-0000", "live.jsonl"),
+    join(legacy, "memoryOFF", "cell-0000", "live.jsonl"),
     [
       JSON.stringify({ kind: "heartbeat", ts: 1 }),
       notice("turn_truncated_retried", "guard_abort"),
@@ -162,12 +164,28 @@ function fixture() {
     ].join("\n") + "\n",
   );
 
+  // ── an ARCHIVED campaign, complete and readable: it must never surface ──
+  const oldCampaign = join(runsRoot, ARCHIVED_RUN);
+  mkdirSync(join(oldCampaign, "memoryOFF", "cell-0000"), { recursive: true });
+  writeFileSync(
+    join(oldCampaign, "manifest.json"),
+    JSON.stringify({ created_at: "2026-08-01T00:00:00Z", system_epoch: "2026-11-08" }),
+  );
+  writeFileSync(join(runsRoot, "backups", STAMP, "results-ledger.jsonl"), "");
+  writeFileSync(
+    join(oldCampaign, "memoryOFF", "cell-0000", "live.jsonl"),
+    [
+      JSON.stringify({ kind: "heartbeat", ts: 1 }),
+      JSON.stringify({ kind: "cell.end", verdict: "FAIL", terminal_reason: "harness_error" }),
+    ].join("\n") + "\n",
+  );
+
   return runsRoot;
 }
 
 /** The fixture's own cards, in list order (any external run is filtered out). */
 function fixtureCards(list) {
-  return list.filter((c) => c.run_dir === CURRENT_RUN || c.run_dir === ARCHIVED_RUN);
+  return list.filter((c) => c.run_dir === CURRENT_RUN || c.run_dir === LEGACY_RUN);
 }
 
 test("runs source: id/fields contract", () => {
@@ -175,7 +193,7 @@ test("runs source: id/fields contract", () => {
   assert.deepEqual(fields, ["runs"]);
 });
 
-test("runs source: enumerates the current cell AND the archived run, newest tree first", async () => {
+test("runs source: enumerates the live root only — the archived campaign never surfaces", async () => {
   const runsRoot = fixture();
   try {
     const res = await read({ runsRoot, benchRoot: runsRoot });
@@ -183,22 +201,24 @@ test("runs source: enumerates the current cell AND the archived run, newest tree
     const { list, counts } = res.patch.runs;
 
     const cards = fixtureCards(list);
-    assert.deepEqual(cards.map((c) => c.run_dir), [CURRENT_RUN, ARCHIVED_RUN],
-      "the current tree (9999999999) leads; the archived run (1780000001) follows");
-    // The order holds in the RAW list too, not just after filtering.
-    assert.ok(
-      list.findIndex((c) => c.run_dir === CURRENT_RUN) < list.findIndex((c) => c.run_dir === ARCHIVED_RUN),
-      "newest-first is a property of the emitted list",
-    );
-    assert.equal(cards[0].archived, false);
-    assert.equal(cards[1].archived, true);
+    assert.deepEqual(cards.map((c) => c.run_dir), [CURRENT_RUN, LEGACY_RUN],
+      "the v2 tree cell and the legacy flat campaign; nothing else from this root");
+    assert.equal(cards[0].class, "living");
+    assert.equal(cards[1].class, "legacy");
+
+    // The prune, stated directly: no card names the archive, whatever its epoch.
+    assert.equal(list.some((c) => c.run_dir === ARCHIVED_RUN), false);
+    assert.equal(list.some((c) => String(c.run_dir ?? "").startsWith("backups/")), false);
+    assert.equal(list.some((c) => c.class === "archived"), false, "archived is unrepresentable at the source");
 
     // counts is a breakdown of the emitted list by status, whatever else ran.
     assert.equal(counts.total, list.length);
-    assert.equal(
-      counts.live + counts.scored + counts.void + counts.harness_error,
-      counts.total,
-    );
+    assert.equal(counts.live + counts.scored + counts.void + counts.harness_error, counts.total);
+    assert.equal(counts.living + counts.legacy, counts.total, "every card is one lane");
+    assert.equal(counts.living, list.filter((c) => c.class === "living").length);
+    assert.equal(counts.legacy, list.filter((c) => c.class === "legacy").length);
+    // One archived campaign home in the fixture; the unit is the run dir, not the cell.
+    assert.equal(counts.archived_excluded, 1);
     assert.equal(counts.scored >= 1, true);
     assert.equal(counts.harness_error >= 1, true);
   } finally {
@@ -210,20 +230,22 @@ test("runs source: each card carries EXACTLY the contract keys, with the stated 
   const runsRoot = fixture();
   try {
     const res = await read({ runsRoot, benchRoot: runsRoot });
-    const [current, archived] = fixtureCards(res.patch.runs.list);
+    const [current, legacy] = fixtureCards(res.patch.runs.list);
 
-    for (const card of [current, archived]) {
+    for (const card of [current, legacy]) {
       assert.deepEqual(Object.keys(card), CARD_KEYS, "the card shape is the shared contract");
     }
 
-    // Current: the launch record states model/arm; the manifest states the
-    // measurement; the scorecard states the verdict; the stream states the kills.
+    // Living: the launch record states model/arm; the manifest states the
+    // measurement and the epoch; the scorecard states the verdict; the stream
+    // states the kills.
     assert.deepEqual(current, {
       run_dir: CURRENT_RUN,
       sequence_index: 0,
       benchmark_id: CURRENT_TREE,
       cell: "local/local-llm-proxy/omlx/model-a/memoryOFF/cell-0000",
       archived: false,
+      class: "living",
       model: "m-current",
       arm: "off",
       status: "scored",
@@ -236,25 +258,26 @@ test("runs source: each card carries EXACTLY the contract keys, with the stated 
       turns: 42,
       loop_errors: 1,
       stalled_limit_errors: 2, // 1 turn_stalled + 1 length_cutoff
-      system_epoch: null, // the fixture's manifest.json declares no epoch
-      cost: null, // the fixture writes no cost.json (and no v2 run exists yet)
+      system_epoch: "2026-11-08",
+      cost: null, // the fixture writes no cost.json
     });
 
-    // Archived: no manifest.status.jsonl, an empty ledger — every unrecorded
-    // measurement is null ("not recorded"), NEVER 0; the status is the
-    // cell.end terminal_reason; the counts come from the notices.
-    assert.deepEqual(archived, {
-      run_dir: ARCHIVED_RUN,
+    // Legacy: no manifest.status.jsonl — every unrecorded measurement is null
+    // ("not recorded"), NEVER 0; the status is the cell.end terminal_reason; the
+    // counts come from the notices; the arm from the harness's own dir name.
+    assert.deepEqual(legacy, {
+      run_dir: LEGACY_RUN,
       sequence_index: 0,
-      benchmark_id: "backups", // the resolvable half for every archived row
-      cell: `${STAMP}/${OLD_TREE}/local/local-llm-proxy/omlx/model-old/memoryOFF/cell-0000`,
-      archived: true,
+      benchmark_id: LEGACY_RUN,
+      cell: "memoryOFF/cell-0000",
+      archived: false,
+      class: "legacy",
       model: null,
-      arm: "off", // stated by the harness's own memoryOFF dir name
+      arm: "off",
       status: "harness_error",
       problems_before: null,
       problems_after: null,
-      problems_fixed: null, // no manifest, and the ledger states counts alone
+      problems_fixed: null,
       problems_broke: null,
       context_peak: null,
       context_window: null,
@@ -262,17 +285,17 @@ test("runs source: each card carries EXACTLY the contract keys, with the stated 
       loop_errors: 2, // turn_truncated_retried + recovery_budget_exhausted, guard_abort
       stalled_limit_errors: 2, // 1 turn_stalled + 1 length_cutoff
       system_epoch: null, // its manifest.json declares no epoch
-      cost: null, // no cost.json on disk
+      cost: null,
     });
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
   }
 });
 
-test("runs source: an archived run's status is its scorecard's verdict — scored is not passed", async () => {
+test("runs source: a legacy run's status is its scorecard's verdict — scored is not passed", async () => {
   const runsRoot = fixture();
   try {
-    const modelDir = join(runsRoot, ARCHIVED_RUN);
+    const modelDir = join(runsRoot, LEGACY_RUN);
     const livePath = join(modelDir, "memoryOFF", "cell-0000", "live.jsonl");
     // A FAILING cell (never green, never PASS) that the harness scored. Its
     // terminal reason is an ordinary non-void one: a non-green ended cell is
@@ -283,11 +306,11 @@ test("runs source: an archived run's status is its scorecard's verdict — score
       JSON.stringify({ scored_sessions: 1, void_instrument: [], not_scored: [] }),
     );
     let res = await read({ runsRoot, benchRoot: runsRoot });
-    let archived = fixtureCards(res.patch.runs.list).find((c) => c.archived);
-    assert.equal(archived.status, "scored", "a failing cell the harness scored is scored");
-    assert.equal(archived.turns, null);
+    let legacy = fixtureCards(res.patch.runs.list).find((c) => c.run_dir === LEGACY_RUN);
+    assert.equal(legacy.status, "scored", "a failing cell the harness scored is scored");
+    assert.equal(legacy.turns, null);
     // No notices in this stream: a live stream with none reads 0, not null.
-    assert.equal(archived.loop_errors, 0);
+    assert.equal(legacy.loop_errors, 0);
 
     // The harness dropped it (run 1790200233: instrument_fault, once shown SCORED).
     writeFileSync(
@@ -295,8 +318,8 @@ test("runs source: an archived run's status is its scorecard's verdict — score
       JSON.stringify({ scored_sessions: 0, void_instrument: [{ sequence_index: 0, void_reason: "instrument_fault" }], not_scored: [] }),
     );
     res = await read({ runsRoot, benchRoot: runsRoot });
-    archived = fixtureCards(res.patch.runs.list).find((c) => c.archived);
-    assert.equal(archived.status, "void");
+    legacy = fixtureCards(res.patch.runs.list).find((c) => c.run_dir === LEGACY_RUN);
+    assert.equal(legacy.status, "void");
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
   }
@@ -319,7 +342,7 @@ test("runs source: a CURRENT run's status is its scorecard's too — never the B
       }),
     );
     let res = await read({ runsRoot, benchRoot: runsRoot });
-    let current = fixtureCards(res.patch.runs.list).find((c) => !c.archived);
+    let current = fixtureCards(res.patch.runs.list).find((c) => c.run_dir === CURRENT_RUN);
     assert.equal(current.status, "scored", "the harness scored it; the batch only says it is no floor");
 
     writeFileSync(
@@ -327,8 +350,8 @@ test("runs source: a CURRENT run's status is its scorecard's too — never the B
       JSON.stringify({ scored_sessions: 0, void_instrument: [{ sequence_index: 0, void_reason: "instrument_fault" }], not_scored: [] }),
     );
     res = await read({ runsRoot, benchRoot: runsRoot });
-    current = fixtureCards(res.patch.runs.list).find((c) => !c.archived);
-    assert.equal(current.status, "void", "a cell the harness dropped is void, current or archived");
+    current = fixtureCards(res.patch.runs.list).find((c) => c.run_dir === CURRENT_RUN);
+    assert.equal(current.status, "void", "a cell the harness dropped is void, current or legacy");
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
   }
@@ -348,13 +371,13 @@ test("runs source: peak context counts the cell.end peak — a last round that n
 
     stream(130500);
     let res = await read({ runsRoot, benchRoot: runsRoot });
-    let current = fixtureCards(res.patch.runs.list).find((c) => !c.archived);
+    let current = fixtureCards(res.patch.runs.list).find((c) => c.run_dir === CURRENT_RUN);
     assert.equal(current.context_peak, 130500, "the cell's own peak, beyond every attempt.end");
     assert.equal(current.context_window, 131072);
 
     stream(90000);
     res = await read({ runsRoot, benchRoot: runsRoot });
-    current = fixtureCards(res.patch.runs.list).find((c) => !c.archived);
+    current = fixtureCards(res.patch.runs.list).find((c) => c.run_dir === CURRENT_RUN);
     assert.equal(current.context_peak, 120000, "the largest stated peak wins; a smaller one never lowers it");
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
@@ -366,17 +389,17 @@ test("runs source: a run that aborted before its status stream reads problems fr
   // state the counts. A pass the grader marked not gradable is not one.
   const runsRoot = fixture();
   try {
-    const cellDir = join(runsRoot, ARCHIVED_RUN, "memoryOFF", "cell-0000");
+    const cellDir = join(runsRoot, LEGACY_RUN, "memoryOFF", "cell-0000");
     writeFileSync(join(cellDir, "live.jsonl"), JSON.stringify({ kind: "cell.end", verdict: "FAIL", terminal_reason: "harness_error" }) + "\n");
     const probs = (n) => JSON.stringify({ gradable: true, problems: Array.from({ length: n }, (_, i) => ({ check: `c${i}` })) });
     writeFileSync(join(cellDir, "attempt-1-report.json"), probs(28));
     writeFileSync(join(cellDir, "attempt-2-report.json"), probs(27));
     writeFileSync(join(cellDir, "attempt-3-report.json"), JSON.stringify({ gradable: false, problems: [] }));
     const res = await read({ runsRoot, benchRoot: runsRoot });
-    const archived = fixtureCards(res.patch.runs.list).find((c) => c.archived);
-    assert.equal(archived.status, "harness_error");
-    assert.equal(archived.problems_before, 28);
-    assert.equal(archived.problems_after, 27, "the unmeasured third pass is not the last measurement");
+    const legacy = fixtureCards(res.patch.runs.list).find((c) => c.run_dir === LEGACY_RUN);
+    assert.equal(legacy.status, "harness_error");
+    assert.equal(legacy.problems_before, 28);
+    assert.equal(legacy.problems_after, 27, "the unmeasured third pass is not the last measurement");
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
   }
@@ -395,11 +418,46 @@ test("runs source: a swap the counts hide — 3 → 3, but one gate fixed and on
       attemptRec(2, ["B", "C", "D"], ["A", "P"]),
     ]);
     const res = await read({ runsRoot, benchRoot: runsRoot });
-    const current = fixtureCards(res.patch.runs.list).find((c) => !c.archived);
+    const current = fixtureCards(res.patch.runs.list).find((c) => c.run_dir === CURRENT_RUN);
     assert.equal(current.problems_before, 3);
     assert.equal(current.problems_after, 3, "the counts are unchanged — that is the whole problem");
     assert.equal(current.problems_fixed, 1, "A failed in the first attempt, not the last");
     assert.equal(current.problems_broke, 1, "D failed in the last attempt, not the first");
+  } finally {
+    rmSync(runsRoot, { recursive: true, force: true });
+  }
+});
+
+test("runs source: an empty living root yields no cards and zero counts", async () => {
+  const runsRoot = mkdtempSync(join(tmpdir(), "runs-empty-"));
+  try {
+    const res = await read({ runsRoot, benchRoot: runsRoot });
+    assert.equal(res.ok, true);
+    const { list, counts } = res.patch.runs;
+
+    // readRunState's process scan is machine-wide, so a live run on this machine
+    // could still produce a card — but never one naming a dir in THIS root.
+    assert.equal(list.filter((c) => c.run_dir && existsSync(join(runsRoot, c.run_dir))).length, 0);
+    assert.equal(counts.archived_excluded, 0);
+    assert.equal(counts.total, list.length);
+    assert.equal(counts.living + counts.legacy, counts.total);
+  } finally {
+    rmSync(runsRoot, { recursive: true, force: true });
+  }
+});
+
+test("runs source: the SSE board path serves the pruned set and the archive count", async () => {
+  // The dashboard consumes getBoard() raw on /api/stream (no filterBoard), so
+  // the prune has to hold at the source the stream serves.
+  const runsRoot = fixture();
+  try {
+    const board = await getBoard({ benchRoot: runsRoot, runsRoot, pollMs: 0, controlUrl: "http://127.0.0.1:9" });
+    assert.ok(Array.isArray(board.runs?.list), "the runs source answered");
+    assert.equal(board.runs.list.some((c) => c.class === "archived"), false);
+    assert.equal(board.runs.list.some((c) => String(c.run_dir ?? "").startsWith("backups/")), false);
+    assert.equal(board.runs.counts.archived_excluded, 1);
+    assert.equal(board.runs.counts.total, board.runs.list.length);
+    assert.equal(board.runs.counts.living + board.runs.counts.legacy, board.runs.counts.total);
   } finally {
     rmSync(runsRoot, { recursive: true, force: true });
   }
