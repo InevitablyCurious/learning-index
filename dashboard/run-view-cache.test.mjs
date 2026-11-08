@@ -8,7 +8,7 @@
 // the TUI mirror flashed, then showed nothing, on every card switch.
 //
 // These tests pin what the fix rests on: the view lives outside the board, a
-// run is fetched once, loading and failure are stated on the wall, and an
+// run is fetched once, loading and failure are stated in the view, and an
 // archived pick never touches the stream.
 //
 //     cd dashboard && node --test run-view-cache.test.mjs
@@ -18,7 +18,6 @@ import assert from "node:assert/strict";
 
 import { cellView, followActiveCell, retryRunView, runViewEntry, setTuiCell, tuiCell } from "./board.js";
 import { setSelectedCell } from "./panels/cells.js";
-import { renderWall } from "./panels/wall.js";
 import { renderTuiBody } from "./panels/tui.js";
 
 const LIVE = { run_dir: "1790257061/local/x", sequence_index: 0, archived: false, status: "live" };
@@ -67,7 +66,7 @@ test("(a) an archived view survives a full board frame — it never lived in the
   // The reconnect's frame replaces the board wholesale.
   const after = boardFrame([A]);
   const v = cellView(after);
-  assert.deepEqual(v.suite.gates, [{ id: A.run_dir }], "the wall still draws the archived run");
+  assert.deepEqual(v.suite.gates, [{ id: A.run_dir }], "the archived run's own suite survives");
   assert.equal(v.run.phase, `phase-of-${A.run_dir}`);
   assert.equal(v.run_view, null);
   setSelectedCell(null);
@@ -91,7 +90,7 @@ test("(b) A → B → A shows A's view with no second fetch", async () => {
   setSelectedCell(null);
 });
 
-test("(c) while the fetch is in flight the wall says loading — never empty, never another run's", async () => {
+test("(c) while the fetch is in flight the view says loading — never empty, never another run's", async () => {
   const C = archived("1789000004");
   let land;
   stubFetch(() => new Promise((resolve) => { land = () => resolve(okAnswer(viewFor(C))); }));
@@ -100,27 +99,29 @@ test("(c) while the fetch is in flight the wall says loading — never empty, ne
   const pending = followActiveCell(b, () => {});
   assert.equal(runViewEntry(keyOf(C)).state, "loading");
 
-  const html = renderWall(cellView(b));
-  assert.match(html, /loading this run's view/);
-  assert.match(html, /LOADING RUN VIEW/);
-  assert.doesNotMatch(html, /gate suite surface is unavailable/i, "not the control-plane absence");
-  assert.doesNotMatch(html, /LIVE-GATE/, "not the live cell's wall");
+  const v = cellView(b);
+  assert.deepEqual(v.run_view, { state: "loading" }, "loading is stated, not drawn as an absence");
+  assert.equal(v.suite, null, "the live cell's suite is never drawn under an archived run");
 
   land();
   await pending;
-  const v = cellView(boardFrame([C]));
-  assert.equal(v.run_view, null);
-  assert.deepEqual(v.suite.gates, [{ id: C.run_dir }]);
+  const loaded = cellView(boardFrame([C]));
+  assert.equal(loaded.run_view, null);
+  assert.deepEqual(loaded.suite.gates, [{ id: C.run_dir }]);
   setSelectedCell(null);
 });
 
-test("(d) a failed fetch states its reason on the wall; re-selecting retries it", async () => {
+test("(d) a failed fetch states its reason; re-selecting retries it", async () => {
   const D = archived("1789000005");
   const calls = stubFetch(() => ({ ok: false, status: 404, json: async () => ({ ok: false, reason: "no such run: 1789000005" }) }));
   const b = boardFrame([D]);
   setSelectedCell(keyOf(D));
   await followActiveCell(b, () => {});
-  assert.match(renderWall(cellView(b)), /could not load this run&#39;s view — no such run: 1789000005/);
+  assert.deepEqual(
+    cellView(b).run_view,
+    { state: "failed", reason: "no such run: 1789000005" },
+    "the failure carries its reason to the view",
+  );
 
   // A failure is held (no refetch on every render) until the operator re-selects.
   assert.equal(followActiveCell(b, () => {}), null);

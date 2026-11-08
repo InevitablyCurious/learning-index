@@ -7,7 +7,7 @@
 // directory `activeRun()` resolves. Both readers used to join the bare filename
 // onto `run.dir`, which opened a path that never exists and reported
 // "no live.jsonl yet" — a reason indistinguishable from a run that legitimately
-// never wrote a stream. The gate wall therefore stayed empty for the entire
+// never wrote a stream. The board therefore showed no gate state for the entire
 // life of every run.
 //
 // These tests pin the three facts that fix depends on.
@@ -90,7 +90,7 @@ test("cellLiveStreamPath resolves each cell's own stream, whatever the mtimes", 
   assert.equal(await cellLiveStreamPath(runs, { run_dir: "camp", sequence_index: 1 }), b);
 });
 
-test("gate wall reads verdicts from the cell-directory stream; later attempt wins", async () => {
+test("the board reads verdicts from the cell-directory stream; later attempt wins", async () => {
   const { ctx } = await fixture();
   const res = await liveStream.readCell(ctx);
   assert.equal(res.ok, true, res.reason);
@@ -144,27 +144,6 @@ test("a re-graded pass does not overwrite the attempt a gate FIRST passed on", a
   assert.equal(alpha.status, "pass");
   assert.equal(alpha.first_pass_attempt, 2);
   assert.equal(alpha.ever_failed, true);
-});
-
-test("the wall draws a digit only on the gate that actually needed repair", async () => {
-  const { ctx } = await fixture({ stream: REGRADED });
-  const { live } = (await liveStream.readCell(ctx)).patch;
-
-  const { renderWall } = await import("./panels/wall.js");
-  const gates = [
-    { id: "CONF", state: "untested" },
-    { id: "backend/a.test.ts::alpha", state: "untested" },
-    { id: "frontend/b.test.ts::beta", state: "untested" },
-  ];
-  const html = renderWall({ suite: { suite: { total: 3 }, gates, totals: null, attempt: null }, live });
-
-  // Exactly one numbered square, and it is the repair.
-  const marks = [...html.matchAll(/<span class="gcell (\w+)"[^>]*>([^<]*)</g)].map((m) => [m[1], m[2]]);
-  assert.deepEqual(
-    marks,
-    [["green", ""], ["recovered", "2"], ["unobserved", ""]],
-    "green-first-try must stay unnumbered; only the repaired gate carries its attempt",
-  );
 });
 
 test("the cell's phase and chunk are the producer's phase.start, not the log's last finished chunk", async () => {

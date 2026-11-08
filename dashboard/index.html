@@ -92,6 +92,22 @@
   /* OFF-HUE #2 — deliberate deviation: the VOID status colour on run cards. */
   --warn:      #e0b34d;
 
+  /* ── CORRIDOR ENCODING (panels/corridor.js) ───────────────────────────────
+     The track speaks in symbol + colour as a KEY, never as the claim itself:
+     blue is build, red is troubleshooting, green is a compaction rule, and the
+     detail layer's six facts each own one hue so a chip is read without
+     reading. YELLOW IS NOT A CATEGORY — it is the selection outline and it
+     appears on nothing else. Claims that used to ride on hue are drawn: failure
+     is a diagonal hatch + FAIL, held is a gate, a stall is a dotted hatch. */
+  --corr-build:   #4b8bff;
+  --corr-trouble: #ff6b6b;
+  --corr-compact: #6dff9e;
+  --corr-sel:     #ffe23d;
+  --corr-in:      #4bd6ff;
+  --corr-out:     #ff7ad9;
+  --corr-reason:  #b48cff;
+  --corr-cache:   #2fd3b5;
+
   /* semantic aliases — product code uses THESE */
   --surface:        var(--bg);
   --surface-raised: var(--bg-2);
@@ -606,7 +622,7 @@ a:hover{color:var(--type)}
 /* THE PANEL. 12px radius + --border (not --hairline) is the artifact's own
    §8.1 measurement; the rewrite had flattened every panel to a 4px box with
    box-shadow:none, which read as a wireframe rather than a raised surface. */
-.curve,.wall,.ledger,.live,.rail,.build{background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);padding:var(--pad);display:flex;flex-direction:column;gap:12px;min-width:0}
+.curve,.ledger,.live,.rail,.build{background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-xl);padding:var(--pad);display:flex;flex-direction:column;gap:12px;min-width:0}
 /* ── BUILD PANEL ── split down the middle: the game on the left, the problems
    on the right. The game is laid out at the operator's own screen size and
    scaled evenly to fit (panels/build.js fitStage), so it is never stretched.
@@ -1250,189 +1266,6 @@ a:hover{color:var(--type)}
    than read off the source by eye.
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── GATE WALL — the correctness axis ─────────────────────────────────────
-   Fixed square cells in a dense grid. Design §9.3 fixes the column count at 12
-   for every suite size; wall.js sets it inline from one constant so the wall
-   reads as the same object from cell to cell. Only cell metrics live here.
-
-   TWO COLOURS AND AN ABSENCE. The wall is a dumb component: it reports the
-   per-gate outcome of the last completed test run and nothing else. There is no
-   phase, no attempt axis, no live signal, and no motion of any kind.
-
-     green      solid check     — passing, green on the FIRST attempt
-     recovered  check + danger rim — passing, but not from the first attempt
-     red        solid danger + ✕  — failing in the last completed test run
-     regressed  danger core + check rim — failing now, but it passed earlier
-     unobserved dashed, no fill   — no result yet; NOT a weaker pass
-
-   The two fills differ in luminance (#6dff9e check · #ff6b6b danger) so a
-   greyscale screenshot separates them, and untested keeps a SHAPE difference
-   rather than a hue one — the single most common state is legible with no
-   colour at all. The legend below the grid carries the meaning in words. */
-/* THE WALL SIZES ITS BANDS OFF THE REAL CELL, NOT OFF A COLUMN COUNT.
-   Every band below used to be a `cqw` fraction chosen when the grid was a fixed
-   12 columns — `one column is ~8cqw` — so the moment the suite grew to 117 and
-   the grid went to 17 columns, a rim sized for a 45px square would have been
-   drawn on a 31px one. `--wall-cols` is published by panels/wall.js and
-   `--wall-cell` is the actual edge length, so the bands track the square at any
-   suite size. The rim and inset fractions below reproduce the original
-   12-column values exactly (rim 3.56px, inset 1.95px at a 574px card). The
-   digit is deliberately smaller than the width fraction it replaced — see the
-   note on `.gcell.recovered` — so a multi-digit attempt count cannot clip. */
-.gwall{
-  display:grid;gap:2px;justify-content:start;
-  --wall-cell:28px;
-  grid-template-columns:repeat(auto-fill,var(--wall-cell));grid-auto-rows:var(--wall-cell);
-}
-.gcell{aspect-ratio:1;border-radius:3px;background:var(--check);border:1px solid transparent;min-width:0}
-.gcell.green{background:var(--check);border-color:var(--check)}
-/* PASSING, BUT NOT FIRST TRY. Green core, danger rim — the fill still says
-   "this passes" and the rim says "it did not always". Read as green at a
-   glance, distinguishable on inspection, which is the correct emphasis: the
-   verdict is the primary fact and the trajectory is the qualifier. The rim is
-   2px so it survives the 9px legend swatch and a greyscale screenshot. */
-.gcell.recovered{
-  /* THREE BANDS, NONE TOUCHING, ALL PROPORTIONAL TO THE SQUARE.
-     Fixed pixel bands were wrong in both directions: at a 73px cell a 2px rim
-     read as a muddy edge against the green, and at a narrow board a fixed 4.5px
-     rim plus gap would have eaten a small square whole.
-     `.gwall` is the size container and publishes `--wall-cell`, the real edge
-     length at whatever column count the suite chose, so every band is expressed
-     as a fraction of the square. Clamped at both ends so a very wide board does
-     not turn the rim into a slab and a very narrow one keeps all three bands
-     visible. */
-  background:var(--check);
-  border:clamp(2px, calc(var(--wall-cell) * 0.079), 7px) solid var(--danger);
-  /* THE GAP. An inset shadow, not a second border or a pseudo-element: it
-     paints inside the padding box, so the rim keeps its full width and nothing
-     is clipped at any grid size. Drawn in --bg rather than left transparent so
-     a neighbouring square can never bleed through it. */
-  box-shadow:inset 0 0 0 clamp(1.5px, calc(var(--wall-cell) * 0.043), 4px) var(--bg);
-  display:flex;align-items:center;justify-content:center;
-  color:var(--bg);letter-spacing:-0.05em;overflow:hidden;
-  /* THE DIGIT IS SIZED OFF THE SQUARE'S EDGE, NOT OFF A DIGIT COUNT. It used to
-     be a fraction of the CARD's width, chosen from a two-digit assumption — that
-     a gate could not pass later than its tenth attempt — and no such cap exists:
-     a 3- or 4-digit count would have been clipped by `overflow:hidden` and read
-     as a smaller number than it is. 0.28 of `--wall-cell` keeps a multi-digit
-     count whole, and at the 28px default cell the 8px floor binds, so a dense
-     board renders the digit at one fixed legible size while a larger square
-     scales it up. A slightly small digit is the right trade; a clipped one is a
-     WRONG READING. */
-  font:700 clamp(8px, calc(var(--wall-cell) * 0.28), 42px)/1 var(--font);
-}
-/* The legend swatch is a fixed 9px: it cannot carry three bands or a readable
-   digit, so it falls back to a plain green chip with a thin rim. A smudge is
-   worse than a clean fill, and the words beside it do the work. */
-.gcell.recovered.sm{font-size:0;display:inline-block;border-width:2px;box-shadow:none}
-/* REGRESSED — the inverse of `recovered`. It passed earlier and is failing now:
-   a RED core with a GREEN rim, the digit being the attempt it broke on. The fill
-   still carries the verdict (failing) and the rim carries the trajectory (it was
-   once green), exactly as recovered carries "passing, but not from the start".
-   Same three bands, same proportions, same digit as recovered, so the two read
-   as one system turned inside out. */
-.gcell.regressed{
-  background:var(--danger);
-  border:clamp(2px, calc(var(--wall-cell) * 0.079), 7px) solid var(--check);
-  box-shadow:inset 0 0 0 clamp(1.5px, calc(var(--wall-cell) * 0.043), 4px) var(--bg);
-  display:flex;align-items:center;justify-content:center;
-  color:var(--bg);letter-spacing:-0.05em;overflow:hidden;
-  font:700 clamp(8px, calc(var(--wall-cell) * 0.28), 42px)/1 var(--font);
-}
-.gcell.regressed.sm{font-size:0;display:inline-block;border-width:2px;box-shadow:none}
-/* FAILING. Fill plus an X, so failure is legible by SHAPE and not by hue alone
-   — the one state a colour-blind or greyscale reader must never miss.
-   IT IS A GLYPH, NOT A DRAWING. Two rotated pseudo-elements used to draw it,
-   and the geometry was wrong: `inset:22%` set bottom:22%, then `top:50%`
-   overrode only the top, so the box spanned 50%..78% vertically while the
-   stroke sat on its TOP edge — 14% above the centre it pivoted around. The two
-   strokes crossed off-centre and the mark read lop-sided at every grid size.
-   A character cannot be lop-sided, and it carries the SAME font declaration as
-   the recovered digit below, so the two marks are one typographic system rather
-   than a glyph beside a hand-drawn approximation of one. */
-.gcell.red{
-  background:var(--danger);border-color:var(--danger);
-  display:flex;align-items:center;justify-content:center;
-  color:var(--bg);overflow:hidden;
-  /* IDENTICAL to .gcell.recovered — the X and the attempt digit must render at
-     the same size, and the only way to guarantee that is one declaration in
-     both places. Sized off `--wall-cell`, the square's real edge, so it tracks
-     the grid at any column count. */
-  font:700 clamp(8px, calc(var(--wall-cell) * 0.28), 42px)/1 var(--font);
-}
-/* The ✕ is dropped at legend size: a 9px swatch cannot carry a readable mark,
-   and a smudge is worse than a clean fill. The words beside it do that work. */
-.gcell.red.sm{font-size:0}
-.gcell.unobserved{background:transparent;border:1px dashed var(--dim)}
-/* ── INSTRUMENT FAULT: NOT A VERDICT, AND DRAWN SO IT CANNOT BE READ AS ONE ──
-   HOLLOW, NOT FILLED. Green and red are filled because they are RESULTS. This
-   square has no result — the worker carrying the gate died before it reported —
-   so it keeps the unobserved square's transparent centre and states its cause
-   with a solid amber rim and a mark. Filling it would put it in the same visual
-   class as a verdict, which is the entire misreading to prevent.
-
-   SOLID RIM, NOT DASHED. Dashed is the language of "nothing here yet"; this
-   gate's absence is KNOWN and explained, which is a different fact from an
-   unreached gate and must not look like one at a glance.
-
-   The "!" is set in the SAME declaration as the red X and the recovered digit,
-   so all three marks are one typographic system at every grid size. */
-.gcell.instrument{
-  background:transparent;border:2px solid var(--type);
-  display:flex;align-items:center;justify-content:center;
-  color:var(--type);overflow:hidden;
-  font:700 clamp(8px, calc(var(--wall-cell) * 0.28), 42px)/1 var(--font);
-}
-/* Dropped at legend size for the same reason as the X: a 9px swatch cannot
-   carry a readable mark, and the words beside it do that work. */
-.gcell.instrument.sm{font-size:0;display:inline-block;border-width:2px}
-/* the legend's inline swatches — fixed 9px, never stretched by the grid */
-.gcell.sm{width:9px;height:9px;aspect-ratio:auto;display:inline-block;vertical-align:baseline;flex:none}
-
-/* THE GATE CARD (panels/wall.js gateCard). Fixed to the viewport beside the
-   square it describes; pinned cards take a brighter rim so a card that stays is
-   visibly different from one that follows the pointer. */
-.gcell[data-gate-id]{cursor:pointer}
-.gcell[data-gate-id]:focus-visible,.gcell.pinned{outline:2px solid var(--type);outline-offset:1px}
-.gcard{position:fixed;z-index:40;overflow:hidden;box-sizing:border-box;
-  background:var(--surface-raised);border:1px solid var(--border-strong);border-radius:var(--radius-md);
-  box-shadow:var(--shadow-raise);padding:12px 14px;font:12px/1.5 var(--font);color:var(--text-body)}
-.gcard.pinned{border-color:var(--accent)}
-/* Compact: chosen only when the full-size card cannot fit the window whole. */
-.gcard.compact{padding:8px 10px;font-size:11px;line-height:1.35}
-.gcard.compact .gc-name{font-size:12.5px}
-.gcard.compact .gc-sec{padding:3px 0}
-.gc-head{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
-.gc-name{color:var(--text-bright);font-size:14px;font-weight:600}
-.gc-status{font-size:11px;letter-spacing:.04em}
-.gc-status.ok{color:var(--check)}
-.gc-status.bad{color:var(--danger)}
-.gc-status.amber{color:var(--warn,#e0b34d)}
-.gc-status.dim{color:var(--text-muted)}
-.gc-sec{border-top:1px solid var(--hairline);padding:6px 0}
-.gc-sec p{margin:2px 0}
-.gc-h{display:block;font-size:10px;letter-spacing:.08em;color:var(--comment)}
-.gc-k{color:var(--comment)}
-.gc-tech{color:var(--text-bright);word-break:break-word}
-.gc-where{color:var(--text-muted);font-size:11px;word-break:break-all}
-.gc-rounds{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline}
-.gc-rounds .gc-h{width:100%}
-.gc-round.ok{color:var(--check)}
-.gc-round.bad{color:var(--danger)}
-.gc-round.dim{color:var(--text-muted)}
-.gc-id{color:var(--comment);letter-spacing:.04em}
-.gc-foot{display:flex;justify-content:space-between;gap:8px;border-top:1px solid var(--hairline);padding-top:6px;font-size:10px;color:var(--text-muted)}
-.wall-legend{display:flex;align-items:center;gap:18px;flex-wrap:wrap;font:400 12px var(--font);color:var(--dim)}
-.wall-legend>span{display:inline-flex;align-items:center;gap:7px;min-width:0}
-.wall-legend .note{flex:1 1 220px;min-width:0}
-.wall-empty{display:flex;flex-direction:column;gap:7px;padding:18px;border:1px dashed var(--border-strong);border-radius:var(--radius-md)}
-/* THE UNWIRED REASONS. Rows, never squares: anything square-shaped on this
-   panel reads as a gate, and a reason is not one. */
-.gphases{display:flex;flex-direction:column;gap:5px;margin-top:4px}
-.gphase{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:baseline;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font:400 12.5px var(--font);color:var(--fg)}
-.gp-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.06em}
-.gp-detail{flex:none;font-weight:700}
-
 /* The live view panel takes the row's slack; its terminal fills what is left. */
 .curve{flex:1 1 0}
 
@@ -1783,70 +1616,6 @@ a:hover{color:var(--type)}
 }
 .prov-tot{display:flex;flex-direction:column;gap:5px;padding-top:9px;border-top:1px solid var(--hairline)}
 
-/* ── THE RUNNING CELL ON THE GATE WALL, SPLIT DOWN THE MIDDLE ─────────────
-   Left: what the cell has SPENT. Right: where it has GOT TO. Equal columns,
-   because neither is a footnote to the other — the same 50/50 rule the axes row
-   itself is built on.
-
-   `align-items:start` so the shorter column does not stretch its own children:
-   the spine's phase boxes must keep their own height, and a stretched token
-   table would push its rule away from the rows it belongs to.
-
-   `minmax(0,1fr)` on both, not `1fr` — a grid column's default minimum is
-   min-content, and the token rows carry long unbroken figures that would
-   otherwise push the column wider than its share and shove the spine off. */
-.wall-run{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;align-items:start;margin-top:6px;padding-top:6px;border-top:1px solid var(--hairline)}
-.wr-col{min-width:0}
-/* The totals block already drew its own rule when it sat alone at the foot of
-   the card. The container carries it now, for both columns at once. */
-.wall-run .prov-tot{padding-top:0;border-top:0}
-
-/* HALF A CARD IS NARROW. The phase title and its state word share a row and no
-   longer always fit on one line; wrapping is correct, clipping the phase name
-   is not. */
-/* The cell's totals compress to a three-column grid and one headline row; the
-   phases are single-line rows. */
-.wall-run .big{font-size:17px;gap:18px}
-.wall-run .tkbl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px 16px;margin-top:4px}
-.wall-run .tkhead{display:none}
-.wall-run .tkrow.tksum{grid-column:span 2;margin-top:0;padding-top:0;border-top:0}
-.wall-run .tkrow.tkrate{margin-top:0;padding-top:0;border-top:0}
-.wall-run .tknote{font-size:10px}
-
-/* ONE COLUMN ONLY WHEN GENUINELY NARROW.
-   The first attempt collapsed at 1400px, which is ABOVE the width this board is
-   normally read at — so the split never appeared and the block just stacked, as
-   it had before. The breakpoint has to be derived from the column the card can
-   actually give, not from a round number:
-
-     viewport 1265 -> wall card 574 -> two columns of ~277px
-     viewport 1100 -> the axes row itself collapses, so the card takes the full
-                      width and the columns get ~515px each
-
-   277px comfortably holds a token row (a short label against a right-aligned
-   figure) and a phase row. It stops working somewhere near 200px, which is a
-   card of ~430px — so the split holds everywhere this board is usable and gives
-   up only on a genuinely small screen, where one full-width column is better
-   than two starved ones. */
-/* WIDE: the squares and legend on the left, the cell's totals and phases on
-   the right, the header across both. Narrow: one column. */
-@media (min-width:1100px){
-  .wall{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);column-gap:22px;align-items:start;align-content:start;gap:6px 22px;padding:6px 10px}
-  .wall>.phead{grid-column:1/-1}
-  .wall>.gwall,.wall>.wall-legend{grid-column:1}
-  .wall>.wall-run{grid-column:2;grid-row:2 / span 3;margin-top:0;padding-top:0;border-top:0}
-}
-
-/* FULL-WIDTH GATE WALL. The card spans the board, so one grid of squares would
-   be drawn ~80px a side. Wide: squares + legend left at natural size, the
-   running cell's totals and phase spine right, header across both. */
-@media (min-width:1100px){
-  .wall{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);column-gap:28px;align-items:start;align-content:start}
-  .wall>.phead{grid-column:1/-1}
-  .wall>.gwall,.wall>.wall-legend{grid-column:1}
-  .wall>.wall-run{grid-column:2;grid-row:2 / span 3;margin-top:0;padding-top:0;border-top:0}
-}
-
 /* ── TOKEN BREAKDOWN ──────────────────────────────────────────────────────
    Every category the agent reports, labelled, with a total that says what it
    summed. Replaces a bare unlabelled "138K" that was input+output only and
@@ -2089,8 +1858,7 @@ a:hover{color:var(--type)}
 }
 
 /* Muted text inside an otherwise-typed line — emphasized phrasing a tag or a
-   cell cannot say in its own colour. Emitted by panels/wall.js and
-   panels/tui.js. */
+   cell cannot say in its own colour. Emitted by panels/tui.js. */
 .dim{color:var(--dim);font-style:normal}
 
 /* ── DEV MODE (panels/devmode.js) ─────────────────────────────────────────
@@ -2126,6 +1894,789 @@ a:hover{color:var(--type)}
   color:var(--dim);background:transparent;
   border:1px dashed var(--border-strong);border-radius:var(--radius-pill);
   padding:3px 10px;white-space:nowrap;
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   THE CORRIDOR — wall time as geometry (panels/corridor.js)
+
+   A run is measured in SECONDS here, not attempts. Length is wall time, the
+   ribbon is token density, the ticks are turns, and the dotted hatch is the
+   stretch that burned its time for nothing. The classes below are every class
+   the panel emits; nothing else styles it.
+
+   ENCODING LAW. Colour here is a KEY, not the claim:
+     blue   --corr-build    build sections   — the work that moved the run
+     red    --corr-trouble  troubleshooting  — time that had to be rescued
+     green  --corr-compact  a compaction rule — an instant, not a duration
+     yellow --corr-sel      SELECTION ONLY   — never a category, never default
+
+   The claims that used to ride on hue are DRAWN, so they read at any
+   saturation: FAILURE is a 45° diagonal hatch plus a FAIL tag, HELD is a gate
+   (two posts under a lintel, with a pause glyph), a STALL is a dotted hatch.
+   Nothing on the default track is amber or yellow. The legend above the track
+   names the three categories, and the detail layer's six facts each own a hue
+   (--corr-in/out/reason/cache) so a chip is read without reading its label.
+   Every numeral carries tabular-nums: a column of digits that reflows every
+   frame drags the eye, and this panel is redrawn on every board render.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* The panel shell. `.panel` owns the box; this only fixes the corridor's
+   internal rhythm and gives the cumulative panel an anchor for its absolute
+   placement. */
+.corridor{position:relative;gap:10px;min-width:0}
+.corridor .phead{flex:none}
+
+/* FLEX COLUMN, AND THE REASON IS HEIGHT. The corridor is a fixed set of rows —
+   legend, hold card, track — inside a panel the board sizes. Letting the rows
+   shrink must not let the track collapse, so the track owns its height and the
+   rest stay natural. */
+.corr{
+  position:relative;display:flex;flex-direction:column;gap:8px;
+  min-width:0;min-height:0;
+}
+
+/* ── THE LEGEND ("filter by") ───────────────────────────────────────────────
+   The track's claims are drawn, but the three CATEGORIES are named in colour,
+   and a colour key without a key is a guess. Each item's swatch carries the
+   category's own token, so the legend cannot drift from the track.
+   One row, above the track, with the provenance caption beside it: the panel
+   never grows a second column for this. */
+.corr-filters{
+  display:flex;align-items:center;gap:6px 14px;flex-wrap:wrap;min-width:0;
+}
+.corr-legend{display:flex;align-items:center;gap:4px 10px;flex-wrap:wrap;min-width:0}
+.corr-legend-title{
+  font:400 9px var(--font);letter-spacing:.14em;text-transform:uppercase;
+  color:color-mix(in srgb,var(--fg) 70%,transparent);
+}
+.corr-legend-item{
+  display:inline-flex;align-items:center;gap:5px;flex:none;
+  font:500 9.5px var(--font);letter-spacing:.02em;color:var(--fg);
+  background:transparent;border:0;border-radius:2px;
+  padding:1px 3px;cursor:pointer;
+  transition:color var(--dur-fast) var(--ease);
+}
+.corr-legend-item:hover{color:var(--type)}
+/* THE SWATCH IS THE CATEGORY, DRAWN. A block for the two bands, a 2px rule for
+   compaction — the same distinction the track makes, at legend scale. */
+.corr-legend-swatch{
+  flex:none;width:9px;height:9px;border-radius:1px;
+  background:color-mix(in srgb,var(--fg) 40%,transparent);
+}
+.corr-legend-item[data-cat="build"] .corr-legend-swatch{background:var(--corr-build)}
+.corr-legend-item[data-cat="trouble"] .corr-legend-swatch{background:var(--corr-trouble)}
+.corr-legend-item[data-cat="compact"] .corr-legend-swatch{
+  width:2px;height:13px;border-radius:0;background:var(--corr-compact);
+}
+/* THE ACTIVE FILTER IS THE ONE PLACE YELLOW IS SPENT BY CHOICE — it is a
+   selection outline, exactly what yellow is reserved for. No layout shift. */
+.corr-legend-item.is-on{
+  outline:2px solid var(--corr-sel);outline-offset:1px;color:var(--type);
+}
+/* THE PROVENANCE. Not a caption on a number: a claim about the DATA — the count
+   is evidence, the positions along the track are drawn only when observed. */
+.corr-provenance{
+  font:400 9px var(--font);letter-spacing:.04em;
+  color:color-mix(in srgb,var(--fg) 70%,transparent);
+  margin-left:auto;white-space:nowrap;
+}
+/* THE LANE-SET TOGGLE. The adapter curates the lane set and reports how many
+   runs it is not drawing, so the corridor states the count rather than silently
+   omitting a lane. A dashed pill at rest (an offer), solid and ringed once every
+   run is drawn (a state) — never colour alone: the label changes too. */
+.corr-toggle{
+  flex:none;display:inline-flex;align-items:center;
+  font:700 9px var(--font);letter-spacing:.08em;
+  color:var(--type);background:transparent;
+  border:1px dashed var(--border-strong);border-radius:var(--radius-pill);
+  padding:2px 7px;cursor:pointer;white-space:nowrap;
+  transition:color var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease);
+}
+.corr-toggle:hover{color:var(--fg);border-color:var(--type)}
+.corr-toggle.is-on{
+  border-style:solid;
+  border-color:color-mix(in srgb,var(--corr-sel) 46%,transparent);
+  color:var(--fg);
+}
+
+/* ── THE TRACK ─────────────────────────────────────────────────────────────
+   A column of lanes on one shared time axis. `overflow:hidden` is the frame: a
+   segment whose width rounds past 100% must be cut at the edge, never allowed to
+   push the panel wider than the card it owns. The barrier, the cap and the
+   compaction rules are absolutely placed, so they are not flex items and never
+   affect that width. */
+.corr-track{
+  position:relative;display:flex;flex-direction:column;
+  /* CLIP, WITH A MARGIN — NOT `hidden`. A compaction rule is 115% of the bar it
+     crosses, so it must paint past the lane's top and bottom edge; `hidden`
+     would have shaved that overhang off at the frame while still cutting a
+     segment that rounds past 100%. `clip` does the same cutting without
+     creating a scroll container, and the margin lets exactly the overhang
+     through. */
+  overflow:clip;overflow-clip-margin:8px;
+  min-width:0;min-height:78px;
+  border-top:1px solid var(--hairline);
+}
+
+/* ONE LANE IS ~70px, WHICH IS ENOUGH FOR THE BAND SPLIT AND NOT MORE. The
+   single-run card is the signature view, so its one lane takes the extra height
+   rather than leaving 70px of track in a tall card. `:only-of-type` is safe
+   because `.corr-track` holds NOTHING but lane divs — the barrier, cap and
+   compaction rules all live inside a lane. */
+.corr-lane{
+  position:relative;display:flex;align-items:stretch;
+  height:70px;min-width:0;cursor:pointer;
+  border-bottom:1px solid var(--hairline);
+}
+.corr-lane:only-of-type{height:112px}
+.corr-lane:last-of-type{border-bottom:0}
+/* SELECTION IS THREE CHANNELS, AND NONE OF THEM IS COLOUR ALONE.
+   (1) A LEFT STATUS RAIL — a real 5px element on the lane's leading edge, cut
+       from the bands by a 1px canvas seam so it can never be read as the first
+       segment's fill.
+   (2) A HEAVIER CAPTION — the model label is `▸`-marked, bold and bright, which
+       is the one channel that survives a greyscale screenshot as a glyph.
+   (3) A RIM — 1px of type around the lane. The quiet channel, not load-bearing
+       on its own.
+   THE FILL LIFT IS ABSENT ON PURPOSE: a wash over the selected lane meant the
+   lane's build blue no longer matched the legend swatch that names it — the key
+   and the key's object disagreeing. The rail and the caption carry selection on
+   their own. */
+.corr-lane.is-selected{
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--type) 46%,transparent);
+}
+.corr-lane.is-selected::before{
+  content:"";position:absolute;top:0;bottom:0;left:0;width:5px;z-index:5;
+  background:var(--type);border-right:1px solid var(--bg);
+}
+.corr-lane:hover:not(.is-selected){box-shadow:inset 0 0 0 1px var(--border-strong)}
+.corr-lane:focus-visible{outline:2px solid var(--type);outline-offset:-2px}
+/* SECONDARY, NOT RECOLOURED. Once a lane is picked the others step back behind
+   a neutral wash — the same bands at the same hues, read as context.
+   Recolouring them (grey, muted variants) would change what they SAY; a wash
+   only changes how loudly they say it. */
+.corr-track:has(.corr-lane.is-selected) .corr-lane:not(.is-selected)::after{
+  content:"";position:absolute;inset:0;z-index:4;pointer-events:none;
+  background:color-mix(in srgb,var(--bg) 58%,transparent);
+}
+
+/* The lane caption sits OVER the bands, on a backing, because the markup puts
+   it inside the lane ahead of the segments — a flex sibling there would have
+   stolen width from every percentage on the track.
+
+   IT IS READ AT A GLANCE OR IT NAMES NOTHING. This caption is the only thing
+   that says WHICH run a band belongs to, so it carries `--fg` at weight 500 —
+   never the `--dim` de-emphasis token, which on a dark lane fill measured
+   ~1.6:1 and left unattributable lanes. 500 is the floor, not a rival: the
+   selected lane's caption is still the one step above it (`--type`, 700, `▸`),
+   so selection keeps all of its channels.
+
+   `top` IS A COLLISION FIX, NOT SPACING. The lane's top edge is a crowded seam:
+   the previous lane's 1px bottom border lands there, and the active segment
+   draws its own 2px accent top rule on the same edge. A 2px caption put its
+   glyphs in that seam and the rules crossed the text. 7px drops the ink clear
+   inside the lane, and it is a fixed px offset — the lane is a fixed 70px and
+   the caption a fixed 9.5px, so 1440 and 1024 clear identically. */
+.corr-lane-label{
+  position:absolute;top:7px;left:6px;z-index:6;
+  font:500 9.5px var(--font);letter-spacing:.08em;color:var(--fg);
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+  background:color-mix(in srgb,var(--bg) 92%,transparent);
+  border-radius:2px;padding:0 3px;max-width:90%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  pointer-events:none;
+}
+.corr-lane-label b{color:var(--fg);font-weight:700}
+/* The selected lane's caption is marked, not merely tinted: `▸` plus weight plus
+   brightness, so the caption names the selection on its own. It also clears the
+   5px status rail it now sits inside. */
+.corr-lane.is-selected .corr-lane-label{
+  left:12px;color:var(--type);font-weight:700;
+  background:color-mix(in srgb,var(--bg) 92%,transparent);
+}
+
+/* THE PER-LANE VERDICT LINE — outcome, price, cost. It hangs under the caption
+   on the lane's trailing edge, in the band's upper third: clear of the caption
+   row above it, clear of `.corr-bandnum` at the foot, and clear of the centred
+   gate. Two rows, never more — a third row would reach the numerals it sits
+   above. Each child carries its own backing so it reads over any band fill, and
+   the whole line is `pointer-events:none`: it is evidence, not a control. */
+.corr-lanedetail{
+  position:absolute;top:20px;right:6px;z-index:6;
+  display:flex;flex-direction:column;align-items:flex-end;gap:1px;
+  max-width:64%;min-width:0;text-align:right;pointer-events:none;
+  font:500 8.5px/1.2 var(--font);letter-spacing:.02em;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+}
+.corr-lanedetail > span{
+  max-width:100%;padding:0 3px;border-radius:2px;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);
+  color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* A VERDICT IS A FINDING. An unstated outcome keeps the dim ink, exactly like
+   the hold card's placeholder — the two must not wear the same weight. */
+.corr-lanedetail .corr-outcome[data-observed="false"]{color:var(--dim)}
+/* PRICE AND COST ARE TRI-STATE, SO THE GLYPHS ARE NOT INTERCHANGEABLE: `N/A`
+   (never applicable) and `—` (not observed) both render from the panel; the
+   stylesheet keeps them the same quiet ink so neither shouts. */
+.corr-money[data-k="price"]{color:color-mix(in srgb,var(--type) 82%,transparent)}
+.corr-money[data-k="cost"]{color:color-mix(in srgb,var(--type) 82%,transparent)}
+
+/* ── SEGMENTS AND BANDS ────────────────────────────────────────────────────
+   A segment is ONE PHASE, its width the phase's measured seconds. Inside it the
+   two kinds sit SIDE BY SIDE: build on the left, troubleshooting on the right,
+   each width ∝ its own measured seconds within that phase (set inline by the
+   panel). A phase that spent a third of itself in troubleshooting is visibly a
+   third red; a phase that built cleanly is visibly all blue. */
+.corr-seg{
+  position:relative;display:flex;flex-direction:row;
+  flex:0 0 auto;min-width:1px;overflow:hidden;
+  border-right:1px solid var(--border);
+  /* THE PHASE LABELS QUERY THE PHASE, NOT THE BAND. The segment is the unit a
+     name belongs to, so it is the container; the band's own container query
+     below still resolves against `.corr-band`, its nearest container. */
+  container-type:inline-size;
+}
+
+/* NEVER GRADED — no `troubleshooting` key at all. The boundary this phase ended
+   on was never judged, so it is drawn dashed: an absence, never a clean pass.
+   THE FILL IS NOT TOUCHED. Stepping the fill back toward the surface would mean
+   the same category wears two different blues depending on a fact about its
+   BOUNDARY — and the key colour has to be one colour. The dashed edge is the
+   whole claim, and it survives a greyscale read. */
+.corr-seg[data-graded="false"]{border-right:1px dashed var(--dim)}
+
+/* Bands are sized by the panel, never by flex: two widths that must sum to the
+   phase cannot be distributed by a flex ratio that also answers to content.
+   THE BAND CLIPS ITS OWN CHIP: a section's numerals are ellipsized at its edge
+   instead of bleeding across the neighbour's fill. */
+.corr-band{
+  position:relative;display:block;flex:0 0 auto;min-height:3px;min-width:0;
+  overflow:hidden;container-type:inline-size;
+}
+
+/* BUILD — BLUE, FLAT, OPAQUE. Solid, not a mix against the surface: the three
+   category colours are a KEY, and a key that shifts with its background is not
+   one. */
+.corr-band.corr-build{background:var(--corr-build)}
+
+/* TROUBLESHOOTING — RED, FLAT. The legend above the track is what names the
+   colour; the section chips say what the band cost. */
+.corr-band.corr-ts{background:var(--corr-trouble)}
+
+/* NEVER TIMED. Wall seconds absent means the band was not observed at all — an
+   ABSENCE, not a zero: transparent, dashed, dim. Colour never carries a claim
+   that the data does not make. */
+.corr-band[data-observed="false"]{
+  background:transparent;border:1px dashed var(--dim);
+}
+
+/* TURNS AS TICKS along the foot of the build band. They flex instead of stacking
+   at a fixed 1px: hundreds of individually-painted ticks would clip to a solid
+   block, so they share the band's width and keep their grain. */
+.corr-ticks{
+  position:absolute;left:0;right:0;bottom:0;height:6px;
+  display:flex;align-items:flex-end;gap:1px;
+  overflow:hidden;pointer-events:none;
+}
+.corr-tick{flex:1 1 1px;min-width:1px;height:4px;background:color-mix(in srgb,var(--fg) 46%,transparent)}
+/* Aggregated density bands are the ticks that collapsed: taller and wider, so a
+   burst of turns reads as a burst rather than as more of the same grain. */
+.corr-tick.agg{flex:2 1 2px;min-width:2px;height:6px;background:var(--fg)}
+
+/* TOKEN RIBBON. Width is the band's share of the run's densest band, set inline.
+   A 3px rule at the foot of the band: density is a second reading of the same
+   seconds, and it must not compete with the fill — nor wear the compaction
+   green, which is a DIFFERENT fact (a stitch through the run, not a weight on
+   one section), so the ribbon is neutral ink. */
+.corr-ribbon{
+  position:absolute;left:0;bottom:0;height:3px;
+  background:color-mix(in srgb,var(--type) 55%,transparent);pointer-events:none;
+}
+
+/* THE SECTION'S OWN NUMBERS. `117K · 6:26` at the band's foot, on a backing so
+   it reads over any fill. It is the only place these two facts are printed.
+   A container query hides it where the band cannot hold even a truncated pair:
+   a chip that only ever shows "1…" is noise, not a measurement. */
+.corr-bandnum{
+  position:absolute;left:2px;right:2px;bottom:8px;z-index:5;
+  font:500 8.5px/1.15 var(--font);letter-spacing:.02em;
+  color:var(--type);background:color-mix(in srgb,var(--bg) 88%,transparent);
+  border-radius:2px;padding:0 2px;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  pointer-events:none;
+}
+@container (max-width: 56px){
+  .corr-bandnum{display:none}
+}
+/* The selected lane carries a 5px status rail on its leading edge; the first
+   band's chip starts behind it and lost a glyph. Clear it. */
+.corr-lane.is-selected .corr-bandnum{left:7px}
+
+/* THE PHASE NAMES ITSELF. A phase was only a `title` attribute and a tick run:
+   the name was readable by hovering one band and nowhere else. It is now visible
+   text at the phase's own left edge, with the phase's turns numeral beside it —
+   the same relationship the band chip states at its foot (`tokens · wall`), one
+   level up. Both sit on a backing so they read over blue, red or a dashed
+   absence.
+   IT IS DROPPED WHERE IT CANNOT BE READ. A phase narrower than ~64px cannot hold
+   even a truncated name and numeral, and a chip that only ever shows `in…` is
+   noise — so the container query removes it, exactly like `.corr-bandnum`. The
+   information is never lost: the stat chips under the track state the same phase
+   in full when its category is picked. */
+.corr-seglabel{
+  position:absolute;left:3px;bottom:22px;z-index:5;
+  display:inline-flex;align-items:baseline;gap:4px;
+  max-width:calc(100% - 6px);padding:0 2px;border-radius:2px;
+  background:color-mix(in srgb,var(--bg) 88%,transparent);
+  font:500 8.5px/1.15 var(--font);letter-spacing:.02em;
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+  overflow:hidden;pointer-events:none;
+}
+.corr-segname{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  color:var(--type);
+}
+.corr-segturns{
+  flex:none;white-space:nowrap;
+  color:color-mix(in srgb,var(--fg) 62%,transparent);
+}
+@container (max-width: 64px){
+  .corr-seglabel{display:none}
+}
+
+/* ── COMPACTION RULES ──────────────────────────────────────────────────────
+   ONE GREEN RULE PER EVENT, 115% OF THE BAR IT CROSSES and centred on it, so it
+   protrudes above and below and reads as a stitch through the lane rather than
+   as another band. Never a block, never a fill: a compaction is an instant, not
+   a duration, and the panel draws a position only where the data carries one
+   (the caption beside the legend says so). */
+.corr-compacts{
+  position:absolute;inset:0;z-index:4;pointer-events:none;
+}
+.corr-compact{
+  position:absolute;top:-7.5%;height:115%;width:2px;margin-left:-1px;
+  background:var(--corr-compact);pointer-events:none;
+}
+
+/* ── THE SELECTION LAYER — YELLOW, AND NOTHING ELSE ────────────────────────
+   A category outline is 2px of `--corr-sel` drawn INSIDE the element it marks
+   (inset shadow, not a border): no layout shift, no recolour, no height change,
+   no zoom — the same band at the same width, ringed. Scope is the SELECTED
+   LANE only, so concurrent lanes stay comparable instead of all lighting up at
+   once. */
+.corr.cat-build .corr-lane.is-selected .corr-band.corr-build,
+.corr.cat-trouble .corr-lane.is-selected .corr-band.corr-ts{
+  box-shadow:inset 0 0 0 2px var(--corr-sel);
+}
+/* A highlighted section hands its two cheap numerals to the stat chip below the
+   track; the chip states them with the full vocabulary, so printing both would
+   be the same fact twice. */
+.corr.cat-build .corr-lane.is-selected .corr-band.corr-build .corr-bandnum,
+.corr.cat-trouble .corr-lane.is-selected .corr-band.corr-ts .corr-bandnum{
+  display:none;
+}
+/* COMPACTION IS THE ODD ONE, BY DESIGN: the rules themselves take the ring, and
+   the panel beside them states a COUNT ONLY. No tokens, no time, no chips. */
+.corr.cat-compact .corr-lane.is-selected .corr-compact{
+  box-shadow:0 0 0 2px var(--corr-sel);
+}
+
+/* ── THE SECTION STATS — ONE CHIP PER HIGHLIGHTED SECTION ──────────────────
+   Under the track, in phase order, each headed `P<n> build|ts`. A ROW, not a
+   chip pinned at each section's x: seven chips of ~190px cannot stand shoulder
+   to shoulder inside a 1000px track without covering each other, and an
+   overlapped stat is an unreadable one. The row wraps at narrow widths instead
+   of clipping. */
+.corr-stats{
+  display:flex;flex-wrap:wrap;gap:3px 8px;min-width:0;
+}
+.corr-stat{
+  display:flex;align-items:baseline;gap:5px;flex:0 1 auto;min-width:0;
+  padding:1px 5px;border:1px solid color-mix(in srgb,var(--corr-sel) 42%,transparent);
+  border-radius:var(--radius-sm);
+  background:color-mix(in srgb,var(--bg-2) 88%,var(--corr-sel) 12%);
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+}
+.corr-stat-id{
+  flex:none;font:700 8.5px var(--font);letter-spacing:.08em;
+  color:color-mix(in srgb,var(--type) 82%,transparent);
+}
+.corr-stat-row{
+  display:flex;align-items:baseline;gap:6px;min-width:0;
+  font:400 8.5px var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* THE VOCABULARY. Six facts, six glyphs, six hues — the symbol is the key and
+   the colour is the second channel; either one survives alone. */
+.corr-fact{font-weight:700;white-space:nowrap}
+.corr-fact[data-k="in"]{color:var(--corr-in)}
+.corr-fact[data-k="out"]{color:var(--corr-out)}
+.corr-fact[data-k="reason"]{color:var(--corr-reason)}
+.corr-fact[data-k="cache"]{color:var(--corr-cache)}
+/* CACHE-WRITE IS THE FIFTH CLASS AND IT MUST NOT WEAR THE READ'S FULL HUE: read
+   and write are two facts about the same cache, so the write is the same teal
+   stepped back — a second reading, not a second colour. */
+.corr-fact[data-k="cachewrite"]{color:color-mix(in srgb,var(--corr-cache) 62%,transparent)}
+.corr-fact[data-k="peak"]{color:var(--corr-sel)}
+.corr-fact[data-k="wall"]{color:var(--type)}
+.corr-fact[data-k="turns"]{color:color-mix(in srgb,var(--fg) 62%,transparent)}
+
+/* ── THE WHOLE-RUN TOTALS ──────────────────────────────────────────────────
+   ONE ROW UNDER THE TRACK, ALWAYS DRAWN. The totals used to exist only inside
+   the cumulative panel, i.e. behind a legend click — so the default view showed
+   a run's shape but never its cost. This row states turns, all five token
+   classes, wall time, context peak, the compaction count and the grade roll-up
+   for the focused lane, and it names that lane in its head: a total with no
+   run attached is a number about nothing. */
+.corr-totals{
+  display:flex;align-items:baseline;flex-wrap:wrap;gap:3px 10px;min-width:0;
+  font:400 9px var(--font);
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+}
+.corr-totals-head{
+  flex:none;font:700 8.5px var(--font);letter-spacing:.1em;text-transform:uppercase;
+  color:color-mix(in srgb,var(--fg) 70%,transparent);
+  max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.corr-total{
+  display:inline-flex;align-items:baseline;gap:4px;flex:none;
+  white-space:nowrap;
+}
+.corr-total-num{font-weight:700}
+.corr-total-label{
+  color:color-mix(in srgb,var(--fg) 62%,transparent);letter-spacing:.02em;
+}
+.corr-total[data-k="in"] .corr-total-num{color:var(--corr-in)}
+.corr-total[data-k="out"] .corr-total-num{color:var(--corr-out)}
+.corr-total[data-k="reason"] .corr-total-num{color:var(--corr-reason)}
+.corr-total[data-k="cache"] .corr-total-num{color:var(--corr-cache)}
+.corr-total[data-k="cachewrite"] .corr-total-num{color:color-mix(in srgb,var(--corr-cache) 62%,transparent)}
+.corr-total[data-k="peak"] .corr-total-num{color:var(--corr-sel)}
+.corr-total[data-k="wall"] .corr-total-num{color:var(--type)}
+.corr-total[data-k="turns"] .corr-total-num{color:color-mix(in srgb,var(--fg) 62%,transparent)}
+.corr-total[data-k="cmp"] .corr-total-num{color:var(--corr-compact)}
+/* The grade roll-up rides in the same row: graded boundaries, then the LAST
+   grade's passed/total and the failed count. An absence is an em dash. */
+.corr-grades{
+  flex:none;white-space:nowrap;
+  color:color-mix(in srgb,var(--fg) 74%,transparent);
+}
+.corr-grades[data-observed="false"]{color:var(--dim)}
+
+/* ── THE CUMULATIVE PANEL — THE WHOLE RUN, ONE CATEGORY ────────────────────
+   It takes the side rail's slot rather than a second column in the same 186px
+   gutter: a second in-flow column would squeeze the track at every width, and
+   the figures it states are already anchored in the lane labels. */
+.corr-cum{
+  position:absolute;top:0;right:0;width:180px;
+  display:flex;flex-direction:column;gap:3px;
+  padding:7px 9px;min-width:0;
+  border:1px solid color-mix(in srgb,var(--corr-sel) 46%,transparent);
+  border-radius:var(--radius-md);
+  background:var(--bg);
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+}
+.corr-cum-head{
+  font:700 8.5px var(--font);letter-spacing:.12em;text-transform:uppercase;
+  color:color-mix(in srgb,var(--fg) 78%,transparent);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.corr-cum-row{
+  display:flex;align-items:baseline;gap:5px;min-width:0;
+  font:400 9px var(--font);white-space:nowrap;
+}
+.corr-cum-num{font-weight:700;flex:none}
+.corr-cum-row[data-k="in"] .corr-cum-num{color:var(--corr-in)}
+.corr-cum-row[data-k="out"] .corr-cum-num{color:var(--corr-out)}
+.corr-cum-row[data-k="reason"] .corr-cum-num{color:var(--corr-reason)}
+.corr-cum-row[data-k="cache"] .corr-cum-num{color:var(--corr-cache)}
+.corr-cum-row[data-k="cachewrite"] .corr-cum-num{color:color-mix(in srgb,var(--corr-cache) 62%,transparent)}
+.corr-cum-row[data-k="peak"] .corr-cum-num{color:var(--corr-sel)}
+.corr-cum-row[data-k="wall"] .corr-cum-num{color:var(--type)}
+.corr-cum-row[data-k="turns"] .corr-cum-num{color:color-mix(in srgb,var(--fg) 62%,transparent)}
+.corr-cum-row[data-k="cmp"] .corr-cum-num{color:var(--corr-compact)}
+.corr-cum-label{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;
+  color:color-mix(in srgb,var(--fg) 72%,transparent);letter-spacing:.02em;
+}
+.corr-cum-count{
+  font:400 8.5px var(--font);letter-spacing:.08em;color:var(--dim);
+  padding-top:3px;border-top:1px solid var(--hairline);white-space:nowrap;
+}
+.corr-cum-note{
+  font:400 8.5px var(--font);letter-spacing:.02em;
+  color:color-mix(in srgb,var(--fg) 62%,transparent);
+}
+/* The cumulative panel occupies the rail's gutter, so the track keeps exactly
+   the width it had. */
+.corr:has(> .corr-cum){padding-right:186px}
+
+/* Held time has NO width — measured time excludes it — so the barrier is drawn
+   where measured time stops and the card is drawn above it. Two clocks, one
+   position: the gap between them is the barrier's whole cost.
+   THE BARRIER IS A SHAPE, NOT AN AMBER RULE. Two posts and a pause glyph in
+   `--type`: held has to survive a greyscale read and amber is not a corridor
+   signal. */
+.corr-gate{
+  position:absolute;top:50%;transform:translateY(-50%);
+  /* THE BOX IS 16px WIDE BECAUSE THE OVERHANG IS 8px, and that is a frame fact,
+     not a taste one: a held run's barrier can be `left:100%`, so the gate is
+     drawn half outside the lane and `.corr-track`'s `overflow-clip-margin`
+     (8px) is all that may paint. At 16px / -8px the gate fits that overhang
+     exactly; a 22px gate would have its right post shaved off at the frame. The
+     width the reader needs is spent on THICKNESS, not span: 3px posts and a 6px
+     pause (two 2px bars) in the same 16px doorway. */
+  width:16px;height:34px;margin-left:-8px;box-sizing:border-box;
+  /* THE LINTEL IS WHAT MAKES IT A GATE AND NOT TWO STICKS: a top rail over the
+     two posts, so the silhouette reads as a doorway at 70px of lane height. */
+  border-top:2px solid var(--type);
+  display:flex;align-items:flex-start;justify-content:space-between;
+  z-index:5;pointer-events:none;
+}
+/* TWO POSTS hanging from the lintel, with the pause glyph standing between them.
+   3px wide and 30px tall: at 2px/24px the posts were two hairlines that a 1:1
+   screen renders as a grey suggestion of a barrier. */
+.corr-gate-bar{
+  display:block;flex:none;width:3px;height:30px;
+  background:var(--type);
+}
+/* THE GLYPH IS PAINTED, NOT TYPESET. `‖` at 15px (with or without a stroke)
+   rasterised at DPR 1 into ONE 3px column — measured across the glyph:
+   231|213|221, i.e. no gap between the two bars, so the doorway read as three
+   posts and the pause disappeared. Two 2px bars with a 2px gap at integer
+   offsets inside the 16px doorway make the pause a SHAPE: no font dependency,
+   no sub-pixel merge, identical at every DPR. The text stays in the markup for
+   the accessibility tree; `font-size:0` keeps it from painting. */
+.corr-gate-pause{
+  display:block;flex:none;align-self:center;
+  width:6px;height:12px;font-size:0;color:transparent;
+  background:linear-gradient(90deg,var(--type) 0 2px,transparent 2px 4px,var(--type) 4px 6px);
+}
+/* THE CARD IS A ROW ABOVE THE TRACK, NEVER AN OVERLAY ON IT. Absolute placement
+   anchored at the barrier meant it sat on top of the stall band, the phase
+   labels and the numerals it was explaining. It is now a flex row of its own
+   between the legend and the track: `align-self:flex-end` plus an inline
+   `margin-right` (= the rest of the time axis) puts its right edge exactly on
+   the barrier's x, and the leader line below drops through the row's gap onto
+   the `.corr-gate` marker on the track. Nothing can overlap, at any width,
+   because the card is in the flow.
+   IT WRAPS, IT NEVER ELLIPSIZES: the verdict and the gate tally are the card's
+   entire content. */
+.corr-holdcard{
+  position:relative;align-self:flex-end;
+  display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;
+  width:min(360px,66%);box-sizing:border-box;
+  padding:4px 8px;border:1px solid var(--type);border-radius:var(--radius-sm);
+  background:var(--bg-2);
+  font:400 10px/1.35 var(--font);color:var(--fg);
+  font-variant-numeric:tabular-nums;
+  pointer-events:auto;
+}
+/* THE LEADER. One vertical hair of `--type` from the card's right edge down
+   through the row gap onto the barrier — the card and the gate are one object,
+   read together, and the marker on the track stays visible on its own. Neutral,
+   like the gate it points at: amber is not a corridor signal any more. */
+.corr-holdcard::after{
+  content:"";position:absolute;top:100%;right:-1px;width:2px;height:9px;
+  background:var(--type);
+}
+.corr-holdcard b{font:700 10px var(--font);letter-spacing:.08em;color:var(--type);flex:none}
+/* A WIDTH, NOT A MAX-WIDTH: a shrink-to-fit card collapsed to one word per line
+   once the copy was allowed to wrap; the card states its width and wraps inside it. */
+.corr-holdcard span{white-space:normal;overflow-wrap:break-word;text-overflow:clip}
+/* THE VERDICT IS THE ONE HEADLINE HERE — THE FIRST SPAN, AND NOTHING ELSE.
+   Outcome and cost are both read first, but they are not equals: the verdict
+   ("did not complete · attempt ceiling reached") is the fact the whole corridor
+   exists to state, so it takes a row of its own at 18px in `--type`, the
+   brightest ink on the board. It inherited the card's own 10px/400 before this,
+   which put the OUTCOME at 10 against the gate tally — the tally shouted and the
+   verdict was a footnote, i.e. exactly backwards for a panel about a wall that
+   held. `:first-of-type` and not a new class: only the first span is the
+   verdict. */
+.corr-holdcard > span:first-of-type{
+  flex:1 1 100%;
+  font:700 18px/1.2 var(--font);color:var(--type);
+  letter-spacing:0;
+}
+/* THE HEADLINE IS EARNED BY A VERDICT, NOT BY A SLOT. A held lane with no
+   terminal outcome renders the placeholder "not observed" — a no-data absence,
+   not a finding, and at 18px it became the loudest text on the board where the
+   other secondary lines sit at 10px `--dim`. The panel marks the span, the
+   stylesheet demotes it: an absence reads like the card's other secondary
+   lines, and only a real verdict is the hero. The row break is deliberately
+   kept (`flex` still comes from the rule above) — the placeholder stays one fact
+   on one row. */
+.corr-holdcard > span:first-of-type[data-observed="false"]{
+  font:400 10px/1.3 var(--font);color:var(--dim);
+}
+
+/* ── THE STALL ─────────────────────────────────────────────────────────────
+   A STALL IS DOTTED, NOT RED. The band is still a build band — it did work — so
+   the fill stays blue and the stall is a dotted NEUTRAL hatch over it: a rhythm
+   of dots that says "this ran and ran and returned nothing". Red belongs to
+   troubleshooting now, and the diagonal hatch belongs to failure; three
+   patterns, three claims, and none of them needs colour to be read.
+   The readout is ALWAYS visible, not on hover: "62 turns, 41:00" is the
+   sentence this whole panel exists to say. */
+.corr-stall{
+  position:absolute;inset:0;z-index:3;overflow:hidden;
+  background:
+    radial-gradient(
+      circle,
+      color-mix(in srgb,var(--type) 62%,transparent) 0 1px,
+      transparent 1.3px
+    ) 0 0/5px 5px,
+    color-mix(in srgb,var(--type) 12%,transparent);
+}
+.corr-stall-readout{
+  position:absolute;top:2px;left:2px;
+  font:700 9.5px var(--font);letter-spacing:.04em;color:var(--type);
+  background:var(--bg);border:1px solid var(--border-strong);border-radius:2px;
+  padding:0 4px;white-space:nowrap;
+  font-variant-numeric:tabular-nums;
+}
+
+/* THE CAP. A lane that ran out rather than stopped gets a hard end and the two
+   words that say so — a fade would have read as a rendering accident.
+   FAILURE IS DRAWN: a 45° diagonal hatch plus a FAIL tag, in neutral ink. It
+   used to be red, which now collides with troubleshooting — and a red cap
+   claimed the wrong category outright.
+   INBOARD, ALWAYS, for the same reason the hold card is: the failed lane is
+   usually the LONGEST run, so its end is `left:100%` and an untranslated cap
+   was clipped by the track frame — the lane read as intact to the last pixel. */
+.corr-cap{
+  position:absolute;top:0;bottom:0;z-index:5;transform:translateX(-100%);
+  display:flex;align-items:center;gap:4px;
+  border-left:3px solid var(--type);
+  padding:0 5px;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb,var(--type) 24%,transparent) 0 2px,
+      transparent 2px 6px
+    ),
+    color-mix(in srgb,var(--bg-2) 92%,var(--type) 8%);
+  font:700 9px var(--font);letter-spacing:.06em;color:var(--type);
+  white-space:nowrap;pointer-events:none;
+}
+/* THE TAG IS THE WORD, SO THE MARK DOES NOT DEPEND ON THE HATCH BEING NOTICED. */
+.corr-fail{
+  flex:none;font:700 8.5px/1.4 var(--font);letter-spacing:.1em;
+  color:var(--bg);background:var(--type);border-radius:2px;padding:0 3px;
+}
+
+/* A RUN THAT HAS ONLY JUST STARTED. A stub, not an empty lane: something is
+   already on the track, it just has no distance behind it yet.
+   FULL LANE HEIGHT, LIKE A BAND. An 8px sliver floated to the middle of the lane
+   read as a rendering fragment, not as a run. A band is lane-height, so the stub
+   is too: the same object at the same scale, just short. And a floor on its
+   width (~38px, the model caption's own size), because 96 measured seconds
+   against a 6102-second axis is 1.6% of the lane — 16px at 1440 and 7px at
+   1024, i.e. a sliver wider at one size than the other. Seconds still set the
+   width above the floor: the floor says "visible", the inline width says "how
+   far". */
+.corr-stub{
+  flex:0 0 auto;align-self:stretch;min-width:38px;
+  background:color-mix(in srgb,var(--corr-build) 75%,transparent);
+  border-radius:2px;
+}
+
+/* THE EMPTY TRACK — ONE HEADLINE, SEVEN SECONDARY STATIONS.
+   A designed zero, never a failed fetch. Hierarchy is the job here: the
+   one-sentence message is the headline at `--type`, the stations sit under it at
+   `--type` reduced (11.3:1 on `--bg`), and only chrome stays at `--dim`. `--dim`
+   is 2.3:1 — it was carrying the sentence AND the seven names, which is why the
+   empty state read as disabled rather than as "waiting". */
+.corr-empty{
+  display:flex;flex-direction:column;gap:12px;
+  padding:14px;border:1px dashed var(--border-strong);
+  border-radius:var(--radius-md);min-height:104px;
+  justify-content:center;
+}
+.corr-empty-note{
+  font:500 12.5px/1.5 var(--font);color:var(--type);letter-spacing:.01em;
+}
+/* SEVEN STATIONS ON ONE RAIL, not seven tags in a bag. The measure is the same
+   time axis the lanes will use, so the empty state already draws a track: equal
+   cells spanning the FULL width, threaded onto a dashed baseline.
+   ONE ROW, ALWAYS, AT EVERY WIDTH — never wrapped. The rail is the point: seven
+   stations are seven stops on ONE line, and a 4+3 break made the dashed baseline
+   stop dead in the middle of the corridor and start again on the next line, which
+   reads as two tracks. The cells are `flex:1 1 0` so they share the width evenly
+   (no dead right-space, no unequal gauge); the names wrap inside them instead
+   (see `.corr-station`), which is why seven fit at 1024px. */
+.corr-stations{
+  position:relative;display:flex;flex-wrap:nowrap;gap:8px;min-width:0;
+  /* THE BASELINE'S STACKING HOME. The connector below is a `z-index:-1` child of
+     each chip; without a stacking context here it painted into the ROOT context,
+     under the panel's own background, and was therefore never visible at all. The
+     isolation puts the negative layer just under the chips — over the panel,
+     under the opaque cells — so the rail shows in every gutter and in no name. */
+  isolation:isolate;
+}
+/* Dot plus name. The numbered dot is the station's position on the spine, which
+   is the only ordering claim the panel makes before a run exists. The name is
+   legible but subordinate to the headline above it. */
+.corr-station{
+  position:relative;
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  /* Equal shares of the row, whatever the width: `1 1 0` splits the space after
+     the gutters evenly, so every cell is the same gauge and the rail it is
+     threaded onto cannot change pitch between neighbours. */
+  flex:1 1 0;min-width:0;
+  padding:3px 5px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+  background:var(--bg-2);
+  font:400 10px/1.3 var(--font);
+  color:color-mix(in srgb,var(--type) 78%,transparent);
+  /* THE NAME WRAPS, IT IS NEVER CUT. "Layer 1 — board and controls" is 28
+     characters and the cell is ~128px at 1024px, so a single line would have to
+     ellipsize to "Layer 1 — board and contro…" — a station with no name. It
+     breaks onto a second line instead; the row's cells are all as tall as the
+     tallest (the container's default stretch), so the chips stay one bar and the
+     baseline through them stays level. */
+  white-space:normal;text-align:center;
+}
+/* THE CELL NEVER CLIPS — the rail below has to reach 5px outside it, and a
+   clipped cell silently ate the rail. The NAME does not clip either: it wraps. */
+.corr-station > span{min-width:0;overflow:visible;text-overflow:clip}
+/* THE BASELINE THE STATIONS ARE THREADED ONTO. A 3px dashed rule per station, not
+   1px of `--hairline`: the previous connector was inside the noise floor and read
+   as nothing at all. It extends 5px into the 8px gutter on BOTH sides, so
+   neighbouring stations meet and the seven names read as one corridor awaiting a
+   run. It stays behind the chip (`z-index:-1` on a chip that creates no stacking
+   context), so it shows in the gutters and never strikes through a name. */
+.corr-station::before{
+  content:"";position:absolute;top:50%;left:-5px;right:-5px;height:3px;margin-top:-1.5px;
+  background:repeating-linear-gradient(90deg,
+    color-mix(in srgb,var(--fg) 62%,transparent) 0 6px,
+    transparent 6px 11px);
+  z-index:-1;
+}
+.corr-station b{
+  display:inline-flex;align-items:center;justify-content:center;
+  flex:none;width:13px;height:13px;border-radius:50%;
+  border:1px solid var(--border-strong);
+  font:700 8.5px var(--font);color:var(--fg);
+}
+
+/* ── NARROW ────────────────────────────────────────────────────────────────
+   At 1024px the panel is ~500px wide and the 186px reserve would leave the track
+   ~300px — too little to read a percentage off. The cumulative panel drops under
+   the track as a strip of figures instead of squeezing the thing it annotates. */
+@media (max-width:1180px){
+  /* THE CUMULATIVE PANEL IS A STRIP HERE TOO, and it does not need the reserve:
+     at this width there is no gutter to sit in, so it joins the column. */
+  .corr:has(> .corr-cum){padding-right:0}
+  .corr-cum{
+    position:static;width:auto;
+    flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:4px 12px;
+    padding:5px 8px;
+  }
+  .corr-cum-head{flex:none}
+  .corr-cum-count{
+    padding-top:0;border-top:0;padding-left:12px;
+    border-left:1px solid var(--hairline);
+  }
 }
 </style>
 <!--

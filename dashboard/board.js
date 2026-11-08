@@ -294,7 +294,7 @@ import {
   isRestoreOpen,
 } from "./panels/restore.js";
 import { renderLiveView } from "./panels/liveview.js";
-import { clearGatePin, fitGateCard, onWallViewChange, refitGateCard, renderWall, setGateHover, toggleGatePin } from "./panels/wall.js";
+import { renderCorridor, onCorridorInteraction } from "./panels/corridor.js";
 import { renderBuild, paintBuild } from "./panels/build.js";
 import { fitTopRow } from "./panels/fit.js";
 import { renderLedger, toggleBaselineRow, toggleSuperseded } from "./panels/ledger.js";
@@ -359,10 +359,6 @@ import {
 } from "./board-actions.js";
 
 function render() {
-  // The wall's attempt-tab view redraws through here. Registered on every draw
-  // (idempotent) rather than at import: board.js and the panels import each
-  // other, and the panel's state does not exist yet while board.js loads.
-  onWallViewChange(render);
   const root = document.getElementById("root");
 
   if (!board) {
@@ -386,7 +382,7 @@ function render() {
   const view = cellView(board);
 
   // Panel order is the board's argument: the curve
-  // and the gate wall side by side; the batches (their cells, their floor and
+  // and the corridor side by side; the batches (their cells, their floor and
   // its ON runs); the live cell; recall; the honesty rail; provenance.
   // patch() morphs the tree in place, so scroll, focus and selection survive.
   patch(root, `
@@ -397,7 +393,7 @@ function render() {
         ${renderLiveView(view)}
         ${renderBuild(view)}
       </div>
-      ${renderWall(view)}
+      ${renderCorridor(view)}
       ${renderLedger(view)}
       ${renderLive(view)}
       ${renderRecall(view)}
@@ -405,8 +401,6 @@ function render() {
       ${renderProvenance(view)}
     </div>
   `);
-  // The gate card is drawn invisible, measured, then placed where it fits whole.
-  if (fitGateCard(document.querySelector(".gcard"))) render();
   // One screen: the row's height and its two cards' widths, solved from the window.
   try { fitTopRow(); } catch (err) { console.error("top row fit failed:", err); }
 
@@ -472,11 +466,6 @@ export { render };
 // import, so panels (and their tests) can import this module under Node.
 function bindInteraction() {
   document.addEventListener("click", onClick);
-  // The gate card follows the pointer and keyboard focus over the wall.
-  document.addEventListener("mouseover", onGateHover);
-  document.addEventListener("focusin", onGateHover);
-  window.addEventListener("resize", () => { if (refitGateCard()) render(); });
-  window.addEventListener("scroll", () => { if (refitGateCard()) render(); }, { passive: true });
   // Resizing changes the font size that fits 130 columns; refit while dragging.
   window.addEventListener("resize", () => { try { fitTopRow(); fitTui(); } catch { /* the board never dies for the mirror */ } });
   // Back from a background tab: put counters back on their published values.
@@ -558,11 +547,11 @@ export function followActiveCell(b, repaint) {
 }
 
 function onClick(e) {
-  const t = e.target.closest("[data-gate-id],[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-cell-pick]");
+  const t = e.target.closest(".corr-lane,.corr-legend-item,.corr-toggle,[data-kind],[data-clearkinds],[data-feedtab],[data-bsource],[data-blevel],[data-bclear],#evjump,[data-tui-detach],[data-tui-detach-yes],[data-tui-cancel],[data-create-open],[data-create-cancel],[data-create-scrim],[data-create-next],[data-create-back],[data-create-kind],[data-create-challenge],[data-create-model],[data-create-compact],[data-create-baseline-continue],[data-create-accept],[data-baseline-expand],[data-superseded-toggle],[data-run-baseline],[data-feed-copy],[data-reset-open],[data-reset-confirm],[data-reset-cancel],[data-reset-scrim],[data-restore-open],[data-restore-pick],[data-restore-confirm],[data-restore-back],[data-restore-cancel],[data-restore-scrim],[data-preflight-fix],[data-tools-open],[data-tools-close],[data-tools-scrim],[data-tool-detail],[data-tool-run],[data-router-save],[data-stop-open],[data-stop-confirm],[data-stop-cancel],[data-devmode-set],[data-requiretodos-set],[data-gradertarget-set],[data-cell-pick]");
   if (!t) return;
 
-  if (t.dataset.gateId) {
-    if (toggleGatePin(t.dataset.gateId, t.getBoundingClientRect())) render();
+  if (t.closest(".corr-lane, .corr-legend-item, .corr-toggle")) {
+    if (onCorridorInteraction(t)) render();
     return;
   }
 
@@ -778,20 +767,8 @@ function onRunSel(e) {
   if (e.target.closest("[data-create-provider]")) { setCreateProvider(e.target.value); render(); }
 }
 
-function onGateHover(e) {
-  const cell = e.target?.closest?.("[data-gate-id]");
-  const overCard = e.target?.closest?.(".gcard");
-  if (overCard) return;
-  const redraw = cell
-    ? setGateHover(cell.dataset.gateId, cell.getBoundingClientRect())
-    : setGateHover(null, null);
-  if (redraw) render();
-}
-
 function onKeydown(e) {
   if (e.key !== "Escape") return;
-  // A pinned gate card is the smallest thing on screen that escape can close.
-  if (clearGatePin()) { render(); return; }
   // Escape closes what is on top: this order mirrors the overlay's paint order.
   if (isResetOpen()) { closeReset(); render(); return; }
   if (isRestoreOpen()) { closeRestore(); render(); return; }

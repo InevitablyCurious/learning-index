@@ -200,46 +200,6 @@ test("every CSS variable a live panel reads is declared", async () => {
   );
 });
 
-test("the Gate Wall's cell states are all styled", async () => {
-  // Named explicitly because this is the failure that shipped. The wall is one
-  // of the two axes the board exists to present; wall.js sets the grid's column
-  // count inline but relies on the stylesheet for the cells themselves, so an
-  // unstyled .gcell renders the whole correctness axis as empty spans.
-  const css = await stylesheet();
-  const defined = definedClasses(css);
-  for (const c of ["gwall", "gcell", "green", "red", "unobserved"]) {
-    assert.ok(defined.has(c), `.${c} is unstyled — the gate wall renders invisible`);
-  }
-
-  // A BASE rule, not merely the name appearing somewhere.
-  //
-  // Injected-drift finding: deleting `.gcell{...}` while leaving `.gcell.green`
-  // in place left the NAME resolvable, so the coverage test above passed while
-  // the cells lost every metric that gives them a visible box — aspect-ratio,
-  // border, radius. The name test is necessary but not sufficient; the geometry
-  // has to be asserted where it actually lives.
-  const base = css.match(/(?:^|\n)\.gcell\{([^}]*)\}/);
-  assert.ok(base, ".gcell has no base rule — modifiers alone give the cell no box");
-  for (const prop of ["aspect-ratio", "border", "background"]) {
-    assert.match(
-      base[1],
-      new RegExp(prop),
-      `.gcell base rule lacks ${prop} — without it the cell has no visible extent`,
-    );
-  }
-
-  // The three states must be visually DISTINCT, not merely present: the board
-  // has to survive a greyscale screenshot, so they cannot differ by hue alone.
-  for (const rule of [/\.gcell\.red\{[^}]*\}/, /\.gcell\.unobserved\{[^}]*\}/]) {
-    const m = css.match(rule);
-    assert.ok(m, `missing a distinct rule for ${rule}`);
-    assert.ok(
-      /background|border/.test(m[0]),
-      `${m[0]} distinguishes by colour alone — it must also differ in fill or border`,
-    );
-  }
-});
-
 test("the honesty rail is a multi-column grid, not a stack", async () => {
   // The rail inherits `flex-direction:column` from the shared panel rule. When
   // its own grid rule went missing it silently became six full-width blocks
