@@ -1,0 +1,1 @@
+There are still pieces on the board — I asked for just the board and the buttons first, with no pieces yet.

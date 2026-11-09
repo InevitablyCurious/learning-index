@@ -808,11 +808,13 @@ async function main() {
     ...backend.problems,
     ...frontend.problems,
   ]).filter((p) => LAYER == null || problemLayer(p.check) <= LAYER);
+  // Scoped like the problems: run 1794248721's layer-1 grade counted 60 failed
+  // gates, 52 of them layer-2/3 gates this pass never graded (8 truly failed).
   const failedGates = dedupeStrings([
     ...conformance.failedGates,
     ...backend.failedGates,
     ...frontend.failedGates,
-  ]);
+  ]).filter((check) => LAYER == null || problemLayer(check) <= LAYER);
 
   // RENDER-BLOCKED: one structured fact for the report, plus synthetic
   // problems in TWO VOICES so the model hears both what the integration team

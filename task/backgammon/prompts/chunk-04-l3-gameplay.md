@@ -1,5 +1,7 @@
 TASK: Add the gameplay in `public/index.html`, `public/style.css`, and `public/app.js` — rolling, opening, hints, moves, the computer's turn, the cube, bearing off and game over.
 
+Render everything from the serialized state: dice, cube.
+
 Call the API with root-relative paths (`fetch('/api/state', …)`) so the page works whichever host name it was loaded from.
 Never use an absolute base such as `http://127.0.0.1:8002/api/state` — a browser treats `localhost` and `127.0.0.1` as distinct origins.
 

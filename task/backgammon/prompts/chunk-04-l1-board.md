@@ -1,6 +1,6 @@
 TASK: Build the board and controls in `public/index.html`, `public/style.css`, and `public/app.js` — the board (points, bar, off tray), the buttons and the game-info panels, laid out to fit the window.
 
-Render everything from the serialized state: checkers on points, bar and off, dice, cube, pip counts, score, turn indicator, messages.
+Render everything from the serialized state: pip counts, score, turn indicator, messages.
 
 What the game should feel like to play:
 

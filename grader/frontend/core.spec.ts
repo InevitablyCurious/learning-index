@@ -231,6 +231,16 @@ test("[F01] REQ-RENDER — page loads and the board appears", async ({ page }) =
   // 1790604214's third round drew its board and every piece, missing only the
   // board's tag, and was told exactly that.
   await expect(page.getByTestId("board"), "[needs: REQ-TESTID/testid.board]").toBeVisible();
+  // Layer 1 is the board and the buttons, with no pieces yet (Jerry,
+  // 2026-11-09: the layered run 1794248721 drew its pieces while it was still
+  // on layer 1). Only a layer-1 pass asks; every later pass needs the pieces.
+  if (process.env.BENCH_LAYER === "1") {
+    await page.waitForTimeout(1_500);
+    const drawn = await page.locator('[data-testid="checker"]').evaluateAll(
+      (els) => els.filter((el) => (el as HTMLElement).checkVisibility()).length,
+    );
+    expect(drawn, `[aspect: early] at layer 1 ${drawn} pieces are drawn on the board`).toBe(0);
+  }
 });
 
 test("[F27] REQ-RENDER — no console or page errors on load", async ({ page }) => {

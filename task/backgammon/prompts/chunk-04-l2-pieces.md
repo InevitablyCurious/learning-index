@@ -1,5 +1,7 @@
 TASK: Add the pieces in `public/index.html`, `public/style.css`, and `public/app.js` — the checkers on the board: their placement, size, stacks and counts.
 
+Render everything from the serialized state: checkers on points, bar and off.
+
 What the game should feel like to play:
 
 - Checkers slide between points rather than jumping; dice visibly roll. Animate with CSS transitions and CSS animations — each checker animates position changes through a `transition` covering `transform` (or `all`) with a non-zero duration, or through a CSS `animation`.
