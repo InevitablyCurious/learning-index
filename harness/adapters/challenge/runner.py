@@ -1857,6 +1857,28 @@ class ChallengeRunner(
                             verdict = "PASS"
                             attempts_to_green += attempt - layer_first_attempt
                             termination_reason = "gates_green"
+                            # A PASSING LAYER IS A GRADE TOO. Dev mode pauses
+                            # after every grade (Jerry); the round pause above
+                            # sits on the repair path only, so run 1794248721
+                            # went from layer 1's PASS straight into building
+                            # layer 2 with no chance to play the finished layer.
+                            # Pause here before the next phase is built — told
+                            # text is that phase's build message, the next thing
+                            # sent. The last phase ends in the final pause below.
+                            if self.pause_after_grade and phase is not phases[-1]:
+                                next_phase = phases[phases.index(phase) + 1]
+                                self._paused_seconds += self._run_operator_pause(
+                                    run_label=run_label,
+                                    run_dir=run_dir,
+                                    worktree=worktree,
+                                    active_cell=active_cell,
+                                    session_id=session_id,
+                                    kind="round",
+                                    attempt=attempt,
+                                    told_text=pack.build_step_message(next_phase.index),
+                                    grade=_pause_grade(report, report_json),
+                                    phase_label=phase_label(phase, "troubleshooting"),
+                                )
                             break
 
                         if worker_killed_reason in _HARNESS_LIMIT_REASONS:

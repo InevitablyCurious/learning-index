@@ -383,3 +383,51 @@ def test_build_compactions_never_end_a_stretch_and_the_second_repair_one_does(
     assert drives == ["initial-chunk-1", "feedback-1"]
     # Layer 2 was never built.
     assert "initial-chunk-2" not in drives
+
+
+def test_dev_mode_pauses_after_a_passing_layer_before_the_next_is_built(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A passing layer grade pauses too, then the next phase is built.
+
+    Run 1794248721 passed layer 1 and went straight into building layer 2: the
+    round pause sat on the repair path only. Every layer passes here, so the
+    pauses are one round pause after each non-last layered phase's PASS, then
+    the final pause; the told text of each round pause is the next build.
+    """
+    runner = _cell_runner(tmp_path, monkeypatch)
+    runner.pause_after_grade = True
+
+    events: list[tuple[str, Any]] = []
+
+    def _fake_opencode(**kwargs: Any) -> _OpencodeRunStats:
+        events.append(("build", str(kwargs.get("phase") or "")))
+        return _stats(session_id="sess-1", exit_code=0, cost_usd=0.0)
+
+    def _fake_pause(**kwargs: Any) -> float:
+        events.append(("pause", kwargs["kind"], kwargs.get("told_text") or ""))
+        return 0.0
+
+    monkeypatch.setattr(runner, "_run_opencode_serve", _fake_opencode)
+    monkeypatch.setattr(runner, "_run_gate_report", lambda **_: dict(_PASS))
+    monkeypatch.setattr(runner, "_run_operator_pause", _fake_pause)
+
+    result = runner._run_cell_impl(
+        run_label="pause-on-pass",
+        run_dir=tmp_path / "pause-on-pass",
+        task_id="backgammon",
+    )
+
+    assert result.verdict == "PASS"
+    pauses = [e for e in events if e[0] == "pause"]
+    # Layers on phases 4, 5, 6, 7: a round pause after the PASS of 4, 5 and 6,
+    # and the final pause after 7.
+    assert [p[1] for p in pauses] == ["round", "round", "round", "final"]
+    # Each round pause comes BEFORE the next phase's build and shows it.
+    for k in (5, 6, 7):
+        pause_at = next(
+            i for i, e in enumerate(events) if e[0] == "pause" and f"phase {k}:" in e[2]
+        )
+        build_at = events.index(("build", f"initial-chunk-{k}"))
+        assert pause_at < build_at
