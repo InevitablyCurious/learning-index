@@ -931,10 +931,19 @@ export async function standsOutFromBoard(
           if (!b) return { fill: false, outline: false, centre: null };
           const samples = [0.2, 0.5, 0.8].map((f) => at(b.x + b.width / 2, b.y + b.height * f));
           const centre = [0, 1, 2].map((i) => Math.round(samples.reduce((sum, c) => sum + c[i], 0) / samples.length));
+          // An edge line drawn ON the box's own edge pixel counts too, when the
+          // pixel just outside the box is the board's: run 1794248721 round 3's
+          // bar had a 1 px border (90,58,40; Delta-E 18.9 from the board) at
+          // inset 0 and a fill 7.0 away, and was told it "blends into the
+          // board". Requiring the board just outside keeps a panel beside a tray
+          // (run 1793183074) from counting as the tray's edge.
+          const xAt = (side: "left" | "right", inset: number) =>
+            side === "left" ? b.x + inset : b.x + b.width - 1 - inset;
           const sideHits = (side: "left" | "right") =>
             [0.15, 0.3, 0.5, 0.7, 0.85].filter((fy) => {
               const y = b.y + b.height * fy;
-              return [1, 2, 3].some((inset) => far(at(side === "left" ? b.x + inset : b.x + b.width - 1 - inset, y)));
+              if ([1, 2, 3].some((inset) => far(at(xAt(side, inset), y)))) return true;
+              return far(at(xAt(side, 0), y)) && !far(at(xAt(side, -1), y));
             }).length;
           const outline = Math.max(sideHits("left"), sideHits("right")) >= 4;
           return { fill: far(centre), outline, centre };
