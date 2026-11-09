@@ -866,9 +866,7 @@ def derive_cost_from_disk(run_dir: Path) -> dict[str, Any]:
     return {"phases": phases, "paused_seconds": paused_seconds}
 
 
-def _first_text(
-    events: list[dict[str, Any]], kind: str, field: str
-) -> str | None:
+def _first_text(events: list[dict[str, Any]], kind: str, field: str) -> str | None:
     """The non-empty ``field`` of the FIRST ``kind`` record carrying one."""
     for event in events:
         if event.get("kind") != kind:
