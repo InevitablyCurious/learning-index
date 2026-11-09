@@ -299,6 +299,10 @@
       "first": "When I pick up a piece, the hints it shows aren't that piece's moves.",
       "repeat": "I picked up a piece again and the hints still belong to other pieces."
     },
+    "F75.size": {
+      "first": "The move hints aren't the size of a piece — I expect each one as big as a piece.",
+      "repeat": "The move hints still aren't the size of a piece."
+    },
     "F75.backwards": {
       "first": "When I pick up a piece, the hints show up behind it, as if it could move backwards.",
       "repeat": "I picked up a piece again and the hints still show up behind it."

@@ -1409,6 +1409,9 @@ test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ p
   const sources = [...new Set(state.legalMoves.map((m) => m.from))].filter((f) => typeof f === "number") as number[];
   const behind: string[] = [];
   const astray: string[] = [];
+  let oversized = false;
+  let widestSeen = 0;
+  let pointWidest = 0;
   for (const from of sources) {
     // A fresh page per piece, so picking one is never read as a move of another.
     await page.reload();
@@ -1426,7 +1429,26 @@ test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ p
       if (at !== null && at > from) behind.push(`${from}→${at}`);
       else if (at === null || !legalTo.has(at)) astray.push(`${from}→${at ?? "no point"}`);
     }
+    const widest = await page
+      .locator('[data-testid="hint"]')
+      .evaluateAll((els) =>
+        Math.max(0, ...els.filter((el) => (el as HTMLElement).checkVisibility()).map((el) => el.getBoundingClientRect().width)),
+      );
+    const pointWide = points.length ? Math.max(...points.map((pt) => pt.width)) : 0;
+    widestSeen = Math.max(widestSeen, widest);
+    pointWidest = Math.max(pointWidest, pointWide);
+    if (pointWide > 0 && widest > 1.5 * pointWide) oversized = true;
   }
+  // A hint far bigger than a point has its centre wherever its size throws it,
+  // not where it was put: run 1794248721 rounds 13-15 anchored each hint on the
+  // right point but drew it 654 px across, so its centre landed on no point, and
+  // "hints sit on points it can't move to" was told three rounds running while
+  // the model's placement was right. The size is told first, in this stage (F86
+  // judges hint size too, but sits a stage later); placement is judged after.
+  expect(
+    !oversized,
+    `[aspect: size] [needs: REQ-HINT/hint F03 F84] a hint is ${Math.round(widestSeen)} px across and a point ${Math.round(pointWidest)} px`,
+  ).toBe(true);
   expect(behind, `[aspect: backwards] [needs: REQ-HINT/hint F03 F84] hints drawn behind the picked piece: ${behind.join(", ")}`).toEqual([]);
   expect(astray, `[aspect: astray] [needs: REQ-HINT/hint F03 F84] hints on points the picked piece can't reach: ${astray.join(", ")}`).toEqual([]);
 
