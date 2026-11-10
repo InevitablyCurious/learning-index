@@ -117,8 +117,30 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   // A row's height is a point's column, so points drawn the full height of the
   // board make a full-height bar read as one row tall (M263: the reference's
   // bar, told "doesn't run the full height of the board").
+  // Short by its TAG is not short to a player when the bar is DRAWN on down
+  // through the missing span (run 1794302476: the element tagged "bar" covered
+  // the top row only, while the dark bar column ran top to bottom on screen,
+  // and "The bar doesn't run the full height of the board" was told). The
+  // missing span is read from the picture the way the blend check reads a
+  // bar: its own fill or edge, standing out from the board.
+  let drawnShort = bar.height < 1.8 * avgPointHeight;
+  if (drawnShort) {
+    const rowsTop = Math.min(...points.map((pt) => pt.y));
+    const rowsBottom = Math.max(...points.map((pt) => pt.y + pt.height));
+    const above = bar.y - rowsTop;
+    const below = rowsBottom - (bar.y + bar.height);
+    const missing =
+      below >= above
+        ? { x: bar.x, y: bar.y + bar.height + 2, width: bar.width, height: below - 4 }
+        : { x: bar.x, y: rowsTop + 2, width: bar.width, height: above - 4 };
+    if (missing.height > 0.5 * avgPointHeight) {
+      const felt = await sampleBoardColour(page, points);
+      const [rest] = await standsOutFromBoard(page, [missing], felt.colours[0]);
+      if (rest.fill || rest.outline) drawnShort = false;
+    }
+  }
   expect(
-    bar.height >= 1.8 * avgPointHeight,
+    !drawnShort,
     `[aspect: short] [needs: REQ-TESTID/point-column] expected the bar to span both board rows, found bar height=${bar.height.toFixed(1)} vs average point height=${avgPointHeight.toFixed(1)}`,
   ).toBeTruthy();
   // And wide enough to hold a piece that has been hit (the build prompt): a
