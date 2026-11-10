@@ -145,10 +145,12 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   ).toBeTruthy();
   // And wide enough to hold a piece that has been hit (the build prompt): a
   // hairline down the middle passed the position and the height above (run
-  // 1791358018: a 2 px bar). The piece it must hold is the reference's piece,
-  // 0.86 of a point's width (the build prompt's size, golden app.js), read from
-  // the points — so the band holds on a board with no piece drawn.
-  const pieceForBar = 0.86 * pointWidth(points);
+  // 1791358018: a 2 px bar). The piece it must hold is the build prompt's
+  // piece, "about 80% of the width of the point it sits on", read from the
+  // points — so the band holds on a board with no piece drawn. Not the
+  // reference's own 0.86: run 1794305514's 56 px bar beside 70 px points fits
+  // the 56 px piece the model was told about, and was told "just a thin line".
+  const pieceForBar = 0.8 * pointWidth(points);
   expect(
     bar.width,
     `[aspect: thin] the bar is ${bar.width.toFixed(0)} px wide; a piece that has been hit needs ${pieceForBar.toFixed(0)} px`,
@@ -380,11 +382,11 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
     tray.height,
     `[aspect: short] the off tray is ${tray.height.toFixed(0)} px tall; the rows of points span ${rowsSpan.toFixed(0)} px`,
   ).toBeGreaterThanOrEqual(0.9 * rowsSpan);
-  // The piece it must hold is the reference's piece, 0.86 of a point's width
-  // (at most the largest size a piece may be: checkers drawn too big are the
-  // size check's complaint, F41, not the tray's). Read from the points, so the
-  // band holds on a board with no piece drawn.
-  const piece = 0.86 * pointWidth(points);
+  // The piece it must hold is the build prompt's piece, about 80% of a point's
+  // width (as the bar's band above; checkers drawn too big are the size check's
+  // complaint, F41, not the tray's). Read from the points, so the band holds on
+  // a board with no piece drawn.
+  const piece = 0.8 * pointWidth(points);
   expect(
     tray.width,
     `[aspect: narrow] the off tray is ${tray.width.toFixed(0)} px wide; a checker lying on its side needs ${piece.toFixed(0)} px`,
