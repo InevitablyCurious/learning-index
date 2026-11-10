@@ -863,6 +863,18 @@ async function main() {
       expected: "the board renders a placed checker",
       observed: reason,
     });
+    // geometry-not-drawn means pieces WERE placed (that is how it is told
+    // apart). On a layer-1 pass, pieces are themselves a finding — the board
+    // and buttons come first — and F01, which says so, died on the same
+    // settle as every other blocked gate. Run 1794300137's first layer-1 grade
+    // drew 30 pieces and no triangles and was told only the triangles.
+    if (reason === "geometry-not-drawn" && LAYER === 1) {
+      problems.push({
+        check: "[F01] REQ-RENDER — page loads and the board appears",
+        expected: "no pieces at layer 1",
+        observed: "[aspect: early] at layer 1 pieces are drawn on the board while the board itself never drew",
+      });
+    }
   }
 
   // A phase "ran" when its runner produced at least one per-test result. That

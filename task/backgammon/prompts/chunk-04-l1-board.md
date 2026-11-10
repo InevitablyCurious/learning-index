@@ -1,5 +1,7 @@
 TASK: Build the board and controls in `public/index.html`, `public/style.css`, and `public/app.js` — the board (points, bar, off tray), the buttons and the game-info panels, laid out to fit the window.
 
+Draw NO pieces in this phase — no checkers anywhere: not on the points, not on the bar, not in the off tray. Draw only the board (its points, the bar and the off tray), the buttons and the game info. The pieces are added in the next phase.
+
 Render everything from the serialized state: pip counts, score, turn indicator, messages.
 
 What the game should feel like to play:
