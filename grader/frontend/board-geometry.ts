@@ -272,6 +272,36 @@ export function pointWidth(points: PointBox[]): number {
   return widths.length ? widths[Math.floor(widths.length / 2)] : 0;
 }
 
+/**
+ * The widest strip of empty board the points leave beside the bar or the off
+ * tray: on either side of the bar, the bar's edge to the nearest point; at the
+ * tray, the end of points 1 and 24 to the tray. While such a strip is wider than
+ * a quarter of a point the points are squeezed, and a size judged against "a
+ * point" (the bar's and tray's width) measures the squeeze, not the bar or tray
+ * (run 1794311852: 34 px points packed against the outer edge left 207 px of
+ * board by the bar; a 80 px bar and a 100 px tray were told "far too wide",
+ * both within bounds once the points fill their half).
+ */
+export function emptyStripBesideBarOrTray(
+  points: PointBox[],
+  bar: { x: number; width: number } | null,
+  tray: { exists: boolean; x: number } | null,
+): number {
+  let widest = 0;
+  if (bar) {
+    const mid = bar.x + bar.width / 2;
+    const left = points.filter((p) => p.x + p.width / 2 < mid);
+    const right = points.filter((p) => p.x + p.width / 2 >= mid);
+    if (left.length) widest = Math.max(widest, bar.x - Math.max(...left.map((p) => p.x + p.width)));
+    if (right.length) widest = Math.max(widest, Math.min(...right.map((p) => p.x)) - (bar.x + bar.width));
+  }
+  const ends = points.filter((p) => p.num === 1 || p.num === 24);
+  if (tray?.exists && ends.length) {
+    widest = Math.max(widest, tray.x - Math.max(...ends.map((p) => p.x + p.width)));
+  }
+  return widest;
+}
+
 /** The drawn box of `[data-testid="bar"]`, or null when the board has none. */
 export async function readBarBox(
   page: Page,

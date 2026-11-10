@@ -27,6 +27,7 @@ import {
   sampleBoardColour,
   sampleBoxColours,
   standsOutFromBoard,
+  emptyStripBesideBarOrTray,
 } from "./board-geometry.ts";
 
 // The shared opening: load the app, start a fresh game through the API, reload
@@ -160,10 +161,15 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   // extra space (a few px) allocated on each side"). The reference is 1.07
   // pieces at both sizes; 1.4 is where "far too wide" is true (run 1793908891
   // round 4: a 121 px bar beside 60 px pieces).
+  // Judged only once the points fill their halves: beside squeezed points "a
+  // piece" is the squeeze's, and the line would send the model to shrink a bar
+  // that is right (run 1794311852). The strip is F80's and F81's to tell.
+  const squeezed =
+    emptyStripBesideBarOrTray(points, bar, await readOffTray(page)) > 0.25 * pointWidth(points);
   expect(
-    bar.width,
+    squeezed || bar.width <= 1.4 * pieceForBar + 2,
     `[aspect: wide] the bar is ${bar.width.toFixed(0)} px wide; a piece is ${pieceForBar.toFixed(0)} px`,
-  ).toBeLessThanOrEqual(1.4 * pieceForBar + 2);
+  ).toBeTruthy();
   // And a bar a player can SEE: it stands out from the board by its fill, its
   // outline or both (how is the builder's choice). A bar that is the colour of the
   // board with no edge of its own is a gap down the middle, wide enough to pass the
@@ -311,9 +317,19 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
     `expected the off tray to be visible, found width=${tray.width.toFixed(1)} height=${tray.height.toFixed(1)}`,
   ).toBeTruthy();
   // A tray a player can see is drawn: a see-through, outline-less, empty box
-  // passed "visible" while nothing was on screen (run 1790341662).
-  expect(tray.painted, "expected the off tray to be drawn (a fill, an outline or a label), found an empty see-through box").toBeTruthy();
+  // passed "visible" while nothing was on screen (run 1790341662). The DOM is
+  // asked first; a tagged box with no paint of its own is then read from the
+  // picture, the way F29 reads a bar: run 1794311852 tagged a see-through click
+  // overlay "off-tray" over a darker "OFF" strip drawn beneath it, and a player
+  // who sees that strip was told "The off tray isn't showing".
   const points = await readPointBoxes(page);
+  let trayDrawn = tray.painted;
+  if (!trayDrawn && tray.visible && points.length > 0) {
+    const felt = await sampleBoardColour(page, points);
+    const [look] = await standsOutFromBoard(page, [tray], felt.colours[0]);
+    trayDrawn = look.fill || look.outline;
+  }
+  expect(trayDrawn, "expected the off tray to be drawn (a fill, an outline or a label), found an empty see-through box").toBeTruthy();
   const under = points.filter((p) => overlaps(tray, p));
   expect(under.map((p) => p.num), "[aspect: overlap] the off tray is drawn over points").toEqual([]);
   // The tray is part of the board: checkers are borne off into the board's
@@ -396,10 +412,14 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
   // reference's is 1.28 points at both sizes. The same 2 px rounding as the
   // narrow side: run 1793908891 round 3's tray was 112 px beside 74 px points,
   // a pixel over 1.5, and was told "far too wide".
+  // Not while the points leave a strip of empty board by the bar or the tray:
+  // "a point" is then the squeeze's (F29's wide, run 1794311852).
+  const traySqueezed =
+    emptyStripBesideBarOrTray(points, await readBarBox(page), tray) > 0.25 * pointWidth(points);
   expect(
-    tray.width,
+    traySqueezed || tray.width <= 1.5 * pointWidth(points) + 2,
     `[aspect: wide] the off tray is ${tray.width.toFixed(0)} px wide; a point is ${pointWidth(points).toFixed(0)} px`,
-  ).toBeLessThanOrEqual(1.5 * pointWidth(points) + 2);
+  ).toBeTruthy();
   // And a tray a player can see: it stands out from the board by its fill, its
   // outline or both, as the bar does (F29). A tray with the board's colour and no
   // edge of its own is a strip of nothing at the end.
@@ -821,6 +841,19 @@ test("[F80] REQ-GEOMETRY — the bar is in the middle", async ({ page }) => {
   expect(bar, "[needs: REQ-RENDER/bar]").not.toBeNull();
   const points = await readPointBoxes(page);
   expect(points.length, "[needs: REQ-RENDER/point]").toBe(24);
+  // Points that stop short of the bar leave empty board beside it: the bar sits
+  // where it should and the points are what is off (run 1794311852: the left
+  // half's points packed against the outer edge, 207 px of board by the bar —
+  // "the bar isn't in the middle" would be false to a player).
+  const mid = bar!.x + bar!.width / 2;
+  const leftPts = points.filter((p) => p.x + p.width / 2 < mid);
+  const rightPts = points.filter((p) => p.x + p.width / 2 >= mid);
+  const gapLeft = leftPts.length ? bar!.x - Math.max(...leftPts.map((p) => p.x + p.width)) : 0;
+  const gapRight = rightPts.length ? Math.min(...rightPts.map((p) => p.x)) - (bar!.x + bar!.width) : 0;
+  expect(
+    Math.max(gapLeft, gapRight) <= 0.25 * pointWidth(points),
+    `[aspect: bargap] [needs: F29 F28 F40] ${Math.max(gapLeft, gapRight).toFixed(0)} px of empty board between the points and the bar`,
+  ).toBeTruthy();
   // The two halves as the points span them: the far edge of the outermost
   // point on each side to the bar's own edge.
   const left = bar!.x - Math.min(...points.map((p) => p.x));

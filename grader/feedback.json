@@ -1779,6 +1779,10 @@
       "first": "The bar isn't in the middle — one half of the board is wider than the other.",
       "repeat": "The bar still isn't in the middle; one half of the board is still wider."
     },
+    "F80.bargap": {
+      "first": "There's an empty gap between the points and the bar — I expect them to touch.",
+      "repeat": "There's still an empty gap between the points and the bar."
+    },
     "F81": {
       "first": "There's an empty gap between the last points and the bear-off area — I expect them to touch.",
       "repeat": "There's still an empty gap before the bear-off area."
