@@ -306,3 +306,20 @@ def test_a_line_another_check_kept_failing_is_still_not_regressed() -> None:
     new = "[G12] REQ-CUBE-AI — accepts near-even cube offers"
     reports = [{"state_hash": "h0", "failed_gates": [old]}, {"state_hash": "h1"}]
     assert _regressed_checks(reports, [_problem(old), _problem(new)]) == set()
+
+
+def test_check_above_previous_layer_is_never_a_regression() -> None:
+    # Run 1794307865: the first layer-2 grade told the stack checks under
+    # "these were working last time" — the layer-1 grade never ran them (no
+    # pieces), so absence from its failed_gates says nothing. A layer-1 check
+    # that passed at layer 1 and fails now IS still a regression.
+    layers = {HINT: 2, PIP: 1}
+    reports = [
+        {"state_hash": "h0", "layer": 1, "failed_gates": []},
+        {"state_hash": "h1", "layer": 2},
+    ]
+    told = [_problem(HINT), _problem(PIP)]
+    assert _regressed_checks(reports, told, layer_of=layers.__getitem__) == {PIP}
+    # Unlayered previous report: unchanged behaviour.
+    flat = [{"state_hash": "h0"}, {"state_hash": "h1"}]
+    assert _regressed_checks(flat, told, layer_of=layers.__getitem__) == {HINT, PIP}

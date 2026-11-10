@@ -224,7 +224,9 @@ _LINE_ASPECT_RE = re.compile(r"\[aspect: ([a-z]+)\]")
 
 
 def _regressed_checks(
-    attempt_reports: list[dict[str, Any]], visible: list[dict[str, Any]]
+    attempt_reports: list[dict[str, Any]],
+    visible: list[dict[str, Any]],
+    layer_of: Callable[[str], int] | None = None,
 ) -> set[str]:
     """The checks told THIS round that PASSED the immediately-previous graded round.
 
@@ -236,6 +238,12 @@ def _regressed_checks(
     check genuinely passed last round. A degraded previous round (gate timeout,
     instrument fault) graded nothing, so nothing is known to have "worked";
     unchanged code cannot regress anything. Both return the empty set.
+
+    A layered previous round graded only its own layers (``--layer N``): a check
+    above N never ran there, so it cannot have worked. ``layer_of`` names each
+    check's layer and those checks are excluded (run 1794307865: the first
+    layer-2 grade told the stack checks as "working last time" — layer 1 had no
+    pieces to stack).
     """
     if len(attempt_reports) < 2:
         return set()
@@ -246,9 +254,15 @@ def _regressed_checks(
         return set()
     prev_failed = {str(g).strip() for g in (prev.get("failed_gates") or [])}
     checks = [p for p in visible if isinstance(p, dict)]
+    prev_layer = prev.get("layer")
+    eligible = checks
+    if layer_of is not None and isinstance(prev_layer, int):
+        eligible = [
+            p for p in checks if layer_of(str(p.get("check", ""))) <= prev_layer
+        ]
     regressed = {
         str(p.get("check", "")).strip()
-        for p in checks
+        for p in eligible
         if str(p.get("check", "")).strip() not in prev_failed
     }
 
@@ -2056,7 +2070,11 @@ class ChallengeRunner(
                         # graded round is a REGRESSION — the model's own fix undid code
                         # that worked — and is told under its own opener (feedback.py).
                         regressions = _regressed_checks(
-                            attempt_reports, stage_view.visible
+                            attempt_reports,
+                            stage_view.visible,
+                            layer_of=lambda c: self._player_layers().layer_of(
+                                c, self._player_stages()
+                            ),
                         )
                         feedback = self._build_feedback_prompt(
                             problems=stage_view.visible,
