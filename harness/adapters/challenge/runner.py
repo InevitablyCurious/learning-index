@@ -32,6 +32,7 @@ importing it directly is correct -- same rationale as serve.py
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -43,7 +44,12 @@ from typing import Any, Callable
 
 from harness import grader_image as grader_image_mod
 from harness.backends.base import NeedCard
-from harness.checkpoint import checkpoint_root, record_checkpoint
+from harness.checkpoint import (
+    checkpoint_root,
+    read_checkpoint,
+    record_checkpoint,
+    seed_worktree_from_checkpoint,
+)
 from harness.context_budget import CONTEXT_EXHAUSTED, model_limits
 from harness.serve_client import WORKER_DIED
 from harness.egress import egress_container_name
@@ -398,6 +404,8 @@ class ChallengeRunner(
         require_todos: bool = False,
         pause_after_grade: bool = False,
         source_commit: str | None = None,
+        resume_checkpoint: Path | str | None = None,
+        resume_phase: int | None = None,
     ) -> None:
         # WO-GATE-ROSTER: the campaign's gate roster, written once at cell start
         # by the sequencer. Passed to `report.mjs` so it can report which gates
@@ -438,6 +446,49 @@ class ChallengeRunner(
         # `_hold_for_operator`. Decided entirely by this flag; the harness never
         # reads an env var for it (BENCH_HOLD_UI is deleted).
         self.pause_after_grade = bool(pause_after_grade)
+        # ── RESUME FROM A CHECK-POINT (dev mode only) ───────────────────────
+        #
+        # The dev loop's step 6 (Jerry, 2026-11-11): after a grader fix, the run
+        # continues from the check-point where the wrong grade was given —
+        # never from zero. The cell's worktree is seeded with that check-point's
+        # tree, every phase before `resume_phase` is taken as built, and
+        # `resume_phase` itself starts at its GRADE (its build is the code in
+        # the tree). The model gets a fresh session, so the first message it
+        # receives re-hands the phase header and the whole spec.
+        #
+        # A RESUMED CELL IS NOT A MEASUREMENT: it skips the work before the
+        # check-point, so it is only allowed with the operator pause (dev mode)
+        # and it writes `resume.json` into its run dir to say what it is.
+        self.resume_checkpoint: dict | None = None
+        self.resume_phase: int | None = None
+        if resume_checkpoint is not None:
+            if not self.pause_after_grade:
+                raise ValueError(
+                    "a resumed cell is a dev-mode cell: resume_checkpoint needs "
+                    "pause_after_grade"
+                )
+            meta = read_checkpoint(Path(resume_checkpoint))
+            phase_k = (
+                resume_phase if resume_phase is not None else meta.get("build_phase")
+            )
+            if not isinstance(phase_k, int) or phase_k < 1:
+                raise ValueError(
+                    f"check-point {meta['dir']} records no build phase — pass "
+                    "resume_phase (the phase-plan index it was graded at)"
+                )
+            if (
+                resume_phase is not None
+                and isinstance(meta.get("build_phase"), int)
+                and meta["build_phase"] != resume_phase
+            ):
+                raise ValueError(
+                    f"resume_phase {resume_phase} contradicts check-point "
+                    f"{meta['dir']}, which was graded at phase {meta['build_phase']}"
+                )
+            self.resume_checkpoint = meta
+            self.resume_phase = phase_k
+        elif resume_phase is not None:
+            raise ValueError("resume_phase without resume_checkpoint")
         self.memory_mode = str(memory_mode)
         # Bench identity for session titling (WO-STRIP-2b). Empty is legitimate
         # (unit callers); the title then uses the "org" fallback component.
@@ -619,6 +670,8 @@ class ChallengeRunner(
         phase,
         state_hash,
         run_label,
+        build_phase=None,
+        layer=None,
     ):
         entry = record_checkpoint(
             run_dir=run_dir,
@@ -627,6 +680,8 @@ class ChallengeRunner(
             phase=phase,
             state_hash=state_hash,
             run_id=str(run_label),
+            build_phase=build_phase,
+            layer=layer,
         )
         if entry is None:
             live = getattr(self, "_live", None)
@@ -872,6 +927,33 @@ class ChallengeRunner(
         self._progress(
             f"PROGRESS run_label={run_label} step=isolation-worktree result=clean dst={worktree}"
         )
+        if self.resume_checkpoint is not None:
+            # After the clean assert, so the check still proves nothing leaked
+            # in from a previous cell; the seed is the one deliberate import.
+            seed_worktree_from_checkpoint(
+                worktree=worktree, cp_dir=Path(self.resume_checkpoint["dir"])
+            )
+            (run_dir / "resume.json").write_text(
+                json.dumps(
+                    {
+                        "resumed_from": self.resume_checkpoint["dir"],
+                        "build_phase": self.resume_phase,
+                        "checkpoint_attempt": self.resume_checkpoint.get("attempt"),
+                        "checkpoint_state_hash": self.resume_checkpoint.get(
+                            "state_hash"
+                        ),
+                        "measurement": False,
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self._progress(
+                f"PROGRESS run_label={run_label} step=resume-seed "
+                f"checkpoint={self.resume_checkpoint['dir']} "
+                f"phase={self.resume_phase} result=exact"
+            )
 
         pure = self._prepare_memory_mode(worktree=worktree)
 
@@ -1243,202 +1325,234 @@ class ChallengeRunner(
                         f"phase={phase.index} name='{phase.name}' "
                         f"layer={'none' if phase.layer is None else phase.layer}"
                     )
-                    try:
-                        build_run = self._run_opencode_serve_chunked(
-                            active_cell=active_cell,
-                            serve_client=self._serve_client,
-                            session_id=self._cell_session_id,
-                            prompts=[pack.build_step_message(phase.index)],
-                            phase_index=phase.index,
-                            phase_label=phase_label(phase, "build"),
-                            run_label=run_label,
-                            sidecar_path=user_events_path,
-                            prior_cost_usd=cell_cost_usd,
-                            kill_hook=active_cell.kill_worker_processes,
+                    # A RESUMED CELL (``resume_phase``) TAKES EVERY PHASE UP TO
+                    # AND INCLUDING ITS CHECK-POINT'S AS BUILT: that code is the
+                    # seeded tree. Its completion row says "seeded", never
+                    # "complete" — nothing was driven here. The check-point's own
+                    # phase then goes straight to its grade below.
+                    seeded = (
+                        self.resume_phase is not None
+                        and phase.index <= self.resume_phase
+                    )
+                    if seeded:
+                        if phase.index == self.resume_phase and phase.layer is None:
+                            raise ValueError(
+                                f"resume phase {phase.index} ('{phase.name}') is a "
+                                "backend phase — only a graded (layered) phase has "
+                                "a check-point to resume from"
+                            )
+                        chunk_reports.append(
+                            {"chunk": phase.index, "exit_code": 0, "seeded": True}
                         )
-                    except ServeTransportError:
-                        raise
-                    except Exception as exc:
+                        self._progress(
+                            f"PROGRESS run_label={run_label} step=build-phase-seeded "
+                            f"phase={phase.index} name='{phase.name}'"
+                        )
+                        if phase.index < self.resume_phase:
+                            continue
+                        # The check-point's phase repairs in the cell's own
+                        # fresh serve session — no build drive handed one back.
+                        session_id = self._cell_session_id
+                    if not seeded:
+                        try:
+                            build_run = self._run_opencode_serve_chunked(
+                                active_cell=active_cell,
+                                serve_client=self._serve_client,
+                                session_id=self._cell_session_id,
+                                prompts=[pack.build_step_message(phase.index)],
+                                phase_index=phase.index,
+                                phase_label=phase_label(phase, "build"),
+                                run_label=run_label,
+                                sidecar_path=user_events_path,
+                                prior_cost_usd=cell_cost_usd,
+                                kill_hook=active_cell.kill_worker_processes,
+                            )
+                        except ServeTransportError:
+                            raise
+                        except Exception as exc:
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=serve-drive "
+                                f"phase=initial-chunk-{phase.index} status=abort "
+                                f"reason=exception detail={exc}"
+                            )
+                            raise ServeTransportError(
+                                f"the chunked build failed on the serve transport "
+                                f"({exc}) — aborting rather than salvaging it by "
+                                "another route"
+                            ) from exc
                         self._progress(
                             f"PROGRESS run_label={run_label} step=serve-drive "
-                            f"phase=initial-chunk-{phase.index} status=abort "
-                            f"reason=exception detail={exc}"
+                            f"phase=initial-chunk-{phase.index} status=used"
                         )
-                        raise ServeTransportError(
-                            f"the chunked build failed on the serve transport "
-                            f"({exc}) — aborting rather than salvaging it by "
-                            "another route"
-                        ) from exc
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=serve-drive "
-                        f"phase=initial-chunk-{phase.index} status=used"
-                    )
-                    # THE DRIVER NUMBERED ITS ONE PROMPT "1". A completion row's
-                    # `chunk` is the PHASE, not the prompt's position inside a
-                    # single-prompt call — otherwise seven phases fold into
-                    # seven rows all claiming chunk 1, six of them reported
-                    # `not_reached`.
-                    for row in build_run.chunk_reports or ():
-                        chunk_reports.append({**row, "chunk": phase.index})
-                    observed_attempt_costs.append(build_run.cost_usd)
-                    cell_cost_usd += build_run.cost_usd
-                    session_id = build_run.session_id
-                    input_tokens_total += build_run.input_tokens
-                    output_tokens_total += (
-                        build_run.output_tokens + build_run.reasoning_tokens
-                    )
-                    reasoning_tokens_total += build_run.reasoning_tokens
-                    cache_read_total += build_run.cache_read_tokens
-                    cache_write_total += build_run.cache_write_tokens
-                    turns_total += build_run.turns
-                    provider_truncations_total += build_run.provider_truncations
-                    cap_cutoffs_total += build_run.cap_cutoffs
-                    cap_cutoffs_nudged_total += build_run.cap_cutoffs_nudged
-                    zero_tool_turns_total += build_run.zero_tool_turns
-                    zero_tool_resumes_total += build_run.zero_tool_resumes
-                    if build_run.zero_tool_turn_honest_fail:
-                        zero_tool_turn_honest_fails_total += 1
-                    turn_anomalies_all.extend(build_run.turn_anomalies)
-                    unmetered_turns_total += build_run.unmetered_turns
-                    unmetered_turn_wall_total += build_run.unmetered_turn_wall_s
-                    prev_run_stats = build_run
-                    worker_killed_reason = build_run.killed_reason
-                    self._progress(
-                        f"PROGRESS run_label={run_label} step=worker-launch-end "
-                        f"mode=real phase={phase.index} exit={build_run.exit_code} "
-                        f"killed={build_run.killed_reason or 'none'} "
-                        f"turns={build_run.turns} input={build_run.input_tokens} "
-                        f"output={build_run.output_tokens} "
-                        f"reasoning={build_run.reasoning_tokens} "
-                        f"session_id={session_id or 'none'} "
-                        f"cost_usd={build_run.cost_usd:.4f} "
-                        f"cell_cost_usd={cell_cost_usd:.4f}"
-                    )
-
-                    # A PHASE THAT DID NOT FINISH ENDS THE CELL: it is not
-                    # graded, and the next phase is never built on top of it.
-                    # In the one-build flow a broken build was still graded
-                    # (D-GATE-COUPLE: gates run regardless of
-                    # `termination_reason`) because there was exactly one
-                    # end-of-cell grade and its evidence was worth having. That
-                    # reason does not survive the sequence: layer 1 graded
-                    # against a backend that never finished reports failures the
-                    # model was never given a chance to avoid, and layer 2 built
-                    # over a dead layer 1 measures nothing at all.
-                    if build_run.killed_reason == WORKER_DIED:
-                        verdict = "FAIL"
-                        attempts_to_green = "WORKER_DIED"
-                        termination_reason = WORKER_DIED
-                        cell_terminal = True  # grade nothing: the worker is gone
-                    elif build_run.context_exhausted:
-                        # The genuine residual: the session raised
-                        # ContextOverflowError, i.e. it was too large to compact
-                        # at all. A build that merely filled its context was
-                        # compacted and kept going, so it never arrives here.
-                        verdict = "FAIL"
-                        attempts_to_green = "CONTEXT_EXHAUSTED"
-                        termination_reason = CONTEXT_EXHAUSTED
+                        # THE DRIVER NUMBERED ITS ONE PROMPT "1". A completion row's
+                        # `chunk` is the PHASE, not the prompt's position inside a
+                        # single-prompt call — otherwise seven phases fold into
+                        # seven rows all claiming chunk 1, six of them reported
+                        # `not_reached`.
+                        for row in build_run.chunk_reports or ():
+                            chunk_reports.append({**row, "chunk": phase.index})
+                        observed_attempt_costs.append(build_run.cost_usd)
+                        cell_cost_usd += build_run.cost_usd
+                        session_id = build_run.session_id
+                        input_tokens_total += build_run.input_tokens
+                        output_tokens_total += (
+                            build_run.output_tokens + build_run.reasoning_tokens
+                        )
+                        reasoning_tokens_total += build_run.reasoning_tokens
+                        cache_read_total += build_run.cache_read_tokens
+                        cache_write_total += build_run.cache_write_tokens
+                        turns_total += build_run.turns
+                        provider_truncations_total += build_run.provider_truncations
+                        cap_cutoffs_total += build_run.cap_cutoffs
+                        cap_cutoffs_nudged_total += build_run.cap_cutoffs_nudged
+                        zero_tool_turns_total += build_run.zero_tool_turns
+                        zero_tool_resumes_total += build_run.zero_tool_resumes
+                        if build_run.zero_tool_turn_honest_fail:
+                            zero_tool_turn_honest_fails_total += 1
+                        turn_anomalies_all.extend(build_run.turn_anomalies)
+                        unmetered_turns_total += build_run.unmetered_turns
+                        unmetered_turn_wall_total += build_run.unmetered_turn_wall_s
+                        prev_run_stats = build_run
+                        worker_killed_reason = build_run.killed_reason
                         self._progress(
-                            f"PROGRESS run_label={run_label} "
-                            f"step=context-exhausted-stop phase=build graded=0"
+                            f"PROGRESS run_label={run_label} step=worker-launch-end "
+                            f"mode=real phase={phase.index} exit={build_run.exit_code} "
+                            f"killed={build_run.killed_reason or 'none'} "
+                            f"turns={build_run.turns} input={build_run.input_tokens} "
+                            f"output={build_run.output_tokens} "
+                            f"reasoning={build_run.reasoning_tokens} "
+                            f"session_id={session_id or 'none'} "
+                            f"cost_usd={build_run.cost_usd:.4f} "
+                            f"cell_cost_usd={cell_cost_usd:.4f}"
                         )
-                        cell_terminal = True
-                    elif build_run.budget_stop_detected:
-                        verdict = "BUDGET_STOP"
-                        attempts_to_green = "BUDGET_STOP"
-                        termination_reason = "budget_stop_mid_attempt"
-                        cell_terminal = True
-                    elif build_run.zero_tool_turn_honest_fail:
-                        verdict = "FAIL"
-                        attempts_to_green = "FAIL"
-                        termination_reason = "zero_tool_turn_honest_fail"
-                        cell_terminal = True
-                    elif (
-                        build_run.exit_code not in (0, None)
-                        and build_run.killed_reason not in _HARNESS_LIMIT_REASONS
-                    ):
-                        # D-EXIT1-TERMINAL: stream-incomplete is transport, not
-                        # terminal. Resume from checkpoint and keep building.
-                        if build_run.exit_code == 1 and self._detect_stream_incomplete(
-                            build_run
-                        ):
+
+                        # A PHASE THAT DID NOT FINISH ENDS THE CELL: it is not
+                        # graded, and the next phase is never built on top of it.
+                        # In the one-build flow a broken build was still graded
+                        # (D-GATE-COUPLE: gates run regardless of
+                        # `termination_reason`) because there was exactly one
+                        # end-of-cell grade and its evidence was worth having. That
+                        # reason does not survive the sequence: layer 1 graded
+                        # against a backend that never finished reports failures the
+                        # model was never given a chance to avoid, and layer 2 built
+                        # over a dead layer 1 measures nothing at all.
+                        if build_run.killed_reason == WORKER_DIED:
+                            verdict = "FAIL"
+                            attempts_to_green = "WORKER_DIED"
+                            termination_reason = WORKER_DIED
+                            cell_terminal = True  # grade nothing: the worker is gone
+                        elif build_run.context_exhausted:
+                            # The genuine residual: the session raised
+                            # ContextOverflowError, i.e. it was too large to compact
+                            # at all. A build that merely filled its context was
+                            # compacted and kept going, so it never arrives here.
+                            verdict = "FAIL"
+                            attempts_to_green = "CONTEXT_EXHAUSTED"
+                            termination_reason = CONTEXT_EXHAUSTED
                             self._progress(
                                 f"PROGRESS run_label={run_label} "
-                                f"step=transport-stoppage "
-                                f"phase=initial-chunk-{phase.index} exit_code=1 "
-                                "finish_reason=stream-incomplete "
-                                f"resume_budget={self.resume_budget} "
-                                f"session_id={build_run.session_id or 'none'}"
+                                f"step=context-exhausted-stop phase=build graded=0"
                             )
-                            build_run = _OpencodeRunStats(
-                                input_tokens=build_run.input_tokens,
-                                output_tokens=build_run.output_tokens,
-                                reasoning_tokens=build_run.reasoning_tokens,
-                                turns=build_run.turns,
-                                session_id=build_run.session_id,
-                                killed_reason=None,
-                                exit_code=None,
-                                cost_usd=build_run.cost_usd,
-                                budget_stop_detected=build_run.budget_stop_detected,
-                                budget_stop_signature=build_run.budget_stop_signature,
-                                provider_truncations=build_run.provider_truncations,
-                                cap_cutoffs=build_run.cap_cutoffs,
-                                cap_cutoffs_nudged=build_run.cap_cutoffs_nudged,
-                                context_peak_tokens=build_run.context_peak_tokens,
-                                zero_tool_turns=build_run.zero_tool_turns,
-                                terminal_zero_tool_turn=build_run.terminal_zero_tool_turn,
-                                zero_tool_resumes=build_run.zero_tool_resumes,
-                                zero_tool_turn_honest_fail=build_run.zero_tool_turn_honest_fail,
-                                resume_count=1,
-                                turn_anomalies=build_run.turn_anomalies,
-                                unmetered_turns=build_run.unmetered_turns,
-                                unmetered_turn_wall_s=build_run.unmetered_turn_wall_s,
-                            )
-                            if self.resume_budget > 0:
-                                self._progress(
-                                    f"PROGRESS run_label={run_label} "
-                                    f"step=transport-resume-allowed "
-                                    f"phase=initial-chunk-{phase.index} "
-                                    f"resume_count=1 budget={self.resume_budget}"
-                                )
-                        else:
+                            cell_terminal = True
+                        elif build_run.budget_stop_detected:
+                            verdict = "BUDGET_STOP"
+                            attempts_to_green = "BUDGET_STOP"
+                            termination_reason = "budget_stop_mid_attempt"
+                            cell_terminal = True
+                        elif build_run.zero_tool_turn_honest_fail:
                             verdict = "FAIL"
                             attempts_to_green = "FAIL"
-                            termination_reason = "harness_error"
+                            termination_reason = "zero_tool_turn_honest_fail"
                             cell_terminal = True
-                    transport_resume_count += build_run.resume_count
-                    if cell_terminal:
-                        self._progress(
-                            f"PROGRESS run_label={run_label} step=build-phase-end "
-                            f"phase={phase.index} graded=0 "
-                            f"termination_reason={termination_reason}"
-                        )
-                        break
+                        elif (
+                            build_run.exit_code not in (0, None)
+                            and build_run.killed_reason not in _HARNESS_LIMIT_REASONS
+                        ):
+                            # D-EXIT1-TERMINAL: stream-incomplete is transport, not
+                            # terminal. Resume from checkpoint and keep building.
+                            if (
+                                build_run.exit_code == 1
+                                and self._detect_stream_incomplete(build_run)
+                            ):
+                                self._progress(
+                                    f"PROGRESS run_label={run_label} "
+                                    f"step=transport-stoppage "
+                                    f"phase=initial-chunk-{phase.index} exit_code=1 "
+                                    "finish_reason=stream-incomplete "
+                                    f"resume_budget={self.resume_budget} "
+                                    f"session_id={build_run.session_id or 'none'}"
+                                )
+                                build_run = _OpencodeRunStats(
+                                    input_tokens=build_run.input_tokens,
+                                    output_tokens=build_run.output_tokens,
+                                    reasoning_tokens=build_run.reasoning_tokens,
+                                    turns=build_run.turns,
+                                    session_id=build_run.session_id,
+                                    killed_reason=None,
+                                    exit_code=None,
+                                    cost_usd=build_run.cost_usd,
+                                    budget_stop_detected=build_run.budget_stop_detected,
+                                    budget_stop_signature=build_run.budget_stop_signature,
+                                    provider_truncations=build_run.provider_truncations,
+                                    cap_cutoffs=build_run.cap_cutoffs,
+                                    cap_cutoffs_nudged=build_run.cap_cutoffs_nudged,
+                                    context_peak_tokens=build_run.context_peak_tokens,
+                                    zero_tool_turns=build_run.zero_tool_turns,
+                                    terminal_zero_tool_turn=build_run.terminal_zero_tool_turn,
+                                    zero_tool_resumes=build_run.zero_tool_resumes,
+                                    zero_tool_turn_honest_fail=build_run.zero_tool_turn_honest_fail,
+                                    resume_count=1,
+                                    turn_anomalies=build_run.turn_anomalies,
+                                    unmetered_turns=build_run.unmetered_turns,
+                                    unmetered_turn_wall_s=build_run.unmetered_turn_wall_s,
+                                )
+                                if self.resume_budget > 0:
+                                    self._progress(
+                                        f"PROGRESS run_label={run_label} "
+                                        f"step=transport-resume-allowed "
+                                        f"phase=initial-chunk-{phase.index} "
+                                        f"resume_count=1 budget={self.resume_budget}"
+                                    )
+                            else:
+                                verdict = "FAIL"
+                                attempts_to_green = "FAIL"
+                                termination_reason = "harness_error"
+                                cell_terminal = True
+                        transport_resume_count += build_run.resume_count
+                        if cell_terminal:
+                            self._progress(
+                                f"PROGRESS run_label={run_label} step=build-phase-end "
+                                f"phase={phase.index} graded=0 "
+                                f"termination_reason={termination_reason}"
+                            )
+                            break
 
-                    # WO-ABORT: a phase whose own completion row is not
-                    # `complete` is an incomplete build — abort, never grade,
-                    # never advance. Folded up to THIS phase, so earlier phases
-                    # are re-checked while a later phase's absence cannot trip
-                    # it. A resumed stream-incomplete build is skipped, as
-                    # before: its row records the transport fault already
-                    # handled above.
-                    if build_run.resume_count == 0:
-                        completion = build_chunk_completion(
-                            chunk_reports=tuple(chunk_reports),
-                            expected=phase.index,
-                        )
-                        incomplete = [
-                            row for row in completion if row["state"] != "complete"
-                        ]
-                        if incomplete:
-                            detail = ", ".join(
-                                f"chunk {row['chunk']} {row['state']}"
-                                for row in incomplete
+                        # WO-ABORT: a phase whose own completion row is not
+                        # `complete` is an incomplete build — abort, never grade,
+                        # never advance. Folded up to THIS phase, so earlier phases
+                        # are re-checked while a later phase's absence cannot trip
+                        # it. A resumed stream-incomplete build is skipped, as
+                        # before: its row records the transport fault already
+                        # handled above.
+                        if build_run.resume_count == 0:
+                            completion = build_chunk_completion(
+                                chunk_reports=tuple(chunk_reports),
+                                expected=phase.index,
                             )
-                            raise IncompleteBuildError(
-                                f"chunked build incomplete: {detail} "
-                                f"(expected {build_chunk_expected} chunks)"
-                            )
+                            incomplete = [
+                                row
+                                for row in completion
+                                if row["state"] not in ("complete", "seeded")
+                            ]
+                            if incomplete:
+                                detail = ", ".join(
+                                    f"chunk {row['chunk']} {row['state']}"
+                                    for row in incomplete
+                                )
+                                raise IncompleteBuildError(
+                                    f"chunked build incomplete: {detail} "
+                                    f"(expected {build_chunk_expected} chunks)"
+                                )
 
                     if phase.layer is None:
                         # BACKEND PHASE: built and compacted, nothing to grade.
@@ -1481,7 +1595,12 @@ class ChallengeRunner(
                     # yields exactly one re-hand, never two in a row.
                     # Independent of the >= 2 abort: one compaction is healthy
                     # and still worth re-handing.
-                    spec_rehand_pending = self.compact
+                    # A resumed phase opens a FRESH session: its first message
+                    # must carry the phase header and the whole spec as well.
+                    spec_rehand_pending = self.compact or (
+                        self.resume_phase is not None
+                        and phase.index == self.resume_phase
+                    )
                     # The attempt number this layer's FIRST grade will take, so
                     # `attempts_to_green` can count this layer's failed grades
                     # (0 when it passes first try) on top of the cell total.
@@ -1565,6 +1684,8 @@ class ChallengeRunner(
                             )
                             self._record_checkpoint(
                                 run_dir=run_dir,
+                                build_phase=phase.index,
+                                layer=phase.layer,
                                 worktree=worktree,
                                 attempt=attempt,
                                 phase=(
@@ -1627,6 +1748,8 @@ class ChallengeRunner(
                             )
                             self._record_checkpoint(
                                 run_dir=run_dir,
+                                build_phase=phase.index,
+                                layer=phase.layer,
                                 worktree=worktree,
                                 attempt=attempt,
                                 phase=(
@@ -1848,6 +1971,8 @@ class ChallengeRunner(
                         )
                         self._record_checkpoint(
                             run_dir=run_dir,
+                            build_phase=phase.index,
+                            layer=phase.layer,
                             worktree=worktree,
                             attempt=attempt,
                             phase=(

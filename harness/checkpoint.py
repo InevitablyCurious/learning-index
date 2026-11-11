@@ -23,14 +23,16 @@ is a refusal, not a fresh start.
 """
 
 import difflib
+import filecmp
 import json
 import os
+import shutil
 import tempfile
 import time
 from pathlib import Path
 
 from harness.cell_isolation import worktree_drift
-from harness.snapshot import capture_snapshot
+from harness.snapshot import SNAPSHOT_EXCLUDED, capture_snapshot
 
 CHECKPOINT_DIR_NAME = "checkpoints"
 
@@ -54,6 +56,8 @@ def record_checkpoint(
     state_hash: str | None,
     run_id: str,
     wall_ts: int | None = None,
+    build_phase: int | None = None,
+    layer: int | None = None,
 ) -> dict | None:
     """Capture attempt ``attempt``'s check-point and diff it against the previous.
 
@@ -65,6 +69,11 @@ def record_checkpoint(
         diffs/<from>_to_<to>/combined.diff    concatenation of file diffs
         diffs/<from>_to_<to>/files/<rel>.diff one file's unified diff
         index.json                            {"run_id","checkpoints","diffs"}
+
+    ``build_phase`` and ``layer`` name the build phase (prompts/phase-plan.json
+    index) and grader layer the attempt was graded at: ``phase`` only says
+    "initial"/"feedback-N", which no longer identifies a point in a layered
+    build, and a resume (:func:`seed_worktree_from_checkpoint`) needs both.
 
     ``state_hash`` is the caller-supplied walk-v1 hash of the LIVE worktree;
     the captured tree is never hashed here. A falsy hash makes
@@ -101,6 +110,8 @@ def record_checkpoint(
                 "checkpoint": cid,
                 "attempt": attempt,
                 "phase": phase,
+                "build_phase": build_phase,
+                "layer": layer,
             },
         )
         if cp_dir is None:
@@ -112,6 +123,8 @@ def record_checkpoint(
                 {
                     "attempt": attempt,
                     "phase": phase,
+                    "build_phase": build_phase,
+                    "layer": layer,
                     "state_hash": state_hash,
                     "wall_ts": ts,
                 },
@@ -124,6 +137,8 @@ def record_checkpoint(
             "id": cid,
             "attempt": attempt,
             "phase": phase,
+            "build_phase": build_phase,
+            "layer": layer,
             "state_hash": state_hash,
             "wall_ts": ts,
             "tree_path": f"{CHECKPOINT_DIR_NAME}/{cid}/tree",
@@ -151,6 +166,91 @@ def record_checkpoint(
         return entry
     except Exception:
         return None
+
+
+class CheckpointSeedError(RuntimeError):
+    """A resume cannot start from this check-point exactly as it was captured."""
+
+
+def read_checkpoint(cp_dir: Path) -> dict:
+    """The check-point at ``cp_dir`` (a ``cp-NN`` directory): its ``cp.json``
+    plus the absolute ``tree`` path. Raises :class:`CheckpointSeedError` when
+    either is missing — a resume never guesses what it is resuming."""
+    cp_dir = Path(cp_dir).expanduser().resolve()
+    meta_path = cp_dir / "cp.json"
+    tree = cp_dir / "tree"
+    if not meta_path.is_file() or not tree.is_dir():
+        raise CheckpointSeedError(
+            f"{cp_dir} is not a check-point: it needs cp.json and tree/"
+        )
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise CheckpointSeedError(f"{meta_path} is unreadable: {exc}") from exc
+    if not isinstance(meta, dict):
+        raise CheckpointSeedError(f"{meta_path} is not an object")
+    return {**meta, "dir": str(cp_dir), "tree": str(tree)}
+
+
+def _tree_files(root: Path) -> set[str]:
+    """Every file under ``root`` that a check-point captures, relative and
+    POSIX-spelled: the top-level entries the snapshot excludes are left out on
+    both sides, so the harness's own AGENTS.md / opencode.json / .git never
+    count as a difference."""
+    out: set[str] = set()
+    for path in root.rglob("*"):
+        rel = path.relative_to(root)
+        if rel.parts[0] in SNAPSHOT_EXCLUDED:
+            continue
+        if path.is_file() or path.is_symlink():
+            out.add(rel.as_posix())
+    return out
+
+
+def seed_worktree_from_checkpoint(*, worktree: Path, cp_dir: Path) -> dict:
+    """Make ``worktree`` hold exactly the code captured at ``cp_dir``.
+
+    A RESUME CONTINUES THE MODEL'S OWN CODE, NOT A COPY OF IT LAID OVER THE
+    SCAFFOLD. Every top-level entry the snapshot captures is removed first (a
+    scaffold file the model deleted must stay deleted), the excluded ones —
+    the harness's AGENTS.md, opencode.json, .git, .okp — are left to the cell,
+    and the captured tree is copied in. Then the two are compared file for
+    file, byte for byte, both ways: any difference raises
+    :class:`CheckpointSeedError` and nothing is resumed from a tree that is not
+    the one the grader saw. Returns :func:`read_checkpoint`'s record.
+    """
+    meta = read_checkpoint(cp_dir)
+    tree = Path(meta["tree"])
+    worktree = Path(worktree)
+    for entry in list(worktree.iterdir()):
+        if entry.name in SNAPSHOT_EXCLUDED:
+            continue
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+    for item in tree.iterdir():
+        target = worktree / item.name
+        if item.is_dir() and not item.is_symlink():
+            shutil.copytree(item, target, symlinks=True)
+        else:
+            shutil.copy2(item, target, follow_symlinks=False)
+
+    want = _tree_files(tree)
+    have = _tree_files(worktree)
+    differ = sorted(
+        rel
+        for rel in want & have
+        if not (tree / rel).is_symlink()
+        and not filecmp.cmp(tree / rel, worktree / rel, shallow=False)
+    )
+    if want != have or differ:
+        raise CheckpointSeedError(
+            f"seeded worktree is not check-point {meta['dir']}: "
+            f"missing={sorted(want - have)[:5]} extra={sorted(have - want)[:5]} "
+            f"differ={differ[:5]}"
+        )
+    return meta
 
 
 def _load_index(index_path: Path) -> dict | None:

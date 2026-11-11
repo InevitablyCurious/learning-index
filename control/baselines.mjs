@@ -282,6 +282,7 @@ export async function collectCells(runsRoot, { includeBackups = false } = {}) {
       // harness records how it ended on its own stream (cell.end); read that
       // rather than calling a four-hour cell "not_started".
       const ended = meas ? null : await readCellEnd(cellDir);
+      const resumed = await readCellResume(cellDir);
 
       cells.push({
         id: baselineId(ent.relative, seq),
@@ -296,7 +297,11 @@ export async function collectCells(runsRoot, { includeBackups = false } = {}) {
         arm,
         // complete: graded · ended: ran and stopped before a graded attempt ·
         // started: began, no end recorded yet · not_started: never began.
-        state: meas ? "complete" : ended ? "ended" : fingerprint ? "started" : "not_started",
+        // resumed: started from a dev-loop check-point — never scored.
+        state: resumed
+          ? "resumed"
+          : meas ? "complete" : ended ? "ended" : fingerprint ? "started" : "not_started",
+        resumed_from: resumed?.resumed_from ?? null,
         // RUNBOOK 5.10, read off the harness's stamp: a cell that never
         // produced the stamp is pre-standard, and not void.
         void_instrument: cost?.void?.is_void === true,
@@ -359,6 +364,17 @@ export async function readCellEnd(cellDir) {
     }
   }
   return null;
+}
+
+/**
+ * A RESUMED cell's own statement (harness: runner `resume_checkpoint`), or null.
+ * A resumed cell started from a dev-loop check-point and skipped the work before
+ * it, so it is never a measurement: its state is "resumed", which no scoring
+ * filter counts.
+ */
+export async function readCellResume(cellDir) {
+  const rec = await readJsonOrNull(join(cellDir, "resume.json"));
+  return rec && typeof rec === "object" && rec.measurement === false ? rec : null;
 }
 
 /** A cell's recorded fingerprint values (harness/fingerprint.py), or null. */

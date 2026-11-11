@@ -104,11 +104,12 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, kind, cloud, compact, requireTodos, graderWorkerTarget, challenge } = check;
+      const { model, arm, org, kind, cloud, compact, requireTodos, graderWorkerTarget, challenge, resume } = check;
       sendJson(res, 200, {
         ok: true,
-        token: confirmationToken({ model, arm, org, kind, compact, devPause }),
-        restatement: restatement({ model, arm, org, kind, cloud, compact, devPause }),
+        token: confirmationToken({ model, arm, org, kind, compact, devPause, resume }),
+        restatement: restatement({ model, arm, org, kind, cloud, compact, devPause, resume }),
+        resume: resume ? { checkpoint: resume.rel, phase: resume.phase } : null,
         // The resolved compaction answer, so the frame shows what the token was
         // minted for.
         compact: compact === true,
@@ -168,7 +169,7 @@ export const routes = [
         return;
       }
 
-      const { model, arm, org, kind, cloud, compact, requireTodos, graderWorkerTarget, challenge } = check;
+      const { model, arm, org, kind, cloud, compact, requireTodos, graderWorkerTarget, challenge, resume } = check;
 
       // Argv array, no shell. Main-parser flags precede the subcommand
       // (argparse exits 2 otherwise). Cloud: --cloud --provider <vendor>
@@ -218,6 +219,11 @@ export const routes = [
       // Pause after each grade is the dev-mode capability (devmode.mjs): the
       // harness flag is the only pause mechanism, and the server decides it.
       if (devPause) argv.push("--pause-after-grade");
+      // Dev loop step 6: validated (dev mode only, a real check-point under the
+      // runs root, a known phase) and bound into the token above.
+      if (resume) {
+        argv.push("--resume-checkpoint", resume.checkpoint, "--resume-phase", String(resume.phase));
+      }
       if (graderWorkerTarget != null) {
         argv.push("--grader-worker-target", String(graderWorkerTarget));
       }

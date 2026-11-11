@@ -213,7 +213,8 @@ def build_chunk_completion(
 ) -> list[dict[str, Any]]:
     """Fold ``chunk_reports`` into one operator-facing row per build chunk.
 
-    THREE STATES, NOT TWO. `chunk_reports.append(report)` runs BEFORE the
+    THREE STATES, NOT TWO (plus ``seeded``: a resumed cell's phases up to its
+    check-point, whose code came from the check-point's tree). `chunk_reports.append(report)` runs BEFORE the
     chunked driver's `exit_code != 0` early return, so a chunk that died still
     carries an entry while every chunk after it carries none:
 
@@ -252,6 +253,21 @@ def build_chunk_completion(
                 {
                     "chunk": index,
                     "state": "not_reached",
+                    "nudges": 0,
+                    "reason": None,
+                    "stub_file": stub_file,
+                    "stubs_remaining": stubs,
+                }
+            )
+            continue
+
+        if report.get("seeded") is True:
+            # A RESUMED cell's phases up to its check-point: their code is the
+            # seeded tree, nothing was driven here (runner, resume_phase).
+            rows.append(
+                {
+                    "chunk": index,
+                    "state": "seeded",
                     "nudges": 0,
                     "reason": None,
                     "stub_file": stub_file,

@@ -120,6 +120,8 @@ test("LAUNCH: the single run's argv names no cell position, and every flag it pu
       "--pause-after-grade",
       "--provider",
       "--require-todos",
+      "--resume-checkpoint",
+      "--resume-phase",
     ],
     "the whole launch argv, re-baselined to one cell per click",
   );

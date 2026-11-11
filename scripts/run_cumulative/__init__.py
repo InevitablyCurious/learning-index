@@ -333,6 +333,34 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    # ── RESUME FROM A CHECK-POINT (dev loop step 6) ─────────────────────────
+    #
+    # DEV MODE ONLY, like the pause: the control plane refuses it when dev mode
+    # is off, and the adapter refuses it without --pause-after-grade. The cell
+    # starts from the code a previous cell was graded on (`cp-NN` directory),
+    # at that check-point's phase, and is never a measurement (resume.json).
+    run_parser.add_argument(
+        "--resume-checkpoint",
+        dest="resume_checkpoint",
+        default=None,
+        metavar="CP_DIR",
+        help=(
+            "Start this cell from a check-point directory (…/checkpoints/cp-NN): "
+            "its tree is the worktree, phases before it are taken as built, and "
+            "its own phase starts at the grade. Dev mode only."
+        ),
+    )
+    run_parser.add_argument(
+        "--resume-phase",
+        dest="resume_phase",
+        type=int,
+        default=None,
+        metavar="K",
+        help=(
+            "The phase-plan index the check-point was graded at. Needed only for "
+            "check-points recorded before they carried their build phase."
+        ),
+    )
     subparsers.add_parser("state", help="Print cumulative sequencer state summary.")
 
     return parser

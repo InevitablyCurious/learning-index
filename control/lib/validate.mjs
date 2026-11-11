@@ -2,6 +2,8 @@
 // each with its own reason; finishValidate is the substrate-blind half both
 // substrates share, and the one place the compaction default is resolved.
 
+import { readFile, stat } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { findChallenge } from "../challenges.mjs";
 import { confirmationToken, restatement, refuse } from "../contract.mjs";
 import {
@@ -162,6 +164,55 @@ export function compactDefaultFor(entry) {
   return Math.min(...known) < COMPACT_DEFAULT_CEILING;
 }
 
+/**
+ * RESUME FROM A CHECK-POINT (dev loop step 6). `payload.resume` is
+ * `{ checkpoint, phase? }`: a `cp-NN` directory under the runs root (relative to
+ * it, or absolute inside it) and, for a check-point recorded before it carried
+ * its build phase, the phase-plan index it was graded at. Dev mode only — a
+ * resumed cell skips the work before its check-point and is never a
+ * measurement. Returns `{ resume }` (null when absent) or `{ refused }`.
+ */
+export async function resolveResume(raw, { runsRoot, devPause }) {
+  if (raw === undefined || raw === null) return { resume: null };
+  if (!devPause) {
+    return { refused: refuse("resume_needs_dev_mode",
+      "resuming from a check-point is a dev-mode run — turn dev mode on first") };
+  }
+  const given = typeof raw?.checkpoint === "string" ? raw.checkpoint.trim() : "";
+  if (!given || !runsRoot) {
+    return { refused: refuse("resume_checkpoint_missing", "name the check-point directory (…/checkpoints/cp-NN)") };
+  }
+  const abs = isAbsolute(given) ? resolve(given) : resolve(runsRoot, given);
+  const rel = relative(resolve(runsRoot), abs);
+  if (!rel || rel.startsWith("..") || isAbsolute(rel)) {
+    return { refused: refuse("resume_checkpoint_outside", `${given} is not under the runs root`) };
+  }
+  let meta = null;
+  try {
+    const tree = await stat(join(abs, "tree"));
+    if (!tree.isDirectory()) throw new Error("tree is not a directory");
+    meta = JSON.parse(await readFile(join(abs, "cp.json"), "utf8"));
+  } catch (err) {
+    return { refused: refuse("resume_checkpoint_invalid",
+      `${rel} is not a check-point (needs cp.json and tree/): ${err?.message ?? err}`) };
+  }
+  const asked = raw?.phase === undefined || raw?.phase === null ? null : Number(raw.phase);
+  if (asked !== null && !(Number.isInteger(asked) && asked > 0)) {
+    return { refused: refuse("resume_phase_invalid", "phase must be a positive whole number") };
+  }
+  const recorded = Number.isInteger(meta?.build_phase) ? meta.build_phase : null;
+  if (asked !== null && recorded !== null && asked !== recorded) {
+    return { refused: refuse("resume_phase_conflict",
+      `${rel} was graded at phase ${recorded}, not ${asked}`) };
+  }
+  const phase = asked ?? recorded;
+  if (phase === null) {
+    return { refused: refuse("resume_phase_unknown",
+      `${rel} records no build phase — pass the phase it was graded at`) };
+  }
+  return { resume: { checkpoint: abs, rel, phase, attempt: meta?.attempt ?? null } };
+}
+
 export async function finishValidate(
   { model, arm, org, kind, entry, cloud, compactRequested = null, requireTodos = false, graderWorkerTarget = null, challengeId = "" },
   { requireConfirm, runsRoot, payload, devPause = false },
@@ -183,10 +234,14 @@ export async function finishValidate(
   // The operator's explicit choice wins; otherwise the model's window decides.
   const compact = compactRequested ?? compactDefaultFor(entry);
 
+  const resumed = await resolveResume(payload?.resume, { runsRoot, devPause });
+  if (resumed.refused) return resumed.refused;
+  const resume = resumed.resume;
+
   // The pause after each grade is the server's dev mode (devmode.mjs), derived
   // by the route and passed in: it halts the run for a human every grade, which
   // is not a scorable automated measurement, and no request field can turn it on.
-  const expected = confirmationToken({ model, arm, org, kind, compact, devPause });
+  const expected = confirmationToken({ model, arm, org, kind, compact, devPause, resume });
   if (requireConfirm && payload?.confirm !== expected) {
     return refuse(
       "bad_confirmation",
@@ -194,7 +249,7 @@ export async function finishValidate(
         "preview was shown. Review the restatement and confirm again.",
       {
         expected_token: expected,
-        restatement: restatement({ model, arm, org, kind, cloud, compact, devPause }),
+        restatement: restatement({ model, arm, org, kind, cloud, compact, devPause, resume }),
       },
     );
   }
@@ -212,5 +267,5 @@ export async function finishValidate(
     }
   }
 
-  return { ok: true, model, arm, org, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, challenge };
+  return { ok: true, model, arm, org, kind, entry, cloud, compact, requireTodos, graderWorkerTarget, challenge, resume };
 }

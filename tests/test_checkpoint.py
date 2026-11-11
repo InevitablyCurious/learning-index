@@ -169,6 +169,10 @@ def test_index_json_round_trips(tmp_path: Path) -> None:
             "id",
             "attempt",
             "phase",
+            # The build phase and grader layer graded at (None when the caller
+            # names none) — a resume needs both (test_resume_from_checkpoint).
+            "build_phase",
+            "layer",
             "state_hash",
             "wall_ts",
             "tree_path",

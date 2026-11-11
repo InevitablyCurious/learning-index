@@ -125,7 +125,7 @@ export const STALL_THRESHOLD_S = 900;
  * The confirmation token is a pure function of the submitted parameters, so a
  * preview for one configuration cannot confirm a different one.
  */
-export function confirmationToken({ model, arm, org, kind, compact, devPause = false }) {
+export function confirmationToken({ model, arm, org, kind, compact, devPause = false, resume = null }) {
   const parts = [
     `model=${model ?? ""}`,
     `arm=${arm ?? ""}`,
@@ -141,6 +141,9 @@ export function confirmationToken({ model, arm, org, kind, compact, devPause = f
   // bound into the token: a preview shown with dev mode off must not start a run
   // that pauses. Present only when on.
   if (devPause === true) parts.push("dev_pause=on");
+  // A resume starts from someone's check-point, not from zero: which one, and
+  // at which phase, is what the operator confirms.
+  if (resume) parts.push(`resume=${resume.rel}@${resume.phase}`);
   return parts.join("|");
 }
 
@@ -148,7 +151,7 @@ export function confirmationToken({ model, arm, org, kind, compact, devPause = f
  * The restatement shown before START, composed by the server so the words read
  * are the words acted on.
  */
-export function restatement({ model, arm, org, kind, cloud = null, compact = false, devPause = false }) {
+export function restatement({ model, arm, org, kind, cloud = null, compact = false, devPause = false, resume = null }) {
   const armWord = arm === "on" ? "MEMORY ON" : arm === "off" ? "CONTROL" : "UNKNOWN ARM";
   const isCloud = kind === "cloud";
   return [
@@ -175,6 +178,11 @@ export function restatement({ model, arm, org, kind, cloud = null, compact = fal
       ? ["pause: dev mode is ON — this run stops after every graded pass (and once at " +
           "the end) for operator review, so you can play the app and read what the model is " +
           "about to be told before anything is sent; release each pause to continue"]
+      : []),
+    ...(resume
+      ? [`resume: starts from check-point ${resume.rel} at phase ${resume.phase} — its code is ` +
+          "the worktree, earlier phases are taken as built, the model gets a fresh session " +
+          "with the whole spec, and this cell is NOT a measurement"]
       : []),
   ].join("\n");
 }

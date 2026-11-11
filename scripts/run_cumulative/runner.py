@@ -386,6 +386,8 @@ class RealSessionRunner:
         require_todos: bool = False,
         pause_after_grade: bool = False,
         grader_worker_target: float | None = None,
+        resume_checkpoint: str | None = None,
+        resume_phase: int | None = None,
         run_identity: str | None = None,
     ) -> None:
         self._task = task
@@ -413,6 +415,10 @@ class RealSessionRunner:
         # launch and threaded to the adapter. Campaign-wide for the same reason
         # as the flags above.
         self._pause_after_grade = bool(pause_after_grade)
+        # Dev loop step 6: continue from a check-point (the adapter validates
+        # and refuses it without the pause).
+        self._resume_checkpoint = resume_checkpoint
+        self._resume_phase = resume_phase
         self._grader_worker_target = (
             None if grader_worker_target is None else float(grader_worker_target)
         )
@@ -1260,6 +1266,8 @@ class RealSessionRunner:
             "compact": bool(getattr(self, "_compact", False)),
             "require_todos": bool(getattr(self, "_require_todos", False)),
             "pause_after_grade": bool(getattr(self, "_pause_after_grade", False)),
+            "resume_checkpoint": getattr(self, "_resume_checkpoint", None),
+            "resume_phase": getattr(self, "_resume_phase", None),
             "grader_worker_target": getattr(self, "_grader_worker_target", None),
             # Corpus identity of the code this cell runs. The campaign layer
             # states it; the adapter never re-derives it, and it is an input to
@@ -1476,5 +1484,7 @@ def _build_real_runner(
         require_todos=bool(getattr(args, "require_todos", False)),
         pause_after_grade=bool(getattr(args, "pause_after_grade", False)),
         grader_worker_target=getattr(args, "grader_worker_target", None),
+        resume_checkpoint=getattr(args, "resume_checkpoint", None),
+        resume_phase=getattr(args, "resume_phase", None),
         run_identity=run_identity,
     )
