@@ -123,8 +123,10 @@ function xyFor(color, loc, index, count) {
   const usable = d.offsetHeight * 0.96;
   let step = csize;
   if (count > 5) step = Math.min(csize, (usable - csize) / (count - 1));
-  if (isTop) return { x, y: d.offsetTop + 2 + index * step };
-  return { x, y: d.offsetTop + d.offsetHeight - csize - 2 - index * step };
+  // Each stack starts right at the board's edge, no gap (Jerry, 2026-11-12:
+  // "there should be 0px gap").
+  if (isTop) return { x, y: d.offsetTop + index * step };
+  return { x, y: d.offsetTop + d.offsetHeight - csize - index * step };
 }
 
 // ---------- render checkers from model ----------

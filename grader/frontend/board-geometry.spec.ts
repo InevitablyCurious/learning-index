@@ -288,26 +288,27 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
   }
 
   // Each stack starts at the edge of the board, at the wide end of its point,
-  // as on every backgammon board: the piece nearest the rim lies within half a
-  // piece of it (the reference: 2 px). Run 1790414346 hung every stack from
-  // its triangle's tip, in the middle of the board, and passed the checks above.
+  // as on every backgammon board — with no gap (Jerry, 2026-11-12: "there
+  // should be 0px gap"). One pixel is the floor of what can be off at all
+  // (sub-pixel rounding). It used to allow half a piece: run 1794475141's
+  // layer-2 build hung every top stack 29.4 px off the edge and passed by
+  // 0.05 px. Run 1790414346 hung every stack from its triangle's tip.
   const pieces = await page.locator('[data-testid="checker"]').evaluateAll((els) =>
     els.flatMap((el) => {
       const loc = (el as HTMLElement).dataset.loc;
       if (loc === undefined || !/^\d+$/.test(loc)) return [];
       const r = el.getBoundingClientRect();
-      return [{ num: Number(loc), top: r.y, bottom: r.y + r.height, size: Math.min(r.width, r.height) }];
+      return [{ num: Number(loc), top: r.y, bottom: r.y + r.height }];
     }),
   );
   const offRim = points.flatMap((p) => {
     const own = pieces.filter((c) => c.num === p.num);
     if (own.length === 0) return [];
-    const size = Math.max(...own.map((c) => c.size));
     const gap =
       p.num >= 13
         ? Math.min(...own.map((c) => c.top)) - p.y
         : p.y + p.height - Math.max(...own.map((c) => c.bottom));
-    return gap > 0.5 * size ? [p.num] : [];
+    return gap > 1 ? [p.num] : [];
   });
   expect(
     offRim,
