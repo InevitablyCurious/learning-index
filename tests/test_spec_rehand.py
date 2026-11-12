@@ -257,7 +257,9 @@ def test_the_rehanded_message_still_carries_the_told_problem(
     # ROUND TWO IS A REPEAT: the same person's second sighting of the same
     # fault, and the single-system voice says it in the REPEAT line (the list
     # opens "I'm still seeing these problems"), never the first-sighting one.
-    told = ChallengeRunner._told_label(dict(_L1_PROBLEM), pass_kind="repeat")[0]
+    told = ChallengeRunner._told_label(
+        dict(_L1_PROBLEM), pass_kind="repeat", among=[dict(_L1_PROBLEM)]
+    )[0]
     assert told, "the layer-1 gate resolves to a told line"
 
     _, feedback = _drive_layer_one(
@@ -323,7 +325,9 @@ def test_the_builds_own_compaction_rehands_the_spec_on_the_first_feedback(
     labels = _all_phase_labels(pack)
     # ATTEMPT ONE IS A FIRST SIGHTING, so the told line is the first-sighting
     # voice (contrast the live-compaction test, whose round two is a repeat).
-    told = ChallengeRunner._told_label(dict(_L1_PROBLEM), pass_kind="first")[0]
+    told = ChallengeRunner._told_label(
+        dict(_L1_PROBLEM), pass_kind="first", among=[dict(_L1_PROBLEM)]
+    )[0]
     assert told, "the layer-1 gate resolves to a told line"
 
     result, feedback = _drive_layer_one(

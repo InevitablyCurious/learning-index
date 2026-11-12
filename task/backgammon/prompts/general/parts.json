@@ -1,0 +1,120 @@
+{
+  "_comment": [
+    "GENERAL LINES (Jerry, 2026-11-11/12). Each part of the board has one line that states the whole expectation.",
+    "It is told in place of the part's specific lines only when one of the part's BIG findings fails this round;",
+    "otherwise each finding tells its own specific line from prompts/failures. 'members' are the findings (gate or",
+    "gate.aspect) the part covers; 'big' are the ones that mean the part's picture is wrong. Measured on the 72-build",
+    "test set (2026-11-12): 'any big finding' matched the player judgement on 44/44 triangle cases; counting findings",
+    "did at best 37/44."
+  ],
+  "pieces": {
+    "members": [
+      "F02",
+      "F31",
+      "F31.down",
+      "F31.offboard",
+      "F31.past",
+      "F31.rim",
+      "F31.side",
+      "F31.up",
+      "F41",
+      "F41.big",
+      "F41.small",
+      "F43",
+      "F43.clipped",
+      "F43.stacked",
+      "F71",
+      "F71.cascade",
+      "F71.crowdedbottom",
+      "F71.crowdedtop",
+      "F71.spreadbottom",
+      "F71.spreadtop",
+      "F71.uneven"
+    ],
+    "big": [
+      "F02",
+      "F31",
+      "F31.up",
+      "F31.down",
+      "F31.offboard",
+      "F43",
+      "F43.stacked"
+    ]
+  },
+  "triangles": {
+    "members": [
+      "F28.rows",
+      "F30",
+      "F30.boardcolours",
+      "F30.float",
+      "F30.short",
+      "F30.someshort",
+      "F30.someundrawn",
+      "F30.someundrawnleft",
+      "F30.someundrawnright",
+      "F30.undrawn",
+      "F40",
+      "F42",
+      "F42.morecolours",
+      "F42.onecolour",
+      "F70",
+      "F70.tooclose",
+      "F70.toowide",
+      "F70.touching",
+      "F79",
+      "F79.length",
+      "F79.width",
+      "F80.bargap",
+      "F81",
+      "F83"
+    ],
+    "big": [
+      "F30",
+      "F30.undrawn",
+      "F30.someundrawn",
+      "F30.someundrawnright",
+      "F30.someundrawnleft",
+      "F30.short",
+      "F30.someshort",
+      "F30.float",
+      "F30.boardcolours",
+      "F28.rows",
+      "F40",
+      "F42.onecolour",
+      "F80.bargap"
+    ]
+  },
+  "bar": {
+    "members": [
+      "F29",
+      "F29.blend",
+      "F29.overlap",
+      "F29.place",
+      "F29.short",
+      "F29.thin",
+      "F29.wide",
+      "F80"
+    ],
+    "big": [
+      "F29",
+      "F29.place"
+    ]
+  },
+  "tray": {
+    "members": [
+      "F32",
+      "F32.blend",
+      "F32.narrow",
+      "F32.offboard",
+      "F32.overlap",
+      "F32.short",
+      "F32.side",
+      "F32.wide"
+    ],
+    "big": [
+      "F32",
+      "F32.offboard",
+      "F32.side"
+    ]
+  }
+}

@@ -148,19 +148,6 @@ def _overrides() -> dict[str, dict[str, str]]:
     return load_feedback_overrides(FEEDBACK)
 
 
-#: Gates whose lines are GENERAL lines (one expectation list per part of the
-#: game, Jerry 2026-11-11). Their text is the shared line every check of that
-#: part tells.
-GENERAL_LINE_GATES = ("F30", "F29", "F32", "F31")
-
-
-def _general_lines() -> set[str]:
-    runtime = load_feedback_overrides_from_failures(TASK / "prompts")
-    return {
-        runtime[g][kind] for g in GENERAL_LINE_GATES for kind in ("first", "repeat")
-    }
-
-
 def _lines() -> list[tuple[str, str, str]]:
     """Every written line, as ``(gate, pass_kind, text)``.
 
@@ -405,13 +392,6 @@ def test_no_override_restates_its_own_test_title(
     Copying the title in is the easy mistake — it reads like a description of
     the problem because it IS one, stated as the rule.
     """
-    # A GENERAL line states the whole expectation for one part of the game and
-    # is shared by every check of that part (Jerry, 2026-11-11: "the triangles
-    # aren't drawn right, I expect …"). It restates the rules on purpose — Jerry
-    # wrote and approved it — so this guard, built for one-symptom lines, does
-    # not apply to it.
-    if text in _general_lines():
-        return
     titles = _test_titles(key)
 
     def significant(s: str) -> set[str]:

@@ -235,7 +235,17 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
   // every-piece-shows check's complaint (F43). At 0.45, run 1790365975's
   // checkers passed 33 px off centre (0.43 point) — half off their points,
   // hanging over the frame.
-  const tolerance = 0.25 * pointWidth(points);
+  //
+  // Two findings, by how far (Jerry, 2026-11-12). Half a point or more off is a
+  // piece on the WRONG point (run 1794469703 round 1: 512 px) — the pieces'
+  // picture is wrong, the general line. Anything visibly off centre short of
+  // that is the detail "the pieces do not sit perfectly on center of their
+  // point": Jerry, "there should be 0px misalignment off-center". The reference
+  // sits within 0.4 px (sub-pixel rounding); round 2 sat every stack 13.0 px
+  // left and passed the old 0.25-point tolerance (18 px). One pixel is the
+  // floor of what can be off at all.
+  const wrongPoint = 0.5 * pointWidth(points);
+  const offCentre = 1;
 
   for (const checker of checkers) {
     const point = points.find((p) => p.num === Number(checker.loc));
@@ -245,10 +255,9 @@ test("[F31] REQ-GEOMETRY — checkers over their own points", async ({ page }) =
     ).not.toBeUndefined();
 
     const dx = Math.abs(checker.centerX - point.centerX);
-    expect(
-      dx < tolerance,
-      `[aspect: side] [needs: F28 F43] expected checker loc=${checker.loc} drawn centered over point ${point.num}, found checker centerX=${checker.centerX.toFixed(1)} vs point centerX=${point.centerX.toFixed(1)} (off by ${dx.toFixed(1)}, tolerance ${tolerance.toFixed(1)})`,
-    ).toBeTruthy();
+    const found = `checker centerX=${checker.centerX.toFixed(1)} vs point ${point.num} centerX=${point.centerX.toFixed(1)} (off by ${dx.toFixed(1)})`;
+    expect(dx < wrongPoint, `[needs: F28 F43] checker loc=${checker.loc} drawn on another point: ${found}`).toBeTruthy();
+    expect(dx < offCentre, `[aspect: side] [needs: F28 F43] checker loc=${checker.loc} off the centre of its point: ${found}`).toBeTruthy();
 
     // Outside its point's vertical band, a piece is on one side of it, read from
     // where it sits — "up or down" was a guess Jerry rejected (run 1792089895,
@@ -486,10 +495,10 @@ test("[F43] REQ-GEOMETRY — every piece shows", async ({ page }) => {
     ),
   ];
   expect(onOneSpot, `[aspect: stacked] pieces drawn on one spot on points: ${onOneSpot.join(", ")}`).toEqual([]);
-  // Cut off: less than three quarters of a piece's on-screen circle shows, and
-  // not because another piece is drawn over it (a stack drawn overlapping
-  // still shows every piece). The reference shows every piece whole.
-  const cut = [...new Set(shown.filter((c) => c.seen + c.under < 0.75 * c.onScreen).map((c) => c.loc))];
+  // Cut off: less than three quarters of a piece's on-screen circle shows in
+  // the picture (another piece drawn over it still shows, so a stack drawn
+  // overlapping shows every piece). The reference shows every piece whole.
+  const cut = [...new Set(shown.filter((c) => c.seen < 0.75 * c.onScreen).map((c) => c.loc))];
   expect(cut, `[aspect: clipped] pieces cut off on points: ${cut.join(", ")}`).toEqual([]);
 });
 

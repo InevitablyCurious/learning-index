@@ -141,26 +141,60 @@ export interface CheckerVisibility {
   width: number;
   /** Share of the piece's circle a player can see. */
   seen: number;
-  /** Share of it that another piece is drawn over. */
-  under: number;
   /** Share of it inside the window. */
   onScreen: number;
 }
 
 /**
- * How much of each checker on a point shows: a grid of spots inside its
- * circle, each hit-tested for what is drawn on top there. Clipping (clip-path,
- * overflow) and stacking order decide a hit exactly as they decide what shows.
- * Pages often let clicks pass through their pieces (the reference sets
- * pointer-events: none on them), so the pieces are made hit-testable for the
- * reading and put back after it.
+ * How much of each checker on a point shows, read from the PICTURE: a grid of
+ * spots inside its circle, each compared between a screenshot of the page and
+ * one with every checker hidden. Where the two differ, the piece shows; where
+ * they match, something is painted over it or it is clipped away.
+ *
+ * It used to hit-test each spot (`elementFromPoint`) and count the piece seen
+ * only when it was the topmost element. A transparent box laid over the pieces
+ * paints nothing and still wins a hit test: run 1794469703's point boxes sat on
+ * top of every piece, and whole, plainly visible pieces were told "some of the
+ * pieces are cut off" (2026-11-12). Another piece drawn over a piece shows
+ * there too, so a stack drawn overlapping still shows every piece.
  */
 export async function readCheckerVisibility(page: Page): Promise<CheckerVisibility[]> {
-  return page.evaluate(() => {
-    const style = document.createElement("style");
-    style.textContent = '[data-testid="checker"], [data-testid="checker"] * { pointer-events: auto !important; }';
-    document.head.appendChild(style);
-    try {
+  const shown = (await page.screenshot({ type: "png" })).toString("base64");
+  const hideStyle = await page.addStyleTag({
+    content: '[data-testid="checker"], [data-testid="checker"] * { visibility: hidden !important; }',
+  });
+  let hidden: string;
+  try {
+    hidden = (await page.screenshot({ type: "png" })).toString("base64");
+  } finally {
+    await hideStyle.evaluate((element) => (element as Element).remove());
+  }
+  return page.evaluate(
+    async ({ shown, hidden, floor }) => {
+      const decode = async (b64: string) => {
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
+          img.src = "data:image/png;base64," + b64;
+        });
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas 2d context unavailable");
+        ctx.drawImage(img, 0, 0);
+        return { ctx, dpr: img.naturalWidth / window.innerWidth };
+      };
+      const a = await decode(shown);
+      const b = await decode(hidden);
+      const px = (pic: typeof a, x: number, y: number) =>
+        pic.ctx.getImageData(Math.round(x * pic.dpr), Math.round(y * pic.dpr), 1, 1).data;
+      const differs = (x: number, y: number) => {
+        const p = px(a, x, y);
+        const q = px(b, x, y);
+        return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) > floor;
+      };
       return [...document.querySelectorAll('[data-testid="checker"]')].flatMap((element) => {
         const loc = (element as HTMLElement).dataset.loc;
         if (loc === undefined || !/^\d+$/.test(loc)) return [];
@@ -170,7 +204,7 @@ export async function readCheckerVisibility(page: Page): Promise<CheckerVisibili
         if (box.width * box.height < 16) {
           const inner = [...element.querySelectorAll("*")]
             .map((el) => el.getBoundingClientRect())
-            .sort((a, b) => b.width * b.height - a.width * a.height)[0];
+            .sort((p, q) => q.width * q.height - p.width * p.height)[0];
           if (inner) box = inner;
         }
         const cx = box.x + box.width / 2;
@@ -178,7 +212,6 @@ export async function readCheckerVisibility(page: Page): Promise<CheckerVisibili
         const r = (0.9 * Math.min(box.width, box.height)) / 2;
         let inside = 0;
         let seen = 0;
-        let under = 0;
         let onScreen = 0;
         for (let i = 0; i < 9; i++) {
           for (let j = 0; j < 9; j++) {
@@ -190,9 +223,7 @@ export async function readCheckerVisibility(page: Page): Promise<CheckerVisibili
             const y = cy + dy * r;
             if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
             onScreen += 1;
-            const hit = document.elementFromPoint(x, y);
-            if (hit && (hit === element || element.contains(hit))) seen += 1;
-            else if (hit?.closest('[data-testid="checker"]')) under += 1;
+            if (differs(x, y)) seen += 1;
           }
         }
         if (inside === 0) return [];
@@ -203,15 +234,13 @@ export async function readCheckerVisibility(page: Page): Promise<CheckerVisibili
             centerY: cy,
             width: Math.min(box.width, box.height),
             seen: seen / inside,
-            under: under / inside,
             onScreen: onScreen / inside,
           },
         ];
       });
-    } finally {
-      style.remove();
-    }
-  });
+    },
+    { shown, hidden, floor: 12 },
+  );
 }
 
 /** The middle checker width of a set of shapes (the one most checkers share). */

@@ -2131,7 +2131,9 @@ class ChallengeRunner(
                         # (`verdict-pass-N`); it is folded into the single feedback
                         # message below. Empty string when nothing newly passed.
                         pass_verdict = self._build_pass_verdict(
-                            newly_passing=newly_passing, told=told_first_label
+                            newly_passing=newly_passing,
+                            told=told_first_label,
+                            still_failing=still_failing,
                         )
 
                         feedback_checks = [
@@ -2193,7 +2195,9 @@ class ChallengeRunner(
                                 and complaint not in told_first_label
                             ):
                                 told_first_label[complaint] = self._told_label(
-                                    p, pass_kind="first"
+                                    p,
+                                    pass_kind="first",
+                                    among=[q for q in problems if isinstance(q, dict)],
                                 )[0]
                         # A check told this round that PASSED the immediately-previous
                         # graded round is a REGRESSION — the model's own fix undid code
@@ -2213,6 +2217,7 @@ class ChallengeRunner(
                             withheld=stage_view.withheld,
                             unevaluated=stage_view.unevaluated,
                             regressions=regressions,
+                            found=[p for p in problems if isinstance(p, dict)],
                             respec=self._respec_for(
                                 [p for p in problems if isinstance(p, dict)],
                                 stage_view.visible,

@@ -176,6 +176,37 @@ def load_feedback_overrides_from_failures(
     return {k: v for k, v in loaded.items() if v.get("first") and v.get("repeat")}
 
 
+def load_general_lines(prompts_dir: Path) -> dict[str, dict[str, Any]]:
+    """The GENERAL lines: one per part of the board (Jerry, 2026-11-11/12).
+
+    `<prompts_dir>/general/parts.json` names each part's member findings (gate
+    or gate.aspect) and its BIG findings; `general/<part>.md` and
+    `<part>-repeat.md` hold the line. A part is told as its general line only
+    while one of its big findings fails — the picture is wrong; otherwise each
+    finding tells its own specific line. Missing directory: no general lines.
+    """
+    root = Path(prompts_dir) / "general"
+    spec_path = root / "parts.json"
+    if not spec_path.is_file():
+        return {}
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    parts: dict[str, dict[str, Any]] = {}
+    for part, entry in spec.items():
+        if part.startswith("_"):
+            continue
+        members = frozenset(entry["members"])
+        parts[part] = {
+            "first": (root / f"{part}.md").read_text(encoding="utf-8").rstrip("\n"),
+            "repeat": (root / f"{part}-repeat.md")
+            .read_text(encoding="utf-8")
+            .rstrip("\n"),
+            "members": members,
+            "big": frozenset(entry["big"]),
+            "gates": frozenset(k.split(".", 1)[0] for k in members),
+        }
+    return parts
+
+
 def gate_tokens_in_suite(gates_dir: Path) -> set[str]:
     """Every `[XXX]` gate token declared by a graded gate file.
 
@@ -529,6 +560,45 @@ class FeedbackMixin:
             cls._FEEDBACK_OVERRIDES_CACHE = cached
         return cached
 
+    @classmethod
+    def _general_lines(cls) -> dict[str, dict[str, Any]]:
+        """The general lines per part (`load_general_lines`), cached on the class."""
+        cached = getattr(cls, "_GENERAL_LINES_CACHE", None)
+        if cached is None:
+            cached = load_general_lines(_PACK.dir)
+            cls._GENERAL_LINES_CACHE = cached
+        return cached
+
+    @classmethod
+    def _finding_key(cls, record: dict[str, Any]) -> str | None:
+        """A problem as the parts file names it: `F30`, or `F30.short`."""
+        gate = check_id(str(record.get("check", "")))
+        if not gate:
+            return None
+        aspect = cls._complaint_aspect(record)
+        return f"{gate}.{aspect}" if aspect else gate
+
+    @classmethod
+    def _general_part(
+        cls, record: dict[str, Any], among: list[dict[str, Any]]
+    ) -> str | None:
+        """The part whose general line tells this problem this round, or None.
+
+        BIG PICTURE OR DETAIL (Jerry, 2026-11-12). When a part's picture is
+        wrong — one of its big findings fails among this round's problems — every
+        finding of that part is told as the one general line. When only details
+        are off, each tells its own line: a board that is close gets told what
+        is left, not the whole list again.
+        """
+        key = cls._finding_key(record)
+        if key is None:
+            return None
+        for part, spec in cls._general_lines().items():
+            if key in spec["members"]:
+                keys = {cls._finding_key(r) for r in among if isinstance(r, dict)}
+                return part if keys & spec["big"] else None
+        return None
+
     # A PREFERENCE IS HANDED BACK, NEVER GUESSED (Jerry, 2026-11-04). The cube's
     # house numbers are the build brief's choice, not something play reveals: a
     # model that misses them is not told "it doubles at the wrong moments" and
@@ -710,7 +780,13 @@ class FeedbackMixin:
         return f"{raw} [aspect: {aspect}]" if aspect else raw
 
     @classmethod
-    def _told_label(cls, record: dict[str, Any], *, pass_kind: str) -> tuple[str, str]:
+    def _told_label(
+        cls,
+        record: dict[str, Any],
+        *,
+        pass_kind: str,
+        among: list[dict[str, Any]] | None = None,
+    ) -> tuple[str, str]:
         """The line the model is told for one problem, and whose voice says it.
 
         One place, so the complaint list and the "that fixed it" list can never
@@ -730,6 +806,10 @@ class FeedbackMixin:
         ) or http_error_line(observed, pass_kind=pass_kind)
         if setup_line:
             return setup_line, "team"
+        # `among` is this round's problems: a part whose picture is wrong is
+        # told as its general line (`_general_part`).
+        if among is not None and (part := cls._general_part(record, among)):
+            return cls._general_lines()[part][pass_kind], "tester"
         label = cls._humanize_check(
             raw_check.split("\n", 1)[0],
             pass_kind=pass_kind,
@@ -741,7 +821,11 @@ class FeedbackMixin:
 
     @classmethod
     def _build_pass_verdict(
-        cls, *, newly_passing: list[str], told: dict[str, str]
+        cls,
+        *,
+        newly_passing: list[str],
+        told: dict[str, str],
+        still_failing: list[str] | tuple[str, ...] = (),
     ) -> str:
         """What the player says about the complaints that are now gone.
 
@@ -766,6 +850,20 @@ class FeedbackMixin:
         if not newly_passing:
             return ""
 
+        # A GENERAL line is fixed only when nothing it covers still fails
+        # (Jerry, 2026-11-12): one of its findings passing while another fails
+        # put "That fixed it — the pieces aren't set out right" above "The
+        # pieces still aren't set out right" in one message.
+        failing_gates = {check_id(c) for c in still_failing}
+        general = cls._general_lines()
+
+        def still_open(label: str) -> bool:
+            return any(
+                label in (spec["first"], spec["repeat"])
+                and spec["gates"] & failing_gates
+                for spec in general.values()
+            )
+
         deduped: list[str] = []
         seen: set[str] = set()
         for item in newly_passing:
@@ -779,12 +877,12 @@ class FeedbackMixin:
             # Same cap and reasoning as the failure list: a human symptom
             # sentence legitimately runs long, and a cut mid-clause is the tell
             # that no person wrote it.
-            # 320, the failure list's cap: a told line quoted back must read
-            # whole — at 200 it cut the setup line mid-quote ("The response
-            # said:…", run 1790196821), the very tell this cap exists to avoid.
-            if len(sanitized) > 320:
-                sanitized = f"{sanitized[:320].rsplit(' ', 1)[0]}…"
-            if not sanitized or sanitized in seen:
+            # TOLD_LINE_CAP, the failure list's cap: a told line quoted back must
+            # read whole — at 200 it cut the setup line mid-quote ("The response
+            # said:…", run 1790196821); at 320 it cut the general pieces line.
+            if len(sanitized) > TOLD_LINE_CAP:
+                sanitized = f"{sanitized[:TOLD_LINE_CAP].rsplit(' ', 1)[0]}…"
+            if not sanitized or sanitized in seen or still_open(sanitized):
                 continue
             seen.add(sanitized)
             deduped.append(sanitized)
@@ -819,6 +917,7 @@ class FeedbackMixin:
         unevaluated: list[str] | None = None,
         regressions: set[str] | None = None,
         respec: Sequence[str] | None = None,
+        found: list[dict[str, Any]] | None = None,
     ) -> str:
         """Compose the message the model receives after a failed attempt.
 
@@ -944,6 +1043,18 @@ class FeedbackMixin:
             return (check_id(raw) or raw, aspect)
 
         repeat_lines = {line_of(r) for r in records if cls._complaint_id(r) in repeats}
+        # A general line is a repeat when any finding it tells was told before:
+        # one line per part, so its "still" can't split across two items.
+        # Whether a part's picture is wrong is judged on EVERYTHING the grade
+        # found (`found`), not only what is told: a big finding waiting on a
+        # smaller one ([needs:]) still means the picture is wrong — run
+        # 1794469703's "pieces on the wrong points" waited on "cut off".
+        among = [p for p in (found or records) if isinstance(p, dict)]
+        general_repeat = {
+            part
+            for r in records
+            if (part := cls._general_part(r, among)) and line_of(r) in repeat_lines
+        }
 
         for record in records:
             raw_check = str(record.get("check", "")).strip()
@@ -964,7 +1075,9 @@ class FeedbackMixin:
             # Keyed on the gate id plus the aspect it names (_complaint_id),
             # never on the rendered sentence, which differs between passes.
             pass_kind = "repeat" if line_of(record) in repeat_lines else "first"
-            label, channel = cls._told_label(record, pass_kind=pass_kind)
+            if part := cls._general_part(record, among):
+                pass_kind = "repeat" if part in general_repeat else "first"
+            label, channel = cls._told_label(record, pass_kind=pass_kind, among=among)
             if channel == "team" and cls.feedback_channel(raw_check) == "tester":
                 tester_fell_silent = True
             # TOLD_LINE_CAP (1000 since 2026-11-11; 320 before, 200 before
