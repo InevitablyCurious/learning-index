@@ -30,6 +30,7 @@ from harness.adapters.challenge import (
     load_feedback_overrides_from_failures,
 )
 from harness.adapters.challenge.constants import _GRADER_DIR
+from harness.adapters.challenge.feedback import TOLD_LINE_CAP
 from harness.adapters.challenge.stages import load_stages, player_view
 
 GATES = Path(__file__).resolve().parents[1] / "grader"
@@ -338,7 +339,7 @@ def test_no_line_is_truncated_in_delivery() -> None:
     # round-tripping every key through `_humanize_check` — several keys resolve
     # only from a conformance-shaped check string, and synthesising one per key
     # would test the synthesiser rather than the lines.
-    cap = 320
+    cap = TOLD_LINE_CAP
     overrides = load_feedback_overrides_from_failures(
         Path(__file__).resolve().parents[1] / "task" / "backgammon" / "prompts"
     )

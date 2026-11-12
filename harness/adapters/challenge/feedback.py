@@ -55,7 +55,8 @@ def load_feedback_overrides(path: Path) -> dict[str, dict[str, str]]:
 
     THE CONTRACT. Keys are a gate's bracket token (`"E08"`, `"F12"`), a
     conformance sub-check key (`"REQ-STATE/state.pip"`), or the exact raw check
-    string. Values are ONE sentence per line, in one of two voices: a person
+    string. Values are ONE complaint per line (a general line may list what a
+    part of the game should look like under it), in one of two voices: a person
     playing the game describing WHAT THEY SAW (the tester), or a software team
     integrating against the app describing what their tooling and API reads
     could not find or got wrong (the team) — the SYMPTOM, never the cause and
@@ -103,8 +104,11 @@ def load_feedback_overrides(path: Path) -> dict[str, dict[str, str]]:
     for key, value in gates.items():
         if not isinstance(value, dict):
             continue
-        first = " ".join(str(value.get("first", "")).split())
-        repeat = " ".join(str(value.get("repeat", "")).split())
+        # Ends trimmed, inside kept: a general line lists its expectation on
+        # lines of its own (Jerry, 2026-11-11), exactly as the `.md` source
+        # the model hears it.
+        first = str(value.get("first", "")).strip()
+        repeat = str(value.get("repeat", "")).strip()
         if not first or not repeat:
             continue
         loaded[str(key)] = {"first": first, "repeat": repeat}
@@ -127,6 +131,14 @@ def _key_from_base(base: str) -> str:
     if base == "CONF":
         return "CONF"
     return base.replace("-", "", 1)
+
+
+#: The longest told line delivered whole. 1000 since 2026-11-11: a general line
+#: states the whole expectation for a part of the game (Jerry: "the triangles
+#: aren't drawn right, I expect …" as one list), not one symptom per check, and
+#: runs to ~800 characters. A written line longer than this fails
+#: tests/test_challenge_feedback_channels.py rather than being cut at delivery.
+TOLD_LINE_CAP = 1000
 
 
 def load_feedback_overrides_from_failures(
@@ -955,7 +967,8 @@ class FeedbackMixin:
             label, channel = cls._told_label(record, pass_kind=pass_kind)
             if channel == "team" and cls.feedback_channel(raw_check) == "tester":
                 tester_fell_silent = True
-            # 320, not 200 (2026-09-05). The comment below has been right twice
+            # TOLD_LINE_CAP (1000 since 2026-11-11; 320 before, 200 before
+            # that). The comment below has been right twice
             # over: at 200 it was ALREADY truncating two hand-written tester
             # lines (E04 at 267 characters, E02 at 244), and the software team's
             # lines are legitimately longer still because each one states what
@@ -970,8 +983,8 @@ class FeedbackMixin:
             #
             # Truncating one mid-clause loses the symptom AND reads like a
             # machine wrote it — the exact tell this voice exists to avoid.
-            if len(label) > 320:
-                label = f"{label[:320].rsplit(' ', 1)[0]}…"
+            if len(label) > TOLD_LINE_CAP:
+                label = f"{label[:TOLD_LINE_CAP].rsplit(' ', 1)[0]}…"
             if not label or label in seen:
                 continue
             seen.add(label)
