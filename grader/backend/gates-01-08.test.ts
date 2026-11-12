@@ -188,7 +188,9 @@ describe("Backgammon backend gates 01-08", () => {
     // at all) was told "the game still lets me bear off from a point closer to
     // the edge" — the opposite.
     const OVERSHOOT = "[aspect: overshoot]";
-    expect(game.allInHome(overshootAllowedBoard, "white"), OVERSHOOT).toBe(true);
+    // The engine's own all-home answer is untold: the moves it offers (below)
+    // are what a player meets.
+    expect(game.allInHome(overshootAllowedBoard, "white"), "[untold] the engine says not every piece is home when every one is").toBe(true);
     // The moves on offer, each once: a list naming 3 -> off once per checker on
     // 3 offers the same move (run 1793579748's engine did; the player saw one
     // "5" hint and it bore off — and was told the game "won't let me").

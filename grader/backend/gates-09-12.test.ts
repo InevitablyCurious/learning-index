@@ -47,7 +47,11 @@ describe("[G09] REQ-BEAROFF-GATE — bear-off blocked while a checker is outside
     points[22] = -1;
     const board = bd(points, { white: 0, black: 0 }, { white: 13, black: 14 });
 
-    expect(game.allInHome(board, "white")).toBe(false);
+    // The engine's own answer is detail a player never sees; the moves it
+    // offers (below) are what they meet (run 1794518885: allInHome ignored the
+    // bar, the move list did not, and the player was told the game let them
+    // bear off). Scored, never told.
+    expect(game.allInHome(board, "white"), "[untold] the engine says every piece is home while one is outside").toBe(false);
 
     const moves = game.singleMoves(board, "white", 3);
     expect(moves.every((m: { to: number }) => m.to !== 25)).toBe(true);
@@ -58,7 +62,7 @@ describe("[G09] REQ-BEAROFF-GATE — bear-off blocked while a checker is outside
     points[2] = 1;
     const board = bd(points, { white: 1, black: 0 });
 
-    expect(game.allInHome(board, "white")).toBe(false);
+    expect(game.allInHome(board, "white"), "[untold] the engine says every piece is home while one is on the bar").toBe(false);
 
     const moves = game.singleMoves(board, "white", 2);
     expect(moves.every((m: { to: number }) => m.to !== 25)).toBe(true);

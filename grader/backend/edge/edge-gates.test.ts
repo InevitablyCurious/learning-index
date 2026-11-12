@@ -191,7 +191,7 @@ describe("Backgammon edge gates", () => {
     // lets a player bear off while still on the bar.
     const b = emptyBoard();
     b.points[3] = 1;
-    expect(game.allInHome(b, "white")).toBe(true);
+    expect(game.allInHome(b, "white"), "[untold] the engine says not every piece is home when every one is").toBe(true);
 
     // A player meets this only if a piece on the bar can bear off, and a game
     // that makes the bar piece come in first never lets it (G06 tells the
