@@ -74,7 +74,9 @@ def test_the_channel_is_decided_in_one_place() -> None:
     # Every ordinary gate is a played-game symptom. The team is an addition,
     # never a reclassification.
     assert R.feedback_channel("[G07] REQ-HIT — hitting → bar") == "tester"
-    assert R.feedback_channel("[F58] REQ-GEOMETRY — the top piece slides away") == "tester"
+    assert (
+        R.feedback_channel("[F58] REQ-GEOMETRY — the top piece slides away") == "tester"
+    )
 
 
 def test_a_missing_field_is_never_reported_as_a_boot_failure() -> None:
