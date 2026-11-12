@@ -2706,8 +2706,14 @@ test("[F68] REQ-RELOAD — on load the difficulty control reads the game's diffi
 test("[F55] REQ-RELOAD — the computer finishes its turn after a reload", async ({ page }) => {
   // A player who reloads mid-computer-turn comes back to the same game and
   // the computer plays on — a page that waits forever for a human who is not
-  // there leaves the game stuck. The standard opening position with the
-  // computer to roll; "easy" never offers a double, so its turn completes.
+  // there leaves the game stuck. Reached the way a player reaches it: their
+  // turn played out on the standard opening position, End Turn pressed, and
+  // the page reloaded as soon as the game has taken it. A computer's turn
+  // seeded straight in ("black" in a "roll" phase) is a state a build's own
+  // game may never make: run 1794513886's game keeps "move" through the
+  // computer's turn and resumed it on reload, while the seeded check told the
+  // player the turn "still never came back". "easy" never offers a double, so
+  // the computer's turn completes.
   await openApp(page);
   const points = emptyPoints();
   points[24] = 2;
@@ -2722,16 +2728,27 @@ test("[F55] REQ-RELOAD — the computer finishes its turn after a reload", async
     points,
     bar: { white: 0, black: 0 },
     off: { white: 0, black: 0 },
-    turn: "black",
-    phase: "roll",
-    dice: [],
+    turn: "white",
+    phase: "move",
+    dice: [3, 1],
     remainingDice: [],
-    turnOver: false,
+    turnOver: true,
     cube: { value: 1, owner: null },
     difficulty: "easy",
     winner: null,
     message: "",
   });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  const endTurn = page.getByTestId("endTurnBtn");
+  await expect(endTurn, "[needs: F47] End Turn was not available with nothing left to play").toBeEnabled();
+  await waitForBoardSettled(page).catch(() => undefined);
+  const handedOver = page.waitForResponse(
+    (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/api/endturn",
+    { timeout: 10_000 },
+  );
+  await endTurn.click();
+  await handedOver.catch(() => undefined);
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 

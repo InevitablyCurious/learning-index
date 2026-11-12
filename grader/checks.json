@@ -482,7 +482,7 @@
     "F55": {
       "name": "The computer finishes its turn after a reload",
       "what": "If the player reloads during the computer's turn, the computer finishes that turn and control returns to the player.",
-      "how": "On screen: seed a position where it is the computer's turn, reload the page, and require the turn to become the player's as the computer completes its turn."
+      "how": "On screen, the way a player gets there: the player's turn played out, End Turn pressed, and the page reloaded as soon as the game has taken it; the turn must come back to the player as the computer completes its turn."
     },
     "F56": {
       "name": "The pending double offer shows again after a reload",
