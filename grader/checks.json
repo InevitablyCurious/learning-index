@@ -157,7 +157,7 @@
     "G30": {
       "name": "The computer plays the higher die when only one is playable",
       "what": "When only one of the computer's two dice can actually be played, it plays the higher one.",
-      "how": "Through the engine: on fixed one-move boards, drive the AI's move chooser at every difficulty several times and require every chosen move to be legal (never the lower die)."
+      "how": "Through the server, the way a game reaches the computer's turn: the player's turn finished, the computer's dice queued, End Turn, then one AI step at a time. In two spots where either number moves the computer's lone piece but not both (a 2 and a 4; a 5 and a 2), at every difficulty, three times each, the piece must move by the bigger number."
     },
     "G31": {
       "name": "The opening roll decides who goes first",

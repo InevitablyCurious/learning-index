@@ -1,1 +1,1 @@
-It still plays the smaller die when only one of the two dice can be used.
+When the computer can play either number but not both, it still plays the smaller one.

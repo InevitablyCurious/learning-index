@@ -504,4 +504,60 @@ describe("Backgammon backend server-path integrity", () => {
       expect(offered, `[aspect: early] the computer offered a double in its opening turn on ${difficulty}`).toBe(false);
     }
   });
+
+  // The computer's higher-die rule as a game plays it (2026-11-12): the
+  // computer's dice come from its own roll, handed over the way its game hands
+  // them, never in the check's order. Run 1794511349's engine took its dice in
+  // the order given and tried only the first; its game always hands it the
+  // bigger die first, so it played right in every game, while its move-chooser
+  // called with [2, 4] played the 2 — and the player was told "the computer
+  // plays the smaller die", which no player of that build could see. Reached
+  // the way a game reaches the computer's turn: the player's turn finished, the
+  // computer's dice queued, End Turn, then one AI step at a time. Two spots
+  // where either number moves the computer's lone piece but not both (black
+  // moves up the numbers): A, black on 5 and a white pair on 11, a 2 and a 4 —
+  // only 5->9; B, black on 6, a white pair on 13 and a white blot on 8, a 5 and
+  // a 2 — only 6->11 (the 2 would hit, which an evaluator likes). The player
+  // owns the cube, so the computer cannot double first.
+  it("[G30] REQ-HIGHER-DIE — the computer obeys the higher-die rule", async () => {
+    const spots = [
+      { black: 5, white: { 11: 2 }, off: { white: 13, black: 14 }, dice: [2, 4], higher: 4 },
+      { black: 6, white: { 13: 2, 8: 1 }, off: { white: 12, black: 14 }, dice: [5, 2], higher: 5 },
+    ];
+    for (const spot of spots) {
+      for (const difficulty of ["easy", "medium", "hard"]) {
+        for (let trial = 0; trial < 3; trial++) {
+          await api("/api/new", {});
+          const points = emptyPoints();
+          points[spot.black] = -1;
+          for (const [at, n] of Object.entries(spot.white)) points[Number(at)] = n;
+          await debugSetState(
+            makeState({
+              points,
+              bar: { white: 0, black: 0 },
+              off: spot.off,
+              turn: "white",
+              phase: "move",
+              dice: [6, 5],
+              remainingDice: [],
+              turnOver: true,
+              cube: { value: 2, owner: "white" },
+              difficulty,
+              winner: null,
+            }),
+          );
+          await debugRoll(spot.dice);
+          let state = await api("/api/endturn", {});
+          for (let guard = 0; guard < 12 && state.turn === "black" && !state.winner; guard++) {
+            state = await api("/api/ai", {});
+          }
+          expect(state.turn, "[needs: G25] the computer never finished its turn").toBe("white");
+          const now = (state.points as number[]).findIndex((v, i) => i >= 1 && i <= 24 && v < 0);
+          expect(now, "[aspect: passed] [needs: G25] the computer rolled and passed without moving its piece").not.toBe(spot.black);
+          const played = now - spot.black;
+          expect(played, `the computer played the ${played} when only the ${spot.higher} could be used`).toBe(spot.higher);
+        }
+      }
+    }
+  });
 });

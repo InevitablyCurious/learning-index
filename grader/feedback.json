@@ -1340,8 +1340,12 @@
       "repeat": "They tried the /game address again and it still comes back 'Not found' — no page."
     },
     "G30": {
-      "first": "The computer plays the smaller die when only one of the two dice can be used.",
-      "repeat": "It still plays the smaller die when only one of the two dice can be used."
+      "first": "The computer could play either of its two numbers, but not both — after either move the other had nowhere to go — and it played the smaller one. When only one of its numbers can be used, I expect it to play the bigger one.",
+      "repeat": "When the computer can play either number but not both, it still plays the smaller one."
+    },
+    "G30.passed": {
+      "first": "The computer rolled, then passed its turn without moving — though it could have played one of its numbers.",
+      "repeat": "The computer still passes its turn without moving when it could play one of its numbers."
     },
     "G31": {
       "first": "They start a new game through your app's API and the opening roll doesn't work right.",
