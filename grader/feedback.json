@@ -308,8 +308,8 @@
       "repeat": "I picked up a piece again and some hints still sit on points it can't move to."
     },
     "F76": {
-      "first": "When I pick up a piece to be moved, and try to move it, it doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the triangle).",
-      "repeat": "When I pick up a piece to be moved, and try to move it, it still doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the triangle)."
+      "first": "When I pick up a piece to be moved, and try to move it, it doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the rectangle that encompasses the triangle).",
+      "repeat": "When I pick up a piece to be moved, and try to move it, it still doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the rectangle that encompasses the triangle)."
     },
     "F05": {
       "first": "When I have no moves, the game doesn't tell me 'No moves available'.",
@@ -1312,8 +1312,8 @@
       "repeat": "Some of the buttons still aren't labelled with their names — I expect them to read Roll, Double, Undo, End Turn and New Game."
     },
     "F45": {
-      "first": "When I pick up a piece to be moved, and try to move it, it doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the triangle).",
-      "repeat": "When I pick up a piece to be moved, and try to move it, it still doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the triangle)."
+      "first": "When I pick up a piece to be moved, and try to move it, it doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the rectangle that encompasses the triangle).",
+      "repeat": "When I pick up a piece to be moved, and try to move it, it still doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the rectangle that encompasses the triangle)."
     },
     "G27": {
       "first": "They play a game to the end and start another, and the gamesPlayed count comes out wrong.",

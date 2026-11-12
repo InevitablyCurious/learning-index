@@ -7,7 +7,7 @@ Never use an absolute base such as `http://127.0.0.1:8002/api/state` — a brows
 
 What the game should feel like to play:
 
-- Clicking anywhere in the column of a point holding one of your movable pieces picks up that point's top piece and shows its hints; with a piece picked up, clicking anywhere in the column of a point it can move to plays that move.
+- Clicking anywhere in the column of a point holding one of your movable pieces picks up that point's top piece and shows its hints; with a piece picked up, clicking anywhere in the column of a point it can move to plays that move — the point itself (the rectangle that encompasses its triangle), a stack of pieces on it, or its hint.
 - A hint appears for each playable die only after a piece is selected, and updates immediately when a different piece is selected; a piece on the bar is included — its entry hints appear only once it is clicked, one hint per playable entry die. Clicking a hint executes that move, consuming the hint's die.
 - A move hint is a dimmed, light-green marker the size of a piece.
 - Hitting sends the opponent's checker to the bar, and you can see it land there; a checker re-entering from the bar travels back onto the board; a checker borne off appears in the off tray.
