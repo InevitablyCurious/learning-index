@@ -343,10 +343,6 @@
       "first": "When the game ends, it doesn't tell me I won — there's no win message or victory popup.",
       "repeat": "Finished another game and it still doesn't show me a win message or popup."
     },
-    "F14": {
-      "first": "The pieces don't animate when they move.",
-      "repeat": "Moved a piece again and it still doesn't animate when it moves."
-    },
     "REQ-STATE/state.points": {
       "first": "They're reading the state your app reports and it doesn't include \"points\" — the 24 board points as a list of numbers, positive for white checkers and negative for black. Without it they can't wire that part of their side up.",
       "repeat": "They read your state again after your fix and \"points\" — the 24 board points as a list of numbers, positive for white checkers and negative for black — still isn't in there."
@@ -1703,10 +1699,6 @@
       "first": "The pieces of a stack cascade off to the side — I expect each stack to stand as a single straight column.",
       "repeat": "The pieces of a stack still cascade off to the side — I expect each stack to stand as a single straight column."
     },
-    "F61.rolls": {
-      "first": "On the opening roll the two dice just appear with their numbers — I never see them actually roll.",
-      "repeat": "On the opening roll the dice still just appear — I still never see them roll."
-    },
     "F61.autoroll": {
       "first": "When I opened the game, the opening roll had already been played by itself — I never got to press Roll.",
       "repeat": "The opening roll still plays itself as soon as the game opens — I never get to press Roll."
@@ -1814,10 +1806,6 @@
     "F86.dim": {
       "first": "The move hints are drawn solid — I expect them dimmed, so the board shows through.",
       "repeat": "The move hints are still solid, not dimmed."
-    },
-    "F86.still": {
-      "first": "The move hints move about — I expect them to sit still.",
-      "repeat": "The move hints still move about."
     },
     "F31.past": {
       "first": "Some of my pieces hang over the edge of the board, past the end of their point.",

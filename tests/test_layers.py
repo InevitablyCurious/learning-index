@@ -36,7 +36,7 @@ def test_load_layers_reads_the_map() -> None:
     # The map is the layer feature itself: a silently shrunk one would layer
     # everything by stage default and never fail.
     assert isinstance(LAYERS, LayerMap)
-    assert len(LAYERS.checks) == 160
+    assert len(LAYERS.checks) == 159
     assert len(LAYERS.stages) == 19
     assert LAYERS.stages[1] == 1  # first look, the board surface
     assert LAYERS.stages[6] == 1  # first look's last stage, the pieces

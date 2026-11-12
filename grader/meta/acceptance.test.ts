@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  checkerAnimates,
   expectedOfferAction,
-  hintAnimates,
   isNonDecreasing,
   withinParityBand,
 } from "../lib/acceptance.ts";
@@ -41,56 +39,5 @@ describe("acceptance predicates", () => {
     expect(isNonDecreasing([0.02, 0.5, 0.8, 0.98])).toBe(true);
     expect(isNonDecreasing([0.5, 0.5, 0.5])).toBe(true);
     expect(isNonDecreasing([0.02, 0.5, 0.4, 0.98])).toBe(false);
-  });
-
-  it("checker animation predicate accepts transition-driven checker motion", () => {
-    expect(
-      checkerAnimates({
-        transitionProperty: "transform",
-        transitionDuration: "0.34s",
-        animationName: "none",
-        animationDuration: "0s",
-      }),
-    ).toBe(true);
-  });
-
-  it("checker animation predicate accepts keyframe-driven checker motion", () => {
-    expect(
-      checkerAnimates({
-        transitionProperty: "all",
-        transitionDuration: "0s",
-        animationName: "pop",
-        animationDuration: "0.5s",
-      }),
-    ).toBe(true);
-  });
-
-  it("checker animation predicate rejects no-op/default motion", () => {
-    expect(
-      checkerAnimates({
-        transitionProperty: "all",
-        transitionDuration: "0s",
-        animationName: "none",
-        animationDuration: "0s",
-      }),
-    ).toBe(false);
-  });
-
-  it("hint animation predicate accepts active hint animation", () => {
-    expect(
-      hintAnimates({
-        animationName: "pulse",
-        animationDuration: "1.1s",
-      }),
-    ).toBe(true);
-  });
-
-  it("hint animation predicate rejects no-op hint animation", () => {
-    expect(
-      hintAnimates({
-        animationName: "none",
-        animationDuration: "0s",
-      }),
-    ).toBe(false);
   });
 });

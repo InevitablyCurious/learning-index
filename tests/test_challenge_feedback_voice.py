@@ -134,7 +134,7 @@ def _problems() -> list[dict[str, str]]:
             "observed": "AssertionError: expected 2 to be 4 // Object.is equality",
         },
         {
-            "check": "[F14] REQ-ANIM — animation present",
+            "check": "[F58] REQ-GEOMETRY — the top piece slides away",
             "expected": "gate passes",
             "observed": "expected false to be true",
         },
@@ -163,7 +163,7 @@ def test_first_failure_is_the_players_first_report() -> None:
         "let me move with the smaller number even though the bigger one had a move too"
         in text
     )
-    assert "pieces don't animate when they move" in text
+    assert "it isn't the top piece that slides away" in text
     # Grader vocabulary a player would never use.
     assert "FAILING" not in text
     # And the old bullet glue, which only existed to chain bullets together.

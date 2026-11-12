@@ -1,6 +1,5 @@
 import { type Page } from "@playwright/test";
 import { expect, pickUpAPiece, playerClick, rollAndCheck, setupState, test } from "./fixtures.ts";
-import { checkerAnimates, hintAnimates } from "../lib/acceptance.ts";
 import { BASE_URL } from "../lib/harness.ts";
 import { isPainted } from "./board-geometry.ts";
 
@@ -347,28 +346,6 @@ test("[F23] REQ-NEWGAME — new game without reload", async ({ page }) => {
     .toBe(1);
 });
 
-test("[F14] REQ-ANIM — checker motion is animated", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
-
-  const checkerMotion = await page
-    .locator('[data-testid="checker"]')
-    .first()
-    .evaluate((el) => {
-      const css = getComputedStyle(el);
-      return {
-        transitionProperty: css.transitionProperty,
-        transitionDuration: css.transitionDuration,
-        animationName: css.animationName,
-        animationDuration: css.animationDuration,
-      };
-    });
-  // REQ-ANIM: checker motion animated via a CSS transition on transform/all with non-zero
-  // duration, OR a CSS keyframe animation with non-zero duration. (transition-property defaults
-  // to "all" with 0s duration when unset, so the duration check is what makes this meaningful.)
-  expect(checkerAnimates(checkerMotion)).toBe(true);
-});
-
 // [F86] REQ-HINT — a move hint looks like a faint green piece. Jerry,
 // 2026-10-18, on the old hint-animation check: "remove that requirement … if
 // anything the hints should be piece sized and dimmed and light green or
@@ -409,8 +386,6 @@ test("[F86] REQ-HINT — a move hint looks like a faint green piece", async ({ p
       size: Math.max(r.width, r.height),
       green: green.length > 0,
       dim: Number(css.opacity) < 1 || green.some((v) => v.length >= 4 && v[3] < 1),
-      animationName: css.animationName,
-      animationDuration: css.animationDuration,
     };
   });
   const piece = await page
@@ -423,7 +398,6 @@ test("[F86] REQ-HINT — a move hint looks like a faint green piece", async ({ p
   ).toBe(true);
   expect(look.green, "[aspect: green] [needs: F03] the hint is not light green").toBe(true);
   expect(look.dim, "[aspect: dim] [needs: F03] the hint is drawn solid, not dimmed").toBe(true);
-  expect(hintAnimates(look), "[aspect: still] [needs: F03] the hint animates").toBe(false);
 });
 
 // The page must work on whichever host name the user reached it by. `localhost`

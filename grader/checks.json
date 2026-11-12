@@ -289,11 +289,6 @@
       "what": "A win ends the game with a banner or popup that says the player won.",
       "how": "Sets a won position with the message \"You win!\": the message must show it, and if a modal is open its title must say win (any capitals)."
     },
-    "F14": {
-      "name": "Checker animation",
-      "what": "Checkers move with animation.",
-      "how": "Reads the page's styles: a checker must have a transition on its position or an animation."
-    },
     "F15": {
       "name": "Works on either host name",
       "what": "The game works whether it's opened at localhost or 127.0.0.1.",
@@ -1001,7 +996,6 @@
         "F60",
         "F58",
         "F59",
-        "F14",
         "G04",
         "G18",
         "F73",

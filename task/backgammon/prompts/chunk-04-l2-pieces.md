@@ -4,7 +4,6 @@ Render everything from the serialized state: checkers on points, bar and off.
 
 What the game should feel like to play:
 
-- Checkers slide between points rather than jumping; dice visibly roll. Animate with CSS transitions and CSS animations — each checker animates position changes through a `transition` covering `transform` (or `all`) with a non-zero duration, or through a CSS `animation`.
 - Each checker is a perfect circle, sized to about 80% of the width of the point it sits on (not counting the bar). A point's checkers stack from the board's edge toward the middle, each piece right against the last and stepping evenly, and a full stack of six sits a little tighter together; a point draws at most six checkers — from seven up it draws six, and the piece at the top of the stack (the sixth, farthest from the edge) shows the total number on the point. A move always takes the piece at the top of its stack, and the piece that arrives goes on top of the stack it joins.
 
 Required `data-testid` hooks (EXACT — the UI automation selects on these; static elements keep their existing `id` and ALSO carry a `data-testid` with the same string):
