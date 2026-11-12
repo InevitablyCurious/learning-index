@@ -1922,6 +1922,10 @@
     "G36": {
       "first": "They roll again through your app's API after the dice are already rolled, and it gives them a new roll instead of ignoring it.",
       "repeat": "They roll again through your app's API after the dice are already rolled, and it still gives them a new roll instead of ignoring it."
+    },
+    "F88.twice": {
+      "first": "When the computer won the opening roll, it moved its checkers twice as far as the dice allow — it played the 3 and the 5, then played them again.",
+      "repeat": "When the computer won the opening roll, it still moved its checkers twice as far as the dice allow — it played the 3 and the 5, then played them again."
     }
   }
 }

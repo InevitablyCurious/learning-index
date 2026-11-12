@@ -17,7 +17,7 @@
 ## Running the server for testing
 Start, test and stop in one command:
 ```
-node --experimental-strip-types src/server.ts > /tmp/server.log 2>&1 &
+node --experimental-strip-types src/server.ts > server.log 2>&1 &
 PID=$!
 for i in $(seq 1 30); do curl -s localhost:8002/health >/dev/null && break; sleep 0.2; done
 curl -s -X POST localhost:8002/api/new -H 'content-type: application/json' -d '{}'

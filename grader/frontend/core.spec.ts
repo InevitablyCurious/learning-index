@@ -911,8 +911,12 @@ test("[F88] REQ-OPENING — the computer plays when it wins the opening", async 
     )
     .toBe(true);
 
-  // Exactly the two numbers thrown — no more, no less.
+  // Exactly the two numbers thrown — no more, no less. Played twice over (16)
+  // has its own line, naming it (Jerry, 2026-11-12: run 1794488314's build
+  // read "no more, no less" as dice order and never found its move loop
+  // applying every move twice).
   const moved = pipsOf(before).black - pipsOf(await readState(page)).black;
+  expect(moved, `[aspect: twice] after a 3-5 opening the computer's first turn moved ${moved} pips — the 3 and the 5 played twice`).not.toBe(16);
   expect(moved, `[aspect: numbers] after a 3-5 opening the computer's first turn moved ${moved} pips, not 8`).toBe(8);
 
   // As the player watches it: the dice readable about a second, then one move,
