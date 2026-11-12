@@ -100,8 +100,19 @@ async function gameReady(page: Page): Promise<void> {
     );
   }
   if (!(await boardGeometryDrawn(page))) {
+    // How many pieces a player can actually see: the report words the board
+    // that never drew as "I can see the pieces, but…" only when some show.
+    // Placed is not shown — a saved build (test set r102) placed its pieces but drew
+    // nothing, and it was told "I can see the pieces" (test set, 2026-11-11).
+    const showing = await page.locator('[data-testid="checker"]').evaluateAll(
+      (els) =>
+        els.filter((el) => {
+          const r = el.getBoundingClientRect();
+          return (el as HTMLElement).checkVisibility() && r.width > 2 && r.height > 2;
+        }).length,
+    );
     throw new Error(
-      `[needs: REQ-RENDER/point] board geometry never drew: no point renders a visible triangle within 5000ms`,
+      `[needs: REQ-RENDER/point] board geometry never drew: no point renders a visible triangle within 5000ms (${showing} pieces showing)`,
     );
   }
 }

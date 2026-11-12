@@ -311,12 +311,20 @@ test("[F37] REQ-LAYOUT — the game fits the screen", async ({ page }) => {
     // Told by the edge they cross: told only "past the edge", run 898deec7's
     // model clamped its pieces sideways for five rounds while they hung off the
     // bottom.
-    const past = layout.piecesPast;
-    const of = `of ${layout.pieces} pieces run past the`;
-    expect(past.bottom, `[aspect: offbottom] at ${layout.size} ${past.bottom} ${of} bottom edge of the window`).toBe(0);
-    expect(past.top, `[aspect: offtop] at ${layout.size} ${past.top} ${of} top edge of the window`).toBe(0);
-    expect(past.left, `[aspect: offleft] at ${layout.size} ${past.left} ${of} left edge of the window`).toBe(0);
-    expect(past.right, `[aspect: offright] at ${layout.size} ${past.right} ${of} right edge of the window`).toBe(0);
+    // Not on a layer-1 pass: there should be no pieces at all yet, and pieces
+    // drawn early are F91's finding, told last (Jerry, 2026-11-11: no talk of
+    // pieces while the board and the buttons are wrong). Six saved builds were
+    // told "some of the pieces run off the bottom of the screen" first, over a
+    // board crammed into a corner or running into the buttons. A board that
+    // runs past the window is F30's offscreen finding either way.
+    if (process.env.BENCH_LAYER !== "1") {
+      const past = layout.piecesPast;
+      const of = `of ${layout.pieces} pieces run past the`;
+      expect(past.bottom, `[aspect: offbottom] at ${layout.size} ${past.bottom} ${of} bottom edge of the window`).toBe(0);
+      expect(past.top, `[aspect: offtop] at ${layout.size} ${past.top} ${of} top edge of the window`).toBe(0);
+      expect(past.left, `[aspect: offleft] at ${layout.size} ${past.left} ${of} left edge of the window`).toBe(0);
+      expect(past.right, `[aspect: offright] at ${layout.size} ${past.right} ${of} right edge of the window`).toBe(0);
+    }
     const tall = drawnBoard(layout).h / layout.vh;
     expect(tall, `[aspect: space] at ${layout.size} the board is ${pct(tall)} of the height`).toBeGreaterThanOrEqual(
       BOARD_HEIGHT_MIN,
@@ -395,9 +403,9 @@ test("[F44] REQ-LAYOUT — the buttons carry their names", async ({ page }) => {
 // [F82] REQ-LAYOUT — the buttons match. Jerry, run 1792248731 round 2, on a
 // board that looked wonky: "the triangles, the bar, the bear off, and the
 // buttons". Roll, Double, Undo and End Turn are one set and are drawn the same
-// size; any other button stacked in line with them (sharing their column or
-// their row) is the same size as them too — New Game in a header of its own
-// is not part of the set. Grader only: the model knows a tidy control panel
+// size; New Game stacked with them (next to one of them in their column or
+// row) is the same size as them too — New Game in a header or a group of its
+// own is not part of the set. Grader only: the model knows a tidy control panel
 // from its training (owner, 2026-10-17).
 test("[F82] REQ-LAYOUT — the buttons match", async ({ page }) => {
   await page.goto("/");
@@ -412,14 +420,28 @@ test("[F82] REQ-LAYOUT — the buttons match", async ({ page }) => {
   const others: typeof set = [];
   const ng = await box("newGameBtn");
   if (ng) {
-    const inLine = set.some((b) => Math.abs(b.x - ng.x) <= 2 || Math.abs(b.y - ng.y) <= 2);
-    if (inLine) others.push({ id: "newGameBtn", ...ng });
+    // In the stack means next to one of them in their column or row — within
+    // a button's height (or width) of it. Run 1794311852's New Game sat at the
+    // top of the panel, the score boxes between it and Roll, 4 px shorter than
+    // the set; told "the buttons aren't all the same size" before anything on
+    // a board drawn upside down. Nobody reads that as one set of buttons.
+    const besideInColumn = (b: (typeof set)[number]) =>
+      Math.abs(b.x - ng.x) <= 2 &&
+      Math.min(Math.abs(ng.y - (b.y + b.height)), Math.abs(b.y - (ng.y + ng.height))) <= b.height;
+    const besideInRow = (b: (typeof set)[number]) =>
+      Math.abs(b.y - ng.y) <= 2 &&
+      Math.min(Math.abs(ng.x - (b.x + b.width)), Math.abs(b.x - (ng.x + ng.width))) <= b.width;
+    if (set.some((b) => besideInColumn(b) || besideInRow(b))) others.push({ id: "newGameBtn", ...ng });
   }
   const all = [...set, ...others];
   const ratio = (xs: number[]) => Math.max(...xs) / Math.min(...xs);
   const sizes = all.map((b) => `${b.id} ${Math.round(b.width)}×${Math.round(b.height)}`).join(", ");
+  // Widths that differ show as a ragged edge down the column, so they match
+  // closely; heights within a fifth read as the same button to a player (a New
+  // Game 33 px tall under 37 px buttons, a saved build told this first, before
+  // anything about its board). An Undo half again as tall still fails.
   expect(
-    ratio(all.map((b) => b.width)) <= 1.05 && ratio(all.map((b) => b.height)) <= 1.05,
+    ratio(all.map((b) => b.width)) <= 1.05 && ratio(all.map((b) => b.height)) <= 1.2,
     `[needs: F38 F44] the buttons are different sizes: ${sizes}`,
   ).toBeTruthy();
 });

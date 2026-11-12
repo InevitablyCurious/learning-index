@@ -652,11 +652,18 @@ function deriveRenderBlocked(problems) {
 
   const geometryNotDrawn = problems.filter((p) => p.observed.includes("board geometry never drew"));
   if (geometryNotDrawn.length > 0) {
+    // Placed is not shown: the player's line says "I can see the pieces" only
+    // when gameReady counted some on screen (its "(N pieces showing)").
+    const piecesShowing = Math.max(
+      0,
+      ...geometryNotDrawn.map((p) => Number(/\((\d+) pieces showing\)/.exec(p.observed)?.[1] ?? 0)),
+    );
     return {
       reason: "geometry-not-drawn",
       evidence:
         "no point rendered a visible triangle — the checkers placed but the board geometry never drew",
       gates: geometryNotDrawn.map((p) => p.check),
+      piecesShowing,
     };
   }
 
@@ -856,8 +863,8 @@ async function main() {
     }
     // PLAYER voice — the visible symptom (geometry-not-drawn for the
     // API-is-fine-and-checkers-placed cause; blank-board for the rest).
-    const symptom =
-      reason === "geometry-not-drawn" ? reason : "blank-board";
+    const piecesShown = reason === "geometry-not-drawn" && renderBlocked.piecesShowing > 0;
+    const symptom = piecesShown ? reason : "blank-board";
     problems.push({
       check: `conformance:REQ-RENDER/${symptom} — the board cannot be rendered`,
       expected: "the board renders a placed checker",
@@ -868,7 +875,7 @@ async function main() {
     // and buttons come first — and F91, which says so, died on the same
     // settle as every other blocked gate. Run 1794300137's first layer-1 grade
     // drew 30 pieces and no triangles and was told only the triangles.
-    if (reason === "geometry-not-drawn" && LAYER === 1) {
+    if (piecesShown && LAYER === 1) {
       problems.push({
         check: "[F91] REQ-RENDER — no pieces before the pieces layer",
         expected: "no pieces at layer 1",

@@ -574,7 +574,6 @@ export interface TriangleSample {
 export async function sampleTriangleOrientation(
   page: Page,
   points: PointBox[],
-  paintFloor = 45,
 ): Promise<TriangleSample[]> {
   // The hide must not outlive the measurement: an injected style tag left
   // behind keeps every checker on the page invisible for the rest of the run.
@@ -588,7 +587,7 @@ export async function sampleTriangleOrientation(
     const dataUrl = "data:image/png;base64," + buf.toString("base64");
 
     return await page.evaluate(
-      async ({ dataUrl, points, paintFloor }) => {
+      async ({ dataUrl, points }) => {
         const img = new Image();
         await new Promise<void>((resolve, reject) => {
           img.onload = () => resolve();
@@ -631,7 +630,7 @@ export async function sampleTriangleOrientation(
           }
         }
         const felt = [...seen.values()].sort((a, b) => b.n - a.n)[0].colour;
-        const painted = (x: number, y: number) => dist(at(x, y), felt) > paintFloor;
+        const painted = (x: number, y: number) => dist(at(x, y), felt) > 45;
 
         // Share of a horizontal line across the point, `depth` of the way in
         // from its rim, that is painted.
@@ -746,7 +745,7 @@ export async function sampleTriangleOrientation(
           };
         });
       },
-      { dataUrl, points, paintFloor },
+      { dataUrl, points },
     );
   } finally {
     await hideStyle.evaluate((element) => (element as Element).remove());
@@ -764,22 +763,86 @@ export async function sampleTriangleOrientation(
 export async function boardGeometryDrawn(page: Page): Promise<boolean> {
   const points = await readPointBoxes(page);
   if (points.length === 0) return false;
-  const samples = await sampleTriangleOrientation(page, points, DRAWN_PAINT_FLOOR);
-  return samples.some((sample) => sample.shape !== "none");
+  const samples = await sampleTriangleOrientation(page, points);
+  if (samples.some((sample) => sample.shape !== "none")) return true;
+  return (await faintWedgesShown(page, points)) >= FAINT_WEDGES_FOR_A_BOARD;
 }
 
 /**
- * How far from the felt a pixel must be to count as drawn when the question is
- * only "did the board draw at all". Lower than F30's 45, which asks whether a
- * triangle STANDS OUT: triangles drawn faint but plainly visible (a see-through
- * brown wedge on green felt, 26 from the felt and at most 39) failed 45, so the
- * page was judged never drawn and the model was told "the board itself never
- * draws — there are no points or triangles" about a board a player could see
- * (step-4 sweep, 30 saved builds). Flat felt sits within a few units of itself.
- * Faint triangles are F30's to tell ("I can't make out a triangle…"), in its
- * own stage.
+ * A board drawn faint is still drawn. The test above asks for paint 45 from the
+ * felt — F30's "stands out" — so triangles drawn plainly visible but faint (a
+ * see-through brown wedge on green, 26 from the felt) failed it, the page was
+ * judged never drawn, and the model was told "the board itself never draws —
+ * there are no points or triangles" about a board a player could see (step-4
+ * sweep, 30 saved builds). Faint triangles are F30's to tell, in its own stage.
+ *
+ * Read against the point's OWN ROW, not one felt colour: at each depth the
+ * point's middle is compared with the two edges of its box at the same height,
+ * which show the felt beside a triangle that narrows away from them. A felt
+ * that shades from top to bottom (the reference's runs 21 from end to end)
+ * cancels out, so a blank board never reads as drawn — a single felt colour and
+ * a lower threshold read that shading as paint (test set X-blank-board).
+ * A point counts when some depths show a wedge and some don't: a triangle
+ * narrows to nothing at its tip, a plain box shows nothing anywhere.
  */
-const DRAWN_PAINT_FLOOR = 15;
+async function faintWedgesShown(page: Page, points: PointBox[]): Promise<number> {
+  const hideStyle = await page.addStyleTag({
+    content: '[data-testid="checker"], [data-testid="hint"] { visibility: hidden !important; }',
+  });
+  try {
+    const buf = await page.screenshot({ type: "png" });
+    const dataUrl = "data:image/png;base64," + buf.toString("base64");
+    return await page.evaluate(
+      async ({ dataUrl, points, floor }) => {
+        const img = new Image();
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
+          img.src = dataUrl;
+        });
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas 2d context unavailable");
+        ctx.drawImage(img, 0, 0);
+        const dpr = img.naturalWidth / window.innerWidth;
+        const at = (x: number, y: number): number[] => {
+          const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+          return [d[0], d[1], d[2]];
+        };
+        const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+        const midY = points.reduce((sum, p) => sum + p.y + p.height / 2, 0) / points.length;
+        let wedges = 0;
+        for (const p of points) {
+          if (p.width < 6 || p.height < 6) continue;
+          const top = p.y + p.height / 2 < midY;
+          let shown = 0;
+          let bare = 0;
+          for (const depth of [0.15, 0.3, 0.45, 0.6, 0.75, 0.9]) {
+            const y = top ? p.y + p.height * depth : p.y + p.height * (1 - depth);
+            const left = at(p.x + 2, y);
+            const right = at(p.x + p.width - 3, y);
+            if (dist(left, right) > floor) continue; // the edges don't show one felt here
+            const felt = [0, 1, 2].map((i) => (left[i] + right[i]) / 2);
+            if (dist(at(p.x + p.width / 2, y), felt) > floor) shown += 1;
+            else bare += 1;
+          }
+          if (shown > 0 && bare > 0) wedges += 1;
+        }
+        return wedges;
+      },
+      { dataUrl, points, floor: FAINT_WEDGE_FLOOR },
+    );
+  } finally {
+    await hideStyle.evaluate((element) => (element as Element).remove());
+  }
+}
+
+/** A wedge 15 from the felt beside it is plainly visible; flat felt reads ~0. */
+const FAINT_WEDGE_FLOOR = 15;
+/** Three points, so a stray mark on one box (a label, a border) never reads as a board. */
+const FAINT_WEDGES_FOR_A_BOARD = 3;
 
 
 /**

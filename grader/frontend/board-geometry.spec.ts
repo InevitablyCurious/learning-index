@@ -159,15 +159,20 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   // And no wider than a piece with a few pixels of room each side (the build
   // prompt; Jerry, 2026-11-05: "about as wide as one of the pieces with a bit of
   // extra space (a few px) allocated on each side"). The reference is 1.07
-  // pieces at both sizes; 1.4 is where "far too wide" is true (run 1793908891
-  // round 4: a 121 px bar beside 60 px pieces).
+  // pieces at both sizes; "far too wide" is true at 2.0 (run 1793908891 round
+  // 4: a 121 px bar beside 60 px pieces) and false at 1.4–1.5: twenty saved
+  // builds draw an 80 px bar beside 70 px points that a player sees as an
+  // ordinary bar, and were all told "far too wide" (test set, 2026-11-11).
+  // The line is told only for the gross case (Jerry, 2026-11-11: tell the big
+  // picture, don't make the grader discern fine differences), so the ceiling
+  // sits between the two: 1.75 pieces.
   // Judged only once the points fill their halves: beside squeezed points "a
   // piece" is the squeeze's, and the line would send the model to shrink a bar
   // that is right (run 1794311852). The strip is F80's and F81's to tell.
   const squeezed =
     emptyStripBesideBarOrTray(points, bar, await readOffTray(page)) > 0.25 * pointWidth(points);
   expect(
-    squeezed || bar.width <= 1.4 * pieceForBar + 2,
+    squeezed || bar.width <= 1.75 * pieceForBar + 2,
     `[aspect: wide] the bar is ${bar.width.toFixed(0)} px wide; a piece is ${pieceForBar.toFixed(0)} px`,
   ).toBeTruthy();
   // And a bar a player can SEE: it stands out from the board by its fill, its
