@@ -151,7 +151,7 @@ def _overrides() -> dict[str, dict[str, str]]:
 #: Gates whose lines are GENERAL lines (one expectation list per part of the
 #: game, Jerry 2026-11-11). Their text is the shared line every check of that
 #: part tells.
-GENERAL_LINE_GATES = ("F30", "F29", "F32")
+GENERAL_LINE_GATES = ("F30", "F29", "F32", "F31")
 
 
 def _general_lines() -> set[str]:
