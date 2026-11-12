@@ -663,6 +663,11 @@
       "name": "A seeded turn can double like a played one",
       "what": "A player turn set up through the debug route, cube centered, may double just as the same turn reached by play.",
       "how": "Seeds white to roll on the opening board with a centered cube and asserts canDouble (after G11 shows a played turn can)."
+    },
+    "F91": {
+      "name": "No pieces before the pieces layer",
+      "what": "While the first layer is being built, the board and the buttons show with no pieces on the board yet.",
+      "how": "On a layer-1 pass, opens the page, waits a moment and requires that no tagged piece is visible."
     }
   },
   "setup": [
@@ -866,7 +871,7 @@
   "stages": [
     {
       "stage": 1,
-      "name": "First look",
+      "name": "First look: the game opens",
       "checks": [
         "G16",
         "REQ-BIND/",
@@ -876,15 +881,35 @@
         "REQ-RESPONSIVE/startup",
         "F01",
         "F27",
-        "F15",
         "G29",
         "G28",
         "REQ-RENDER/blank-board",
         "REQ-RENDER/geometry-not-drawn",
-        "F02",
         "REQ-RENDER/point",
         "REQ-RENDER/bar",
         "REQ-RENDER/off-tray",
+        "REQ-TESTID/"
+      ]
+    },
+    {
+      "stage": 2,
+      "name": "First look: where the board and the buttons sit",
+      "checks": [
+        "F35"
+      ]
+    },
+    {
+      "stage": 3,
+      "name": "First look: the game fits the screen",
+      "checks": [
+        "F37"
+      ]
+    },
+    {
+      "stage": 4,
+      "name": "First look: the board's size and drawing",
+      "checks": [
+        "F36",
         "F28",
         "F40",
         "F29",
@@ -895,9 +920,26 @@
         "F42",
         "F83",
         "F32",
-        "F81",
-        "F36",
-        "F37",
+        "F81"
+      ]
+    },
+    {
+      "stage": 5,
+      "name": "First look: the buttons",
+      "checks": [
+        "F38",
+        "F44",
+        "F82",
+        "F52",
+        "F08"
+      ]
+    },
+    {
+      "stage": 6,
+      "name": "First look: the pieces",
+      "checks": [
+        "F91",
+        "F02",
         "REQ-RENDER/checker",
         "F41",
         "F43",
@@ -907,20 +949,14 @@
         "G02",
         "F06",
         "F69",
-        "REQ-TESTID/",
-        "F35",
-        "F38",
-        "F44",
-        "F52",
-        "F82",
-        "F08",
-        "G26",
         "F34",
+        "G26",
+        "F15",
         "F87"
       ]
     },
     {
-      "stage": 2,
+      "stage": 7,
       "name": "Starting a game: the first roll",
       "checks": [
         "F89",
@@ -938,7 +974,7 @@
       ]
     },
     {
-      "stage": 3,
+      "stage": 8,
       "name": "Starting a game: picking up a piece",
       "checks": [
         "REQ-HINT/",
@@ -947,7 +983,7 @@
       ]
     },
     {
-      "stage": 4,
+      "stage": 9,
       "name": "Starting a game: the hints",
       "checks": [
         "F04",
@@ -955,7 +991,7 @@
       ]
     },
     {
-      "stage": 5,
+      "stage": 10,
       "name": "Starting a game: moving a piece",
       "checks": [
         "F45",
@@ -978,7 +1014,7 @@
       ]
     },
     {
-      "stage": 6,
+      "stage": 11,
       "name": "Starting a game: using the dice",
       "checks": [
         "F39",
@@ -994,7 +1030,7 @@
       ]
     },
     {
-      "stage": 7,
+      "stage": 12,
       "name": "Playing: the computer's turn",
       "checks": [
         "G25",
@@ -1009,7 +1045,7 @@
       ]
     },
     {
-      "stage": 8,
+      "stage": 13,
       "name": "Playing: hitting",
       "checks": [
         "G07",
@@ -1018,7 +1054,7 @@
       ]
     },
     {
-      "stage": 9,
+      "stage": 14,
       "name": "Playing: the bar",
       "checks": [
         "G06",
@@ -1034,14 +1070,14 @@
       ]
     },
     {
-      "stage": 10,
+      "stage": 15,
       "name": "Playing: tall stacks",
       "checks": [
         "F57"
       ]
     },
     {
-      "stage": 11,
+      "stage": 16,
       "name": "Playing: bearing off",
       "checks": [
         "G09",
@@ -1056,7 +1092,7 @@
       ]
     },
     {
-      "stage": 12,
+      "stage": 17,
       "name": "Playing: the doubling cube",
       "checks": [
         "G33",
@@ -1079,7 +1115,7 @@
       ]
     },
     {
-      "stage": 13,
+      "stage": 18,
       "name": "Finished: game over",
       "checks": [
         "G10",
@@ -1091,7 +1127,7 @@
       ]
     },
     {
-      "stage": 14,
+      "stage": 19,
       "name": "Finished: playing again",
       "checks": [
         "F22",
@@ -1101,5 +1137,5 @@
       ]
     }
   ],
-  "stages_note": "Player order. The model hears only the failing checks of the earliest stage that has any, listed in the order of that stage's list: a player cannot reach a later step past an earlier one that is broken. Every check is still graded every round. A key ending in / matches every setup check under it; the most specific key wins. Jerry, 2026-10-28: FIRST LOOK (app loads → board → pieces → buttons → resizing, one stage: a player sees the first screen at once) → STARTING A GAME (first roll → picking up a piece → hints → moving → using the dice) → PLAYING (the computer's turn → hitting → the bar → tall stacks → bearing off → the doubling cube) → FINISHED (game over → playing again), each step after the first look its own stage. The first roll holds the dice look because every dice check needs Roll to work."
+  "stages_note": "Player order. The model hears only the failing checks of the earliest stage that has any, listed in the order of that stage's list: a player cannot reach a later step past an earlier one that is broken. Every check is still graded every round. A key ending in / matches every setup check under it; the most specific key wins. Jerry, 2026-10-28: FIRST LOOK (app loads → board → pieces → buttons → resizing, one stage: a player sees the first screen at once). Jerry, 2026-11-11: the first look is told big picture first, so it is six stages — the game opens → where the board and the buttons sit (board left, buttons right) → the game fitting the screen → the board's size and drawing (points, bar, tray) → the buttons' details → the pieces; while the board and buttons are in the wrong place nothing about triangles or pieces is told → STARTING A GAME (first roll → picking up a piece → hints → moving → using the dice) → PLAYING (the computer's turn → hitting → the bar → tall stacks → bearing off → the doubling cube) → FINISHED (game over → playing again), each step after the first look its own stage. The first roll holds the dice look because every dice check needs Roll to work."
 }

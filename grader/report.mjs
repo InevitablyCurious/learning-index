@@ -865,14 +865,14 @@ async function main() {
     });
     // geometry-not-drawn means pieces WERE placed (that is how it is told
     // apart). On a layer-1 pass, pieces are themselves a finding — the board
-    // and buttons come first — and F01, which says so, died on the same
+    // and buttons come first — and F91, which says so, died on the same
     // settle as every other blocked gate. Run 1794300137's first layer-1 grade
     // drew 30 pieces and no triangles and was told only the triangles.
     if (reason === "geometry-not-drawn" && LAYER === 1) {
       problems.push({
-        check: "[F01] REQ-RENDER — page loads and the board appears",
+        check: "[F91] REQ-RENDER — no pieces before the pieces layer",
         expected: "no pieces at layer 1",
-        observed: "[aspect: early] at layer 1 pieces are drawn on the board while the board itself never drew",
+        observed: "at layer 1 pieces are drawn on the board while the board itself never drew",
       });
     }
   }

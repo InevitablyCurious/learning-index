@@ -36,10 +36,11 @@ def test_load_layers_reads_the_map() -> None:
     # The map is the layer feature itself: a silently shrunk one would layer
     # everything by stage default and never fail.
     assert isinstance(LAYERS, LayerMap)
-    assert len(LAYERS.checks) == 159
-    assert len(LAYERS.stages) == 14
+    assert len(LAYERS.checks) == 160
+    assert len(LAYERS.stages) == 19
     assert LAYERS.stages[1] == 1  # first look, the board surface
-    assert LAYERS.stages[14] == 3  # finished: gameplay, the last pass
+    assert LAYERS.stages[6] == 1  # first look's last stage, the pieces
+    assert LAYERS.stages[19] == 3  # finished: gameplay, the last pass
 
 
 def test_layer_of_resolves_exact_template_and_stage() -> None:
@@ -63,9 +64,9 @@ def test_layer_of_resolves_exact_template_and_stage() -> None:
 
 
 def test_stages_carry_layer() -> None:
-    assert len(STAGES) == 14
-    assert STAGES[0].name == "First look" and STAGES[0].layer == 1
-    assert STAGES[-1].number == 14 and STAGES[-1].layer == 3
+    assert len(STAGES) == 19
+    assert STAGES[0].name == "First look: the game opens" and STAGES[0].layer == 1
+    assert STAGES[-1].number == 19 and STAGES[-1].layer == 3
 
 
 def _contains_pair(argv: list[str], left: str, right: str) -> bool:

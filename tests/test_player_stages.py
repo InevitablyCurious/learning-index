@@ -54,7 +54,7 @@ def test_every_complaint_key_and_every_drawn_or_tagged_element_has_a_stage() -> 
 
 
 def test_the_most_specific_key_wins() -> None:
-    assert stage_of("conformance:REQ-TESTID/die — dice tagged", STAGES).number == 2
+    assert stage_of("conformance:REQ-TESTID/die — dice tagged", STAGES).number == 7
     assert stage_of("conformance:REQ-TESTID/testid.board — tagged", STAGES).number == 1
 
 
@@ -65,13 +65,13 @@ def test_an_undeclared_check_is_refused_not_guessed() -> None:
 
 def test_only_the_earliest_failing_stage_is_told() -> None:
     problems = [
-        {"check": "[G08] REQ-BEAROFF — bear-off"},  # stage 11
-        {"check": "[G01] REQ-INIT — initial position"},  # stage 1
-        {"check": "[F06] REQ-PIPUI — pips on screen"},  # stage 1
-        {"check": "[G14] REQ-AISTRENGTH — hard beats easy"},  # stage 7
+        {"check": "[G08] REQ-BEAROFF — bear-off"},  # stage 16
+        {"check": "[G01] REQ-INIT — initial position"},  # stage 6
+        {"check": "[F06] REQ-PIPUI — pips on screen"},  # stage 6
+        {"check": "[G14] REQ-AISTRENGTH — hard beats easy"},  # stage 12
     ]
     view = player_view(problems, STAGES, is_infra=_infra)
-    assert view.stage is not None and view.stage.number == 1
+    assert view.stage is not None and view.stage.number == 6
     assert [p["check"][:5] for p in view.visible] == ["[G01]", "[F06]"]
     assert len(view.withheld) == 2
 
@@ -92,7 +92,7 @@ def test_the_board_as_it_opens_is_told_before_anything_played() -> None:
         STAGES,
         is_infra=_infra,
     )
-    assert view.stage is not None and view.stage.number == 1
+    assert view.stage is not None and view.stage.number == 6
     assert [p["check"][:5] for p in view.visible] == ["[F87]"]
 
 
@@ -105,19 +105,44 @@ def test_a_stage_is_told_in_the_order_a_player_meets_it() -> None:
             {
                 "check": "[F87] REQ-LAYOUT — the board keeps its shape as the window changes"
             },
-            {"check": "[F82] REQ-LAYOUT — the buttons match"},
             {"check": "[G01] REQ-INIT — initial position"},
-            {"check": "[F79] REQ-GEOMETRY — every point is the same size"},
+            {
+                "check": "[F41] REQ-GEOMETRY — checkers drawn as circles sized to their points"
+            },
         ],
         STAGES,
         is_infra=_infra,
     )
     assert [p["check"][:5] for p in view.visible] == [
-        "[F79]",
+        "[F41]",
         "[G01]",
-        "[F82]",
         "[F87]",
     ]
+
+
+def test_the_first_look_is_told_big_picture_first() -> None:
+    # Jerry, 2026-11-11, on a build with its board centred, its buttons stacked
+    # underneath, faint triangles and pieces already drawn: "the board and the
+    # buttons aren't positioned correctly, i expect to see the board on the left
+    # and the buttons on the right" — and nothing about the triangles or the
+    # pieces. Placement is told alone; the board's drawing, the buttons' details
+    # and the pieces each wait for the stage before them to be clean (a button
+    # 4 px shorter than the rest is not told over points squeezed into a corner).
+    told = [
+        {"check": "[F91] REQ-RENDER — no pieces before the pieces layer"},
+        {"check": "[F30] REQ-GEOMETRY — triangles point inward"},
+        {"check": "[F36] REQ-LAYOUT — the board takes about 80% of the width"},
+        {"check": "[F38] REQ-LAYOUT — the buttons and game info show properly"},
+        {"check": "[F35] REQ-LAYOUT — board and controls placement"},
+    ]
+    order = []
+    while told:
+        view = player_view(told, STAGES, is_infra=_infra)
+        assert view.stage is not None
+        order.append([p["check"][:5] for p in view.visible])
+        shown = {p["check"] for p in view.visible}
+        told = [p for p in told if p["check"] not in shown]
+    assert order == [["[F35]"], ["[F36]", "[F30]"], ["[F38]"], ["[F91]"]]
 
 
 def test_a_clean_stage_unlocks_the_next_failing_one_skipping_clean_stages() -> None:
@@ -126,7 +151,7 @@ def test_a_clean_stage_unlocks_the_next_failing_one_skipping_clean_stages() -> N
         STAGES,
         is_infra=_infra,
     )
-    assert view.stage is not None and view.stage.number == 7
+    assert view.stage is not None and view.stage.number == 12
 
 
 def test_runner_deaths_are_never_staged_or_told() -> None:
@@ -224,7 +249,7 @@ def test_a_stuck_check_is_told_when_the_step_failed_only_in_its_own_situation() 
         STAGES,
         is_infra=_infra,
     )
-    assert view.stage is not None and view.stage.number == 6
+    assert view.stage is not None and view.stage.number == 11
     assert [p["check"][:5] for p in view.visible] == [
         "[F33]"
     ] and view.unevaluated == []

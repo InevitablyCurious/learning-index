@@ -176,32 +176,33 @@
     "REQ-RENDER/die": 3,
     "REQ-TESTID/die": 3,
     "REQ-RENDER/die-reload": 3,
-    "REQ-HINT/hint": 3
+    "REQ-HINT/hint": 3,
+    "F91": 1
   },
   "stages": {
     "1": {
       "layer": 1,
-      "reason": "First look — the board/controls surface; cross-layer checks inside stage 1 are layered individually in `checks` and win over this stage default"
+      "reason": "First look (stages 1-6, split big picture first 2026-11-11) — the board/controls surface; cross-layer checks inside are layered individually in `checks` and win over this stage default"
     },
     "2": {
-      "layer": 3,
-      "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
+      "layer": 1,
+      "reason": "First look (stages 1-6, split big picture first 2026-11-11) — the board/controls surface; cross-layer checks inside are layered individually in `checks` and win over this stage default"
     },
     "3": {
-      "layer": 3,
-      "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
+      "layer": 1,
+      "reason": "First look (stages 1-6, split big picture first 2026-11-11) — the board/controls surface; cross-layer checks inside are layered individually in `checks` and win over this stage default"
     },
     "4": {
-      "layer": 3,
-      "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
+      "layer": 1,
+      "reason": "First look (stages 1-6, split big picture first 2026-11-11) — the board/controls surface; cross-layer checks inside are layered individually in `checks` and win over this stage default"
     },
     "5": {
-      "layer": 3,
-      "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
+      "layer": 1,
+      "reason": "First look (stages 1-6, split big picture first 2026-11-11) — the board/controls surface; cross-layer checks inside are layered individually in `checks` and win over this stage default"
     },
     "6": {
-      "layer": 3,
-      "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
+      "layer": 1,
+      "reason": "First look (stages 1-6, split big picture first 2026-11-11) — the board/controls surface; cross-layer checks inside are layered individually in `checks` and win over this stage default"
     },
     "7": {
       "layer": 3,
@@ -232,6 +233,26 @@
       "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
     },
     "14": {
+      "layer": 3,
+      "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
+    },
+    "15": {
+      "layer": 3,
+      "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
+    },
+    "16": {
+      "layer": 3,
+      "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
+    },
+    "17": {
+      "layer": 3,
+      "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
+    },
+    "18": {
+      "layer": 3,
+      "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
+    },
+    "19": {
       "layer": 3,
       "reason": "gameplay/backend — rolling, moves, cube, bearing off, game over"
     }

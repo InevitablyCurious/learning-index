@@ -554,6 +554,18 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
         : wholeHalf("left")
           ? "[aspect: someundrawnleft]"
           : "[aspect: someundrawn]";
+  // Pointing outward: wider further in than at the rim, however short it is.
+  // Asked of the triangles that can be read, BEFORE the faint or missing ones:
+  // which way the points face is the bigger picture (Jerry, 2026-11-11). Run
+  // 1794311852's board drew every triangle upside down, half of them dark green
+  // on green; asked second, the faint half answered first and the model was told
+  // only "some of the points don't show a clear triangle" (the 2026-09-30 D3R4
+  // miss, again).
+  const outward = judged.filter((s) => s.shape === "outward").map((s) => s.num);
+  expect(
+    outward,
+    `${needsRows}expected every point's triangle to point inward (wider at the rim than further in), found outward-pointing point numbers: ${outward.join(", ")}`,
+  ).toEqual([]);
   expect(
     noTriangle,
     `${needsRows}${spread} no triangle drawn on points: ${noTriangle.join(", ")}`,
@@ -586,12 +598,6 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
     ).toBe(true);
   }
 
-  // Pointing outward: wider further in than at the rim, however short it is.
-  const outward = judged.filter((s) => s.shape === "outward").map((s) => s.num);
-  expect(
-    outward,
-    `${needsRows}expected every point's triangle to point inward (wider at the rim than further in), found outward-pointing point numbers: ${outward.join(", ")}`,
-  ).toEqual([]);
 
   // And it stands out at least half way in from the rim (the reference's run
   // 88%). Run 1790396722's triangles reached a fifth of the way; run

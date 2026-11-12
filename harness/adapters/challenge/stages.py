@@ -283,7 +283,7 @@ def player_view(
     belongs to another layer is dropped before staging, so a pass over layer 1
     never widens its repair message to a later pass's gates. The layer is the
     check's own (``layer_map.layer_of``), never its stage's: layer 2 has no
-    stage of its own — stages 2-14 default to layer 3 — so reading ``Stage.layer``
+    stage of its own — stages 7-19 default to layer 3 — so reading ``Stage.layer``
     here would drop every layer-2 problem. Without a scope the result is
     unchanged."""
     records = [p for p in problems if isinstance(p, dict)]

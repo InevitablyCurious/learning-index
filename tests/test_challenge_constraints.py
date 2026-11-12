@@ -108,7 +108,7 @@ def test_the_block_ends_the_both_channels_message() -> None:
     composed into the one message."""
     _, msg = _feedback(
         [
-            _problem("[G01] REQ-INIT — initial position"),
+            _problem("[F01] REQ-RENDER — page loads and the board appears"),
             _problem(
                 'conformance:REQ-STATE/state.winType — /api/state carries "winType"'
             ),

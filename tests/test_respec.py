@@ -52,6 +52,8 @@ def test_untold_cube_words_hand_the_brief_back_only_once_the_cube_is_reached() -
             "observed": "AssertionError: [untold] a cube answer outside double / no-double",
         }
     ]
-    assert ChallengeRunner._respec_for(words, [], stages[11], stages)
+    cube = next(s for s in stages if s.name == "Playing: the doubling cube")
+    moving = next(s for s in stages if s.name == "Starting a game: moving a piece")
+    assert ChallengeRunner._respec_for(words, [], cube, stages)
     assert ChallengeRunner._respec_for(words, [], None, stages)
-    assert ChallengeRunner._respec_for(words, [], stages[4], stages) == []
+    assert ChallengeRunner._respec_for(words, [], moving, stages) == []

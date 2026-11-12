@@ -574,6 +574,7 @@ export interface TriangleSample {
 export async function sampleTriangleOrientation(
   page: Page,
   points: PointBox[],
+  paintFloor = 45,
 ): Promise<TriangleSample[]> {
   // The hide must not outlive the measurement: an injected style tag left
   // behind keeps every checker on the page invisible for the rest of the run.
@@ -587,7 +588,7 @@ export async function sampleTriangleOrientation(
     const dataUrl = "data:image/png;base64," + buf.toString("base64");
 
     return await page.evaluate(
-      async ({ dataUrl, points }) => {
+      async ({ dataUrl, points, paintFloor }) => {
         const img = new Image();
         await new Promise<void>((resolve, reject) => {
           img.onload = () => resolve();
@@ -630,7 +631,7 @@ export async function sampleTriangleOrientation(
           }
         }
         const felt = [...seen.values()].sort((a, b) => b.n - a.n)[0].colour;
-        const painted = (x: number, y: number) => dist(at(x, y), felt) > 45;
+        const painted = (x: number, y: number) => dist(at(x, y), felt) > paintFloor;
 
         // Share of a horizontal line across the point, `depth` of the way in
         // from its rim, that is painted.
@@ -745,7 +746,7 @@ export async function sampleTriangleOrientation(
           };
         });
       },
-      { dataUrl, points },
+      { dataUrl, points, paintFloor },
     );
   } finally {
     await hideStyle.evaluate((element) => (element as Element).remove());
@@ -763,9 +764,22 @@ export async function sampleTriangleOrientation(
 export async function boardGeometryDrawn(page: Page): Promise<boolean> {
   const points = await readPointBoxes(page);
   if (points.length === 0) return false;
-  const samples = await sampleTriangleOrientation(page, points);
+  const samples = await sampleTriangleOrientation(page, points, DRAWN_PAINT_FLOOR);
   return samples.some((sample) => sample.shape !== "none");
 }
+
+/**
+ * How far from the felt a pixel must be to count as drawn when the question is
+ * only "did the board draw at all". Lower than F30's 45, which asks whether a
+ * triangle STANDS OUT: triangles drawn faint but plainly visible (a see-through
+ * brown wedge on green felt, 26 from the felt and at most 39) failed 45, so the
+ * page was judged never drawn and the model was told "the board itself never
+ * draws — there are no points or triangles" about a board a player could see
+ * (step-4 sweep, 30 saved builds). Flat felt sits within a few units of itself.
+ * Faint triangles are F30's to tell ("I can't make out a triangle…"), in its
+ * own stage.
+ */
+const DRAWN_PAINT_FLOOR = 15;
 
 
 /**
