@@ -1618,9 +1618,15 @@ test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
   // 1790633807's entered at the wrong end and showed hints there.
   await expect(page.getByTestId("hint"), "[needs: G06]").toHaveCount(0);
 
+  // The server's own fields for a stuck turn are API shape no player sees:
+  // run 1794516809's page showed no hints and passed the turn by itself a
+  // second later (F48), while its /api/state never set turnOver, and the player
+  // was told "it keeps me stuck or still shows me places to click". Scored,
+  // never told (Jerry, 2026-11-03, the cube words: what no player sees is
+  // [untold]).
   const state = await readState(page);
-  expect(state.turnOver, "[needs: G06]").toBe(true);
-  expect(state.legalMoves, "[needs: G06]").toHaveLength(0);
+  expect(state.turnOver, "[untold] [needs: G06] a stuck turn's state did not say turnOver").toBe(true);
+  expect(state.legalMoves, "[untold] [needs: G06] a stuck turn's state still listed moves").toHaveLength(0);
 });
 
 test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {

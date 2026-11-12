@@ -231,7 +231,11 @@ describe("Backgammon backend gates 13-16", () => {
       // A stuck player exists only once pieces come in off the bar where they
       // should (G06: run 1790633807's entered at the wrong end and were never
       // stuck); a turn that ends with no word of it is the notice gate's (F05).
-      const entry = "[needs: G06]";
+      // turnOver and the empty move list are API shape a player never sees (the
+      // page passes the turn on its own, F48): scored, never told — run
+      // 1794516809 was told "a die gets used twice, the turn doesn't come back"
+      // for a missing turnOver alone.
+      const entry = "[untold] [needs: G06]";
       const notice = "[needs: F05]";
       expect(state.turnOver, entry).toBe(true);
       expect(Array.isArray(state.legalMoves), entry).toBe(true);
