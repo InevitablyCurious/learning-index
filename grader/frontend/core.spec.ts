@@ -1864,6 +1864,97 @@ test("[F48] REQ-TURN — a no-move roll passes by itself", async ({ page }) => {
     .toBe(true);
 });
 
+// [F93] REQ-PACING — the dice land and stay still after a roll. Jerry,
+// 2026-11-12: "enforce a brief pause after the roll 1 second delay before any
+// subsequent action … so that we eliminate the spam and ensure that the
+// benchmarked product produced is legible to a human observing it." A build
+// that redrew its dice with their rolling animation every 200 ms kept them
+// tumbling from the roll until the first move (run 1794159080's last build,
+// played in a browser), and a game that moves on by itself the moment the dice
+// land is one a player can't follow. The computer's turn (F62), the opening
+// (F88) and a roll with no move (F48) are timed on their own; this is the
+// player's ordinary roll. Read from the screen — the dice's own boxes and
+// pixels, and where the player's pieces are tagged — never from animation
+// events: the dice may roll in any way, once, and then must sit still.
+test("[F93] REQ-PACING — the dice land and stay still after a roll", async ({ page }) => {
+  test.setTimeout(60_000);
+  await openApp(page);
+  await setupState(page, {
+    points: startingPoints(),
+    bar: { white: 0, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "roll",
+    dice: [],
+    remainingDice: [],
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await waitForBoardSettled(page).catch(() => undefined);
+
+  const look = () =>
+    page.evaluate(() => {
+      const dice = [...document.querySelectorAll('[data-testid="die"]')]
+        .filter((el) => (el as HTMLElement).checkVisibility())
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => r.width > 2 && r.height > 2);
+      const pieces = [...document.querySelectorAll('[data-testid="checker"][data-color="white"]')]
+        .map((el) => (el as HTMLElement).dataset.loc ?? "")
+        .sort()
+        .join("|");
+      if (dice.length === 0) return { boxes: "", clip: null, pieces };
+      const pad = 4;
+      const x = Math.max(0, Math.min(...dice.map((r) => r.x)) - pad);
+      const y = Math.max(0, Math.min(...dice.map((r) => r.y)) - pad);
+      const right = Math.min(innerWidth, Math.max(...dice.map((r) => r.right)) + pad);
+      const bottom = Math.min(innerHeight, Math.max(...dice.map((r) => r.bottom)) + pad);
+      const boxes = dice.map((r) => `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`).join("|");
+      return { boxes, clip: { x, y, width: Math.max(1, right - x), height: Math.max(1, bottom - y) }, pieces };
+    });
+
+  const beforeRoll = (await look()).pieces;
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
+  await rollAndCheck(page, [6, 5], () => page.getByTestId("rollBtn").click());
+  const rolledAt = Date.now();
+  await page.mouse.move(1, 1);
+
+  // Three seconds of the dice and the player's pieces as drawn, about ten
+  // times a second.
+  const samples: { t: number; boxes: string; pixels: Buffer | null; pieces: string }[] = [];
+  while (Date.now() - rolledAt < 3_000) {
+    const now = await look();
+    const pixels = now.clip ? await page.screenshot({ clip: now.clip, animations: "allow" }).catch(() => null) : null;
+    samples.push({ t: Date.now() - rolledAt, boxes: now.boxes, pixels, pieces: now.pieces });
+    await page.waitForTimeout(80);
+  }
+
+  expect(
+    samples.some((s) => s.boxes !== ""),
+    "[needs: REQ-RENDER/die F39] no dice showed after the roll",
+  ).toBe(true);
+  const movedAt = samples.find((s) => s.t < 1_000 && s.pieces !== beforeRoll)?.t;
+  expect(
+    movedAt === undefined,
+    `[aspect: moved] the player's pieces moved by themselves ${movedAt ?? 0} ms after the roll`,
+  ).toBe(true);
+
+  // The longest spell in which the dice kept the same boxes and the same pixels.
+  let still = 0;
+  for (let i = 0; i < samples.length; ) {
+    let j = i;
+    const same = (a: (typeof samples)[number], b: (typeof samples)[number]) =>
+      a.boxes !== "" && a.boxes === b.boxes && a.pixels !== null && b.pixels !== null && a.pixels.equals(b.pixels);
+    while (j + 1 < samples.length && same(samples[i], samples[j + 1])) j++;
+    if (samples[i].boxes !== "") still = Math.max(still, samples[j].t - samples[i].t);
+    i = j + 1;
+  }
+  expect(
+    still >= 900,
+    `[aspect: still] [needs: REQ-RENDER/die F39] in the 3 s after the roll the dice never held still for a second (longest ${still} ms)`,
+  ).toBe(true);
+});
+
 // [F92] REQ-TURN — one roll per turn. Jerry, 2026-11-12, playing run
 // 1794488314's build: after he played his whole roll, End Turn showed "like it
 // should but also the 'roll' button … when i click it, it allows me to roll

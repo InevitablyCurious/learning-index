@@ -160,7 +160,7 @@ def test_first_failure_is_the_players_first_report() -> None:
         "I've encountered while playing the game:" in text
     )
     assert (
-        "let me move with the smaller number even though the bigger one had a move too"
+        "whichever I played, the other had no move left — and the game let me play the smaller one"
         in text
     )
     assert "it isn't the top piece that slides away" in text
@@ -253,10 +253,10 @@ def test_repeat_matching_is_keyed_on_the_raw_gate_id() -> None:
     )
     # A repeat that failed to match leaves every gate on its FIRST line.
     assert (
-        "let me move with the smaller number even though the bigger one had a move too"
+        "whichever I played, the other had no move left — and the game let me play the smaller one"
         in text
     )
-    assert "while the bigger one also had a move" not in text
+    assert "the game still lets me play the smaller one" not in text
 
 
 def test_empty_checks_never_claims_a_clean_run() -> None:

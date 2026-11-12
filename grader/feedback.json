@@ -84,12 +84,12 @@
       "repeat": "It happened again — I took one of the moves it offered me and landed somewhere my opponent clearly already holds."
     },
     "G05": {
-      "first": "I rolled two numbers where I could play one or the other but not both, and the game let me move with the smaller number even though the bigger one had a move too.",
-      "repeat": "Got another roll where only one of my two numbers could be used — it still let me play the smaller number while the bigger one also had a move."
+      "first": "I rolled two different numbers but only one of them could be used — whichever I played, the other had no move left — and the game let me play the smaller one. When only one number can be used I expect it to be the bigger one; when both can be used, either order is fine.",
+      "repeat": "When only one of my two numbers can be used, the game still lets me play the smaller one."
     },
     "G05.offered": {
-      "first": "I rolled two numbers where I could play one or the other but not both, and the game showed me a move with the smaller number even though the bigger one had a move too.",
-      "repeat": "Got another roll where only one of my two numbers could be used — it still showed me a move with the smaller number while the bigger one also had a move."
+      "first": "I rolled two different numbers but only one of them could be used — whichever I played, the other had no move left — and the game showed me a move with the smaller one. When only one number can be used I expect it to be the bigger one; when both can be used, either order is fine.",
+      "repeat": "When only one of my two numbers can be used, the game still shows me a move with the smaller one."
     },
     "G06": {
       "first": "When my piece is on the bar the game doesn't force me to bring it back in before i do anything else",
@@ -1728,8 +1728,8 @@
       "repeat": "I still get the computer playing again, not my own turn, when I press End Turn with its double waiting."
     },
     "F73": {
-      "first": "I rolled two numbers I could play in either order, but the game only let me play the bigger one first. Clicking the other number's move did nothing.",
-      "repeat": "I still can't play the smaller number first when I could play both."
+      "first": "I rolled two different numbers and both could be used, but the game made me play the bigger one first — clicking the smaller number's move did nothing. When both numbers can be used I expect to play them in either order; only when just one of them can be used does it have to be the bigger one.",
+      "repeat": "With two different numbers that can both be used, I still can't play the smaller one first."
     },
     "F78": {
       "first": "After I move a piece, the die I used disappears. It should grey out slightly to signal it's been played.",
@@ -1910,6 +1910,18 @@
     "F92": {
       "first": "After I played my roll, the Roll button was still there and let me roll and play again before the computer had its turn — I expect one roll per turn, then End Turn.",
       "repeat": "After I played my roll, the Roll button was still there and still let me roll and play again before the computer had its turn — I expect one roll per turn, then End Turn."
+    },
+    "F93": {
+      "first": "After a roll, the game moves on before I can read the dice — I expect the dice to land and stay still for about a second before anything else happens.",
+      "repeat": "After a roll, the game still moves on before I can read the dice."
+    },
+    "F93.moved": {
+      "first": "After a roll, the game moves on before I can read the dice — I expect the dice to land and stay still for about a second before anything else happens.",
+      "repeat": "After a roll, the game still moves on before I can read the dice."
+    },
+    "F93.still": {
+      "first": "The dice keep tumbling after they land — I expect them to land once and stay still so I can read them.",
+      "repeat": "The dice still keep tumbling after they land."
     },
     "G36": {
       "first": "They roll again through your app's API after the dice are already rolled, and it gives them a new roll instead of ignoring it.",

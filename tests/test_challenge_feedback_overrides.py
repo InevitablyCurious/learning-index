@@ -79,6 +79,14 @@ _IMPLEMENTATION_IDENTIFIERS = (
 #: G36, 2026-11-12: "…it gives them a new roll instead of ignoring it."
 _APPROVED_PRESCRIPTIVE = frozenset({"G36"})
 
+#: Lines Jerry approved word for word although they share the rule's words with
+#: their own test title — they state the expectation in a player's voice by
+#: design, so the two read the same (memory: fix the guard, not his words).
+#: F73 and G05, 2026-11-12: two lines that only implied the deciding condition
+#: read as opposites to a model that held the wrong rule, so each now states it.
+#: F93, 2026-11-12: "I expect the dice to land and stay still…".
+_APPROVED_TITLE_OVERLAP = frozenset({"F73", "F93"})
+
 _PRESCRIPTIVE_PHRASES = (
     "should be",
     "should have",
@@ -399,6 +407,8 @@ def test_no_override_restates_its_own_test_title(
     Copying the title in is the easy mistake — it reads like a description of
     the problem because it IS one, stated as the rule.
     """
+    if key in _APPROVED_TITLE_OVERLAP:
+        return
     titles = _test_titles(key)
 
     def significant(s: str) -> set[str]:
