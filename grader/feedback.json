@@ -84,12 +84,12 @@
       "repeat": "It happened again — I took one of the moves it offered me and landed somewhere my opponent clearly already holds."
     },
     "G05": {
-      "first": "I rolled two different numbers but only one of them could be used — whichever I played, the other had no move left — and the game let me play the smaller one. When only one number can be used I expect it to be the bigger one; when both can be used, either order is fine.",
-      "repeat": "When only one of my two numbers can be used, the game still lets me play the smaller one."
+      "first": "I rolled a 4 and a 3 and could play either one, but not both — after either move the other number had nowhere to go — and the game let me play the 3. When I can only use one of my two numbers, I expect to have to play the bigger one; when I can use both, either order is fine.",
+      "repeat": "When I can play either number but not both, the game still lets me play the smaller one."
     },
     "G05.offered": {
-      "first": "I rolled two different numbers but only one of them could be used — whichever I played, the other had no move left — and the game showed me a move with the smaller one. When only one number can be used I expect it to be the bigger one; when both can be used, either order is fine.",
-      "repeat": "When only one of my two numbers can be used, the game still shows me a move with the smaller one."
+      "first": "I rolled a 4 and a 3 and could play either one, but not both — after either move the other number had nowhere to go — and the game showed me a move for the 3. When I can only use one of my two numbers, I expect to have to play the bigger one; when I can use both, either order is fine.",
+      "repeat": "When I can play either number but not both, the game still shows me a move for the smaller one."
     },
     "G06": {
       "first": "When my piece is on the bar the game doesn't force me to bring it back in before i do anything else",
