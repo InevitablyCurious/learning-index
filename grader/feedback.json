@@ -888,32 +888,32 @@
       "repeat": "The triangles still aren't drawn right. Here's what I expect:\n   - The bar splits each row in half, so the board has four quarters with six triangles in each.\n   - The six triangles fill their quarter edge to edge, with no empty strip left over — on the left from the board's edge to the bar, on the right from the bar to the off tray — and all 24 are the same width.\n   - Each triangle's wide end sits on the board's outer edge, and its tip points toward the middle.\n   - The tips reach most of the way to the middle but never touch the tip across from them: about a quarter of half the board's height stays open between them.\n   - They use two colours that alternate side by side, each triangle faces one of the other colour across the middle, and both colours stand out clearly from the board."
     },
     "F29": {
-      "first": "The bar sits out at the edge of the board, not between the two halves.",
-      "repeat": "Looked again and the bar is still sitting out at the edge, not in the middle of the board."
+      "first": "The bar isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it.",
+      "repeat": "The bar still isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it."
     },
     "F29.thin": {
-      "first": "The bar down the middle is just a thin line — I expect it wide enough for a piece I've hit to sit on it.",
-      "repeat": "The bar down the middle is still just a thin line — I expect it wide enough for a piece that's been hit to sit on it."
+      "first": "The bar isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it.",
+      "repeat": "The bar still isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it."
     },
     "F29.wide": {
-      "first": "The bar down the middle is far too wide — I expect it about as wide as one of the pieces with a bit of extra space (a few px) allocated on each side.",
-      "repeat": "The bar down the middle is still far too wide — I expect it about as wide as one of the pieces with a bit of extra space (a few px) on each side."
+      "first": "The bar isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it.",
+      "repeat": "The bar still isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it."
     },
     "F29.blend": {
-      "first": "The bar down the middle blends into the board, so I can't pick it out — I expect it to stand out from the board.",
-      "repeat": "The bar down the middle still blends into the board, so I still can't pick it out — I expect it to stand out from the board."
+      "first": "The bar isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it.",
+      "repeat": "The bar still isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it."
     },
     "F29.overlap": {
-      "first": "The bar cuts across some of the points.",
-      "repeat": "The bar still cuts across some of the points."
+      "first": "The bar isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it.",
+      "repeat": "The bar still isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it."
     },
     "F29.place": {
-      "first": "The bar splits the board in the wrong place.",
-      "repeat": "The bar still splits the board in the wrong place."
+      "first": "The bar isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it.",
+      "repeat": "The bar still isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it."
     },
     "F29.short": {
-      "first": "The bar doesn't run the full height of the board.",
-      "repeat": "The bar still doesn't run the full height of the board."
+      "first": "The bar isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it.",
+      "repeat": "The bar still isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it."
     },
     "F30": {
       "first": "The triangles aren't drawn right. Here's what I expect:\n   - The bar splits each row in half, so the board has four quarters with six triangles in each.\n   - The six triangles fill their quarter edge to edge, with no empty strip left over — on the left from the board's edge to the bar, on the right from the bar to the off tray — and all 24 are the same width.\n   - Each triangle's wide end sits on the board's outer edge, and its tip points toward the middle.\n   - The tips reach most of the way to the middle but never touch the tip across from them: about a quarter of half the board's height stays open between them.\n   - They use two colours that alternate side by side, each triangle faces one of the other colour across the middle, and both colours stand out clearly from the board.",
@@ -980,36 +980,36 @@
       "repeat": "Some of the stacks still don't start at the edge of the board — I expect each stack to start right at the edge, at the wide end of its point."
     },
     "F32": {
-      "first": "The off tray isn't showing — there's no place on the board for pieces that have been taken off.",
-      "repeat": "Looked again and the off tray still isn't there, still no place for taken-off pieces."
+      "first": "The off tray isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it.",
+      "repeat": "The off tray still isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it."
     },
     "F32.wide": {
-      "first": "The off tray is far too wide — I expect it no wider than about one and a half points.",
-      "repeat": "The off tray is still far too wide — I expect it no wider than about one and a half points."
+      "first": "The off tray isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it.",
+      "repeat": "The off tray still isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it."
     },
     "F32.blend": {
-      "first": "The off tray blends into the board, so I can't tell where it is — I expect it to stand out from the board.",
-      "repeat": "The off tray still blends into the board, so I still can't tell where it is — I expect it to stand out from the board."
+      "first": "The off tray isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it.",
+      "repeat": "The off tray still isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it."
     },
     "F32.overlap": {
-      "first": "The off tray cuts across some of the points.",
-      "repeat": "The off tray still cuts across some of the points."
+      "first": "The off tray isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it.",
+      "repeat": "The off tray still isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it."
     },
     "F32.offboard": {
-      "first": "The off tray is sitting outside the board, not on it.",
-      "repeat": "The off tray is still sitting outside the board, not on it."
+      "first": "The off tray isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it.",
+      "repeat": "The off tray still isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it."
     },
     "F32.short": {
-      "first": "The off tray doesn't run the full height of the board.",
-      "repeat": "The off tray still doesn't run the full height of the board."
+      "first": "The off tray isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it.",
+      "repeat": "The off tray still isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it."
     },
     "F32.narrow": {
-      "first": "The off tray is too narrow to hold a piece lying on its side.",
-      "repeat": "The off tray is still too narrow to hold a piece lying on its side."
+      "first": "The off tray isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it.",
+      "repeat": "The off tray still isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it."
     },
     "F32.side": {
-      "first": "The off tray isn't at the end of the board where I bear off, past point 1.",
-      "repeat": "The off tray still isn't at the end of the board where I bear off, past point 1."
+      "first": "The off tray isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it.",
+      "repeat": "The off tray still isn't drawn right. Here's what I expect:\n   - It sits on the board at the right-hand end, beside points 1 and 24.\n   - It runs the full height of the board.\n   - It's at least as wide as a piece and no wider than one and a half points, so a borne-off piece fits in it lying on its side.\n   - It stands out from the board — its own fill, or a clear edge on the side facing the points — and no triangle runs into it."
     },
     "F33": {
       "first": "I rolled a double and couldn't play all of it.",
@@ -1772,8 +1772,8 @@
       "repeat": "The triangles still aren't drawn right. Here's what I expect:\n   - The bar splits each row in half, so the board has four quarters with six triangles in each.\n   - The six triangles fill their quarter edge to edge, with no empty strip left over — on the left from the board's edge to the bar, on the right from the bar to the off tray — and all 24 are the same width.\n   - Each triangle's wide end sits on the board's outer edge, and its tip points toward the middle.\n   - The tips reach most of the way to the middle but never touch the tip across from them: about a quarter of half the board's height stays open between them.\n   - They use two colours that alternate side by side, each triangle faces one of the other colour across the middle, and both colours stand out clearly from the board."
     },
     "F80": {
-      "first": "The bar isn't in the middle — one half of the board is wider than the other.",
-      "repeat": "The bar still isn't in the middle; one half of the board is still wider."
+      "first": "The bar isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it.",
+      "repeat": "The bar still isn't drawn right. Here's what I expect:\n   - One bar runs down the middle of the board, top to bottom, splitting it into two halves of the same width.\n   - It's about as wide as a piece, with a few pixels to spare on each side, so a piece that's been hit fits on it.\n   - It stands out from the board, and no triangle runs under or across it."
     },
     "F80.bargap": {
       "first": "The triangles aren't drawn right. Here's what I expect:\n   - The bar splits each row in half, so the board has four quarters with six triangles in each.\n   - The six triangles fill their quarter edge to edge, with no empty strip left over — on the left from the board's edge to the bar, on the right from the bar to the off tray — and all 24 are the same width.\n   - Each triangle's wide end sits on the board's outer edge, and its tip points toward the middle.\n   - The tips reach most of the way to the middle but never touch the tip across from them: about a quarter of half the board's height stays open between them.\n   - They use two colours that alternate side by side, each triangle faces one of the other colour across the middle, and both colours stand out clearly from the board.",
