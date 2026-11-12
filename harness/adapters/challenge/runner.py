@@ -3030,6 +3030,7 @@ class ChallengeRunner(
     # Every other gate token is the tester's.
     _TEAM_GATE_TOKENS = (
         "E08",
+        "G36",
         "G03",
         "G16",
         "G22",

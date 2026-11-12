@@ -1914,6 +1914,14 @@
     "F88.numbers": {
       "first": "When the computer won the opening roll, its first turn didn't move by exactly the two numbers thrown — no more, no less.",
       "repeat": "When the computer won the opening roll, its first turn still didn't move by exactly the two numbers thrown — no more, no less."
+    },
+    "F92": {
+      "first": "After I played my roll, the Roll button was still there and let me roll and play again before the computer had its turn — I expect one roll per turn, then End Turn.",
+      "repeat": "After I played my roll, the Roll button was still there and still let me roll and play again before the computer had its turn — I expect one roll per turn, then End Turn."
+    },
+    "G36": {
+      "first": "They roll again through your app's API after the dice are already rolled, and it gives them a new roll instead of ignoring it.",
+      "repeat": "They roll again through your app's API after the dice are already rolled, and it still gives them a new roll instead of ignoring it."
     }
   }
 }

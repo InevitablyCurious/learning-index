@@ -396,6 +396,30 @@ describe("Backgammon backend server-path integrity", () => {
     }
   });
 
+  // [G36] One roll per turn, through the API (Jerry, 2026-11-12: a build that
+  // rolled again for a player who had played his whole roll let him skip the
+  // computer's turn). Ignored or refused, a second roll changes nothing.
+  it("[G36] REQ-ROLL-ONCE — a roll asked for after the dice are down changes nothing", async () => {
+    await api("/api/new", {});
+    let state = await debugRollVerified([5, 3]);
+    expect(state.turn).toBe("white");
+    for (let guard = 0; guard < 6 && state.remainingDice.length > 0 && (state.legalMoves ?? []).length > 0; guard++) {
+      const m = state.legalMoves[0];
+      state = await api("/api/move", { from: m.from, to: m.to, die: m.die });
+    }
+    expect(state.remainingDice.length, "the opening roll could not be played out through the API").toBe(0);
+    // No decoy roll is queued: a correct build never takes it, and a dice queue
+    // left behind would be the next check's roll. A second roll shows anyway —
+    // new dice to play.
+    const dice = JSON.stringify(state.dice);
+    let after = await api("/api/roll", {}).catch(() => null);
+    after = after ?? (await getState());
+    expect(
+      after.turn === "white" && after.remainingDice.length === 0 && JSON.stringify(after.dice) === dice,
+      `a second /api/roll rolled again: dice ${JSON.stringify(after.dice)}, ${after.remainingDice.length} to play`,
+    ).toBe(true);
+  });
+
   // The computer stuck is a turn returned, not a turn hung: black on the bar
   // with every entry point held and a roll it cannot use must pass the turn
   // back AND say why.

@@ -74,6 +74,11 @@ _IMPLEMENTATION_IDENTIFIERS = (
 # as it should be" is the rule, and pairing the wrong value with the right one
 # hands over the whole fix. This is the paraphrase the title-overlap check
 # cannot see: it shares almost no words with the test title and leaks more.
+#: Lines Jerry approved word for word although they name what should happen —
+#: his wording stands over this guard (memory: fix the guard, not his words).
+#: G36, 2026-11-12: "…it gives them a new roll instead of ignoring it."
+_APPROVED_PRESCRIPTIVE = frozenset({"G36"})
+
 _PRESCRIPTIVE_PHRASES = (
     "should be",
     "should have",
@@ -313,6 +318,8 @@ def test_no_override_states_what_should_happen(key: str, kind: str, text: str) -
     it replaced. The observation ("I only get two moves on a double") is the
     useful half; the correction is the leak.
     """
+    if key in _APPROVED_PRESCRIPTIVE:
+        return
     lowered = text.lower()
     found = [phrase for phrase in _PRESCRIPTIVE_PHRASES if phrase in lowered]
     assert not found, (

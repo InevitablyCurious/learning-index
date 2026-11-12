@@ -1869,6 +1869,56 @@ test("[F48] REQ-TURN — a no-move roll passes by itself", async ({ page }) => {
     .toBe(true);
 });
 
+// [F92] REQ-TURN — one roll per turn. Jerry, 2026-11-12, playing run
+// 1794488314's build: after he played his whole roll, End Turn showed "like it
+// should but also the 'roll' button … when i click it, it allows me to roll
+// again and play again effectively bypassing the computer's turn". The
+// reference keeps Roll off and ignores a roll asked for once the dice are down.
+test("[F92] REQ-TURN — one roll per turn", async ({ page }) => {
+  await openApp(page);
+  await postJson<ApiState>(page, "/api/new", {});
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [5, 3] });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await rollAndCheck(page, [5, 3], () => clickOpeningRoll(page));
+  // Play every die by clicking a hint, as a player does.
+  for (let guard = 0; guard < 6; guard++) {
+    const state = await readState(page);
+    if (state.turn !== "white" || (state.remainingDice ?? []).length === 0 || (state.legalMoves ?? []).length === 0) break;
+    const left = state.remainingDice.length;
+    await revealHints(page, state.legalMoves);
+    await playerClick(page.getByTestId("hint").first());
+    await expect
+      .poll(async () => (await readState(page)).remainingDice?.length ?? 0, {
+        message: "[needs: F45] a click on a hint did not play the move",
+        timeout: 5_000,
+      })
+      .toBeLessThan(left);
+  }
+  const played = await readState(page);
+  expect(
+    played.turn === "white" && (played.remainingDice ?? []).length === 0,
+    "[needs: F45] the opening roll could not be played out by clicking",
+  ).toBe(true);
+  await waitForBoardSettled(page);
+  // A roll now must change nothing: a page that rolls again shows new dice to
+  // play. (No decoy is queued — a correct build never takes it, and it would be
+  // left behind for the next roll.)
+  const roll = page.getByTestId("rollBtn");
+  const pressable = await roll.click({ trial: true, timeout: 1_000 }).then(() => true, () => false);
+  if (pressable) {
+    await roll.click();
+    await page.waitForTimeout(1_500);
+  }
+  const after = await readState(page);
+  expect(
+    after.turn === "white" &&
+      (after.remainingDice ?? []).length === 0 &&
+      JSON.stringify(after.dice) === JSON.stringify(played.dice),
+    `after the roll was played out, pressing Roll rolled again: dice ${JSON.stringify(after.dice)}, ${(after.remainingDice ?? []).length} to play`,
+  ).toBe(true);
+});
+
 test("[F06] REQ-PIPUI — pip display cross-checked vs engine", async ({ page }) => {
   await openApp(page);
 

@@ -663,6 +663,16 @@
       "name": "No pieces before the pieces layer",
       "what": "While the first layer is being built, the board and the buttons show with no pieces on the board yet.",
       "how": "On a layer-1 pass, opens the page, waits a moment and requires that no tagged piece is visible."
+    },
+    "F92": {
+      "name": "One roll per turn",
+      "what": "After the player has played their roll, Roll stays off until the computer has had its turn.",
+      "how": "Wins the opening 5-3, plays both dice by clicking hints, presses Roll if it can be pressed, and requires the same dice and nothing new to play."
+    },
+    "G36": {
+      "name": "A second roll through the API changes nothing",
+      "what": "Once the dice are down, a roll asked for through the API is ignored or refused.",
+      "how": "Wins the opening 5-3 through the API, plays both dice, calls /api/roll, and requires the same dice and nothing left to play (a refusal counts as ignoring it)."
     }
   },
   "setup": [
@@ -1020,7 +1030,9 @@
         "REQ-RENDER/die-reload",
         "F21",
         "F48",
-        "REQ-RESPONSIVE/awkwardroll"
+        "REQ-RESPONSIVE/awkwardroll",
+        "F92",
+        "G36"
       ]
     },
     {
