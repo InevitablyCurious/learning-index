@@ -1,54 +1,99 @@
 # Learning-Index
 
-**An open benchmark for AI agent memory.** For one model, in one harness, on one challenge, it
-measures whether a memory system makes the agent's work better, where growing memory turns from
-helping to hurting, and what the memory does when the job changes.
+**A test bench for the systems around a model.** Hold the model and the task still, swap in one
+layer — a harness, a memory system, an orchestration loop — and measure what it changes.
 
-> **Status: proof of concept.** The no-memory baseline runs today, on a local model or a cloud
-> endpoint. There are no memory-on results yet — see [where things stand](#where-things-stand).
+> **Status, 12 November 2026: proof of concept.** The bench runs a model with nothing swapped in,
+> and its grader is being made trustworthy round by round. Nothing has yet been measured with a
+> layer swapped in. Details: [where it stands](#where-it-stands).
 
-How it was built, and the choices behind it: [notes from the operator](docs/operator-notes.md).
+## What it is designed to do
 
-## Why it exists
+Most agent benchmarks rank models, or model-and-agent pairs. Learning-Index is built for the other
+question: with the model held still, what is a given harness, memory system or orchestration loop
+worth? It answers that the way a test bench does — every condition pinned but one, the same
+measurement every time, and the result read against the same model's own baseline.
 
-People change what they want, and memory turns each change into confident wrong advice: a fix
-replayed against code it no longer fits, an old preference overriding a new instruction. Memory
-products say they handle this. Nothing can check that claim in real agent work: memory benchmarks
-ask questions about conversations, and the few that test stale memory use quizzes or memories
-written by hand.
+- **The model is pinned, and is its own control.** A series runs one model throughout. Its
+  context window, speed and raw ability cancel out of its own result: deltas compare across
+  models, scores never do.
+- **The task is pinned.** One challenge — a complete backgammon game — built from the same written
+  spec every run, from starting files frozen by hash.
+- **The problem set is deterministic.** The grader runs what the agent built — its engine, its API,
+  and a real browser playing it like a person — with the dice fixed for every check. A reference
+  solution passes every check. No language model judges anything.
+- **The model hears only human prose.** The spec says what a player expects. After each grade the
+  agent hears the earliest problems a player would run into, in a player's words — never test
+  names, expected values or code. Every line it is told must be true of the build it describes; a
+  false line is the bench's fault, and is fixed before any result counts.
+- **Every run is fingerprinted,** and compared only with runs whose fingerprint matches.
+- **One layer varies.** Each run with a layer swapped in is measured against the average of the
+  matching baseline runs — whether the app works, how far it got, and what it cost in tokens
+  (cache included), turns and time. Everything else stays pinned.
 
-Learning-Index measures it where it happens. An agent builds real software again and again, with
-and without a memory system, and the grader runs what it builds. Because the challenge is
-configurable, the job can also be changed on purpose, to see how the memory copes.
+What it is designed to answer, with the same model on the same task:
 
-## The questions
+- **Harnesses.** Does a different agent harness get more of the app built, and what does it spend
+  getting there?
+- **Memory systems.** Does memory learned from the agent's own work make the next build better —
+  and as it grows, where does it stop helping and start to hurt (its **index**)? When the job
+  changes, does it adapt, or keep steering the agent the old way?
+- **Orchestration loops.** Does a different loop around the model — how the work is split up, when
+  the context is compacted, how problems are reported back — change what gets finished, and what
+  it costs?
 
-1. **Does a memory system make the agent's work better?**
-2. **As memory keeps growing, is there a point where it stops helping and starts to hurt?** That
-   point is the memory system's **index**.
-3. **When the job changes — a preference, a way of working, a dependency — does the memory adapt,
-   or keep steering the agent the old way?**
+How a run is measured: [methodology](docs/methodology.md). What existing benchmarks measure, and
+the closest project: [related work](docs/related-work.md). How it was built, and the choices behind
+it: [notes from the operator](docs/operator-notes.md).
 
-The proof of concept answers questions 1 and 2. Question 3 is why the benchmark exists. How each is
-measured: [methodology](docs/methodology.md).
+## Roadmap
 
-## How it works
+1. **The instrument and its baseline.** Sealed agent cells, the deterministic grader, a control
+   plane and a live board; a model building the challenge with nothing swapped in, every line it
+   hears true. *Built; the baseline is being finished.*
+2. **A replaceable harness.** opencode becomes one harness among several; the first replacement is
+   Hermes Agent (Nous Research). Hermes keeps memory of its own, so the first thing to settle is a
+   clean no-memory baseline for it. *Not started.*
+3. **Memory systems.** Series of runs with a memory system learning from the agent's own work:
+   does it help, and where does its index fall. The way in — opencode's plugin mechanism — and the
+   first kit, [Honcho](https://github.com/plastic-labs/honcho), are built. *Not yet run.*
+4. **Orchestration loops.** Swapping the loop around the model. Today the loop is the bench's own,
+   and its settings (such as compaction between build steps) are part of each run's fingerprint;
+   swapping in a different loop is *not built*.
+5. **Memory under change.** The job changed on purpose — a preference, a way of working, a
+   dependency — to see whether memory adapts. *Designed, not built.*
+6. **More challenges.** The challenge format is open, with a template to start from; backgammon is
+   the only challenge so far.
 
-- **Everything but memory is fixed.** One harness (opencode, version pinned), one challenge (a
-  backgammon game) and one deterministic grader, and each model is its own control: its context
-  window, its speed and its raw ability cancel out of its own result. Every run is fingerprinted,
-  and a run is compared only with baselines whose fingerprint matches.
+## Where it stands
+
+As of 12 November 2026:
+
+- **Works today:** one harness (opencode 1.18.20), one challenge, the grader (238 checks — the
+  contract's shape, the engine and API, and a real browser — told in 19 stages, in the order a
+  player meets them), local and cloud models, fingerprints, per-run cost records, and a
+  development mode that pauses after every grade.
+- **The baseline is not finished.** A local model (Qwen3.6-35B-A3B) builds the game in development
+  mode. At every pause an operator plays the build and checks each line the model is about to
+  hear; when a line is false, the grader is fixed and the run resumes from its last checkpoint.
+  Its build now gets as far as stage 14 of 19 (the bar). Development runs are not measurements: a
+  measured baseline runs start to finish, once the grader is frozen.
+- **Nothing has been measured with a layer swapped in** — no memory system, no second harness, no
+  other loop.
+
+## How a run works
+
 - **The unit is one run.** One click on Run launches one cell: a single opencode session that
-  builds the challenge in five chunks, in order, then troubleshoots in that same session, round
+  builds the challenge in seven phases, in order, then troubleshoots in that same session, round
   after round, until every check passes. The harness compacts the session itself between chunks,
   a launch choice stated before the run starts and part of its fingerprint, costing one model turn
   per chunk. There is no round cap and no time cap.
 - **A chunk ends on the transport's verdict.** A chunk is complete when the session goes idle with
   exit 0, and nothing the model wrote is read to decide it. A non-zero exit ends the build there,
   and every later chunk is recorded not reached.
-- **Two arms.** OFF: every click in OFF mode is a baseline, appended and averaged per fingerprint.
-  ON: the same model with a memory system reading and learning, measured against the average of the
-  baselines that share its fingerprint.
+- **Two arms.** Baseline (OFF on the board): nothing swapped in; every baseline run is appended and
+  averaged per fingerprint. Test (ON): the same model with the layer under test swapped in,
+  measured against the average of the baselines that share its fingerprint.
 - **Runs are serial per model.** One cell in flight per model; a different model may run beside it.
 - **Dev mode pauses; normal mode does not.** In dev mode the run stops after every grade and once
   at the end, so the operator can play the app as it stands and read what the model is about to be
@@ -60,40 +105,22 @@ measured: [methodology](docs/methodology.md).
 - **What is measured.** Every run writes a cost record — build, troubleshooting and total: tokens
   by kind including cache, turns, compactions, grades, wall time with paused time taken out, and
   peak context. A local model is measured in tokens only, because there is no price to state; a
-  cloud cell also records what it cost. Beside it: whether the cell finished and what ended it, the
-  memory delivered to the agent, and the memory system's own background work.
-- **No language model judges anything.** The grader runs the game: more than 150 checks, in the
-  order a player meets them.
-
-## What's different
-
-- **Judged by running the work,** not by answering questions about it.
-- **Memory learned from the agent's own work,** over a long series, against the same model's
-  no-memory baseline.
-- **Memory priced in tokens,** including the context it adds on every turn and its own background
+  cloud cell also records what it cost. Beside it: whether the cell finished and what ended it,
+  and, when a memory system is swapped in, what it delivered to the agent and its own background
   work.
-- **Open on both sides:** any memory system plugs in unchanged, and anyone can add a challenge.
-
-What existing benchmarks measure, and the closest project: [related work](docs/related-work.md).
-
-## Where things stand
-
-| | |
-|---|---|
-| **Built** | The instrument: sealed agent cells, a deterministic grader, a control plane and a live board. One challenge (backgammon). Memory-off baselines with a local model. |
-| **In progress** | The memory-off baseline: making every line told to the model true of the build it describes, and the problems it hears match what a tester would report. Preparing the first memory system, Honcho. |
-| **Next** | Memory-on series (questions 1 and 2). Then memory under change (question 3). |
+- **No language model judges anything.** The grader runs the game: more than 200 checks, in the
+  order a player meets them.
 
 ## The challenge: backgammon
 
 Build a complete, playable backgammon game — a human against the computer — in Node and TypeScript
-with no dependencies, in five steps: the rules engine; the computer opponent; the server and its
-API; an animated board page; and integration, until the whole game runs clean.
+with no dependencies, in seven phases: the rules engine; the computer opponent; the server and its
+API; the page in three layers — the board and its controls, then the pieces, then the gameplay;
+and wiring it all together, until the whole game runs clean.
 
-The grader runs more than 150 checks in three phases: the contract's shape, the engine and API, and
-a real browser playing like a person. They fall into seven stages, in the order a player meets
-them — the game opens; rolling and moving; hitting and the bar; bearing off; winning; the doubling
-cube; playing the computer. After each round the agent hears about the earliest stage that fails,
+The grader runs more than 200 checks in three phases: the contract's shape, the engine and API, and
+a real browser playing like a person. They fall into 19 stages, in the order a player meets
+them — the first look at the board, starting a game, playing it out, and finishing it. After each round the agent hears about the earliest stage that fails,
 as complaints a player would make, never as expected values. A reference solution, kept out of the
 agent's reach, proves the challenge can be built.
 
@@ -113,14 +140,14 @@ it; the grader judges what a player sees the same way.
 The first milestone — three runs in a row in which every line told to the model was true — was
 reached in September 2026.
 
-## Plug in a memory system
+## Plug something in
 
-A memory system plugs into opencode through opencode's own plugin mechanism; the benchmark adds no
-memory interface of its own. Point `BENCH_PLUGIN_DIR` at the plugin package and rebuild the worker
-image, and each cell runs with memory OFF or ON. The first system is
-[Honcho](https://github.com/plastic-labs/honcho), which publishes an opencode plugin; its kit is in
-[memory-systems/honcho](memory-systems/honcho/). The guide, with Honcho step by step:
-[docs/memory-systems.md](docs/memory-systems.md).
+Today the one way in is opencode's own plugin mechanism; the bench adds no interface of its own.
+Point `BENCH_PLUGIN_DIR` at the plugin package and rebuild the worker image, and each cell runs with
+it OFF or ON. The first kit is the memory system [Honcho](https://github.com/plastic-labs/honcho),
+which publishes an opencode plugin; it is in [memory-systems/honcho](memory-systems/honcho/), and
+the guide takes it step by step: [docs/memory-systems.md](docs/memory-systems.md). Replacing the
+harness itself is on the [roadmap](#roadmap).
 
 ## Add a challenge
 
@@ -143,7 +170,7 @@ python -m venv .venv && . .venv/bin/activate && pip install -e '.[test]'
 (cd grader && npm ci)
 
 # 3. build the worker and grader images (a run refuses without them)
-#    set BENCH_PLUGIN_DIR=<abs path to plugin tree> first to install a memory plugin
+#    set BENCH_PLUGIN_DIR=<abs path to plugin tree> first to install a plugin under test
 .venv/bin/python scripts/rebuild_worker_image.py
 .venv/bin/python scripts/rebuild_grader_image.py
 
@@ -157,8 +184,8 @@ node control/server.mjs            # http://127.0.0.1:8718
 (cd dashboard && docker compose up -d)   # http://127.0.0.1:8717
 ```
 
-Runs are started from the board: `[+ BASELINE]` for a memory-off cell, `[+ run]` on a baseline row
-for a memory-on one. Full operations: [RUNBOOK.md](RUNBOOK.md).
+Runs are started from the board: `[+ BASELINE]` for a baseline cell, `[+ run]` on a baseline row
+for one with a layer swapped in. Full operations: [RUNBOOK.md](RUNBOOK.md).
 
 ## The board
 
@@ -180,8 +207,8 @@ run's are cleaned up.
 |---|---|
 | **Runs strip** | One card per run, current and archived: status, problems before and after, peak context against the window, turns, loop and stall errors. Picks the cell the rest of the board shows. |
 | **Gate wall** | Every check as a fixed square — passed, recovered, failed, not yet observed — with a card per check on hover. |
-| **Baselines** | One row per model: every memory-off baseline on its fingerprint and the average the memory-on runs are measured against, with those runs nested beneath; a stats strip of scored, voided and unmeasured runs and error counts. |
-| **Transfer curve** | Memory-on runs' turns, tokens and wall time against the baseline average, with stacked token bars; a line appears from two memory-on runs. |
+| **Baselines** | One row per model: every baseline on its fingerprint and the average the runs with a layer swapped in are measured against, with those runs nested beneath; a stats strip of scored, voided and unmeasured runs and error counts. |
+| **Transfer curve** | Turns, tokens and wall time of the runs with a layer swapped in, against the baseline average, with stacked token bars; a line appears from two such runs. |
 | **Learning** | A check-by-attempt matrix filling as the cell runs; the model's own account of its work beside the code-derived record of what it changed. |
 | **Terminal mirror** | The running cell's terminal, live and read-only. |
 | **Data feed** | The running cell's events — or a finished cell's frozen record — with filters, plus a backend feed beside it; a phase spine of one build and each grading round, with running token counters. |
@@ -200,11 +227,11 @@ run's are cleaned up.
 
 ## Why opencode
 
-A memory benchmark needs a harness that adds nothing of its own to what is measured. opencode is
+The first harness had to add nothing of its own to what is measured. opencode is
 open source (MIT) and pinned in the worker image; it works with any OpenAI-compatible endpoint,
 local models included; it exposes each session over HTTP, so the benchmark can drive a build step
-by step while an operator watches live; and memory systems plug in through its own plugin
-mechanism. It keeps no memory of its own between sessions, so a no-memory run is a clean control.
+by step while an operator watches live; and memory systems and loops plug in through its own plugin
+mechanism. It keeps no memory of its own between sessions, so a baseline run is a clean control.
 Its automatic context compaction stays at opencode's own default, never forced off: where a run
 asks for it, the harness compacts the session once after each build chunk and counts only the
 compactions that finish, and in troubleshooting a cell is ended only when two compactions complete
@@ -215,8 +242,8 @@ before one grade.
 
 | Harness | Why it was not chosen |
 |---|---|
-| **pi** (Mario Zechner) | The closest alternative: open source, model-agnostic and deliberately minimal. The benchmark is built on two things opencode provides natively — `opencode serve`, which exposes every session over HTTP with a live event stream, and a plugin mechanism memory systems are written against. pi also leaves out MCP by design, while many memory systems ship as MCP servers. pi is the natural second harness to support. |
-| **Hermes Agent** (Nous Research) | Learning is its core feature: it keeps persistent memory, writes its own reusable skills from experience and searches its past sessions. Its no-memory run is not a clean control; it belongs among the systems under test. |
+| **pi** (Mario Zechner) | The closest alternative: open source, model-agnostic and deliberately minimal. The bench is built on two things opencode provides natively — `opencode serve`, which exposes every session over HTTP with a live event stream, and a plugin mechanism memory systems are written against. pi also leaves out MCP by design, while many memory systems ship as MCP servers. |
+| **Hermes Agent** (Nous Research) | Learning is its core feature: it keeps persistent memory, writes its own reusable skills from experience and searches its past sessions, so its no-memory run is not a clean control as it ships. It is the first harness planned to replace opencode ([roadmap](#roadmap)); a clean baseline for it comes first. |
 | **Claude Code** (Anthropic) | Closed source and built for Anthropic's models. It ships its own memory — CLAUDE.md files and an automatic memory — so a memory-off run is never clean. |
 | **Cursor** | A closed-source editor that routes models through its own service, indexes the codebase for retrieval and keeps its own rules and memories. |
 | **Codex CLI** (OpenAI) | Open source, but built for OpenAI's models first, so other models would run at a disadvantage: a harness-versus-model confound. |
