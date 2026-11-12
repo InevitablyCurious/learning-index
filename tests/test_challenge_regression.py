@@ -39,6 +39,7 @@ from harness.adapters.challenge.constants import (
 )
 from harness.adapters.challenge.runner import _regressed_checks
 from harness.adapters.challenge.stages import load_stages, player_view
+from harness.prompt_pack import Phase, phase_label
 
 STAGES = load_stages(_GRADER_DIR / "checks.json")
 
@@ -313,10 +314,15 @@ def test_check_above_previous_layer_is_never_a_regression() -> None:
     # "these were working last time" — the layer-1 grade never ran them (no
     # pieces), so absence from its failed_gates says nothing. A layer-1 check
     # that passed at layer 1 and fails now IS still a regression.
+    # The records carry their layer the way the runner writes them — through
+    # phase_label — so this test cannot pass on a key production never emits
+    # (it did: it hand-built {"layer": 1} while real rounds carry phase_layer).
     layers = {HINT: 2, PIP: 1}
+    l1 = Phase(index=4, name="l1-board", layer=1, file="chunk-04-l1.md", text="")
+    l2 = Phase(index=5, name="l2-pieces", layer=2, file="chunk-04-l2.md", text="")
     reports = [
-        {"state_hash": "h0", "layer": 1, "failed_gates": []},
-        {"state_hash": "h1", "layer": 2},
+        {**phase_label(l1, "build"), "state_hash": "h0", "failed_gates": []},
+        {**phase_label(l2, "build"), "state_hash": "h1"},
     ]
     told = [_problem(HINT), _problem(PIP)]
     assert _regressed_checks(reports, told, layer_of=layers.__getitem__) == {PIP}

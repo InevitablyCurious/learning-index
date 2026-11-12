@@ -260,7 +260,11 @@ def _regressed_checks(
         return set()
     prev_failed = {str(g).strip() for g in (prev.get("failed_gates") or [])}
     checks = [p for p in visible if isinstance(p, dict)]
-    prev_layer = prev.get("layer")
+    # The round record's layer key is ``phase_layer`` (``phase_label``, the
+    # one serialization of a phase): reading ``layer`` here found nothing on
+    # every real record, so the filter never fired (step-4 sweep, 34 false
+    # "working last time" lines it should have dropped).
+    prev_layer = prev.get("phase_layer")
     eligible = checks
     if layer_of is not None and isinstance(prev_layer, int):
         eligible = [
