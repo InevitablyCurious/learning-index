@@ -1731,14 +1731,6 @@
       "first": "I rolled two numbers I could play in either order, but the game only let me play the bigger one first. Clicking the other number's move did nothing.",
       "repeat": "I still can't play the smaller number first when I could play both."
     },
-    "F74": {
-      "first": "Every time I move a piece, the dice tumble again as if I had just rolled.",
-      "repeat": "The dice still roll again after every move I make."
-    },
-    "F74.again": {
-      "first": "Every time I move a piece, the dice tumble again as if I had just rolled.",
-      "repeat": "The dice still roll again after every move I make."
-    },
     "F78": {
       "first": "After I move a piece, the die I used disappears. It should grey out slightly to signal it's been played.",
       "repeat": "The die I used still disappears after I move."

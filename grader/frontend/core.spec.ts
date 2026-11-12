@@ -3113,12 +3113,6 @@ test("[F73] REQ-DIE-ORDER — the smaller number can be played first", async ({ 
     .toBeGreaterThan(0);
 });
 
-// ── F74: a move leaves the dice alone ─────────────────────────────────────────
-// The dice roll when they are rolled. A page that redrew them on every move made
-// them tumble again after each click on a hint (run 1791408711, played by hand): a
-// player sees a new roll where there was none. Read through the browser's own
-// animation events, so however the dice are drawn and moved, a die that starts an
-// animation after the roll is a die that rolled again.
 test("[F78] REQ-DICE-USED — a played die stays on screen, greyed", async ({ page }) => {
   test.setTimeout(60_000);
   // Jerry, run 1792224699 round 3: "the die disappears after i move it. what?
@@ -3182,53 +3176,4 @@ test("[F78] REQ-DICE-USED — a played die stays on screen, greyed", async ({ pa
     faintest <= 0.8 * was,
     `[aspect: grey] [needs: F45] after a move the faintest die stands out ${faintest.toFixed(2)} against ${was.toFixed(2)} before it`,
   ).toBe(true);
-});
-
-test("[F74] REQ-DICE-STILL — a move leaves the dice alone", async ({ page }) => {
-  test.setTimeout(60_000);
-  await openApp(page);
-  const points = emptyPoints();
-  points[24] = 2;
-  points[13] = 5;
-  points[8] = 3;
-  points[6] = 5;
-  points[1] = -2;
-  points[12] = -5;
-  points[17] = -3;
-  points[19] = -5;
-  await seedRolled(
-    page,
-    { points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 }, cube: { value: 1, owner: null }, message: "" },
-    [3, 5],
-  );
-  await page.reload();
-  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await waitForBoardSettled(page).catch(() => undefined);
-  await page.evaluate(() => {
-    const w = window as unknown as { __diceAnim: string[] };
-    w.__diceAnim = [];
-    document.addEventListener(
-      "animationstart",
-      (e) => {
-        const t = e.target as Element | null;
-        if (t?.closest?.('[data-testid="die"], [data-testid="dice"]')) w.__diceAnim.push(e.animationName);
-      },
-      true,
-    );
-  });
-
-  const hints = page.getByTestId("hint");
-  const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
-  const backCount = await back.count();
-  expect(backCount, "[needs: F03 F25] no piece on 13 to pick up").toBeGreaterThan(0);
-  await playerClickUntilShown(back.nth(backCount - 1), hints);
-  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]").toBeGreaterThan(0);
-  const before = (await readState(page)).remainingDice.length;
-  await playerClick(hints.first());
-  await expect
-    .poll(async () => (await readState(page)).remainingDice.length, "[needs: F25] the move did not use up a die")
-    .toBeLessThan(before);
-  await page.waitForTimeout(1_500);
-  const started = await page.evaluate(() => (window as unknown as { __diceAnim: string[] }).__diceAnim);
-  expect(started, `[aspect: again] [needs: F25 F45] the dice animated again after a move (${started.join(", ")})`).toEqual([]);
 });

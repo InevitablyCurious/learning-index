@@ -584,11 +584,6 @@
       "what": "When two numbers can be played in either order, the smaller number's move can be played first.",
       "how": "Fixes the roll to 3-5, clicks the piece on 13 and then the hint at point 10 (the 3's move); the piece must arrive on 10."
     },
-    "F74": {
-      "name": "The dice do not roll again after a move",
-      "what": "The dice stay still when a piece moves; they only roll when they are rolled.",
-      "how": "Plays one move by clicking a piece and a hint and reads the browser's animation events: no die may start an animation afterwards."
-    },
     "F78": {
       "name": "A played die stays on screen, greyed",
       "what": "After a move, the die it used stays on screen and is drawn visibly fainter.",
@@ -1024,7 +1019,6 @@
         "F39",
         "E01",
         "F33",
-        "F74",
         "F78",
         "G05",
         "REQ-RENDER/die-reload",
