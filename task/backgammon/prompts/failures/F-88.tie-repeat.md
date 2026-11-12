@@ -1,0 +1,1 @@
+We tied on the opening roll again and the game froze again; pressing Roll still did nothing.

@@ -832,28 +832,64 @@ test("[F85] REQ-OPENING — a tied opening never freezes the game", async ({ pag
 
 test("[F88] REQ-OPENING — the computer plays when it wins the opening", async ({ page }) => {
   // Jerry, run 1792517825's final build: "we roll, i get 4 ai gets 6, ai goes
-  // first. ok. ai never moves. broken … unplayable." The check for it sat in
-  // F61 after the dice-colour assertion, so a build with white-and-white dice
-  // never reached it and the model was told only the colours. A game that
-  // freezes the moment the computer wins the opening — about half of all games
-  // — blocks everything after it, as F85's tie freeze does: its own gate, in
-  // stage 1. The computer's die is higher (3 against 5); it makes the first
-  // move and the turn comes back to the player, as the state records it. The
-  // server can do this when asked (G31); a failure here is the page never
-  // letting the computer take that turn.
-  test.setTimeout(60_000);
+  // first. ok. ai never moves. broken … unplayable." A game that freezes the
+  // moment the computer wins the opening — about half of all games — blocks
+  // everything after it: its own gate, in the first-roll stage.
+  //
+  // The opening as the grader scripts it (Jerry, 2026-11-12): three ties, then
+  // the computer wins the fourth roll, 3 against 5, and plays exactly those two
+  // numbers, paced as every computer turn is — its dice readable, then one
+  // move, a pause, the next — and the turn comes back to the player. Run
+  // 1794480585's gameplay build played its opening numbers twice.
   await openApp(page);
   await postJson<ApiState>(page, "/api/new", {});
-  await postJson<ApiState>(page, "/api/debug/roll", { dice: [3, 5] });
+  const rolls: [number, number][] = [
+    [2, 2],
+    [5, 5],
+    [1, 1],
+    [3, 5],
+  ];
+  for (const dice of rolls) await postJson<ApiState>(page, "/api/debug/roll", { dice });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   const before = await readState(page);
-  await clickOpeningRoll(page);
+
+  // Three ties: both dice show the same number, nobody moves, and Roll is
+  // there to press again. Whether the page waits for that press is F61's.
+  for (const [n, dice] of rolls.slice(0, 3).entries()) {
+    if (n === 0) {
+      await rollAndCheck(page, dice, () => clickOpeningRoll(page));
+    } else {
+      const canRoll = await page
+        .getByTestId("rollBtn")
+        .click({ trial: true, timeout: 5_000 })
+        .then(() => true, () => false);
+      expect(canRoll, `[aspect: tie] [needs: F85] after ${n} tied opening rolls Roll could not be pressed again`).toBe(true);
+      await rollAndCheck(page, dice, () => page.getByTestId("rollBtn").click());
+    }
+    // A player reads the tie before pressing Roll again: a page still drawing
+    // the last roll may ignore a press (the reference is busy ~0.5 s after one).
+    await waitForBoardSettled(page);
+    await page.waitForTimeout(1_000);
+    const tied = await readState(page);
+    expect(
+      tied.phase === "openingRoll" &&
+        pipsOf(tied).black === pipsOf(before).black &&
+        pipsOf(tied).white === pipsOf(before).white,
+      `[aspect: tie] [needs: F85] after a ${dice[0]}-${dice[1]} tie the game left the opening roll: phase ${tied.phase}`,
+    ).toBe(true);
+  }
+
+  // The fourth roll, watched frame by frame from the press.
+  await waitForBoardSettled(page);
+  await recordFrames(page, "black");
+  await page.waitForTimeout(200);
+  const { at: clickAt, dice: atClick } = await diceNow(page);
+  await rollAndCheck(page, rolls[3], () => page.getByTestId("rollBtn").click());
+
   // A computer that offers a double during that turn has not "sat there": the
   // player answers it, as a player would, and the turn goes on. Whether it may
-  // double at all is the cube stage's finding (run 1793634524's final build
-  // offered after its first opening move, and "it never made its move" would
-  // have been told about a game waiting on Accept / Decline).
+  // double at all is the cube stage's finding.
   let answered = false;
   await expect
     .poll(
@@ -869,11 +905,33 @@ test("[F88] REQ-OPENING — the computer plays when it wins the opening", async 
         return state.turn === "white" && blackOf(state) !== blackOf(before);
       },
       {
-        message: "[needs: F89] after a 3-5 opening the computer never made its first move and handed the turn back",
+        message: "[needs: F89] after three ties and a 3-5 opening the computer never made its first move and handed the turn back",
         timeout: 20_000,
       },
     )
     .toBe(true);
+
+  // Exactly the two numbers thrown — no more, no less.
+  const moved = pipsOf(before).black - pipsOf(await readState(page)).black;
+  expect(moved, `[aspect: numbers] after a 3-5 opening the computer's first turn moved ${moved} pips, not 8`).toBe(8);
+
+  // As the player watches it: the dice readable about a second, then one move,
+  // a pause, the next (F62's and F77's rules, here on the opening turn).
+  let seen = await piecesSettled(page, clickAt);
+  for (const deadline = Date.now() + 15_000; seen !== "settled" && Date.now() < deadline; ) {
+    await page.waitForTimeout(250);
+    seen = await piecesSettled(page, clickAt);
+  }
+  const frames = await stopFrames(page);
+  expect(seen, "[aspect: drawn] the computer's opening move never showed on the board").not.toBe("still");
+  const { starts, first } = moveStarts(frames, clickAt);
+  const { readable } = readableDice(frames, clickAt, first, atClick);
+  expect(readable, `[aspect: pace] the computer's opening dice were up ${readable.toFixed(0)} ms before its first move`).toBeGreaterThanOrEqual(800);
+  const gaps = starts.slice(1).map((t, i) => t - starts[i]);
+  expect(
+    starts.length >= 2 && gaps.every((gap) => gap >= 350),
+    `[aspect: pace] the computer's two opening moves started ${starts.length < 2 ? "together" : gaps.map((g) => `${g.toFixed(0)} ms`).join(", ") + " apart"}`,
+  ).toBe(true);
 });
 
 test("[F61] REQ-OPENING — the opening roll shows both dice and the winner plays them", async ({ page }) => {

@@ -1360,8 +1360,8 @@
       "repeat": "They throw lower than the computer in the opening roll through your API again, and the first move still isn't the computer's."
     },
     "G31.numbers": {
-      "first": "The computer wins the opening throw through your app's API, but its first move doesn't use the two numbers thrown.",
-      "repeat": "The computer wins the opening throw through your API again, and its first move still doesn't use the two numbers thrown."
+      "first": "The computer wins the opening throw through your app's API, but its first turn doesn't move by exactly the two numbers thrown — no more, no less.",
+      "repeat": "The computer wins the opening throw through your app's API, and its first turn still doesn't move by exactly the two numbers thrown — no more, no less."
     },
     "G31.handback": {
       "first": "The computer makes its first move after winning the opening throw through your app's API, and the turn never comes back to them.",
@@ -1898,6 +1898,22 @@
     "F39.frozen": {
       "first": "After I played both my numbers, clicking a piece again locked the game up.",
       "repeat": "After both my numbers, clicking a piece again still locks the game up."
+    },
+    "F88.tie": {
+      "first": "When we tied on the opening roll, the game froze — I pressed Roll like it told me and nothing happened.",
+      "repeat": "We tied on the opening roll again and the game froze again; pressing Roll still did nothing."
+    },
+    "F88.pace": {
+      "first": "I couldn't keep up with what the computer did.",
+      "repeat": "Again I couldn't keep up with what the computer did."
+    },
+    "F88.drawn": {
+      "first": "When the computer won the opening roll, it never made its move — the game just sat there and I couldn't do anything.",
+      "repeat": "The computer won the opening roll again and still never made its move."
+    },
+    "F88.numbers": {
+      "first": "When the computer won the opening roll, its first turn didn't move by exactly the two numbers thrown — no more, no less.",
+      "repeat": "When the computer won the opening roll, its first turn still didn't move by exactly the two numbers thrown — no more, no less."
     }
   }
 }
