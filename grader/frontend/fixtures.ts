@@ -181,6 +181,28 @@ export async function rollAndCheck(page: Page, dice: number[], click: () => Prom
   return body;
 }
 
+/**
+ * The player holding `dice` in a position, reached the way a player reaches it:
+ * the position is seeded at the player's roll and the build's own roll deals the
+ * dice. Dice seeded straight into the move phase arrive in the check's order,
+ * which the build's own game may never make: run 1794497751's round 4 kept every
+ * roll larger-first and read the first die as the larger, so a real 3-5 refused
+ * the 3 while F73, seeded [3, 5], passed; and G05, seeded [3, 4], played a 3 that
+ * a real roll refused — the player was told what no player could meet, and the
+ * model looked for it for a whole round. A check whose player plays a move with
+ * two different numbers gets them this way.
+ */
+export async function seedRolled(page: Page, body: Record<string, any>, dice: number[]): Promise<any> {
+  await setupState(page, { ...body, turn: "white", phase: "roll", dice: [], remainingDice: [] });
+  await page.request.post("/api/debug/roll", { data: { dice } });
+  const rolled = await page.request
+    .post("/api/roll", { data: {} })
+    .then((r) => r.json())
+    .catch(() => null);
+  assertRollTook(dice, rolled?.dice);
+  return rolled;
+}
+
 // ── CLICK WHERE A PLAYER CLICKS ─────────────────────────────────────────────
 //
 // `locator.click()` insists that the element ITSELF receives the click, and

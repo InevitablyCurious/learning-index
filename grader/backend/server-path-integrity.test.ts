@@ -12,6 +12,7 @@ import {
   startServer,
   stopServer,
   ordinaryTurn,
+  seedRolled,
 } from "../lib/harness.ts";
 
 type Move = { from: number; to: number; die: number };
@@ -137,17 +138,7 @@ describe("Backgammon backend server-path integrity", () => {
     const points = emptyPoints();
     points[24] = 2; points[13] = 5; points[8] = 3; points[6] = 5;
     points[10] = -1; points[1] = -2; points[12] = -4; points[17] = -3; points[19] = -5;
-    await debugSetState(
-      makeState({
-        points,
-        bar: { white: 0, black: 0 },
-        off: { white: 0, black: 0 },
-        turn: "white",
-        phase: "move",
-        dice: [3, 1],
-        remainingDice: [3, 1],
-      }),
-    );
+    await seedRolled(makeState({ points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 } }), [3, 1]);
     const hitBefore = await getState();
     const hitMove = (hitBefore.legalMoves as Move[]).find((m) => m.from === 13 && m.to === 10);
     expect(hitMove, "[needs: G04]").toBeTruthy();

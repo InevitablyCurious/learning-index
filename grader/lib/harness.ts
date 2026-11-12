@@ -439,6 +439,20 @@ export async function debugRoll(dice: number[]): Promise<any> {
   return api("/api/debug/roll", { dice });
 }
 
+/**
+ * The player holding `dice` in a position, the way a player comes to hold them:
+ * seeded at the player's roll, then dealt by the build's own roll — never seeded
+ * straight into the move phase, whose dice arrive in the check's order and not
+ * the build's (frontend/fixtures.ts seedRolled, run 1794497751 round 4).
+ */
+export async function seedRolled(partial: Record<string, any>, dice: number[]): Promise<any> {
+  await debugSetState({ ...partial, turn: "white", phase: "roll", dice: [], remainingDice: [] });
+  await debugRoll(dice);
+  const rolled = await api("/api/roll", {});
+  assertRollTook(dice, rolled?.dice);
+  return rolled;
+}
+
 /** A sorted copy of `xs` when every entry is a finite number, else null. */
 function sortedNumbers(xs: unknown): number[] | null {
   if (!Array.isArray(xs)) return null;

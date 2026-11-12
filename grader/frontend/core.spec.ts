@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { expect, pickUpAPiece, playerClick, playerClickUntilShown, PORT, rollAndCheck, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, playerClickUntilShown, PORT, rollAndCheck, seedRolled, setupState, test } from "./fixtures.ts";
 import { readColumnBox, readPointBoxes, sampleBoxBrightness, sampleBoxContrast, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
@@ -1384,16 +1384,7 @@ test("[G05] REQ-HIGHER-DIE — use higher die", async ({ page }) => {
   const points = emptyPoints();
   points[13] = 1;
   points[6] = -3;
-  await setupState(page, {
-    points,
-    bar: { white: 0, black: 0 },
-    off: { white: 14, black: 12 },
-    turn: "white",
-    phase: "move",
-    dice: [3, 4],
-    remainingDice: [3, 4],
-    message: "",
-  });
+  await seedRolled(page, { points, bar: { white: 0, black: 0 }, off: { white: 14, black: 12 }, message: "" }, [3, 4]);
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
@@ -3081,17 +3072,11 @@ test("[F73] REQ-DIE-ORDER — the smaller number can be played first", async ({ 
   points[12] = -5;
   points[17] = -3;
   points[19] = -5;
-  await setupState(page, {
-    points,
-    bar: { white: 0, black: 0 },
-    off: { white: 0, black: 0 },
-    turn: "white",
-    phase: "move",
-    dice: [3, 5],
-    remainingDice: [3, 5],
-    cube: { value: 1, owner: null },
-    message: "",
-  });
+  await seedRolled(
+    page,
+    { points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 }, cube: { value: 1, owner: null }, message: "" },
+    [3, 5],
+  );
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await waitForBoardSettled(page).catch(() => undefined);
@@ -3153,17 +3138,11 @@ test("[F78] REQ-DICE-USED — a played die stays on screen, greyed", async ({ pa
   points[12] = -5;
   points[17] = -3;
   points[19] = -5;
-  await setupState(page, {
-    points,
-    bar: { white: 0, black: 0 },
-    off: { white: 0, black: 0 },
-    turn: "white",
-    phase: "move",
-    dice: [3, 5],
-    remainingDice: [3, 5],
-    cube: { value: 1, owner: null },
-    message: "",
-  });
+  await seedRolled(
+    page,
+    { points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 }, cube: { value: 1, owner: null }, message: "" },
+    [3, 5],
+  );
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await waitForBoardSettled(page).catch(() => undefined);
@@ -3217,17 +3196,11 @@ test("[F74] REQ-DICE-STILL — a move leaves the dice alone", async ({ page }) =
   points[12] = -5;
   points[17] = -3;
   points[19] = -5;
-  await setupState(page, {
-    points,
-    bar: { white: 0, black: 0 },
-    off: { white: 0, black: 0 },
-    turn: "white",
-    phase: "move",
-    dice: [3, 5],
-    remainingDice: [3, 5],
-    cube: { value: 1, owner: null },
-    message: "",
-  });
+  await seedRolled(
+    page,
+    { points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 }, cube: { value: 1, owner: null }, message: "" },
+    [3, 5],
+  );
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await waitForBoardSettled(page).catch(() => undefined);
