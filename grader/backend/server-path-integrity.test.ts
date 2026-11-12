@@ -155,6 +155,13 @@ describe("Backgammon backend server-path integrity", () => {
     const hitUndone = await api("/api/undo", {});
     const hit = "[aspect: hit] after a hit was taken back the board was not as it was";
     expect(hitUndone.points, hit).toEqual(hitBefore.points);
+    // Whose piece is left on the bar is named (Jerry, 2026-11-12): run
+    // 1794493441's build put the computer's piece back and left one of the
+    // player's own on the bar, and "extra pieces of the computer's" was false.
+    expect(
+      hitUndone.bar.white,
+      `[aspect: hitmine] after a hit was taken back the player's pieces on the bar went from ${hitBefore.bar.white} to ${hitUndone.bar.white}`,
+    ).toBe(hitBefore.bar.white);
     expect(hitUndone.bar, hit).toEqual(hitBefore.bar);
   });
 

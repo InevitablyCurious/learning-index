@@ -1926,6 +1926,10 @@
     "F88.twice": {
       "first": "When the computer won the opening roll, it moved its checkers twice as far as the dice allow — it played the 3 and the 5, then played them again.",
       "repeat": "When the computer won the opening roll, it still moved its checkers twice as far as the dice allow — it played the 3 and the 5, then played them again."
+    },
+    "G23.hitmine": {
+      "first": "I hit one of the computer's pieces and pressed Undo, and its piece went back, but one of my own pieces was left sitting on the bar.",
+      "repeat": "I undid a hit again, and one of my own pieces was still left sitting on the bar."
     }
   }
 }
