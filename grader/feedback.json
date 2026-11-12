@@ -223,13 +223,17 @@
       "first": "At the end of the game the game bears a checker off from the wrong point — it takes one off while a checker sits further back.",
       "repeat": "Back at the end of the game again and it still bears off from the wrong point."
     },
+    "E02.behind": {
+      "first": "My pieces were on the 6 and the 3 and I rolled a 5, and the game took the piece on the 3 off while my piece on the 6 was further back. I expect a number bigger than a piece needs to take it off only when no piece of mine sits further back — otherwise it moves the piece that's further back.",
+      "repeat": "With a piece further back, the game still takes a nearer piece off with a number bigger than it needs."
+    },
     "E02.short": {
       "first": "At the end of the game the game lets me take a piece off with a number too small to carry it off the board.",
       "repeat": "Finishing up again and it still lets a number too small carry a piece off the board."
     },
     "E03": {
-      "first": "There is a problem when i roll and i'm trying to take my piece off and it won't let me, it only lets me move the piece forward but it doesn't let me take it off the board",
-      "repeat": "Same trouble getting my pieces off — the roll just shuffles me further along and the piece stays on the board."
+      "first": "My pieces were on the 6 and the 3 and I rolled a 3, but the game wouldn't take the piece on the 3 off — it only let me move the 6 forward. I expect a number that exactly matches a piece's point to take that piece off, whatever sits further back.",
+      "repeat": "With a number that exactly matches a piece's point, the game still won't take that piece off."
     },
     "E04": {
       "first": "I rolled the dice while my piece was on the bar, and the opponent had filled up his home section with all 6 spaces being taken with 2x pieces and the dice i rolled were blocked but i was able to move my pieces anyways that weren't on the bar or the game just crashed.",
@@ -1532,8 +1536,8 @@
       "repeat": "Again a Fast Forward button was showing at the start of a new game."
     },
     "F64.shown": {
-      "first": "When all my pieces were past the computer's and nothing could be hit any more, no Fast Forward button showed.",
-      "repeat": "Again, with all my pieces past the computer's, no Fast Forward button showed."
+      "first": "At the start of my turn, before I'd rolled, all my pieces were past the computer's and nothing could be hit any more — and no Fast Forward button showed.",
+      "repeat": "Again at the start of my turn, before rolling, with all my pieces past the computer's, no Fast Forward button showed."
     },
     "F65": {
       "first": "Fast Forward didn't carry the game through to the end for me.",

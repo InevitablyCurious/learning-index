@@ -1,1 +1,1 @@
-Same trouble getting my pieces off — the roll just shuffles me further along and the piece stays on the board.
+With a number that exactly matches a piece's point, the game still won't take that piece off.

@@ -93,7 +93,13 @@ describe("Backgammon edge gates", () => {
     // the 3 correctly, and was told "it takes one off while a checker sits
     // further back": nothing sat further back than the 6.
     const withHigher = game.singleMoves(b, "white", 5);
-    expect(withHigher.some((m: any) => m.from === 3 && m.to === 25)).toBe(false);
+    // Its own line names this spot (Jerry, 2026-11-12): run 1794520110's model
+    // swung between this and E03 — each told one side of the rule — until both
+    // lines said where the pieces were and what the number does.
+    expect(
+      withHigher.some((m: any) => m.from === 3 && m.to === 25),
+      "[aspect: behind] a 5 took the piece on 3 off while the 6 sat further back",
+    ).toBe(false);
     expect(
       withHigher.some((m: any) => m.from === 6 && m.to === 25),
       "[aspect: short] a 5 carried the piece on 6 off",
