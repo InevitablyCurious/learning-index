@@ -1,1 +1,1 @@
-Clicking the point a piece can move to still doesn't move it there.
+When I pick up a piece to be moved, and try to move it, it still doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the triangle).

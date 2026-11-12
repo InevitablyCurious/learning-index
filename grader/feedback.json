@@ -308,8 +308,8 @@
       "repeat": "I picked up a piece again and some hints still sit on points it can't move to."
     },
     "F76": {
-      "first": "I tried to move a piece and a completely different piece than what I clicked moved instead.",
-      "repeat": "I tried to move a piece again and a different piece than the one I clicked still moved."
+      "first": "When I pick up a piece to be moved, and try to move it, it doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the triangle).",
+      "repeat": "When I pick up a piece to be moved, and try to move it, it still doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the triangle)."
     },
     "F05": {
       "first": "When I have no moves, the game doesn't tell me 'No moves available'.",
@@ -1312,8 +1312,8 @@
       "repeat": "Some of the buttons still aren't labelled with their names — I expect them to read Roll, Double, Undo, End Turn and New Game."
     },
     "F45": {
-      "first": "When I pick up a piece and click the point it can move to, it doesn't move there.",
-      "repeat": "Clicking the point a piece can move to still doesn't move it there."
+      "first": "When I pick up a piece to be moved, and try to move it, it doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the triangle).",
+      "repeat": "When I pick up a piece to be moved, and try to move it, it still doesn't work as intended. I expect the piece to move when I click anywhere for it to move, such as another stack, the hint, or the spot itself (the triangle)."
     },
     "G27": {
       "first": "They play a game to the end and start another, and the gamesPlayed count comes out wrong.",
