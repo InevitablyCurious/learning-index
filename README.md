@@ -225,36 +225,6 @@ run's are cleaned up.
 
 </details>
 
-## Why opencode
-
-The first harness had to add nothing of its own to what is measured. opencode is
-open source (MIT) and pinned in the worker image; it works with any OpenAI-compatible endpoint,
-local models included; it exposes each session over HTTP, so the benchmark can drive a build step
-by step while an operator watches live; and memory systems and loops plug in through its own plugin
-mechanism. It keeps no memory of its own between sessions, so a baseline run is a clean control.
-Its automatic context compaction stays at opencode's own default, never forced off: where a run
-asks for it, the harness compacts the session once after each build chunk and counts only the
-compactions that finish, and in troubleshooting a cell is ended only when two compactions complete
-before one grade.
-
-<details>
-<summary>Why not another harness</summary>
-
-| Harness | Why it was not chosen |
-|---|---|
-| **pi** (Mario Zechner) | The closest alternative: open source, model-agnostic and deliberately minimal. The bench is built on two things opencode provides natively — `opencode serve`, which exposes every session over HTTP with a live event stream, and a plugin mechanism memory systems are written against. pi also leaves out MCP by design, while many memory systems ship as MCP servers. |
-| **Hermes Agent** (Nous Research) | Learning is its core feature: it keeps persistent memory, writes its own reusable skills from experience and searches its past sessions, so its no-memory run is not a clean control as it ships. It is the first harness planned to replace opencode ([roadmap](#roadmap)); a clean baseline for it comes first. |
-| **Claude Code** (Anthropic) | Closed source and built for Anthropic's models. It ships its own memory — CLAUDE.md files and an automatic memory — so a memory-off run is never clean. |
-| **Cursor** | A closed-source editor that routes models through its own service, indexes the codebase for retrieval and keeps its own rules and memories. |
-| **Codex CLI** (OpenAI) | Open source, but built for OpenAI's models first, so other models would run at a disadvantage: a harness-versus-model confound. |
-| **Gemini CLI** (Google) | Open source, but built around Gemini models, and it ships a memory tool the model can call to save facts across sessions. |
-| **Aider** | A pair-programming tool driven one request at a time rather than an autonomous loop. By default it adds its own ranked map of the repository to every request, and it has no plugin surface for a memory system. |
-
-Also weighed: OpenHands, which injects its own knowledge snippets and condenses context on its own
-platform, and Goose, which ships a memory extension.
-
-</details>
-
 ## Repository layout
 
 ```
