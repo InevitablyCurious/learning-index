@@ -29,7 +29,7 @@ pip, legalMoves, canDouble
 
 - `pip`: `{ white: number, black: number }` — both players' pip counts from the engine.
 - `legalMoves`: `Move[]` — the human's legal moves right now (`[]` unless it is the human's move phase).
-- `canDouble`: boolean — whether the human may offer a double at this moment; false until the opening move has been played.
+- `canDouble`: boolean — whether the human may offer a double at this moment; false until the opening move has been played. It is worked out from the game's current fields alone, so a position set through `/api/debug/state` answers the same as one reached by play.
 - `history` is NOT serialized.
 - The server MUST hold a complete, initialized game state from startup, so `/api/state` and `/api/debug/state` return a valid serialized game even before any `/api/new` is called.
 
@@ -42,7 +42,7 @@ Debug seam — gated by env `DEBUG_API=1`; when `DEBUG_API` is not `1` these rou
 
 | Method | Path | Body | Effect |
 |---|---|---|---|
-| POST | `/api/debug/state` | a full/partial state object — any of these fields: `points`, `bar`, `off`, `turn`, `phase`, `dice`, `remainingDice`, `cube`, `difficulty`, `score`, `winner`, `winType`, `pointsWon`, `doubleOfferedBy`, `message`, `turnOver`, `gamesPlayed` | Overwrite the in-memory game with the supplied fields. The response is the resulting serialized state, and it echoes the supplied fields back — a position set this way reads back the same through `/api/state`. |
+| POST | `/api/debug/state` | a full/partial state object — any of these fields: `points`, `bar`, `off`, `turn`, `phase`, `dice`, `remainingDice`, `cube`, `difficulty`, `score`, `winner`, `winType`, `pointsWon`, `doubleOfferedBy`, `message`, `turnOver`, `gamesPlayed` | Overwrite the in-memory game with the supplied fields. The response is the resulting serialized state, and it echoes the supplied fields back — a position set this way reads back the same through `/api/state`. From there the game plays on exactly as if that position had been reached by play. |
 | POST | `/api/debug/roll` | `{dice:number[]}` | Enqueue `dice` as the next roll; the next dice-roll consumes this queue instead of `Math.random`. Doubles are a 4-length array (e.g. `[3,3,3,3]`); a normal roll is 2-length. During `openingRoll` a two-die array is forced verbatim as `[playerDie, computerDie]`; outside `openingRoll` a subsequent `/api/roll` yields those dice sorted ascending in `dice`. Returns serialized state. |
 
 A position supplied to `/api/debug/state` is a real backgammon position — exactly 15 checkers per side across points, bar and off.

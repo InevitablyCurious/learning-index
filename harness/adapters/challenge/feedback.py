@@ -633,7 +633,10 @@ class FeedbackMixin:
                 and (stage is None or stage_of(check, stages).number <= stage.number)
             ):
                 gates.append(gate)
-        return [text for g in gates if (text := cls._respec_text(g))]
+        # Gates that share one part of the brief (E07/G08/G09/G19 all judge
+        # allInHome) hand it back once.
+        texts = [text for g in gates if (text := cls._respec_text(g))]
+        return list(dict.fromkeys(texts))
 
     @classmethod
     def _fill_seconds(cls, line: str, observed: str | None) -> str:

@@ -1,5 +1,6 @@
 """A preference the model missed is handed back from the build brief, word for word."""
 
+import re
 from pathlib import Path
 
 from harness.adapters.challenge import ChallengeRunner
@@ -57,3 +58,49 @@ def test_untold_cube_words_hand_the_brief_back_only_once_the_cube_is_reached() -
     assert ChallengeRunner._respec_for(words, [], cube, stages)
     assert ChallengeRunner._respec_for(words, [], None, stages)
     assert ChallengeRunner._respec_for(words, [], moving, stages) == []
+
+
+GRADER = Path(__file__).resolve().parents[1] / "grader"
+_UNTOLD_GATE = re.compile(r"""(?:it|test)\(\s*["'`]\[([A-Z]+[0-9]+)\]""")
+
+
+def _untold_gates() -> set[str]:
+    """Every gate with an `[untold]` assertion in its test body."""
+    gates: set[str] = set()
+    for path in [*GRADER.glob("backend/**/*.ts"), *GRADER.glob("frontend/*.ts")]:
+        owner = None
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if match := _UNTOLD_GATE.search(line):
+                owner = match.group(1)
+            if "[untold]" in line and owner and "expect" in line:
+                gates.add(owner)
+            elif "[untold]" in line and owner and "const " in line:
+                gates.add(owner)
+    return gates
+
+
+def test_every_untold_gate_hands_its_brief_back() -> None:
+    # An untold check is never told, so the only way a model can learn it fails
+    # is its part of the brief handed back. Without one, a build that fails only
+    # untold checks hears "something is still broken" and nothing it can act on
+    # (run 1794576468: E07/G19 failed on allInHome round after round, untold).
+    gates = _untold_gates()
+    assert {"E07", "G12", "G19", "F24"} <= gates, f"the scan missed gates: {gates}"
+    missing = sorted(g for g in gates if not (PROMPTS / "respec" / f"{g}.md").is_file())
+    assert missing == [], f"untold gates with no brief to hand back: {missing}"
+
+
+def test_a_shared_excerpt_is_handed_back_once() -> None:
+    stages = load_stages(CHECKS)
+    failing = [
+        {
+            "check": "[E07] REQ-ALLINHOME-BAR — x",
+            "observed": "AssertionError: [untold] a",
+        },
+        {
+            "check": "[G19] REQ-BEAROFF-GATE — x",
+            "observed": "AssertionError: [untold] b",
+        },
+    ]
+    respec = ChallengeRunner._respec_for(failing, [], None, stages)
+    assert len(respec) == 1 and "allInHome" in respec[0]

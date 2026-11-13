@@ -37,7 +37,7 @@ export function startingPoints(): number[];
 /** A fresh GameState for a new game at the given difficulty — the new game starts in phase "openingRoll" (white to move), cube `{value: 1, owner: null}`, empty bar and off, `winner: null`, and `points === startingPoints()`. */
 export function createGame(difficulty: GameState["difficulty"]): GameState;
 
-/** True when ALL of `player`'s checkers are in that player's home quadrant. */
+/** True when ALL of `player`'s checkers are in that player's home quadrant or already borne off — a checker on the bar is not home. */
 export function allInHome(b: Board, player: Player): boolean;
 
 /** Deep-copy a Board (points + bar + off) so callers can explore without mutating. */
