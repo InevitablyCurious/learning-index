@@ -141,36 +141,6 @@ Report each run's fingerprint, its cost record and its final grade — all three
 folder. More runs make a stronger measurement; the board shows a difference only once each side has
 three scored runs.
 
-## How a run works
-
-- **The unit is one run.** One click on Run launches one cell: a single opencode session that
-  builds the challenge in seven phases, in order, then troubleshoots in that same session, round
-  after round, until every check passes. The harness compacts the session itself between chunks,
-  a launch choice stated before the run starts and part of its fingerprint, costing one model turn
-  per chunk. There is no round cap and no time cap.
-- **A chunk ends on the transport's verdict.** A chunk is complete when the session goes idle with
-  exit 0, and nothing the model wrote is read to decide it. A non-zero exit ends the build there,
-  and every later chunk is recorded not reached.
-- **Two arms.** Baseline (OFF on the board): nothing swapped in; every baseline run is appended and
-  averaged per fingerprint. Test (ON): the same model with the layer under test swapped in,
-  measured against the average of the baselines that share its fingerprint.
-- **Runs are serial per model.** One cell in flight per model; a different model may run beside it.
-- **Dev mode pauses; normal mode does not.** In dev mode the run stops after every grade and once
-  at the end, so the operator can play the app as it stands and read what the model is about to be
-  told; each pause waits on a file sentinel, and releasing it continues the run. Normal mode runs
-  straight through.
-- **A cell that ran out of room is a result.** When the session grew too large to compact at all,
-  the cell ends `context_exhausted` and is recorded as that — never restarted from a saved copy of
-  an earlier run.
-- **What is measured.** Every run writes a cost record — build, troubleshooting and total: tokens
-  by kind including cache, turns, compactions, grades, wall time with paused time taken out, and
-  peak context. A local model is measured in tokens only, because there is no price to state; a
-  cloud cell also records what it cost. Beside it: whether the cell finished and what ended it,
-  and, when a memory system is swapped in, what it delivered to the agent and its own background
-  work.
-- **No language model judges anything.** The grader runs the game: more than 200 checks, in the
-  order a player meets them.
-
 ## Designing a challenge
 
 A challenge is the task every run builds. It lives in its own repository, selected with
@@ -221,6 +191,120 @@ What it asks of a model, as a programmer would see it:
 | Keeping two sides in step | The page and the server agreeing at every step: undo, a reload mid-turn, the computer's turn driven from the page, Fast Forward with pause. |
 | Checking its own work | Neither the model nor the grader sees the screen: the model has to check what it drew by driving a real browser and measuring it. |
 | Working over a long horizon | Fixing a stream of user complaints without breaking what already works; a fix that breaks something else is reported back as a regression. |
+
+### How backgammon was designed
+
+- **A game anyone can judge.** A person can play backgammon and see at once whether it works, yet
+  its rules are dense enough to be hard to get completely right, its computer opponent needs real
+  search, and its board has to be drawn and clicked. Every part can be checked by running it, and
+  the only randomness — the dice — can be fixed from outside.
+- **A reference first.** The reference game began as a solution a frontier model wrote in close to
+  one pass, corrected since by playing it. The checks were built around it, so its passing every
+  check is the proof the challenge can be built. The model never sees it.
+- **The spec says what, not how.** Seven build prompts, given to the model one phase at a time with
+  the whole spec in view: the rules engine, the computer opponent, the server, the page in three
+  layers, and wiring it together. They pin only what a check has to find — file and function names,
+  the shape of the game state, the routes, the page's element tags, a debug route for setting
+  positions and dice — and the few house preferences no player could guess, such as the doubling
+  thresholds and the exact wording of messages. They do not teach backgammon, how to build an
+  opponent or how to make move generation fast: a capable developer supplies those, and that is
+  what is being measured. Where the spec describes behaviour, it says what a player expects to see.
+- **The page in layers.** The page is built and checked in three layers — the board and its buttons
+  with no pieces, then the pieces in their starting position, then the gameplay — so the first look
+  at the board is right before any play is judged.
+- **Preferences are handed back, not guessed.** When a check of a house preference fails, the
+  passage of the spec it comes from is handed to the model again, word for word.
+- **Shapes, not pixels.** Layout is stated in proportions — the whole board is 1.4 times as wide as
+  it is tall, sized to the window — so every build is judged the same at any screen size.
+- **Pace, not animation.** How things move is the model's choice. What is required is that a person
+  can follow it: dice readable for about a second, the computer's moves about half a second apart,
+  and a still second after every roll before anything else happens.
+- **A scripted opening.** The dice are queued so the opening roll ties three times and then the
+  computer wins, so one game exercises the tie, the computer's first turn and its pacing.
+
+### How the grader works
+
+- **It runs the build.** Every round, a sealed grader starts the model's latest code from scratch
+  and runs more than 200 checks in three groups: the contract's shape (files, exports, routes,
+  page tags); the engine and its API, called directly and through the server; and the page in a
+  real browser at two ordinary laptop sizes, clicking and reading the screen as a player would.
+- **Every check is deterministic.** The dice and the position are set through the debug route, and
+  where the build's own behaviour matters, a check reaches its state the way a game would — through
+  the build's own roll, its own End Turn — so it never tests a state the game could not reach. The
+  page is judged by what it draws, where, and what a click does, through the element tags the spec
+  names, so any way of building it is judged the same.
+- **Stages, in the order a player meets them.** The checks fall into 19 stages, from the first look
+  at the board to the end of a game. Each round, only the earliest failing stage is told. A check
+  that cannot be reached until an earlier step works waits behind that step, so the model never
+  hears about something a player could not get to.
+- **Each way of failing has its own words.** A check can fail in several ways, and each has its own
+  line, with a first version and a repeat ("Again…"). When a whole part is wrong — the board, the
+  pieces, Fast Forward — one general line says what that part should be, instead of a list of
+  symptoms.
+- **What no player sees is scored, not told.** Details only code could see — an internal flag, the
+  answer an engine function gives — still count against the build, but are never put to the model
+  as something a player noticed.
+- **A person checks the grader.** In development the run pauses after every grade: an operator plays
+  the build beside the reference and checks every line the model is about to hear. A line that is
+  not true is the grader's bug — it is fixed, proven on the reference and on saved builds, and the
+  run resumes from its last checkpoint.
+- **The grader is tested too.** A change to it must still pass the reference on every check, must
+  catch deliberately broken builds, and is re-run on a frozen set of 72 saved builds whose right
+  lines are written down beforehand, so a fix for one build cannot quietly break the lines another
+  build gets.
+
+### How the agent is spoken to
+
+The agent never sees a test. Everything it is told is written as if from two people: a player, and
+the player's software team.
+
+- **The player** says what happened, in plain words — "When I rolled a double, there were more than
+  two dice on the screen." — never a test name, an expected value, a file or a line of code.
+- **The software team** speaks only about what no player could ever see: an API field, a contract
+  their own software depends on.
+- **Each message reads like a real one:** what got fixed since last time, what broke that used to
+  work, and what is still wrong. It opens by saying how the player checked — the latest code from
+  scratch, a new game, an ordinary laptop screen, playing white — which answers the usual excuses
+  (a stale page, an old server, a different screen) before they are made. It closes with the names
+  and routes the team's software relies on, so that a fix never breaks them.
+- **Why human prose.** The aim is that nothing inside the session marks it as a benchmark: as far as
+  the agent can tell, it is coding for a person. A model handed failing test names can satisfy the
+  tests without building what was asked; a model that hears a person describe what went wrong has
+  to find the cause itself, as it would with a real user. That keeps the measurement about building
+  software rather than passing tests, and it puts a harness, a memory system or a loop through the
+  test real use would: turning an ordinary person's complaint into working code.
+- **The wording rules.** Every line is true of every build it can be told about. It names one fault,
+  and gives a count only when the count is exact. It reports what happened instead of stating the
+  rule — "…and not four, as it should be" would hand over the fix. It never names an excuse the model
+  could reach for. And no new line reaches a model until a person has approved it.
+- **The big picture first.** When the board and its buttons are in the wrong places, the player says
+  only that — the board on the left, the buttons on the right — and nothing about the details, which
+  would change once the layout does.
+
+### Lessons from running it
+
+Each of these cost rounds before it was learned, and each applies to any challenge:
+
+- **Name the spot.** Two lines that only imply the condition between them — "I could play them in
+  either order" and "only one of them could be used" — read to a model as opposites, and it swung
+  between two wrong fixes. Naming the position ("I rolled a 4 and a 3 and could play either one,
+  but not both") ended the swing, and a line naming its spot from the start ("my pieces were on the
+  6 and the 3 and I rolled a 5") was fixed in one round.
+- **Name the moment.** "No Fast Forward button showed" was true only before the roll; the model
+  tested after rolling, saw the button, and decided it was fixed. "At the start of my turn, before
+  I'd rolled" fixed it in one round.
+- **Reach the state the way the game does.** A check that sets up a position the game itself never
+  produces — dice listed in an order its own roll never makes, a turn in a phase it never uses —
+  tells the model about a problem it cannot reproduce, and the model searches for it for round after
+  round.
+- **What no player can see, no player says.** An engine answer the game itself never relies on,
+  told as something a player saw, sends the model after a problem that is not there.
+- **A model going in circles is evidence against the line first.** Before deciding the model can't do
+  something, read its own reasoning: every long loop so far traced back to a line that was vague,
+  misleading or untrue.
+- **The whole picture when it is badly wrong, the details when it is close.** One line describing a
+  whole part fixed in one round what a single specific line had not fixed in three; on a nearly right
+  part, the general line buried the one detail left.
 
 ### Other challenges worth building
 
