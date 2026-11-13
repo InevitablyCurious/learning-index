@@ -3023,8 +3023,11 @@ test("[F66] REQ-FASTFORWARD-PAUSE — Pause stops Fast Forward and it carries on
   await expect(button, "[aspect: running] the running Fast Forward button never read Pause").toHaveText(PAUSE);
 
   // Paused during the player's first roll, the turn stays theirs and the
-  // button stays on screen.
+  // button stays on screen. A button gone from the screen is found at once,
+  // not by a click that waits out the test (run 1794523863: Fast Forward ended
+  // the turn, the button vanished, and the click waited 120 s).
   await page.waitForTimeout(250);
+  await expect(button, "the Fast Forward button had gone from the screen while it ran").toBeVisible({ timeout: 5_000 });
   await button.click();
   await expect(button, "[aspect: label] [needs: F64] after Pause the button never read Fast Forward again").toHaveText(FAST_FORWARD);
 

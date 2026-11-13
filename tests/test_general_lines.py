@@ -37,7 +37,7 @@ def _list(problems: list[dict[str, str]], **kw: object) -> str:
 
 
 def test_every_part_is_complete_and_fits_the_delivery_cap() -> None:
-    assert set(GENERAL) == {"triangles", "bar", "tray", "pieces"}
+    assert set(GENERAL) == {"triangles", "bar", "tray", "pieces", "fastforward"}
     for part, spec in GENERAL.items():
         assert spec["first"] and spec["repeat"], part
         assert (

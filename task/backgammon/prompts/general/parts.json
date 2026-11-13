@@ -116,5 +116,43 @@
       "F32.offboard",
       "F32.side"
     ]
+  },
+  "fastforward": {
+    "members": [
+      "F64",
+      "F64.outside",
+      "F64.shown",
+      "F65",
+      "F65.between",
+      "F65.dice",
+      "F65.first",
+      "F65.played",
+      "F65.popup",
+      "F66",
+      "F66.hang",
+      "F66.label",
+      "F66.paused",
+      "F66.resume",
+      "F66.running",
+      "F67",
+      "F67.answer",
+      "F67.back",
+      "F67.frozen",
+      "F67.label",
+      "F67.offer",
+      "F67.stays",
+      "F67.stopped"
+    ],
+    "big": [
+      "F64.shown",
+      "F65",
+      "F65.played",
+      "F66",
+      "F66.hang",
+      "F66.running",
+      "F66.label",
+      "F66.paused",
+      "F66.resume"
+    ]
   }
 }
