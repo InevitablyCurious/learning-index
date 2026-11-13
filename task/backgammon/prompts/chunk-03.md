@@ -14,7 +14,7 @@ The API surface (EXACT):
 | POST | `/api/move` | `{from,to,die}` | Apply one human sub-move. |
 | POST | `/api/undo` | — | Undo last sub-move this turn. |
 | POST | `/api/endturn` | — | End human turn (only when `turnOver`). |
-| POST | `/api/double` | — | Human offers a double; AI responds. |
+| POST | `/api/double` | — | Human offers a double; AI responds. When `canDouble` is false the double is refused and nothing changes. |
 | POST | `/api/double/respond` | `{accept:boolean}` | Human answers an AI-offered double. |
 | POST | `/api/ai` | — | Advance one AI step. |
 | GET | `/health` | — | `200 {"status":"ok","port":8002}` (liveness; always available). |
@@ -29,7 +29,7 @@ pip, legalMoves, canDouble
 
 - `pip`: `{ white: number, black: number }` — both players' pip counts from the engine.
 - `legalMoves`: `Move[]` — the human's legal moves right now (`[]` unless it is the human's move phase).
-- `canDouble`: boolean — whether the human may offer a double at this moment; false until the opening move has been played. It is worked out from the game's current fields alone, so a position set through `/api/debug/state` answers the same as one reached by play.
+- `canDouble`: boolean — whether the human may offer a double at this moment: only on the human's own turn before they roll (phase `roll`), while the cube is in the middle or theirs and nobody has won — never before the opening move has been played. It is worked out from the game's current fields alone, so a position set through `/api/debug/state` answers the same as one reached by play.
 - `history` is NOT serialized.
 - The server MUST hold a complete, initialized game state from startup, so `/api/state` and `/api/debug/state` return a valid serialized game even before any `/api/new` is called.
 
