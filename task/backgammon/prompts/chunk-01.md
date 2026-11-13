@@ -66,7 +66,7 @@ export function allSequences(b: Board, player: Player, dice: number[]): { board:
 /** The pip count for `player` on board `b`. */
 export function pipCount(b: Board, player: Player): number;
 
-/** Whether `player` has borne off all 15 checkers, and if so how the win is classified. */
+/** Whether `player` has borne off all 15 checkers, and if so how the win is classified: "single" when the loser has borne off at least one checker; "gammon" when the loser has borne off none; "backgammon" when the loser has borne off none and still has a checker on the bar or in the winner's home board. */
 export function checkWin(b: Board, player: Player): { won: boolean; type: "single" | "gammon" | "backgammon" | null };
 ```
 
