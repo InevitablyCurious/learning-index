@@ -913,6 +913,7 @@ class FeedbackMixin:
         problems: list[dict[str, Any]] | None = None,
         checks: list[str] | None = None,
         repeat_complaints: set[str] | None = None,
+        repeat_parts: set[str] | None = None,
         withheld: list[str] | None = None,
         unevaluated: list[str] | None = None,
         regressions: set[str] | None = None,
@@ -1050,10 +1051,14 @@ class FeedbackMixin:
         # smaller one ([needs:]) still means the picture is wrong — run
         # 1794469703's "pieces on the wrong points" waited on "cut off".
         among = [p for p in (found or records) if isinstance(p, dict)]
+        # Or when the part itself was told as its general line before and its
+        # picture has stayed wrong since (``repeat_parts``, kept by the runner):
+        # the fault inside it may have moved, but it is the same part, still wrong.
         general_repeat = {
             part
             for r in records
-            if (part := cls._general_part(r, among)) and line_of(r) in repeat_lines
+            if (part := cls._general_part(r, among))
+            and (line_of(r) in repeat_lines or part in (repeat_parts or set()))
         }
 
         for record in records:

@@ -100,3 +100,18 @@ def test_a_piece_off_centre_is_a_detail_with_jerrys_line() -> None:
     msg = _list([OFF_CENTRE])
     assert PIECES["first"] not in msg
     assert "do not sit perfectly on center of their point" in msg
+
+
+def test_a_part_told_before_is_still_wrong_even_when_its_fault_moved() -> None:
+    # Run 1794560336: told the Fast Forward line for a vanished button, then for
+    # a resume that moved nothing — and heard it as a first report both times.
+    ff = GENERAL["fastforward"]
+    resume = _problem(
+        "[F66] REQ-FASTFORWARD-PAUSE — Pause stops Fast Forward and it carries on",
+        "resume",
+    )
+    fresh = _list([resume])
+    assert ff["first"] in fresh and ff["repeat"] not in fresh
+    again = _list([resume], repeat_parts={"fastforward"})
+    assert ff["repeat"] in again and ff["first"] not in again
+    assert "I'm still seeing these problems" in again

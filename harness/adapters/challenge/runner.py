@@ -1021,6 +1021,10 @@ class ChallengeRunner(
         # it" quotes what was actually said (feedback.py _build_pass_verdict).
         told_first_label: dict[str, str] = {}
         told_open: set[str] = set()
+        # General-line parts told as their general line whose picture has stayed
+        # wrong in every grade since: still the same part, even when the fault
+        # inside it changed (feedback.py ``repeat_parts``).
+        told_parts_open: set[str] = set()
         # How many phases the build SHOULD have run, for the completion rows
         # below: a phase that never got a turn has no report to count.
         build_chunk_expected: int = 0
@@ -2172,6 +2176,22 @@ class ChallengeRunner(
                             self._complaint_id(p) for p in stage_view.visible
                         }
                         repeat_complaints = visible_complaints & told_open
+                        # A part told as its general line is "still" not right while
+                        # its picture stays wrong, whichever finding now says so: run
+                        # 1794560336 heard the Fast Forward line as new because its
+                        # fault moved from the vanished button to resuming.
+                        found_now = [p for p in problems if isinstance(p, dict)]
+                        told_parts_open &= {
+                            part
+                            for p in found_now
+                            if (part := self._general_part(p, found_now))
+                        }
+                        parts_told_now = {
+                            part
+                            for p in stage_view.visible
+                            if (part := self._general_part(p, found_now))
+                        }
+                        repeat_parts = parts_told_now & told_parts_open
                         self._progress(
                             f"PROGRESS run_label={run_label} step=player-stage attempt={attempt} "
                             f"stage={stage_view.stage.number if stage_view.stage else 'none'} "
@@ -2188,6 +2208,7 @@ class ChallengeRunner(
                             if str(p.get("check", "")).strip()
                         }
                         told_open |= visible_complaints
+                        told_parts_open |= parts_told_now
                         for p in stage_view.visible:
                             complaint = self._complaint_id(p)
                             if (
@@ -2214,6 +2235,7 @@ class ChallengeRunner(
                             # The repeats also choose the opener (feedback.py): "I'm
                             # still seeing these problems" heads a list of repeats only.
                             repeat_complaints=repeat_complaints,
+                            repeat_parts=repeat_parts,
                             withheld=stage_view.withheld,
                             unevaluated=stage_view.unevaluated,
                             regressions=regressions,
