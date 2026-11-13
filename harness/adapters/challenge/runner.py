@@ -2239,6 +2239,27 @@ class ChallengeRunner(
                                 c, self._player_stages()
                             ),
                         )
+                        # BROKE AN EARLIER PHASE (Jerry, 2026-11-13): a layer
+                        # advances only on a scoped PASS, so a told check from a
+                        # layer an earlier phase finished was right when that
+                        # phase ended. Told first, under its own opener, the
+                        # first time it is told; a repeat is "still seeing".
+                        first_phase_of_layer = {
+                            ph.layer: ph.index for ph in reversed(phases) if ph.layer
+                        }
+                        broke_earlier = {
+                            str(p.get("check", "")).strip()
+                            for p in stage_view.visible
+                            if self._complaint_id(p) not in repeat_complaints
+                            and first_phase_of_layer.get(
+                                self._player_layers().layer_of(
+                                    str(p.get("check", "")).strip(),
+                                    self._player_stages(),
+                                ),
+                                phase.index,
+                            )
+                            < phase.index
+                        }
                         feedback = self._build_feedback_prompt(
                             problems=stage_view.visible,
                             # The repeats also choose the opener (feedback.py): "I'm
@@ -2250,6 +2271,8 @@ class ChallengeRunner(
                             regressions=regressions,
                             found=[p for p in problems if isinstance(p, dict)],
                             phase_index=phase.index,
+                            broke_earlier=broke_earlier,
+                            phase_work=phase.work,
                             respec=self._respec_for(
                                 [p for p in problems if isinstance(p, dict)],
                                 stage_view.visible,

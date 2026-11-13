@@ -39,6 +39,7 @@ from .constants import (
     _PACK,
     _SPEC,
     _PASS_VERDICT_MAX_LISTED,
+    _BROKE_EARLIER_HEADER,
     _REGRESSION_HEADER,
     _STUB_SENTINEL,
     _TEAM_EXCUSE_ELIMINATOR,
@@ -920,6 +921,8 @@ class FeedbackMixin:
         respec: Sequence[str] | None = None,
         found: list[dict[str, Any]] | None = None,
         phase_index: int | None = None,
+        broke_earlier: set[str] | None = None,
+        phase_work: str | None = None,
     ) -> str:
         """Compose the message the model receives after a failed attempt.
 
@@ -1020,6 +1023,11 @@ class FeedbackMixin:
         # by_channel still holds EVERY label — tester_speaks, the filler and
         # the team gate all read it — this dict only splits the emission.
         regressed: dict[str, list[str]] = {"tester": [], "team": []}
+        # A check from an earlier, finished phase that this phase broke: told
+        # first, under its own opener naming what this phase was doing (Jerry,
+        # 2026-11-13: "hang on a minute you just broke the board … it was good
+        # before and you broke it when you tried to put your pieces on it").
+        broke: list[str] = []
         # Pass-kinds of the NON-regressed tester labels only: a regression is
         # always a first sighting, and the ordinary header ("still seeing")
         # must describe only the ordinary list it heads.
@@ -1119,6 +1127,9 @@ class FeedbackMixin:
                 continue
             seen.add(label)
             by_channel[channel].append(label)
+            if channel == "tester" and raw_check in (broke_earlier or set()):
+                broke.append(label)
+                continue
             is_regression = raw_check in regressions
             if is_regression:
                 regressed[channel].append(label)
@@ -1164,11 +1175,22 @@ class FeedbackMixin:
             # fix undoing working code, and that news heads the tester's list
             # before the ordinary complaints. Numbered from 1 like every list:
             # two sightings by the same person, not one list with a divider.
+            if broke:
+                if not phase_work:
+                    raise ValueError(
+                        "an earlier phase's check broke, but this phase declares no "
+                        "`work` in phase-plan.json to say what broke it"
+                    )
+                lines += [_BROKE_EARLIER_HEADER.replace("{work}", phase_work), ""]
+                for n, label in enumerate(broke, start=1):
+                    lines.append(f"{n}) {label}")
             if regressed["tester"]:
+                if broke:
+                    lines.append("")
                 lines += [_REGRESSION_HEADER, ""]
                 for n, label in enumerate(regressed["tester"], start=1):
                     lines.append(f"{n}) {label}")
-            regressed_tester = set(regressed["tester"])
+            regressed_tester = set(regressed["tester"]) | set(broke)
             ordinary_tester = [
                 label for label in by_channel["tester"] if label not in regressed_tester
             ]
@@ -1176,7 +1198,7 @@ class FeedbackMixin:
             # below, which IS the tester's list when they have nothing to name.
             # With `regressions` empty this is byte-identical to the old shape.
             if ordinary_tester or not by_channel["tester"]:
-                if regressed["tester"]:
+                if regressed["tester"] or broke:
                     lines.append("")
                 lines += [header, ""]
                 for n, label in enumerate(ordinary_tester, start=1):

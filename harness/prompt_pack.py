@@ -68,7 +68,10 @@ class Phase:
     ``index`` is the 1-based position K the header prints; ``name`` is what the
     header and every record label the phase with; ``layer`` is the grader layer
     (``None`` for the backend phases, 1..3 for the frontend); ``file`` is the
-    chunk file within the prompts dir; ``text`` is its verbatim body.
+    chunk file within the prompts dir; ``text`` is its verbatim body;
+    ``work`` is what the phase is doing, in a player's words ("putting the
+    pieces on the board"), said when this phase breaks an earlier one — None
+    for a phase that never follows a graded one.
     """
 
     index: int
@@ -76,6 +79,7 @@ class Phase:
     layer: int | None
     file: str
     text: str
+    work: str | None = None
 
 
 def phase_label(phase: Phase, kind: str) -> dict[str, Any]:
@@ -187,6 +191,11 @@ class PromptPack:
             name = entry.get("name")
             layer = entry.get("layer")
             file = entry.get("file")
+            work = entry.get("work")
+            if work is not None and (not isinstance(work, str) or not work.strip()):
+                raise MissingPromptError(
+                    f"{decl_path}: phase {index} has an empty `work`."
+                )
             if index != position:
                 raise MissingPromptError(
                     f"{decl_path}: phase at position {position} has index "
@@ -219,6 +228,7 @@ class PromptPack:
                     layer=layer,
                     file=file,
                     text=self.text(file),
+                    work=work,
                 )
             )
 

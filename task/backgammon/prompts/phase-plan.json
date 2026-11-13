@@ -4,8 +4,8 @@
     { "index": 2, "name": "Backend 2 — AI", "layer": null, "file": "chunk-02.md" },
     { "index": 3, "name": "Backend 3 — server", "layer": null, "file": "chunk-03.md" },
     { "index": 4, "name": "Layer 1 — board and controls", "layer": 1, "file": "chunk-04-l1-board.md" },
-    { "index": 5, "name": "Layer 2 — pieces", "layer": 2, "file": "chunk-04-l2-pieces.md" },
-    { "index": 6, "name": "Layer 3 — gameplay", "layer": 3, "file": "chunk-04-l3-gameplay.md" },
-    { "index": 7, "name": "Wire and verify", "layer": 3, "file": "chunk-05.md" }
+    { "index": 5, "name": "Layer 2 — pieces", "layer": 2, "file": "chunk-04-l2-pieces.md", "work": "putting the pieces on the board" },
+    { "index": 6, "name": "Layer 3 — gameplay", "layer": 3, "file": "chunk-04-l3-gameplay.md", "work": "adding the gameplay" },
+    { "index": 7, "name": "Wire and verify", "layer": 3, "file": "chunk-05.md", "work": "wiring everything together" }
   ]
 }

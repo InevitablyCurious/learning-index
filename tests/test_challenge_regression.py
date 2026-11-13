@@ -345,3 +345,32 @@ def test_check_above_previous_layer_is_never_a_regression() -> None:
     # Unlayered previous report: unchanged behaviour.
     flat = [{"state_hash": "h0"}, {"state_hash": "h1"}]
     assert _regressed_checks(flat, told, layer_of=layers.__getitem__) == {HINT, PIP}
+
+
+def test_an_earlier_phase_broken_now_is_told_first_with_what_broke_it() -> None:
+    # Jerry, 2026-11-13: "hang on a minute you just broke the board … it was
+    # good before and you broke it when you tried to put your pieces on it."
+    from harness.prompt_pack import default_pack
+
+    pieces = default_pack().phase(5)
+    assert pieces.work == "putting the pieces on the board"
+    assert all(default_pack().phase(k).work for k in (5, 6, 7))
+    triangles = {
+        "check": "[F30] REQ-GEOMETRY — triangles point inward",
+        "observed": "Error: [aspect: float] triangles whose wide end doesn't sit at the edge",
+    }
+    msg = R._build_feedback_prompt(
+        problems=[triangles],
+        broke_earlier={triangles["check"]},
+        phase_work=pieces.work,
+    )
+    opener = (
+        "Hang on a minute — you broke something that was working before. "
+        "It was right until you started putting the pieces on the board:"
+    )
+    assert opener in msg
+    assert msg.index(opener) < msg.index("1) ")
+    assert "I've checked your work thoroughly" not in msg
+    # Not an earlier phase's check: the ordinary opener, no "hang on".
+    plain = R._build_feedback_prompt(problems=[triangles], phase_work=pieces.work)
+    assert "Hang on a minute" not in plain

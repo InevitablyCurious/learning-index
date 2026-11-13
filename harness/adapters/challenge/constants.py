@@ -401,6 +401,9 @@ _FIXED_OPENER_MANY = _PACK.text("repair/fixed-many.md")
 # each channel heads its regressed checks with its own opener, before the
 # ordinary list (feedback.py `_build_feedback_prompt`).
 _REGRESSION_HEADER = _PACK.text("repair/regression-round.md")
+#: A check from an earlier, finished phase that this phase broke (Jerry,
+#: 2026-11-13): `{work}` is the phase's own phrase from phase-plan.json.
+_BROKE_EARLIER_HEADER = _PACK.text("repair/broke-earlier.md")
 _TEAM_REGRESSION_HEADER = _PACK.text("repair/team-regression.md")
 
 # ── A ROUND THAT CHANGED NOTHING ────────────────────────────────────────────
