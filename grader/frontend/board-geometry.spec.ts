@@ -582,9 +582,18 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   // only "some of the points don't show a clear triangle" (the 2026-09-30 D3R4
   // miss, again).
   const outward = judged.filter((s) => s.shape === "outward").map((s) => s.num);
+  // Told by row when one row alone faces the wrong way (Jerry, 2026-11-13: name
+  // the spot). Run 1794592634 drew the bottom row pointing down at its edge for
+  // two rounds and heard "the triangles point outward" — true of half the board.
+  const outwardRow =
+    outward.length && outward.every((n) => n <= 12)
+      ? "[aspect: outwardbottom] "
+      : outward.length && outward.every((n) => n >= 13)
+        ? "[aspect: outwardtop] "
+        : "";
   expect(
     outward,
-    `${needsRows}expected every point's triangle to point inward (wider at the rim than further in), found outward-pointing point numbers: ${outward.join(", ")}`,
+    `${outwardRow}${needsRows}expected every point's triangle to point inward (wider at the rim than further in), found outward-pointing point numbers: ${outward.join(", ")}`,
   ).toEqual([]);
   expect(
     noTriangle,

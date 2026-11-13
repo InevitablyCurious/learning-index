@@ -260,11 +260,10 @@ def test_the_rehanded_message_still_carries_the_told_problem(
     pack = _pack()
     spec = pack.build_step_message(L1_PHASE)
     # ROUND TWO IS A REPEAT: the same person's second sighting of the same
-    # fault, and the single-system voice says it in the REPEAT line (the list
-    # opens "I'm still seeing these problems"), never the first-sighting one.
-    told = ChallengeRunner._told_label(
-        dict(_L1_PROBLEM), pass_kind="repeat", among=[dict(_L1_PROBLEM)]
-    )[0]
+    # fault, said in its own REPEAT line. A part told as its general line the
+    # first round is told by its specific lines after that (Jerry, 2026-11-13),
+    # so the repeat is the gate's own line, not the general list again.
+    told = ChallengeRunner._told_label(dict(_L1_PROBLEM), pass_kind="repeat")[0]
     assert told, "the layer-1 gate resolves to a told line"
 
     _, feedback = _drive_layer_one(

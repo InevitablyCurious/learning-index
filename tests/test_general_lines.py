@@ -39,10 +39,8 @@ def _list(problems: list[dict[str, str]], **kw: object) -> str:
 def test_every_part_is_complete_and_fits_the_delivery_cap() -> None:
     assert set(GENERAL) == {"triangles", "bar", "tray", "pieces", "fastforward"}
     for part, spec in GENERAL.items():
-        assert spec["first"] and spec["repeat"], part
-        assert (
-            len(spec["first"]) <= TOLD_LINE_CAP and len(spec["repeat"]) <= TOLD_LINE_CAP
-        ), part
+        assert spec["line"], part
+        assert len(spec["line"]) <= TOLD_LINE_CAP, part
         assert spec["big"] <= spec["members"], (
             f"{part}: a big finding that isn't a member"
         )
@@ -62,18 +60,18 @@ def test_every_member_keeps_its_own_specific_line() -> None:
 
 def test_a_part_whose_picture_is_wrong_is_told_once_as_its_general_line() -> None:
     msg = _list([ON_THE_WRONG_POINT, CUT_OFF, SPREAD])
-    assert msg.count(PIECES["first"]) == 1
-    assert "cut off" not in msg.replace(PIECES["first"], "")
+    assert msg.count(PIECES["line"]) == 1
+    assert "cut off" not in msg.replace(PIECES["line"], "")
 
 
 def test_a_part_that_is_close_is_told_its_details_not_the_general_line() -> None:
     msg = _list([CUT_OFF])
-    assert PIECES["first"] not in msg and PIECES["repeat"] not in msg
+    assert PIECES["line"] not in msg
     assert "cut off" in msg
 
 
 def test_a_general_line_is_never_fixed_while_its_part_still_fails() -> None:
-    told = {"a": PIECES["first"], "b": PIECES["first"]}
+    told = {"a": PIECES["line"], "b": PIECES["line"]}
     # One of its findings passes, another still fails: nothing is fixed.
     assert (
         R._build_pass_verdict(newly_passing=["a"], told=told, still_failing=["[F43] x"])
@@ -83,7 +81,7 @@ def test_a_general_line_is_never_fixed_while_its_part_still_fails() -> None:
     verdict = R._build_pass_verdict(
         newly_passing=["a", "b"], told=told, still_failing=["[F87] x"]
     )
-    assert PIECES["first"] in verdict and "…" not in verdict
+    assert PIECES["line"] in verdict and "…" not in verdict
 
 
 def test_a_big_finding_held_back_for_a_smaller_one_still_calls_the_general_line() -> (
@@ -92,26 +90,32 @@ def test_a_big_finding_held_back_for_a_smaller_one_still_calls_the_general_line(
     # Told: cut off and spread apart. Found but held back ([needs: F43]): the
     # pieces are on the wrong points. The picture is wrong, so the general line.
     msg = _list([CUT_OFF, SPREAD], found=[ON_THE_WRONG_POINT, CUT_OFF, SPREAD])
-    assert msg.count(PIECES["first"]) == 1
+    assert msg.count(PIECES["line"]) == 1
 
 
 def test_a_piece_off_centre_is_a_detail_with_jerrys_line() -> None:
     # Jerry, 2026-11-12: a close board whose stacks sit 13 px left of centre.
     msg = _list([OFF_CENTRE])
-    assert PIECES["first"] not in msg
+    assert PIECES["line"] not in msg
     assert "do not sit perfectly on center of their point" in msg
 
 
-def test_a_part_told_before_is_still_wrong_even_when_its_fault_moved() -> None:
-    # Run 1794560336: told the Fast Forward line for a vanished button, then for
-    # a resume that moved nothing — and heard it as a first report both times.
-    ff = GENERAL["fastforward"]
-    resume = _problem(
-        "[F66] REQ-FASTFORWARD-PAUSE — Pause stops Fast Forward and it carries on",
-        "resume",
+def test_a_part_told_before_gets_its_specific_lines_not_the_list_again() -> None:
+    # Jerry, 2026-11-13: the picture once, then the specifics. Run 1794592634
+    # heard the same five-bullet triangles list three rounds running while its
+    # points went from outward-pointing to plain stripes; it never learned WHICH
+    # expectation it missed.
+    triangles = GENERAL["triangles"]
+    undrawn = _problem("[F30] REQ-GEOMETRY — triangles point inward", "undrawn")
+    fresh = _list([undrawn])
+    assert triangles["line"] in fresh
+    again = _list([undrawn], repeat_parts={"triangles"})
+    assert triangles["line"] not in again
+    assert "I can't make out a triangle on any of the points" in again
+    # Told as a repeat of its own line when that line was said before.
+    still = _list(
+        [undrawn],
+        repeat_parts={"triangles"},
+        repeat_complaints={R._complaint_id(undrawn)},
     )
-    fresh = _list([resume])
-    assert ff["first"] in fresh and ff["repeat"] not in fresh
-    again = _list([resume], repeat_parts={"fastforward"})
-    assert ff["repeat"] in again and ff["first"] not in again
-    assert "I'm still seeing these problems" in again
+    assert "I still can't make out a triangle on any of the points" in still

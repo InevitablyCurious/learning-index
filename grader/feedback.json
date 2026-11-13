@@ -927,6 +927,14 @@
       "first": "Part of the board runs off the edge of the screen.",
       "repeat": "Part of the board still runs off the edge of the screen."
     },
+    "F30.outwardbottom": {
+      "first": "The triangles in the bottom row point the wrong way, down toward the edge of the board — I expect each one's wide end at the bottom edge and its tip pointing up toward the middle.",
+      "repeat": "The triangles in the bottom row still point down toward the edge — I expect each one's wide end at the bottom edge and its tip pointing up toward the middle."
+    },
+    "F30.outwardtop": {
+      "first": "The triangles in the top row point the wrong way, up toward the edge of the board — I expect each one's wide end at the top edge and its tip pointing down toward the middle.",
+      "repeat": "The triangles in the top row still point up toward the edge — I expect each one's wide end at the top edge and its tip pointing down toward the middle."
+    },
     "F30.undrawn": {
       "first": "I can't make out a triangle on any of the points — I expect each point drawn as a triangle that stands out from the board.",
       "repeat": "I still can't make out a triangle on any of the points — I expect each point drawn as a triangle that stands out from the board."

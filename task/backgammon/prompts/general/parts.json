@@ -66,7 +66,9 @@
       "F79.width",
       "F80.bargap",
       "F81",
-      "F83"
+      "F83",
+      "F30.outwardbottom",
+      "F30.outwardtop"
     ],
     "big": [
       "F30",
@@ -81,7 +83,9 @@
       "F28.rows",
       "F40",
       "F42.onecolour",
-      "F80.bargap"
+      "F80.bargap",
+      "F30.outwardbottom",
+      "F30.outwardtop"
     ]
   },
   "bar": {

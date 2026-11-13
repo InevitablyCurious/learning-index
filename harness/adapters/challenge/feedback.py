@@ -180,10 +180,11 @@ def load_general_lines(prompts_dir: Path) -> dict[str, dict[str, Any]]:
     """The GENERAL lines: one per part of the board (Jerry, 2026-11-11/12).
 
     `<prompts_dir>/general/parts.json` names each part's member findings (gate
-    or gate.aspect) and its BIG findings; `general/<part>.md` and
-    `<part>-repeat.md` hold the line. A part is told as its general line only
-    while one of its big findings fails — the picture is wrong; otherwise each
-    finding tells its own specific line. Missing directory: no general lines.
+    or gate.aspect) and its BIG findings; `general/<part>.md` holds the line. A
+    part is told as its general line only while one of its big findings fails —
+    the picture is wrong — and only the first round it is: after that each
+    finding tells its own specific line (Jerry, 2026-11-13), so a general line
+    has no repeat form. Missing directory: no general lines.
     """
     root = Path(prompts_dir) / "general"
     spec_path = root / "parts.json"
@@ -196,10 +197,7 @@ def load_general_lines(prompts_dir: Path) -> dict[str, dict[str, Any]]:
             continue
         members = frozenset(entry["members"])
         parts[part] = {
-            "first": (root / f"{part}.md").read_text(encoding="utf-8").rstrip("\n"),
-            "repeat": (root / f"{part}-repeat.md")
-            .read_text(encoding="utf-8")
-            .rstrip("\n"),
+            "line": (root / f"{part}.md").read_text(encoding="utf-8").rstrip("\n"),
             "members": members,
             "big": frozenset(entry["big"]),
             "gates": frozenset(k.split(".", 1)[0] for k in members),
@@ -812,7 +810,7 @@ class FeedbackMixin:
         # `among` is this round's problems: a part whose picture is wrong is
         # told as its general line (`_general_part`).
         if among is not None and (part := cls._general_part(record, among)):
-            return cls._general_lines()[part][pass_kind], "tester"
+            return cls._general_lines()[part]["line"], "tester"
         label = cls._humanize_check(
             raw_check.split("\n", 1)[0],
             pass_kind=pass_kind,
@@ -862,8 +860,7 @@ class FeedbackMixin:
 
         def still_open(label: str) -> bool:
             return any(
-                label in (spec["first"], spec["repeat"])
-                and spec["gates"] & failing_gates
+                label == spec["line"] and spec["gates"] & failing_gates
                 for spec in general.values()
             )
 
@@ -1054,9 +1051,10 @@ class FeedbackMixin:
         # smaller one ([needs:]) still means the picture is wrong — run
         # 1794469703's "pieces on the wrong points" waited on "cut off".
         among = [p for p in (found or records) if isinstance(p, dict)]
-        # Or when the part itself was told as its general line before and its
-        # picture has stayed wrong since (``repeat_parts``, kept by the runner):
-        # the fault inside it may have moved, but it is the same part, still wrong.
+        # A part told as its general line before whose picture has stayed wrong
+        # since (``repeat_parts``, kept by the runner) — or whose general line is
+        # a repeat — is past its first telling: its findings are told by their
+        # own lines below, not the general list again.
         general_repeat = {
             part
             for r in records
@@ -1083,9 +1081,19 @@ class FeedbackMixin:
             # Keyed on the gate id plus the aspect it names (_complaint_id),
             # never on the rendered sentence, which differs between passes.
             pass_kind = "repeat" if line_of(record) in repeat_lines else "first"
-            if part := cls._general_part(record, among):
-                pass_kind = "repeat" if part in general_repeat else "first"
-            label, channel = cls._told_label(record, pass_kind=pass_kind, among=among)
+            # THE PICTURE ONCE, THEN THE SPECIFICS (Jerry, 2026-11-13: "we have
+            # generalizing for broad failures but the specific failure list
+            # should still be there"). A part whose picture is wrong is told as
+            # its general line the first round; while it stays wrong after that,
+            # each failing finding is told by its own line, so the model learns
+            # WHICH expectation it still misses. Run 1794592634 heard the same
+            # five-bullet triangles list three rounds running while its points
+            # went from outward-pointing to plain stripes.
+            part = cls._general_part(record, among)
+            if part and part not in general_repeat:
+                label, channel = cls._told_label(record, pass_kind="first", among=among)
+            else:
+                label, channel = cls._told_label(record, pass_kind=pass_kind)
             if channel == "team" and cls.feedback_channel(raw_check) == "tester":
                 tester_fell_silent = True
             # TOLD_LINE_CAP (1000 since 2026-11-11; 320 before, 200 before
