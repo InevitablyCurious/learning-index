@@ -5,7 +5,7 @@ layer — a harness, a memory system, an orchestration loop — and measure what
 
 > **Status, 12 November 2026: proof of concept.** The bench runs a model with nothing swapped in,
 > and its grader is being made trustworthy round by round. Nothing has yet been measured with a
-> layer swapped in. Details: [where it stands](#where-it-stands).
+> layer swapped in. See the [roadmap](#roadmap).
 
 ## What it is designed to do
 
@@ -48,38 +48,98 @@ it: [notes from the operator](docs/operator-notes.md).
 
 ## Roadmap
 
-1. **The instrument and its baseline.** Sealed agent cells, the deterministic grader, a control
-   plane and a live board; a model building the challenge with nothing swapped in, every line it
-   hears true. *Built; the baseline is being finished.*
-2. **A replaceable harness.** opencode becomes one harness among several; the first replacement is
-   Hermes Agent (Nous Research). Hermes keeps memory of its own, so the first thing to settle is a
-   clean no-memory baseline for it. *Not started.*
-3. **Memory systems.** Series of runs with a memory system learning from the agent's own work:
-   does it help, and where does its index fall. The way in — opencode's plugin mechanism — and the
-   first kit, [Honcho](https://github.com/plastic-labs/honcho), are built. *Not yet run.*
-4. **Orchestration loops.** Swapping the loop around the model. Today the loop is the bench's own,
-   and its settings (such as compaction between build steps) are part of each run's fingerprint;
-   swapping in a different loop is *not built*.
-5. **Memory under change.** The job changed on purpose — a preference, a way of working, a
-   dependency — to see whether memory adapts. *Designed, not built.*
-6. **More challenges.** The challenge format is open, with a template to start from; backgammon is
-   the only challenge so far.
+**The instrument**
+- [x] Sealed agent cells, a deterministic grader, a control plane and a live board
+- [x] A fingerprint and a cost record for every run
+- [x] A development mode that pauses after every grade, so an operator can play the build and check
+  what the model is about to be told
+- [ ] The baseline: every line the model hears true, then the grader frozen — *in progress*
 
-## Where it stands
+**Swapping a layer in**
+- [x] The way in for memory systems — opencode's plugin mechanism — and a first kit,
+  [Honcho](https://github.com/plastic-labs/honcho)
+- [ ] A replaceable harness: opencode as one harness among several; the first replacement is Hermes
+  Agent (Nous Research), with its own memory switched off for a clean baseline
+- [ ] Memory-system series: does memory help, and where does its index fall
+- [ ] Orchestration loops swapped in
+- [ ] Memory under change: the job changed on purpose, to see whether memory adapts — *designed*
 
-As of 12 November 2026:
+**Sharing results**
+- [ ] Fingerprints for the swapped layer itself — the memory system and its memory state, the
+  harness, the loop — with a memory series chained run to run, so anyone can check it ran in order
+  from the memory it claims
+- [ ] A way to submit results to a shared record, with minimum run counts
 
-- **Works today:** one harness (opencode 1.18.20), one challenge, the grader (238 checks — the
-  contract's shape, the engine and API, and a real browser — told in 19 stages, in the order a
-  player meets them), local and cloud models, fingerprints, per-run cost records, and a
-  development mode that pauses after every grade.
-- **The baseline is not finished.** A local model (Qwen3.6-35B-A3B) builds the game in development
-  mode. At every pause an operator plays the build and checks each line the model is about to
-  hear; when a line is false, the grader is fixed and the run resumes from its last checkpoint.
-  Its build now gets as far as stage 14 of 19 (the bar). Development runs are not measurements: a
-  measured baseline runs start to finish, once the grader is frozen.
-- **Nothing has been measured with a layer swapped in** — no memory system, no second harness, no
-  other loop.
+**Challenges**
+- [x] An open challenge format, with a template to start from
+- [x] Backgammon, the reference challenge
+- [ ] More challenges
+
+## How to measure
+
+A measurement is a comparison: the same model on the same challenge, run with nothing swapped in
+(the baseline, OFF on the board) and with one layer swapped in (the test, ON). Every number is read
+against that model's own baseline.
+
+### Recording a baseline
+
+A baseline run is one complete build of the challenge with nothing swapped in. Every valid baseline
+that shares a fingerprint is averaged — turns, tokens (cache included) and wall time — and the
+spread of those runs is the range chance alone produces. More runs make a stronger baseline; there
+is no cap. The bench runs one model's runs one at a time, local or cloud; different models may run
+side by side.
+
+**Local models** — served on your own machine:
+- Keep the serving fixed between runs: the weights, the quantisation, the context length, the
+  sampling settings and the serving software. The fingerprint records the model's name, not these;
+  change one and you need a new baseline, which only you can know.
+- Don't run another model on the same machine while measuring: two models sharing one machine slow
+  each other down.
+- Compare wall time only between runs on the same machine. Turns and tokens can be pooled across
+  machines.
+- A local run has no price; its cost is reported in tokens.
+
+**Cloud models** — a hosted endpoint:
+- Wall time follows the provider's load, so it is noisy; read turns and tokens first.
+- A provider can update a model behind the same name. Run the baseline and the test close together
+  in time, and record the dates with your results.
+- Rate limits can stall a run; a run cut off by the provider is void, not failed.
+- A cloud run records its price beside its tokens; cache pricing differs between providers.
+
+### Recording a delta
+
+A delta is the test, read against the baseline average and its spread. A test inside the
+baseline's spread is not evidence of anything. How the test runs relate to one another depends on
+what is swapped in:
+
+- **Memory systems** — open to experiment. We recommend accrual: a series starts from empty memory
+  and each run reads what the earlier runs wrote, so each run's delta is credited to the memory as
+  it stood when that run began. The index is the point where those deltas turn from gains to
+  losses; report it only when two separate series, each started from empty memory, show the turn
+  in the same place. The first run of a series starts empty, so any gain it shows came from memory
+  written and read back within that run; report it on its own.
+- **Harnesses** — a harness with no memory of its own gives independent runs: average them and
+  compare with the baseline average. If it keeps memory, choose one and say which: carry a snapshot
+  of that memory from run to run, or wipe it so every run starts fresh.
+- **Orchestration loops** — tested with or without a memory system. Without one, the delta is
+  simply loop on against loop off: the average of the test runs against the baseline average. With
+  one, it is read like a memory series.
+
+### What makes a run valid
+
+A run counts towards a measurement only if:
+
+- It ran in normal mode, start to finish. Development-mode runs and runs resumed from a checkpoint
+  build the instrument; they do not measure.
+- It finished and is not void. A run spoiled by the instrument — a provider cut-off, a grading
+  fault — is void and left out, never scored as a failure. A run that ends without every check
+  passing still counts, with how far it got.
+- Its fingerprint matches the runs it is compared with.
+- With a memory system, its delivery to the agent was verified; an unverified run is left out.
+
+Report each run's fingerprint, its cost record and its final grade — all three are in the run's
+folder. More runs make a stronger measurement; the board shows a difference only once each side has
+three scored runs.
 
 ## How a run works
 
@@ -111,56 +171,81 @@ As of 12 November 2026:
 - **No language model judges anything.** The grader runs the game: more than 200 checks, in the
   order a player meets them.
 
-## The challenge: backgammon
+## Designing a challenge
 
-Build a complete, playable backgammon game — a human against the computer — in Node and TypeScript
-with no dependencies, in seven phases: the rules engine; the computer opponent; the server and its
-API; the page in three layers — the board and its controls, then the pieces, then the gameplay;
-and wiring it all together, until the whole game runs clean.
+A challenge is the task every run builds. It lives in its own repository, selected with
+`BENCH_TASK_DIR`, and brings four things:
 
-The grader runs more than 200 checks in three phases: the contract's shape, the engine and API, and
-a real browser playing like a person. They fall into 19 stages, in the order a player meets
-them — the first look at the board, starting a game, playing it out, and finishing it. After each round the agent hears about the earliest stage that fails,
-as complaints a player would make, never as expected values. A reference solution, kept out of the
-agent's reach, proves the challenge can be built.
+- **Build prompts** — the only specification the model sees, in plain prose, written as what a user
+  expects. They name what a check has to find (files, routes, page elements) and leave the how to
+  the model.
+- **Starting files** — frozen by hash, so a run refuses to start if they drift.
+- **A reference solution** — kept out of the model's reach. It passes every check, which proves the
+  challenge can be built.
+- **A grader** — two scripts: `roster.mjs --out` lists every check without running any, and
+  `report.mjs --target --out` grades a built candidate — plus one complaint per check, written the
+  way a user would say it.
 
-Neither side has vision. The agent checks what it draws by driving a real browser and measuring
-it; the grader judges what a player sees the same way.
+Start from [challenges/TEMPLATE](challenges/TEMPLATE/).
 
-## Keeping the grader honest
+**What makes a challenge measure well:**
 
-- **A false line is the benchmark's fault.** Every complaint told to the model must be true of the
-  build it is told about. When one is not, the grader is fixed, the fix is proven against
-  deliberately broken builds and a re-grade of every saved build, and the run is repeated.
-- **Played by a person.** Every round's build is played side by side with the reference game. A
-  player's correction becomes a requirement, a check, and a fresh baseline.
-- **A stuck model is a result.** When every line told was true and the model still could not fix
-  the problem, that is measured, not repaired.
+- Every check is decided by running the built software. Nothing is judged by a language model.
+- Anything random can be fixed from outside — backgammon's dice are set through a debug route — so
+  every check sees the same situation every time.
+- The checks fall into stages in the order a user meets them, and the model hears only the earliest
+  failing stage, as complaints — never the checks themselves.
+- Every complaint is true of every build it can be told about. One that isn't is a bug in the
+  challenge, not the model's failure.
+- It is too big for any model to build in one pass. The rounds of fixing are where a harness, a
+  memory system or a loop shows what it is worth.
 
-The first milestone — three runs in a row in which every line told to the model was true — was
-reached in September 2026.
+### The reference: backgammon
 
-## Plug something in
+A complete, playable backgammon game — a person against the computer — in Node and TypeScript with
+no dependencies, built in seven phases: the rules engine; the computer opponent; the server and its
+API; the page in three layers — the board and its controls, then the pieces, then the gameplay; and
+wiring it all together. More than 200 checks in three groups — the contract's shape, the engine and
+API, and a real browser playing like a person — fall into 19 stages, from the first look at the
+board to the end of a game.
 
-Today the one way in is opencode's own plugin mechanism; the bench adds no interface of its own.
-Point `BENCH_PLUGIN_DIR` at the plugin package and rebuild the worker image, and each cell runs with
-it OFF or ON. The first kit is the memory system [Honcho](https://github.com/plastic-labs/honcho),
-which publishes an opencode plugin; it is in [memory-systems/honcho](memory-systems/honcho/), and
-the guide takes it step by step: [docs/memory-systems.md](docs/memory-systems.md). Replacing the
-harness itself is on the [roadmap](#roadmap).
+What it asks of a model, as a programmer would see it:
 
-## Add a challenge
+| Capability | What backgammon demands |
+|---|---|
+| Modelling a rule-dense domain | A typed game state — 24 points, the bar, borne-off pieces, the doubling cube, whose turn and which phase — and rules that interact: entering from the bar first, using both dice when possible, the bigger number when only one can be used, exact and overshoot bearing off. |
+| Algorithms | Generating every legal move and every whole turn, deduplicated by resulting position; detecting a race, a stuck turn, the end of a game and how it was won. |
+| Search and evaluation | A computer opponent at three strengths that chooses among whole turns by evaluating positions, and a doubling-cube policy that follows published thresholds. |
+| API design | An HTTP server with a fixed JSON contract, explicit state transitions (opening roll, turns, doubles, game over), a debug route to set positions and dice, and state that survives a page reload. |
+| Front end | A page in plain HTML, CSS and JavaScript that draws the board geometrically at any window size, stacks pieces, turns clicks into moves, shows hints, and paces the computer's turn so a person can follow it. |
+| Keeping two sides in step | The page and the server agreeing at every step: undo, a reload mid-turn, the computer's turn driven from the page, Fast Forward with pause. |
+| Checking its own work | Neither the model nor the grader sees the screen: the model has to check what it drew by driving a real browser and measuring it. |
+| Working over a long horizon | Fixing a stream of user complaints without breaking what already works; a fix that breaks something else is reported back as a regression. |
 
-A challenge is its own repository, selected with `BENCH_TASK_DIR`. It brings its build prompts, its
-starting files, a reference solution and a grader. The grader's contract is two scripts —
-`roster.mjs --out` lists every check without running any; `report.mjs --target --out` grades a
-built candidate — plus one complaint per check, written the way a user would say it. The starting
-files are frozen by hash, so a run refuses to start if they drift. Start from
-[challenges/TEMPLATE](challenges/TEMPLATE/).
+### Other challenges worth building
 
-## Run it
+Ideas, each chosen for what it would measure. Each still needs deterministic checks, a reference
+solution and complaints in a user's words.
 
-One-time installs, two image builds, then a control plane and a board:
+| Kind | Example | What it would test |
+|---|---|---|
+| Logic puzzles | A Sudoku or nonogram solver with a playable board | Search and pruning; correctness against a known unique solution |
+| Front-end apps | A spreadsheet with formulas, a kanban board | Rendering, interaction, layout, recalculation |
+| API services | A booking system, a ledger with transfers | Data integrity, validation, error handling, idempotency |
+| Data analysis | Clean a messy dataset and produce a fixed report | Parsing, numerical correctness, reproducibility |
+| Languages | A JSON parser, a regex engine, a small interpreter | Following a formal specification; edge cases |
+| Systems | A key–value store that survives a crash | Persistence, recovery, concurrency |
+| Other games | Chess, a card game | Rules plus an opponent, as in backgammon, in a new domain |
+
+**To contribute one,** open an issue with the idea first: what a user would build, and what each
+stage would check. A full challenge is the prompts, the starting files, a reference solution and a
+grader with its complaints; any one of those is a useful start.
+
+## Getting started
+
+You need Docker, Python 3.11 or newer, Node, and a model: one served locally behind an
+OpenAI-compatible endpoint, or a cloud provider. One-time installs, two image builds, then a
+control plane and a board:
 
 ```bash
 # 1. install the harness (once)
@@ -184,21 +269,27 @@ node control/server.mjs            # http://127.0.0.1:8718
 (cd dashboard && docker compose up -d)   # http://127.0.0.1:8717
 ```
 
-Runs are started from the board: `[+ BASELINE]` for a baseline cell, `[+ run]` on a baseline row
-for one with a layer swapped in. Full operations: [RUNBOOK.md](RUNBOOK.md).
+**Record a baseline.** On the board, `[+ BASELINE]` picks local or cloud, the model and the
+challenge, runs the preflight checklist and starts the run. Repeat it for as many baselines as you
+want ([how to measure](#how-to-measure)).
 
-## The board
+**Swap a layer in.** Today the way in is a plugin for opencode, the harness every run uses: set
+`BENCH_PLUGIN_DIR` to the plugin package, rebuild the worker image, and start a run with `[+ run]`
+on a baseline row. The first kit is the memory system Honcho, in
+[memory-systems/honcho](memory-systems/honcho/); its guide is
+[docs/memory-systems.md](docs/memory-systems.md).
 
-A read-only live view at `http://127.0.0.1:8717`. It holds no data of its own: every panel reads
-from the control plane on `:8718`, the only process that reads run files or changes anything. It
-never overstates: it keeps "not measured", "not connected" and "measured, and zero" apart, computes
-no difference between arms below three scored runs per arm, counts invalid runs as excluded rather
-than as zero, and never treats memory delivered as an outcome.
+**Use your own challenge.** Point `BENCH_TASK_DIR` at its repository
+([designing a challenge](#designing-a-challenge)).
 
-Stopping a run keeps its tree and writes its cost record, and the cell is recorded stopped by hand.
-The preview disappears only because its play container is removed and the cell's own build stops
-with it: play containers are named from the run and the cell, so two never collide, and a finished
-run's are cleaned up.
+**Read the results.** Each run writes a folder under `runs/` holding its fingerprint
+(`fingerprint.json`), its cost record (`cost.json`), the grader's report for every round and its
+live event record (`live.jsonl`).
+
+**Watch it live.** The board at `http://127.0.0.1:8717` is read-only: every panel reads from the
+control plane on `:8718`, the only process that reads run files or changes anything. It keeps "not
+measured", "not connected" and "measured, and zero" apart, counts invalid runs as excluded rather
+than as zero, and shows no difference between the arms below three scored runs per arm.
 
 <details>
 <summary>What each panel shows</summary>
@@ -224,6 +315,9 @@ run's are cleaned up.
 | **Reset and restore** | Move all benchmark data into a backup and start clean, or bring a backup back — each with a preview and a confirmation. |
 
 </details>
+
+
+Full operations: [RUNBOOK.md](RUNBOOK.md).
 
 ## Repository layout
 
