@@ -164,8 +164,8 @@
       "repeat": "They checked more positions, and the computer's win-chance estimate still doesn't rise as it pulls ahead."
     },
     "G35": {
-      "first": "They set up a turn through your app's debug setup — their move, the cube in the middle — and it won't let them double, though the same turn in a real game can.",
-      "repeat": "They set up that turn through your debug setup again, and it still won't let them double the way a real game does."
+      "first": "They set up a turn through your app's debug setup — the player's turn, before the roll, the cube in the middle — and it won't let them double, though the same turn in a real game can.",
+      "repeat": "They set up that turn through your debug setup again — the player's turn, before the roll — and it still won't let them double the way a real game does."
     },
     "G23": {
       "first": "I made a move, hit undo, and the board didn't go back to how it was — a checker stayed where it had moved to or went missing.",
