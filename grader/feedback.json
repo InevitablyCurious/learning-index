@@ -800,8 +800,8 @@
       "repeat": "I counted the spaces on the board again and it's still not right."
     },
     "REQ-RENDER/checker": {
-      "first": "There is an incorrect number of pieces on the board when I start a game.",
-      "repeat": "I counted the pieces again on a new game and there is still an incorrect number of them."
+      "first": "There is an incorrect number of pieces on the board when I start a game, or there are pieces located off the board that I cannot see.",
+      "repeat": "I counted the pieces again on a new game and there is still an incorrect number of them, or there are still pieces located off the board that I cannot see."
     },
     "REQ-RENDER/bar": {
       "first": "There's no bar down the middle of the board.",
