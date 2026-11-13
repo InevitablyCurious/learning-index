@@ -1115,6 +1115,22 @@
       "first": "I won a gammon and it only counted as one point.",
       "repeat": "Won another gammon and it still only counted as one point."
     },
+    "G10.gammon": {
+      "first": "I bore off all my pieces before the computer had borne off any — every one of its pieces still out on the board, none on the bar and none in my home board — and the game didn't announce it as a gammon.",
+      "repeat": "Won another gammon — none of the computer's pieces borne off, none on the bar, none in my home board — and it still wasn't announced as a gammon."
+    },
+    "G10.backgammon": {
+      "first": "I won while one of the computer's pieces was still in my home board or on the bar, with none of its pieces borne off, and the game didn't announce it as a backgammon.",
+      "repeat": "Won again with a computer piece still in my home board or on the bar, and it still wasn't announced as a backgammon."
+    },
+    "G10.single": {
+      "first": "I won after the computer had already borne off a piece, and the game didn't announce it as a single win.",
+      "repeat": "Won again after the computer had borne off a piece, and it still wasn't announced as a single win."
+    },
+    "G10.early": {
+      "first": "The game said I'd won while I still had a piece left to bear off.",
+      "repeat": "It still says I've won while I still have a piece left to bear off."
+    },
     "G20.value": {
       "first": "The player doubles and your computer takes it, but your app's state doesn't make the cube worth two.",
       "repeat": "Your computer takes the player's double and your app's state still doesn't make the cube worth two."

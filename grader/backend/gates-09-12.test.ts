@@ -75,7 +75,7 @@ describe("[G10] REQ-WINCLASS — win / gammon / backgammon classification", () =
     points[13] = -1;
     const board = bd(points, { white: 0, black: 0 }, { white: 15, black: 2 });
 
-    expect(game.checkWin(board, "white")).toEqual({ won: true, type: "single" });
+    expect(game.checkWin(board, "white"), "[aspect: single]").toEqual({ won: true, type: "single" });
   });
 
   it("[G10] REQ-WINCLASS — classifies gammon when loser has no off, no bar, and none in winner home", () => {
@@ -83,7 +83,7 @@ describe("[G10] REQ-WINCLASS — win / gammon / backgammon classification", () =
     points[13] = -3;
     const board = bd(points, { white: 0, black: 0 }, { white: 15, black: 0 });
 
-    expect(game.checkWin(board, "white")).toEqual({ won: true, type: "gammon" });
+    expect(game.checkWin(board, "white"), "[aspect: gammon]").toEqual({ won: true, type: "gammon" });
   });
 
   it("[G10] REQ-WINCLASS — classifies backgammon when loser checker is in winner home board", () => {
@@ -91,7 +91,7 @@ describe("[G10] REQ-WINCLASS — win / gammon / backgammon classification", () =
     points[3] = -1;
     const board = bd(points, { white: 0, black: 0 }, { white: 15, black: 0 });
 
-    expect(game.checkWin(board, "white")).toEqual({ won: true, type: "backgammon" });
+    expect(game.checkWin(board, "white"), "[aspect: backgammon]").toEqual({ won: true, type: "backgammon" });
   });
 
   it("[G10] REQ-WINCLASS — classifies backgammon when loser still has a checker on the bar", () => {
@@ -99,7 +99,7 @@ describe("[G10] REQ-WINCLASS — win / gammon / backgammon classification", () =
     points[13] = -1;
     const board = bd(points, { white: 0, black: 1 }, { white: 15, black: 0 });
 
-    expect(game.checkWin(board, "white")).toEqual({ won: true, type: "backgammon" });
+    expect(game.checkWin(board, "white"), "[aspect: backgammon]").toEqual({ won: true, type: "backgammon" });
   });
 
   it("[G10] REQ-WINCLASS — reports not-won when off count is below 15", () => {
@@ -107,7 +107,7 @@ describe("[G10] REQ-WINCLASS — win / gammon / backgammon classification", () =
     points[1] = 1;
     const board = bd(points, { white: 0, black: 0 }, { white: 14, black: 0 });
 
-    expect(game.checkWin(board, "white").won).toBe(false);
+    expect(game.checkWin(board, "white").won, "[aspect: early]").toBe(false);
   });
 });
 
