@@ -93,6 +93,22 @@ def test_pass_then_fail_is_regression() -> None:
     assert _regressed_checks(reports, [_problem(HINT)]) == {HINT}
 
 
+def test_a_pass_on_broken_groundwork_is_not_a_regression() -> None:
+    # Run 1794591826 round 2: F83 (facing colours) "passed" the round before,
+    # but on a board whose points were flat wedges — F30, which F83 needs, was
+    # failing. That pass was the broken part's, so F83 failing now is not
+    # "working last time".
+    f30 = "[F30] REQ-GEOMETRY — triangles point inward"
+    f83 = {
+        "check": "[F83] REQ-GEOMETRY — facing points differ in colour",
+        "observed": "Error: [needs: F28 F30 F42] points straight across in the same colour",
+    }
+    broken_before = [{"state_hash": "h0", "failed_gates": [f30]}, {"state_hash": "h1"}]
+    assert _regressed_checks(broken_before, [f83]) == set()
+    sound_before = [{"state_hash": "h0", "failed_gates": []}, {"state_hash": "h1"}]
+    assert _regressed_checks(sound_before, [f83]) == {f83["check"]}
+
+
 def test_fail_then_pass_then_fail_is_regression() -> None:
     # Only the IMMEDIATELY-previous graded round matters: HINT failed two
     # rounds ago, passed last round, and fails again now — that is a

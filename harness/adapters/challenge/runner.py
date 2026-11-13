@@ -91,6 +91,7 @@ from .stages import (
     check_id,
     load_layers,
     load_stages,
+    needs_of,
     player_order,
     player_view,
     told_complaints_fixed,
@@ -270,6 +271,14 @@ def _regressed_checks(
         eligible = [
             p for p in checks if layer_of(str(p.get("check", ""))) <= prev_layer
         ]
+    # A pass on a board whose groundwork was broken did not "work": a check
+    # whose [needs:] failed last round passed on the broken part, not on its
+    # own (run 1794591826 round 2 told the facing colours as "working last
+    # time" after a round whose points were flat wedges, F30 failing).
+    prev_failed_ids = {i for g in prev_failed if (i := check_id(g))}
+    eligible = [
+        p for p in eligible if not any(n in prev_failed_ids for n in needs_of(p))
+    ]
     regressed = {
         str(p.get("check", "")).strip()
         for p in eligible
