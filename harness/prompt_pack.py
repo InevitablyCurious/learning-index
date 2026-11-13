@@ -43,11 +43,17 @@ _PHASE_DECLARATION = "phase-plan.json"
 #: The approved build-step header (owner wording, verbatim). `{K}` appears twice
 #: and `{name}` once; both are filled per phase. The "7" matches the declaration
 #: and is asserted at load — change both together.
+#:
+#: THE SPEC SO FAR, NEVER AHEAD (Jerry, 2026-11-13). Phase K's message carries
+#: phases 1..K only. It used to carry all seven "for reference", and the last
+#: words the model read were phase 7's "Play it for real … Fix every defect you
+#: find": fresh runs 1794311852 and 1794585511 both wrote the AI, the server,
+#: the page and its styling during phase 1, so the phases measured nothing.
 _BUILD_HEADER = (
-    "This build has 7 phases. You are in phase {K}: {name}. The whole build "
-    "spec follows for reference. Build only what phase {K} asks for — don't "
-    "build anything from an earlier or later phase now. Earlier phases are "
-    "done and must keep working."
+    "This build has 7 phases. You are in phase {K}: {name}. The build spec so "
+    "far follows, ending with this phase. Build only what phase {K} asks for — "
+    "don't build anything from an earlier or later phase now. Earlier phases "
+    "are done and must keep working."
 )
 
 
@@ -230,17 +236,24 @@ class PromptPack:
             raise MissingPromptError(f"no phase {k}; the build has {len(plan)} phases.")
         return plan[k - 1]
 
-    def whole_spec(self) -> str:
-        """All phases' chunk texts in order, each under a label naming its phase."""
+    def spec_through(self, k: int) -> str:
+        """Phases 1..K's chunk texts in order, each under a label naming its phase."""
+        self.phase(k)  # raises on an out-of-range K
         return "\n\n".join(
-            f"## Phase {p.index}: {p.name}\n\n{p.text}" for p in self.phases()
+            f"## Phase {p.index}: {p.name}\n\n{p.text}"
+            for p in self.phases()
+            if p.index <= k
         )
 
+    def whole_spec(self) -> str:
+        """Every phase's chunk text: the spec as the last phase sees it."""
+        return self.spec_through(len(self.phases()))
+
     def build_step_message(self, k: int) -> str:
-        """The composed build-step message for phase K: header + the whole spec."""
+        """The composed build-step message for phase K: header + the spec so far."""
         p = self.phase(k)
         header = _BUILD_HEADER.format(K=p.index, name=p.name)
-        return f"{header}\n\n{self.whole_spec()}"
+        return f"{header}\n\n{self.spec_through(k)}"
 
 
 def default_task_dir() -> Path:

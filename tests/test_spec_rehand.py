@@ -1,9 +1,9 @@
 """DECISION 3: AFTER A COMPACTION, THE SPEC GOES BACK IN.
 
 THE RULE (harness/adapters/challenge/runner.py, ``_run_cell_impl``). A build
-step sends the phase header plus the WHOLE spec (``pack.build_step_message``),
-because a 7-phase build delivered one chunk at a time is only honest if the
-model always holds the plan it is building inside of. The window between the
+step sends the phase header plus the spec so far — phases 1..K, never a later
+one (``pack.build_step_message``) — because a phase is only honest if the model
+holds everything it has been asked to build up to it. The window between the
 build and the grades is long enough for the model's own context to compact, and
 a compaction rewrites the transcript the spec was handed in — so the spec can
 silently stop being in context while the model keeps being graded against it.
@@ -25,8 +25,8 @@ and the model needs both at once.
 
 WHAT THESE TESTS STATE, one rule each:
 
-  (a) every build message carries the phase header and all 7 phase labels, so
-      the build-side hand-over is the whole plan by construction;
+  (a) every build message carries the phase header and the labels of phases
+      1..K and no later one, so the build-side hand-over is the plan so far;
   (b) one observed compaction during troubleshooting re-hands the spec on
       exactly the next feedback message, and the message after does not repeat;
   (c) the re-handed message still carries the layer-1 told problem — the spec
@@ -75,7 +75,7 @@ def _phase_names(pack: PromptPack) -> dict[int, str]:
 
 
 def _all_phase_labels(pack: PromptPack) -> list[str]:
-    """Every ``## Phase K: name`` label the whole-spec body carries."""
+    """Every ``## Phase K: name`` label, in order (index K-1 is phase K's)."""
     return [f"## Phase {p.index}: {p.name}" for p in pack.phases()]
 
 
@@ -147,16 +147,16 @@ def _drive_layer_one(
     return result, feedback
 
 
-def test_every_build_message_carries_the_header_and_the_whole_spec(
+def test_every_build_message_carries_the_header_and_the_spec_so_far(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """(a) Build step K = header(K) + all 7 phase labels — the spec, by construction.
+    """(a) Build step K = header(K) + the labels of phases 1..K, never a later one.
 
     This is what makes the re-hand a one-line rule rather than a second
     composer: the build and the re-hand both go through
-    ``pack.build_step_message``, so if the build's message carries the whole
-    plan then so does every re-hand.
+    ``pack.build_step_message``, so whatever the build's message carries, every
+    re-hand carries too.
     """
     pack = _pack()
     names = _phase_names(pack)
@@ -196,8 +196,11 @@ def test_every_build_message_carries_the_header_and_the_whole_spec(
         assert message == pack.build_step_message(k)
         header = pack.build_step_message(k).split("\n\n", 1)[0]
         assert f"phase {k}: {names[k]}" in header
-        for label in labels:
-            assert label in message, f"build step {k} must carry {label}"
+        for index, label in enumerate(labels, start=1):
+            if index <= k:
+                assert label in message, f"build step {k} must carry {label}"
+            else:
+                assert label not in message, f"build step {k} shows {label}"
 
 
 def test_one_compaction_rehands_the_spec_on_the_very_next_message_only(
@@ -231,11 +234,13 @@ def test_one_compaction_rehands_the_spec_on_the_very_next_message_only(
     first, second, third = (prompt for _, prompt in feedback)
     # EDGE-TRIGGER, NOT A STEADY STATE: round one has nothing armed yet.
     assert not first.startswith(spec)
-    # THE RE-HAND: the very next message, and the WHOLE plan with it.
+    # THE RE-HAND: the very next message, and the plan so far with it.
     assert second.startswith(spec)
     assert second.count(spec) == 1, "one re-hand per message, never a duplicate"
-    for label in labels:
+    for label in labels[:L1_PHASE]:
         assert label in second
+    for label in labels[L1_PHASE:]:
+        assert label not in second, f"the re-hand shows a later phase: {label}"
     # CONSUMED: the message after it is a plain complaint again.
     assert not third.startswith(spec)
 
@@ -346,8 +351,10 @@ def test_the_builds_own_compaction_rehands_the_spec_on_the_first_feedback(
     header = spec.split("\n\n", 1)[0]
     assert f"phase {L1_PHASE}" in header
     assert "Layer 1" in header
-    for label in labels:
+    for label in labels[:L1_PHASE]:
         assert label in first, f"the re-hand must carry {label}"
+    for label in labels[L1_PHASE:]:
+        assert label not in first, f"the re-hand shows a later phase: {label}"
     # THE COMPLAINT IS STILL THERE, after the spec it is about.
     assert told in first, "the told problem survives the re-hand"
     assert first.index(told) > first.index(spec)

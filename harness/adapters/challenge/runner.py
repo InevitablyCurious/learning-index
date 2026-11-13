@@ -458,7 +458,7 @@ class ChallengeRunner(
         # tree, every phase before `resume_phase` is taken as built, and
         # `resume_phase` itself starts at its GRADE (its build is the code in
         # the tree). The model gets a fresh session, so the first message it
-        # receives re-hands the phase header and the whole spec.
+        # receives re-hands the phase header and the spec so far.
         #
         # A RESUMED CELL IS NOT A MEASUREMENT: it skips the work before the
         # check-point, so it is only allowed with the operator pause (dev mode)
@@ -1604,7 +1604,7 @@ class ChallengeRunner(
                     # Independent of the >= 2 abort: one compaction is healthy
                     # and still worth re-handing.
                     # A resumed phase opens a FRESH session: its first message
-                    # must carry the phase header and the whole spec as well.
+                    # must carry the phase header and the spec so far as well.
                     spec_rehand_pending = self.compact or (
                         self.resume_phase is not None
                         and phase.index == self.resume_phase

@@ -19,10 +19,10 @@ REPO = Path(__file__).resolve().parents[1]
 PACK = default_pack()
 
 HEADER = (
-    "This build has 7 phases. You are in phase {K}: {name}. The whole build "
-    "spec follows for reference. Build only what phase {K} asks for — don't "
-    "build anything from an earlier or later phase now. Earlier phases are "
-    "done and must keep working."
+    "This build has 7 phases. You are in phase {K}: {name}. The build spec so "
+    "far follows, ending with this phase. Build only what phase {K} asks for — "
+    "don't build anything from an earlier or later phase now. Earlier phases "
+    "are done and must keep working."
 )
 
 EXPECTED = [
@@ -57,7 +57,9 @@ def test_phase_plan_is_the_seven_declared_phases_in_order() -> None:
     assert [(p.index, p.name, p.layer, p.file) for p in plan] == EXPECTED
 
 
-def test_every_build_step_message_has_the_header_and_the_whole_spec() -> None:
+def test_every_build_step_message_has_the_header_and_the_spec_so_far() -> None:
+    # Never a later phase: with all seven in every message, fresh runs built the
+    # whole product during phase 1 (Jerry, 2026-11-13).
     for k in range(1, 8):
         phase = PACK.phase(k)
         message = PACK.build_step_message(k)
@@ -65,6 +67,12 @@ def test_every_build_step_message_has_the_header_and_the_whole_spec() -> None:
         positions = []
         for p in PACK.phases():
             label = f"## Phase {p.index}: {p.name}"
+            if p.index > k:
+                assert label not in message, f"phase {k} shows later phase {p.index}"
+                assert p.text not in message, (
+                    f"phase {k} carries phase {p.index}'s text"
+                )
+                continue
             assert label in message, f"phase {k} is missing the label for {p.index}"
             assert p.text in message, f"phase {k} is missing the text for {p.index}"
             positions.append(message.index(label))
