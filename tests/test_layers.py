@@ -197,3 +197,34 @@ def test_needs_edges_never_point_earlier_layer_to_later() -> None:
     assert violations == set(), (
         f"needs markers point an earlier layer at a later one: {sorted(violations)}"
     )
+
+
+def test_a_later_pass_still_tells_an_earlier_layers_regression() -> None:
+    # Jerry, 2026-11-13: run 1794602352's pieces round (layer 2) moved the
+    # bottom row of triangles to the middle of the board, and the model was
+    # never told — the layer scope dropped every layer-1 check. An earlier
+    # phase is done and must keep working, so its fault is told in stage order;
+    # only a LATER layer's checks stay out of the message.
+    from harness.adapters.challenge.stages import player_view
+
+    triangles = {
+        "check": "[F30] REQ-GEOMETRY — triangles point inward",
+        "observed": "Error: [aspect: float] triangles whose wide end doesn't sit at the edge",
+    }
+    stacks = {
+        "check": "[F43] REQ-GEOMETRY — every piece shows",
+        "observed": "Error: [aspect: clipped] pieces cut off on points: 13",
+    }
+    later = {"check": "[G05] REQ-ROLL — roll", "observed": "Error: x"}
+    assert LAYERS.layer_of(triangles["check"], STAGES) == 1
+    assert LAYERS.layer_of(later["check"], STAGES) == 3
+    view = player_view(
+        [triangles, stacks, later],
+        STAGES,
+        is_infra=lambda c: False,
+        layer=2,
+        layer_map=LAYERS,
+    )
+    assert [p["check"] for p in view.visible] == [triangles["check"]]
+    assert stacks["check"] in view.withheld
+    assert later["check"] not in view.withheld + [p["check"] for p in view.visible]

@@ -280,8 +280,14 @@ def player_view(
     check reports, are told to no one.
 
     ``layer`` scopes the told problems to one grader pass: a problem whose CHECK
-    belongs to another layer is dropped before staging, so a pass over layer 1
-    never widens its repair message to a later pass's gates. The layer is the
+    belongs to a LATER layer is dropped before staging, so a pass over layer 1
+    never widens its repair message to a later pass's gates. An earlier layer's
+    check stays: its phase is done and must keep working, and the pass grades it
+    (report.mjs grades layers 1..N), so a fault the model's new work brought
+    back there is told in stage order like any other (Jerry, 2026-11-13: run
+    1794602352's pieces round moved the bottom row of triangles to the middle
+    of the board and the model was never told — every layer-1 check was
+    dropped). The layer is the
     check's own (``layer_map.layer_of``), never its stage's: layer 2 has no
     stage of its own — stages 7-19 default to layer 3 — so reading ``Stage.layer``
     here would drop every layer-2 problem. Without a scope the result is
@@ -304,7 +310,7 @@ def player_view(
         if (
             layer is not None
             and layer_map is not None
-            and layer_map.layer_of(check, stages) != layer
+            and layer_map.layer_of(check, stages) > layer
         ):
             continue
         if is_unevaluated(problem) or any(n in failed for n in needs_of(problem)):
