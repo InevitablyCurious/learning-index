@@ -29,7 +29,9 @@
       "F71.crowdedtop",
       "F71.spreadbottom",
       "F71.spreadtop",
-      "F71.uneven"
+      "F71.uneven",
+      "F71.spreadboth",
+      "F71.crowdedboth"
     ],
     "big": [
       "F02",

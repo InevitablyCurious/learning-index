@@ -1727,6 +1727,10 @@
       "first": "On the bottom row, the checkers in a stack are squeezed together at the edge of the board, overlapping each other — I expect each checker in a stack touching the next, edge to edge.",
       "repeat": "On the bottom row, the checkers in a stack are still squeezed together at the edge of the board, overlapping each other — I expect each checker in a stack touching the next, edge to edge."
     },
+    "F71.crowdedboth": {
+      "first": "On both rows, the checkers in a stack are squeezed together at the edge of the board, overlapping each other — I expect each checker in a stack touching the next, edge to edge.",
+      "repeat": "On both rows, the checkers in a stack are still squeezed together at the edge of the board, overlapping each other — I expect each checker in a stack touching the next, edge to edge."
+    },
     "F71.spreadtop": {
       "first": "On the top row, the checkers in a stack are spread apart down the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge.",
       "repeat": "On the top row, the checkers in a stack are still spread apart down the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge."
@@ -1734,6 +1738,10 @@
     "F71.spreadbottom": {
       "first": "On the bottom row, the checkers in a stack are spread apart up the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge.",
       "repeat": "On the bottom row, the checkers in a stack are still spread apart up the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge."
+    },
+    "F71.spreadboth": {
+      "first": "On both rows, the checkers in a stack are spread apart along the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge.",
+      "repeat": "On both rows, the checkers in a stack are still spread apart along the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge."
     },
     "F71.cascade": {
       "first": "The pieces of a stack cascade off to the side — I expect each stack to stand as a single straight column.",

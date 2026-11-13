@@ -382,6 +382,31 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
     { loc: 12, held: 5 },
     { loc: 19, held: 5 },
   ];
+  // Which rows hold a stack too spread or too squeezed, read before any is told:
+  // the check stops at its first bad stack, so naming only that stack's row
+  // told run 1794597495 "on the top row" while both rows were spread alike.
+  const rowsWhere = (bad: (extent: number) => boolean): Set<string> =>
+    new Set(
+      shortStacks.flatMap(({ loc }) => {
+        const ys = centresAt(loc);
+        if (ys.length < 2) return [];
+        const p = pitchesOf(ys);
+        const step = p.reduce((sum, x) => sum + x, 0) / p.length;
+        const ext = width > 0 ? step / width : step > 0 ? Infinity : 0;
+        return bad(ext) ? [rowOf(ys)] : [];
+      }),
+    );
+  const crowdedRows = rowsWhere((e) => e <= 0.85);
+  const spreadRows = rowsWhere((e) => e >= 1.4);
+  // Written out whole: the aspect markers are read from this source to pin
+  // that every one has its lines (tests/test_player_stages.py).
+  const rowAspect = (kind: "crowded" | "spread", rows: Set<string>, row: string): string => {
+    const both = rows.size === 2;
+    if (kind === "crowded") {
+      return both ? "[aspect: crowdedboth]" : row === "top" ? "[aspect: crowdedtop]" : "[aspect: crowdedbottom]";
+    }
+    return both ? "[aspect: spreadboth]" : row === "top" ? "[aspect: spreadtop]" : "[aspect: spreadbottom]";
+  };
   const evenPitches: number[] = [];
   for (const { loc, held } of shortStacks) {
     const ys = centresAt(loc);
@@ -415,11 +440,11 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
     const row = rowOf(ys);
     expect(
       extent,
-      `${row === "top" ? "[aspect: crowdedtop]" : "[aspect: crowdedbottom]"} [needs: F02] point ${loc} (${row} row) holds ${held} checkers, drawn at steps of ${extent.toFixed(2)} checker-widths — squeezed together at the edge, where a player needs each piece one checker-width against the last`,
+      `${rowAspect("crowded", crowdedRows, row)} [needs: F02] point ${loc} (${row} row) holds ${held} checkers, drawn at steps of ${extent.toFixed(2)} checker-widths — squeezed together at the edge, where a player needs each piece one checker-width against the last`,
     ).toBeGreaterThan(0.85);
     expect(
       extent,
-      `${row === "top" ? "[aspect: spreadtop]" : "[aspect: spreadbottom]"} [needs: F02] point ${loc} (${row} row) holds ${held} checkers, drawn at steps of ${extent.toFixed(2)} checker-widths — spread apart along the point, where a player needs each piece one checker-width against the last`,
+      `${rowAspect("spread", spreadRows, row)} [needs: F02] point ${loc} (${row} row) holds ${held} checkers, drawn at steps of ${extent.toFixed(2)} checker-widths — spread apart along the point, where a player needs each piece one checker-width against the last`,
     ).toBeLessThan(1.4);
     evenPitches.push(avg);
   }
