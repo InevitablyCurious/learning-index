@@ -1,1 +1,1 @@
-Tried doubling mid-turn again and it still lets me.
+Mid-turn, after the roll, your app still accepts the player's double and changes the cube.

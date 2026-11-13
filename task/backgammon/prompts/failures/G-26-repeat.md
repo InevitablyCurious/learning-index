@@ -1,1 +1,1 @@
-Started another game and the cube still isn't showing one, or it still sits in a corner.
+A new game from your app still doesn't start with the cube at one, in the middle.

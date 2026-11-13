@@ -2510,6 +2510,13 @@ test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", a
   if (took) {
     const answer = page.locator('[data-testid="modalBtns"] button:visible');
     if ((await answer.count()) > 0) await playerClick(answer.first());
+    // Roll comes back, or the game froze (run 1794568362: after the take it
+    // left the player in the move phase with nothing to play, and the click
+    // waited out the test — told as the answer's wording).
+    await expect(
+      page.getByTestId("rollBtn"),
+      "[aspect: frozen] after the computer took the double, Roll never came back",
+    ).toBeEnabled({ timeout: 10_000 });
     await postJson<ApiState>(page, "/api/debug/roll", { dice: [3, 1] });
     await rollAndCheck(page, [3, 1], () => page.getByTestId("rollBtn").click());
   }
@@ -3214,11 +3221,19 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
     await button.click();
     await pageKeepsAnswering(page, "[needs: F66] the page stopped answering after Fast Forward was clicked");
 
+    // An offer is the computer's, made in the game: words on screen alone are not
+    // one (run 1794568362's page said "double" on its own button and messages
+    // while its computer never offered, and F67 went on to judge a stop that had
+    // nothing to stop for). It waits on the computer offering at all (G24).
     await expect
-      .poll(async () => /double|offer/i.test(await shownDoubleText(page)), {
-        message: "[aspect: offer] [needs: F49 G12] nothing on screen said the computer was doubling",
-        timeout: 15_000,
-      })
+      .poll(
+        async () =>
+          /double|offer/i.test(await shownDoubleText(page)) && (await readState(page)).phase === "doubleOffered",
+        {
+          message: "[aspect: offer] [needs: F49 G12 G24] nothing on screen said the computer was doubling",
+          timeout: 15_000,
+        },
+      )
       .toBe(true);
     // Stopped: while the offer waits, nothing plays on — a button the player can
     // see does not read Pause. A hidden button's leftover text is not on screen

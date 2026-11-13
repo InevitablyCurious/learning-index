@@ -156,8 +156,8 @@
       "repeat": "The player doubles, your computer takes it, and your app's state still doesn't make the cube worth two and owned by the computer."
     },
     "G21": {
-      "first": "The game lets me double in the middle of a turn.",
-      "repeat": "Tried doubling mid-turn again and it still lets me."
+      "first": "After the player has rolled, in the middle of their turn, your app still accepts their double and changes the cube.",
+      "repeat": "Mid-turn, after the roll, your app still accepts the player's double and changes the cube."
     },
     "G22": {
       "first": "Their tools read your computer's win-chance estimate, and it doesn't go up as the computer gets further ahead.",
@@ -1148,8 +1148,8 @@
       "repeat": "They roll two different numbers through your API again and the number of moves it gives them is still wrong."
     },
     "G26": {
-      "first": "On a new game the cube isn't showing one, or it already sits in a corner, not the middle.",
-      "repeat": "Started another game and the cube still isn't showing one, or it still sits in a corner."
+      "first": "A new game from your app doesn't start with the cube at one, in the middle.",
+      "repeat": "A new game from your app still doesn't start with the cube at one, in the middle."
     },
     "F34": {
       "first": "On a new game the cube on the board reads a number other than one, or it already looks owned by one side.",
@@ -1650,6 +1650,10 @@
     "F50.shown": {
       "first": "When I double, nothing on screen tells me whether the computer took it.",
       "repeat": "I doubled again and still nothing on screen told me whether the computer took it."
+    },
+    "F50.frozen": {
+      "first": "After the computer took my double, the game froze — I couldn't roll.",
+      "repeat": "The computer took my double and the game froze again — still no way to roll."
     },
     "F51.points": {
       "first": "The pop-up at the end doesn't show the game's points — no number with the word \"points\".",
