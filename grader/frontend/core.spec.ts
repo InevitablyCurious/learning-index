@@ -1961,6 +1961,63 @@ test("[F93] REQ-PACING — the dice land and stay still after a roll", async ({ 
   ).toBe(true);
 });
 
+// [F94] REQ-TURN — when the computer can't move, the turn comes back to roll.
+// Jerry, 2026-11-13, playing run 1794560336's build: "when i had hit the AI and
+// it went to the bar, it rolled dice that it couldn't move. the turn should have
+// returned to me, but it didn't. and now the game is left in a frozen unplayable
+// state." Its server handed the turn back with the computer's dice left for the
+// player to play and no roll to make; G32 (the team's check of the same spot)
+// saw only that the turn was white's and the message right. Judged as the player
+// meets it: their turn played out, End Turn pressed, the computer on the bar with
+// every way in held and a 6-5 it cannot use — then Roll must come back, and
+// pressing it must give the player a fresh roll of their own.
+test("[F94] REQ-TURN — when the computer can't move, the turn comes back to roll", async ({ page }) => {
+  test.setTimeout(60_000);
+  await openApp(page);
+  const points = emptyPoints();
+  for (let p = 1; p <= 6; p++) points[p] = 2; // white holds every way in
+  points[13] = 3;
+  points[12] = -5;
+  points[17] = -3;
+  points[19] = -6; // 14 black on the board, the 15th on the bar
+  await setupState(page, {
+    points,
+    bar: { white: 0, black: 1 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "move",
+    dice: [3, 1],
+    remainingDice: [],
+    turnOver: true,
+    cube: { value: 1, owner: null },
+    difficulty: "easy",
+    winner: null,
+    message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await waitForBoardSettled(page).catch(() => undefined);
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
+  const endTurn = page.getByTestId("endTurnBtn");
+  await expect(endTurn, "[needs: F47] End Turn was not available with nothing left to play").toBeEnabled();
+  await endTurn.click();
+
+  // The computer rolls, cannot come in, says so, and hands the turn back.
+  const roll = page.getByTestId("rollBtn");
+  await expect(roll, "after the computer's stuck turn Roll never came back to the player").toBeEnabled({ timeout: 10_000 });
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 1] });
+  await roll.click();
+  await expect
+    .poll(
+      async () => {
+        const s = await readState(page);
+        return s.turn === "white" && JSON.stringify([...s.remainingDice].sort()) === "[1,2]";
+      },
+      { message: "pressing Roll after the computer's stuck turn gave the player no roll of their own", timeout: 5_000 },
+    )
+    .toBe(true);
+});
+
 // [F92] REQ-TURN — one roll per turn. Jerry, 2026-11-12, playing run
 // 1794488314's build: after he played his whole roll, End Turn showed "like it
 // should but also the 'roll' button … when i click it, it allows me to roll
@@ -2937,6 +2994,22 @@ test("[F64] REQ-FASTFORWARD-SHOW — the Fast Forward button appears only in a r
   const button = page.getByTestId("fastForwardBtn");
   await expect(button, "[aspect: shown] no Fast Forward button showed in a race").toBeVisible();
   await expect(button, "[aspect: shown] the button showed in a race did not read Fast Forward").toHaveText(FAST_FORWARD);
+
+  // For the whole turn, not only its start (Jerry, 2026-11-13): once the player
+  // has rolled, and once their moves are played. Run 1794560336's build showed
+  // the button before the roll only, and F67 — which starts from a turn whose
+  // moves are done — could not find it.
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 1] });
+  await rollAndCheck(page, [2, 1], () => page.getByTestId("rollBtn").click());
+  await expect(button, "[aspect: shown] no Fast Forward button showed in a race once the player had rolled").toBeVisible();
+  await setupState(page, {
+    points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 },
+    turn: "white", phase: "move", dice: [2, 1], remainingDice: [], turnOver: true,
+    cube: { value: 1, owner: null }, difficulty: "easy", winner: null, message: "",
+  });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await expect(button, "[aspect: shown] no Fast Forward button showed in a race once the player's moves were played").toBeVisible();
 });
 
 test("[F65] REQ-FASTFORWARD-PLAYOUT — Fast Forward plays the race out to a win", async ({ page }) => {
@@ -3049,62 +3122,79 @@ test("[F66] REQ-FASTFORWARD-PAUSE — Pause stops Fast Forward and it carries on
 });
 
 test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward until you answer", async ({ page }) => {
-  test.setTimeout(120_000);
-  // F49's position: a race black leads by 31 pips without dominating, so a
-  // hard computer that doubles by the prompt's thresholds offers here (G12).
-  // The player's moves are done: Fast Forward ends the turn and the
-  // computer's turn opens with its offer. The offer is read wherever the page
-  // shows it and answered with the page's own button (F49's and F56's reading).
-  await openApp(page);
-  const { points, off } = await offerRace(page);
-  await setupState(page, {
-    points, bar: { white: 0, black: 0 }, off,
-    turn: "white", phase: "move", dice: [6, 5], remainingDice: [], turnOver: true,
-    cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "",
-  });
-  await page.reload();
-  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  const button = page.getByTestId("fastForwardBtn");
-  await expect(button, "[needs: F64]").toBeVisible();
-  await button.click();
-  await pageKeepsAnswering(page, "[needs: F66] the page stopped answering after Fast Forward was clicked");
+  test.setTimeout(240_000);
+  // Jerry, 2026-11-13: "i click fast forward -> AI wants to double -> double
+  // message appears -> game pauses -> i accept -> game remains paused (its my
+  // turn anyways) -> i click fast forward again (no matter if i've clicked roll
+  // or not the game starts back into the fast forward state". Played through
+  // twice: carrying on before the player rolls, then after.
+  for (const rolledFirst of [false, true]) {
+    await openApp(page);
+    const { points, off } = await offerRace(page);
+    await setupState(page, {
+      points, bar: { white: 0, black: 0 }, off,
+      turn: "white", phase: "move", dice: [6, 5], remainingDice: [], turnOver: true,
+      cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "",
+    });
+    await page.reload();
+    await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+    const button = page.getByTestId("fastForwardBtn");
+    await expect(button, "[needs: F64]").toBeVisible();
+    await button.click();
+    await pageKeepsAnswering(page, "[needs: F66] the page stopped answering after Fast Forward was clicked");
 
-  await expect
-    .poll(async () => /double|offer/i.test(await shownDoubleText(page)), {
-      message: "[aspect: offer] [needs: F49 G12] nothing on screen said the computer was doubling",
-      timeout: 15_000,
-    })
-    .toBe(true);
-  // Stopped: while the offer waits, nothing plays on — a button the player can
-  // see does not read Pause. A hidden button's leftover text is not on screen
-  // (run 1793627441 hid it with "Pause" inside, and the player was told the
-  // button "still read Pause").
-  await page.waitForTimeout(1_500);
-  if (await button.isVisible()) {
-    await expect(button, "[aspect: stopped] the button still read Pause while the computer's double waited").not.toHaveText(PAUSE);
+    await expect
+      .poll(async () => /double|offer/i.test(await shownDoubleText(page)), {
+        message: "[aspect: offer] [needs: F49 G12] nothing on screen said the computer was doubling",
+        timeout: 15_000,
+      })
+      .toBe(true);
+    // Stopped: while the offer waits, nothing plays on — a button the player can
+    // see does not read Pause. A hidden button's leftover text is not on screen
+    // (run 1793627441 hid it with "Pause" inside, and the player was told the
+    // button "still read Pause").
+    await page.waitForTimeout(1_500);
+    if (await button.isVisible()) {
+      await expect(button, "[aspect: stopped] the button still read Pause while the computer's double waited").not.toHaveText(PAUSE);
+    }
+
+    // The player takes the double; the computer finishes its turn.
+    const take = answerButton(page, TAKE);
+    await expect(take, "[aspect: answer] [needs: F49 F56] no button to take the computer's double showed").toBeVisible();
+    await playerClick(take);
+    await expect
+      .poll(async () => (await readState(page)).turn, {
+        message: "[aspect: frozen] [needs: G20] after the double was taken the turn never came back to the player",
+        timeout: 20_000,
+      })
+      .toBe("white");
+
+    // Stays stopped: nothing plays by itself, and the button is back, reading Fast Forward.
+    await page.waitForTimeout(2_000);
+    const held = positionOf(await readState(page));
+    await page.waitForTimeout(3_000);
+    expect(positionOf(await readState(page)), "[aspect: stays] pieces moved by themselves after the double was taken").toBe(held);
+    await expect(button, "[aspect: back] after the double was taken no Fast Forward button showed").toBeVisible();
+    // Nothing plays and the button is there, so only its word is wrong: told as
+    // that, not "didn't come back" — run 1793743564 heard that line as "start
+    // playing again" and Fast Forward played the player's moves next round.
+    await expect(button, "[aspect: label] [needs: F64] after the double was taken nothing played, but the button still read Pause").toHaveText(FAST_FORWARD);
+
+    // Carries on when asked, from wherever the turn stands.
+    if (rolledFirst) {
+      await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 1] });
+      await rollAndCheck(page, [2, 1], () => page.getByTestId("rollBtn").click());
+    }
+    const paused = positionOf(await readState(page));
+    await expect(button, `after the double was taken${rolledFirst ? " and the player rolled" : ""} no Fast Forward button was there to carry on`).toBeVisible();
+    await button.click();
+    await expect
+      .poll(async () => positionOf(await readState(page)), {
+        message: `Fast Forward clicked again after the double${rolledFirst ? " and the roll" : ""} did not start the automatic play`,
+        timeout: 15_000,
+      })
+      .not.toBe(paused);
   }
-
-  // The player takes the double; the computer finishes its turn.
-  const take = answerButton(page, TAKE);
-  await expect(take, "[aspect: answer] [needs: F49 F56] no button to take the computer's double showed").toBeVisible();
-  await playerClick(take);
-  await expect
-    .poll(async () => (await readState(page)).turn, {
-      message: "[aspect: frozen] [needs: G20] after the double was taken the turn never came back to the player",
-      timeout: 20_000,
-    })
-    .toBe("white");
-
-  // Stays stopped: nothing plays by itself, and the button is back, reading Fast Forward.
-  await page.waitForTimeout(2_000);
-  const held = positionOf(await readState(page));
-  await page.waitForTimeout(3_000);
-  expect(positionOf(await readState(page)), "[aspect: stays] pieces moved by themselves after the double was taken").toBe(held);
-  await expect(button, "[aspect: back] after the double was taken no Fast Forward button showed").toBeVisible();
-  // Nothing plays and the button is there, so only its word is wrong: told as
-  // that, not "didn't come back" — run 1793743564 heard that line as "start
-  // playing again" and Fast Forward played the player's moves next round.
-  await expect(button, "[aspect: label] [needs: F64] after the double was taken nothing played, but the button still read Pause").toHaveText(FAST_FORWARD);
 });
 
 // ── F72: an offer is answered with Accept or Decline ──────────────────────────

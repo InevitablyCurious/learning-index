@@ -669,6 +669,11 @@
       "what": "After the player's roll the dice settle and stay still and readable for about a second, and nothing on the board moves by itself in that second.",
       "how": "In a browser: presses Roll for a fixed 6-5 on the opening layout, then for three seconds reads the dice's boxes and pixels and where the player's pieces are tagged, about ten times a second. No piece may move within a second of the roll, and the dice must hold still — same boxes, same pixels — for at least 0.9 s."
     },
+    "F94": {
+      "name": "When the computer can't move, the turn comes back to roll",
+      "what": "With the computer stuck on the bar and a roll it cannot use, its turn ends with no move and the player gets the turn back, ready to roll fresh dice.",
+      "how": "In a browser: the player's turn played out on a position where white holds every way in and black has one piece on the bar; the computer's roll fixed to 6-5; End Turn clicked. Roll must become available within 10 s, and pressing it (fixed to 2-1) must leave the player with a 2-1 of their own to play."
+    },
     "G36": {
       "name": "A second roll through the API changes nothing",
       "what": "Once the dice are down, a roll asked for through the API is ignored or refused.",
@@ -1072,7 +1077,8 @@
         "E05",
         "E06",
         "E04",
-        "E07"
+        "E07",
+        "F94"
       ]
     },
     {

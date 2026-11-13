@@ -1588,8 +1588,8 @@
       "repeat": "Again, clicking Fast Forward after a pause moved nothing."
     },
     "F67": {
-      "first": "Something went wrong with Fast Forward around the doubling cube.",
-      "repeat": "Again something went wrong with Fast Forward around the doubling cube."
+      "first": "After being offered a double while my game was in Fast Forward, the behavior was wrong. I expect:\n   - When the computer offers a double during Fast Forward, the automatic play stops and the offer shows on screen.\n   - I can take the double right there.\n   - After I take it, the computer finishes its turn and the turn comes back to me with the game still paused — nothing moves by itself.\n   - The Fast Forward button is there, reading Fast Forward, and clicking it starts the automatic play again, whether or not I've rolled.",
+      "repeat": "Again, after being offered a double while my game was in Fast Forward, the behavior was wrong. I expect:\n   - When the computer offers a double during Fast Forward, the automatic play stops and the offer shows on screen.\n   - I can take the double right there.\n   - After I take it, the computer finishes its turn and the turn comes back to me with the game still paused — nothing moves by itself.\n   - The Fast Forward button is there, reading Fast Forward, and clicking it starts the automatic play again, whether or not I've rolled."
     },
     "F67.offer": {
       "first": "When I started Fast Forward at the end of my turn, nothing on screen showed the computer doubling.",
@@ -1930,6 +1930,10 @@
     "F93.still": {
       "first": "The dice keep tumbling after they land — I expect them to land once and stay still so I can read them.",
       "repeat": "The dice still keep tumbling after they land."
+    },
+    "F94": {
+      "first": "The computer's piece was on the bar and it rolled numbers that couldn't bring it in. The turn should have come back to me, but it didn't — the game froze and I couldn't roll.",
+      "repeat": "Again the computer couldn't bring its piece in off the bar, and the game froze instead of giving me my roll."
     },
     "G36": {
       "first": "They roll again through your app's API after the dice are already rolled, and it gives them a new roll instead of ignoring it.",

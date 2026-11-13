@@ -77,7 +77,9 @@ _IMPLEMENTATION_IDENTIFIERS = (
 #: Lines Jerry approved word for word although they name what should happen —
 #: his wording stands over this guard (memory: fix the guard, not his words).
 #: G36, 2026-11-12: "…it gives them a new roll instead of ignoring it."
-_APPROVED_PRESCRIPTIVE = frozenset({"G36"})
+#: F94, 2026-11-13, in Jerry's own words: "The turn should have come back to me…"
+#: and "…instead of giving me my roll."
+_APPROVED_PRESCRIPTIVE = frozenset({"G36", "F94"})
 
 #: Lines Jerry approved word for word although they share the rule's words with
 #: their own test title — they state the expectation in a player's voice by
@@ -85,7 +87,9 @@ _APPROVED_PRESCRIPTIVE = frozenset({"G36"})
 #: F73 and G05, 2026-11-12: two lines that only implied the deciding condition
 #: read as opposites to a model that held the wrong rule, so each now states it.
 #: F93, 2026-11-12: "I expect the dice to land and stay still…".
-_APPROVED_TITLE_OVERLAP = frozenset({"F73", "F93"})
+#: F94, 2026-11-13: "…The turn should have come back to me, but it didn't — the game froze and I couldn't roll."
+#: F67, 2026-11-13: "After being offered a double while my game was in Fast Forward, the behavior was wrong. I expect: …"
+_APPROVED_TITLE_OVERLAP = frozenset({"F67", "F73", "F93", "F94"})
 
 _PRESCRIPTIVE_PHRASES = (
     "should be",
