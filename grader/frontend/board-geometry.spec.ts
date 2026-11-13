@@ -151,10 +151,15 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   // points — so the band holds on a board with no piece drawn. Not the
   // reference's own 0.86: run 1794305514's 56 px bar beside 70 px points fits
   // the 56 px piece the model was told about, and was told "just a thin line".
+  // A point's width means something only once the points are triangles standing
+  // in from the rim (F30): run 1794590432 round 2 drew each point as a flat wedge
+  // 420 px wide, so "a piece" read 338 px and a 60 px bar was told "just a thin
+  // line" and a 112 px tray "too narrow" — both false to a player. Every size
+  // judged against a point (here and the tray's, F32) waits on F30.
   const pieceForBar = 0.8 * pointWidth(points);
   expect(
     bar.width,
-    `[aspect: thin] the bar is ${bar.width.toFixed(0)} px wide; a piece that has been hit needs ${pieceForBar.toFixed(0)} px`,
+    `[aspect: thin] [needs: F30] the bar is ${bar.width.toFixed(0)} px wide; a piece that has been hit needs ${pieceForBar.toFixed(0)} px`,
   ).toBeGreaterThanOrEqual(pieceForBar - 2);
   // And no wider than a piece with a few pixels of room each side (the build
   // prompt; Jerry, 2026-11-05: "about as wide as one of the pieces with a bit of
@@ -173,7 +178,7 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
     emptyStripBesideBarOrTray(points, bar, await readOffTray(page)) > 0.25 * pointWidth(points);
   expect(
     squeezed || bar.width <= 1.75 * pieceForBar + 2,
-    `[aspect: wide] the bar is ${bar.width.toFixed(0)} px wide; a piece is ${pieceForBar.toFixed(0)} px`,
+    `[aspect: wide] [needs: F30] the bar is ${bar.width.toFixed(0)} px wide; a piece is ${pieceForBar.toFixed(0)} px`,
   ).toBeTruthy();
   // And a bar a player can SEE: it stands out from the board by its fill, its
   // outline or both (how is the builder's choice). A bar that is the colour of the
@@ -420,7 +425,7 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
   const piece = 0.8 * pointWidth(points);
   expect(
     tray.width,
-    `[aspect: narrow] the off tray is ${tray.width.toFixed(0)} px wide; a checker lying on its side needs ${piece.toFixed(0)} px`,
+    `[aspect: narrow] [needs: F30] the off tray is ${tray.width.toFixed(0)} px wide; a checker lying on its side needs ${piece.toFixed(0)} px`,
   ).toBeGreaterThanOrEqual(piece - 2);
   // And no wider than one and a half points (the build prompt): a tray that wide
   // takes the board's room (run 1791358018: 124 px beside 76 px points). The
@@ -433,7 +438,7 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
     emptyStripBesideBarOrTray(points, await readBarBox(page), tray) > 0.25 * pointWidth(points);
   expect(
     traySqueezed || tray.width <= 1.5 * pointWidth(points) + 2,
-    `[aspect: wide] the off tray is ${tray.width.toFixed(0)} px wide; a point is ${pointWidth(points).toFixed(0)} px`,
+    `[aspect: wide] [needs: F30] the off tray is ${tray.width.toFixed(0)} px wide; a point is ${pointWidth(points).toFixed(0)} px`,
   ).toBeTruthy();
   // And a tray a player can see: it stands out from the board by its fill, its
   // outline or both, as the bar does (F29). A tray with the board's colour and no
