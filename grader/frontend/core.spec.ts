@@ -2018,6 +2018,61 @@ test("[F94] REQ-TURN — when the computer can't move, the turn comes back to ro
     .toBe(true);
 });
 
+// [F95] REQ-BEAROFF — clicking the off tray bears the picked piece off. Jerry,
+// 2026-11-13, playing run 1794565288's build to the end: "when clicking on the
+// final pieces moving them to the off tray, i'm not able to click in the
+// rectangle that is the off tray and i have to directly click on the hint. had
+// this same issue before with piece movement." F45's class: a move plays
+// wherever a player clicks for it, and for bearing off that is the off tray.
+// Clicked inside the tray clear of every hint, so the tray itself is judged.
+test("[F95] REQ-BEAROFF — clicking the off tray bears the picked piece off", async ({ page }) => {
+  test.setTimeout(60_000);
+  await openApp(page);
+  const points = emptyPoints();
+  for (let p = 1; p <= 5; p++) points[p] = 3; // all fifteen home
+  for (let p = 19; p <= 23; p++) points[p] = -3;
+  await seedRolled(
+    page,
+    { points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 }, cube: { value: 1, owner: null }, message: "" },
+    [5, 4],
+  );
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await waitForBoardSettled(page).catch(() => undefined);
+
+  const hints = page.getByTestId("hint");
+  const piece = page.locator('[data-testid="checker"][data-color="white"][data-loc="5"]');
+  const count = await piece.count();
+  expect(count, "[needs: F03 F25] no piece on 5 to pick up").toBeGreaterThan(0);
+  await playerClickUntilShown(piece.nth(count - 1), hints);
+  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 G08 E03]").toBeGreaterThan(0);
+
+  // A spot in the tray clear of every hint, the player's end first.
+  const spot = await page.evaluate(() => {
+    const tray = document.querySelector('[data-testid="off-tray"]')?.getBoundingClientRect();
+    if (!tray || tray.width < 2 || tray.height < 2) return null;
+    const taken = [...document.querySelectorAll('[data-testid="hint"]')]
+      .filter((el) => (el as HTMLElement).checkVisibility())
+      .map((el) => el.getBoundingClientRect());
+    for (const fy of [0.85, 0.7, 0.55, 0.4, 0.25, 0.15]) {
+      for (const fx of [0.5, 0.25, 0.75]) {
+        const x = tray.x + tray.width * fx;
+        const y = tray.y + tray.height * fy;
+        if (!taken.some((h) => x >= h.left - 4 && x <= h.right + 4 && y >= h.top - 4 && y <= h.bottom + 4)) return { x, y };
+      }
+    }
+    return null;
+  });
+  expect(spot, "[needs: REQ-RENDER/off-tray] no part of the off tray clear of the hints to click").not.toBeNull();
+  await page.mouse.click(spot!.x, spot!.y);
+  await expect
+    .poll(async () => (await readState(page)).off.white, {
+      message: "clicking the off tray did not bear the picked piece off",
+      timeout: 3_000,
+    })
+    .toBe(1);
+});
+
 // [F92] REQ-TURN — one roll per turn. Jerry, 2026-11-12, playing run
 // 1794488314's build: after he played his whole roll, End Turn showed "like it
 // should but also the 'roll' button … when i click it, it allows me to roll
@@ -2332,7 +2387,7 @@ test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", asyn
 
   await expect
     .poll(async () => /double|offer/i.test(await shownDoubleText(page)), {
-      message: "[aspect: shown] [needs: F01] [needs: G12] nothing on screen said the computer was doubling",
+      message: "[aspect: shown] [needs: F01] [needs: G12 G24] nothing on screen said the computer was doubling",
       timeout: 10_000,
     })
     .toBe(true);
@@ -2994,6 +3049,22 @@ test("[F64] REQ-FASTFORWARD-SHOW — the Fast Forward button appears only in a r
   const button = page.getByTestId("fastForwardBtn");
   await expect(button, "[aspect: shown] no Fast Forward button showed in a race").toBeVisible();
   await expect(button, "[aspect: shown] the button showed in a race did not read Fast Forward").toHaveText(FAST_FORWARD);
+
+  // The same size as the other buttons, by F82's measure (Jerry, 2026-11-13:
+  // "the fast forward button is not the same size as the other buttons").
+  const sizes = (await page.evaluate(() =>
+    ["fastForwardBtn", "rollBtn", "doubleBtn", "undoBtn", "endTurnBtn"]
+      .map((id) => {
+        const r = document.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect();
+        return r && r.width > 0 && r.height > 0 ? { id, width: r.width, height: r.height } : null;
+      })
+      .filter((b) => b !== null),
+  )) as { id: string; width: number; height: number }[];
+  const spread = (xs: number[]) => Math.max(...xs) / Math.min(...xs);
+  expect(
+    sizes.length === 5 && spread(sizes.map((b) => b.width)) <= 1.05 && spread(sizes.map((b) => b.height)) <= 1.2,
+    `[aspect: size] [needs: F82] the Fast Forward button is not the size of the other buttons: ${sizes.map((b) => `${b.id} ${Math.round(b.width)}×${Math.round(b.height)}`).join(", ")}`,
+  ).toBe(true);
 
   // For the whole turn, not only its start (Jerry, 2026-11-13): once the player
   // has rolled, and once their moves are played. Run 1794560336's build showed

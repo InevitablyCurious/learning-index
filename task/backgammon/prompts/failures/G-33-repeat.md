@@ -1,1 +1,1 @@
-The computer is still offering me a double straight after its first turn.
+From the even start again, your computer still offers a double after its very first turn.

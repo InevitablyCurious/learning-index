@@ -1,1 +1,1 @@
-Played more games with the cube in play and the computer still takes, refuses, or offers doubles at the wrong moments.
+Your computer's doubling decisions still don't all match the thresholds you were given.

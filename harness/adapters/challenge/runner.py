@@ -3051,6 +3051,16 @@ class ChallengeRunner(
     # sees (Jerry, 2026-10-17; audit WO-LI-NEVER-SEE-VOICE-AUDIT).
     # Every other gate token is the tester's.
     _TEAM_GATE_TOKENS = (
+        # The doubling cube's logic — when a double may be offered, taken or
+        # turned down, and what the cube is after one — is calculation no player
+        # sees (Jerry, 2026-11-13): told by the software team. What the cube and
+        # its offer look like on screen stays the player's (F07, F46, F49, F50,
+        # F56, F72, F90).
+        "G11",
+        "G12",
+        "G20",
+        "G24",
+        "G33",
         "E08",
         "G36",
         "G03",

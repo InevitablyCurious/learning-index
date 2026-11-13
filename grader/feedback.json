@@ -116,12 +116,12 @@
       "repeat": "Played several more games to the end and the result it announces still doesn't match how the game actually finished."
     },
     "G11": {
-      "first": "The game won't let me offer a double.",
-      "repeat": "It still won't let me offer a double."
+      "first": "On the player's turn, before the roll, with the cube in the middle, your app won't let them double.",
+      "repeat": "On the player's turn with the cube in the middle, your app still won't let them double."
     },
     "G12": {
-      "first": "The computer handles the doubling cube at the wrong times — it takes or turns down my doubles when it shouldn't, or it offers me the cube when it has no business doubling.",
-      "repeat": "Played more games with the cube in play and the computer still takes, refuses, or offers doubles at the wrong moments."
+      "first": "They put your computer's doubling decisions against the thresholds you were given — when it offers, takes and turns down a double — and some of them don't match.",
+      "repeat": "Your computer's doubling decisions still don't all match the thresholds you were given."
     },
     "G13": {
       "first": "Turns don't flow right — sometimes a die gets used twice, the turn doesn't come back to me, or i'm stuck with nothing to play and the message doesn't say 'No moves available'.",
@@ -152,8 +152,8 @@
       "repeat": "It happened again — a piece came off while one of mine was still sitting on the bar."
     },
     "G20": {
-      "first": "When my opponent accepts my double, the cube doesn't switch to them — it doesn't show them as the owner now.",
-      "repeat": "Doubled again and after they took it the cube still doesn't show them as the owner."
+      "first": "The player doubles and your computer takes it, but your app's state doesn't make the cube worth two and owned by the computer.",
+      "repeat": "The player doubles, your computer takes it, and your app's state still doesn't make the cube worth two and owned by the computer."
     },
     "G21": {
       "first": "The game lets me double in the middle of a turn.",
@@ -180,24 +180,24 @@
       "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
     },
     "G24.owner": {
-      "first": "I accepted the computer's double and the cube didn't show me as its owner.",
-      "repeat": "Accepted another double and the cube still didn't show me as its owner."
+      "first": "The player takes your computer's double, but your app's state doesn't make the player the cube's owner.",
+      "repeat": "The player takes your computer's double and your app's state still doesn't make them the cube's owner."
     },
     "G24.plays": {
-      "first": "After I took the computer's double, it skipped its own turn — it never moved, and it was straight back to me to roll.",
-      "repeat": "Took the computer's double again, and again it skipped its turn and went straight back to me."
+      "first": "After the player takes your computer's double, your computer skips the rest of its turn and hands the turn straight back.",
+      "repeat": "After the player takes its double, your computer still skips the rest of its turn and hands the turn straight back."
     },
     "G24.never": {
-      "first": "The computer never doubles me, even when it's far ahead in the race.",
-      "repeat": "Played on, and the computer still never doubled, however far ahead it got."
+      "first": "They play races where your computer is far ahead, and it never offers a double.",
+      "repeat": "Far ahead in a race again, your computer still never offers a double."
     },
     "G24.before": {
-      "first": "The computer rolled its dice first and only then offered me a double.",
-      "repeat": "Again the computer rolled before it offered me the double."
+      "first": "Your computer rolls first and only then offers its double.",
+      "repeat": "Your computer still rolls first and only then offers its double."
     },
     "G24": {
-      "first": "I accepted a double and the cube stayed at one, and it didn't mark me as the owner.",
-      "repeat": "Accepted another double and the cube still didn't go up to two or show me as the owner."
+      "first": "The player takes your computer's double, but your app's state doesn't make the cube worth two and owned by the player.",
+      "repeat": "The player takes your computer's double and your app's state still doesn't make the cube worth two and owned by the player."
     },
     "G25": {
       "first": "The computer never takes its turn — after I move it just sits there and I never get to go again.",
@@ -1116,12 +1116,12 @@
       "repeat": "Won another gammon and it still only counted as one point."
     },
     "G20.value": {
-      "first": "I doubled and the cube didn't go up to two.",
-      "repeat": "Doubled again and the cube still didn't go up to two."
+      "first": "The player doubles and your computer takes it, but your app's state doesn't make the cube worth two.",
+      "repeat": "Your computer takes the player's double and your app's state still doesn't make the cube worth two."
     },
     "G20.owner": {
-      "first": "I doubled and my opponent took it, but the cube didn't show them as the owner.",
-      "repeat": "Doubled again and after they took it the cube still didn't show them as the owner."
+      "first": "The player doubles and your computer takes it, but your app's state doesn't make the computer the cube's owner.",
+      "repeat": "Your computer takes the player's double and your app's state still doesn't make it the cube's owner."
     },
     "E01.doubles": {
       "first": "I rolled doubles and got the wrong number of moves.",
@@ -1539,6 +1539,10 @@
       "first": "At the start of my turn, before I'd rolled, all my pieces were past the computer's and nothing could be hit any more — and no Fast Forward button showed.",
       "repeat": "Again at the start of my turn, before rolling, with all my pieces past the computer's, no Fast Forward button showed."
     },
+    "F64.size": {
+      "first": "The Fast Forward button isn't the same size as the other buttons.",
+      "repeat": "The Fast Forward button still isn't the same size as the other buttons."
+    },
     "F65": {
       "first": "Fast Forward didn't carry the game through to the end for me.",
       "repeat": "Again Fast Forward didn't carry the game through to the end."
@@ -1720,12 +1724,12 @@
       "repeat": "After a tie on the opening roll, the game still rolled again without waiting for me to press Roll."
     },
     "G33": {
-      "first": "The computer offered me a double right after its very first turn, when nobody was ahead.",
-      "repeat": "The computer is still offering me a double straight after its first turn."
+      "first": "From the even starting position, your computer offers a double after its very first turn, when nobody is ahead.",
+      "repeat": "From the even start again, your computer still offers a double after its very first turn."
     },
     "G33.early": {
-      "first": "The computer offered me a double right after its very first turn, when nobody was ahead.",
-      "repeat": "The computer is still offering me a double straight after its first turn."
+      "first": "From the even starting position, your computer offers a double after its very first turn, when nobody is ahead.",
+      "repeat": "From the even start again, your computer still offers a double after its very first turn."
     },
     "F72": {
       "first": "While the computer's double was waiting for my answer, pressing End Turn just made the computer play again.",
@@ -1934,6 +1938,10 @@
     "F94": {
       "first": "The computer's piece was on the bar and it rolled numbers that couldn't bring it in. The turn should have come back to me, but it didn't — the game froze and I couldn't roll.",
       "repeat": "Again the computer couldn't bring its piece in off the bar, and the game froze instead of giving me my roll."
+    },
+    "F95": {
+      "first": "When I pick up a piece to bear it off, clicking the off tray doesn't take it off — I have to click its hint. I expect the piece to come off when I click anywhere for it to go, such as the off tray itself (the rectangle that holds the borne-off pieces) or its hint.",
+      "repeat": "Clicking the off tray still doesn't bear my piece off — only its hint does."
     },
     "G36": {
       "first": "They roll again through your app's API after the dice are already rolled, and it gives them a new roll instead of ignoring it.",

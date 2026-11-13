@@ -674,6 +674,11 @@
       "what": "With the computer stuck on the bar and a roll it cannot use, its turn ends with no move and the player gets the turn back, ready to roll fresh dice.",
       "how": "In a browser: the player's turn played out on a position where white holds every way in and black has one piece on the bar; the computer's roll fixed to 6-5; End Turn clicked. Roll must become available within 10 s, and pressing it (fixed to 2-1) must leave the player with a 2-1 of their own to play."
     },
+    "F95": {
+      "name": "Clicking the off tray bears the picked piece off",
+      "what": "With a piece picked up that can bear off, clicking anywhere in the off tray bears it off, the same as its off hint.",
+      "how": "In a browser: every white piece home, the roll dealt 5-4 by the build's own roll; picks up the piece on 5 and clicks inside the off tray clear of every hint. The piece must be borne off within 3 s."
+    },
     "G36": {
       "name": "A second roll through the API changes nothing",
       "what": "Once the dice are down, a roll asked for through the API is ignored or refused.",
@@ -1100,7 +1105,8 @@
         "F11",
         "REQ-RESPONSIVE/bearingoff",
         "F64",
-        "F66"
+        "F66",
+        "F95"
       ]
     },
     {

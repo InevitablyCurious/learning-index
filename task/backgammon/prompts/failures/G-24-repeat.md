@@ -1,1 +1,1 @@
-Accepted another double and the cube still didn't go up to two or show me as the owner.
+The player takes your computer's double and your app's state still doesn't make the cube worth two and owned by the player.

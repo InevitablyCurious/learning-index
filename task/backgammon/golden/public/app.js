@@ -278,6 +278,7 @@ function clearHints() {
 // wherever checker click handlers are cleared so stale handlers never fire.
 function clearPointClicks() {
   for (let n = 1; n <= 24; n++) if (pointDivs[n]) pointDivs[n].onclick = null;
+  if (trayDiv) trayDiv.onclick = null;
 }
 function applySelectable() {
   checkerEls.white.forEach((e) => { e.classList.remove("selectable"); e.onclick = null; });
@@ -351,8 +352,10 @@ function selectSource(from) {
     h.onclick = () => doMove(from, to, dice[0]);
     hintLayer.appendChild(h);
     // J5: the destination point's whole COLUMN plays the same move (same die
-    // as the hint). OFF has no column — bear-off stays hint-only.
+    // as the hint); bearing off, the whole off tray does (Jerry, 2026-11-13:
+    // "i'm not able to click in the rectangle that is the off tray").
     if (to !== OFF) pointDivs[to].onclick = () => doMove(from, to, dice[0]);
+    else if (trayDiv) trayDiv.onclick = () => doMove(from, OFF, dice[0]);
   }
 }
 

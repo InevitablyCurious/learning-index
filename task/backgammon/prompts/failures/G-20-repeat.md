@@ -1,1 +1,1 @@
-Doubled again and after they took it the cube still doesn't show them as the owner.
+The player doubles, your computer takes it, and your app's state still doesn't make the cube worth two and owned by the computer.

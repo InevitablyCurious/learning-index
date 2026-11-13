@@ -89,7 +89,8 @@ _APPROVED_PRESCRIPTIVE = frozenset({"G36", "F94"})
 #: F93, 2026-11-12: "I expect the dice to land and stay still…".
 #: F94, 2026-11-13: "…The turn should have come back to me, but it didn't — the game froze and I couldn't roll."
 #: F67, 2026-11-13: "After being offered a double while my game was in Fast Forward, the behavior was wrong. I expect: …"
-_APPROVED_TITLE_OVERLAP = frozenset({"F67", "F73", "F93", "F94"})
+#: G11, G33, 2026-11-13: the doubling cube's logic told by the software team (Jerry's split).
+_APPROVED_TITLE_OVERLAP = frozenset({"F67", "F73", "F93", "F94", "G11", "G33"})
 
 _PRESCRIPTIVE_PHRASES = (
     "should be",

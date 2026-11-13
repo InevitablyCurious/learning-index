@@ -214,7 +214,7 @@ describe("Backgammon backend server-path integrity", () => {
     // below it for others (run 1793743564 round 4 rated black 0.77 here, held
     // by its own rule, and the check read that as a lost offer).
     const play = await offeredRace();
-    expect(play.phase, "[needs: G12 F49] the computer never offered a double").toBe("doubleOffered");
+    expect(play.phase, "[aspect: never] [needs: G12] the computer never offered a double").toBe("doubleOffered");
     const res = await api("/api/double/respond", { accept: true });
     expect(res.cube.value).toBe(2);
     const OWNER = "[aspect: owner] the taken cube was not the player's";

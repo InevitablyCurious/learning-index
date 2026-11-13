@@ -215,7 +215,9 @@ select:hover, .btn:not(:disabled):hover { background: #2c4763; }
 .die[data-owner="ai"] .dot { background: #f2f4f7; }
 
 .actionbox { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.actionbox .btn { width: 100%; }
+/* One line each, so every button is the same size — "Fast Forward" wrapped onto
+   two lines in a 99 px column and stood half again as tall (Jerry, 2026-11-13). */
+.actionbox .btn { width: 100%; white-space: nowrap; padding-left: 6px; padding-right: 6px; }
 .msgbox { flex: 1; overflow: auto; }
 #message { font-size: 13px; line-height: 1.5; color: var(--muted); }
 #message b { color: var(--text); }
