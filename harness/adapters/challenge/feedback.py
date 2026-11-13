@@ -919,6 +919,7 @@ class FeedbackMixin:
         regressions: set[str] | None = None,
         respec: Sequence[str] | None = None,
         found: list[dict[str, Any]] | None = None,
+        phase_index: int | None = None,
     ) -> str:
         """Compose the message the model receives after a failed attempt.
 
@@ -1231,6 +1232,40 @@ class FeedbackMixin:
         # The integration surface closes EVERY repair message, team or no
         # team: it names what the checking depends on, so the model stops
         # renaming or removing it while fixing the complaints above.
-        lines += ["", _CONSTRAINTS]
+        lines += ["", cls._constraints_for(phase_index)]
 
         return "\n".join(lines)
+
+    _TAG_LINE = "- the data-testid tags: "
+    _DYNAMIC = "; and on the dynamic elements "
+
+    @classmethod
+    def _constraints_for(cls, phase_index: int | None) -> str:
+        """The integration surface, naming only tags the spec so far names.
+
+        THE SPEC SO FAR, NEVER AHEAD (Jerry, 2026-11-13) — the same rule as the
+        build-step message (prompt_pack._BUILD_HEADER). The block lists every
+        tag of the finished product; closing a phase-5 repair message it named
+        ``fastForwardBtn``, and run 1794603490's model built a Fast Forward
+        button while still placing pieces. A tag is named once the spec
+        through this phase names it (as `tag` or "tag"). No phase: the whole
+        block.
+        """
+        if phase_index is None:
+            return _CONSTRAINTS
+        spec = _PACK.spec_through(phase_index)
+
+        def named(tag: str) -> bool:
+            return f"`{tag}`" in spec or f'"{tag}"' in spec
+
+        out: list[str] = []
+        for line in _CONSTRAINTS.splitlines():
+            if line.startswith(cls._TAG_LINE):
+                static, _, dynamic = line[len(cls._TAG_LINE) :].partition(cls._DYNAMIC)
+                keep_static = [t for t in static.split(", ") if named(t)]
+                keep_dynamic = [t for t in dynamic.split(", ") if t and named(t)]
+                line = cls._TAG_LINE + ", ".join(keep_static)
+                if keep_dynamic:
+                    line += cls._DYNAMIC + ", ".join(keep_dynamic)
+            out.append(line)
+        return "\n".join(out)

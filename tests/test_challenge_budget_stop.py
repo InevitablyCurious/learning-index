@@ -280,7 +280,9 @@ def test_prompts_are_delivered_over_the_serve_session_never_on_argv(
     )
 
     assert result.verdict == "PASS"
-    feedback_prompt = runner._build_feedback_prompt(checks=[REAL_CHECK])
+    # The fakes' single phase is K=1: its repair message names only the tags
+    # the spec through phase 1 names (_constraints_for).
+    feedback_prompt = runner._build_feedback_prompt(checks=[REAL_CHECK], phase_index=1)
     # The build text is the PACK's message for the phase being built
     # (`build_step_message(1)`), never a chunk list the runner assembled.
     assert delivered == [
@@ -393,6 +395,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     failure_feedback = runner._build_feedback_prompt(
         checks=[REAL_CHECK],
         repeat_complaints={REAL_CHECK},
+        phase_index=1,
     )
     assert (
         "I've checked your resolution for the problems that were given before, "
@@ -418,7 +421,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     assert prompt_texts[
         1
     ] == f"{_FIRST_MESSAGE_PREAMBLE}\n\n" + runner._build_feedback_prompt(
-        checks=[REAL_PASS1, REAL_CHECK]
+        checks=[REAL_PASS1, REAL_CHECK], phase_index=1
     )
     assert runner._humanize_check(REAL_PASS2) not in prompt_texts[1], (
         "a stage-2 problem is withheld while stage 1 still fails"

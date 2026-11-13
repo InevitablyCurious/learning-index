@@ -123,3 +123,28 @@ def test_an_undeclared_chunk_file_on_disk_is_loud(tmp_path: Path) -> None:
     )
     with pytest.raises(MissingPromptError):
         PromptPack(tmp_path).phases()
+
+
+def test_the_repair_tag_list_never_names_a_later_phases_tag() -> None:
+    # Jerry, 2026-11-13: the spec so far, never ahead. The "keep these tags"
+    # block closing every repair message named fastForwardBtn in phase 5, and
+    # run 1794603490's model built a Fast Forward button while placing pieces.
+    from harness.adapters.challenge import ChallengeRunner
+    from harness.adapters.challenge.constants import _CONSTRAINTS
+
+    def tags(block: str) -> list[str]:
+        line = next(
+            l for l in block.splitlines() if l.startswith("- the data-testid tags: ")
+        )
+        rest = line.split(": ", 1)[1].replace("; and on the dynamic elements ", ", ")
+        return rest.split(", ")
+
+    four = tags(ChallengeRunner._constraints_for(4))
+    five = tags(ChallengeRunner._constraints_for(5))
+    assert "point" in four and "off-tray" in four
+    for later in ("checker", "checkerCount", "hint", "fastForwardBtn"):
+        assert later not in four, later
+    assert "checker" in five and "checkerCount" in five
+    assert "hint" not in five and "fastForwardBtn" not in five
+    assert ChallengeRunner._constraints_for(7) == _CONSTRAINTS
+    assert ChallengeRunner._constraints_for(None) == _CONSTRAINTS

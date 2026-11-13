@@ -2249,6 +2249,7 @@ class ChallengeRunner(
                             unevaluated=stage_view.unevaluated,
                             regressions=regressions,
                             found=[p for p in problems if isinstance(p, dict)],
+                            phase_index=phase.index,
                             respec=self._respec_for(
                                 [p for p in problems if isinstance(p, dict)],
                                 stage_view.visible,
