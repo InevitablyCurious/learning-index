@@ -952,12 +952,12 @@
       "repeat": "Some of the points, including every one on the left half of the board, still don't show a clear triangle — I expect each point drawn as a triangle that stands out from the board."
     },
     "F30.short": {
-      "first": "The triangles reach less than half way from the board's edge to the middle — I expect each one to reach most of the way, leaving a gap of about 24% of half the board's height between its tip and the tip straight across from it.",
-      "repeat": "The triangles still reach less than half way from the board's edge to the middle — I expect each one to reach most of the way, leaving a gap of about 24% of half the board's height between its tip and the tip straight across from it."
+      "first": "The triangles reach less than half way from the board's edge to the middle — I expect each one to reach about nine-tenths of the way, leaving only a small gap between its tip and the tip straight across from it.",
+      "repeat": "The triangles still reach less than half way from the board's edge to the middle — I expect each one to reach about nine-tenths of the way, leaving only a small gap between its tip and the tip straight across from it."
     },
     "F30.someshort": {
-      "first": "Some of the triangles reach less than half way from the board's edge to the middle — I expect each one to reach most of the way, leaving a gap of about 24% of half the board's height between its tip and the tip straight across from it.",
-      "repeat": "Some of the triangles still reach less than half way from the board's edge to the middle — I expect each one to reach most of the way, leaving a gap of about 24% of half the board's height between its tip and the tip straight across from it."
+      "first": "Some of the triangles reach less than half way from the board's edge to the middle — I expect each one to reach about nine-tenths of the way, leaving only a small gap between its tip and the tip straight across from it.",
+      "repeat": "Some of the triangles still reach less than half way from the board's edge to the middle — I expect each one to reach about nine-tenths of the way, leaving only a small gap between its tip and the tip straight across from it."
     },
     "F30.float": {
       "first": "The triangles don't sit at the edge of the board — I expect each triangle's wide end right at the edge.",
