@@ -157,9 +157,15 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   // line" and a 112 px tray "too narrow" — both false to a player. Every size
   // judged against a point (here and the tray's, F32) waits on F30.
   const pieceForBar = 0.8 * pointWidth(points);
+  // Told by how far off it is (Jerry, 2026-11-13): "just a thin line" is true of
+  // a hairline, not of a bar a few pixels short of a piece. Run 1794650186's
+  // 57 px bar beside 60 px pieces was told "just a thin line". Under 60% of a
+  // piece is thin; from there up to the piece it is a little narrow. The band
+  // itself is unchanged.
+  const barShort = bar.width < 0.6 * pieceForBar ? "[aspect: thin]" : "[aspect: narrow]";
   expect(
     bar.width,
-    `[aspect: thin] [needs: F30] the bar is ${bar.width.toFixed(0)} px wide; a piece that has been hit needs ${pieceForBar.toFixed(0)} px`,
+    `${barShort} [needs: F30] the bar is ${bar.width.toFixed(0)} px wide; a piece that has been hit needs ${pieceForBar.toFixed(0)} px`,
   ).toBeGreaterThanOrEqual(pieceForBar - 2);
   // And no wider than a piece with a few pixels of room each side (the build
   // prompt; Jerry, 2026-11-05: "about as wide as one of the pieces with a bit of

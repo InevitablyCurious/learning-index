@@ -903,6 +903,10 @@
       "first": "The bar down the middle blends into the board, so I can't pick it out — I expect it to stand out from the board.",
       "repeat": "The bar down the middle still blends into the board, so I still can't pick it out — I expect it to stand out from the board."
     },
+    "F29.narrow": {
+      "first": "The bar is a little narrower than a piece — I expect it about as wide as a piece, with a few pixels to spare on each side, so a piece I've hit fits on it.",
+      "repeat": "The bar is still a little narrower than a piece — I expect it about as wide as a piece, with a few pixels to spare on each side, so a piece I've hit fits on it."
+    },
     "F29.overlap": {
       "first": "The bar cuts across some of the points.",
       "repeat": "The bar still cuts across some of the points."

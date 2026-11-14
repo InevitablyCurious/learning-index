@@ -99,7 +99,8 @@
       "F29.short",
       "F29.thin",
       "F29.wide",
-      "F80"
+      "F80",
+      "F29.narrow"
     ],
     "big": [
       "F29",
