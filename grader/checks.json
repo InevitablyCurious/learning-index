@@ -552,7 +552,7 @@
     "F66": {
       "name": "Fast Forward can be paused and carried on",
       "what": "While Fast Forward is running the button reads \"Pause\"; clicking Pause stops the play-out and the button reads \"Fast Forward\" again; clicking it then carries on.",
-      "how": "In a browser: sets a long race (fifteen a side, all home), clicks Fast Forward and requires the button to read Pause ([aspect: running]); clicks it 250 ms later and requires it to read Fast Forward again ([aspect: label]) and the position unchanged from 2 s to 5 s after ([aspect: paused]); clicks it again and requires Pause ([aspect: running]) and a changed position within 15 s ([aspect: resume])."
+      "how": "In a browser: sets a long race (fifteen a side, all home), clicks Fast Forward and requires the button to read Pause ([aspect: running]); clicks it 250 ms later and requires it to read Fast Forward again ([aspect: label]) and the position unchanged from 2 s to 5 s after ([aspect: paused]); clicks it again and requires Pause ([aspect: running]) and a changed position within 15 s ([aspect: resume]) — unless it stood still with the player's roll used up and the turn still theirs, which is told as Fast Forward stopping at the end of a roll ([aspect: turnend])."
     },
     "F67": {
       "name": "A computer double stops Fast Forward until you answer",

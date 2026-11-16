@@ -3198,12 +3198,24 @@ test("[F66] REQ-FASTFORWARD-PAUSE — Pause stops Fast Forward and it carries on
   // Clicked again, it carries on.
   await button.click();
   await expect(button, "[aspect: running] Fast Forward clicked again never read Pause").toHaveText(PAUSE);
-  await expect
-    .poll(async () => positionOf(await readState(page)), {
-      message: "[aspect: resume] after Fast Forward was clicked again no piece moved",
-      timeout: 15_000,
-    })
-    .not.toBe(held);
+  const carried = await expect
+    .poll(async () => positionOf(await readState(page)), { timeout: 15_000 })
+    .not.toBe(held)
+    .then(
+      () => true,
+      () => false,
+    );
+  if (carried) return;
+  // Still, and the player's roll is used up with the turn still theirs: Fast
+  // Forward stops at the end of every roll, paused or not, and that is the
+  // finding. Run 1794861279's did — it played the roll, never ended the turn —
+  // and "after pausing, nothing moved" sent its model to the pause code.
+  const still = await readState(page);
+  expect(
+    still.turn === "white" && still.phase === "move" && still.remainingDice.length === 0,
+    "[aspect: turnend] Fast Forward played the player's roll and stopped: the turn never passed to the computer",
+  ).toBe(false);
+  expect(carried, "[aspect: resume] after Fast Forward was clicked again no piece moved").toBe(true);
 });
 
 test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward until you answer", async ({ page }) => {
