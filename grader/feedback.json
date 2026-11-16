@@ -2014,6 +2014,10 @@
     "F66.turnend": {
       "first": "Fast Forward played my roll and then just stopped — my dice were used up, but the turn never went over to the computer.",
       "repeat": "Fast Forward played my roll and stopped there again — the turn still never went over to the computer."
+    },
+    "F11.outside": {
+      "first": "Some of the pieces I take off are drawn past the edges of the off tray, not inside it — I expect every piece I take off to sit wholly inside the tray.",
+      "repeat": "Pieces I take off are still drawn past the edges of the off tray."
     }
   }
 }

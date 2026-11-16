@@ -292,7 +292,7 @@
     "F11": {
       "name": "Borne-off checkers in the tray",
       "what": "Borne-off checkers appear in the player's off tray.",
-      "how": "Sets a position with 3 white checkers borne off: the player's tray must be visible with exactly 3 white checkers in it. The checkers must be drawn in the tray, not only tagged off."
+      "how": "Sets a position with 3 white checkers borne off. The tray judged is the player's end of it (off-you) when that has a size, else the off tray it sits in. At least 3 white checkers must be drawn — tagged off, or untagged pieces inside the tray — and each must lie within the tray's sides and reach no more than half a piece past its top or bottom ([aspect: outside])."
     },
     "F12": {
       "name": "Win announced",

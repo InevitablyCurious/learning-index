@@ -173,39 +173,61 @@ test("[F11] REQ-BEAROFF — bear-off visual", async ({ page }) => {
   });
 
   await page.reload();
-  await expect(page.locator('[data-testid="off-you"]')).toBeVisible();
+  // The tray a player looks at: the player's own end of it (off-you) when that
+  // has a size, else the tray it sits in (off-tray). Run 1794863925's off-you
+  // was a 0x0 point in the middle of the tray, and "doesn't show up in the off
+  // tray" was told three rounds running while its pieces hung half past the
+  // tray's edge over the buttons beside it.
+  const trayBox = () =>
+    page.evaluate(() => {
+      for (const sel of ['[data-testid="off-you"]', '[data-testid="off-tray"]']) {
+        const el = document.querySelector(sel);
+        const r = el?.getBoundingClientRect();
+        if (r && r.width >= 2 && r.height >= 2) return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      }
+      return null;
+    });
+  await expect.poll(trayBox, { message: "[needs: REQ-RENDER/off-tray] no off tray drawn", timeout: 5_000 }).not.toBeNull();
   // The three pieces already off, as a player sees them: checkers tagged off,
   // or pieces drawn in the player's tray without the tag. Run 1790650821 drew
   // three discs there untagged and was told they "don't show up in the off
   // tray". A tray with nothing drawn in it is this gate's finding.
-  const shownOff = async () => {
-    // Tagged AND drawn in the tray: a piece tagged off but drawn somewhere else
-    // (run 1791408711's build put them in the bar's column, x 480 against a tray
-    // at x 956) is not in the tray a player looks at. The tray may be a little
-    // short for a tall stack, so a piece counts when its centre is within half
-    // a piece of the tray's box.
+  const offPieces = async () => {
+    // Tagged and drawn: inside when the piece lies within the tray's sides (a
+    // sixth of a piece over is the drawing's slack) and its centre within half
+    // a piece of the top and bottom (the tray may be a little short for a tall
+    // stack). Run 1791408711's build put them in the bar's column, x 480
+    // against a tray at x 956: not in the tray a player looks at.
     const tagged = await page.evaluate(() => {
-      const tray = document.querySelector('[data-testid="off-you"]');
-      if (!tray) return 0;
-      const t = tray.getBoundingClientRect();
-      return [
+      const tray = ['[data-testid="off-you"]', '[data-testid="off-tray"]']
+        .map((sel) => document.querySelector(sel)?.getBoundingClientRect())
+        .find((r) => r && r.width >= 2 && r.height >= 2);
+      const drawn = [
         ...document.querySelectorAll<HTMLElement>('[data-testid="checker"][data-color="white"][data-loc="off"]'),
-      ].filter((el) => {
-        const r = el.getBoundingClientRect();
-        const x = r.left + r.width / 2;
+      ]
+        .map((el) => el.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.height > 0);
+      if (!tray) return { drawn: drawn.length, inside: 0 };
+      const inside = drawn.filter((r) => {
+        const slack = r.width / 6;
         const y = r.top + r.height / 2;
         return (
-          r.width > 0 &&
-          x >= t.left - r.width / 2 &&
-          x <= t.right + r.width / 2 &&
-          y >= t.top - r.height / 2 &&
-          y <= t.bottom + r.height / 2
+          r.left >= tray.left - slack &&
+          r.right <= tray.right + slack &&
+          y >= tray.top - r.height / 2 &&
+          y <= tray.bottom + r.height / 2
         );
       }).length;
+      return { drawn: drawn.length, inside };
     });
-    if (tagged >= 3) return tagged;
-    return page.evaluate(() => {
-      const tray = document.querySelector('[data-testid="off-you"]');
+    if (tagged.inside >= 3 || tagged.drawn >= 3) return tagged;
+    const untagged = await page.evaluate(() => {
+      const tray = ['[data-testid="off-you"]', '[data-testid="off-tray"]']
+        .map((sel) => document.querySelector(sel))
+        .find((el) => {
+          const r = el?.getBoundingClientRect();
+          return r && r.width >= 2 && r.height >= 2;
+        });
       if (!tray) return 0;
       const t = tray.getBoundingClientRect();
       return [...document.querySelectorAll<HTMLElement>("body *")].filter((el) => {
@@ -217,8 +239,10 @@ test("[F11] REQ-BEAROFF — bear-off visual", async ({ page }) => {
         return x >= t.left && x <= t.right && y >= t.top && y <= t.bottom;
       }).length;
     });
+    return { drawn: Math.max(tagged.drawn, untagged), inside: untagged };
   };
-  await expect.poll(shownOff, { timeout: 5_000 }).toBeGreaterThanOrEqual(3);
+  await expect.poll(async () => (await offPieces()).drawn, { timeout: 5_000 }).toBeGreaterThanOrEqual(3);
+  expect((await offPieces()).inside, "[aspect: outside] pieces taken off are drawn past the edges of the off tray").toBeGreaterThanOrEqual(3);
 });
 
 test("[F12] REQ-NEWGAME — the win is announced", async ({ page }) => {
