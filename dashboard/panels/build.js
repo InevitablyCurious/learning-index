@@ -389,9 +389,15 @@ export function paintBuild(view) {
   // A live run grades another attempt: re-read the prose (GET only), and
   // keep the readout in step with the selected tab. Both are read-only.
   if (key === preparedKey || key === loadedKey) {
-    const done = completedAttempts(view);
-    if (done !== feedbackAtDone && !feedbackFetching) {
-      feedbackAtDone = done;
+    // Keyed on the NEWEST graded round, never on how many the board holds
+    // (Jerry, 2026-11-16: a count that stalled froze this readout for fifteen
+    // rounds of a normal-mode run). And while a live round failed but its
+    // prompt is not in hand yet — it is written a few ms after the grade —
+    // read again next tick rather than wait for the round after.
+    const latest = latestAttempt(view);
+    const owed = card.status === "live" && lastRoundFailed(view) && newestPromptInto() <= latest;
+    if ((latest !== feedbackAtDone || owed) && !feedbackFetching) {
+      feedbackAtDone = latest;
       void paintProse(card, abort?.signal);
     }
     renderWrong();
@@ -432,7 +438,7 @@ export function paintBuild(view) {
       abort = new AbortController();
       preparedKey = key;
       feedbackMsgs = null;
-      feedbackAtDone = completedAttempts(view);
+      feedbackAtDone = latestAttempt(view);
       renderWrong();
       void paintProse(card, abort.signal); // own region, own failures
       paintFrameLoad();
@@ -529,6 +535,25 @@ async function paintProse(card, signal) {
     feedbackFetching = false;
   }
   renderWrong();
+}
+
+/** The newest graded round's number; 0 before the first grade. */
+function latestAttempt(view) {
+  const rounds = Array.isArray(view?.live?.attempts) ? view.live.attempts : [];
+  return rounds.reduce((top, r) => Math.max(top, Number(r?.attempt) || 0), 0);
+}
+
+/** Whether the newest graded round failed — a prompt follows a failed round. */
+function lastRoundFailed(view) {
+  const rounds = Array.isArray(view?.live?.attempts) ? view.live.attempts : [];
+  const newest = rounds.reduce((top, r) => ((Number(r?.attempt) || 0) > (Number(top?.attempt) || 0) ? r : top), null);
+  return newest?.verdict === "FAIL";
+}
+
+/** The round the newest prompt in hand was sent into; 0 when none. */
+function newestPromptInto() {
+  if (!Array.isArray(feedbackMsgs)) return 0;
+  return feedbackMsgs.reduce((top, m, i) => Math.max(top, Number(m?.attempt) || i + 2), 0);
 }
 
 /** Attempts the board reports as completed; the live tab's "how far along". */

@@ -38,6 +38,39 @@ const TOKEN_FIELDS = ["input", "output", "reasoning", "cache_read", "cache_write
  */
 const PROGRESS_KINDS = ['"turn.tokens"', '"compaction"', '"pause.start"', '"pause.end"'];
 
+/**
+ * The cell's own milestones, read from the WHOLE file too: the 512KB tail
+ * holds about five graded rounds of a gameplay run (240 gate.result rows a
+ * round), so a long run's earlier rounds and phases fell out of it. Run
+ * 1794656683 cell-0001 (2.2MB, 20 rounds) showed five rounds from round 5 on
+ * — the count stopped moving, and the BUILD card, which refetched the
+ * model's prompt when that count changed, froze for fifteen rounds (Jerry,
+ * 2026-11-16). These rows are small; the bulky gate.result stays tail-only.
+ */
+const WHOLE_KINDS = ['"attempt.end"', '"phase.start"', '"cell.start"', '"cell.end"'];
+const WHOLE_KIND_SET = new Set(["attempt.end", "phase.start", "cell.start", "cell.end"]);
+
+/** Every record of `markers`' kinds from the whole file; [] when unreadable. */
+async function readWholeKinds(path, markers) {
+  let text;
+  try {
+    text = await readFile(path, "utf8");
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const line of text.split("\n")) {
+    if (!markers.some((w) => line.includes(w))) continue;
+    try {
+      const r = JSON.parse(line);
+      if (r && typeof r === "object") out.push(r);
+    } catch {
+      // a half-flushed last line is normal on a growing stream
+    }
+  }
+  return out;
+}
+
 /** Phase kinds the benchmark names; anything else folds into "unknown". */
 const KNOWN_PHASE_KINDS = new Set(["build", "troubleshooting"]);
 
@@ -306,7 +339,14 @@ export async function readCell(ctx) {
   // The cumulative token axis, from the whole file (never the tail above).
   const progress = await readProgress(path);
 
-  for (const r of recs) {
+  // Milestones from the whole file first, then the tail's other rows (its own
+  // milestones are dropped — the whole-file read already holds them).
+  const milestones = (await readWholeKinds(path, WHOLE_KINDS)).filter((r) =>
+    WHOLE_KIND_SET.has(str(r.kind)),
+  );
+  const folded = [...milestones, ...recs.filter((r) => !WHOLE_KIND_SET.has(str(r?.kind)))];
+
+  for (const r of folded) {
     if (!r || typeof r !== "object") continue;
     const kind = str(r.kind);
 
