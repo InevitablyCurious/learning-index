@@ -93,7 +93,7 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
         await expect(hints.first(), "no hint appeared").toBeVisible();
         // Clicked where it shows: a pulsing hint on top of a stack (fixtures.ts).
         await playerClick(hints.first());
-        await expect.poll(() => remainingDiceCount(page), "die not consumed").toBe(4 - played);
+        await expect.poll(() => remainingDiceCount(page), "die not consumed").toBeLessThanOrEqual(4 - played);
         // The server holds the move a few milliseconds before the page has drawn it,
         // and a click in that gap is ignored or wiped by the redraw. A player only
         // ever sees the page, so the next pick-up waits until what is drawn holds
@@ -106,6 +106,12 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
       // moves the double gave — so every failure inside the move says so.
       throw new Error(`move ${played} ${told}: ${(err as Error).message}`);
     }
+    // One click, one move. Run 1794866864's page sent the same move twice for
+    // one click and the double had the dice for both: two pieces left 24 at
+    // once, and "couldn't make a single move" was told about a move that played.
+    expect(await remainingDiceCount(page), "[aspect: twice] one click played more than one move of the double").toBe(
+      4 - played,
+    );
   }
 
   // All four dice were played through the UI: the server holds nothing left.

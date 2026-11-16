@@ -387,7 +387,7 @@
     "F33": {
       "name": "A double lets the player make four moves",
       "what": "A double gives the player four moves, not two.",
-      "how": "Sets a doubled dice state through the debug route, reloads, then clicks checker, hint, and move four times, asserting all four dice are consumed; a failure names how many moves the double gave."
+      "how": "Sets a doubled dice state through the debug route, reloads, then clicks checker, hint, and move four times, asserting all four dice are consumed; a failure names how many moves the double gave, and one click that plays more than one move is told as that ([aspect: twice])."
     },
     "F35": {
       "name": "Board left, controls right",

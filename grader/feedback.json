@@ -2018,6 +2018,10 @@
     "F11.outside": {
       "first": "Some of the pieces I take off are drawn past the edges of the off tray, not inside it — I expect every piece I take off to sit wholly inside the tray.",
       "repeat": "Pieces I take off are still drawn past the edges of the off tray."
+    },
+    "F33.twice": {
+      "first": "I rolled a double, and one click played two of its moves at once — I clicked to move one piece and two of my moves were used up.",
+      "repeat": "Rolled a double again and one click still played two of its moves at once."
     }
   }
 }
