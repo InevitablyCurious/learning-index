@@ -295,7 +295,9 @@ export async function collectCells(runsRoot, { includeBackups = false } = {}) {
         router: who.router,
         model_slug: who.slug,
         arm,
-        // complete: graded · ended: ran and stopped before a graded attempt ·
+        // complete: finished and measured · ended: ran but never finished (stopped,
+        // or died — with or without graded rounds; run 1794656683 cell-0001 was
+        // stopped after twenty) ·
         // started: began, no end recorded yet · not_started: never began.
         // resumed: started from a dev-loop check-point — never scored.
         state: resumed
@@ -871,7 +873,7 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
   const exhausted = mine.filter(
     (c) => c.state === "complete" && !c.void_instrument && exhaustedUngraded(c),
   );
-  // Void: graded but measuring the harness, or ended before any graded attempt.
+  // Void: graded but measuring the harness, or ran but never finished.
   const voids = mine.filter((c) => (c.state === "complete" && c.void_instrument) || c.state === "ended");
   // Still to finish: not begun, or begun with no end recorded. A cell that
   // ENDED without a graded attempt is not running — it is a void result.
@@ -988,8 +990,8 @@ export async function baselineFor(model, offCells, { repoRoot = REPO_ROOT, runsR
       model_slug: v.model_slug,
       candidates: 0,
       reason: v.state === "ended"
-        ? `the last OFF cell for ${model} ended before any graded attempt (${v.terminal_exception ?? v.terminal_reason ?? "no reason recorded"}) — ` +
-          "there is no measurement to compare a run against. Run a new baseline."
+        ? `the last OFF cell for ${model} never finished (${v.terminal_exception ?? v.terminal_reason ?? "no reason recorded"}) — ` +
+          "a run that was stopped or died is no measurement to compare a run against. Run a new baseline."
         : `the last OFF cell for ${model} is void-instrument (${v.terminal_exception ?? v.terminal_reason ?? "instrument fault"}) — ` +
           "it produced numbers, but they measure the harness rather than the model, so every Δ " +
           "computed against them would be invalid. Run a new baseline.",
