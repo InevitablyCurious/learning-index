@@ -104,3 +104,20 @@ def test_a_shared_excerpt_is_handed_back_once() -> None:
     ]
     respec = ChallengeRunner._respec_for(failing, [], None, stages)
     assert len(respec) == 1 and "allInHome" in respec[0]
+
+
+def test_an_untold_step_waiting_on_a_failed_check_hands_nothing_back() -> None:
+    # Run 1794861030: G06 failed (a piece came in off the bar at the wrong end),
+    # so F24's shut-out position was no shut-out and its untold turnOver step
+    # failed with nothing stuck; the stuck-turn brief came back as unfollowed.
+    stages = load_stages(CHECKS)
+    stuck = {
+        "check": "[F24] REQ-TURN — stuck turn state",
+        "observed": "Error: [untold] [needs: G06] a stuck turn's state did not say turnOver",
+    }
+    bar = {
+        "check": "[G06] REQ-BAR — bar re-entry + blocked pass",
+        "observed": "AssertionError: [aspect: wrongpoint] the bar piece is offered the wrong point",
+    }
+    assert ChallengeRunner._respec_for([stuck, bar], [bar], None, stages) == []
+    assert ChallengeRunner._respec_for([stuck], [], None, stages)

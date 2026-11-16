@@ -48,7 +48,7 @@ from .constants import (
     _TEAM_REGRESSION_HEADER,
 )
 from .exceptions import MissingFeedbackOverrideError
-from .stages import Stage, check_id, is_untold, stage_of
+from .stages import Stage, check_id, is_untold, met_failures, needs_unmet, stage_of
 
 
 def load_feedback_overrides(path: Path) -> dict[str, dict[str, str]]:
@@ -619,8 +619,13 @@ class FeedbackMixin:
     ) -> list[str]:
         """The brief excerpts to hand back: a gate's, once, when one of its
         checks is told this round, or fails untold at or before the stage
-        being told (its words are the brief's too)."""
+        being told (its words are the brief's too). An untold step waiting on
+        a check that failed never had its situation, so it hands nothing back:
+        run 1794861030's pieces came in off the bar at the wrong end, so no
+        turn was stuck, and the stuck-turn brief came back as "still isn't
+        following" (F24, G13 `[needs: G06]`)."""
         told = {str(p.get("check", "")).strip() for p in visible}
+        failed = met_failures(problems)
         gates: list[str] = []
         for p in problems:
             check = str(p.get("check", "")).strip()
@@ -629,6 +634,7 @@ class FeedbackMixin:
                 continue
             if check in told or (
                 is_untold(p)
+                and not needs_unmet(p, failed)
                 and (stage is None or stage_of(check, stages).number <= stage.number)
             ):
                 gates.append(gate)

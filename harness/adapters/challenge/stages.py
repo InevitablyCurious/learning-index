@@ -105,6 +105,25 @@ def needs_of(problem: dict[str, Any]) -> tuple[str, ...]:
     return tuple(n for m in _NEEDS_RE.finditer(observed) for n in m.group(1).split())
 
 
+def met_failures(problems: Iterable[dict[str, Any]]) -> set[str]:
+    """The checks that failed on a step the grader reached. A check never
+    reached, or failing only untold, is not a failure a player met, so it cannot
+    excuse another check from being told: both would reach no one."""
+    return {
+        ident
+        for p in problems
+        if isinstance(p, dict)
+        and not is_unevaluated(p)
+        and (ident := check_id(str(p.get("check", "")).strip()))
+    }
+
+
+def needs_unmet(problem: dict[str, Any], failed: set[str]) -> bool:
+    """True when a check this one's failing step waits on failed too: the step
+    never had its situation, so nothing about it is known."""
+    return any(n in failed for n in needs_of(problem))
+
+
 _LAYER_TEMPLATE = "{x}"
 
 
@@ -293,14 +312,7 @@ def player_view(
     here would drop every layer-2 problem. Without a scope the result is
     unchanged."""
     records = [p for p in problems if isinstance(p, dict)]
-    # A check the grader never reached is not a failure a player met, so it cannot
-    # excuse another check from being told: both would reach no one.
-    failed = {
-        ident
-        for p in records
-        if not is_unevaluated(p)
-        and (ident := check_id(str(p.get("check", "")).strip()))
-    }
+    failed = met_failures(records)
     staged: list[tuple[Stage, dict[str, Any]]] = []
     unevaluated: list[str] = []
     for problem in records:
@@ -313,7 +325,7 @@ def player_view(
             and layer_map.layer_of(check, stages) > layer
         ):
             continue
-        if is_unevaluated(problem) or any(n in failed for n in needs_of(problem)):
+        if is_unevaluated(problem) or needs_unmet(problem, failed):
             unevaluated.append(check)
             continue
         staged.append((stage_of(check, stages), problem))
