@@ -171,13 +171,21 @@
       "first": "I made a move, hit undo, and the board didn't go back to how it was — a checker stayed where it had moved to or went missing.",
       "repeat": "Tried undo again after another move and the board still didn't come back right — a checker was still missing or still in the wrong place."
     },
-    "G23.hit": {
-      "first": "I hit one of the computer's pieces and pressed Undo, and its piece went back, but it also left extra pieces of the computer's on the bar.",
-      "repeat": "Undid a hit again and the computer still got extra pieces on the bar."
-    },
     "G23.nomove": {
       "first": "After I rolled, there was no checker I could pick up to move.",
       "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
+    },
+    "G37": {
+      "first": "I hit one of the computer's pieces and pressed Undo, and the board didn't go back to how it was before the hit.",
+      "repeat": "Undid a hit again and the board still didn't go back to how it was before it."
+    },
+    "G37.hit": {
+      "first": "I hit one of the computer's pieces and pressed Undo, and its piece went back, but it also left extra pieces of the computer's on the bar.",
+      "repeat": "Undid a hit again and the computer still got extra pieces on the bar."
+    },
+    "G37.hitmine": {
+      "first": "I hit one of the computer's pieces and pressed Undo, and its piece went back, but one of my own pieces was left sitting on the bar.",
+      "repeat": "I undid a hit again, and one of my own pieces was still left sitting on the bar."
     },
     "G24.owner": {
       "first": "The player takes your computer's double, but your app's state doesn't make the player the cube's owner.",
@@ -1168,12 +1176,12 @@
       "repeat": "They roll a double through your API again and it still gives them no move to make."
     },
     "G03.doublemoves": {
-      "first": "They roll a double through your app's API and the number of moves it gives them is wrong.",
-      "repeat": "They roll a double through your API again and the number of moves it gives them is still wrong."
+      "first": "They ask your engine how many moves a double allows, and the number it gives back is wrong.",
+      "repeat": "They asked your engine again how many moves a double allows, and the number is still wrong."
     },
     "G03.plainmoves": {
-      "first": "They roll two different numbers through your app's API and the number of moves it gives them is wrong.",
-      "repeat": "They roll two different numbers through your API again and the number of moves it gives them is still wrong."
+      "first": "They ask your engine how many moves two different numbers allow, and the number it gives back is wrong.",
+      "repeat": "They asked your engine again how many moves two different numbers allow, and the number is still wrong."
     },
     "G26": {
       "first": "A new game from your app doesn't start with the cube at one, in the middle.",
@@ -1990,10 +1998,6 @@
     "F88.twice": {
       "first": "When the computer won the opening roll, it moved its checkers twice as far as the dice allow — it played the 3 and the 5, then played them again.",
       "repeat": "When the computer won the opening roll, it still moved its checkers twice as far as the dice allow — it played the 3 and the 5, then played them again."
-    },
-    "G23.hitmine": {
-      "first": "I hit one of the computer's pieces and pressed Undo, and its piece went back, but one of my own pieces was left sitting on the bar.",
-      "repeat": "I undid a hit again, and one of my own pieces was still left sitting on the bar."
     }
   }
 }

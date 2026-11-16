@@ -370,7 +370,7 @@ test("[F86] REQ-HINT — a move hint looks like a faint green piece", async ({ p
   });
   await page.reload();
   const pickedUp = await pickUpAPiece(page, page.locator('[data-testid="hint"]'));
-  expect(pickedUp, "[needs: REQ-HINT/hint F03]").toBeTruthy();
+  expect(pickedUp, "[needs: REQ-HINT/hint F03 F60]").toBeTruthy();
   const hint = page.locator('[data-testid="hint"]').first();
   await expect(hint, "[needs: REQ-HINT/hint F03 F25]").toBeVisible();
 

@@ -169,7 +169,7 @@ test("[F58] REQ-GEOMETRY — the top piece slides away", async ({ page }) => {
   const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
   const backCount = await back.count();
   await playerClickUntilShown(back.nth(backCount - 1), hints);
-  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint]").toBeGreaterThan(0);
+  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F60]").toBeGreaterThan(0);
 
   // Click where the piece will sit — F45's own click: point 11's spot in the
   // bottom row, whose stacks start at the bottom edge, so the first piece of
@@ -262,7 +262,7 @@ test("[F59] REQ-GEOMETRY — a piece lands at the far end", async ({ page }) => 
   const hints = page.getByTestId("hint");
   const piece = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
   await playerClickUntilShown(piece.last(), hints);
-  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint]").toBeGreaterThan(0);
+  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F60]").toBeGreaterThan(0);
 
   // Play 13→11 by clicking the hint drawn over point 11. The point already
   // holds a checker, so the arrival spot — and the hint that plays it — sits

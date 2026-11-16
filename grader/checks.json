@@ -129,6 +129,11 @@
       "what": "Undo returns the board to exactly where it was before the move.",
       "how": "Plays a move through the API, calls undo, and asserts points, bar, and off trays deep-equal the pre-move snapshot."
     },
+    "G37": {
+      "name": "Undo takes back a hit",
+      "what": "Undoing a move that hit returns the hit piece to its point and leaves the bar as it was.",
+      "how": "Through the server: a position with a computer blot on 10, a 3-1 rolled, the hit 13→10 played and undone; the points and both bar counts must equal the pre-move snapshot."
+    },
     "G24": {
       "name": "Accepting the computer's double",
       "what": "Accepting the computer's double makes the cube 2 and owned by the player.",
@@ -1066,7 +1071,8 @@
       "checks": [
         "G07",
         "G17",
-        "F09"
+        "F09",
+        "G37"
       ]
     },
     {

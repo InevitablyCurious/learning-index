@@ -130,18 +130,24 @@ describe("Backgammon backend server-path integrity", () => {
     expect(afterUndo.points).toEqual(beforeBoard.points);
     expect(afterUndo.bar).toEqual(beforeBoard.bar);
     expect(afterUndo.off).toEqual(beforeBoard.off);
+  });
 
-    // A hit taken back: the computer's piece returns to its point and leaves the
-    // bar. Jerry, 2026-11-02, playing run 1793615343's build: two black pieces on
-    // the bar and seventeen in all — its undo put a hit piece back AND added one
-    // to the bar.
+  // A hit taken back: the computer's piece returns to its point and leaves the
+  // bar. Jerry, 2026-11-02, playing run 1793615343's build: two black pieces on
+  // the bar and seventeen in all — its undo put a hit piece back AND added one
+  // to the bar. Its own check, in the hitting stage (2026-11-16): inside G23 a
+  // build that could not hit at all was told "I made a move, hit undo, and the
+  // board didn't go back" (run 1794833910 round 1) — the move was never made,
+  // and hitting (G17, G07) is a later stage than G23's could wait on.
+  it("[G37] REQ-UNDO — undo takes back a hit", async () => {
+    await ordinaryTurn();
     const points = emptyPoints();
     points[24] = 2; points[13] = 5; points[8] = 3; points[6] = 5;
     points[10] = -1; points[1] = -2; points[12] = -4; points[17] = -3; points[19] = -5;
     await seedRolled(makeState({ points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 } }), [3, 1]);
     const hitBefore = await getState();
     const hitMove = (hitBefore.legalMoves as Move[]).find((m) => m.from === 13 && m.to === 10);
-    expect(hitMove, "[needs: G04]").toBeTruthy();
+    expect(hitMove, "[needs: G04 G17 G07] the hit from 13 to 10 was not offered").toBeTruthy();
     await api("/api/move", { from: 13, to: 10, die: 3 });
     const hitUndone = await api("/api/undo", {});
     const hit = "[aspect: hit] after a hit was taken back the board was not as it was";

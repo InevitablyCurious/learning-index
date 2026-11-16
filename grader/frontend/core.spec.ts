@@ -637,7 +637,7 @@ test("[F45] REQ-HINT — clicking where a piece can go plays the move", async ({
     const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
     const backCount = await back.count();
     if (backCount > 0) await playerClickUntilShown(back.nth(backCount - 1), hints);
-    await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]").toBeGreaterThan(0);
+    await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 F60]").toBeGreaterThan(0);
 
     // Point 11 sits in the bottom row: its column runs from the board's middle
     // (box.y, the triangle's tip) down to the board's edge (box.y + box.height,
@@ -2045,7 +2045,7 @@ test("[F95] REQ-BEAROFF — clicking the off tray bears the picked piece off", a
   const count = await piece.count();
   expect(count, "[needs: F03 F25] no piece on 5 to pick up").toBeGreaterThan(0);
   await playerClickUntilShown(piece.nth(count - 1), hints);
-  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 G08 E03]").toBeGreaterThan(0);
+  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 F60 G08 E03]").toBeGreaterThan(0);
 
   // A spot in the tray clear of every hint, the player's end first.
   const spot = await page.evaluate(() => {
@@ -3380,7 +3380,7 @@ test("[F73] REQ-DIE-ORDER — the smaller number can be played first", async ({ 
   const backCount = await back.count();
   expect(backCount, "[needs: F03 F25] no piece on 13 to pick up").toBeGreaterThan(0);
   await playerClickUntilShown(back.nth(backCount - 1), hints);
-  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]").toBeGreaterThan(1);
+  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 F60]").toBeGreaterThan(1);
 
   // The hint that shows the 3: the one drawn nearest point 10's column.
   const dest = await readColumnBox(page, 10);
@@ -3452,7 +3452,7 @@ test("[F78] REQ-DICE-USED — a played die stays on screen, greyed", async ({ pa
   const backCount = await back.count();
   expect(backCount, "[needs: F03 F25] no piece on 13 to pick up").toBeGreaterThan(0);
   await playerClickUntilShown(back.nth(backCount - 1), hints);
-  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03]").toBeGreaterThan(0);
+  await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 F60]").toBeGreaterThan(0);
   await playerClick(hints.first());
   await expect
     .poll(async () => (await readState(page)).remainingDice.length, "[needs: F25 F45] the move did not use up a die")
