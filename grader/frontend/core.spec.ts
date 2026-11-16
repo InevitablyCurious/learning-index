@@ -1671,25 +1671,32 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
     .toBeGreaterThan(0);
 
   // Play the plies the way a player does — pick up a movable checker, click a
-  // hint — until the server says the turn is over.
+  // hint — until the dice are used up (or the server says the turn is over): a
+  // player stops when there is nothing left to play, not on a flag. Run
+  // 1794853654 round 3's build left turnOver false with no dice left, the loop
+  // played on, and the model was told "my turn ends by itself" of a turn that
+  // held — End Turn waiting, the computer still. Playing the roll out is this
+  // check's SETUP, not its subject: when it fails, the turn was never judged,
+  // so it is scored and never told (its brief is handed back, respec/F47.md).
   const hints = page.getByTestId("hint");
+  const playedOut = (s: ApiState): boolean => s.turnOver || s.remainingDice.length === 0;
   const playUntilTurnOver = async (told: string): Promise<void> => {
     for (let i = 0; i < 4; i++) {
       const s = await readState(page);
-      if (s.turnOver) return;
+      if (playedOut(s)) return;
       const picked = await pickUpAPiece(page, hints);
-      expect(picked, `[needs: F03] [needs: F25] [needs: F45] ${told}: no checker could be picked up`).toBe(true);
-      await expect(hints.first(), "[needs: F03]").toBeVisible();
+      expect(picked, `[untold] [needs: F03] [needs: F25] [needs: F45] ${told}: no checker could be picked up`).toBe(true);
+      await expect(hints.first(), "[untold] [needs: F03]").toBeVisible();
       await playerClick(hints.first());
       await expect
         .poll(
           async () => (await readState(page)).remainingDice.length,
-          `[needs: F25 F45] ${told}: a move did not consume a die`,
+          `[untold] [needs: F25 F45] ${told}: a move did not consume a die`,
         )
         .toBeLessThan(s.remainingDice.length);
     }
     await expect
-      .poll(async () => (await readState(page)).turnOver, `[needs: F25 F45] ${told}: white could not finish the roll's moves`)
+      .poll(async () => playedOut(await readState(page)), `[untold] [needs: F25 F45] ${told}: white could not finish the roll's moves`)
       .toBe(true);
   };
   await playUntilTurnOver("playing the roll");
