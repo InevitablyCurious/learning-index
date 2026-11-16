@@ -699,7 +699,7 @@ test("[F60] REQ-HINT — picking a piece up from its column", async ({ page }) =
     // A few pixels below the deepest checker's bottom, clamped inside the column.
     return { x: pb.x + pb.width / 2, y: Math.min(deepest + 6, pb.y + pb.height - 4) };
   });
-  expect(spot).not.toBeNull();
+  expect(spot, "[needs: REQ-TESTID/point]").not.toBeNull();
   const x = spot!.x;
   const y = spot!.y;
 
