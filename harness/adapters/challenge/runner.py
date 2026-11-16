@@ -2247,6 +2247,27 @@ class ChallengeRunner(
                         first_phase_of_layer = {
                             ph.layer: ph.index for ph in reversed(phases) if ph.layer
                         }
+
+                        # And only when THIS cell saw it pass in an earlier
+                        # round: a resumed cell never graded the phase that
+                        # finished it, and a check tightened since (F71's
+                        # spacing, 2026-11-16) never met the new bar — "it was
+                        # working before" must be something the record shows.
+                        def seen_passing(check: str) -> bool:
+                            layer = self._player_layers().layer_of(
+                                check, self._player_stages()
+                            )
+                            return any(
+                                isinstance(rep.get("phase_layer"), int)
+                                and rep["phase_layer"] >= layer
+                                and check
+                                not in {
+                                    str(g).strip()
+                                    for g in rep.get("failed_gates") or []
+                                }
+                                for rep in attempt_reports[:-1]
+                            )
+
                         broke_earlier = {
                             str(p.get("check", "")).strip()
                             for p in stage_view.visible
@@ -2259,6 +2280,7 @@ class ChallengeRunner(
                                 phase.index,
                             )
                             < phase.index
+                            and seen_passing(str(p.get("check", "")).strip())
                         }
                         feedback = self._build_feedback_prompt(
                             problems=stage_view.visible,

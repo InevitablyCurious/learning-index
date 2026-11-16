@@ -41,6 +41,13 @@ import { type Page } from "@playwright/test";
 import { expect, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
 import { readCheckerBoxes, readCheckerShapes, typicalWidth, waitForBoardSettled } from "./board-geometry.ts";
 
+/**
+ * The widest step a stack may take, in checker-widths: pieces "right against
+ * the last" (the build prompt), so a gap of a few pixels at most — 1.05 of a
+ * piece is about 3 px at 1280x800. The reference steps exactly 1.00.
+ */
+const SPREAD_MAX = 1.05;
+
 interface ApiState {
   legalMoves: { from: number; to: number; die: number }[];
 }
@@ -397,7 +404,7 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
       }),
     );
   const crowdedRows = rowsWhere((e) => e <= 0.85);
-  const spreadRows = rowsWhere((e) => e >= 1.4);
+  const spreadRows = rowsWhere((e) => e >= SPREAD_MAX);
   // Written out whole: the aspect markers are read from this source to pin
   // that every one has its lines (tests/test_player_stages.py).
   const rowAspect = (kind: "crowded" | "spread", rows: Set<string>, row: string): string => {
@@ -426,9 +433,10 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
     ).toBeLessThanOrEqual(0.2);
     // REACH — evenness is relative; this is the step judged against the
     // piece itself. Extent 1.0 is one checker wide, each piece right
-    // against the last. The 1.4 top sits far above the reference's ~1.0
-    // (a slightly looser but packed board still passes) and far below a
-    // space-between build stretched across the point; the 0.85 bottom is
+    // against the last (the build prompt). The top is SPREAD_MAX: a gap of
+    // a few pixels at most (Jerry, 2026-11-16: the old 1.4 passed run
+    // 1794837109's stacks at 1.15 — a 15% gap a player sees at every window
+    // size — while the reference steps exactly 1.00). The 0.85 bottom is
     // a step tighter than a checker — crowded, not collapsed (F43 tells
     // the collapse itself). A board whose median piece has no width
     // leaves the ratio unreadable — any step against nothing reads as
@@ -445,7 +453,7 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
     expect(
       extent,
       `${rowAspect("spread", spreadRows, row)} [needs: F02] point ${loc} (${row} row) holds ${held} checkers, drawn at steps of ${extent.toFixed(2)} checker-widths — spread apart along the point, where a player needs each piece one checker-width against the last`,
-    ).toBeLessThan(1.4);
+    ).toBeLessThan(SPREAD_MAX);
     evenPitches.push(avg);
   }
 
