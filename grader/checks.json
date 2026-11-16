@@ -142,7 +142,7 @@
     "G24": {
       "name": "Accepting the computer's double",
       "what": "Accepting the computer's double makes the cube 2 and owned by the player.",
-      "how": "Sets a double-offered state, accepts through the response endpoint, and asserts the cube is value 2 owner white in both the response and persisted state."
+      "how": "Sets a double-offered state, accepts through the response endpoint, and asserts the cube is value 2 owner white in both the response and persisted state; then steps the computer's turn: it must not offer again on the player's cube ([aspect: again]) and must move ([aspect: plays])."
     },
     "G25": {
       "name": "The computer takes its turn",

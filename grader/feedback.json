@@ -208,8 +208,8 @@
       "repeat": "The player takes your computer's double and your app's state still doesn't make them the cube's owner."
     },
     "G24.plays": {
-      "first": "After the player takes your computer's double, your computer skips the rest of its turn and hands the turn straight back.",
-      "repeat": "After the player takes its double, your computer still skips the rest of its turn and hands the turn straight back."
+      "first": "After the player takes your computer's double, your computer doesn't play the turn it doubled on — none of its pieces move.",
+      "repeat": "After the player takes its double, your computer still doesn't play the turn it doubled on."
     },
     "G24.never": {
       "first": "They play races where your computer is far ahead, and it never offers a double.",
@@ -2022,6 +2022,10 @@
     "F33.twice": {
       "first": "I rolled a double, and one click played two of its moves at once — I clicked to move one piece and two of my moves were used up.",
       "repeat": "Rolled a double again and one click still played two of its moves at once."
+    },
+    "G24.again": {
+      "first": "After the player takes your computer's double, your computer offers to double again straight away, on a cube the player now owns.",
+      "repeat": "After the take, your computer still offers to double again straight away, on a cube the player owns."
     }
   }
 }

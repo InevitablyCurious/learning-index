@@ -249,9 +249,14 @@ describe("Backgammon backend server-path integrity", () => {
       JSON.stringify([(st.points as number[]).map((v) => (v < 0 ? v : 0)), st.bar.black, st.off.black]);
     const before = blackOf(state);
     let after = state;
-    for (let guard = 0; guard < 12 && after.turn === "black"; guard++) {
+    for (let guard = 0; guard < 12 && after.turn === "black" && after.phase !== "doubleOffered"; guard++) {
       after = await api("/api/ai", {});
     }
+    // The cube is the player's now, so the computer has no double to offer
+    // until it is redoubled: run 1794869961's offered again at once (the cube
+    // went to 4 on the player's cube) and sat on the offer without moving,
+    // and was told it "hands the turn straight back".
+    expect(after.phase, "[aspect: again] after the take the computer offered to double again").not.toBe("doubleOffered");
     expect(blackOf(after), "[aspect: plays] after the take the computer skipped its turn").not.toBe(before);
   });
 
