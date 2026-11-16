@@ -135,22 +135,23 @@ describe("Backgammon backend gates 01-08", () => {
   });
 
   it("[G06] REQ-BAR — bar re-entry + blocked pass", () => {
-    const REENTER = "[aspect: reenter]";
     const BLOCKED = "[aspect: blocked]";
     const entryPts = emptyPoints();
     entryPts[10] = -1;
     entryPts[8] = 1;
     const entryBoard = bd(entryPts, { white: 1, black: 0 }, { white: 0, black: 0 });
 
-    // Which fault, told as the player meets it: another piece moving while one
-    // waits on the bar; no way back in at all; or a way back in on the wrong
-    // point. Run 1790633807's bar piece came in at the wrong end (a 2 entered
-    // on point 2, not 23, its hint drawn there) and was told "the game let me
-    // play other pieces".
-    const entryMoves = game.singleMoves(entryBoard, "white", 2) as Move[];
-    expect(entryMoves.every((m) => m.from === 0), REENTER).toBe(true);
-    expect(entryMoves.length, "[aspect: noentry] no way in off the bar onto an open point").toBeGreaterThan(0);
-    expect(norm(entryMoves), "[aspect: wrongpoint] the bar piece is offered the wrong point").toEqual(
+    // Which fault, told as the player meets it: no way back in at all, or a way
+    // back in on the wrong point. Only the bar piece's own moves are judged
+    // here — whether other pieces may move while one waits on the bar is E05's
+    // alone. Run 1790633807's bar piece came in at the wrong end (a 2 entered
+    // on point 2, not 23) and was told "the game let me play other pieces";
+    // run 1794859708's did the same while its page kept the other pieces still,
+    // and the "other pieces" line, asserted first here, hid the wrong point a
+    // player could see.
+    const barMoves = (game.singleMoves(entryBoard, "white", 2) as Move[]).filter((m) => m.from === 0);
+    expect(barMoves.length, "[aspect: noentry] no way in off the bar onto an open point").toBeGreaterThan(0);
+    expect(norm(barMoves), "[aspect: wrongpoint] the bar piece is offered the wrong point").toEqual(
       norm([{ from: 0, to: 23, die: 2 }]),
     );
 

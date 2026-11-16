@@ -36,8 +36,8 @@
     },
     "G06": {
       "name": "Entering from the bar",
-      "what": "A checker on the bar must come back in first, and a player who can't enter has no move.",
-      "how": "White on the bar with a 2 must have exactly one move, entering on 23. With black holding 23 and 21, a roll of 2 and 4 must leave no legal moves."
+      "what": "A checker on the bar comes back in on the right point, and a player who can't enter has no move.",
+      "how": "White on the bar with a 2 must have exactly one way in off the bar, entering on 23. With black holding 23 and 21, a roll of 2 and 4 must leave no legal moves."
     },
     "G07": {
       "name": "Hitting sends a checker to the bar",

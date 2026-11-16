@@ -1,1 +1,1 @@
-Again with a piece on the bar and their home side completely shut: I could still move my other pieces, or the whole thing fell over.
+They asked your engine again with a piece shut out on the bar, and it still offers moves for their other pieces, or fails outright.

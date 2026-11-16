@@ -3137,6 +3137,13 @@ class ChallengeRunner(
         # server never makes in play (it checks for no move first), so the
         # software team meets it, not a player (2026-11-16).
         "G38",
+        # Other pieces moving while one waits on the bar, asked of the engine.
+        # A page can keep the other pieces still on its own while the engine
+        # still lists them: run 1794859708's did, and the player's "I was able
+        # to move another piece" was false for anyone on its page (2026-11-16).
+        # Only the engine's answer is checked, so only the team meets it.
+        "E04",
+        "E05",
     )
 
     # HARNESS-INFRA CHECK NAMES (WO-FEEDBACK-VOICE-3 follow-up, 2026-08-30).

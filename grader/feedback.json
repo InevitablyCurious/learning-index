@@ -260,12 +260,12 @@
       "repeat": "With a number that exactly matches a piece's point, the game still won't take that piece off."
     },
     "E04": {
-      "first": "I rolled the dice while my piece was on the bar, and the opponent had filled up his home section with all 6 spaces being taken with 2x pieces and the dice i rolled were blocked but i was able to move my pieces anyways that weren't on the bar or the game just crashed.",
-      "repeat": "Again with a piece on the bar and their home side completely shut: I could still move my other pieces, or the whole thing fell over."
+      "first": "They ask your engine for the moves with one of their pieces on the bar and every point it could come in on covered, and it doesn't come back empty — it offers moves for their other pieces, or it fails outright. A piece that can't come in off the bar means no move at all that turn.",
+      "repeat": "They asked your engine again with a piece shut out on the bar, and it still offers moves for their other pieces, or fails outright."
     },
     "E05": {
-      "first": "I rolled the dice while my piece was on the bar, and i was able to move another piece (the non-bar piece) before the bar piece, this is broken",
-      "repeat": "With a piece stuck on the bar it still let me pick up a different one first."
+      "first": "They ask your engine for the moves while one of their pieces is on the bar, and it offers moves for their other pieces too — a piece on the bar has to come back in before any other piece may move.",
+      "repeat": "They asked your engine again with a piece on the bar, and it still offers moves for their other pieces."
     },
     "E06": {
       "first": "My pip count is wrong while one of my pieces is on the bar.",
@@ -1142,10 +1142,6 @@
     "G06.wrongpoint": {
       "first": "When I bring a piece in off the bar, the game offers me the wrong point to come in on — I expect it on the point in my opponent's home that matches the number I use.",
       "repeat": "Brought a piece in off the bar again and it's still offered the wrong point to come in on."
-    },
-    "G06.reenter": {
-      "first": "I was on the bar and the game let me play other pieces, not bring the one on the bar back in.",
-      "repeat": "Went to the bar again and it still let me play other pieces, not bring the bar piece back in."
     },
     "G10.points": {
       "first": "I won a gammon and it only counted as one point.",
