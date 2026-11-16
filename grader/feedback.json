@@ -183,6 +183,10 @@
       "first": "I hit one of the computer's pieces and pressed Undo, and its piece went back, but it also left extra pieces of the computer's on the bar.",
       "repeat": "Undid a hit again and the computer still got extra pieces on the bar."
     },
+    "G37.hitback": {
+      "first": "I hit one of the computer's pieces and pressed Undo, and its piece didn't go back to the point it was hit on.",
+      "repeat": "Undid a hit again, and the computer's piece still didn't go back to the point it was hit on."
+    },
     "G37.hitmine": {
       "first": "I hit one of the computer's pieces and pressed Undo, and its piece went back, but one of my own pieces was left sitting on the bar.",
       "repeat": "I undid a hit again, and one of my own pieces was still left sitting on the bar."

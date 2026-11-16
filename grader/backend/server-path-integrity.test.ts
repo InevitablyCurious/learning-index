@@ -150,8 +150,19 @@ describe("Backgammon backend server-path integrity", () => {
     expect(hitMove, "[needs: G04 G17 G07] the hit from 13 to 10 was not offered").toBeTruthy();
     await api("/api/move", { from: 13, to: 10, die: 3 });
     const hitUndone = await api("/api/undo", {});
-    const hit = "[aspect: hit] after a hit was taken back the board was not as it was";
-    expect(hitUndone.points, hit).toEqual(hitBefore.points);
+    // Told as what a player sees, in the order they would see it (2026-11-16:
+    // run 1794857044's undo left point 10 empty AND two computer pieces on the
+    // bar, and was told "its piece went back, but it also left extra pieces" —
+    // half false). First whether the hit piece came back to its point; only
+    // then whose pieces are left on the bar, each its own line.
+    expect(
+      hitUndone.points[10],
+      "[aspect: hitback] after a hit was taken back the computer's piece was not back on point 10",
+    ).toBe(hitBefore.points[10]);
+    expect(
+      hitUndone.bar.black,
+      `[aspect: hit] after a hit was taken back the computer's pieces on the bar went from ${hitBefore.bar.black} to ${hitUndone.bar.black}`,
+    ).toBe(hitBefore.bar.black);
     // Whose piece is left on the bar is named (Jerry, 2026-11-12): run
     // 1794493441's build put the computer's piece back and left one of the
     // player's own on the bar, and "extra pieces of the computer's" was false.
@@ -159,7 +170,9 @@ describe("Backgammon backend server-path integrity", () => {
       hitUndone.bar.white,
       `[aspect: hitmine] after a hit was taken back the player's pieces on the bar went from ${hitBefore.bar.white} to ${hitUndone.bar.white}`,
     ).toBe(hitBefore.bar.white);
-    expect(hitUndone.bar, hit).toEqual(hitBefore.bar);
+    // Anything else not as it was: the general line.
+    expect(hitUndone.points, "after a hit was taken back the board was not as it was").toEqual(hitBefore.points);
+    expect(hitUndone.bar, "after a hit was taken back the bar was not as it was").toEqual(hitBefore.bar);
   });
 
   // Races from even to hopeless for black (white falling behind a checker at a
