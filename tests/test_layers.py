@@ -37,8 +37,8 @@ def test_load_layers_reads_the_map() -> None:
     # everything by stage default and never fail.
     assert isinstance(LAYERS, LayerMap)
     # F74 removed; F93, F94 and F95 added (Jerry, 2026-11-12/13); G37 split
-    # from G23 (2026-11-16).
-    assert len(LAYERS.checks) == 164
+    # from G23, G38 added (2026-11-16).
+    assert len(LAYERS.checks) == 165
     assert len(LAYERS.stages) == 19
     assert LAYERS.stages[1] == 1  # first look, the board surface
     assert LAYERS.stages[6] == 1  # first look's last stage, the pieces

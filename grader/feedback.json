@@ -187,6 +187,18 @@
       "first": "I hit one of the computer's pieces and pressed Undo, and its piece went back, but one of my own pieces was left sitting on the bar.",
       "repeat": "I undid a hit again, and one of my own pieces was still left sitting on the bar."
     },
+    "G38": {
+      "first": "Their software asks your computer player for its move on a turn where it has no move to make, and it doesn't answer with no moves.",
+      "repeat": "They asked your computer player again for its move on a turn with no move to make, and it still doesn't answer with no moves."
+    },
+    "G38.throws": {
+      "first": "Their software asks your computer player for its move on a turn where it has no move to make, and it crashes with an error.",
+      "repeat": "They asked your computer player again for its move on a turn with no move to make, and it still crashes with an error."
+    },
+    "G38.moves": {
+      "first": "Their software asks your computer player for its move on a turn where it has no move to make, and it answers with moves anyway.",
+      "repeat": "They asked your computer player again for its move on a turn with no move to make, and it still answers with moves."
+    },
     "G24.owner": {
       "first": "The player takes your computer's double, but your app's state doesn't make the player the cube's owner.",
       "repeat": "The player takes your computer's double and your app's state still doesn't make them the cube's owner."

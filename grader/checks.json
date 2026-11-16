@@ -134,6 +134,11 @@
       "what": "Undoing a move that hit returns the hit piece to its point and leaves the bar as it was.",
       "how": "Through the server: a position with a computer blot on 10, a 3-1 rolled, the hit 13→10 played and undone; the points and both bar counts must equal the pre-move snapshot."
     },
+    "G38": {
+      "name": "The computer's chooser answers a turn with no move",
+      "what": "chooseMoves, asked for a turn with no legal move, returns no moves and the board unchanged at every difficulty, never an error.",
+      "how": "Through the engine: black's one piece on 18, outside its home board, every point from 19 to 24 held by two white pieces, dice 6-5; chooseMoves at easy, medium and hard."
+    },
     "G24": {
       "name": "Accepting the computer's double",
       "what": "Accepting the computer's double makes the cube 2 and owned by the player.",
@@ -1060,6 +1065,7 @@
         "REQ-RESPONSIVE/playing",
         "F55",
         "REQ-RESPONSIVE/aiturn",
+        "G38",
         "G14",
         "G30",
         "E08"

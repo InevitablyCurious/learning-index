@@ -532,7 +532,11 @@ describe("Backgammon backend server-path integrity", () => {
     ];
     for (const spot of spots) {
       for (const difficulty of ["easy", "medium", "hard"]) {
-        for (let trial = 0; trial < 3; trial++) {
+        // Eight tries a level: a computer that picks among its sequences at
+        // random breaks the rule on some turns only (run 1794839567's easy
+        // played the smaller number 106 times in 200), and three tries missed
+        // it one run in eight — the same build passed, then failed.
+        for (let trial = 0; trial < 8; trial++) {
           await api("/api/new", {});
           const points = emptyPoints();
           points[spot.black] = -1;

@@ -364,6 +364,9 @@ _STATIC_TESTIDS = (
     "modalBtns",
 )
 _HELPER_MARKERS = {
+    # choose (gates-14-30.test.ts): a chooser that throws waits on G38, the
+    # check that asks it a turn with no move (2026-11-16).
+    ("backend/gates-14-30.test.ts", "[needs: G38]"): ("G14",),
     # rollAndCheck (fixtures.ts): a press of Roll that made no roll waits on F89.
     ("frontend/fixtures.ts", "[needs: F89]"): (
         "F03",

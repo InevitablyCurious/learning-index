@@ -152,9 +152,17 @@ describe("Backgammon backend gates 13-16", () => {
       // first listed move ran the turn out and told "the computer never takes
       // its turn". A game that takes none of the moves it lists is the
       // played-move gate's finding.
-      const refused = "[needs: F25] the game refused every move it listed";
+      // Played out when the dice are used up, or the server says so: a player
+      // stops when there is nothing left to play (run 1794856383's build left
+      // turnOver false with no dice, the loop tried moves the game rightly
+      // refused, and "the computer never takes its turn" was told before the
+      // computer was ever reached). Playing the player's roll is this check's
+      // SETUP: when it fails the computer was never judged — scored, never
+      // told (respec/G25.md hands back the brief).
+      const refused = "[untold] [needs: F25] the game refused every move it listed";
+      const playedOut = (s: any): boolean => Boolean(s.turnOver) || (s.remainingDice ?? []).length === 0;
       let moveSteps = 0;
-      while (!state.turnOver && moveSteps < 16) {
+      while (!playedOut(state) && moveSteps < 16) {
         const legalMoves = (state.legalMoves ?? []) as Move[];
         expect(legalMoves.length, moveSteps === 0 ? noMove : undefined).toBeGreaterThan(0);
         const before = JSON.stringify(state.remainingDice);
@@ -171,7 +179,7 @@ describe("Backgammon backend gates 13-16", () => {
         moveSteps++;
       }
 
-      expect(state.turnOver).toBe(true);
+      expect(playedOut(state), "[untold] [needs: F25 F47] the player's roll could not be played out").toBe(true);
 
       // The computer's turn, however the app runs it: step by step through
       // /api/ai, or whole inside /api/endturn. Run 1790608868's server played

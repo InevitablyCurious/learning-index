@@ -3133,6 +3133,10 @@ class ChallengeRunner(
         "F63",
         "F68",
         "F69",
+        # The computer's chooser asked with no move to make: an engine call the
+        # server never makes in play (it checks for no move first), so the
+        # software team meets it, not a player (2026-11-16).
+        "G38",
     )
 
     # HARNESS-INFRA CHECK NAMES (WO-FEEDBACK-VOICE-3 follow-up, 2026-08-30).

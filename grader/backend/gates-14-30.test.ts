@@ -167,6 +167,44 @@ describe("Backgammon backend gates 14-30 (the computer's engine)", () => {
       Math.random = originalRandom;
     });
 
+    // The computer's choice, as a check reaches it: a chooser that throws has
+    // no move to judge, and its crash is G38's finding, not G14's (run
+    // 1794856383 round 1: hard's chooseMoves threw on a no-move position in
+    // self-play, and G14 told a player "the skill setting doesn't seem to
+    // change anything" — the build's server never asks it with no move).
+    function choose(board: Board, player: Player, dice: number[], difficulty: Difficulty) {
+      try {
+        return ai.chooseMoves(game.cloneBoard(board), player, [...dice], difficulty) as {
+          moves: Move[];
+          board: Board;
+        };
+      } catch (err) {
+        throw new Error(`[needs: G38] chooseMoves threw at ${difficulty}: ${(err as Error).message}`);
+      }
+    }
+
+    // A position with no legal move for black: its one piece on 18, outside its
+    // home board, and every point from 19 to 24 held by two white pieces.
+    it("[G38] REQ-AILEGAL — the computer's chooser answers a turn with no move", () => {
+      const points = new Array(26).fill(0);
+      points[18] = -1;
+      for (let p = 19; p <= 24; p++) points[p] = 2;
+      const board: Board = { points, bar: { white: 0, black: 0 }, off: { white: 3, black: 14 } };
+      for (const difficulty of DIFFICULTIES) {
+        const before = JSON.stringify(board);
+        let result: { moves: Move[]; board: Board } | null = null;
+        let threw: string | null = null;
+        try {
+          result = ai.chooseMoves(game.cloneBoard(board), "black", [6, 5], difficulty);
+        } catch (err) {
+          threw = (err as Error).message;
+        }
+        expect(threw, `[aspect: throws] chooseMoves threw at ${difficulty} with no legal move: ${threw}`).toBeNull();
+        expect(result?.moves ?? null, `[aspect: moves] chooseMoves returned moves at ${difficulty} with no legal move`).toEqual([]);
+        expect(JSON.stringify(result?.board), `[aspect: moves] chooseMoves changed the board at ${difficulty} with no legal move`).toBe(before);
+      }
+    });
+
     it("[G14] REQ-AILEGAL — chooseMoves always returns legal move sequences", () => {
       const seed = 0x13a4b6c8;
       Math.random = mulberry32(seed);
@@ -178,10 +216,7 @@ describe("Backgammon backend gates 14-30 (the computer's engine)", () => {
 
         for (const difficulty of DIFFICULTIES) {
           const start = game.cloneBoard(board);
-          const result = ai.chooseMoves(game.cloneBoard(board), player, [...dice], difficulty) as {
-            moves: Move[];
-            board: Board;
-          };
+          const result = choose(board, player, dice, difficulty);
 
           const replayed = replayAndAssertLegal(start, player, [...dice], result.moves);
           expect(result.board).toEqual(replayed);
@@ -207,10 +242,7 @@ describe("Backgammon backend gates 14-30 (the computer's engine)", () => {
         for (let halfTurns = 0; halfTurns < 400; halfTurns++) {
           const dice = rollDice(Math.random);
           const difficulty: Difficulty = player === "black" ? "hard" : "easy";
-          const choice = ai.chooseMoves(game.cloneBoard(board), player, [...dice], difficulty) as {
-            moves: Move[];
-            board: Board;
-          };
+          const choice = choose(board, player, dice, difficulty);
           board.points = [...choice.board.points];
           board.bar = { ...choice.board.bar };
           board.off = { ...choice.board.off };

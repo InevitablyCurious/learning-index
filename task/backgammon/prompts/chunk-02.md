@@ -10,7 +10,7 @@ type CubeDecision = { action: "double" | "no-double"; reasoning: string };
 export function evaluate(b: Board, player: Player): number;
 
 /** Choose the AI's full-turn move sequence for the given `dice` at `difficulty`, returning the
- *  chosen moves and resulting board. */
+ *  chosen moves and resulting board — no moves and the board unchanged when it has no legal move. */
 export function chooseMoves(b: Board, player: Player, dice: number[], difficulty: "easy" | "medium" | "hard"): AiMoveResult;
 
 /** Estimate `player`'s probability of winning from board `b`, in [0,1]. */
