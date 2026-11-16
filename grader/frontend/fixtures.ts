@@ -318,7 +318,15 @@ export async function pickUpAPiece(page: Page, hints: Locator): Promise<boolean>
       );
       const top = onScreen.lastIndexOf(true);
       if (top < 0) continue;
-      await playerClickUntilShown(pieces.nth(top), hints, tries);
+      // The last piece is named at click time, not by a number read a moment
+      // before: the board redraws after a move, and a stack that just lost a
+      // piece left "piece 3 of 3" naming nothing — the click waited for it,
+      // 5 s a try, until the move's time ran out, and the model was told it
+      // "got the wrong number of moves" of a 6-5 it could play (run 1794845176
+      // round 4, F39; it reproduced one run in two). A numbered piece only
+      // when the last one is past the window's edge.
+      const target = top === onScreen.length - 1 ? pieces.last() : pieces.nth(top);
+      await playerClickUntilShown(target, hints, tries);
       if ((await hints.count()) > 0) return true;
     }
   }

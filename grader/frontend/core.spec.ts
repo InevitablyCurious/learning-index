@@ -66,7 +66,7 @@ async function clickTopWhiteChecker(page: Page, from: number): Promise<boolean> 
   );
   const count = await checker.count();
   if (count === 0) return false;
-  await playerClick(checker.nth(count - 1));
+  await playerClick(checker.last());
   return true;
 }
 
@@ -501,7 +501,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
   // every build that takes clicks only once the dice land (FIX-27b: M88).
   const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
   const backCount = await back.count();
-  if (backCount > 0) await playerClickUntilShown(back.nth(backCount - 1), page.getByTestId("hint"));
+  if (backCount > 0) await playerClickUntilShown(back.last(), page.getByTestId("hint"));
   const on13 = (await page.getByTestId("hint").count()) > 0;
   if (!on13) {
     try {
@@ -564,7 +564,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
       );
       const secondCount = await secondTop.count();
       if (secondCount > 0) {
-        await playerClick(secondTop.nth(secondCount - 1));
+        await playerClick(secondTop.last());
         await expect
           .poll(
             async () => hintsMovedAway(firstPositions, await hintPositions(page)),
@@ -636,7 +636,7 @@ test("[F45] REQ-HINT — clicking where a piece can go plays the move", async ({
     const hints = page.getByTestId("hint");
     const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
     const backCount = await back.count();
-    if (backCount > 0) await playerClickUntilShown(back.nth(backCount - 1), hints);
+    if (backCount > 0) await playerClickUntilShown(back.last(), hints);
     await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 F60]").toBeGreaterThan(0);
 
     // Point 11 sits in the bottom row: its column runs from the board's middle
@@ -1450,7 +1450,7 @@ test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ p
     const top = page.locator(`[data-testid="checker"][data-color="white"][data-loc="${locAttr(from)}"]`);
     const n = await top.count();
     if (n === 0) continue;
-    await playerClick(top.nth(n - 1));
+    await playerClick(top.last());
     await page.waitForTimeout(600);
     const legalTo = new Set(state.legalMoves.filter((m) => m.from === from).map((m) => m.to));
     const points = await readPointBoxes(page);
@@ -1500,7 +1500,7 @@ test("[F76] REQ-HINT — clicking a hint moves the piece that was picked up", as
   const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
   const backCount = await back.count();
   if (backCount > 0) {
-    await playerClick(back.nth(backCount - 1));
+    await playerClick(back.last());
     await page.waitForTimeout(600);
     const hints = page.getByTestId("hint");
     if ((await hints.count()) > 0) {
@@ -2044,7 +2044,7 @@ test("[F95] REQ-BEAROFF — clicking the off tray bears the picked piece off", a
   const piece = page.locator('[data-testid="checker"][data-color="white"][data-loc="5"]');
   const count = await piece.count();
   expect(count, "[needs: F03 F25] no piece on 5 to pick up").toBeGreaterThan(0);
-  await playerClickUntilShown(piece.nth(count - 1), hints);
+  await playerClickUntilShown(piece.last(), hints);
   await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 F60 G08 E03]").toBeGreaterThan(0);
 
   // A spot in the tray clear of every hint, the player's end first.
@@ -3379,7 +3379,7 @@ test("[F73] REQ-DIE-ORDER — the smaller number can be played first", async ({ 
   const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
   const backCount = await back.count();
   expect(backCount, "[needs: F03 F25] no piece on 13 to pick up").toBeGreaterThan(0);
-  await playerClickUntilShown(back.nth(backCount - 1), hints);
+  await playerClickUntilShown(back.last(), hints);
   await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 F60]").toBeGreaterThan(1);
 
   // The hint that shows the 3: the one drawn nearest point 10's column.
@@ -3451,7 +3451,7 @@ test("[F78] REQ-DICE-USED — a played die stays on screen, greyed", async ({ pa
   const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
   const backCount = await back.count();
   expect(backCount, "[needs: F03 F25] no piece on 13 to pick up").toBeGreaterThan(0);
-  await playerClickUntilShown(back.nth(backCount - 1), hints);
+  await playerClickUntilShown(back.last(), hints);
   await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 F60]").toBeGreaterThan(0);
   await playerClick(hints.first());
   await expect

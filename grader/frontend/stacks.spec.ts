@@ -175,7 +175,7 @@ test("[F58] REQ-GEOMETRY — the top piece slides away", async ({ page }) => {
   const hints = page.getByTestId("hint");
   const back = page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]');
   const backCount = await back.count();
-  await playerClickUntilShown(back.nth(backCount - 1), hints);
+  await playerClickUntilShown(back.last(), hints);
   await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F60]").toBeGreaterThan(0);
 
   // Click where the piece will sit — F45's own click: point 11's spot in the
