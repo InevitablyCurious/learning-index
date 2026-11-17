@@ -288,7 +288,7 @@ describe("Backgammon backend gates 13-16", () => {
       //    observed a 554-turn maximum over 400 games.
       //  * A turn costs at most 8 calls (1 debugRoll + 1 roll + <=4 moves + 1
       //    endturn for the human; 1 debugRoll + 1 ai + 1 double-response for the
-      //    computer). 8000 calls covers ~1000 turns at 8 calls/turn — twice the
+      //    computer's offer). 8000 calls covers ~1000 turns at 8 calls/turn — twice the
       //    engine's own observed worst case. The no-progress detector, not this
       //    ceiling, is what fails a stuck engine immediately.
       const MAX_ITERATIONS = 8000;
@@ -306,7 +306,14 @@ describe("Backgammon backend gates 13-16", () => {
           iterations++;
           const before = JSON.stringify(state);
 
-          if (state.turn === "white") {
+          if (state.phase === "doubleOffered") {
+            // The computer's offer, taken. Whose turn the state names while an
+            // offer waits is the build's choice — the prompt fixes none: run
+            // 1794876616's offer stood on white's turn, the golden's on black's,
+            // and this driver, answering only on black's, told a game that never
+            // crashed that it "can crash partway through".
+            state = await api("/api/double/respond", { accept: true });
+          } else if (state.turn === "white") {
             if (state.phase === "roll") {
               await debugRoll(nextRoll());
               state = await api("/api/roll", {});
@@ -324,9 +331,7 @@ describe("Backgammon backend gates 13-16", () => {
               throw new Error(`white: unexpected phase ${state.phase}`);
             }
           } else if (state.turn === "black") {
-            if (state.phase === "doubleOffered") {
-              state = await api("/api/double/respond", { accept: true });
-            } else if (state.phase === "move") {
+            if (state.phase === "move") {
               // The computer won the opening roll (not reachable here — the
               // opening is forced non-tie in white's favour) and must play the
               // dice already on the table; /api/ai does so without rolling.
