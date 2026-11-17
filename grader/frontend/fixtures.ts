@@ -288,6 +288,11 @@ export async function playerClick(target: Locator): Promise<void> {
 // /api/state list) is tried first, then every other white stack: a player
 // tries the pieces they see. True once a click brought hints up.
 export async function pickUpAPiece(page: Page, hints: Locator): Promise<boolean> {
+  // A player picks up what is drawn once it holds still: every pick-up waits for
+  // the board to settle, so no check can skip it (Jerry, 2026-11-17 audit, class
+  // 3 — runs 1791403718 and 1794892305 picked up during a redraw under load and
+  // were told no checker could be picked up).
+  await waitForBoardSettled(page).catch(() => undefined);
   const response = await page.request.post("/api/state", { data: {} });
   const state = response.ok()
     ? ((await response.json().catch(() => ({}))) as { legalMoves?: { from: number }[] })

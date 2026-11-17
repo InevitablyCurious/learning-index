@@ -77,3 +77,23 @@ def test_no_team_line_speaks_as_the_player() -> None:
             assert not found, (
                 f"{key}/{kind} is told by the team but speaks as the player ({found}): {line[kind]}"
             )
+
+
+def test_a_check_that_did_not_finish_is_told_to_no_one() -> None:
+    from pathlib import Path as _P
+
+    from harness.adapters.challenge.stages import load_stages, player_view
+
+    stages = load_stages(_P(GRADER / "checks.json"))
+    for observed in (
+        "Test timeout of 30000ms exceeded.",
+        "AssertionError: Test timed out in 60000ms.",
+        "Error: STACK_TRACE_ERROR",
+    ):
+        view = player_view(
+            [{"check": "[F33] REQ-DOUBLES — a double", "observed": observed}],
+            stages,
+            is_infra=lambda c: False,
+        )
+        assert not view.visible, observed
+        assert view.unevaluated == ["[F33] REQ-DOUBLES — a double"], observed

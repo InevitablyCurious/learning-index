@@ -77,9 +77,31 @@ def is_untold(problem: dict[str, Any]) -> bool:
     return _UNTOLD in str(problem.get("observed", ""))
 
 
+# A CHECK THAT DIDN'T FINISH IS NOT A FINDING (Jerry, 2026-11-17 audit, class 3).
+# A test that ran out of time — Playwright's "Test timeout of …ms exceeded",
+# vitest's own timer ("Test timed out in …", or its STACK_TRACE_ERROR when the
+# timer fires after a synchronous block) — never reached a verdict on its
+# subject. Told by the check's own line it was false over and over (1,300+
+# times in the saved runs; run 1794897794's slow-but-correct self-play told
+# "the skill setting doesn't change anything"). It is scored as not passing and
+# told to no one; a check that needs to report a frozen page bounds its own
+# step and names it with an aspect.
+_DID_NOT_FINISH = re.compile(
+    r"Test timeout of \d+ms exceeded|Test timed out in \d+|STACK_TRACE_ERROR"
+)
+
+
+def did_not_finish(problem: dict[str, Any]) -> bool:
+    return bool(_DID_NOT_FINISH.search(str(problem.get("observed", ""))))
+
+
 def is_unevaluated(problem: dict[str, Any]) -> bool:
     observed = str(problem.get("observed", "")).strip()
-    return observed.startswith(_UNEVALUATED) or _UNTOLD in observed
+    return (
+        observed.startswith(_UNEVALUATED)
+        or _UNTOLD in observed
+        or did_not_finish(problem)
+    )
 
 
 # A CHECK THAT CANNOT GET STARTED IS NOT TOLD (Jerry, 2026-09-24). A gate that
