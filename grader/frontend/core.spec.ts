@@ -1139,9 +1139,16 @@ async function recordFrames(page: Page, color: Player): Promise<void> {
       const board = document.querySelector('[data-testid="board"]')?.getBoundingClientRect();
       const ox = board?.x ?? 0;
       const oy = board?.y ?? 0;
+      // A die by its face — what is drawn inside it — never by its class or
+      // style, which a page changes to dim or mark a used die
+      // (diceNow reads the same way). Run 1794900428's page dropped a
+      // "no-moves" class from the player's spent 3-1 102 ms after End Turn,
+      // and that was read as the computer's roll coming up straight away; its
+      // 6-5 came up at 1075 ms. Its class stands in only for a die drawn
+      // with nothing inside it.
       const dice = [...document.querySelectorAll('[data-testid="die"]')]
         .filter((el) => (el as HTMLElement).checkVisibility())
-        .map((el) => el.outerHTML)
+        .map((el) => el.innerHTML || String(el.getAttribute("class") ?? ""))
         .join("|");
       const drawn = [...document.querySelectorAll(`[data-testid="checker"][data-color="${color}"]`)].filter((el) =>
         (el as HTMLElement).checkVisibility(),
@@ -1170,9 +1177,10 @@ async function recordFrames(page: Page, color: Player): Promise<void> {
 async function diceNow(page: Page): Promise<{ at: number; dice: string }> {
   return page.evaluate(() => ({
     at: performance.now(),
+    // By face, as recordFrames reads it.
     dice: [...document.querySelectorAll('[data-testid="die"]')]
       .filter((el) => (el as HTMLElement).checkVisibility())
-      .map((el) => el.outerHTML)
+      .map((el) => el.innerHTML || String(el.getAttribute("class") ?? ""))
       .join("|"),
   }));
 }
