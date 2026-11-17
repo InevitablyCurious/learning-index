@@ -2030,6 +2030,14 @@
     "F49.never": {
       "first": "I was far behind in a race and the computer never once offered to double.",
       "repeat": "Far behind in a race again, and the computer still never offered to double."
+    },
+    "F29.faint": {
+      "first": "The bar down the middle is only faintly different from the board — I expect it to stand out clearly.",
+      "repeat": "The bar down the middle is still only faintly different from the board."
+    },
+    "F32.faint": {
+      "first": "The off tray is only faintly different from the board — I expect it to stand out clearly.",
+      "repeat": "The off tray is still only faintly different from the board."
     }
   }
 }

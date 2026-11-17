@@ -94,6 +94,7 @@
     "members": [
       "F29",
       "F29.blend",
+      "F29.faint",
       "F29.overlap",
       "F29.place",
       "F29.short",
@@ -111,6 +112,7 @@
     "members": [
       "F32",
       "F32.blend",
+      "F32.faint",
       "F32.narrow",
       "F32.offboard",
       "F32.overlap",

@@ -28,6 +28,8 @@ import {
   sampleBoxColours,
   standsOutFromBoard,
   emptyStripBesideBarOrTray,
+  colourDeltaE,
+  FAINT_FROM,
 } from "./board-geometry.ts";
 
 // The shared opening: load the app, start a fresh game through the API, reload
@@ -194,6 +196,14 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   // is F30's finding.
   const feltForBar = await sampleBoardColour(page, points);
   const [barLook] = await standsOutFromBoard(page, [bar], feltForBar.colours[0]);
+  // Faint is not invisible: run 1794883426's bar, 30,58,46 on a 46,74,62 board
+  // (ΔE 7.0), read as a darker band down the middle, and "blends into the board,
+  // so I can't pick it out" was not what a player saw.
+  const barApart = barLook.centre ? colourDeltaE(barLook.centre, feltForBar.colours[0]) : 0;
+  expect(
+    barLook.fill || barLook.outline || barApart < FAINT_FROM,
+    `[aspect: faint] [needs: F30] the bar is only faintly apart from the board — ΔE ${barApart.toFixed(1)}, its middle ${barLook.centre?.join(",")} against the board's ${feltForBar.colours[0].join(",")}`,
+  ).toBeTruthy();
   expect(
     barLook.fill || barLook.outline,
     `[aspect: blend] [needs: F30] the bar does not stand out from the board — its middle is ${barLook.centre?.join(",")} against the board's ${feltForBar.colours[0].join(",")} and it has no edge of its own`,
@@ -471,6 +481,12 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
   // edge of its own is a strip of nothing at the end.
   const feltForTray = await sampleBoardColour(page, points);
   const [trayLook] = await standsOutFromBoard(page, [tray], feltForTray.colours[0]);
+  // Faint is not invisible, as for the bar (F29).
+  const trayApart = trayLook.centre ? colourDeltaE(trayLook.centre, feltForTray.colours[0]) : 0;
+  expect(
+    trayLook.fill || trayLook.outline || trayApart < FAINT_FROM,
+    `[aspect: faint] [needs: F30] the off tray is only faintly apart from the board — ΔE ${trayApart.toFixed(1)}, its middle ${trayLook.centre?.join(",")} against the board's ${feltForTray.colours[0].join(",")}`,
+  ).toBeTruthy();
   expect(
     trayLook.fill || trayLook.outline,
     `[aspect: blend] [needs: F30] the off tray does not stand out from the board — its middle is ${trayLook.centre?.join(",")} against the board's ${feltForTray.colours[0].join(",")} and it has no edge of its own`,

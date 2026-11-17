@@ -1008,6 +1008,32 @@ export async function sampleBoxColours(
  * while the same tray beside the board's rim in round 3 had only its real line and
  * failed (5 of 10 spots under the old both-sides rule).
  */
+/**
+ * How far apart two colours look (CIELAB ΔE 1976), read on the node side from
+ * colours the page sampled. Below FAINT_FROM two large areas side by side read
+ * as one colour; from it up to standsOutFromBoard's 8 they read as faintly
+ * different — seen, but not standing out.
+ */
+export function colourDeltaE(a: number[], b: number[]): number {
+  const lab = (c: number[]): number[] => {
+    const lin = c.map((v) => {
+      const s = v / 255;
+      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    const xyz = [
+      (0.4124 * lin[0] + 0.3576 * lin[1] + 0.1805 * lin[2]) / 0.95047,
+      0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2],
+      (0.0193 * lin[0] + 0.1192 * lin[1] + 0.9505 * lin[2]) / 1.08883,
+    ].map((t) => (t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116));
+    return [116 * xyz[1] - 16, 500 * (xyz[0] - xyz[1]), 200 * (xyz[1] - xyz[2])];
+  };
+  const [la, lb] = [lab(a), lab(b)];
+  return Math.hypot(la[0] - lb[0], la[1] - lb[1], la[2] - lb[2]);
+}
+
+/** ΔE from which a strip the board's colour all but is still reads as apart. */
+export const FAINT_FROM = 3;
+
 export async function standsOutFromBoard(
   page: Page,
   boxes: ({ x: number; y: number; width: number; height: number } | null)[],
