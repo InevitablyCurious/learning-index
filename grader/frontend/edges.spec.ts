@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, pickUpAPiece, playerClick, rollAndCheck, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
 import { BASE_URL } from "../lib/harness.ts";
 import { isPainted } from "./board-geometry.ts";
 
@@ -130,7 +130,12 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
     })
     .toBe(true);
   const hints = page.locator('[data-testid="hint"]');
-  await playerClick(whiteBarChecker);
+  // Clicked again until hints show, as a player clicks again: a click landing
+  // while the roll still redraws the board is wiped by the redraw. The golden
+  // failed here twice under the image's parallel workers (rebuilds at 547e701
+  // and 9a0c86e), and a check that fails the reference can tell a correct
+  // build its bar piece showed no hints.
+  await playerClickUntilShown(whiteBarChecker, hints);
   await expect(hints, "[aspect: hints] [needs: F03]").toHaveCount(2);
   await playerClick(hints.first());
 
