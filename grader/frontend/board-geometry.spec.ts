@@ -580,7 +580,7 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   );
   const samples = await sampleTriangleOrientation(page, points);
 
-  expect(samples.length, `expected 24 triangle samples, found ${samples.length}`).toBe(24);
+  expect(samples.length, `[needs: REQ-TESTID/point-column F28] expected 24 triangle samples, found ${samples.length}`).toBe(24);
   // Which edge is a point's rim depends on its row: with no two rows there is
   // no rim to read from, and the order check tells that (FIX-24: a top row
   // drawn beside the bottom one was told "The triangles point outward").

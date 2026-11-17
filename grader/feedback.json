@@ -920,16 +920,16 @@
       "repeat": "The bar down the middle is still just a thin line — I expect it wide enough for a piece that's been hit to sit on it."
     },
     "F29.wide": {
-      "first": "The bar down the middle is far too wide — I expect it about as wide as one of the pieces with a bit of extra space (a few px) allocated on each side.",
-      "repeat": "The bar down the middle is still far too wide — I expect it about as wide as one of the pieces with a bit of extra space (a few px) on each side."
+      "first": "Their measurements of the page: {measured}. The brief has the bar about as wide as a piece, with only a few pixels to spare on each side.",
+      "repeat": "Their measurements again: {measured} — the bar is still wider than a piece and its few pixels of room."
     },
     "F29.blend": {
       "first": "The bar down the middle blends into the board, so I can't pick it out — I expect it to stand out from the board.",
       "repeat": "The bar down the middle still blends into the board, so I still can't pick it out — I expect it to stand out from the board."
     },
     "F29.narrow": {
-      "first": "The bar is a little narrower than a piece — I expect it about as wide as a piece, with a few pixels to spare on each side, so a piece I've hit fits on it.",
-      "repeat": "The bar is still a little narrower than a piece — I expect it about as wide as a piece, with a few pixels to spare on each side, so a piece I've hit fits on it."
+      "first": "Their measurements of the page: {measured}. The brief has the bar about as wide as a piece, with a few pixels to spare on each side, so a piece that has been hit fits on it.",
+      "repeat": "Their measurements again: {measured} — the bar is still narrower than a piece."
     },
     "F29.overlap": {
       "first": "The bar cuts across some of the points.",
@@ -1020,8 +1020,8 @@
       "repeat": "Looked again and the off tray still isn't there, still no place for taken-off pieces."
     },
     "F32.wide": {
-      "first": "The off tray is too wide — I expect it no wider than one and a half points.",
-      "repeat": "The off tray is still too wide — I expect it no wider than one and a half points."
+      "first": "Their measurements of the page: {measured}. The brief has the off tray at least as wide as a piece and no wider than one and a half points.",
+      "repeat": "Their measurements again: {measured} — the off tray is still wider than one and a half points."
     },
     "F32.blend": {
       "first": "The off tray blends into the board, so I can't tell where it is — I expect it to stand out from the board.",
@@ -1040,8 +1040,8 @@
       "repeat": "The off tray still doesn't run the full height of the board."
     },
     "F32.narrow": {
-      "first": "The off tray is too narrow to hold a piece lying on its side.",
-      "repeat": "The off tray is still too narrow to hold a piece lying on its side."
+      "first": "Their measurements of the page: {measured}. The brief has the off tray at least as wide as a piece, so a borne-off piece fits lying on its side.",
+      "repeat": "Their measurements again: {measured} — the off tray is still too narrow for a piece lying on its side."
     },
     "F32.side": {
       "first": "The off tray isn't at the end of the board where I bear off, past point 1.",
@@ -1208,8 +1208,8 @@
       "repeat": "Still not the layout I asked for — the board on the left, with all the buttons and game info on the right."
     },
     "F35.leftedge": {
-      "first": "The board starts too far in from the left edge — I expect it to start at the left, with all the buttons and game info on the right.",
-      "repeat": "The board still starts too far in from the left edge — I expect it at the left, with all the buttons and game info on the right."
+      "first": "Their measurements of the page: {measured}. The brief puts the board at the left of the window, with all the buttons and game info on its right.",
+      "repeat": "Their measurements again: {measured} — the board still starts too far in from the left edge."
     },
     "F35.controls": {
       "first": "Some of the buttons and game info aren't on the right of the board, like I asked.",
@@ -1220,12 +1220,12 @@
       "repeat": "The board and the buttons still aren't sized the way I asked, can you give me something like an 80%/20% ratio, board/buttons"
     },
     "F36.wide": {
-      "first": "The buttons on the right side look squished and the board looks too big, can you give me something like an 80%/20% ratio, board/buttons",
-      "repeat": "The buttons on the right still look squished and the board still looks too big, can you give me something like an 80%/20% ratio, board/buttons"
+      "first": "Their measurements of the page: {measured}. The brief gives the board about 80% of the width, with the buttons and game info in the rest.",
+      "repeat": "Their measurements again: {measured} — the board still takes more than its share of the width."
     },
     "F36.narrow": {
-      "first": "The board looks too small, can you give me something like an 80%/20% ratio, board/buttons",
-      "repeat": "The board still looks too small, can you give me something like an 80%/20% ratio, board/buttons"
+      "first": "Their measurements of the page: {measured}. The brief gives the board about 80% of the width, with the buttons and game info in the rest.",
+      "repeat": "Their measurements again: {measured} — the board still takes less than its share of the width."
     },
     "F37": {
       "first": "The game doesn't fit the screen properly.",
@@ -1284,12 +1284,12 @@
       "repeat": "The pieces still aren't perfect circles."
     },
     "F41.big": {
-      "first": "The pieces are too big for their points — I expect each one about 80% as wide as the point it sits on.",
-      "repeat": "The pieces are still too big for their points — I expect each one about 80% as wide as the point it sits on."
+      "first": "Their measurements of the page: {measured}. The brief makes a checker about 80% of a point's width.",
+      "repeat": "Their measurements again: {measured} — the checkers are still too big for their points."
     },
     "F41.small": {
-      "first": "The pieces are too small for their points — I expect each one about 80% as wide as the point it sits on.",
-      "repeat": "The pieces are still too small for their points — I expect each one about 80% as wide as the point it sits on."
+      "first": "Their measurements of the page: {measured}. The brief makes a checker about 80% of a point's width.",
+      "repeat": "Their measurements again: {measured} — the checkers are still too small for their points."
     },
     "F42": {
       "first": "Some neighbouring points are the same colour — I expect the points to alternate between two colours.",
@@ -1724,52 +1724,52 @@
       "repeat": "The triangles on the two sides of the middle still touch or overlap — I expect the gap between each top triangle's tip and the tip of the one straight across from it to be about 24% of half the board's height."
     },
     "F70.tooclose": {
-      "first": "The triangles on the two sides of the middle nearly meet — I expect the gap between each top triangle's tip and the tip of the one straight across from it to be about 24% of half the board's height.",
-      "repeat": "The triangles on the two sides of the middle still nearly meet — I expect the gap between each top triangle's tip and the tip of the one straight across from it to be about 24% of half the board's height."
+      "first": "Their measurements of the page: {measured}. The brief leaves about a quarter of half the board's height open between each top tip and the tip straight across from it.",
+      "repeat": "Their measurements again: {measured} — facing tips still sit too close together."
     },
     "F70.toowide": {
-      "first": "The triangles stop well short of the middle, leaving too much open space between each top tip and the tip straight across from it — I expect that gap to be about 24% of half the board's height.",
-      "repeat": "The triangles still stop well short of the middle, leaving too much open space between each top tip and the tip straight across from it — I expect that gap to be about 24% of half the board's height."
+      "first": "Their measurements of the page: {measured}. The brief leaves about a quarter of half the board's height open between each top tip and the tip straight across from it.",
+      "repeat": "Their measurements again: {measured} — facing tips still sit too far apart."
     },
     "F71": {
       "first": "The checkers on a point aren't spaced evenly — I expect a point's checkers evenly apart, and a stack of six a little tighter than the rest.",
       "repeat": "The checkers on a point still aren't spaced evenly — I expect a point's checkers evenly apart, and a stack of six a little tighter than the rest."
     },
     "F71.uneven": {
-      "first": "The checkers on a point don't sit packed the way I expect — I expect a point's checkers to sit packed together, stepping evenly from the board's edge toward the middle, each piece right against the last.",
-      "repeat": "The checkers on a point still don't sit packed the way I expect — I expect a point's checkers to sit packed together, stepping evenly from the board's edge toward the middle, each piece right against the last."
+      "first": "Their measurements of the page: {measured}. The brief has the checkers in a stack evenly spaced, each touching the next.",
+      "repeat": "Their measurements again: {measured} — the steps in a stack still aren't even."
     },
     "F71.six": {
-      "first": "A stack of six pieces is drawn with the same gap as the shorter stacks — I expect any stack of six to sit a little tighter together so all six fit within their point, while stacks of five or fewer stay as they are: starting right at the edge, each piece touching the next.",
-      "repeat": "A stack of six is still drawn with the same gap as the shorter stacks — I expect any stack of six to sit a little tighter together so all six fit within their point, while stacks of five or fewer stay as they are: starting right at the edge, each piece touching the next."
+      "first": "Their measurements of the page: {measured}. The brief: a stack of six sits a little tighter so all six fit within their point, while stacks of five or fewer stay as they are — starting right at the edge, each piece touching the next.",
+      "repeat": "Their measurements again: {measured} — a stack of six is still drawn at the shorter stacks' spacing."
     },
     "F71.crowdedtop": {
-      "first": "On the top row, the checkers in a stack are squeezed together at the edge of the board, overlapping each other — I expect each checker in a stack touching the next, edge to edge.",
-      "repeat": "On the top row, the checkers in a stack are still squeezed together at the edge of the board, overlapping each other — I expect each checker in a stack touching the next, edge to edge."
+      "first": "Their measurements of the page: {measured}. The brief has each piece in a stack touching the next without overlapping it; only a stack of six sits a little tighter.",
+      "repeat": "Their measurements again: {measured} — the checkers in a stack still overlap."
     },
     "F71.crowdedbottom": {
-      "first": "On the bottom row, the checkers in a stack are squeezed together at the edge of the board, overlapping each other — I expect each checker in a stack touching the next, edge to edge.",
-      "repeat": "On the bottom row, the checkers in a stack are still squeezed together at the edge of the board, overlapping each other — I expect each checker in a stack touching the next, edge to edge."
+      "first": "Their measurements of the page: {measured}. The brief has each piece in a stack touching the next without overlapping it; only a stack of six sits a little tighter.",
+      "repeat": "Their measurements again: {measured} — the checkers in a stack still overlap."
     },
     "F71.crowdedboth": {
-      "first": "On both rows, the checkers in a stack are squeezed together at the edge of the board, overlapping each other — I expect each checker in a stack touching the next, edge to edge.",
-      "repeat": "On both rows, the checkers in a stack are still squeezed together at the edge of the board, overlapping each other — I expect each checker in a stack touching the next, edge to edge."
+      "first": "Their measurements of the page: {measured}. The brief has each piece in a stack touching the next without overlapping it; only a stack of six sits a little tighter.",
+      "repeat": "Their measurements again: {measured} — the checkers in a stack still overlap."
     },
     "F71.spreadtop": {
-      "first": "On the top row, the checkers in a stack are spread apart down the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge.",
-      "repeat": "On the top row, the checkers in a stack are still spread apart down the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge."
+      "first": "Their measurements of the page: {measured}. The brief has every stack start right at the edge, at the wide end of its point, each piece touching the next.",
+      "repeat": "Their measurements again: {measured} — the checkers in a stack still aren't touching."
     },
     "F71.spreadbottom": {
-      "first": "On the bottom row, the checkers in a stack are spread apart up the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge.",
-      "repeat": "On the bottom row, the checkers in a stack are still spread apart up the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge."
+      "first": "Their measurements of the page: {measured}. The brief has every stack start right at the edge, at the wide end of its point, each piece touching the next.",
+      "repeat": "Their measurements again: {measured} — the checkers in a stack still aren't touching."
     },
     "F71.spreadboth": {
-      "first": "On both rows, the checkers in a stack are spread apart along the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge.",
-      "repeat": "On both rows, the checkers in a stack are still spread apart along the point, with gaps between them — I expect each checker in a stack touching the next, edge to edge."
+      "first": "Their measurements of the page: {measured}. The brief has every stack start right at the edge, at the wide end of its point, each piece touching the next.",
+      "repeat": "Their measurements again: {measured} — the checkers in a stack still aren't touching."
     },
     "F71.cascade": {
-      "first": "The pieces of a stack cascade off to the side — I expect each stack to stand as a single straight column.",
-      "repeat": "The pieces of a stack still cascade off to the side — I expect each stack to stand as a single straight column."
+      "first": "Their measurements of the page: {measured}. The brief has each stack stand straight along its point, every checker centred on the point.",
+      "repeat": "Their measurements again: {measured} — the stack still drifts sideways."
     },
     "F61.autoroll": {
       "first": "When I opened the game, the opening roll had already been played by itself — I never got to press Roll.",
@@ -1820,20 +1820,20 @@
       "repeat": "The triangles still don't all match."
     },
     "F79.width": {
-      "first": "The triangles on one side of the board are bigger than on the other — I expect them all to match.",
-      "repeat": "The triangles still don't all match."
+      "first": "Their measurements of the page: {measured}. The brief has every point the same width.",
+      "repeat": "Their measurements again: {measured} — the points still aren't all the same width."
     },
     "F79.length": {
-      "first": "Some of the triangles are longer than others — I expect every point the same length.",
-      "repeat": "The triangles still aren't all the same length."
+      "first": "Their measurements of the page: {measured}. The brief has every point the same length.",
+      "repeat": "Their measurements again: {measured} — the points still aren't all the same length."
     },
     "F80": {
       "first": "The bar isn't in the middle — one half of the board is wider than the other.",
       "repeat": "The bar still isn't in the middle; one half of the board is still wider."
     },
     "F80.bargap": {
-      "first": "There's an empty gap between the points and the bar — I expect them to touch.",
-      "repeat": "There's still an empty gap between the points and the bar."
+      "first": "Their measurements of the page: {measured}. The brief has the points run right up to the bar on both sides.",
+      "repeat": "Their measurements again: {measured} — there's still empty board between the points and the bar."
     },
     "F81": {
       "first": "There's an empty gap between the last points and the bear-off area — I expect them to touch.",
@@ -1924,12 +1924,12 @@
       "repeat": "The board still isn't shaped like a real board."
     },
     "F87.shape": {
-      "first": "When I change the shape of my browser window, the board stretches out of shape. I expect it to keep its proportions and just get bigger or smaller.",
-      "repeat": "Changed my window's shape again and the board still stretches out of shape."
+      "first": "Their measurements as the window changes size: {measured}. The brief keeps the board 1.4 times as wide as it is tall at any window size.",
+      "repeat": "Their measurements as the window changes size again: {measured} — the board still loses its shape."
     },
     "F87.size": {
-      "first": "When I change the size of my browser window, the pieces don't stay in proportion with the points — they come out too big or too small for the board.",
-      "repeat": "Resized my window again and the pieces still don't stay in proportion with the points."
+      "first": "Their measurements as the window changes size: {measured}. The brief keeps each checker the same share of a point's width at any window size.",
+      "repeat": "Their measurements as the window changes size again: {measured} — the checkers still change their share of the point."
     },
     "F87.changed": {
       "first": "When I change the size of my browser window and then put it back, the game doesn't come back looking the way it did — the pieces come back a different size.",
@@ -2032,12 +2032,12 @@
       "repeat": "Far behind in a race again, and the computer still never offered to double."
     },
     "F29.faint": {
-      "first": "The bar down the middle is only faintly different from the board — I expect it to stand out clearly.",
-      "repeat": "The bar down the middle is still only faintly different from the board."
+      "first": "Their measurements of the page: {measured}. The brief has the bar stand out clearly from the board — a fill of its own or a clear edge.",
+      "repeat": "Their measurements again: {measured} — the bar still barely stands apart from the board."
     },
     "F32.faint": {
-      "first": "The off tray is only faintly different from the board — I expect it to stand out clearly.",
-      "repeat": "The off tray is still only faintly different from the board."
+      "first": "Their measurements of the page: {measured}. The brief has the off tray stand out clearly from the board — a fill of its own or a clear edge down the side facing the points.",
+      "repeat": "Their measurements again: {measured} — the off tray still barely stands apart from the board."
     },
     "F88.between": {
       "first": "When the computer won the opening roll, its two moves came less than half a second apart, too quick to watch one at a time.",
@@ -2066,6 +2066,54 @@
     "G14.unfinished": {
       "first": "They play your computer against itself — hard against easy — and none of the games ever comes to an end.",
       "repeat": "They played hard against easy again, and still none of the games came to an end."
+    },
+    "F38.cutoff": {
+      "first": "Some of the buttons or game info on the right are cut off by the edge of the window.",
+      "repeat": "Some of the buttons or game info are still cut off by the edge of the window."
+    },
+    "F38.onboard": {
+      "first": "Some of the buttons or game info sit on top of the board.",
+      "repeat": "Some of the buttons or game info still sit on top of the board."
+    },
+    "F38.squished": {
+      "first": "Some of the buttons are squished too small to use properly.",
+      "repeat": "Some of the buttons are still squished too small to use properly."
+    },
+    "F38.overlap": {
+      "first": "Some of the buttons overlap each other.",
+      "repeat": "Some of the buttons still overlap each other."
+    },
+    "F34.value": {
+      "first": "On a new game the cube on the board doesn't read one.",
+      "repeat": "Started another new game and the cube still doesn't read one."
+    },
+    "F34.owner": {
+      "first": "On a new game the cube already looks owned by one side — I expect it in the middle, owned by nobody.",
+      "repeat": "Started another new game and the cube still looks owned by one side."
+    },
+    "F16.pieces": {
+      "first": "I refreshed the page and not all the pieces were on the board afterwards.",
+      "repeat": "Refreshed again and still not all the pieces came back on the board."
+    },
+    "F17.pieces": {
+      "first": "I refreshed the page and not all the pieces were on the board afterwards.",
+      "repeat": "Refreshed again and still not all the pieces came back on the board."
+    },
+    "F18.pieces": {
+      "first": "I refreshed the page and not all the pieces were on the board afterwards.",
+      "repeat": "Refreshed again and still not all the pieces came back on the board."
+    },
+    "F19.pieces": {
+      "first": "I refreshed the page and not all the pieces were on the board afterwards.",
+      "repeat": "Refreshed again and still not all the pieces came back on the board."
+    },
+    "F20.pieces": {
+      "first": "I refreshed the page and not all the pieces were on the board afterwards.",
+      "repeat": "Refreshed again and still not all the pieces came back on the board."
+    },
+    "F21.pieces": {
+      "first": "I refreshed the page and not all the pieces were on the board afterwards.",
+      "repeat": "Refreshed again and still not all the pieces came back on the board."
     }
   }
 }

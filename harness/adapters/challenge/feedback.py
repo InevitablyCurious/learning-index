@@ -644,8 +644,18 @@ class FeedbackMixin:
     # `prompts/respec/<gate>.md` (tests/test_respec.py pins it to the brief).
     @classmethod
     def _respec_text(cls, gate: str) -> str | None:
-        path = _PACK.dir / "respec" / f"{gate}.md"
-        return path.read_text(encoding="utf-8").strip() if path.is_file() else None
+        # Read once per run (audit item 27): a held round's text never picks up a
+        # file edited mid-run.
+        cache = cls.__dict__.get("_RESPEC_CACHE")
+        if cache is None:
+            cache = {}
+            cls._RESPEC_CACHE = cache
+        if gate not in cache:
+            path = _PACK.dir / "respec" / f"{gate}.md"
+            cache[gate] = (
+                path.read_text(encoding="utf-8").strip() if path.is_file() else None
+            )
+        return cache[gate]
 
     @classmethod
     def _respec_for(

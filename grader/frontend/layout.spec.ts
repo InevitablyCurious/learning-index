@@ -343,9 +343,9 @@ test("[F38] REQ-LAYOUT — the buttons and game info show properly", async ({ pa
     for (const [id, c] of present) {
       expect(
         c.x >= -1 && c.y >= -1 && c.x + c.w <= layout.vw + 1 && c.y + c.h <= layout.vh + 1,
-        `at ${layout.size} ${id} is cut off by the edge of the window (${Math.round(c.x)},${Math.round(c.y)} ${Math.round(c.w)}×${Math.round(c.h)})`,
+        `[aspect: cutoff] at ${layout.size} ${id} is cut off by the edge of the window (${Math.round(c.x)},${Math.round(c.y)} ${Math.round(c.w)}×${Math.round(c.h)})`,
       ).toBeTruthy();
-      expect(overlap(c, board), `at ${layout.size} ${id} sits on top of the board`).toBeLessThanOrEqual(2);
+      expect(overlap(c, board), `[aspect: onboard] at ${layout.size} ${id} sits on top of the board`).toBeLessThanOrEqual(2);
     }
     const buttons = present.filter(([id]) => BUTTONS.includes(id));
     for (const [id, c] of buttons) {
@@ -355,14 +355,14 @@ test("[F38] REQ-LAYOUT — the buttons and game info show properly", async ({ pa
       if (c.tag !== "BUTTON") continue;
       expect(
         c.w >= BUTTON_MIN.w && c.h >= BUTTON_MIN.h && !c.clipped,
-        `at ${layout.size} ${id} is squished (${Math.round(c.w)}×${Math.round(c.h)}${c.clipped ? ", its label cut off" : ""})`,
+        `[aspect: squished] at ${layout.size} ${id} is squished (${Math.round(c.w)}×${Math.round(c.h)}${c.clipped ? ", its label cut off" : ""})`,
       ).toBeTruthy();
     }
     for (let i = 0; i < buttons.length; i++) {
       for (let j = i + 1; j < buttons.length; j++) {
         expect(
           overlap(buttons[i][1], buttons[j][1]),
-          `at ${layout.size} ${buttons[i][0]} and ${buttons[j][0]} overlap`,
+          `[aspect: overlap] at ${layout.size} ${buttons[i][0]} and ${buttons[j][0]} overlap`,
         ).toBeLessThanOrEqual(2);
       }
     }

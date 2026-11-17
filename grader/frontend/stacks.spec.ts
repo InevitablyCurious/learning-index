@@ -197,7 +197,7 @@ test("[F58] REQ-GEOMETRY — the top piece slides away", async ({ page }) => {
     const box = point.getBoundingClientRect();
     return { x: box.x + box.width / 2, y: firsts[Math.floor(firsts.length / 2)] };
   });
-  expect(spot, "the board drew no point 11, and no bottom-row stack to aim the click at").not.toBeNull();
+  expect(spot, "[needs: F28 F02] the board drew no point 11, and no bottom-row stack to aim the click at").not.toBeNull();
   await page.mouse.click(spot!.x, spot!.y);
 
   await expect
@@ -299,7 +299,7 @@ test("[F59] REQ-GEOMETRY — a piece lands at the far end", async ({ page }) => 
     const far = stack.reduce((a, b) => (b.y < a.y ? b : a));
     return { x: pb.x + pb.width / 2, y: far.y + far.height / 2 - far.height };
   });
-  expect(dest, "the board drew no point 11, no hint over it, and no tagged checker on it").not.toBeNull();
+  expect(dest, "[needs: F28 F02 F03] the board drew no point 11, no hint over it, and no tagged checker on it").not.toBeNull();
   await page.mouse.click(dest!.x, dest!.y);
 
   await expect

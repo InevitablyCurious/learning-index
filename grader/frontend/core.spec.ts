@@ -2207,9 +2207,9 @@ test("[F34] REQ-CUBEUI — a new game shows the cube at one, centered", async ({
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-  await expect(page.getByTestId("cubeVal")).toHaveText("1");
+  await expect(page.getByTestId("cubeVal"), "[aspect: value] a new game's cube does not read 1").toHaveText("1");
   const openingOwnerLabel = await page.getByTestId("cubeOwner").innerText();
-  expect(openingOwnerLabel.toLowerCase()).toMatch(/center|centre|centr/);
+  expect(openingOwnerLabel.toLowerCase(), "[aspect: owner] a new game's cube is not shown in the middle").toMatch(/center|centre|centr/);
 });
 
 test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
@@ -2971,7 +2971,7 @@ test("[F16] REQ-RELOAD — whose turn survives a reload", async ({ page }) => {
   await setupState(page, { turn: "white" });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await expect(page.getByTestId("checker")).toHaveCount(30);
+  await expect(page.getByTestId("checker"), "[aspect: pieces] [needs: F02] after the reload not all 30 pieces are on the board").toHaveCount(30);
   const state = await readState(page);
   expect(state.turn).toBe("white");
   // And the turn can be played: a page redrawn after a reload but dead answered
@@ -2987,7 +2987,7 @@ test("[F17] REQ-RELOAD — match score survives a reload", async ({ page }) => {
   await setupState(page, { score: { white: 3, black: 5 } });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await expect(page.getByTestId("checker")).toHaveCount(30);
+  await expect(page.getByTestId("checker"), "[aspect: pieces] [needs: F02] after the reload not all 30 pieces are on the board").toHaveCount(30);
   const state = await readState(page);
   expect(state.score.white).toBe(3);
   expect(state.score.black).toBe(5);
@@ -3004,7 +3004,7 @@ test("[F18] REQ-RELOAD — dice values survive a reload", async ({ page }) => {
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await expect(page.getByTestId("checker")).toHaveCount(30);
+  await expect(page.getByTestId("checker"), "[aspect: pieces] [needs: F02] after the reload not all 30 pieces are on the board").toHaveCount(30);
   const state = await readState(page);
   expect([...state.dice].sort((a, b) => a - b)).toEqual([2, 5]);
 });
@@ -3015,7 +3015,7 @@ test("[F19] REQ-RELOAD — difficulty survives a reload", async ({ page }) => {
   await setupState(page, { difficulty: "hard" });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await expect(page.getByTestId("checker")).toHaveCount(30);
+  await expect(page.getByTestId("checker"), "[aspect: pieces] [needs: F02] after the reload not all 30 pieces are on the board").toHaveCount(30);
   const state = await readState(page);
   expect(state.difficulty).toBe("hard");
 });
@@ -3026,7 +3026,7 @@ test("[F20] REQ-RELOAD — the doubling cube survives a reload", async ({ page }
   await setupState(page, { cube: { value: 2, owner: "black" } });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await expect(page.getByTestId("checker")).toHaveCount(30);
+  await expect(page.getByTestId("checker"), "[aspect: pieces] [needs: F02] after the reload not all 30 pieces are on the board").toHaveCount(30);
   const state = await readState(page);
   expect(state.canDouble).toBe(false);
 });
@@ -3042,7 +3042,7 @@ test("[F21] REQ-RELOAD — remaining dice survive a reload", async ({ page }) =>
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await expect(page.getByTestId("checker")).toHaveCount(30);
+  await expect(page.getByTestId("checker"), "[aspect: pieces] [needs: F02] after the reload not all 30 pieces are on the board").toHaveCount(30);
   const state = await readState(page);
   expect([...state.remainingDice].sort((a, b) => a - b)).toEqual([2]);
 });
