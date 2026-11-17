@@ -1968,12 +1968,12 @@
       "repeat": "We tied on the opening roll again and the game froze again; pressing Roll still did nothing."
     },
     "F88.pace": {
-      "first": "I couldn't keep up with what the computer did.",
-      "repeat": "Again I couldn't keep up with what the computer did."
+      "first": "When the computer won the opening roll, its first move came less than a second after its dice showed, too soon for me to read them.",
+      "repeat": "When the computer won the opening roll again, its first move still came less than a second after its dice showed."
     },
     "F88.drawn": {
-      "first": "When the computer won the opening roll, it never made its move — the game just sat there and I couldn't do anything.",
-      "repeat": "The computer won the opening roll again and still never made its move."
+      "first": "When the computer won the opening roll, I never saw its pieces move on the board.",
+      "repeat": "When the computer won the opening roll again, I still never saw its pieces move on the board."
     },
     "F88.numbers": {
       "first": "When the computer won the opening roll, its first turn didn't move by exactly the two numbers thrown — no more, no less.",
@@ -2038,6 +2038,10 @@
     "F32.faint": {
       "first": "The off tray is only faintly different from the board — I expect it to stand out clearly.",
       "repeat": "The off tray is still only faintly different from the board."
+    },
+    "F88.between": {
+      "first": "When the computer won the opening roll, its two moves came less than half a second apart, too quick to watch one at a time.",
+      "repeat": "When the computer won the opening roll again, its two moves still came less than half a second apart."
     }
   }
 }

@@ -934,7 +934,7 @@ test("[F88] REQ-OPENING — the computer plays when it wins the opening", async 
   const gaps = starts.slice(1).map((t, i) => t - starts[i]);
   expect(
     starts.length >= 2 && gaps.every((gap) => gap >= 350),
-    `[aspect: pace] the computer's two opening moves started ${starts.length < 2 ? "together" : gaps.map((g) => `${g.toFixed(0)} ms`).join(", ") + " apart"}`,
+    `[aspect: between] the computer's two opening moves started ${starts.length < 2 ? "together" : gaps.map((g) => `${g.toFixed(0)} ms`).join(", ") + " apart"}`,
   ).toBe(true);
 });
 
