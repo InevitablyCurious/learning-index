@@ -1472,8 +1472,8 @@
       "repeat": "The game ended again and the pop-up still shows a 'Match score' line — I still just want who won and the points."
     },
     "F52": {
-      "first": "At the start of a game, the buttons I can't use yet aren't clearly fainter than the ones I can — I can't tell what's clickable.",
-      "repeat": "The buttons I can't use still aren't clearly fainter than the ones I can — I still can't tell what's clickable."
+      "first": "Their measurements of the page at the start of a game: {measured}. The brief draws the buttons that can't be used yet clearly fainter than the ones that can.",
+      "repeat": "Their measurements again: {measured} — the buttons that can't be used yet still aren't clearly fainter."
     },
     "F53": {
       "first": "I bear off my last piece and the win pop-up never appears.",
@@ -1548,20 +1548,20 @@
       "repeat": "Again the computer moved without showing me its dice first."
     },
     "F62.first": {
-      "first": "The computer's first move came less than a second after its dice showed, too soon for me to read them.",
-      "repeat": "Again the computer's first move came less than a second after its dice showed."
+      "first": "Their timing of the page: {measured}. The brief keeps the computer's dice readable about a second before its first move.",
+      "repeat": "Their timing again: {measured} — the computer's dice still aren't up long enough to read."
     },
     "F62.wait": {
-      "first": "When I click End Turn, the computer rolls straight away. I expect a pause of about a second first, so I can follow what it's doing.",
-      "repeat": "The computer still rolls straight away after I click End Turn."
+      "first": "Their timing of the page: {measured}. The brief has a pause of about a second after End Turn before the computer's dice come up.",
+      "repeat": "Their timing again: {measured} — the computer's dice still come up too soon after End Turn."
     },
     "F77": {
       "first": "I couldn't keep up with what the computer did.",
       "repeat": "Again I couldn't keep up with what the computer did."
     },
     "F77.between": {
-      "first": "The computer's moves came less than half a second apart, too quick to watch one at a time.",
-      "repeat": "The computer's moves again came less than half a second apart."
+      "first": "Their timing of the page: {measured}. The brief plays the computer's moves about half a second apart, one at a time.",
+      "repeat": "Their timing again: {measured} — the computer's moves still come too close together."
     },
     "F63": {
       "first": "They roll to see who goes first and can't read the result from your app.",
@@ -1608,12 +1608,12 @@
       "repeat": "Again, under Fast Forward my pieces moved before my dice showed."
     },
     "F65.first": {
-      "first": "When Fast Forward played my turn, my first move came less than a second after my dice showed.",
-      "repeat": "Again, under Fast Forward my first move came less than a second after my dice showed."
+      "first": "Their timing of the page: {measured}. The brief keeps the player's dice readable about a second before Fast Forward's first move.",
+      "repeat": "Their timing again: {measured} — the dice still aren't up long enough before Fast Forward moves."
     },
     "F65.between": {
-      "first": "When Fast Forward played my turn, my moves came less than half a second apart.",
-      "repeat": "Again, under Fast Forward my moves came less than half a second apart."
+      "first": "Their timing of the page: {measured}. The brief plays Fast Forward's moves about half a second apart.",
+      "repeat": "Their timing again: {measured} — Fast Forward's moves still come too close together."
     },
     "F66": {
       "first": "I couldn't pause Fast Forward the way I wanted.",
@@ -1680,8 +1680,8 @@
       "repeat": "End Turn still doesn't hand the turn to the computer after I finish my moves."
     },
     "F48.dim": {
-      "first": "When I roll and can't move, my dice don't dim to show me none of them can be played.",
-      "repeat": "Rolled with no move again, and my dice still don't dim."
+      "first": "Their measurements of a roll with no move: {measured}. The brief dims the dice of a roll that can't be played, then passes the turn after about a second.",
+      "repeat": "Their measurements again: {measured} — the dice of a roll with no move still aren't dimmed."
     },
     "F48.pause": {
       "first": "When I roll and can't move, the turn passes straight away. I want a second's pause with my dice up so I can see why.",
@@ -1968,8 +1968,8 @@
       "repeat": "We tied on the opening roll again and the game froze again; pressing Roll still did nothing."
     },
     "F88.pace": {
-      "first": "When the computer won the opening roll, its first move came less than a second after its dice showed, too soon for me to read them.",
-      "repeat": "When the computer won the opening roll again, its first move still came less than a second after its dice showed."
+      "first": "Their timing of the page: {measured}. The brief keeps the computer's dice readable about a second before its first move.",
+      "repeat": "Their timing again: {measured} — the computer's opening dice still aren't up long enough to read."
     },
     "F88.drawn": {
       "first": "When the computer won the opening roll, I never saw its pieces move on the board.",
@@ -1992,8 +1992,8 @@
       "repeat": "After a roll, the game still moves on before I can read the dice."
     },
     "F93.still": {
-      "first": "The dice keep tumbling after they land — I expect them to land once and stay still so I can read them.",
-      "repeat": "The dice still keep tumbling after they land."
+      "first": "Their timing of the page: {measured}. The brief has the dice land after a roll and stay still so they can be read.",
+      "repeat": "Their timing again: {measured} — the dice still don't hold still after they land."
     },
     "F94": {
       "first": "The computer's piece was on the bar and it rolled numbers that couldn't bring it in. The turn should have come back to me, but it didn't — the game froze and I couldn't roll.",
@@ -2040,8 +2040,8 @@
       "repeat": "Their measurements again: {measured} — the off tray still barely stands apart from the board."
     },
     "F88.between": {
-      "first": "When the computer won the opening roll, its two moves came less than half a second apart, too quick to watch one at a time.",
-      "repeat": "When the computer won the opening roll again, its two moves still came less than half a second apart."
+      "first": "Their timing of the page: {measured}. The brief plays the computer's moves about half a second apart, one at a time.",
+      "repeat": "Their timing again: {measured} — the computer's opening moves still come too close together."
     },
     "G30.easy": {
       "first": "On the easy setting, they let your computer take a turn through your server where either of its two numbers moves its checker but not both, and it plays the smaller one — when only one number can be used, the bigger one is played, on every setting.",

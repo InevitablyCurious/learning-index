@@ -19,9 +19,15 @@
     "F36.wide",
     "F41.big",
     "F41.small",
+    "F48.dim",
+    "F52",
+    "F62.first",
+    "F62.wait",
     "F63",
     "F63.order",
     "F63.owner",
+    "F65.between",
+    "F65.first",
     "F68",
     "F69",
     "F70.tooclose",
@@ -35,10 +41,14 @@
     "F71.spreadbottom",
     "F71.spreadtop",
     "F71.uneven",
+    "F77.between",
     "F79.length",
     "F79.width",
     "F80.bargap",
     "F87.shape",
-    "F87.size"
+    "F87.size",
+    "F88.between",
+    "F88.pace",
+    "F93.still"
   ]
 }
