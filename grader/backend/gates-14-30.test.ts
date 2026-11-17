@@ -264,7 +264,14 @@ describe("Backgammon backend gates 14-30 (the computer's engine)", () => {
       expect(hardWins + easyWins + noResult).toBe(games);
       expect(hardWins + easyWins).toBeGreaterThan(0);
       expect(hardWins).toBeGreaterThan(easyWins);
-    });
+      // Bounded by the runner's deadline for this file (report.mjs
+      // runnerBudgetMs), not by vitest's 60 s: the self-play is synchronous, so
+      // vitest's timer only fires after it returns — and then fails a skill check
+      // that passed. Run 1794897794's hard chooser (p99 0.5 s, max 1.3 s a move)
+      // played its 25 games in 119 s, hard winning, and was told "the skill
+      // setting doesn't seem to change anything". Code that does not return is
+      // stopped by the runner's deadline and comes back not_run, told to no one.
+    }, 600_000);
   });
 
 });
