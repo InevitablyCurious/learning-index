@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   api,
   debugRoll,
@@ -29,10 +29,18 @@ describe("Backgammon backend server-path integrity", () => {
 
   beforeAll(async () => {
     ({ game, ai } = await loadEngine());
+  });
+
+  // A FRESH SERVER FOR EVERY CHECK (Jerry, 2026-11-17 audit, class 6): what a build
+  // carries between games — finished games, the score, anything it keeps — never
+  // leaks from one check into the next. Run 1794873096's computer never doubled
+  // until a game had been finished on its server; sharing one server across the
+  // file let earlier checks finish games and the cube checks passed.
+  beforeEach(async () => {
     server = await startServer({ debug: true });
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await stopServer(server);
   });
 

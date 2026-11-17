@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   PORT,
   api,
@@ -98,12 +98,17 @@ describe("Backgammon backend gates 13-16", () => {
   describe("[G13] REQ-TURN — turn-flow integrity (via server)", () => {
     let server: Awaited<ReturnType<typeof startServer>>;
 
-    beforeAll(async () => {
+    // A FRESH SERVER FOR EVERY CHECK (Jerry, 2026-11-17 audit, class 6): what a build
+    // carries between games — finished games, the score, anything it keeps — never
+    // leaks from one check into the next. Run 1794873096's computer never doubled
+    // until a game had been finished on its server; sharing one server across the
+    // file let earlier checks finish games and the cube checks passed.
+    beforeEach(async () => {
       server = await startServer({ debug: true });
       expect(server.baseUrl).toContain(`:${PORT}`);
     });
 
-    afterAll(async () => {
+    afterEach(async () => {
       await stopServer(server);
     });
 
@@ -257,12 +262,17 @@ describe("Backgammon backend gates 13-16", () => {
   describe("[G15] REQ-COMPLETE — a full game reaches a winner with zero exceptions (via server)", () => {
     let server: Awaited<ReturnType<typeof startServer>>;
 
-    beforeAll(async () => {
+    // A FRESH SERVER FOR EVERY CHECK (Jerry, 2026-11-17 audit, class 6): what a build
+    // carries between games — finished games, the score, anything it keeps — never
+    // leaks from one check into the next. Run 1794873096's computer never doubled
+    // until a game had been finished on its server; sharing one server across the
+    // file let earlier checks finish games and the cube checks passed.
+    beforeEach(async () => {
       server = await startServer({ debug: true });
       expect(server.baseUrl).toContain(`:${PORT}`);
     });
 
-    afterAll(async () => {
+    afterEach(async () => {
       await stopServer(server);
     });
 
