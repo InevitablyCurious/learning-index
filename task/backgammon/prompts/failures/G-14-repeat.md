@@ -1,1 +1,1 @@
-Switched between the levels again: the top setting still isn't any stronger, or it slips in a move that isn't allowed.
+They asked your computer's move-chooser again, and some of the moves it picks still aren't legal.

@@ -82,7 +82,7 @@
     "G14": {
       "name": "Legal computer moves, and hard beats easy",
       "what": "Every move the computer makes is legal, and hard really is stronger than easy.",
-      "how": "200 random positions and rolls at each difficulty: every chosen move is replayed through the engine and must be legal and produce the board the computer claims. Then 25 full games with fixed dice, hard as black against easy as white: hard must win more."
+      "how": "200 random positions and rolls at each difficulty: every chosen move is replayed through the engine and must be legal and produce the board the computer claims. Then 25 full games with fixed dice, hard as black against easy as white: some must finish ([aspect: unfinished]) and hard must win more ([aspect: strength]). Told by the software team: a player cannot see either."
     },
     "G15": {
       "name": "A full game reaches a winner",

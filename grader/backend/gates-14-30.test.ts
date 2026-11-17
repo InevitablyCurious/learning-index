@@ -262,8 +262,10 @@ describe("Backgammon backend gates 14-30 (the computer's engine)", () => {
       }
 
       expect(hardWins + easyWins + noResult).toBe(games);
-      expect(hardWins + easyWins).toBeGreaterThan(0);
-      expect(hardWins).toBeGreaterThan(easyWins);
+      expect(hardWins + easyWins, `[aspect: unfinished] none of ${games} games of hard against easy came to an end`).toBeGreaterThan(0);
+      expect(hardWins, `[aspect: strength] hard won ${hardWins} of ${games} games against easy's ${easyWins} (${noResult} unfinished)`).toBeGreaterThan(
+        easyWins,
+      );
       // Bounded by the runner's deadline for this file (report.mjs
       // runnerBudgetMs), not by vitest's 60 s: the self-play is synchronous, so
       // vitest's timer only fires after it returns — and then fails a skill check

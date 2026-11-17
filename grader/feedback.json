@@ -128,8 +128,8 @@
       "repeat": "I watched several turns closely: between spending the dice, handing the turn over and being stuck with no move, something still goes wrong."
     },
     "G14": {
-      "first": "The computer's skill setting doesn't seem to change anything — the toughest level is no more of a challenge, or it makes a move it shouldn't be able to",
-      "repeat": "Switched between the levels again: the top setting still isn't any stronger, or it slips in a move that isn't allowed."
+      "first": "They ask your computer's move-chooser for its moves in hundreds of positions and rolls, at every setting, and some of the moves it picks aren't legal.",
+      "repeat": "They asked your computer's move-chooser again, and some of the moves it picks still aren't legal."
     },
     "G15": {
       "first": "The game can crash partway through before anyone wins",
@@ -2058,6 +2058,14 @@
     "F88.passed": {
       "first": "When the computer won the opening roll, it handed the turn straight back to me without moving a single piece.",
       "repeat": "The computer won the opening roll again and still handed the turn back without moving a piece."
+    },
+    "G14.strength": {
+      "first": "They play your computer against itself — hard against easy, with the same seeded dice — and hard doesn't win more games than easy.",
+      "repeat": "They played hard against easy again, and hard still doesn't win more games."
+    },
+    "G14.unfinished": {
+      "first": "They play your computer against itself — hard against easy — and none of the games ever comes to an end.",
+      "repeat": "They played hard against easy again, and still none of the games came to an end."
     }
   }
 }

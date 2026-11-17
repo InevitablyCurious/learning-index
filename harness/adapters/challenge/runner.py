@@ -3144,6 +3144,11 @@ class ChallengeRunner(
         # Only the engine's answer is checked, so only the team meets it.
         "E04",
         "E05",
+        # The computer's move-chooser asked directly: hundreds of positions for
+        # legal moves, and seeded games of hard against easy. Nothing a player
+        # can see or count — only a team calling the code finds it (Jerry,
+        # 2026-11-17).
+        "G14",
     )
 
     # HARNESS-INFRA CHECK NAMES (WO-FEEDBACK-VOICE-3 follow-up, 2026-08-30).
