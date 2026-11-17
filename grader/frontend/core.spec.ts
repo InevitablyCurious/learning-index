@@ -2318,7 +2318,7 @@ function answerButton(page: Page, name: RegExp): Locator {
 async function offerRace(
   page: Page,
   pick: "first" | "middle" = "first",
-): Promise<{ points: number[]; off: { white: number; black: number } }> {
+): Promise<{ points: number[]; off: { white: number; black: number }; offered: boolean }> {
   const ladder: { points: number[]; off: { white: number; black: number } }[] = [];
   let six = 10, one = 1, whiteOff = 4;
   const rung = () => {
@@ -2362,7 +2362,7 @@ async function offerRace(
   // The middle by black's lead, not by ladder order.
   const whitePips = (r: (typeof ladder)[number]) => r.points.reduce((sum, n, i) => sum + Math.max(0, n) * i, 0);
   const byLead = [...offering].sort((a, b) => whitePips(a) - whitePips(b));
-  return byLead[Math.floor((byLead.length - 1) / 2)] ?? ladder[0]!;
+  return { ...(byLead[Math.floor((byLead.length - 1) / 2)] ?? ladder[0]!), offered: offering.length > 0 };
 }
 
 test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", async ({ page }) => {
@@ -2374,7 +2374,12 @@ test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", asyn
   // pips, so the AI's decision is the same as the bare points give.
   test.setTimeout(90_000);
   await openApp(page);
-  const { points, off } = await offerRace(page);
+  const { points, off, offered: anyOffer } = await offerRace(page);
+  // No rung of the ladder drew an offer from the build's own server: there is
+  // no offer for the screen to show. Run 1794873096's computer never doubled
+  // until a game had been finished on the server, so a player's first game
+  // never saw one — and was told the offer "never shows up on screen".
+  expect(anyOffer, "[aspect: never] [needs: G12] far behind in a race, the computer never offered to double").toBe(true);
   await setupState(page, {
     points,
     bar: { white: 0, black: 0 },

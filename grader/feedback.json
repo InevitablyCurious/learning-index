@@ -2026,6 +2026,10 @@
     "G24.again": {
       "first": "After the player takes your computer's double, your computer offers to double again straight away, on a cube the player now owns.",
       "repeat": "After the take, your computer still offers to double again straight away, on a cube the player owns."
+    },
+    "F49.never": {
+      "first": "I was far behind in a race and the computer never once offered to double.",
+      "repeat": "Far behind in a race again, and the computer still never offered to double."
     }
   }
 }

@@ -462,7 +462,7 @@
     "F49": {
       "name": "Plain double offer",
       "what": "When the computer offers a double the message says so in plain words, not its win percentage, pip counts, or reasoning.",
-      "how": "A race the hard computer doubles in: after End Turn, something on screen — the message area or any pop-up — must say it is doubling ([aspect: shown]), and that text must not show win chances, pip counts or reasoning; then requires buttons reading Accept (or Take) and Decline (or Pass) to answer it ([aspect: answer])."
+      "how": "A race the hard computer doubles in, found by stepping the build's own server through a ladder of races — none drawing an offer is told as the computer never offering ([aspect: never]): after End Turn, something on screen — the message area or any pop-up — must say it is doubling ([aspect: shown]), and that text must not show win chances, pip counts or reasoning; then requires buttons reading Accept (or Take) and Decline (or Pass) to answer it ([aspect: answer])."
     },
     "F50": {
       "name": "Plain double answer",
