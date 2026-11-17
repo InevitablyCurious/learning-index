@@ -2042,6 +2042,18 @@
     "F88.between": {
       "first": "When the computer won the opening roll, its two moves came less than half a second apart, too quick to watch one at a time.",
       "repeat": "When the computer won the opening roll again, its two moves still came less than half a second apart."
+    },
+    "G30.easy": {
+      "first": "On the easy setting, the computer could play either of its two numbers, but not both — after either move the other had nowhere to go — and it played the smaller one. When only one of its numbers can be used, I expect it to play the bigger one, on every setting.",
+      "repeat": "On the easy setting, the computer still played the smaller number when only one of its two could be used."
+    },
+    "G30.medium": {
+      "first": "On the medium setting, the computer could play either of its two numbers, but not both — after either move the other had nowhere to go — and it played the smaller one. When only one of its numbers can be used, I expect it to play the bigger one, on every setting.",
+      "repeat": "On the medium setting, the computer still played the smaller number when only one of its two could be used."
+    },
+    "G30.hard": {
+      "first": "On the hard setting, the computer could play either of its two numbers, but not both — after either move the other had nowhere to go — and it played the smaller one. When only one of its numbers can be used, I expect it to play the bigger one, on every setting.",
+      "repeat": "On the hard setting, the computer still played the smaller number when only one of its two could be used."
     }
   }
 }

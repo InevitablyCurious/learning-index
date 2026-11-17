@@ -582,8 +582,16 @@ describe("Backgammon backend server-path integrity", () => {
           expect(state.turn, "[needs: G25] the computer never finished its turn").toBe("white");
           const now = (state.points as number[]).findIndex((v, i) => i >= 1 && i <= 24 && v < 0);
           expect(now, "[aspect: passed] [needs: G25] the computer rolled and passed without moving its piece").not.toBe(spot.black);
+          // Told by the setting it broke on (Jerry: name the spot): run
+          // 1794900428's easy chooser picked at random among sequences that
+          // used either number (about half its turns), while medium and hard
+          // preferred the bigger die; told without the setting three rounds
+          // running, its model kept tuning the paths that already obeyed.
           const played = now - spot.black;
-          expect(played, `the computer played the ${played} when only the ${spot.higher} could be used`).toBe(spot.higher);
+          const level = { easy: "[aspect: easy]", medium: "[aspect: medium]", hard: "[aspect: hard]" }[difficulty];
+          expect(played, `${level} the computer played the ${played} when only the ${spot.higher} could be used, on ${difficulty}`).toBe(
+            spot.higher,
+          );
         }
       }
     }
