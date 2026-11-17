@@ -1684,6 +1684,12 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
     for (let i = 0; i < 4; i++) {
       const s = await readState(page);
       if (playedOut(s)) return;
+      // A player picks up what is drawn once it holds still, as F33 does: run
+      // 1794892305 round 8's pick-up after Undo, clicked while the board still
+      // redrew under the grader's load, found no checker, and the turn's brief
+      // was handed back to a build whose turn waited and whose Undo worked
+      // (6 of 6, then 16 of 16 passes run alone).
+      await waitForBoardSettled(page).catch(() => undefined);
       const picked = await pickUpAPiece(page, hints);
       expect(picked, `[untold] [needs: F03] [needs: F25] [needs: F45] ${told}: no checker could be picked up`).toBe(true);
       await expect(hints.first(), "[untold] [needs: F03]").toBeVisible();
