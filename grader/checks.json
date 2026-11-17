@@ -497,7 +497,7 @@
     "F56": {
       "name": "The pending double offer shows again after a reload",
       "what": "If the player reloads while the computer's double offer is on screen, the offer shows again so the player can accept or decline.",
-      "how": "Seeds the computer's pending double offer and reloads: visible buttons to take and to pass the double must be on screen again, wherever the page puts them."
+      "how": "Reaches the computer's double offer the way F49 does — a race the build's own server doubles in, End Turn on the page — then reloads: visible buttons to take and to pass the double must be on screen again, wherever the page puts them."
     },
     "F57": {
       "name": "A tall stack caps at six with a count",

@@ -2899,26 +2899,38 @@ test("[F56] REQ-RELOAD — the pending double offer shows again after a reload",
   // A player faced with the computer's double offer who reloads comes back to
   // the same question — a page that drops the offer leaves the game waiting
   // for an answer nobody can give. Both choices must be on offer again.
+  // The offer is the build's own, reached as F49 reaches it: the prompt fixes
+  // neither whose turn it is while an offer waits nor when the cube turns, so
+  // an offer written straight into the state is one build's shape. Run
+  // 1794874583's offer stood on white's turn with the cube at 2; written in on
+  // black's turn at 1, its page showed no answer, and a player who reloaded
+  // during its real offer — who still had both buttons — was told they had none.
+  test.setTimeout(90_000);
   await openApp(page);
-  const points = emptyPoints();
-  points[1] = 1;
-  points[6] = 10;
-  points[19] = -5;
+  const { points, off } = await offerRace(page);
   await setupState(page, {
     points,
     bar: { white: 0, black: 0 },
-    off: { white: 4, black: 10 },
-    turn: "black",
-    phase: "doubleOffered",
-    doubleOfferedBy: "black",
-    dice: [],
+    off,
+    turn: "white",
+    phase: "move",
+    dice: [6, 5],
     remainingDice: [],
-    turnOver: false,
+    turnOver: true,
     cube: { value: 1, owner: null },
     difficulty: "hard",
     winner: null,
     message: "",
   });
+  await page.reload();
+  await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
+  await page.getByTestId("endTurnBtn").click();
+  await expect
+    .poll(async () => (await readState(page)).phase, {
+      message: "[needs: F49] the computer's offer never came",
+      timeout: 20_000,
+    })
+    .toBe("doubleOffered");
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
