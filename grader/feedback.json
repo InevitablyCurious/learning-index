@@ -2114,6 +2114,10 @@
     "F21.pieces": {
       "first": "I refreshed the page and not all the pieces were on the board afterwards.",
       "repeat": "Refreshed again and still not all the pieces came back on the board."
+    },
+    "F37.shape": {
+      "first": "Their measurements of the page: {measured}. The brief keeps the whole board — its points, the bar and the off tray — 1.4 times as wide as it is tall, sized to the window.",
+      "repeat": "Their measurements again: {measured} — the board still isn't 1.4 times as wide as it is tall."
     }
   }
 }

@@ -329,6 +329,16 @@ test("[F37] REQ-LAYOUT — the game fits the screen", async ({ page }) => {
     expect(tall, `[aspect: space] at ${layout.size} the board is ${pct(tall)} of the height`).toBeGreaterThanOrEqual(
       BOARD_HEIGHT_MIN,
     );
+    // The board's shape is the board phase's rule (chunk-04-l1: the whole board
+    // 1.4 times as wide as it is tall), judged with the board, not a phase later
+    // (audit class 7: run 1794886524's board measured 1.28 through the whole
+    // board phase and was first told in the pieces phase, by F87).
+    const drawn = drawnBoard(layout);
+    const shape = drawn.w / drawn.h;
+    expect(
+      Math.abs(shape / BOARD_SHAPE - 1) <= SHAPE_SLACK,
+      `[aspect: shape] at ${layout.size} the board is ${shape.toFixed(2)} times as wide as it is tall, not ${BOARD_SHAPE}`,
+    ).toBe(true);
   }
 });
 
