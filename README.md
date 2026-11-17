@@ -22,10 +22,12 @@ measurement every time, and the result read against the same model's own baselin
 - **The problem set is deterministic.** The grader runs what the agent built — its engine, its API,
   and a real browser playing it like a person — with the dice fixed for every check. A reference
   solution passes every check. No language model judges anything.
-- **The model hears only human prose.** The spec says what a player expects. After each grade the
-  agent hears the earliest problems a player would run into, in a player's words — never test
-  names, expected values or code. Every line it is told must be true of the build it describes; a
-  false line is the bench's fault, and is fixed before any result counts.
+- **The model hears people, never tests.** After each grade the agent is told what went wrong by the
+  two people who would really report it: a **player**, for what anyone sees on the page, and the
+  player's **software team**, for what the code answers and what exact measurements show. Never a
+  test name, an expected value or a line of grader code. Every line it hears must be true of the
+  build it describes; a false line is the bench's fault, and is fixed before any result counts.
+  [How the agent is told what's wrong](#how-the-agent-is-told-whats-wrong).
 - **Every run is fingerprinted,** and compared only with runs whose fingerprint matches.
 - **One layer varies.** Each run with a layer swapped in is measured against the average of the
   matching baseline runs — whether the app works, how far it got, and what it cost in tokens
@@ -45,6 +47,52 @@ What it is designed to answer, with the same model on the same task:
 How a run is measured: [methodology](docs/methodology.md). What existing benchmarks measure, and
 the closest project: [related work](docs/related-work.md). How it was built, and the choices behind
 it: [notes from the operator](docs/operator-notes.md).
+
+## How the agent is told what's wrong
+
+The agent never sees a test. After each grade it hears what went wrong the way a real project hears
+it — from the people using the software. Two people speak, and each says only what they could truly
+know.
+
+| | The player | The software team |
+|---|---|---|
+| **Who** | A person playing the game on an ordinary laptop screen | The player's own developers, integrating the app into their software |
+| **What they report** | What anyone sees and does on the page: what is drawn, a click that does nothing, a game that freezes, a message that never appears | What a player can't see, or can't state exactly: what the engine and the server answer, the names and routes their software relies on, and precise measurements of the page — sizes, colours, timings — quoted with the value the grader read |
+| **In their words** | *"I clicked my checker on the bar and no hints appeared showing where it could come back in."* | *"Their measurements of the page: the off tray is 112 px wide; a point is 71 px. The brief has the off tray at least as wide as a piece and no wider than one and a half points."* |
+
+**Who speaks is decided by where the check looks — never by hand.** A check that plays the page in
+a browser speaks as the player. A check that calls the engine or the server speaks as the team. A
+measurement of the page judged against a close limit — a tray a few pixels too wide, a bar a shade
+too faint, a pause 200 ms short — is the team's as well: no sentence in a player's mouth stays true
+at every value such a check can fire on, while the team quotes the number the grader actually
+measured. The player carries what a person would notice; the team carries the exact, technical
+detail a person couldn't supply. Between them, the agent hears every finding a real user or a real
+team would raise, and every line is held to being true.
+
+**In the order a real user would raise it.** The checks fall into stages, from the first look at
+the page to the end of a game. Each round only the earliest failing stage is told — every problem
+in it — and a problem that can't be reached until an earlier step works waits behind that step.
+When a whole part is badly wrong, the player first describes the whole picture they expect; while it
+stays wrong, each remaining finding gets its own line. Each fault has its own words, with a first
+version and an "Again…" for one still open. A message says what got fixed since last time, what
+broke that used to work — first, when it broke something an earlier phase had finished — and what
+is still wrong.
+
+**Only what is true.** Every line must be true of the build it is told about, at every value its
+check can fire on. A check that never reached its subject is not told. A check that ran out of time
+is scored as not passing and told to no one. Where a build misses a house preference — a number or
+a wording no one could guess — the spec's own passage is handed back word for word.
+
+**Why it is built this way.** Coding benchmarks usually either show the agent its failing tests
+([SWE-bench](https://www.swebench.com), [Web-Bench](https://arxiv.org/abs/2505.07473)'s retry with
+the error) or ask a language model to play the user ([MINT](https://arxiv.org/abs/2309.10691),
+[ColBench](https://arxiv.org/abs/2503.15478), [τ-bench](https://arxiv.org/abs/2406.12045)). Failing
+tests teach to the test; a simulated user sounds human but answers differently from run to run.
+Learning-Index grades with a program, not a language model, and turns what it finds into the words
+of the two people who would really report it. The agent has to work out the cause, as it would with
+a real user and a real team, and every run draws on the same written lines. For a bench that
+measures what a memory system, a harness or a loop is worth, both halves matter: the feedback is the
+same channel for every run being compared, and it is the kind of feedback real use produces.
 
 ## Roadmap
 
@@ -153,8 +201,9 @@ A challenge is the task every run builds. It lives in its own repository, select
 - **A reference solution** — kept out of the model's reach. It passes every check, which proves the
   challenge can be built.
 - **A grader** — two scripts: `roster.mjs --out` lists every check without running any, and
-  `report.mjs --target --out` grades a built candidate — plus one complaint per check, written the
-  way a user would say it.
+  `report.mjs --target --out` grades a built candidate — plus a line for each finding, in the voice
+  of whoever would notice it: the player, or the software team
+  ([how the agent is told](#how-the-agent-is-told-whats-wrong)).
 
 Start from [challenges/TEMPLATE](challenges/TEMPLATE/).
 
@@ -201,8 +250,8 @@ What it asks of a model, as a programmer would see it:
 - **A reference first.** The reference game began as a solution a frontier model wrote in close to
   one pass, corrected since by playing it. The checks were built around it, so its passing every
   check is the proof the challenge can be built. The model never sees it.
-- **The spec says what, not how.** Seven build prompts, given to the model one phase at a time with
-  the whole spec in view: the rules engine, the computer opponent, the server, the page in three
+- **The spec says what, not how.** Seven build prompts, given to the model one phase at a time, each
+  with the spec up to that phase and nothing beyond it: the rules engine, the computer opponent, the server, the page in three
   layers, and wiring it together. They pin only what a check has to find — file and function names,
   the shape of the game state, the routes, the page's element tags, a debug route for setting
   positions and dice — and the few house preferences no player could guess, such as the doubling
@@ -225,43 +274,62 @@ What it asks of a model, as a programmer would see it:
 ### How the grader works
 
 - **It runs the build.** Every round, a sealed grader starts the model's latest code from scratch
-  and runs more than 200 checks in three groups: the contract's shape (files, exports, routes,
-  page tags); the engine and its API, called directly and through the server; and the page in a
-  real browser at two ordinary laptop sizes, clicking and reading the screen as a player would.
-- **Every check is deterministic.** The dice and the position are set through the debug route, and
-  where the build's own behaviour matters, a check reaches its state the way a game would — through
-  the build's own roll, its own End Turn — so it never tests a state the game could not reach. The
-  page is judged by what it draws, where, and what a click does, through the element tags the spec
-  names, so any way of building it is judged the same.
+  and runs 240 checks in three phases. The contract phase checks the names the spec promises —
+  24 page element tags and the 20 keys of the game state, one check each; the files and exports
+  the spec names are not yet checked as entries of their own. The engine is called directly for the
+  rules and again through the server for the game's flow. The page is played in a real browser at
+  1280×800 and 1440×900, clicking and reading the screen as a player would.
+- **What may be set, and what never is.** The world is injected: positions and dice are set through
+  the debug route. The action is the build's own wherever it matters — its roll, its turn hand-over,
+  its computer's move — so a check does not test a state the game itself could never reach. The
+  guarantee is about inputs, not the clock: several checks measure timing, and one geometry check
+  waits 700 ms for the board to settle because the reference moves its pieces in 340 ms, so a build
+  that animates more slowly can fail for being slow.
+- **The page is judged by what it shows.** What it draws, where, and what a click does, read through
+  the element tags the spec names — so any way of building the page is judged the same.
 - **Stages, in the order a player meets them.** The checks fall into 19 stages, from the first look
-  at the board to the end of a game. Each round, only the earliest failing stage is told. A check
-  that cannot be reached until an earlier step works waits behind that step, so the model never
-  hears about something a player could not get to.
-- **Each way of failing has its own words.** A check can fail in several ways, and each has its own
-  line, with a first version and a repeat ("Again…"). When a whole part is wrong — the board, the
-  pieces, Fast Forward — one general line says what that part should be, instead of a list of
-  symptoms.
-- **What no player sees is scored, not told.** Details only code could see — an internal flag, the
-  answer an engine function gives — still count against the build, but are never put to the model
-  as something a player noticed.
-- **A person checks the grader.** In development the run pauses after every grade: an operator plays
-  the build beside the reference and checks every line the model is about to hear. A line that is
-  not true is the grader's bug — it is fixed, proven on the reference and on saved builds, and the
-  run resumes from its last checkpoint.
-- **The grader is tested too.** A change to it must still pass the reference on every check, must
-  catch deliberately broken builds, and is re-run on a frozen set of 72 saved builds whose right
-  lines are written down beforehand, so a fix for one build cannot quietly break the lines another
-  build gets.
+  at the board to the end of a game. Each round, only the earliest failing stage is told — and every
+  failure in it, not one. A check that cannot be reached until an earlier step works waits behind
+  that step. Those are two separate silences, one by order and one by reachability, and together
+  they keep the model from hearing about something a player could not get to.
+- **Each way of failing has its own words.** A first version, and an "Again…" for a complaint still
+  open. When a whole part is wrong — the board, the pieces, Fast Forward — one general line replaces
+  its list of symptoms. Which parts get one is decided by a declared set of core findings per part,
+  not by a count: on the saved builds, "any core finding" matched the operator's judgement 43 times
+  in 44, against 37 at best for any count. A check with no written line stops the run; it is never
+  told in silence.
+- **What no player sees, the software team tells.** An engine answer, a server reply or an exact
+  measurement of the page is reported by the team, with the value the grader read — never as
+  something a player noticed. Each check records whether it looks at the page or at the code, and a
+  test holds that record to where the check actually runs. The few things no one would raise — the
+  exact words of an internal answer — still count against the build, but are never told.
+- **A person checks every line.** In development the run pauses after every grade, and an operator
+  plays the build and checks each line before the model hears it. The reference is not yet started
+  beside the build at a pause; the operator compares it by hand.
+- **The grader is tested, unevenly.** A change must still pass the reference on every check. It is
+  run against 276 deliberately broken builds, though nothing yet asserts that each break flips
+  exactly one check, and not every check has a break that proves it. And it is re-run on 72 saved
+  first-look builds whose right lines were written down, compared by eye rather than automatically.
+- **The wording guards are uneven too.** A guard against lines that state the rule exists, but today
+  every line it matches is one a person approved word for word, so it blocks nothing.
+- **Each run records its grader.** A run's fingerprint carries the grader's tree hash and its image
+  identity. The image's name is reused on every rebuild, so a report read without its run's
+  fingerprint does not say which grader produced it.
 
 ### How the agent is spoken to
 
-The agent never sees a test. Everything it is told is written as if from two people: a player, and
-the player's software team.
+Backgammon uses the two voices described in
+[how the agent is told what's wrong](#how-the-agent-is-told-whats-wrong):
 
-- **The player** says what happened, in plain words — "When I rolled a double, there were more than
-  two dice on the screen." — never a test name, an expected value, a file or a line of code.
-- **The software team** speaks only about what no player could ever see: an API field, a contract
-  their own software depends on.
+- **The player** plays white and says what happened, in plain words — "When I rolled a double, there
+  were more than two dice on the screen." — never a test name, an expected value, a file or a line
+  of code.
+- **The software team** reports what the engine and the server answer — "They ask your engine where
+  white's piece on the bar comes back in, and it names the wrong point — white comes in on the point
+  in black's home that matches the number used, so a 2 enters on 23." — and what exact measurements
+  of the page show, sizes and timings quoted as the grader measured them: "Their timing of the page:
+  the computer's dice came up 63 ms after End Turn. The brief has a pause of about a second after End
+  Turn before the computer's dice come up."
 - **Each message reads like a real one:** what got fixed since last time, what broke that used to
   work, and what is still wrong. It opens by saying how the player checked — the latest code from
   scratch, a new game, an ordinary laptop screen, playing white — which answers the usual excuses
@@ -298,7 +366,12 @@ Each of these cost rounds before it was learned, and each applies to any challen
   tells the model about a problem it cannot reproduce, and the model searches for it for round after
   round.
 - **What no player can see, no player says.** An engine answer the game itself never relies on,
-  told as something a player saw, sends the model after a problem that is not there.
+  told as something a player saw, sends the model after a problem that is not there. A page that
+  happened to enforce a rule its engine got wrong made "I was able to move another piece" false for
+  anyone playing it; told by the team as what the engine answered, the same finding is true.
+- **A number close to its limit belongs to the team.** "The off tray is far too wide" was told of a
+  tray 5% over its limit, and "the bar blends in, I can't pick it out" of a bar plainly visible but
+  pale. Quoted by the team with the value measured, each finding is true at any size it fires on.
 - **A model going in circles is evidence against the line first.** Before deciding the model can't do
   something, read its own reasoning: every long loop so far traced back to a line that was vague,
   misleading or untrue.
