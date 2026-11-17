@@ -1,1 +1,1 @@
-It happened again finishing up — I had a checker back, and it still took one off from up front.
+Your engine still bears a nearer checker off with a bigger number while one sits further back.

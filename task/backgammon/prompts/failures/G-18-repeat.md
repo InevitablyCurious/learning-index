@@ -1,1 +1,1 @@
-Rolled an opening 6 again and it still offers moves from checkers that are blocked in.
+Your engine's opening 6s still aren't the moves white can play.

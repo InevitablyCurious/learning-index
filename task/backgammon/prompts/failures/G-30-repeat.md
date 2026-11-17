@@ -1,1 +1,1 @@
-When the computer can play either number but not both, it still plays the smaller one.
+Through your server, your computer still plays the smaller number when only one of its two can be used.

@@ -1,1 +1,1 @@
-I watched several turns closely: between spending the dice, handing the turn over and being stuck with no move, something still goes wrong.
+They played turns through your server again and the turn flow still doesn't follow the brief.

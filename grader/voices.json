@@ -1,0 +1,17 @@
+{
+  "_comment": [
+    "WHO TELLS WHAT (Jerry, 2026-11-17). The software team does the heavy lifting: every check that looks at the",
+    "code underneath (grader/checks.json \"looks\": \"code\") is the team's, automatically. The player says only what a",
+    "person sees and does on the page. A page check, or one of its aspects, listed here is told by the team too: what",
+    "no player sees (tags, console, the opening dice's owner tags) and exact measurements (sizes, ratios, colour",
+    "difference, milliseconds), which the team quotes with the grader's own numbers ({measured} in its line)."
+  ],
+  "team": [
+    "F27",
+    "F63",
+    "F63.order",
+    "F63.owner",
+    "F68",
+    "F69"
+  ]
+}

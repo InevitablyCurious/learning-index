@@ -1,1 +1,1 @@
-I moved again and the computer still just sits there, never taking its turn.
+Through your server, the computer still doesn't take its turn.

@@ -68,20 +68,20 @@
       "repeat": "I went through it again after your fix and something still isn't behaving."
     },
     "G01": {
-      "first": "When i start a new game the setup isn't how a real game starts — the pieces, the cube, or whose turn it is is off",
-      "repeat": "Fresh game again and I went over the whole table before the first roll — the starting setup still isn't right."
+      "first": "They start a new game through your engine and its starting state doesn't match a standard backgammon opening.",
+      "repeat": "They started a new game through your engine again and its starting state still doesn't match a standard opening."
     },
     "G02": {
-      "first": "On a brand-new game the pip counts look wrong to me — how far each side still has to move all its pieces to finish doesn't add up.",
-      "repeat": "Fresh game again, before I'd even rolled, and the pip counts still don't add up."
+      "first": "They count pips on the standard starting position with your engine's own counting, and it doesn't come to 167 for each side.",
+      "repeat": "They counted the starting position's pips with your engine again, and it still doesn't come to 167 a side."
     },
     "G03": {
       "first": "When they roll against your app's API, the numbers that come back don't match: a double doesn't give four moves, or two different numbers don't give two.",
       "repeat": "When they roll against your API again, the numbers that come back still don't match."
     },
     "G04": {
-      "first": "Sometimes the game offers me moves that land on a spot my opponent has stacked with pieces",
-      "repeat": "It happened again — I took one of the moves it offered me and landed somewhere my opponent clearly already holds."
+      "first": "They ask your engine for moves onto a point the other side holds with two or more checkers, and it offers them — a point held by two or more is closed.",
+      "repeat": "Your engine still offers moves onto points the other side holds with two or more checkers."
     },
     "G05": {
       "first": "I rolled a 4 and a 3 and could play either one, but not both — after either move the other number had nowhere to go — and the game let me play the 3. When I can only use one of my two numbers, I expect to have to play the bigger one; when I can use both, either order is fine.",
@@ -92,28 +92,28 @@
       "repeat": "When I can play either number but not both, the game still shows me a move for the smaller one."
     },
     "G06": {
-      "first": "When my piece is on the bar the game doesn't force me to bring it back in before i do anything else",
-      "repeat": "I got sent to the bar again and the game still let me carry on elsewhere as if nothing had happened."
+      "first": "They ask your engine how a piece on the bar comes back in, and its answer breaks the bar rules.",
+      "repeat": "Your engine still breaks the bar rules when they ask how a piece on the bar comes back in."
     },
     "G07": {
-      "first": "When I hit one of their pieces, the hit doesn't fully resolve on the board — my piece doesn't land on the point, or theirs doesn't end up on the bar.",
-      "repeat": "Hit one of theirs again and the board still doesn't show the full hit."
+      "first": "They play a hit through your engine — a white checker onto a lone black one — and the board afterwards isn't a complete hit: the move reported as a hit, white on that point, the black checker on the bar, and the point white left empty.",
+      "repeat": "Your engine still doesn't complete a hit when they play one."
     },
     "G08": {
-      "first": "When I have a checker further back, the game still lets me bear off from a point closer to the edge.",
-      "repeat": "It happened again finishing up — I had a checker back, and it still took one off from up front."
+      "first": "They ask your engine to bear off while a white checker still sits further back, and it takes a nearer checker off with a number bigger than that checker needs — that's only allowed when no checker sits further back.",
+      "repeat": "Your engine still bears a nearer checker off with a bigger number while one sits further back."
     },
     "G08.overshoot": {
-      "first": "When my last pieces are closer to the edge than the number I roll, the game won't let me take them off — I expect the roll to carry my furthest-back piece off.",
-      "repeat": "Rolled bigger than my last pieces needed again, and it still won't let me take them off."
+      "first": "They ask your engine to bear off when every checker left is closer to the edge than the number rolled, and it won't — the number then carries the furthest-back checker off.",
+      "repeat": "Your engine still won't bear off with a number bigger than the last checkers need."
     },
     "G09": {
-      "first": "The game let me take a piece off the board even though one of my pieces was still out on the other side of the board",
-      "repeat": "Did it again with a straggler stranded nowhere near my home side, and it still started letting me take pieces off."
+      "first": "They ask your engine about taking checkers off with one of white's still out on the other side of the board, and it allows it — none come off until all fifteen are in white's home board.",
+      "repeat": "Your engine still lets white take checkers off with one still out on the other side of the board."
     },
     "G10": {
-      "first": "When a game ends, the result it announces is wrong — a single win, gammon, or backgammon is called by the wrong name, or it says I won before I actually finished.",
-      "repeat": "Played several more games to the end and the result it announces still doesn't match how the game actually finished."
+      "first": "They ask your engine how finished games end, and its answer doesn't follow the brief's rules for a single win, a gammon and a backgammon.",
+      "repeat": "Your engine still classifies finished games against the brief's rules."
     },
     "G11": {
       "first": "On the player's turn, before the roll, with the cube in the middle, your app won't let them double.",
@@ -124,32 +124,32 @@
       "repeat": "Your computer's doubling decisions still don't all match the thresholds you were given."
     },
     "G13": {
-      "first": "Turns don't flow right — sometimes a die gets used twice, the turn doesn't come back to me, or i'm stuck with nothing to play and the message doesn't say 'No moves available'.",
-      "repeat": "I watched several turns closely: between spending the dice, handing the turn over and being stuck with no move, something still goes wrong."
+      "first": "They play turns through your server — spending the dice, handing the turn over, a turn shut out on the bar — and the turn flow doesn't follow the brief.",
+      "repeat": "They played turns through your server again and the turn flow still doesn't follow the brief."
     },
     "G14": {
       "first": "They ask your computer's move-chooser for its moves in hundreds of positions and rolls, at every setting, and some of the moves it picks aren't legal.",
       "repeat": "They asked your computer's move-chooser again, and some of the moves it picks still aren't legal."
     },
     "G15": {
-      "first": "The game can crash partway through before anyone wins",
-      "repeat": "It fell over on me again partway through, before either of us had finished."
+      "first": "They play a whole game through your server with fixed dice, taking the computer's doubles, and it stops partway — stuck, or failing — before anyone wins.",
+      "repeat": "Their scripted game through your server still stops before anyone wins."
     },
     "G16": {
       "first": "They start a second copy of your server while one is already running, and it doesn't stop with an error saying the port is in use.",
       "repeat": "They started a second copy again, and it still doesn't stop with an error saying the port is in use."
     },
     "G17": {
-      "first": "When my opponent has a single checker on a point, the game won't let me land there and hit it.",
-      "repeat": "Tried again to land on a single checker of theirs and the game still won't give me that move."
+      "first": "They ask your engine for moves onto a point the other side holds with a single checker, and it doesn't offer the hit.",
+      "repeat": "Your engine still won't offer a move that hits a single checker."
     },
     "G18": {
-      "first": "On the opening roll a 6 offers me moves from checkers that are still blocked in.",
-      "repeat": "Rolled an opening 6 again and it still offers moves from checkers that are blocked in."
+      "first": "They ask your engine for the opening position's moves with a 6, and the list isn't the 6s white can play — only checkers on 24, 13 and 8 can move six, onto points on the board.",
+      "repeat": "Your engine's opening 6s still aren't the moves white can play."
     },
     "G19": {
-      "first": "The game let me bear a checker off even though I still had one on the bar.",
-      "repeat": "It happened again — a piece came off while one of mine was still sitting on the bar."
+      "first": "They ask your engine about bearing off while a white checker is on the bar, and it treats white as all home — a checker on the bar isn't home, so nothing bears off.",
+      "repeat": "Your engine still lets them bear off with a checker on the bar."
     },
     "G20": {
       "first": "The player doubles and your computer takes it, but your app's state doesn't make the cube worth two and owned by the computer.",
@@ -168,28 +168,28 @@
       "repeat": "They set up that turn through your debug setup again — the player's turn, before the roll — and it still won't let them double the way a real game does."
     },
     "G23": {
-      "first": "I made a move, hit undo, and the board didn't go back to how it was — a checker stayed where it had moved to or went missing.",
-      "repeat": "Tried undo again after another move and the board still didn't come back right — a checker was still missing or still in the wrong place."
+      "first": "They play a move through your server and undo it, and the points, the bar and the borne-off counts don't all come back exactly as they were before the move.",
+      "repeat": "Undo through your server still doesn't put the board back exactly."
     },
     "G23.nomove": {
-      "first": "After I rolled, there was no checker I could pick up to move.",
-      "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
+      "first": "They roll through your server and it offers white no move to play.",
+      "repeat": "They rolled through your server again and it still offers white no move."
     },
     "G37": {
-      "first": "I hit one of the computer's pieces and pressed Undo, and the board didn't go back to how it was before the hit.",
-      "repeat": "Undid a hit again and the board still didn't go back to how it was before it."
+      "first": "They play a hit through your server and undo it, and the board doesn't come back exactly as it was before the hit.",
+      "repeat": "Undoing a hit through your server still doesn't put the board back exactly."
     },
     "G37.hit": {
-      "first": "I hit one of the computer's pieces and pressed Undo, and its piece went back, but it also left extra pieces of the computer's on the bar.",
-      "repeat": "Undid a hit again and the computer still got extra pieces on the bar."
+      "first": "They play a hit through your server and undo it; the hit checker goes back, but the computer is left with extra checkers on the bar.",
+      "repeat": "After undoing a hit through your server, the computer still has extra checkers on the bar."
     },
     "G37.hitback": {
-      "first": "I hit one of the computer's pieces and pressed Undo, and its piece didn't go back to the point it was hit on.",
-      "repeat": "Undid a hit again, and the computer's piece still didn't go back to the point it was hit on."
+      "first": "They play a hit through your server and undo it, and the hit checker doesn't go back to the point it was hit on.",
+      "repeat": "Undoing a hit through your server still doesn't put the hit checker back."
     },
     "G37.hitmine": {
-      "first": "I hit one of the computer's pieces and pressed Undo, and its piece went back, but one of my own pieces was left sitting on the bar.",
-      "repeat": "I undid a hit again, and one of my own pieces was still left sitting on the bar."
+      "first": "They play a hit through your server and undo it; the hit checker goes back, but one of white's own checkers is left on the bar.",
+      "repeat": "After undoing a hit through your server, a white checker is still left on the bar."
     },
     "G38": {
       "first": "Their software asks your computer player for its move on a turn where it has no move to make, and it doesn't answer with no moves.",
@@ -224,40 +224,40 @@
       "repeat": "The player takes your computer's double and your app's state still doesn't make the cube worth two and owned by the player."
     },
     "G25": {
-      "first": "The computer never takes its turn — after I move it just sits there and I never get to go again.",
-      "repeat": "I moved again and the computer still just sits there, never taking its turn."
+      "first": "They end white's turn through your server and step the computer's turn, and the computer never takes it — the turn doesn't come back to white.",
+      "repeat": "Through your server, the computer still doesn't take its turn."
     },
     "G25.skipped": {
-      "first": "When I end my turn the computer doesn't move — it's straight back to my roll.",
-      "repeat": "I ended my turn again and the computer still didn't move — straight back to my roll."
+      "first": "They end white's turn through your server, and the computer's turn passes without a single move of its checkers.",
+      "repeat": "Through your server, the computer still passes its turn without moving."
     },
     "G25.offered": {
-      "first": "The computer moved once, then stopped in the middle of its turn to offer me a double — I expect it to finish its turn first.",
-      "repeat": "The computer again stopped in the middle of its turn to offer me a double — I expect it to finish its turn first."
+      "first": "Through your server, the computer moves once and then stops in the middle of its turn to offer a double — it offers a double before it rolls, never partway through a turn.",
+      "repeat": "Through your server, the computer still stops mid-turn to offer a double."
     },
     "G25.nomove": {
-      "first": "After I rolled, there was no checker I could pick up to move.",
-      "repeat": "Rolled again and there still wasn't a checker I could pick up to move."
+      "first": "They roll through your server and it offers white no move to play.",
+      "repeat": "They rolled through your server again and it still offers white no move."
     },
     "E01": {
-      "first": "When I roll doubles, I only get two moves.",
-      "repeat": "Rolled doubles again and I still only get two moves."
+      "first": "They ask your engine how many moves a roll allows from the opening position, and the count is wrong.",
+      "repeat": "Your engine still gets the number of moves a roll allows wrong."
     },
     "E02": {
-      "first": "At the end of the game the game bears a checker off from the wrong point — it takes one off while a checker sits further back.",
-      "repeat": "Back at the end of the game again and it still bears off from the wrong point."
+      "first": "They ask your engine about bearing off with a number that doesn't match a checker's point, and its answer breaks the bearing-off rules.",
+      "repeat": "Your engine still breaks the bearing-off rules for a number that doesn't match a checker's point."
     },
     "E02.behind": {
-      "first": "My pieces were on the 6 and the 3 and I rolled a 5, and the game took the piece on the 3 off while my piece on the 6 was further back. I expect a number bigger than a piece needs to take it off only when no piece of mine sits further back — otherwise it moves the piece that's further back.",
-      "repeat": "With a piece further back, the game still takes a nearer piece off with a number bigger than it needs."
+      "first": "They ask your engine to bear off with white on 6 and 3 and a 5 rolled, and it takes the checker on 3 off — a bigger number bears a checker off only when none sits further back, so here the 5 moves the 6 to 1.",
+      "repeat": "Your engine still bears the nearer checker off while one sits further back."
     },
     "E02.short": {
-      "first": "At the end of the game the game lets me take a piece off with a number too small to carry it off the board.",
-      "repeat": "Finishing up again and it still lets a number too small carry a piece off the board."
+      "first": "They ask your engine to bear off with a number too small to carry the checker off the board, and it allows it.",
+      "repeat": "Your engine still bears off with a number too small."
     },
     "E03": {
-      "first": "My pieces were on the 6 and the 3 and I rolled a 3, but the game wouldn't take the piece on the 3 off — it only let me move the 6 forward. I expect a number that exactly matches a piece's point to take that piece off, whatever sits further back.",
-      "repeat": "With a number that exactly matches a piece's point, the game still won't take that piece off."
+      "first": "They ask your engine to bear off with white on 6 and 3 and a 3 rolled, and it won't take the checker on 3 off — a number that exactly matches a checker's point always bears it off.",
+      "repeat": "Your engine still won't bear off with an exact number."
     },
     "E04": {
       "first": "They ask your engine for the moves with one of their pieces on the bar and every point it could come in on covered, and it doesn't come back empty — it offers moves for their other pieces, or it fails outright. A piece that can't come in off the bar means no move at all that turn.",
@@ -268,20 +268,20 @@
       "repeat": "They asked your engine again with a piece on the bar, and it still offers moves for their other pieces."
     },
     "E06": {
-      "first": "My pip count is wrong while one of my pieces is on the bar.",
-      "repeat": "Had a piece on the bar again and my pip count is still wrong for it."
+      "first": "They ask your engine for pip counts with checkers on the bar, and the count is wrong — a checker on the bar counts 25 pips.",
+      "repeat": "Your engine's pip count still doesn't count a checker on the bar as 25."
     },
     "E07": {
-      "first": "When my piece is on the bar i'm able to take pieces off the board",
-      "repeat": "Still able to take pieces off the board even with one of mine sitting on the bar."
+      "first": "They ask your engine whether all of white's checkers are home while one is on the bar, and it says yes — a checker on the bar isn't home.",
+      "repeat": "Your engine still counts a checker on the bar as home."
     },
     "E08": {
       "first": "Their tools ask your engine for every way to play a roll, and the same finished position keeps coming back more than once — two orders of the same moves show up as two different plays.",
       "repeat": "They asked your engine for the ways to play a roll again, and the same end position still comes back more than once."
     },
     "E09": {
-      "first": "While the computer is thinking some of my pieces suddenly change position on their own, and the board doesn't stay how i left it",
-      "repeat": "Kept my eyes on the board while it was thinking this time — my pieces still shuffled around on their own."
+      "first": "They copy a board with your engine and change the copy, and the original changes too — a copy has to stand apart from the board it came from.",
+      "repeat": "Changing a copy of a board through your engine still changes the original."
     },
     "F01": {
       "first": "When I open the game, the board doesn't show up — I expect to see the board with the pieces set out, ready to play.",
@@ -1092,16 +1092,16 @@
       "repeat": "It seized up on me again mid-game. Everything on screen just stops reacting, and {seconds} later it still hadn't moved."
     },
     "G01.pieces": {
-      "first": "Fresh game again, The pieces are not in their correct starting positions. A game starts with 2 of mine on point 24, 5 on 13, 3 on 8 and 5 on 6, and black's the mirror: 2 on point 1, 5 on 12, 3 on 17 and 5 on 19.",
-      "repeat": "Fresh game again, You still didn't place the pieces in the correct orientation and quantity, they are currently wrong. A game starts with 2 of mine on point 24, 5 on 13, 3 on 8 and 5 on 6, and black's the mirror: 2 on point 1, 5 on 12, 3 on 17 and 5 on 19."
+      "first": "They start a new game through your engine and the checkers aren't on their starting points. A game starts with white's 2 on point 24, 5 on 13, 3 on 8 and 5 on 6, and black's the mirror: 2 on point 1, 5 on 12, 3 on 17 and 5 on 19.",
+      "repeat": "Their new game from your engine still doesn't put the checkers on their starting points."
     },
     "G01.setup": {
-      "first": "When I start a new game the rest of the setup is off — the cube, whose turn it is, or what the game is waiting for isn't how a real game begins.",
-      "repeat": "Started over again and the opening setup — the cube, the turn, or what it's waiting on — still isn't right."
+      "first": "They start a new game through your engine and the rest of its state — the cube, whose turn it is, the phase, the bar and borne-off counts, the winner — isn't how the brief's new game begins.",
+      "repeat": "Their new game from your engine still doesn't begin the way the brief's does."
     },
     "G01.opponent": {
-      "first": "The game gets mixed up about who is playing against whom.",
-      "repeat": "It's still mixed up about who is playing against whom."
+      "first": "They ask your engine who each colour plays against, and it doesn't answer black for white and white for black.",
+      "repeat": "They asked your engine again, and it still doesn't name white and black as each other's opponents."
     },
     "F06.value": {
       "first": "The pip counts on screen are the wrong numbers for the position on the board.",
@@ -1132,36 +1132,36 @@
       "repeat": "Made a move again and the die still didn't go away, still showing as left to play."
     },
     "G06.blocked": {
-      "first": "I was on the bar and the game let me come in on a point my opponent had covered.",
-      "repeat": "Went to the bar again and it still let me come in on a point my opponent had covered."
+      "first": "They ask your engine for the moves of a piece on the bar when every point it could come in on is held by two or more of the other side's checkers, and it offers a way in anyway — a piece shut out like that has no move.",
+      "repeat": "Your engine still lets a piece on the bar come in on a point the other side holds."
     },
     "G06.noentry": {
-      "first": "I was on the bar with an open point to come in on, and the game gave me no way to bring the piece back in.",
-      "repeat": "On the bar again with an open point, and still no way to bring the piece back in."
+      "first": "They ask your engine for the moves of a piece on the bar with an open point to come in on, and it offers no way in.",
+      "repeat": "Your engine still offers no way in off the bar onto an open point."
     },
     "G06.wrongpoint": {
-      "first": "When I bring a piece in off the bar, the game offers me the wrong point to come in on — I expect it on the point in my opponent's home that matches the number I use.",
-      "repeat": "Brought a piece in off the bar again and it's still offered the wrong point to come in on."
+      "first": "They ask your engine where white's piece on the bar comes back in, and it names the wrong point — white comes in on the point in black's home that matches the number used, so a 2 enters on 23.",
+      "repeat": "Your engine still brings a piece in off the bar on the wrong point."
     },
     "G10.points": {
-      "first": "I won a gammon and it only counted as one point.",
-      "repeat": "Won another gammon and it still only counted as one point."
+      "first": "They finish a gammon through your engine and it's scored as one point — a gammon counts double.",
+      "repeat": "Your engine still scores a gammon as one point."
     },
     "G10.gammon": {
-      "first": "I bore off all my pieces while the computer had borne off none — its pieces were all back on point 13, none on the bar and none in my home board — and the game didn't announce it as a gammon.",
-      "repeat": "Won another gammon with the computer's pieces all back on point 13 — none borne off, none on the bar, none in my home board — and it still wasn't announced as a gammon."
+      "first": "They ask your engine to classify a win where black has borne off none, has none on the bar and none in white's home board, and it isn't called a gammon.",
+      "repeat": "Your engine still doesn't call that win a gammon."
     },
     "G10.backgammon": {
-      "first": "I won while one of the computer's pieces was still in my home board or on the bar, with none of its pieces borne off, and the game didn't announce it as a backgammon.",
-      "repeat": "Won again with a computer piece still in my home board or on the bar, and it still wasn't announced as a backgammon."
+      "first": "They ask your engine to classify a win where black has borne off none and still has a checker in white's home board or on the bar, and it isn't called a backgammon.",
+      "repeat": "Your engine still doesn't call that win a backgammon."
     },
     "G10.single": {
-      "first": "I won after the computer had already borne off a piece, and the game didn't announce it as a single win.",
-      "repeat": "Won again after the computer had borne off a piece, and it still wasn't announced as a single win."
+      "first": "They ask your engine to classify a win where black has already borne off a checker, and it isn't called a single win.",
+      "repeat": "Your engine still doesn't call that win a single win."
     },
     "G10.early": {
-      "first": "The game said I'd won while I still had a piece left to bear off.",
-      "repeat": "It still says I've won while I still have a piece left to bear off."
+      "first": "They ask your engine whether white has won with one checker still to bear off, and it says yes.",
+      "repeat": "Your engine still says white has won with a checker left to bear off."
     },
     "G20.value": {
       "first": "The player doubles and your computer takes it, but your app's state doesn't make the cube worth two.",
@@ -1172,12 +1172,12 @@
       "repeat": "Your computer takes the player's double and your app's state still doesn't make it the cube's owner."
     },
     "E01.doubles": {
-      "first": "I rolled doubles and got the wrong number of moves.",
-      "repeat": "Rolled doubles again and still got the wrong number of moves."
+      "first": "They ask your engine how many moves a double allows from the opening position, and it doesn't come to four.",
+      "repeat": "Your engine still doesn't give a double four moves."
     },
     "E01.nondouble": {
-      "first": "I rolled two different numbers and got the wrong number of moves.",
-      "repeat": "Rolled two different numbers again and still got the wrong number of moves."
+      "first": "They ask your engine how many moves two different numbers allow from the opening position, and it doesn't come to two.",
+      "repeat": "Your engine still doesn't give two different numbers two moves."
     },
     "G03.doubles": {
       "first": "They roll a double through your app's API and the dice it sends back never list four numbers.",
@@ -1392,12 +1392,12 @@
       "repeat": "They tried the /game address again and it still comes back 'Not found' — no page."
     },
     "G30": {
-      "first": "The computer could play either of its two numbers, but not both — after either move the other had nowhere to go — and it played the smaller one. When only one of its numbers can be used, I expect it to play the bigger one.",
-      "repeat": "When the computer can play either number but not both, it still plays the smaller one."
+      "first": "They let your computer take a turn through your server where either of its two numbers moves its checker but not both, and it plays the smaller one — when only one number can be used, the bigger one is played.",
+      "repeat": "Through your server, your computer still plays the smaller number when only one of its two can be used."
     },
     "G30.passed": {
-      "first": "The computer rolled, then passed its turn without moving — though it could have played one of its numbers.",
-      "repeat": "The computer still passes its turn without moving when it could play one of its numbers."
+      "first": "They let your computer take a turn through your server where one of its numbers can be played, and it passes without moving.",
+      "repeat": "Your computer still passes its turn without moving when one of its numbers can be played."
     },
     "G31": {
       "first": "They start a new game through your app's API and the opening roll doesn't work right.",
@@ -2044,16 +2044,16 @@
       "repeat": "When the computer won the opening roll again, its two moves still came less than half a second apart."
     },
     "G30.easy": {
-      "first": "On the easy setting, the computer could play either of its two numbers, but not both — after either move the other had nowhere to go — and it played the smaller one. When only one of its numbers can be used, I expect it to play the bigger one, on every setting.",
-      "repeat": "On the easy setting, the computer still played the smaller number when only one of its two could be used."
+      "first": "On the easy setting, they let your computer take a turn through your server where either of its two numbers moves its checker but not both, and it plays the smaller one — when only one number can be used, the bigger one is played, on every setting.",
+      "repeat": "On the easy setting, your computer still plays the smaller number when only one of its two can be used."
     },
     "G30.medium": {
-      "first": "On the medium setting, the computer could play either of its two numbers, but not both — after either move the other had nowhere to go — and it played the smaller one. When only one of its numbers can be used, I expect it to play the bigger one, on every setting.",
-      "repeat": "On the medium setting, the computer still played the smaller number when only one of its two could be used."
+      "first": "On the medium setting, they let your computer take a turn through your server where either of its two numbers moves its checker but not both, and it plays the smaller one — when only one number can be used, the bigger one is played, on every setting.",
+      "repeat": "On the medium setting, your computer still plays the smaller number when only one of its two can be used."
     },
     "G30.hard": {
-      "first": "On the hard setting, the computer could play either of its two numbers, but not both — after either move the other had nowhere to go — and it played the smaller one. When only one of its numbers can be used, I expect it to play the bigger one, on every setting.",
-      "repeat": "On the hard setting, the computer still played the smaller number when only one of its two could be used."
+      "first": "On the hard setting, they let your computer take a turn through your server where either of its two numbers moves its checker but not both, and it plays the smaller one — when only one number can be used, the bigger one is played, on every setting.",
+      "repeat": "On the hard setting, your computer still plays the smaller number when only one of its two can be used."
     },
     "F88.passed": {
       "first": "When the computer won the opening roll, it handed the turn straight back to me without moving a single piece.",

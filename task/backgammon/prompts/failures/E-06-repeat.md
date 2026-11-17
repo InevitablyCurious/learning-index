@@ -1,1 +1,1 @@
-Had a piece on the bar again and my pip count is still wrong for it.
+Your engine's pip count still doesn't count a checker on the bar as 25.

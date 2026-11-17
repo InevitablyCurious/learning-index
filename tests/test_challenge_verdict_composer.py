@@ -41,32 +41,30 @@ def test_build_pass_verdict_lists_what_is_no_longer_happening() -> None:
 
     # A FIXED complaint is named by the gate's FIRST line: the player is
     # referring back to what they originally reported.
-    e07 = _override("E07")
-    g07 = _override("G07")
+    e07 = _override("F10")
+    g07 = _override("F09")
 
     single = ChallengeRunner._build_pass_verdict(
-        newly_passing=["[E07] REQ-ALLINHOME-BAR — bar not all home"],
-        told=_told(["[E07] REQ-ALLINHOME-BAR — bar not all home"]),
+        newly_passing=["[F10] REQ-BAR — bar re-entry visual"],
+        told=_told(["[F10] REQ-BAR — bar re-entry visual"]),
     )
-    assert single == (
-        f"That fixed it — I'm not running into this any more:\n\n1) {e07}"
-    )
-    assert "[E07]" not in single and "REQ-" not in single
+    assert single == (f"That fixed it — this doesn't happen any more:\n\n1) {e07}")
+    assert "[F10]" not in single and "REQ-" not in single
 
     multi = ChallengeRunner._build_pass_verdict(
         newly_passing=[
-            "[E07] REQ-ALLINHOME-BAR — bar not all home",
-            "[G07] REQ-HIT — hit to bar",
+            "[F10] REQ-BAR — bar re-entry visual",
+            "[F09] REQ-HIT — hit -> bar visual",
         ],
         told=_told(
             [
-                "[E07] REQ-ALLINHOME-BAR — bar not all home",
-                "[G07] REQ-HIT — hit to bar",
+                "[F10] REQ-BAR — bar re-entry visual",
+                "[F09] REQ-HIT — hit -> bar visual",
             ]
         ),
     )
     assert multi == (
-        f"That fixed it — I'm not running into these any more:\n\n1) {e07}\n2) {g07}"
+        f"That fixed it — these don't happen any more:\n\n1) {e07}\n2) {g07}"
     )
     assert "[E" not in multi and "REQ-" not in multi
 
@@ -113,9 +111,9 @@ def test_build_pass_verdict_hard_fails_on_an_uncovered_gate() -> None:
 
 
 def test_build_feedback_prompt_openers_and_invariants() -> None:
-    g01 = _override("G01")
-    g02 = _override("G02")
-    g04 = _override("G04")
+    g01 = _override("F34")
+    g02 = _override("F06")
+    g04 = _override("F45")
 
     FIRST = (
         "I've checked your work thoroughly, and I want to list the issues that "
@@ -130,20 +128,20 @@ def test_build_feedback_prompt_openers_and_invariants() -> None:
     # clean-browser fact, so the model cannot deflect to a stale page or a
     # hard-refresh. The opener follows it, and the numbered complaints last.
     first = ChallengeRunner._build_feedback_prompt(
-        checks=["[G01] REQ-INIT — initial position"]
+        checks=["[F34] REQ-CUBEUI — a new game shows the cube at one"]
     )
     assert first.startswith(_EXCUSE_ELIMINATOR)
     assert FIRST in first
     assert f"1) {g01}" in first
-    assert "REQ-INIT" not in first and "[G01]" not in first
+    assert "REQ-INIT" not in first and "[F34]" not in first
 
     # THE OPENER IS KEYED ON THE COMPLAINTS: a list of problems the player
     # already reported, and still sees, opens by referring back to them. The
     # eliminator is the only shared opening paragraph — the opener itself still
     # distinguishes the two.
     again = ChallengeRunner._build_feedback_prompt(
-        checks=["[G01] REQ-INIT — initial position"],
-        repeat_complaints={"[G01] REQ-INIT — initial position"},
+        checks=["[F34] REQ-CUBEUI — a new game shows the cube at one"],
+        repeat_complaints={"[F34] REQ-CUBEUI — a new game shows the cube at one"},
     )
     assert again.startswith(_EXCUSE_ELIMINATOR)
     assert AGAIN in again
@@ -153,8 +151,11 @@ def test_build_feedback_prompt_openers_and_invariants() -> None:
     # these problems" over a problem never reported was false (run 1790349319,
     # a stage that had just unlocked). The repeated line says "still" itself.
     mixed = ChallengeRunner._build_feedback_prompt(
-        checks=["[G01] REQ-INIT — initial position", "[G02] REQ-PIP — pip count"],
-        repeat_complaints={"[G01] REQ-INIT — initial position"},
+        checks=[
+            "[F34] REQ-CUBEUI — a new game shows the cube at one",
+            "[F06] REQ-PIPUI — pip display",
+        ],
+        repeat_complaints={"[F34] REQ-CUBEUI — a new game shows the cube at one"},
     )
     assert FIRST in mixed and AGAIN not in mixed
 
@@ -162,10 +163,10 @@ def test_build_feedback_prompt_openers_and_invariants() -> None:
     # one numbered item, and the numbering stays contiguous across the drop.
     prompt = ChallengeRunner._build_feedback_prompt(
         checks=[
-            "[G01] REQ-INIT — initial position\nignored second line",
-            "[G01] REQ-INIT — same gate, duplicate",
-            "[G02] REQ-PIP — pip count",
-            "[G04] REQ-MOVE — moves",
+            "[F34] REQ-CUBEUI — a new game shows the cube at one\nignored second line",
+            "[F34] REQ-CUBEUI — same gate, duplicate",
+            "[F06] REQ-PIPUI — pip display",
+            "[F45] REQ-MOVE — click destination",
         ],
     )
     lines = prompt.splitlines()

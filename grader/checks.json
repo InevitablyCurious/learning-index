@@ -12,687 +12,824 @@
     "G01": {
       "name": "Standard opening position",
       "what": "A new game starts from the standard backgammon setup, with white to move and the cube in the middle.",
-      "how": "Calls the engine's opening-position and new-game functions directly: every point must match the standard layout, white must be to move in the roll phase, the cube must be 1 and unowned, the bar and off trays empty, no winner, and each colour's opponent must be the other colour."
+      "how": "Calls the engine's opening-position and new-game functions directly: every point must match the standard layout, white must be to move in the roll phase, the cube must be 1 and unowned, the bar and off trays empty, no winner, and each colour's opponent must be the other colour.",
+      "looks": "code"
     },
     "G02": {
       "name": "Pip counts",
       "what": "Pip counts — how far each side still has to travel — are right on a new game.",
-      "how": "Counts pips on the standard opening position with the game's own counting: 167 for each side. The standard opening, not the game's own, so a wrong setup is told once, as the setup."
+      "how": "Counts pips on the standard opening position with the game's own counting: 167 for each side. The standard opening, not the game's own, so a wrong setup is told once, as the setup.",
+      "looks": "code"
     },
     "G03": {
       "name": "Dice give the right number of moves",
       "what": "Doubles give four moves and an ordinary roll gives two.",
-      "how": "From the opening position, asks how many dice can be used: 3-3-3-3 must allow four, 3-1 two, and black's 6-6-6-6 four. Through the running server: seeds a later turn on the standard board — the opening roll itself is one die per side and can never be four (G31) — rolls until doubles come up, and requires four equal dice with all four still to play, at least one legal move, and at least three of the four dice playable."
+      "how": "From the opening position, asks how many dice can be used: 3-3-3-3 must allow four, 3-1 two, and black's 6-6-6-6 four. Through the running server: seeds a later turn on the standard board — the opening roll itself is one die per side and can never be four (G31) — rolls until doubles come up, and requires four equal dice with all four still to play, at least one legal move, and at least three of the four dice playable.",
+      "looks": "code"
     },
     "G04": {
       "name": "Blocked points",
       "what": "A checker can't land on a point held by two or more opposing checkers.",
-      "how": "White on 8 with black holding 5 with two checkers: a 3 must give no moves."
+      "how": "White on 8 with black holding 5 with two checkers: a 3 must give no moves.",
+      "looks": "code"
     },
     "G05": {
       "name": "Play the higher die",
       "what": "When only one of the two dice can be played, the player must play the higher one.",
-      "how": "On screen: white on 13 with black holding 6 three deep, a 3 and a 4 to play, only one usable. The player picks up the piece; a visible hint for the 3 that plays when clicked is told as letting the smaller number play, one that does not as showing it. No hint for the 3 passes."
+      "how": "On screen: white on 13 with black holding 6 three deep, a 3 and a 4 to play, only one usable. The player picks up the piece; a visible hint for the 3 that plays when clicked is told as letting the smaller number play, one that does not as showing it. No hint for the 3 passes.",
+      "looks": "page"
     },
     "G06": {
       "name": "Entering from the bar",
       "what": "A checker on the bar comes back in on the right point, and a player who can't enter has no move.",
-      "how": "White on the bar with a 2 must have exactly one way in off the bar, entering on 23. With black holding 23 and 21, a roll of 2 and 4 must leave no legal moves."
+      "how": "White on the bar with a 2 must have exactly one way in off the bar, entering on 23. With black holding 23 and 21, a roll of 2 and 4 must leave no legal moves.",
+      "looks": "code"
     },
     "G07": {
       "name": "Hitting sends a checker to the bar",
       "what": "Landing on a single opposing checker hits it and sends it to the bar.",
-      "how": "White on 8 moves onto a lone black checker on 5 with a 3: the move must report a hit, white must now sit on 5, black must have one checker on the bar, and point 8 must be empty."
+      "how": "White on 8 moves onto a lone black checker on 5 with a 3: the move must report a hit, white must now sit on 5, black must have one checker on the bar, and point 8 must be empty.",
+      "looks": "code"
     },
     "G08": {
       "name": "Bearing off, including a bigger die",
       "what": "Bearing off works, including using a bigger die than needed when no checker is further back.",
-      "how": "White with two checkers on 3 and the rest off can bear off from 3 with a 5. With checkers on 5 and 3, a 5 must bear off from 5 only — never from 3."
+      "how": "White with two checkers on 3 and the rest off can bear off from 3 with a 5. With checkers on 5 and 3, a 5 must bear off from 5 only — never from 3.",
+      "looks": "code"
     },
     "G09": {
       "name": "No bearing off until all are home",
       "what": "No bearing off while any checker is still outside home.",
-      "how": "White on 3 with another on 8: a 3 must not bear off, and the position must report that not all checkers are home."
+      "how": "White on 3 with another on 8: a 3 must not bear off, and the position must report that not all checkers are home.",
+      "looks": "code"
     },
     "G10": {
       "name": "Single, gammon or backgammon",
       "what": "A finished game is classed correctly as a single win, a gammon or a backgammon.",
-      "how": "White has all 15 off in each case. Black with 2 already off → single. Black with none off, none on the bar and none in white's home → gammon. A black checker in white's home, or on the bar → backgammon. White with only 14 off → not won."
+      "how": "White has all 15 off in each case. Black with 2 already off → single. Black with none off, none on the bar and none in white's home → gammon. A black checker in white's home, or on the bar → backgammon. White with only 14 off → not won.",
+      "looks": "code"
     },
     "G11": {
       "name": "Doubling on the player's turn",
       "what": "On the player's turn, with the cube centered, the player may offer a double.",
-      "how": "Through the running server: seeds a later turn — the player to act in the roll phase, cube centered, standard opening board — and requires doubling to be allowed (canDouble true). A fresh game sits in the opening roll, where nobody may double yet (G31)."
+      "how": "Through the running server: seeds a later turn — the player to act in the roll phase, cube centered, standard opening board — and requires doubling to be allowed (canDouble true). A fresh game sits in the opening roll, where nobody may double yet (G31).",
+      "looks": "code"
     },
     "G26": {
       "name": "The cube starts centered",
       "what": "A new game starts with the cube at one, unowned (centered).",
-      "how": "Through the running server: a new game must have the cube at value 1 with owner null."
+      "how": "Through the running server: a new game must have the cube at value 1 with owner null.",
+      "looks": "code"
     },
     "G12": {
       "name": "The computer's cube decisions",
       "what": "The computer accepts, declines and offers the cube at its published win-chance thresholds.",
-      "how": "Even position (30 pips each): win chance 0.5 and every difficulty accepts. Black hopelessly behind (350 against 2): win chance under 0.24 and hard declines. Hard never offers when white owns the cube, offers or holds on a 30-against-61 position exactly as its thresholds say, easy never offers, and hard holds when far too far ahead."
+      "how": "Even position (30 pips each): win chance 0.5 and every difficulty accepts. Black hopelessly behind (350 against 2): win chance under 0.24 and hard declines. Hard never offers when white owns the cube, offers or holds on a 30-against-61 position exactly as its thresholds say, easy never offers, and hard holds when far too far ahead.",
+      "looks": "code"
     },
     "G13": {
       "name": "Turn flow",
       "what": "A die can't be used twice, turns go white → black → white, and a player with no move passes with a clear message.",
-      "how": "Through the running server with the roll fixed to 1 and 3: after playing the 3, playing it again must leave the remaining dice unchanged. Playing out white's turn, ending it and advancing the computer must hand the turn back to white. With white on the bar and both entry points blocked, rolling 2 and 4 must end the turn with no legal moves and a message reading exactly 'No moves available'."
+      "how": "Through the running server with the roll fixed to 1 and 3: after playing the 3, playing it again must leave the remaining dice unchanged. Playing out white's turn, ending it and advancing the computer must hand the turn back to white. With white on the bar and both entry points blocked, rolling 2 and 4 must end the turn with no legal moves and a message reading exactly 'No moves available'.",
+      "looks": "code"
     },
     "G14": {
       "name": "Legal computer moves, and hard beats easy",
       "what": "Every move the computer makes is legal, and hard really is stronger than easy.",
-      "how": "200 random positions and rolls at each difficulty: every chosen move is replayed through the engine and must be legal and produce the board the computer claims. Then 25 full games with fixed dice, hard as black against easy as white: some must finish ([aspect: unfinished]) and hard must win more ([aspect: strength]). Told by the software team: a player cannot see either."
+      "how": "200 random positions and rolls at each difficulty: every chosen move is replayed through the engine and must be legal and produce the board the computer claims. Then 25 full games with fixed dice, hard as black against easy as white: some must finish ([aspect: unfinished]) and hard must win more ([aspect: strength]). Told by the software team: a player cannot see either.",
+      "looks": "code"
     },
     "G15": {
       "name": "A full game reaches a winner",
       "what": "A complete game, driven only through the public API with fixed dice, finishes with a winner and no crash partway.",
-      "how": "Starts a game at a fixed difficulty, fixes the opening roll and every later roll through the debug dice, plays white's legal moves one at a time and lets the computer play black, and requires the game to reach a winner (single, gammon or backgammon) with no server error, failing immediately if it stalls without a move."
+      "how": "Starts a game at a fixed difficulty, fixes the opening roll and every later roll through the debug dice, plays white's legal moves one at a time and lets the computer play black, and requires the game to reach a winner (single, gammon or backgammon) with no server error, failing immediately if it stalls without a move.",
+      "looks": "code"
     },
     "G16": {
       "name": "Port 8002, and a clear error when taken",
       "what": "The server listens on port 8002, and a second copy fails clearly instead of hanging.",
-      "how": "With the server already running, starts a second copy on the same port: within 6 seconds it must exit with an error, and its output must name 8002 and say the port is in use or already taken."
+      "how": "With the server already running, starts a second copy on the same port: within 6 seconds it must exit with an error, and its output must name 8002 and say the port is in use or already taken.",
+      "looks": "code"
     },
     "G17": {
       "name": "Landing on a single checker",
       "what": "A checker can land on a point held by a single opposing checker.",
-      "how": "White on 8 with a single black on 6: a 2 must give exactly the move 8→6."
+      "how": "White on 8 with a single black on 6: a 2 must give exactly the move 8→6.",
+      "looks": "code"
     },
     "G18": {
       "name": "The opening roll with a 6",
       "what": "From the opening position a 6 only moves the checkers that are free to move, and every move stays on the board.",
-      "how": "From the opening position a 6 may only move checkers from 24, 13 and 8, and every move must stay within the board."
+      "how": "From the opening position a 6 may only move checkers from 24, 13 and 8, and every move must stay within the board.",
+      "looks": "code"
     },
     "G19": {
       "name": "No bearing off from the bar",
       "what": "No bearing off while a checker is still on the bar.",
-      "how": "White on 2 with a checker on the bar: a 2 must not bear off, and the position must report that not all checkers are home."
+      "how": "White on 2 with a checker on the bar: a 2 must not bear off, and the position must report that not all checkers are home.",
+      "looks": "code"
     },
     "G20": {
       "name": "An accepted double transfers the cube",
       "what": "When a double is accepted, the cube becomes 2 and belongs to whoever took it.",
-      "how": "Through the running server: the player doubles, the computer accepts, and the cube must become 2 owned by black."
+      "how": "Through the running server: the player doubles, the computer accepts, and the cube must become 2 owned by black.",
+      "looks": "code"
     },
     "G21": {
       "name": "No doubling after rolling",
       "what": "A double can't be offered once the dice are rolled, and trying anyway changes nothing.",
-      "how": "Through the running server: after rolling, doubling must be disallowed, and trying anyway must leave the cube unchanged."
+      "how": "Through the running server: after rolling, doubling must be disallowed, and trying anyway must leave the cube unchanged.",
+      "looks": "code"
     },
     "G22": {
       "name": "Win chance rises with the lead",
       "what": "The computer's win chance never drops as it gets further ahead.",
-      "how": "Four positions ordered by growing pip lead — far behind, near even, ahead, and far ahead: the win chance at each must be at least the one before."
+      "how": "Four positions ordered by growing pip lead — far behind, near even, ahead, and far ahead: the win chance at each must be at least the one before.",
+      "looks": "code"
     },
     "G23": {
       "name": "Undo restores the board",
       "what": "Undo returns the board to exactly where it was before the move.",
-      "how": "Plays a move through the API, calls undo, and asserts points, bar, and off trays deep-equal the pre-move snapshot."
+      "how": "Plays a move through the API, calls undo, and asserts points, bar, and off trays deep-equal the pre-move snapshot.",
+      "looks": "code"
     },
     "G37": {
       "name": "Undo takes back a hit",
       "what": "Undoing a move that hit returns the hit piece to its point and leaves the bar as it was.",
-      "how": "Through the server: a position with a computer blot on 10, a 3-1 rolled, the hit 13→10 played and undone; the points and both bar counts must equal the pre-move snapshot."
+      "how": "Through the server: a position with a computer blot on 10, a 3-1 rolled, the hit 13→10 played and undone; the points and both bar counts must equal the pre-move snapshot.",
+      "looks": "code"
     },
     "G38": {
       "name": "The computer's chooser answers a turn with no move",
       "what": "chooseMoves, asked for a turn with no legal move, returns no moves and the board unchanged at every difficulty, never an error.",
-      "how": "Through the engine: black's one piece on 18, outside its home board, every point from 19 to 24 held by two white pieces, dice 6-5; chooseMoves at easy, medium and hard."
+      "how": "Through the engine: black's one piece on 18, outside its home board, every point from 19 to 24 held by two white pieces, dice 6-5; chooseMoves at easy, medium and hard.",
+      "looks": "code"
     },
     "G24": {
       "name": "Accepting the computer's double",
       "what": "Accepting the computer's double makes the cube 2 and owned by the player.",
-      "how": "Sets a double-offered state, accepts through the response endpoint, and asserts the cube is value 2 owner white in both the response and persisted state; then steps the computer's turn: it must not offer again on the player's cube ([aspect: again]) and must move ([aspect: plays])."
+      "how": "Sets a double-offered state, accepts through the response endpoint, and asserts the cube is value 2 owner white in both the response and persisted state; then steps the computer's turn: it must not offer again on the player's cube ([aspect: again]) and must move ([aspect: plays]).",
+      "looks": "code"
     },
     "G25": {
       "name": "The computer takes its turn",
       "what": "After the player ends a turn, the computer takes its turn and control returns to the player.",
-      "how": "Rolls, completes white's moves, ends the turn, drives the AI turn through the API, and asserts the turn comes back to white."
+      "how": "Rolls, completes white's moves, ends the turn, drives the AI turn through the API, and asserts the turn comes back to white.",
+      "looks": "code"
     },
     "G27": {
       "name": "Finished games are counted and carried",
       "what": "gamesPlayed counts finished games: it goes up by one when a game ends, and a new game carries it forward.",
-      "how": "Through the running server: sets one white piece left to bear off, rolls 2-1 and bears it off (the win itself is G08's and G10's), then requires gamesPlayed to have gone up ([aspect: counted]), and after /api/new neither lower ([aspect: carried]) nor higher ([aspect: extra])."
+      "how": "Through the running server: sets one white piece left to bear off, rolls 2-1 and bears it off (the win itself is G08's and G10's), then requires gamesPlayed to have gone up ([aspect: counted]), and after /api/new neither lower ([aspect: carried]) nor higher ([aspect: extra]).",
+      "looks": "code"
     },
     "G28": {
       "name": "The debug route honours turnOver and gamesPlayed",
       "what": "The debug state route accepts the turnOver flag and the gamesPlayed count like the other state fields.",
-      "how": "Through the running server: post turnOver and gamesPlayed to the debug state route and require both to be reflected in the resulting state."
+      "how": "Through the running server: post turnOver and gamesPlayed to the debug state route and require both to be reflected in the resulting state.",
+      "looks": "code"
     },
     "G29": {
       "name": "Any non-API path serves the game page",
       "what": "A path outside /api serves the game page instead of 404ing.",
-      "how": "Through the running server: fetch a non-/api path and require the HTML page (status 200 with a text/html content type)."
+      "how": "Through the running server: fetch a non-/api path and require the HTML page (status 200 with a text/html content type).",
+      "looks": "code"
     },
     "G30": {
       "name": "The computer plays the higher die when only one is playable",
       "what": "When only one of the computer's two dice can actually be played, it plays the higher one.",
-      "how": "Through the server, the way a game reaches the computer's turn: the player's turn finished, the computer's dice queued, End Turn, then one AI step at a time. In two spots where either number moves the computer's lone piece but not both (a 2 and a 4; a 5 and a 2), at every difficulty, three times each, the piece must move by the bigger number."
+      "how": "Through the server, the way a game reaches the computer's turn: the player's turn finished, the computer's dice queued, End Turn, then one AI step at a time. In two spots where either number moves the computer's lone piece but not both (a 2 and a 4; a 5 and a 2), at every difficulty, three times each, the piece must move by the bigger number.",
+      "looks": "code"
     },
     "G31": {
       "name": "The opening roll decides who goes first",
       "what": "A game opens with one die per side: the higher side moves first and plays both numbers, equal dice tie and roll again, and nobody may double before the opening move is played.",
-      "how": "Through the running server at easy: fixes the opening roll on the debug route, then rolls — 6-5 must give the player the turn ([aspect: won]) in the move phase with a 6 and a 5 to play ([aspect: dice]); 3-5 must give the computer the turn ([aspect: first]), and its AI move must move black exactly 8 pips ([aspect: numbers]) and hand the turn back ([aspect: handback]); 4-4 must stay in phase openingRoll ([aspect: tie]); a fresh game must report canDouble false ([aspect: cube]), and a double asked for anyway (refused or ignored) must leave the cube at 1, no offer pending and no winner ([aspect: cubemoved])."
+      "how": "Through the running server at easy: fixes the opening roll on the debug route, then rolls — 6-5 must give the player the turn ([aspect: won]) in the move phase with a 6 and a 5 to play ([aspect: dice]); 3-5 must give the computer the turn ([aspect: first]), and its AI move must move black exactly 8 pips ([aspect: numbers]) and hand the turn back ([aspect: handback]); 4-4 must stay in phase openingRoll ([aspect: tie]); a fresh game must report canDouble false ([aspect: cube]), and a double asked for anyway (refused or ignored) must leave the cube at 1, no offer pending and no winner ([aspect: cubemoved]).",
+      "looks": "code"
     },
     "G32": {
       "name": "When the computer is stuck, the game says so and the turn returns",
       "what": "When the computer is on the bar with every entry point held and rolls numbers it cannot use, its turn ends with the turn handed back to the player and a message containing the words \"No moves available\".",
-      "how": "Through the running server: fixes a position where the computer is on the bar and all six entry points are held by two or more opposing pieces, then drives the computer's turn with a 6-5 it cannot use and checks the turn is the player's again ([aspect: pass]) and the message contains the words \"No moves available\" ([aspect: wording])."
+      "how": "Through the running server: fixes a position where the computer is on the bar and all six entry points are held by two or more opposing pieces, then drives the computer's turn with a 6-5 it cannot use and checks the turn is the player's again ([aspect: pass]) and the message contains the words \"No moves available\" ([aspect: wording]).",
+      "looks": "code"
     },
     "E01": {
       "name": "Doubles are four moves",
       "what": "Doubles really are four moves, not two.",
-      "how": "From the opening position, 3-3-3-3 must allow four moves and 3-5 two."
+      "how": "From the opening position, 3-3-3-3 must allow four moves and 3-5 two.",
+      "looks": "code"
     },
     "E02": {
       "name": "Bigger die bears off only from the back",
       "what": "A bigger-than-needed die only bears off from the highest occupied point.",
-      "how": "White on 6 and 3 with a 5: bearing off must not be allowed, but 6→1 must be. With only the checker on 3 left, the 5 must bear it off."
+      "how": "White on 6 and 3 with a 5: bearing off must not be allowed, but 6→1 must be. With only the checker on 3 left, the 5 must bear it off.",
+      "looks": "code"
     },
     "E03": {
       "name": "Exact die always bears off",
       "what": "A die that exactly matches a checker's distance always bears it off.",
-      "how": "White on 6 and 3 with a 3: bearing off from 3 must be allowed."
+      "how": "White on 6 and 3 with a 3: bearing off from 3 must be allowed.",
+      "looks": "code"
     },
     "E04": {
       "name": "Shut out on the bar",
       "what": "A player shut out on the bar has no legal move at all — not even with other checkers.",
-      "how": "White on the bar, black holding all of 19–24, and white also on 13: with a 3 and a 5, no die may be used and the list of legal moves must be empty."
+      "how": "White on the bar, black holding all of 19–24, and white also on 13: with a 3 and a 5, no die may be used and the list of legal moves must be empty.",
+      "looks": "code"
     },
     "E05": {
       "name": "The bar comes first",
       "what": "While a checker is on the bar, no other checker may move.",
-      "how": "White on the bar and on 13 with a 3: there must be moves, and every one must be entering from the bar."
+      "how": "White on the bar and on 13 with a 3: there must be moves, and every one must be entering from the bar.",
+      "looks": "code"
     },
     "E06": {
       "name": "Bar counts 25 pips",
       "what": "A checker on the bar counts as 25 pips, and borne-off checkers count nothing.",
-      "how": "One white checker on the bar → 25. Add one on 6 → 31. Add three borne off → still 31. White on the bar and on 4 → 29. Black with two on the bar and one on 20 → 55."
+      "how": "One white checker on the bar → 25. Add one on 6 → 31. Add three borne off → still 31. White on the bar and on 4 → 29. Black with two on the bar and one on 20 → 55.",
+      "looks": "code"
     },
     "E07": {
       "name": "On the bar means not all home",
       "what": "A checker on the bar means not all checkers are home.",
-      "how": "White with one checker on 3 is all home; add one on the bar and it must no longer be."
+      "how": "White with one checker on 3 is all home; add one on the bar and it must no longer be.",
+      "looks": "code"
     },
     "E08": {
       "name": "Each end position listed once",
       "what": "The list of possible turns holds each resulting position once, not once per order of moves.",
-      "how": "Two white checkers on 10 with a 1 and a 2: there are several orders to play them but only two different end positions, so the list must hold exactly two, all different."
+      "how": "Two white checkers on 10 with a 1 and a 2: there are several orders to play them but only two different end positions, so the list must hold exactly two, all different.",
+      "looks": "code"
     },
     "E09": {
       "name": "Copying a board",
       "what": "Copying a board gives a fully independent copy.",
-      "how": "Copies a board, changes the copy's points, bar and borne-off counts, and checks the original is untouched."
+      "how": "Copies a board, changes the copy's points, bar and borne-off counts, and checks the original is untouched.",
+      "looks": "code"
     },
     "F01": {
       "name": "The board appears",
       "what": "The game page loads and the board appears.",
-      "how": "Opens the page in a browser and requires the board to be visible."
+      "how": "Opens the page in a browser and requires the board to be visible.",
+      "looks": "page"
     },
     "F02": {
       "name": "Full board is drawn",
       "what": "A new game draws the whole board.",
-      "how": "Starts a new game and reloads: exactly 24 points and 30 checkers, 15 of each colour."
+      "how": "Starts a new game and reloads: exactly 24 points and 30 checkers, 15 of each colour.",
+      "looks": "page"
     },
     "F03": {
       "name": "Clicking shows the moves",
       "what": "Clicking a checker that can move shows where it can go.",
-      "how": "Fixes the next roll to 6-5, clicks Roll, waits for the board to settle, clicks a movable checker, and requires at least one move hint to appear; when hints were already up before the click, the click must change them within 1.5 s ([aspect: nochange]) — stray hints alone never pass it."
+      "how": "Fixes the next roll to 6-5, clicks Roll, waits for the board to settle, clicks a movable checker, and requires at least one move hint to appear; when hints were already up before the click, the click must change them within 1.5 s ([aspect: nochange]) — stray hints alone never pass it.",
+      "looks": "page"
     },
     "F04": {
       "name": "Hints show which die",
       "what": "Move hints show which die each move uses.",
-      "how": "Fixes the roll to 5-3 — the player's die first, so the player wins the opening roll and plays both numbers (a forced 3-5 would hand the turn to the computer) — clicks Roll and the back checker on 13 (another movable checker if it shows nothing): every hint's text must be 3 or 5 (or \"off\"), and the checker on 13 must show a hint for each die, 3 and 5, both open from it on every board."
+      "how": "Fixes the roll to 5-3 — the player's die first, so the player wins the opening roll and plays both numbers (a forced 3-5 would hand the turn to the computer) — clicks Roll and the back checker on 13 (another movable checker if it shows nothing): every hint's text must be 3 or 5 (or \"off\"), and the checker on 13 must show a hint for each die, 3 and 5, both open from it on every board.",
+      "looks": "page"
     },
     "F75": {
       "name": "Hints are the piece's own moves",
       "what": "After picking up a piece, every hint is a move of that piece, and clicking it moves that piece.",
-      "how": "Fixes the opening to 5-3 (the player moves first) and, for each movable piece on a fresh page, picks it up: no hint may sit behind it (white travels down the numbers) or on a point it cannot reach, by the point under each hint's centre against the server's legal moves."
+      "how": "Fixes the opening to 5-3 (the player moves first) and, for each movable piece on a fresh page, picks it up: no hint may sit behind it (white travels down the numbers) or on a point it cannot reach, by the point under each hint's centre against the server's legal moves.",
+      "looks": "page"
     },
     "F76": {
       "name": "A hint moves the picked piece",
       "what": "Clicking a hint moves the piece that was picked up, not another one.",
-      "how": "Fixes the opening to 5-3, picks up the piece on 13, clicks its first hint, and when the board changes requires the piece that left to be the one on 13."
+      "how": "Fixes the opening to 5-3, picks up the piece on 13, clicks its first hint, and when the board changes requires the piece that left to be the one on 13.",
+      "looks": "page"
     },
     "F05": {
       "name": "No-move notice",
       "what": "When the player can't move, the page says so.",
-      "how": "Puts white on the bar with both entry points blocked and fixes the roll to 2-4. After Roll the message must read exactly 'No moves available'."
+      "how": "Puts white on the bar with both entry points blocked and fixes the roll to 2-4. After Roll the message must read exactly 'No moves available'.",
+      "looks": "page"
     },
     "F06": {
       "name": "Pip counts on screen",
       "what": "The pip counts on screen match the game.",
-      "how": "On a new game the displayed counts must show a number ([aspect: format]) that matches the server and the pieces on the board, counted by the grader (a wrong opening is the setup check's complaint, a wrong formula the pip check's). A custom position is then set, and the displayed counts must match the server again."
+      "how": "On a new game the displayed counts must show a number ([aspect: format]) that matches the server and the pieces on the board, counted by the grader (a wrong opening is the setup check's complaint, a wrong formula the pip check's). A custom position is then set, and the displayed counts must match the server again.",
+      "looks": "page"
     },
     "F07": {
       "name": "The cube after a double",
       "what": "After the player doubles, the cube on screen shows the new value and who owns it.",
-      "how": "After the player doubles and the computer accepts: value 2, and the owner label names the side the server reports."
+      "how": "After the player doubles and the computer accepts: value 2, and the owner label names the side the server reports.",
+      "looks": "page"
     },
     "F34": {
       "name": "The cube on a new game",
       "what": "A new game shows the cube at one, centered on screen.",
-      "how": "New game: the cube value reads 1 and the owner label reads centered."
+      "how": "New game: the cube value reads 1 and the owner label reads centered.",
+      "looks": "page"
     },
     "F08": {
       "name": "Difficulty selector",
       "what": "Changing the difficulty and starting a new game really changes it.",
-      "how": "Selects hard and clicks New game: the server must report hard. Then the same for easy."
+      "how": "Selects hard and clicks New game: the server must report hard. Then the same for easy.",
+      "looks": "page"
     },
     "F09": {
       "name": "Hit checker shown on the bar",
       "what": "A hit checker is drawn on the bar.",
-      "how": "Sets a position with one black checker on the bar and reloads: the bar must be visible with exactly one black checker drawn on it."
+      "how": "Sets a position with one black checker on the bar and reloads: the bar must be visible with exactly one black checker drawn on it.",
+      "looks": "page"
     },
     "F10": {
       "name": "Re-entering shown on the board",
       "what": "Coming back in from the bar is shown on the board.",
-      "how": "White on the bar with the roll fixed to 3-5. After Roll, clicking the bar checker shows the two entry hints, one per playable entry die; clicking one must take the checker off the bar, the server must agree, and a white checker must appear on point 20 or 22."
+      "how": "White on the bar with the roll fixed to 3-5. After Roll, clicking the bar checker shows the two entry hints, one per playable entry die; clicking one must take the checker off the bar, the server must agree, and a white checker must appear on point 20 or 22.",
+      "looks": "page"
     },
     "F11": {
       "name": "Borne-off checkers in the tray",
       "what": "Borne-off checkers appear in the player's off tray.",
-      "how": "Sets a position with 3 white checkers borne off. The tray judged is the player's end of it (off-you) when that has a size, else the off tray it sits in. At least 3 white checkers must be drawn — tagged off, or untagged pieces inside the tray — and each must lie within the tray's sides and reach no more than half a piece past its top or bottom ([aspect: outside])."
+      "how": "Sets a position with 3 white checkers borne off. The tray judged is the player's end of it (off-you) when that has a size, else the off tray it sits in. At least 3 white checkers must be drawn — tagged off, or untagged pieces inside the tray — and each must lie within the tray's sides and reach no more than half a piece past its top or bottom ([aspect: outside]).",
+      "looks": "page"
     },
     "F12": {
       "name": "Win announced",
       "what": "A win ends the game with a banner or popup that says the player won.",
-      "how": "Sets a won position with the message \"You win!\": the message must show it, and if a modal is open its title must say win (any capitals)."
+      "how": "Sets a won position with the message \"You win!\": the message must show it, and if a modal is open its title must say win (any capitals).",
+      "looks": "page"
     },
     "F15": {
       "name": "Works on either host name",
       "what": "The game works whether it's opened at localhost or 127.0.0.1.",
-      "how": "Loads the page at both addresses: each must show the board with 24 points and 30 checkers. Console errors at either address are F27's."
+      "how": "Loads the page at both addresses: each must show the board with 24 points and 30 checkers. Console errors at either address are F27's.",
+      "looks": "page"
     },
     "F16": {
       "name": "The player's turn survives a reload",
       "what": "Reloading during the player's turn leaves it the player's turn.",
-      "how": "Reloads a fresh game at the player's turn and requires the reported turn to still be the player's. Then presses Roll: the turn must still be playable (a dead page is the ROLL DEAD line)."
+      "how": "Reloads a fresh game at the player's turn and requires the reported turn to still be the player's. Then presses Roll: the turn must still be playable (a dead page is the ROLL DEAD line).",
+      "looks": "page"
     },
     "F17": {
       "name": "Match score survives a reload",
       "what": "The match score keeps its value across a page reload.",
-      "how": "Sets the score to 3-5, reloads, and requires the reported score to still be 3 and 5."
+      "how": "Sets the score to 3-5, reloads, and requires the reported score to still be 3 and 5.",
+      "looks": "page"
     },
     "F18": {
       "name": "Dice values survive a reload",
       "what": "The rolled dice keep their exact values across a page reload.",
-      "how": "Sets the dice to 5 and 2, reloads, and requires the reported dice to still be 2 and 5."
+      "how": "Sets the dice to 5 and 2, reloads, and requires the reported dice to still be 2 and 5.",
+      "looks": "page"
     },
     "F19": {
       "name": "Difficulty survives a reload",
       "what": "The chosen difficulty stays set across a page reload.",
-      "how": "Sets the difficulty to hard, reloads, and requires it to still be hard."
+      "how": "Sets the difficulty to hard, reloads, and requires it to still be hard.",
+      "looks": "page"
     },
     "F20": {
       "name": "The doubling cube survives a reload",
       "what": "Who owns the cube, and therefore whether a double is allowed, stays the same across a reload.",
-      "how": "Sets the cube to be owned by black, reloads, and requires doubling to still be disallowed for white."
+      "how": "Sets the cube to be owned by black, reloads, and requires doubling to still be disallowed for white.",
+      "looks": "page"
     },
     "F21": {
       "name": "Remaining dice survive a reload",
       "what": "The dice left to play mid-turn stay the same across a page reload.",
-      "how": "Sets one die already played (dice 5 and 2, remaining 2), reloads, and requires the remaining die to still be 2."
+      "how": "Sets one die already played (dice 5 and 2, remaining 2), reloads, and requires the remaining die to still be 2.",
+      "looks": "page"
     },
     "F22": {
       "name": "Board resets on new game",
       "what": "After a win, clicking New game redraws the standard opening layout and closes the win popup.",
-      "how": "Sets a won position and clicks New game: exactly 30 checkers, each side back on its opening points, and the modal hidden."
+      "how": "Sets a won position and clicks New game: exactly 30 checkers, each side back on its opening points, and the modal hidden.",
+      "looks": "page"
     },
     "F23": {
       "name": "New game without reload",
       "what": "A new game starts without reloading the page.",
-      "how": "Sets a won position, marks the window, clicks New game, and then reads the mark: window marks do not survive a page reload, so the mark must still be there."
+      "how": "Sets a won position, marks the window, clicks New game, and then reads the mark: window marks do not survive a page reload, so the mark must still be there.",
+      "looks": "page"
     },
     "F24": {
       "name": "Stuck turn ends",
       "what": "When no move can be played, the turn is over and nothing is left to click.",
-      "how": "Puts white on the bar with both entry points blocked and fixes the roll to 2-4. After Roll the turn must be over with no legal moves, and clicking the bar checker must show no hints."
+      "how": "Puts white on the bar with both entry points blocked and fixes the roll to 2-4. After Roll the turn must be over with no legal moves, and clicking the bar checker must show no hints.",
+      "looks": "page"
     },
     "F25": {
       "name": "A move uses up a die",
       "what": "Playing a move by clicking really advances the turn.",
-      "how": "Fixes the next roll to 6-5, clicks Roll, clicks a movable checker, clicks one of its visible hints, and requires the move to be played and one fewer die left afterwards."
+      "how": "Fixes the next roll to 6-5, clicks Roll, clicks a movable checker, clicks one of its visible hints, and requires the move to be played and one fewer die left afterwards.",
+      "looks": "page"
     },
     "F27": {
       "name": "Page loads cleanly",
       "what": "The game page loads without errors.",
-      "how": "Opens the page in a browser at its usual address and at the other host name (127.0.0.1 for localhost) and requires no console errors and no page errors. Told by the integrating team: no player sees the console."
+      "how": "Opens the page in a browser at its usual address and at the other host name (127.0.0.1 for localhost) and requires no console errors and no page errors. Told by the integrating team: no player sees the console.",
+      "looks": "page"
     },
     "F28": {
       "name": "Points in board order",
       "what": "The 24 points are drawn in the standard board order — the top half runs 13 through 24 left to right, the bottom half 12 down to 1.",
-      "how": "In a browser: reads the 24 point boxes and requires two rows, one above the other ([aspect: rows] — held back while the tagged points overlap, which is the point-column check's finding), then 13 to 24 along the top and 12 down to 1 along the bottom."
+      "how": "In a browser: reads the 24 point boxes and requires two rows, one above the other ([aspect: rows] — held back while the tagged points overlap, which is the point-column check's finding), then 13 to 24 along the top and 12 down to 1 along the bottom.",
+      "looks": "page"
     },
     "F29": {
       "name": "Bar between the halves",
       "what": "The bar sits between the two board halves, not at the outer edge, and spans both rows.",
-      "how": "Measures the bar's box and asserts its left edge is right of the left half's right edge, its right edge is left of the right half's left edge, and its height spans both point rows."
+      "how": "Measures the bar's box and asserts its left edge is right of the left half's right edge, its right edge is left of the right half's left edge, and its height spans both point rows.",
+      "looks": "page"
     },
     "F30": {
       "name": "Triangles point inward",
       "what": "Each point's triangle points inward toward the board, not outward.",
-      "how": "Hides checkers, screenshots the board, samples each point's colour near the outer edge versus the inner end, and asserts the outer edge is triangle paint while the inner end is felt. A point with nothing painted at either end, or painted right across at both ends (a block), has no triangle and is told as such; pointing outward means wider at the inner end than at the rim. Each point is read every 5% of the way in: the painted stretch must narrow away from the rim and stand out from the felt at least half way in, told as all or some of the triangles."
+      "how": "Hides checkers, screenshots the board, samples each point's colour near the outer edge versus the inner end, and asserts the outer edge is triangle paint while the inner end is felt. A point with nothing painted at either end, or painted right across at both ends (a block), has no triangle and is told as such; pointing outward means wider at the inner end than at the rim. Each point is read every 5% of the way in: the painted stretch must narrow away from the rim and stand out from the felt at least half way in, told as all or some of the triangles.",
+      "looks": "page"
     },
     "F31": {
       "name": "Checkers over their own points",
       "what": "Every checker is drawn over the point it belongs to, not offset to a neighbour.",
-      "how": "Measures each checker's centre against its point's centre and vertical band: each sits within a quarter of a point's width of its own point's centre, inside its band — toward the middle is [aspect: up] (bottom points) or [aspect: down] (top points), past the board end of its point is [aspect: past], which waits on F37. Then each stack must start at the edge of the board: the piece nearest its point's rim within half a piece of it. Judged only once the points are numbered in order (F28): with the numbers wrong, a checker drawn where a player expects it can sit over the wrong number."
+      "how": "Measures each checker's centre against its point's centre and vertical band: each sits within a quarter of a point's width of its own point's centre, inside its band — toward the middle is [aspect: up] (bottom points) or [aspect: down] (top points), past the board end of its point is [aspect: past], which waits on F37. Then each stack must start at the edge of the board: the piece nearest its point's rim within half a piece of it. Judged only once the points are numbered in order (F28): with the numbers wrong, a checker drawn where a player expects it can sit over the wrong number.",
+      "looks": "page"
     },
     "F32": {
       "name": "Off tray visible",
       "what": "The off tray is present and visible, not hidden or zero-sized, on the board, at the end where checkers bear off.",
-      "how": "New game: the off tray exists, is visible, is actually drawn (a fill, an outline or a label — not an empty see-through box), sits over no point, lies on the board (its centre inside the board's frame, or drawn flush against points 1 and 24 and lined up with the points top to bottom), lies past points 1 and 24 — the end white and black bear off from (not told while another tray-like element stands at that end: a player can't tell which strip is the tray) — runs at least 90% of the height of the rows of points, and is at least as wide as a checker (at most 90% of a point)."
+      "how": "New game: the off tray exists, is visible, is actually drawn (a fill, an outline or a label — not an empty see-through box), sits over no point, lies on the board (its centre inside the board's frame, or drawn flush against points 1 and 24 and lined up with the points top to bottom), lies past points 1 and 24 — the end white and black bear off from (not told while another tray-like element stands at that end: a player can't tell which strip is the tray) — runs at least 90% of the height of the rows of points, and is at least as wide as a checker (at most 90% of a point).",
+      "looks": "page"
     },
     "F33": {
       "name": "A double lets the player make four moves",
       "what": "A double gives the player four moves, not two.",
-      "how": "Sets a doubled dice state through the debug route, reloads, then clicks checker, hint, and move four times, asserting all four dice are consumed; a failure names how many moves the double gave, and one click that plays more than one move is told as that ([aspect: twice])."
+      "how": "Sets a doubled dice state through the debug route, reloads, then clicks checker, hint, and move four times, asserting all four dice are consumed; a failure names how many moves the double gave, and one click that plays more than one move is told as that ([aspect: twice]).",
+      "looks": "page"
     },
     "F35": {
       "name": "Board left, controls right",
       "what": "The board sits on the left and every button and piece of game info on the right, as the build prompt asks.",
-      "how": "At 1280×800 and 1440×900 on a new game: the drawn board (points, bar and off tray) starts in the left tenth of the window, and roll, double, undo, end turn, cube, pip counts, turn, message, difficulty and New Game all sit to its right."
+      "how": "At 1280×800 and 1440×900 on a new game: the drawn board (points, bar and off tray) starts in the left tenth of the window, and roll, double, undo, end turn, cube, pip counts, turn, message, difficulty and New Game all sit to its right.",
+      "looks": "page"
     },
     "F36": {
       "name": "Board about 80% of the width",
       "what": "The board takes about 80% of the window's width, leaving about 20% for the buttons.",
-      "how": "At both sizes the drawn board must be 70–88% of the window's width (the reference measures 76% and 79%)."
+      "how": "At both sizes the drawn board must be 70–88% of the window's width (the reference measures 76% and 79%).",
+      "looks": "page"
     },
     "F37": {
       "name": "The game fits the screen",
       "what": "Everything fits without scrolling and the board fills the screen's height.",
-      "how": "At both sizes the page must not scroll either way, a scrollable board must not scroll sideways, no piece may have more than a tenth of its circle past the window's edge (told by the edge it crosses: bottom, top, left or right), and the drawn board must be at least 70% of the window's height (the reference: 88–89%)."
+      "how": "At both sizes the page must not scroll either way, a scrollable board must not scroll sideways, no piece may have more than a tenth of its circle past the window's edge (told by the edge it crosses: bottom, top, left or right), and the drawn board must be at least 70% of the window's height (the reference: 88–89%).",
+      "looks": "page"
     },
     "F38": {
       "name": "Buttons show properly",
       "what": "Every button and piece of game info is showing, inside the window, clear of the board and of each other, and big enough to use.",
-      "how": "At both sizes each control is visible, inside the window and off the board; each button is at least 60×24 px with its label not cut off; no two buttons overlap. A control that isn't showing is named in the line (the Roll button, my pip count, whose turn it is …)."
+      "how": "At both sizes each control is visible, inside the window and off the board; each button is at least 60×24 px with its label not cut off; no two buttons overlap. A control that isn't showing is named in the line (the Roll button, my pip count, whose turn it is …).",
+      "looks": "page"
     },
     "F39": {
       "name": "Two dice, two moves",
       "what": "After any roll exactly two dice are on screen, and two different numbers give exactly two moves (a double's four are F33).",
-      "how": "Fixes the roll to 6-5 — the player's die first, so the player wins the opening roll and plays both numbers (a forced 5-6 would hand the turn to the computer) — and clicks Roll: two dice on screen ([aspect: extra]), two moves playable by clicking, no third; then seeds a later turn in the move phase with a double already rolled, since an opening roll is one die per side and can no longer be a double (G31): still two dice on screen ([aspect: double]). A third click that never comes back within 25 s is a frozen game ([aspect: frozen]), not 'no third move'."
+      "how": "Fixes the roll to 6-5 — the player's die first, so the player wins the opening roll and plays both numbers (a forced 5-6 would hand the turn to the computer) — and clicks Roll: two dice on screen ([aspect: extra]), two moves playable by clicking, no third; then seeds a later turn in the move phase with a double already rolled, since an opening roll is one die per side and can no longer be a double (G31): still two dice on screen ([aspect: double]). A third click that never comes back within 25 s is a frozen game ([aspect: frozen]), not 'no third move'.",
+      "looks": "page"
     },
     "F40": {
       "name": "Rows line up",
       "what": "The top row of points sits straight across from the bottom row, column for column.",
-      "how": "New game: each row's drawn points sorted left to right; each top point's centre must be within half a point's width of the bottom point in the same column."
+      "how": "New game: each row's drawn points sorted left to right; each top point's centre must be within half a point's width of the bottom point in the same column.",
+      "looks": "page"
     },
     "F41": {
       "name": "Checkers are circles sized to their points",
       "what": "Every checker is a perfect circle, about 80% as wide as the point it sits on.",
-      "how": "New game: every checker on a point is drawn round (a circular border radius, clip or SVG circle) with a square box, and the typical checker is 70–90% of a point's width."
+      "how": "New game: every checker on a point is drawn round (a circular border radius, clip or SVG circle) with a square box, and the typical checker is 70–90% of a point's width.",
+      "looks": "page"
     },
     "F42": {
       "name": "Points alternate in colour",
       "what": "The points alternate between two colours, as on every backgammon board.",
-      "how": "New game, checkers hidden: each triangle's own colour down its middle at its widest; within each quarter, side-by-side neighbours must differ. Colours are compared with each other only; neither across the bar nor straight across the board is judged, and a point the bar or tray is drawn over is skipped."
+      "how": "New game, checkers hidden: each triangle's own colour down its middle at its widest; within each quarter, side-by-side neighbours must differ. Colours are compared with each other only; neither across the bar nor straight across the board is judged, and a point the bar or tray is drawn over is skipped.",
+      "looks": "page"
     },
     "F43": {
       "name": "Every drawn piece shows",
       "what": "Every drawn piece on the board can be seen whole: a stack of up to six shows each of its pieces, and no drawn piece is cut off.",
-      "how": "New game: a grid of spots inside each drawn checker on a point is hit-tested (the pieces made hit-testable for the reading). Two pieces on the same point with centres closer than a third of a piece are drawn on one spot; a piece showing less than three quarters of itself on screen, not because another piece is drawn over it, is cut off. Pieces mostly past the window are the fit check's."
+      "how": "New game: a grid of spots inside each drawn checker on a point is hit-tested (the pieces made hit-testable for the reading). Two pieces on the same point with centres closer than a third of a piece are drawn on one spot; a piece showing less than three quarters of itself on screen, not because another piece is drawn over it, is cut off. Pieces mostly past the window are the fit check's.",
+      "looks": "page"
     },
     "F44": {
       "name": "Buttons carry their names",
       "what": "Each button's label carries its name: Roll, Double, Undo, End Turn and New Game.",
-      "how": "New game: each button's own text, whether or not it shows, must contain its name (case aside; \"Roll Dice\" carries Roll). A button that isn't there is the tag check's; one that doesn't show is F38's."
+      "how": "New game: each button's own text, whether or not it shows, must contain its name (case aside; \"Roll Dice\" carries Roll). A button that isn't there is the tag check's; one that doesn't show is F38's.",
+      "looks": "page"
     },
     "F45": {
       "name": "Clicking a destination moves there",
       "what": "Clicking the point a picked-up checker can move to plays that move.",
-      "how": "Fixes the roll to 2-1, clicks Roll and the top checker on 13 (its one move is to the empty 11), then clicks three spots up the column of point 11 — near its middle-ward end, its centre, and its edge-ward end, away from the hint token — and requires a checker on 11 each time. A game whose hints play no move is F25's."
+      "how": "Fixes the roll to 2-1, clicks Roll and the top checker on 13 (its one move is to the empty 11), then clicks three spots up the column of point 11 — near its middle-ward end, its centre, and its edge-ward end, away from the hint token — and requires a checker on 11 each time. A game whose hints play no move is F25's.",
+      "looks": "page"
     },
     "F46": {
       "name": "The decline pop-up says you won",
       "what": "When the computer turns down the player's double, the pop-up title contains the word win.",
-      "how": "Sets a position where the player is far ahead, clicks the double button, and requires the pop-up title to contain win."
+      "how": "Sets a position where the player is far ahead, clicks the double button, and requires the pop-up title to contain win.",
+      "looks": "page"
     },
     "F47": {
       "name": "The turn waits for End Turn",
       "what": "The player's turn never ends by itself; it waits for the End Turn click, and Undo keeps working until then.",
-      "how": "Sets a position white can move in, forces 6-5, plays every die by clicking until the turn is over, then waits 1.6 s: the turn must still be white's in the move phase. Undo must be available and give a die back ([aspect: undo]); after replaying, End Turn must hand the turn to the computer ([aspect: endturn]). It waits four seconds (what a player takes to find the button) before checking the turn is still the player's."
+      "how": "Sets a position white can move in, forces 6-5, plays every die by clicking until the turn is over, then waits 1.6 s: the turn must still be white's in the move phase. Undo must be available and give a die back ([aspect: undo]); after replaying, End Turn must hand the turn to the computer ([aspect: endturn]). It waits four seconds (what a player takes to find the button) before checking the turn is still the player's.",
+      "looks": "page"
     },
     "F48": {
       "name": "A roll with no move passes by itself",
       "what": "When the player rolls and no die can be played, the dice stay up dimmed for about a second, then the turn passes to the computer with no End Turn click.",
-      "how": "In a browser: rolls a fixed 6-5 on the opening layout and reads the two dice's pixel contrast (90th minus 10th percentile brightness) a second after they land; then sets white's whole stack on 12 with black holding 6 and 7 and rolls the same 6-5. Requires the dice still on screen half a second later, the brightest no more than 0.8 of the faintest live die ([aspect: dim]); the turn still white's about a second after the roll ([aspect: pause]); and then, with no click, the computer's turn happening (black shows, or its pieces moved, or the turn is back to white for a roll)."
+      "how": "In a browser: rolls a fixed 6-5 on the opening layout and reads the two dice's pixel contrast (90th minus 10th percentile brightness) a second after they land; then sets white's whole stack on 12 with black holding 6 and 7 and rolls the same 6-5. Requires the dice still on screen half a second later, the brightest no more than 0.8 of the faintest live die ([aspect: dim]); the turn still white's about a second after the roll ([aspect: pause]); and then, with no click, the computer's turn happening (black shows, or its pieces moved, or the turn is back to white for a roll).",
+      "looks": "page"
     },
     "F49": {
       "name": "Plain double offer",
       "what": "When the computer offers a double the message says so in plain words, not its win percentage, pip counts, or reasoning.",
-      "how": "A race the hard computer doubles in, found by stepping the build's own server through a ladder of races — none drawing an offer is told as the computer never offering ([aspect: never]): after End Turn, something on screen — the message area or any pop-up — must say it is doubling ([aspect: shown]), and that text must not show win chances, pip counts or reasoning; then requires buttons reading Accept (or Take) and Decline (or Pass) to answer it ([aspect: answer])."
+      "how": "A race the hard computer doubles in, found by stepping the build's own server through a ladder of races — none drawing an offer is told as the computer never offering ([aspect: never]): after End Turn, something on screen — the message area or any pop-up — must say it is doubling ([aspect: shown]), and that text must not show win chances, pip counts or reasoning; then requires buttons reading Accept (or Take) and Decline (or Pass) to answer it ([aspect: answer]).",
+      "looks": "page"
     },
     "F50": {
       "name": "Plain double answer",
       "what": "When the computer answers the player's double it says accept or decline in plain words, not its win percentage or pip counts.",
-      "how": "The player doubles from an even position (the medium computer takes) and from a hopeless one (it passes): each time something on screen must say what it did ([aspect: shown]), without win chances, pip counts or reasoning. Once the computer has taken (the cube reads 2) it dismisses the page's pop-up and presses Roll: the game must carry on (a stuck game is the ROLL DEAD line)."
+      "how": "The player doubles from an even position (the medium computer takes) and from a hopeless one (it passes): each time something on screen must say what it did ([aspect: shown]), without win chances, pip counts or reasoning. Once the computer has taken (the cube reads 2) it dismisses the page's pop-up and presses Roll: the game must carry on (a stuck game is the ROLL DEAD line).",
+      "looks": "page"
     },
     "F51": {
       "name": "End pop-up names the winner and points",
       "what": "The end-of-game pop-up says who won and the points the game was worth, with no 'Match score' line.",
-      "how": "Ends the game with the player's own last bear-off (F53's move). The end-of-game pop-up must say what the game was worth ([aspect: points]) and must not show a match score."
+      "how": "Ends the game with the player's own last bear-off (F53's move). The end-of-game pop-up must say what the game was worth ([aspect: points]) and must not show a match score.",
+      "looks": "page"
     },
     "F52": {
       "name": "Greyed-out buttons look different",
       "what": "Buttons the player can't use look clearly different from usable ones — dimmed and greyed out.",
-      "how": "New game: Undo and End Turn cannot be used yet, New Game and Roll can. From each button's screenshot, the spread between its brightest and darkest marks; the unusable pair must be at most 60% of the least clear usable button; Roll counts as usable only when it can be clicked (a Roll shut at the start is F61's fault)."
+      "how": "New game: Undo and End Turn cannot be used yet, New Game and Roll can. From each button's screenshot, the spread between its brightest and darkest marks; the unusable pair must be at most 60% of the least clear usable button; Roll counts as usable only when it can be clicked (a Roll shut at the start is F61's fault).",
+      "looks": "page"
     },
     "F53": {
       "name": "Bearing off the last piece opens the win pop-up",
       "what": "When the player bears off their last piece, the end-of-game pop-up opens at once with a title that says they won.",
-      "how": "On screen: seed a one-checker bear-off position, play the last checker off, and require the win pop-up to appear immediately."
+      "how": "On screen: seed a one-checker bear-off position, play the last checker off, and require the win pop-up to appear immediately.",
+      "looks": "page"
     },
     "F54": {
       "name": "The difficulty control shows the level you're playing",
       "what": "After the page reloads, the difficulty control shows the difficulty the game is actually running at, not a fixed default.",
-      "how": "In a browser: chooses Hard on the difficulty control and clicks New Game (the game really is Hard: F08's), reloads, and requires the control to read hard."
+      "how": "In a browser: chooses Hard on the difficulty control and clicks New Game (the game really is Hard: F08's), reloads, and requires the control to read hard.",
+      "looks": "page"
     },
     "F55": {
       "name": "The computer finishes its turn after a reload",
       "what": "If the player reloads during the computer's turn, the computer finishes that turn and control returns to the player.",
-      "how": "On screen, the way a player gets there: the player's turn played out, End Turn pressed, and the page reloaded as soon as the game has taken it; the turn must come back to the player as the computer completes its turn."
+      "how": "On screen, the way a player gets there: the player's turn played out, End Turn pressed, and the page reloaded as soon as the game has taken it; the turn must come back to the player as the computer completes its turn.",
+      "looks": "page"
     },
     "F56": {
       "name": "The pending double offer shows again after a reload",
       "what": "If the player reloads while the computer's double offer is on screen, the offer shows again so the player can accept or decline.",
-      "how": "Reaches the computer's double offer the way F49 does — a race the build's own server doubles in, End Turn on the page — then reloads: visible buttons to take and to pass the double must be on screen again, wherever the page puts them."
+      "how": "Reaches the computer's double offer the way F49 does — a race the build's own server doubles in, End Turn on the page — then reloads: visible buttons to take and to pass the double must be on screen again, wherever the page puts them.",
+      "looks": "page"
     },
     "F57": {
       "name": "A tall stack caps at six with a count",
       "what": "A point holds at most six drawn checkers; from seven up it draws six and the top piece shows the total.",
-      "how": "Seven white on 13, drawn at rest: at most six shown on screen ([aspect: cap]), and the total 7 readable on the stack — a checkerCount badge or a number shown on point 13's column ([aspect: count])."
+      "how": "Seven white on 13, drawn at rest: at most six shown on screen ([aspect: cap]), and the total 7 readable on the stack — a checkerCount badge or a number shown on point 13's column ([aspect: count]).",
+      "looks": "page"
     },
     "F58": {
       "name": "The top piece slides away",
       "what": "When a checker leaves a stack, the piece farthest from the board's edge is the one that slides away, and the rest stay put.",
-      "how": "Opening position, 2-1: the pieces on 13 are held in the page, the top one is picked up and played to 11. When a held piece is the one now on 11 it must be the top one; a page that draws every piece afresh leaves none to follow and is not judged."
+      "how": "Opening position, 2-1: the pieces on 13 are held in the page, the top one is picked up and played to 11. When a held piece is the one now on 11 it must be the top one; a page that draws every piece afresh leaves none to follow and is not judged.",
+      "looks": "page"
     },
     "F59": {
       "name": "A piece lands at the far end",
       "what": "When a checker lands on a point that already holds checkers, it joins at the far end of the stack, farthest from the edge.",
-      "how": "White to move with a 2 left, one piece on 13 and one on 11: both are held in the page, and the piece on 13 is played onto 11. When both held pieces are the ones on 11, the arrival must be farther from the edge; a page that draws them afresh is not judged."
+      "how": "White to move with a 2 left, one piece on 13 and one on 11: both are held in the page, and the piece on 13 is played onto 11. When both held pieces are the ones on 11, the arrival must be farther from the edge; a page that draws them afresh is not judged.",
+      "looks": "page"
     },
     "F60": {
       "name": "Clicking a piece's column picks it up",
       "what": "Clicking anywhere in the column of a point holding one of the player's movable pieces picks up its top piece and shows its hints.",
-      "how": "Fixes the roll to 2-1, clicks Roll, then clicks a spot in the column of point 13 away from the checker — near the column's middle-ward end — and requires a hint to appear."
+      "how": "Fixes the roll to 2-1, clicks Roll, then clicks a spot in the column of point 13 away from the checker — near the column's middle-ward end — and requires a hint to appear.",
+      "looks": "page"
     },
     "F61": {
       "name": "The opening roll on screen",
       "what": "On the opening roll the page shows both dice; equal dice tie and say to roll again; and when the computer's die is higher it makes the first move and hands the turn back.",
-      "how": "In a browser: first requires the Roll button to be clickable at the start of a new game ([aspect: roll]); then fixes the opening roll to 6-5, clicks Roll, and requires at least two dice on screen once they rest ([aspect: dice]); fixes 4-4 and requires the words \"Tie — roll again\" (any dash) somewhere on the page, again with two dice resting on screen ([aspect: tie], [aspect: dice]); The computer winning the opening is F88's. The player's own first move with both numbers is F03's and F04's, which open with a roll the player wins. The two opening dice must look different from each other, and a tie must wait for the player to press Roll: three seconds after the tie lands, still the opening roll and still the tie ([aspect: self])."
+      "how": "In a browser: first requires the Roll button to be clickable at the start of a new game ([aspect: roll]); then fixes the opening roll to 6-5, clicks Roll, and requires at least two dice on screen once they rest ([aspect: dice]); fixes 4-4 and requires the words \"Tie — roll again\" (any dash) somewhere on the page, again with two dice resting on screen ([aspect: tie], [aspect: dice]); The computer winning the opening is F88's. The player's own first move with both numbers is F03's and F04's, which open with a roll the player wins. The two opening dice must look different from each other, and a tie must wait for the player to press Roll: three seconds after the tie lands, still the opening roll and still the tie ([aspect: self]).",
+      "looks": "page"
     },
     "F62": {
       "name": "The computer's dice on screen",
       "what": "When the computer takes its turn, its pieces move on the board, and its dice come up about a second after End Turn and stay readable for about a second before its first piece moves.",
-      "how": "In a browser: sets the opening position with the player's roll used up, easy difficulty and the computer's roll fixed to 6-5, records every frame (the visible dice drawn and the black pieces' centres and data-loc tags), and clicks End Turn. Requires End Turn available and the state to show the computer moved and the turn back ([aspect: turn]); a new dice drawing before the first move ([aspect: dice]), first drawn at least 0.8 s after the click ([aspect: wait]), that stayed unchanged at least 0.8 s ([aspect: first]). Also requires the black pieces to move on screen ([aspect: drawn])."
+      "how": "In a browser: sets the opening position with the player's roll used up, easy difficulty and the computer's roll fixed to 6-5, records every frame (the visible dice drawn and the black pieces' centres and data-loc tags), and clicks End Turn. Requires End Turn available and the state to show the computer moved and the turn back ([aspect: turn]); a new dice drawing before the first move ([aspect: dice]), first drawn at least 0.8 s after the click ([aspect: wait]), that stayed unchanged at least 0.8 s ([aspect: first]). Also requires the black pieces to move on screen ([aspect: drawn]).",
+      "looks": "page"
     },
     "F77": {
       "name": "The computer moves one piece at a time",
       "what": "When the computer takes its turn, its pieces move on the board one after another, each about half a second after the last.",
-      "how": "In a browser, the same computer turn as F62 (opening position, easy, roll fixed to 6-5, End Turn clicked, every frame recorded). Requires at least two move starts, each at least 0.35 s after the last ([aspect: between]); moves are timed from the pieces' tags, or from their drawing when the tags show fewer than two moves. A turn that never went through or never moved on screen is F62's."
+      "how": "In a browser, the same computer turn as F62 (opening position, easy, roll fixed to 6-5, End Turn clicked, every frame recorded). Requires at least two move starts, each at least 0.35 s after the last ([aspect: between]); moves are timed from the pieces' tags, or from their drawing when the tags show fewer than two moves. A turn that never went through or never moved on screen is F62's.",
+      "looks": "page"
     },
     "F63": {
       "name": "The opening dice carry whose they are",
       "what": "After the opening roll the state carries the dice as [playerDie, computerDie], and each die on screen is marked data-owner \"you\" or \"ai\".",
-      "how": "In a browser: fixes the opening roll to 6-5, clicks Roll, and requires the state's dice to read [6,5] ([aspect: order]) and the visible dice to include one marked data-owner \"you\" and one marked \"ai\" ([aspect: owner])."
+      "how": "In a browser: fixes the opening roll to 6-5, clicks Roll, and requires the state's dice to read [6,5] ([aspect: order]) and the visible dice to include one marked data-owner \"you\" and one marked \"ai\" ([aspect: owner]).",
+      "looks": "page"
     },
     "F64": {
       "name": "The Fast Forward button appears only in a race",
       "what": "On your turn in a pure race — nothing on the bar and every one of your checkers past every one of the computer's — a button appears to play the rest out for you; anywhere else, like the opening position, it stays hidden.",
-      "how": "In a browser: on a new game requires the fastForwardBtn button hidden ([aspect: outside]); then sets a race on the player's turn (every piece home on both sides) and requires the button visible with a label containing \"Fast Forward\" ([aspect: shown])."
+      "how": "In a browser: on a new game requires the fastForwardBtn button hidden ([aspect: outside]); then sets a race on the player's turn (every piece home on both sides) and requires the button visible with a label containing \"Fast Forward\" ([aspect: shown]).",
+      "looks": "page"
     },
     "F65": {
       "name": "Fast Forward plays a race out to the end",
       "what": "Clicking Fast Forward plays the rest of the game out for both sides without any further clicks, and when it ends the end-of-game pop-up shows who won.",
-      "how": "In a browser: sets a short race (white one piece on each of 1-3, black one on each of 22-24, the rest borne off), fixes the rolls to 2-1, 2-1, 6-5 so the play-out takes three turns including the computer's, records every frame (the dice drawn and the white pieces), and clicks Fast Forward once. Requires the game to reach gameover within a minute ([aspect: played]) and the end-of-game pop-up ([aspect: popup]); and, for the player's first turn, a new dice drawing before the first move ([aspect: dice]) up at least 0.8 s ([aspect: first]) and the moves at least 0.35 s apart ([aspect: between]), timed as F62 times the computer."
+      "how": "In a browser: sets a short race (white one piece on each of 1-3, black one on each of 22-24, the rest borne off), fixes the rolls to 2-1, 2-1, 6-5 so the play-out takes three turns including the computer's, records every frame (the dice drawn and the white pieces), and clicks Fast Forward once. Requires the game to reach gameover within a minute ([aspect: played]) and the end-of-game pop-up ([aspect: popup]); and, for the player's first turn, a new dice drawing before the first move ([aspect: dice]) up at least 0.8 s ([aspect: first]) and the moves at least 0.35 s apart ([aspect: between]), timed as F62 times the computer.",
+      "looks": "page"
     },
     "F66": {
       "name": "Fast Forward can be paused and carried on",
       "what": "While Fast Forward is running the button reads \"Pause\"; clicking Pause stops the play-out and the button reads \"Fast Forward\" again; clicking it then carries on.",
-      "how": "In a browser: sets a long race (fifteen a side, all home), clicks Fast Forward and requires the button to read Pause ([aspect: running]); clicks it 250 ms later and requires it to read Fast Forward again ([aspect: label]) and the position unchanged from 2 s to 5 s after ([aspect: paused]); clicks it again and requires Pause ([aspect: running]) and a changed position within 15 s ([aspect: resume]) — unless it stood still with the player's roll used up and the turn still theirs, which is told as Fast Forward stopping at the end of a roll ([aspect: turnend])."
+      "how": "In a browser: sets a long race (fifteen a side, all home), clicks Fast Forward and requires the button to read Pause ([aspect: running]); clicks it 250 ms later and requires it to read Fast Forward again ([aspect: label]) and the position unchanged from 2 s to 5 s after ([aspect: paused]); clicks it again and requires Pause ([aspect: running]) and a changed position within 15 s ([aspect: resume]) — unless it stood still with the player's roll used up and the turn still theirs, which is told as Fast Forward stopping at the end of a roll ([aspect: turnend]).",
+      "looks": "page"
     },
     "F67": {
       "name": "A computer double stops Fast Forward until you answer",
       "what": "If the computer offers a double while Fast Forward is running, the play-out stops and stays stopped; after you answer the double it still stays stopped until you click Fast Forward again.",
-      "how": "In a browser: sets F49's position (hard, the player's moves done, a race the computer doubles in by the published thresholds) and clicks Fast Forward. Requires the offer on screen wherever the page shows it ([aspect: offer]), the button not reading Pause 1.5 s later ([aspect: stopped]), a button to take the double ([aspect: answer]); after taking it, the turn back with the player ([aspect: back]), the position unchanged from 2 s to 5 s after ([aspect: stays]), and the button showing and reading Fast Forward ([aspect: back])."
+      "how": "In a browser: sets F49's position (hard, the player's moves done, a race the computer doubles in by the published thresholds) and clicks Fast Forward. Requires the offer on screen wherever the page shows it ([aspect: offer]), the button not reading Pause 1.5 s later ([aspect: stopped]), a button to take the double ([aspect: answer]); after taking it, the turn back with the player ([aspect: back]), the position unchanged from 2 s to 5 s after ([aspect: stays]), and the button showing and reading Fast Forward ([aspect: back]).",
+      "looks": "page"
     },
     "F68": {
       "name": "On load the difficulty control reads the game's level",
       "what": "When the page opens, the difficulty control shows the difficulty the game is actually running at, whatever set it.",
-      "how": "In a browser: starts a new game at Hard through /api/new, reloads, and requires the difficulty control to read hard (the player's own choice is F54's)."
+      "how": "In a browser: starts a new game at Hard through /api/new, reloads, and requires the difficulty control to read hard (the player's own choice is F54's).",
+      "looks": "page"
     },
     "F69": {
       "name": "The pip elements hold just the number",
       "what": "pipWhite and pipBlack contain only the pip count, with any label outside those elements.",
-      "how": "In a browser: opens a new game and requires the text of pipWhite and pipBlack to be a bare number (F06 judges the numbers themselves)."
+      "how": "In a browser: opens a new game and requires the text of pipWhite and pipBlack to be a bare number (F06 judges the numbers themselves).",
+      "looks": "page"
     },
     "F70": {
       "name": "Triangles leave a gap across the middle",
       "what": "The tip of each top-half triangle and the tip of the bottom-half triangle directly across the middle leave a clear gap — about 24% of the board's half-height — neither touching nor crossing, and not so short that the gap is wider than that.",
-      "how": "Measures each point's painted tip from a screenshot, pairs top and bottom points by column, and checks the gap as a fraction of the point's height against the 19%–29% band (≤0 touching, <19% too close, >29% too wide)."
+      "how": "Measures each point's painted tip from a screenshot, pairs top and bottom points by column, and checks the gap as a fraction of the point's height against the 19%–29% band (≤0 touching, <19% too close, >29% too wide).",
+      "looks": "page"
     },
     "F71": {
       "name": "Checkers on a point stack evenly, tighter at six",
       "what": "The checkers on a point stack evenly apart (two to five pieces), and a full stack of six sits a little tighter.",
-      "how": "Reads checker boxes by data-loc, sorts by centre y, and compares consecutive pitch: even within a stack for two to five pieces, and a six-piece stack's pitch at least ~3% tighter than the even pitch. Also measures each stack's extent — the mean pitch against the median checker width — flagging stacks squeezed together at the edge (crowded) or spread apart along the point (spread), each told with the row the stack is drawn in, and requiring a six-stack to compress. Also checks horizontal alignment — a stack's pieces share one x, and a stack whose centres fan out more than a tenth of a checker width drifts sideways (cascades) instead of standing in a single straight column over its point."
+      "how": "Reads checker boxes by data-loc, sorts by centre y, and compares consecutive pitch: even within a stack for two to five pieces, and a six-piece stack's pitch at least ~3% tighter than the even pitch. Also measures each stack's extent — the mean pitch against the median checker width — flagging stacks squeezed together at the edge (crowded) or spread apart along the point (spread), each told with the row the stack is drawn in, and requiring a six-stack to compress. Also checks horizontal alignment — a stack's pieces share one x, and a stack whose centres fan out more than a tenth of a checker width drifts sideways (cascades) instead of standing in a single straight column over its point.",
+      "looks": "page"
     },
     "G33": {
       "name": "The computer does not offer a double at an even start",
       "what": "From the even opening position the computer's first turn, at any difficulty, offers no double.",
-      "how": "Through the running server: a game at the standard opening position with the computer to play 3-1 at easy, medium and hard; after its turn no double may be on offer."
+      "how": "Through the running server: a game at the standard opening position with the computer to play 3-1 at easy, medium and hard; after its turn no double may be on offer.",
+      "looks": "code"
     },
     "F72": {
       "name": "The computer's double waits for an answer",
       "what": "While the computer's double waits for the player's answer, End Turn does not hand the turn back to the computer.",
-      "how": "A race the hard computer doubles on: once the offer shows, End Turn is pressed if it can be; the computer must not take another turn."
+      "how": "A race the hard computer doubles on: once the offer shows, End Turn is pressed if it can be; the computer must not take another turn.",
+      "looks": "page"
     },
     "F73": {
       "name": "Either number can be played first",
       "what": "When two numbers can be played in either order, the smaller number's move can be played first.",
-      "how": "Fixes the roll to 3-5, clicks the piece on 13 and then the hint at point 10 (the 3's move); the piece must arrive on 10."
+      "how": "Fixes the roll to 3-5, clicks the piece on 13 and then the hint at point 10 (the 3's move); the piece must arrive on 10.",
+      "looks": "page"
     },
     "F78": {
       "name": "A played die stays on screen, greyed",
       "what": "After a move, the die it used stays on screen and is drawn visibly fainter.",
-      "how": "In a browser: the opening layout with a 3-5 to play; reads the two dice's pixel contrast (90th minus 10th percentile brightness), picks up the piece on 13 and clicks a hint, waits 1.5 s, then requires two dice still on screen ([aspect: gone]) and the faintest of them at most 0.8 of the faintest contrast before the move ([aspect: grey])."
+      "how": "In a browser: the opening layout with a 3-5 to play; reads the two dice's pixel contrast (90th minus 10th percentile brightness), picks up the piece on 13 and clicks a hint, waits 1.5 s, then requires two dice still on screen ([aspect: gone]) and the faintest of them at most 0.8 of the faintest contrast before the move ([aspect: grey]).",
+      "looks": "page"
     },
     "F79": {
       "name": "Every point is the same size",
       "what": "All 24 points are drawn the same width and the same length.",
-      "how": "On a fresh board reads every tagged point's box: the widest at most 5% wider than the narrowest ([aspect: width]) and the longest at most 5% longer than the shortest ([aspect: length])."
+      "how": "On a fresh board reads every tagged point's box: the widest at most 5% wider than the narrowest ([aspect: width]) and the longest at most 5% longer than the shortest ([aspect: length]).",
+      "looks": "page"
     },
     "F80": {
       "name": "The bar is in the middle",
       "what": "The bar splits the board into two halves of the same width.",
-      "how": "On a fresh board measures each half from the outer edge of its outermost point to the bar's edge: the wider at most 5% wider than the other."
+      "how": "On a fresh board measures each half from the outer edge of its outermost point to the bar's edge: the wider at most 5% wider than the other.",
+      "looks": "page"
     },
     "F81": {
       "name": "The off tray sits right beside points 1 and 24",
       "what": "No strip of empty board between the last points and the off tray.",
-      "how": "On a fresh board: the gap from the right edge of points 1 and 24 to the off tray at most a quarter of a point's width. Waits on F79 and F80: a half squeezed narrow leaves this strip as a side effect."
+      "how": "On a fresh board: the gap from the right edge of points 1 and 24 to the off tray at most a quarter of a point's width. Waits on F79 and F80: a half squeezed narrow leaves this strip as a side effect.",
+      "looks": "page"
     },
     "F82": {
       "name": "The buttons match",
       "what": "Roll, Double, Undo and End Turn are the same size, and so is any other button stacked in line with them.",
-      "how": "Reads the four buttons' boxes, plus New Game when it shares their column or row: widths and heights each within 5% of one another."
+      "how": "Reads the four buttons' boxes, plus New Game when it shares their column or row: widths and heights each within 5% of one another.",
+      "looks": "page"
     },
     "F83": {
       "name": "Facing points differ in colour",
       "what": "Each point is a different colour from the point straight across the board from it.",
-      "how": "On a fresh board samples each triangle's own colour; for every top point and the bottom point straight across (13/12 … 24/1), not covered by the bar or tray, the two colours must differ."
+      "how": "On a fresh board samples each triangle's own colour; for every top point and the bottom point straight across (13/12 … 24/1), not covered by the bar or tray, the two colours must differ.",
+      "looks": "page"
     },
     "F84": {
       "name": "A roll alone draws no hints",
       "what": "After a roll, no move hint shows until the player picks a piece up.",
-      "how": "Rolls a fixed 5-3 opening, waits until the hint count is stable after the dice land, and requires no hint on the board."
+      "how": "Rolls a fixed 5-3 opening, waits until the hint count is stable after the dice land, and requires no hint on the board.",
+      "looks": "page"
     },
     "F85": {
       "name": "A tied opening never freezes the game",
       "what": "After a tie on the opening roll the game gets past it — by rolling again itself, or at least when the player presses Roll.",
-      "how": "Queues 2-2 then 5-3, clicks Roll at the opening, waits up to 4 s for the page to roll again by itself; if it has not, presses Roll (when it can be pressed) and waits 4 s more. Fails only if the game is still on the opening roll."
+      "how": "Queues 2-2 then 5-3, clicks Roll at the opening, waits up to 4 s for the page to roll again by itself; if it has not, presses Roll (when it can be pressed) and waits 4 s more. Fails only if the game is still on the opening roll.",
+      "looks": "page"
     },
     "F86": {
       "name": "A move hint looks like a faint green piece",
       "what": "A move hint is a dimmed, light-green marker the size of a piece, and it does not animate.",
-      "how": "Picks up a piece on a 3-5 and reads the first hint's own style: its box between 0.7 and 1.3 of a piece's width ([aspect: size]); a fill, border or text colour that is light green ([aspect: green]); that green, or the hint, see-through ([aspect: dim]); no running CSS animation ([aspect: still])."
+      "how": "Picks up a piece on a 3-5 and reads the first hint's own style: its box between 0.7 and 1.3 of a piece's width ([aspect: size]); a fill, border or text colour that is light green ([aspect: green]); that green, or the hint, see-through ([aspect: dim]); no running CSS animation ([aspect: still]).",
+      "looks": "page"
     },
     "F87": {
       "name": "The game follows the window as it changes size",
       "what": "On one live page the window is squeezed narrower and 150 px shorter and then made full size again: squeezed, the game still fits with its pieces apart; back at full size it looks as it did.",
-      "how": "Opens at 1440×900, then resizes the same page to 1180×750 (narrower and shorter, as a squeeze by hand): no scrolling and no piece past the window ([aspect: fit], waits on F37), no two pieces of different points closer than nine tenths of a piece ([aspect: overlap], waits on F31); then back to 1440×900, where exactly one bar and one off tray are drawn and at most 2% of the screen's pixels differ in brightness by more than a twelfth from before ([aspect: stale])."
+      "how": "Opens at 1440×900, then resizes the same page to 1180×750 (narrower and shorter, as a squeeze by hand): no scrolling and no piece past the window ([aspect: fit], waits on F37), no two pieces of different points closer than nine tenths of a piece ([aspect: overlap], waits on F31); then back to 1440×900, where exactly one bar and one off tray are drawn and at most 2% of the screen's pixels differ in brightness by more than a twelfth from before ([aspect: stale]).",
+      "looks": "page"
     },
     "F88": {
       "name": "The computer plays when it wins the opening",
       "what": "When the computer's opening die is higher, it makes its first move and the turn comes back to the player.",
-      "how": "Queues three tied opening rolls then a 3-5 the computer wins, clicks Roll for each, and within 20 s requires the turn back with white (never back: the game sat there), the computer's pieces moved before it came back ([aspect: passed]) and drawn moving on the board ([aspect: drawn]); its dice readable at least 0.8 s before its first move ([aspect: pace]) and its two moves at least 0.35 s apart ([aspect: between])."
+      "how": "Queues three tied opening rolls then a 3-5 the computer wins, clicks Roll for each, and within 20 s requires the turn back with white (never back: the game sat there), the computer's pieces moved before it came back ([aspect: passed]) and drawn moving on the board ([aspect: drawn]); its dice readable at least 0.8 s before its first move ([aspect: pace]) and its two moves at least 0.35 s apart ([aspect: between]).",
+      "looks": "page"
     },
     "F89": {
       "name": "Pressing Roll rolls the dice",
       "what": "A press of Roll makes a roll — at the start of a game and on the player's turn later on.",
-      "how": "Starts a new game and presses Roll, then sets a standard position on white's turn in the roll phase and presses Roll again: each press must make a POST /api/roll within 8 s. The roll helper every other gate uses fails with the ROLL DEAD marker (told 'I pressed Roll and nothing happened') when a press makes no roll, and waits on this gate."
+      "how": "Starts a new game and presses Roll, then sets a standard position on white's turn in the roll phase and presses Roll again: each press must make a POST /api/roll within 8 s. The roll helper every other gate uses fails with the ROLL DEAD marker (told 'I pressed Roll and nothing happened') when a press makes no roll, and waits on this gate.",
+      "looks": "page"
     },
     "F90": {
       "name": "Taking the computer's double, the game plays on",
       "what": "When the computer offers a double during play and the player accepts, the computer plays its turn and the turn comes back to the player.",
-      "how": "In a browser: a position the computer leads by about 40 pips on hard, white to roll; rolls 2-1 through the page, plays it through the hints, clicks End Turn, waits for the page's own computer turn to offer (waits on F49), clicks Accept, and within 20 s requires the turn back with white or the game over."
+      "how": "In a browser: a position the computer leads by about 40 pips on hard, white to roll; rolls 2-1 through the page, plays it through the hints, clicks End Turn, waits for the page's own computer turn to offer (waits on F49), clicks Accept, and within 20 s requires the turn back with white or the game over.",
+      "looks": "page"
     },
     "G35": {
       "name": "A seeded turn can double like a played one",
       "what": "A player turn set up through the debug route, cube centered, may double just as the same turn reached by play.",
-      "how": "Seeds white to roll on the opening board with a centered cube and asserts canDouble (after G11 shows a played turn can)."
+      "how": "Seeds white to roll on the opening board with a centered cube and asserts canDouble (after G11 shows a played turn can).",
+      "looks": "code"
     },
     "F91": {
       "name": "No pieces before the pieces layer",
       "what": "While the first layer is being built, the board and the buttons show with no pieces on the board yet.",
-      "how": "On a layer-1 pass, opens the page, waits a moment and requires that no tagged piece is visible."
+      "how": "On a layer-1 pass, opens the page, waits a moment and requires that no tagged piece is visible.",
+      "looks": "page"
     },
     "F92": {
       "name": "One roll per turn",
       "what": "After the player has played their roll, Roll stays off until the computer has had its turn.",
-      "how": "Wins the opening 5-3, plays both dice by clicking hints, presses Roll if it can be pressed, and requires the same dice and nothing new to play."
+      "how": "Wins the opening 5-3, plays both dice by clicking hints, presses Roll if it can be pressed, and requires the same dice and nothing new to play.",
+      "looks": "page"
     },
     "F93": {
       "name": "The dice land and stay still after a roll",
       "what": "After the player's roll the dice settle and stay still and readable for about a second, and nothing on the board moves by itself in that second.",
-      "how": "In a browser: presses Roll for a fixed 6-5 on the opening layout, then for three seconds reads the dice's boxes and pixels and where the player's pieces are tagged, about ten times a second. No piece may move within a second of the roll, and the dice must hold still — same boxes, same pixels — for at least 0.9 s."
+      "how": "In a browser: presses Roll for a fixed 6-5 on the opening layout, then for three seconds reads the dice's boxes and pixels and where the player's pieces are tagged, about ten times a second. No piece may move within a second of the roll, and the dice must hold still — same boxes, same pixels — for at least 0.9 s.",
+      "looks": "page"
     },
     "F94": {
       "name": "When the computer can't move, the turn comes back to roll",
       "what": "With the computer stuck on the bar and a roll it cannot use, its turn ends with no move and the player gets the turn back, ready to roll fresh dice.",
-      "how": "In a browser: the player's turn played out on a position where white holds every way in and black has one piece on the bar; the computer's roll fixed to 6-5; End Turn clicked. Roll must become available within 10 s, and pressing it (fixed to 2-1) must leave the player with a 2-1 of their own to play."
+      "how": "In a browser: the player's turn played out on a position where white holds every way in and black has one piece on the bar; the computer's roll fixed to 6-5; End Turn clicked. Roll must become available within 10 s, and pressing it (fixed to 2-1) must leave the player with a 2-1 of their own to play.",
+      "looks": "page"
     },
     "F95": {
       "name": "Clicking the off tray bears the picked piece off",
       "what": "With a piece picked up that can bear off, clicking anywhere in the off tray bears it off, the same as its off hint.",
-      "how": "In a browser: every white piece home, the roll dealt 5-4 by the build's own roll; picks up the piece on 5 and clicks inside the off tray clear of every hint. The piece must be borne off within 3 s."
+      "how": "In a browser: every white piece home, the roll dealt 5-4 by the build's own roll; picks up the piece on 5 and clicks inside the off tray clear of every hint. The piece must be borne off within 3 s.",
+      "looks": "page"
     },
     "G36": {
       "name": "A second roll through the API changes nothing",
       "what": "Once the dice are down, a roll asked for through the API is ignored or refused.",
-      "how": "Wins the opening 5-3 through the API, plays both dice, calls /api/roll, and requires the same dice and nothing left to play (a refusal counts as ignoring it)."
+      "how": "Wins the opening 5-3 through the API, plays both dice, calls /api/roll, and requires the same dice and nothing left to play (a refusal counts as ignoring it).",
+      "looks": "code"
     }
   },
   "setup": [

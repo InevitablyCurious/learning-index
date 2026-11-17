@@ -3087,69 +3087,11 @@ class ChallengeRunner(
 
     _TESTER_CONF_EXACT = ("REQ-BIND/boot",)
 
-    # Numbered gates a player cannot observe: they call the engine's named
-    # functions (contract, like the API), so only an integrating team sees the
-    # failure. E08 asks for each resulting position once; its old player line
-    # ("the computer takes a noticeably long time") described latency the test
-    # never measures.
-    # Checks a player never meets — the integration contract (a new game keeps
-    # gamesPlayed, the debug route takes every state field, any non-/api path
-    # serves the page, the opening dice's order in the state and their
-    # data-owner marks, the page loading the difficulty the game runs at, the pip elements holding
-    # just the number) — are
-    # told by the integrating team, in their voice.
-    # G03 (the dice a roll sends back), G31 (the opening roll's fields) and G32 (the
-    # message when the computer cannot move) read the API's reply, not the screen: a
-    # player sees the moves play out fine while the reply is wrong (WO-STUCK23-WHY).
-    # F27 (errors in the browser console), G16 (a second server copy's exit) and
-    # G22 (the win-chance estimate, never displayed) are faults no player ever
-    # sees (Jerry, 2026-10-17; audit WO-LI-NEVER-SEE-VOICE-AUDIT).
-    # Every other gate token is the tester's.
-    _TEAM_GATE_TOKENS = (
-        # The doubling cube's logic — when a double may be offered, taken or
-        # turned down, and what the cube is after one — is calculation no player
-        # sees (Jerry, 2026-11-13): told by the software team. What the cube and
-        # its offer look like on screen stays the player's (F07, F46, F49, F50,
-        # F56, F72, F90).
-        "G11",
-        "G12",
-        "G20",
-        "G21",
-        "G24",
-        "G26",
-        "G33",
-        "E08",
-        "G36",
-        "G03",
-        "G16",
-        "G22",
-        "G35",
-        "G27",
-        "G28",
-        "G29",
-        "G31",
-        "G32",
-        "F27",
-        "F63",
-        "F68",
-        "F69",
-        # The computer's chooser asked with no move to make: an engine call the
-        # server never makes in play (it checks for no move first), so the
-        # software team meets it, not a player (2026-11-16).
-        "G38",
-        # Other pieces moving while one waits on the bar, asked of the engine.
-        # A page can keep the other pieces still on its own while the engine
-        # still lists them: run 1794859708's did, and the player's "I was able
-        # to move another piece" was false for anyone on its page (2026-11-16).
-        # Only the engine's answer is checked, so only the team meets it.
-        "E04",
-        "E05",
-        # The computer's move-chooser asked directly: hundreds of positions for
-        # legal moves, and seeded games of hard against easy. Nothing a player
-        # can see or count — only a team calling the code finds it (Jerry,
-        # 2026-11-17).
-        "G14",
-    )
+    # WHO TELLS WHAT is decided in FeedbackMixin.feedback_channel: a check that
+    # looks at the code underneath (grader/checks.json "looks": "code") is the
+    # software team's by where it looks; a page check or aspect is the team's when
+    # grader/voices.json lists it (Jerry, 2026-11-17). The hand list of team gate
+    # tokens that lived here is gone.
 
     # HARNESS-INFRA CHECK NAMES (WO-FEEDBACK-VOICE-3 follow-up, 2026-08-30).
     # These are born only when a RUNNER DIES mid-run —

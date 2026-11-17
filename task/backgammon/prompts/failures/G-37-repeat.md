@@ -1,1 +1,1 @@
-Undid a hit again and the board still didn't go back to how it was before it.
+Undoing a hit through your server still doesn't put the board back exactly.

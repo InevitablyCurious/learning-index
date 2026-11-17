@@ -1,1 +1,1 @@
-Hit one of theirs again and the board still doesn't show the full hit.
+Your engine still doesn't complete a hit when they play one.

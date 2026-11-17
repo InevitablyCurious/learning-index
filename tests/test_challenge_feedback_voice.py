@@ -272,9 +272,12 @@ def test_legacy_checks_kwarg_still_works() -> None:
     """Older callers pass a bare list; they must keep working unchanged. The
     label is the human-written override, not the title."""
     text = ChallengeRunner._build_feedback_prompt(
-        checks=["[G01] REQ-INIT — initial position"]
+        checks=["[F34] REQ-CUBEUI — a new game shows the cube at one"]
     )
-    assert "1) When i start a new game the setup isn't how a real game starts" in text
+    assert (
+        "1) On a new game the cube on the board reads a number other than one, or it already looks owned by one side."
+        in text
+    )
 
 
 # ── harness-infra check names are not gates ──────────────────────────────────

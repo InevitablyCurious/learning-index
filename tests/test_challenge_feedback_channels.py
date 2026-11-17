@@ -71,12 +71,15 @@ def test_the_channel_is_decided_in_one_place() -> None:
     assert R.feedback_channel("conformance:REQ-RENDER/die — x") == "tester"
     assert R.feedback_channel("conformance:REQ-HINT/hint — x") == "tester"
     assert R.feedback_channel("conformance:REQ-BIND/boot — x") == "tester"
-    # Every ordinary gate is a played-game symptom. The team is an addition,
-    # never a reclassification.
-    assert R.feedback_channel("[G07] REQ-HIT — hitting → bar") == "tester"
+    # WHO TELLS WHAT (Jerry, 2026-11-17): by where the check looks. A check of
+    # the code underneath is the team's; a page check is the player's unless
+    # grader/voices.json gives it, or one of its aspects, to the team.
+    assert R.feedback_channel("[G07] REQ-HIT — hitting → bar") == "team"
+    assert R.feedback_channel("[F09] REQ-HIT — hit -> bar visual") == "tester"
     assert (
         R.feedback_channel("[F58] REQ-GEOMETRY — the top piece slides away") == "tester"
     )
+    assert R.feedback_channel("[F27] REQ-RENDER — no console errors") == "team"
 
 
 def test_a_missing_field_is_never_reported_as_a_boot_failure() -> None:
@@ -96,7 +99,7 @@ def test_a_missing_field_is_never_reported_as_a_boot_failure() -> None:
 def test_the_two_lists_are_separate_and_each_numbered_from_one() -> None:
     msg = R._build_feedback_prompt(
         problems=[
-            _problem("[G07] REQ-HIT — hitting → bar"),
+            _problem("[F09] REQ-HIT — hit -> bar visual"),
             _problem(
                 'conformance:REQ-STATE/state.winType — /api/state carries "winType"'
             ),
@@ -115,7 +118,7 @@ def test_the_team_section_is_absent_when_the_team_has_nothing_to_say() -> None:
     # Announcing an integration attempt and listing nothing is a sentence with no
     # content, and it still hands the model a party to argue with.
     msg = R._build_feedback_prompt(
-        problems=[_problem("[G07] REQ-HIT — hitting → bar")],
+        problems=[_problem("[F09] REQ-HIT — hit -> bar visual")],
     )
     assert "software team" not in msg
 
@@ -164,12 +167,12 @@ def test_a_tester_check_told_in_the_teams_voice_still_silences_the_tester(
     view, msg = _feedback(
         [
             {
-                "check": "[F02] REQ-RENDER — start game renders full board",
+                "check": "[F34] REQ-CUBEUI — a new game shows the cube at one",
                 "observed": observed,
             }
         ]
     )
-    assert view.visible and view.visible[0]["check"].startswith("[F02]")
+    assert view.visible and view.visible[0]["check"].startswith("[F34]")
     assert "Nothing jumped out" not in msg
     assert "while playing the game" not in msg
     assert "Also, my software team" not in msg
@@ -182,13 +185,13 @@ def test_a_later_stage_tester_failure_silences_the_tester() -> None:
     view, msg = _feedback(
         [
             {"check": "conformance:REQ-TESTID/testid.board", "observed": "missing"},
-            {"check": "[G07] REQ-HIT — hitting → bar", "observed": "x"},
+            {"check": "[F09] REQ-HIT — hit -> bar visual", "observed": "x"},
         ]
     )
     assert [p["check"].split(" ")[0] for p in view.visible] == [
         "conformance:REQ-TESTID/testid.board"
     ]
-    assert view.withheld == ["[G07] REQ-HIT — hitting → bar"]
+    assert view.withheld == ["[F09] REQ-HIT — hit -> bar visual"]
     assert "Nothing jumped out" not in msg
     assert "while playing the game" not in msg
     assert "Also, my software team" not in msg
@@ -657,7 +660,7 @@ def test_a_failed_api_call_is_told_as_the_status_and_error_the_app_returned() ->
             "observed": "HTTP 500 from POST /api/new: Error: boom",
         },
         {
-            "check": "[F02] REQ-RENDER — start game renders full board",
+            "check": "[F34] REQ-CUBEUI — a new game shows the cube at one",
             "observed": "Error: POST /api/new failed (500)\n\nexpect(received).toBeTruthy()",
         },
     ]
@@ -696,7 +699,7 @@ def test_a_labelled_assertion_is_told_as_that_aspect() -> None:
         "[G01] REQ-INIT — initial position",
         observed="AssertionError: [aspect: pieces]: expected [ Array(26) ] to deeply equal [ Array(26) ]",
     )
-    assert "pieces" in pieces and "cube" not in pieces
+    assert "starting points" in pieces and "cube" not in pieces
     plain = R._humanize_check(
         "[G01] REQ-INIT — initial position", observed="AssertionError: x"
     )

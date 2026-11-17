@@ -35,6 +35,7 @@ from .constants import (
     _FEEDBACK_HEADER_FIRST,
     _FEEDBACK_HEADER_REPEAT,
     _FIXED_OPENER_MANY,
+    _GRADER_DIR,
     _FIXED_OPENER_ONE,
     _PACK,
     _SPEC,
@@ -528,12 +529,49 @@ def setup_refusal_line(observed: str, *, pass_kind: str) -> str | None:
 
 class FeedbackMixin:
     @classmethod
-    def feedback_channel(cls, check: str) -> str:
-        """`"tester"` or `"team"` for one check id. Single source of truth."""
+    def _check_looks(cls) -> dict[str, str]:
+        """Where each check looks — "page" or "code" (grader/checks.json), loaded once."""
+        cached = getattr(cls, "_CHECK_LOOKS_CACHE", None)
+        if cached is None:
+            data = json.loads((_GRADER_DIR / "checks.json").read_text(encoding="utf-8"))
+            cached = {
+                key: str(entry.get("looks", "page"))
+                for key, entry in (data.get("checks") or {}).items()
+                if isinstance(entry, dict)
+            }
+            cls._CHECK_LOOKS_CACHE = cached
+        return cached
+
+    @classmethod
+    def _team_keys(cls) -> frozenset[str]:
+        """Page checks and aspects the software team tells (grader/voices.json), loaded once."""
+        cached = getattr(cls, "_TEAM_KEYS_CACHE", None)
+        if cached is None:
+            data = json.loads((_GRADER_DIR / "voices.json").read_text(encoding="utf-8"))
+            cached = frozenset(str(k) for k in data.get("team") or [])
+            cls._TEAM_KEYS_CACHE = cached
+        return cached
+
+    @classmethod
+    def feedback_channel(cls, check: str, aspect: str | None = None) -> str:
+        """`"tester"` or `"team"` for one check (and, given, the aspect it names).
+
+        WHO TELLS WHAT (Jerry, 2026-11-17): the software team does the heavy
+        lifting — every check that looks at the code underneath is theirs, by
+        where the check looks (grader/checks.json "looks"), never by a hand list;
+        a page check, or one of its aspects, in grader/voices.json is theirs
+        too. The player says only what a person sees and does on the page.
+        Single source of truth."""
         m = cls._CONF_KEY_RE.match(str(check or "").strip())
         if not m:
             token = cls._GATE_TOKEN_KEY_RE.match(str(check or "").strip())
-            if token and token.group(1) in cls._TEAM_GATE_TOKENS:
+            if not token:
+                return "tester"
+            gate = token.group(1)
+            team = cls._team_keys()
+            if cls._check_looks().get(gate) == "code" or gate in team:
+                return "team"
+            if aspect and f"{gate}.{aspect}" in team:
                 return "team"
             return "tester"
         key = m.group(1)
@@ -662,11 +700,32 @@ class FeedbackMixin:
         sentence still reads as English either way. A bare number would leave
         the fallback as "a long while seconds".
         """
+        line = cls._fill_measured(line, observed)
         if "{seconds}" not in line:
             return line
         m = re.search(r"(\d+)\s*s\b", str(observed or ""))
         filled = f"{m.group(1)} seconds" if m else "a long while"
         return line.replace("{seconds}", filled)
+
+    @classmethod
+    def _fill_measured(cls, line: str, observed: str | None) -> str:
+        """Substitute `{measured}` with the grader's own finding, in its words.
+
+        A team line that quotes the measurement is true by construction: the
+        number is the one the check read off this build ("the off tray is 112 px
+        wide; a point is 71 px"), never one a sentence guessed at. Taken from the
+        failing assertion's message — its first line, without the markers, the
+        "Error:" prefix or the test runner's "expected … to …" tail.
+        """
+        if "{measured}" not in line:
+            return line
+        first = str(observed or "").strip().split("\n", 1)[0]
+        first = re.sub(r"^\w*Error:\s*", "", first)
+        first = re.sub(
+            r"\[(?:aspect|needs):[^\]]*\]\s*|\[untold\]\s*", "", first
+        ).strip()
+        first = re.split(r":\s*expected\b", first, maxsplit=1)[0].strip().rstrip(".")
+        return line.replace("{measured}", first or "what their check measured")
 
     @classmethod
     def _humanize_check(
@@ -825,7 +884,7 @@ class FeedbackMixin:
             # only exists on the grader's finding.
             observed=observed,
         )
-        return label, cls.feedback_channel(raw_check)
+        return label, cls.feedback_channel(raw_check, cls._complaint_aspect(record))
 
     @classmethod
     def _build_pass_verdict(

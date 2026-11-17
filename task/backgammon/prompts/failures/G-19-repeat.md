@@ -1,1 +1,1 @@
-It happened again — a piece came off while one of mine was still sitting on the bar.
+Your engine still lets them bear off with a checker on the bar.

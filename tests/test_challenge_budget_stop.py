@@ -39,8 +39,8 @@ TASK_DIR = (Path(__file__).resolve().parents[1] / "task" / "backgammon").resolve
 # A real graded gate check (a bracket token that HAS a feedback override). The
 # single-system feedback contract hard-fails on synthetic labels, so loop
 # mechanics tests must drive the cell with genuine gate ids.
-REAL_CHECK = "[G02] REQ-PIP — pip count"
-REAL_PASS1 = "[G01] REQ-INIT — initial position"
+REAL_CHECK = "[F34] REQ-CUBEUI — a new game shows the cube at one"
+REAL_PASS1 = "[F06] REQ-PIPUI — pip display"
 REAL_PASS2 = "[G03] REQ-DICE — dice to moves"
 
 
@@ -379,7 +379,7 @@ def test_feedback_gap_folds_pass_verdict_into_failure_feedback_with_sidecar_fide
     # 4 calls: initial + feedback-1 + feedback-2 + feedback-3 — ONE prompt per
     # round (WO-FEEDBACK-ONEPHASE). The attempt-2 pass verdict rides INSIDE
     # feedback-2; there is no separate verdict-pass-2 prompt any more.
-    # Gate [G02] B keeps failing until attempt 4, so there's an extra feedback round
+    # Gate [F06] B keeps failing until attempt 4, so there's an extra feedback round
     assert len(calls) == 4
 
     # WO-FEEDBACK-VOICE-3: grader tokens are stripped from delivered text. The
@@ -480,8 +480,8 @@ def test_zero_progress_gap_has_no_pass_verdict_and_uses_false_header(
             return {
                 "verdict": "FAIL",
                 "conformed": True,
-                "problems": [{"check": "[G02] B"}],
-                "failed_gates": ["[G02] B"],
+                "problems": [{"check": "[F06] B"}],
+                "failed_gates": ["[F06] B"],
             }
         return {
             "verdict": "PASS",
@@ -850,8 +850,8 @@ def test_non_budget_nonzero_worker_exit_classifies_as_harness_error(
         lambda **kwargs: {
             "verdict": "FAIL",
             "conformed": True,
-            "problems": [{"check": "[G02] REQ-PIP — pip count"}],
-            "failed_gates": ["[G02] REQ-PIP — pip count"],
+            "problems": [{"check": "[F06] REQ-PIPUI — pip display"}],
+            "failed_gates": ["[F06] REQ-PIPUI — pip display"],
         },
     )
 

@@ -45,8 +45,8 @@ STAGES = load_stages(_GRADER_DIR / "checks.json")
 
 # REAL check strings, all stage 1, each with a feedback override — the
 # single-system contract hard-fails on synthetic labels in the real pipeline.
-PIP = "[G02] REQ-PIP — pip count"  # tester channel
-INIT = "[G01] REQ-INIT — initial position"  # tester channel
+PIP = "[F06] REQ-PIPUI — pip display"  # tester channel
+INIT = "[F34] REQ-CUBEUI — a new game shows the cube at one"  # tester channel
 DOM = "REQ-TESTID/dom"  # team channel (conformance)
 CHECKER = "REQ-TESTID/checker"  # team channel (conformance)
 
@@ -176,9 +176,9 @@ def test_previous_withheld_or_unevaluated_is_not_regression() -> None:
 
 def test_regression_opener_heads_the_tester_list() -> None:
     view, msg = _feedback([_problem(PIP), _problem(INIT)], regressions={PIP})
-    # Told in the stage's own order (the starting position before the pip
-    # count), whatever order the grader reported them in.
-    assert [p["check"] for p in view.visible] == [INIT, PIP]
+    # Told in the stage's own order (the pip display before the cube, by the
+    # stage's key order), whatever order the grader reported them in.
+    assert [p["check"] for p in view.visible] == [PIP, INIT]
     assert _REGRESSION_HEADER in msg
     assert msg.index(_REGRESSION_HEADER) < msg.index(_FEEDBACK_HEADER_FIRST), (
         "the regression opener heads the tester's message, before the "

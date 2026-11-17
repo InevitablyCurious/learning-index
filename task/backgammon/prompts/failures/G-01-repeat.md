@@ -1,1 +1,1 @@
-Fresh game again and I went over the whole table before the first roll — the starting setup still isn't right.
+They started a new game through your engine again and its starting state still doesn't match a standard opening.

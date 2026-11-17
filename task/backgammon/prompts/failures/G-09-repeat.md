@@ -1,1 +1,1 @@
-Did it again with a straggler stranded nowhere near my home side, and it still started letting me take pieces off.
+Your engine still lets white take checkers off with one still out on the other side of the board.

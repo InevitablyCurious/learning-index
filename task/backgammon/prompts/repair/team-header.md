@@ -1,1 +1,1 @@
-Also, my software team is trying to integrate your app into their own software and they hit some problems on their side:
+Also, my software team ran your app through their own checks — on the code underneath it and on exact measurements of the page — and found these problems:

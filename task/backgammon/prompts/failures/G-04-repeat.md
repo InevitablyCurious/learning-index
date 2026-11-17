@@ -1,1 +1,1 @@
-It happened again — I took one of the moves it offered me and landed somewhere my opponent clearly already holds.
+Your engine still offers moves onto points the other side holds with two or more checkers.

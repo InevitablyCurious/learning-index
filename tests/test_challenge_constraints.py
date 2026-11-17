@@ -86,7 +86,7 @@ def _ends_with_the_block(msg: str) -> None:
 def test_the_block_ends_the_tester_only_message() -> None:
     """(a) One tester-channel complaint; the team has nothing to say, so there
     is no team section at all — the block still closes the message."""
-    _, msg = _feedback([_problem("[G07] REQ-HIT — hitting → bar")])
+    _, msg = _feedback([_problem("[F09] REQ-HIT — hit -> bar visual")])
     _ends_with_the_block(msg)
     assert "software team" not in msg, "this variant has no team section"
 
@@ -128,11 +128,11 @@ def test_the_block_ends_the_tester_silent_message() -> None:
     view, msg = _feedback(
         [
             {"check": "conformance:REQ-TESTID/testid.board", "observed": "missing"},
-            {"check": "[G07] REQ-HIT — hitting → bar", "observed": "x"},
+            {"check": "[F09] REQ-HIT — hit -> bar visual", "observed": "x"},
         ]
     )
     _ends_with_the_block(msg)
-    assert view.withheld == ["[G07] REQ-HIT — hitting → bar"]
+    assert view.withheld == ["[F09] REQ-HIT — hit -> bar visual"]
     assert "My software team" in msg
     assert "Also, my software team" not in msg, "the team opens alone, without 'Also'"
 
