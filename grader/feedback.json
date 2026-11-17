@@ -2054,6 +2054,10 @@
     "G30.hard": {
       "first": "On the hard setting, the computer could play either of its two numbers, but not both — after either move the other had nowhere to go — and it played the smaller one. When only one of its numbers can be used, I expect it to play the bigger one, on every setting.",
       "repeat": "On the hard setting, the computer still played the smaller number when only one of its two could be used."
+    },
+    "F88.passed": {
+      "first": "When the computer won the opening roll, it handed the turn straight back to me without moving a single piece.",
+      "repeat": "The computer won the opening roll again and still handed the turn back without moving a piece."
     }
   }
 }

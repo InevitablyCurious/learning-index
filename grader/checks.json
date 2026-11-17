@@ -647,7 +647,7 @@
     "F88": {
       "name": "The computer plays when it wins the opening",
       "what": "When the computer's opening die is higher, it makes its first move and the turn comes back to the player.",
-      "how": "Queues three tied opening rolls then a 3-5 the computer wins, clicks Roll for each, and within 20 s requires the computer's pieces moved on the board ([aspect: drawn]) and the turn back with white; its dice readable at least 0.8 s before its first move ([aspect: pace]) and its two moves at least 0.35 s apart ([aspect: between])."
+      "how": "Queues three tied opening rolls then a 3-5 the computer wins, clicks Roll for each, and within 20 s requires the turn back with white (never back: the game sat there), the computer's pieces moved before it came back ([aspect: passed]) and drawn moving on the board ([aspect: drawn]); its dice readable at least 0.8 s before its first move ([aspect: pace]) and its two moves at least 0.35 s apart ([aspect: between])."
     },
     "F89": {
       "name": "Pressing Roll rolls the dice",

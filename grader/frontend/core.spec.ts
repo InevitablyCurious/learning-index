@@ -902,14 +902,22 @@ test("[F88] REQ-OPENING — the computer plays when it wins the opening", async 
             await take.click().catch(() => undefined);
           }
         }
-        return state.turn === "white" && blackOf(state) !== blackOf(before);
+        return state.turn === "white" && state.phase !== "openingRoll";
       },
       {
-        message: "[needs: F89] after three ties and a 3-5 opening the computer never made its first move and handed the turn back",
+        message: "[needs: F89] after three ties and a 3-5 opening the computer's first turn never ended — the turn never came back",
         timeout: 20_000,
       },
     )
     .toBe(true);
+  // Back, but played or not: run 1794902330's server answered the 3-5 with
+  // "black rolled 3, 5 — No moves available" and handed the turn straight back,
+  // Roll live, and the player was told the game "just sat there and I couldn't
+  // do anything".
+  expect(
+    blackOf(await readState(page)) !== blackOf(before),
+    "[aspect: passed] [needs: F89] after a 3-5 opening the computer handed the turn back without moving",
+  ).toBe(true);
 
   // Exactly the two numbers thrown — no more, no less. Played twice over (16)
   // has its own line, naming it (Jerry, 2026-11-12: run 1794488314's build
