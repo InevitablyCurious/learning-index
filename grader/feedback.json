@@ -1920,8 +1920,8 @@
       "repeat": "Changed my window's shape again, and pieces from different points still run into each other."
     },
     "F87.ratio": {
-      "first": "The board isn't shaped like a real board. I expect it about 1.4 times as wide as it is tall.",
-      "repeat": "The board still isn't shaped like a real board."
+      "first": "Their measurements of the page: {measured}. The brief keeps the whole board — its points, the bar and the off tray — 1.4 times as wide as it is tall, sized to the window.",
+      "repeat": "Their measurements again: {measured} — the board still isn't 1.4 times as wide as it is tall."
     },
     "F87.shape": {
       "first": "Their measurements as the window changes size: {measured}. The brief keeps the board 1.4 times as wide as it is tall at any window size.",
