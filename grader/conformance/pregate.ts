@@ -666,6 +666,25 @@ export async function runPreGate(): Promise<PreGateResult> {
         if (drawnBefore < 2) {
           add("REQ-RENDER/die — the dice are drawn after a roll", ">=2", rolled ? String(drawnBefore) : "never evaluated — the Roll button could not be clicked at the start of a game");
         }
+
+        // A player reloads once the roll has landed, not while it is on its way:
+        // the reload waits (bounded) until the server holds a roll. Reloading on
+        // the first drawn die raced a build that animates its dice while the roll
+        // request is in flight — a correct build answering 300 ms slower lost the
+        // roll to the reload and was told "my roll was gone" (class matrix
+        // legit/server-300ms-slower). A server that never takes the roll is the
+        // roll checks' finding; the reload check below still reads what it shows.
+        if (rolled) {
+          const landedBy = Date.now() + 5_000;
+          while (Date.now() < landedBy) {
+            const held = await api("/api/state").then(
+              (s) => Array.isArray((s as { dice?: unknown }).dice) && ((s as { dice: unknown[] }).dice.length >= 2),
+              () => false,
+            );
+            if (held) break;
+            await page.waitForTimeout(100);
+          }
+        }
       }
 
       await page.reload({ waitUntil: "domcontentloaded" });

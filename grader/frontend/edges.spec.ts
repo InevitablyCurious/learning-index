@@ -116,7 +116,7 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
   const whiteBarChecker = page.locator(
     '[data-testid="checker"][data-color="white"][data-loc="bar"]',
   );
-  await expect(whiteBarChecker).toHaveCount(1);
+  await expect(whiteBarChecker, "[aspect: onbar] [needs: F09] the player's piece on the bar is not drawn there").toHaveCount(1);
   // The roll animates before the state is applied: wait for the dice to stop
   // changing so the bar checker is clickable when we click it.
   await expect
@@ -127,7 +127,7 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
       await page.waitForTimeout(200);
       const b = await dice.evaluateAll((els) => els.map((el) => el.innerHTML).join("|"));
       return a === b;
-    })
+    }, "[needs: F93] the dice never held still after the roll")
     .toBe(true);
   const hints = page.locator('[data-testid="hint"]');
   // Clicked again until hints show, as a player clicks again: a click landing
@@ -141,7 +141,7 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
 
   await expect(whiteBarChecker, "[aspect: reentry] [needs: F03 F45]").toHaveCount(0);
   const state = await fetchState(page);
-  expect(state.bar.white).toBe(0);
+  expect(state.bar.white, "[needs: G06] the server still holds the piece on the bar").toBe(0);
 
   await expect
     .poll(async () => {
@@ -269,16 +269,29 @@ test("[F12] REQ-NEWGAME — the win is announced", async ({ page }) => {
   });
 
   await page.reload();
-  await expect(page.locator('[data-testid="message"]')).toContainText("You win");
+  await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
 
+  // A player is told nothing announced the win only when nothing on the page
+  // did — the banner or the end pop-up. A pop-up saying "You win" over a banner
+  // that doesn't is the brief's banner wording, the team's to tell: one line for
+  // both told such a build "there's no win message or victory popup".
+  // Capitals are not the player's concern: "You win!" says it as well as "Win".
   const modalOverlay = page.locator('[data-testid="modalOverlay"]');
-  const modalVisible = await modalOverlay.evaluate(
-    (el) => !el.classList.contains("hidden"),
-  );
-  if (modalVisible) {
-    // Capitals are not the player's concern: "You win!" says it as well as "Win".
-    await expect(page.locator('[data-testid="modalTitle"]')).toContainText(/win/i);
+  const popupShown = () => modalOverlay.isVisible().catch(() => false);
+  const banner = () => page.locator('[data-testid="message"]').innerText().catch(() => "");
+  const popupTitle = async () =>
+    (await popupShown()) ? await page.locator('[data-testid="modalTitle"]').innerText().catch(() => "") : "";
+  // Announced is anything a player reads as their win: the player is white, so
+  // "White wins!" tells them as plainly as "You win" (the brief's exact words
+  // are the banner aspect below, the team's).
+  await expect
+    .poll(async () => /\bwin|\bwon\b|victor/i.test(await banner()) || /win/i.test(await popupTitle()), "the win was not announced on the page")
+    .toBe(true);
+  if (await popupShown()) {
+    await expect(page.locator('[data-testid="modalTitle"]'), "[aspect: popup] the end pop-up's title does not say win").toContainText(/win/i);
   }
+  const said = await banner();
+  expect(/you win/i.test(said), `[aspect: banner] the win banner (message) reads "${said.trim()}", not "You win"`).toBe(true);
 });
 
 test("[F22] REQ-NEWGAME — board resets for the next game", async ({ page }) => {
@@ -308,33 +321,52 @@ test("[F22] REQ-NEWGAME — board resets for the next game", async ({ page }) =>
   if (await inPopup.isVisible().catch(() => false)) await inPopup.click();
   else await page.locator('[data-testid="newGameBtn"]').click({ force: true });
 
-  await expect(page.locator('[data-testid="checker"]')).toHaveCount(30);
+  // Each part of the reset is its own line: the pieces back where a game starts,
+  // the end pop-up out of sight (what a player sees) and the brief's hidden class
+  // on it (what the team's software reads). One hedged line for all of them told
+  // builds "the pieces are still where the last game left them, or the victory
+  // popup is still open" when only one was true, or neither to a player.
+  const reset = "[aspect: pieces] after New Game the pieces are not in the starting position";
+  await expect(page.locator('[data-testid="checker"]'), reset).toHaveCount(30);
   await expect(
     page.locator('[data-testid="checker"][data-color="white"][data-loc="24"]'),
+    reset,
   ).toHaveCount(2);
   await expect(
     page.locator('[data-testid="checker"][data-color="white"][data-loc="13"]'),
+    reset,
   ).toHaveCount(5);
   await expect(
     page.locator('[data-testid="checker"][data-color="white"][data-loc="8"]'),
+    reset,
   ).toHaveCount(3);
   await expect(
     page.locator('[data-testid="checker"][data-color="white"][data-loc="6"]'),
+    reset,
   ).toHaveCount(5);
   await expect(
     page.locator('[data-testid="checker"][data-color="black"][data-loc="1"]'),
+    reset,
   ).toHaveCount(2);
   await expect(
     page.locator('[data-testid="checker"][data-color="black"][data-loc="12"]'),
+    reset,
   ).toHaveCount(5);
   await expect(
     page.locator('[data-testid="checker"][data-color="black"][data-loc="17"]'),
+    reset,
   ).toHaveCount(3);
   await expect(
     page.locator('[data-testid="checker"][data-color="black"][data-loc="19"]'),
+    reset,
   ).toHaveCount(5);
 
-  await expect(page.locator('[data-testid="modalOverlay"]')).toHaveClass(/hidden/);
+  const overlay = page.locator('[data-testid="modalOverlay"]');
+  await expect(overlay, "[aspect: popup] after New Game the end pop-up is still on screen").toBeHidden();
+  await expect(
+    overlay,
+    "[aspect: hiddenclass] after New Game the end pop-up is out of sight but modalOverlay does not carry the hidden class",
+  ).toHaveClass(/(^|\s)hidden(\s|$)/);
 });
 
 test("[F23] REQ-NEWGAME — new game without reload", async ({ page }) => {

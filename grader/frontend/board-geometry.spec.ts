@@ -30,6 +30,7 @@ import {
   emptyStripBesideBarOrTray,
   colourDeltaE,
   FAINT_FROM,
+  STANDS_OUT_FROM,
 } from "./board-geometry.ts";
 
 // The shared opening: load the app, start a fresh game through the API, reload
@@ -640,6 +641,24 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   expect(
     noTriangle,
     `${needsRows}${spread} no triangle drawn on points: ${noTriangle.join(", ")}`,
+  ).toEqual([]);
+  // A triangle a player can see that doesn't stand out from the board, by the
+  // bar's and the tray's rule (an RGB distance over 45, or ΔE from 8): how far
+  // apart two colours look near that limit is a measurement, told by the team
+  // with the grader's numbers (grader/voices.json). A fixed 45 alone told a
+  // player "some of the points don't show a clear triangle" about tan triangles
+  // plainly visible on a tan board, ΔE 8.6 (run 1794918036 round 2).
+  const faint = judged
+    .filter((s) => !noTriangle.includes(s.num) && s.peak <= 45)
+    .map((s) => ({ num: s.num, apart: colourDeltaE(s.peakColour, s.felt), colour: s.peakColour, felt: s.felt }))
+    .filter((s) => s.apart < STANDS_OUT_FROM)
+    .sort((a, b) => a.apart - b.apart);
+  const faintest = faint[0];
+  expect(
+    faint.map((s) => s.num),
+    faintest
+      ? `[aspect: faint] ${needsRows}the triangles on points ${faint.map((s) => s.num).join(", ")} are only faintly apart from the board — ΔE ${faintest.apart.toFixed(1)} at the faintest, colour ${faintest.colour.join(",")} against the board's ${faintest.felt.join(",")}`
+      : "",
   ).toEqual([]);
 
   // The board is one plain colour with the points drawn on it (the build prompt):

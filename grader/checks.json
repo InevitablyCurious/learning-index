@@ -318,7 +318,7 @@
     "F07": {
       "name": "The cube after a double",
       "what": "After the player doubles, the cube on screen shows the new value and who owns it.",
-      "how": "After the player doubles and the computer accepts: value 2, and the owner label names the side the server reports.",
+      "how": "After the player doubles and the computer accepts, the server must hold the cube at 2 owned by black (waits on G12); then on the page the cube reads 2 ([aspect: value]) and its owner label names the computer ([aspect: owner]: ai, black, opponent or computer).",
       "looks": "page"
     },
     "F34": {
@@ -342,7 +342,7 @@
     "F10": {
       "name": "Re-entering shown on the board",
       "what": "Coming back in from the bar is shown on the board.",
-      "how": "White on the bar with the roll fixed to 3-5. After Roll, clicking the bar checker shows the two entry hints, one per playable entry die; clicking one must take the checker off the bar, the server must agree, and a white checker must appear on point 20 or 22.",
+      "how": "White on the bar with the roll fixed to 3-5. After Roll, clicking the bar checker shows the two entry hints, one per playable entry die; the white checker must be drawn on the bar first ([aspect: onbar], waits on F09) and the dice must hold still (waits on F93); clicking one must take the checker off the bar ([aspect: reentry]), the server must agree (waits on G06), and a white checker must appear on point 20 or 22 (waits on G06).",
       "looks": "page"
     },
     "F11": {
@@ -354,7 +354,7 @@
     "F12": {
       "name": "Win announced",
       "what": "A win ends the game with a banner or popup that says the player won.",
-      "how": "Sets a won position with the message \"You win!\": the message must show it, and if a modal is open its title must say win (any capitals).",
+      "how": "Sets a won position with the message \"You win!\": the win must be announced on the page \u2014 the banner says \"You win\" or a pop-up on screen says win; a pop-up on screen must say win in its title ([aspect: popup]); and the banner must say \"You win\" ([aspect: banner], told by the team: the brief's wording).",
       "looks": "page"
     },
     "F15": {
@@ -372,7 +372,7 @@
     "F17": {
       "name": "Match score survives a reload",
       "what": "The match score keeps its value across a page reload.",
-      "how": "Sets the score to 3-5, reloads, and requires the reported score to still be 3 and 5.",
+      "how": "Sets the score to 3-5, reloads, and requires the score on screen (scoreWhite, scoreBlack) to read 3 and 5; a screen reading 0-0 is [aspect: zero].",
       "looks": "page"
     },
     "F18": {
@@ -402,7 +402,7 @@
     "F22": {
       "name": "Board resets on new game",
       "what": "After a win, clicking New game redraws the standard opening layout and closes the win popup.",
-      "how": "Sets a won position and clicks New game: exactly 30 checkers, each side back on its opening points, and the modal hidden.",
+      "how": "Sets a won position and clicks New game: exactly 30 checkers, each side back on its opening points ([aspect: pieces]); the end pop-up out of sight ([aspect: popup]); and modalOverlay carrying the brief's hidden class ([aspect: hiddenclass], told by the team).",
       "looks": "page"
     },
     "F23": {
@@ -444,7 +444,7 @@
     "F30": {
       "name": "Triangles point inward",
       "what": "Each point's triangle points inward toward the board, not outward.",
-      "how": "Hides checkers, screenshots the board, samples each point's colour near the outer edge versus the inner end, and asserts the outer edge is triangle paint while the inner end is felt. A point with nothing painted at either end, or painted right across at both ends (a block), has no triangle and is told as such; pointing outward means wider at the inner end than at the rim. Each point is read every 5% of the way in: the painted stretch must narrow away from the rim and stand out from the felt at least half way in, told as all or some of the triangles.",
+      "how": "Hides checkers, screenshots the board, samples each point's colour near the outer edge versus the inner end, and asserts the outer edge is triangle paint while the inner end is felt. A point with nothing painted at either end, or painted right across at both ends (a block), has no triangle and is told as such; pointing outward means wider at the inner end than at the rim. Paint is read against each point's own contrast: half way from the felt to its strongest colour, capped at 45. Each point is read every 5% of the way in: the painted stretch must narrow away from the rim and stand out from the felt at least half way in, told as all or some of the triangles. A triangle that reads but doesn't stand out from the board — RGB distance 45 or less and ΔE under 8, the bar's and tray's rule — is [aspect: faint], told by the team with the measured ΔE.",
       "looks": "page"
     },
     "F31": {
@@ -486,7 +486,7 @@
     "F38": {
       "name": "Buttons show properly",
       "what": "Every button and piece of game info is showing, inside the window, clear of the board and of each other, and big enough to use.",
-      "how": "At both sizes each control is visible, inside the window and off the board; each button is at least 60×24 px with its label not cut off; no two buttons overlap. A control that isn't showing is named in the line (the Roll button, my pip count, whose turn it is …).",
+      "how": "At both sizes each control is visible, inside the window and off the board; no button's label is cut off ([aspect: squished]) and each button is at least 60×24 px ([aspect: small], told by the team with its size); no two buttons overlap. A control that isn't showing is named in the line (the Roll button, my pip count, whose turn it is …).",
       "looks": "page"
     },
     "F39": {
@@ -714,7 +714,7 @@
     "F78": {
       "name": "A played die stays on screen, greyed",
       "what": "After a move, the die it used stays on screen and is drawn visibly fainter.",
-      "how": "In a browser: the opening layout with a 3-5 to play; reads the two dice's pixel contrast (90th minus 10th percentile brightness), picks up the piece on 13 and clicks a hint, waits 1.5 s, then requires two dice still on screen ([aspect: gone]) and the faintest of them at most 0.8 of the faintest contrast before the move ([aspect: grey]).",
+      "how": "In a browser: the opening layout with a 3-5 to play; reads the two dice's pixel contrast (90th minus 10th percentile brightness), picks up the piece on 13 and clicks a hint, waits 1.5 s, then requires two dice still on screen ([aspect: gone]) and the faintest of them visibly dimmed — at most 0.95 of the faintest contrast before the move ([aspect: grey]) — and at most 0.8 of it ([aspect: slight], told by the team with the numbers).",
       "looks": "page"
     },
     "F79": {
@@ -768,7 +768,7 @@
     "F87": {
       "name": "The game follows the window as it changes size",
       "what": "On one live page the window is squeezed narrower and 150 px shorter and then made full size again: squeezed, the game still fits with its pieces apart; back at full size it looks as it did.",
-      "how": "Opens at 1440×900, then resizes the same page to 1180×750 (narrower and shorter, as a squeeze by hand): no scrolling and no piece past the window ([aspect: fit], waits on F37), no two pieces of different points closer than nine tenths of a piece ([aspect: overlap], waits on F31); then back to 1440×900, where exactly one bar and one off tray are drawn and at most 2% of the screen's pixels differ in brightness by more than a twelfth from before ([aspect: stale]).",
+      "how": "Opens one live page at 1440×900 — the board there must be 1.4 times as wide as it is tall ([aspect: ratio], told by the team) — then resizes the same page to four shapes of that window: a banner taking a quarter of its height (1440×648), a fifth smaller both ways, narrower at full height, and bigger (2304×1440). At each: no scrolling and no piece past the window ([aspect: fit], waits on F37); one bar and one off tray drawn ([aspect: stale]); every piece seen at full size still seen ([aspect: missing]); pieces on their points ([aspect: place]) and apart from other points' pieces ([aspect: overlap]); the board 1.4 times as wide as it is tall within 0.03 ([aspect: shape]); a piece the same share of a point's width as at full size, within 0.05 ([aspect: size]); the biggest piece on a point at most 1.1 times the smallest ([aspect: uneven]); and the board filling at least 65% of the window one way ([aspect: small]). Back at 1440×900, at most 2% of the screen differs from before ([aspect: changed]). Every measured aspect is told by the team with its numbers.",
       "looks": "page"
     },
     "F88": {

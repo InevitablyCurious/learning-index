@@ -1,1 +1,1 @@
-Played another game, reloaded, and the score got wiped to nothing again — the games we'd won were just gone.
+Played another game, reloaded, and the score at the top still didn't come back as it was.

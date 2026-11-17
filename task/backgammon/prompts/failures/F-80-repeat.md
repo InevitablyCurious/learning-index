@@ -1,1 +1,1 @@
-The bar still isn't in the middle; one half of the board is still wider.
+Their measurements again: {measured} — the two halves still aren't the same width.

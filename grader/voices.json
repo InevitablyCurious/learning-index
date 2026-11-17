@@ -9,6 +9,7 @@
   "team": [
     "F27",
     "F29.faint",
+    "F30.faint",
     "F29.narrow",
     "F29.wide",
     "F32.faint",
@@ -51,6 +52,15 @@
     "F87.size",
     "F88.between",
     "F88.pace",
-    "F93.still"
+    "F93.still",
+    "F38.small",
+    "F78.slight",
+    "F80",
+    "F82",
+    "F87.uneven",
+    "F87.small",
+    "F87.changed",
+    "F12.banner",
+    "F22.hiddenclass"
   ]
 }

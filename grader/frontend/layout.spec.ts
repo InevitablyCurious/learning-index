@@ -358,16 +358,23 @@ test("[F38] REQ-LAYOUT — the buttons and game info show properly", async ({ pa
       expect(overlap(c, board), `[aspect: onboard] at ${layout.size} ${id} sits on top of the board`).toBeLessThanOrEqual(2);
     }
     const buttons = present.filter(([id]) => BUTTONS.includes(id));
-    for (const [id, c] of buttons) {
-      // Too small to press is a button's measure. The difficulty <select> is
-      // sized by the browser — about 19 px tall unstyled — and a player uses it
-      // as it is (run 1790396722 told one "too small to use").
-      if (c.tag !== "BUTTON") continue;
-      expect(
-        c.w >= BUTTON_MIN.w && c.h >= BUTTON_MIN.h && !c.clipped,
-        `[aspect: squished] at ${layout.size} ${id} is squished (${Math.round(c.w)}×${Math.round(c.h)}${c.clipped ? ", its label cut off" : ""})`,
-      ).toBeTruthy();
-    }
+    // Too small to press is a button's measure. The difficulty <select> is
+    // sized by the browser — about 19 px tall unstyled — and a player uses it
+    // as it is (run 1790396722 told one "too small to use").
+    // A label cut off is the player's to see; a button a few pixels under the
+    // brief's 60 × 24 is a measurement, told by the team with its size (a
+    // button 58 px wide was told "squished too small to use properly").
+    const real = buttons.filter(([, c]) => c.tag === "BUTTON");
+    const clipped = real.filter(([, c]) => c.clipped);
+    expect(
+      clipped.map(([id]) => id),
+      `[aspect: squished] at ${layout.size} labels cut off on: ${clipped.map(([id, c]) => `${id} (${Math.round(c.w)}×${Math.round(c.h)})`).join(", ")}`,
+    ).toEqual([]);
+    const small = real.filter(([, c]) => c.w < BUTTON_MIN.w || c.h < BUTTON_MIN.h);
+    expect(
+      small.map(([id]) => id),
+      `[aspect: small] at ${layout.size} ${small.map(([id, c]) => `${id} is ${Math.round(c.w)}×${Math.round(c.h)} px`).join(", ")}`,
+    ).toEqual([]);
     for (let i = 0; i < buttons.length; i++) {
       for (let j = i + 1; j < buttons.length; j++) {
         expect(

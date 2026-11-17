@@ -579,6 +579,13 @@ export interface TriangleSample {
   // coarse to measure the tip-to-tip gap across the middle (F70), which lives
   // in a band a few percent wide.
   tipY: number | null;
+  // How far the point's body gets from the felt beside it at its strongest (the
+  // colour a quarter of its width reaches at some depth, RGB distance), that
+  // colour, and the felt beside it there: the faint verdict (colourDeltaE) is
+  // asked of these, on the node side.
+  peak: number;
+  peakColour: number[];
+  felt: number[];
 }
 
 /**
@@ -586,7 +593,8 @@ export interface TriangleSample {
  * colours: hide the checkers and hints, screenshot the page, decode the PNG
  * in-browser through a canvas, and learn the board's own felt — the commonest
  * colour on the line between the two rows, where no triangle reaches. A pixel
- * is triangle paint when it differs clearly from that felt. A triangle
+ * is triangle paint when it is at least half way from that felt to the point's
+ * own strongest colour (capped at 45, never under the felt's noise). A triangle
  * pointing inward covers most of its point's width near the rim and little of
  * it near the inner end; pointing outward inverts both.
  *
@@ -616,7 +624,7 @@ export async function sampleTriangleOrientation(
     const dataUrl = "data:image/png;base64," + buf.toString("base64");
 
     return await page.evaluate(
-      async ({ dataUrl, points }) => {
+      async ({ dataUrl, points, floor }) => {
         const img = new Image();
         await new Promise<void>((resolve, reject) => {
           img.onload = () => resolve();
@@ -632,10 +640,14 @@ export async function sampleTriangleOrientation(
         ctx.drawImage(img, 0, 0);
 
         // Sampled coordinates are CSS/viewport px; the screenshot is device px.
+        // The pixels are read once: every sample below indexes into them.
         const dpr = img.naturalWidth / window.innerWidth;
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         const at = (x: number, y: number): number[] => {
-          const d = ctx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
-          return [d[0], d[1], d[2]];
+          const px = Math.min(canvas.width - 1, Math.max(0, Math.round(x * dpr)));
+          const py = Math.min(canvas.height - 1, Math.max(0, Math.round(y * dpr)));
+          const o = (py * canvas.width + px) * 4;
+          return [pixels[o], pixels[o + 1], pixels[o + 2]];
         };
         const dist = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
@@ -659,17 +671,64 @@ export async function sampleTriangleOrientation(
           }
         }
         const felt = [...seen.values()].sort((a, b) => b.n - a.n)[0].colour;
-        const painted = (x: number, y: number) => dist(at(x, y), felt) > 45;
+        // The felt beside a point at height y is what its own two edges show
+        // there — a triangle narrows away from them — averaged over the edges
+        // that are felt-like (within 45 of the board's commonest colour); the
+        // commonest colour only when neither is. A board shaded top to bottom, or
+        // darkened toward its rim and its ends, then cancels out: read against one
+        // colour for the whole board, a plain shaded board (test set
+        // X-blank-board) read as triangles, and its corner point, darker at one
+        // edge than the other, as a block.
+        const feltAt = (p: (typeof points)[number], y: number): number[] => {
+          const edges = [at(p.x + 2, y), at(p.x + p.width - 3, y)].filter((c) => dist(c, felt) <= 45);
+          if (edges.length === 0) return felt;
+          return [0, 1, 2].map((k) => edges.reduce((sum, c) => sum + c[k], 0) / edges.length);
+        };
+        // Paint is read against the point's own contrast: a pixel counts when it
+        // is at least half way from the felt to the point's strongest colour,
+        // capped at 45 (a triangle 90 or more from the felt reads exactly as it
+        // always has — the reference's weakest is 107) and never under the felt's
+        // noise floor. A fixed 45 called a plainly visible tan triangle on a tan
+        // board (28 away, ΔE 8.6 — standing out by the bar's own rule) "no
+        // triangle", and the player was told so (run 1794918036 round 2).
+        // The strongest colour is the body's: at each depth, the colour a quarter
+        // of the point's width reaches — a point's number printed at its rim is a
+        // few thin strokes and never sets it.
+        const peakOf = (p: (typeof points)[number]) => {
+          let best = 0;
+          let colour = felt;
+          let beside = felt;
+          for (let i = 1; i < 20; i++) {
+            const y = p.y + p.height * (i / 20);
+            const f = feltAt(p, y);
+            const row: { d: number; c: number[] }[] = [];
+            for (let x = p.x + 1; x < p.x + p.width - 1; x += 1) {
+              const c = at(x, y);
+              row.push({ d: dist(c, f), c });
+            }
+            if (row.length === 0) continue;
+            row.sort((a, b) => a.d - b.d);
+            const q = row[Math.floor(0.75 * (row.length - 1))];
+            if (q.d > best) {
+              best = q.d;
+              colour = q.c;
+              beside = f;
+            }
+          }
+          return { best, colour, beside };
+        };
+        const cutFor = (peak: number) => Math.min(45, Math.max(floor, peak / 2));
 
         // Share of a horizontal line across the point, `depth` of the way in
         // from its rim, that is painted.
-        const coverage = (p: (typeof points)[number], top: boolean, depth: number): number => {
+        const coverage = (p: (typeof points)[number], top: boolean, depth: number, cut: number): number => {
           const y = top ? p.y + p.height * depth : p.y + p.height * (1 - depth);
+          const f = feltAt(p, y);
           let hit = 0;
           let all = 0;
           for (let x = p.x + 1; x < p.x + p.width - 1; x += 1) {
             all += 1;
-            if (painted(x, y)) hit += 1;
+            if (dist(at(x, y), f) > cut) hit += 1;
           }
           return all ? hit / all : 0;
         };
@@ -682,7 +741,9 @@ export async function sampleTriangleOrientation(
         const mean = (xs: number[]) => xs.reduce((sum, x) => sum + x, 0) / xs.length;
         return points.map((p) => {
           const top = p.y + p.height / 2 < midY;
-          const profile = depths.map((d) => coverage(p, top, d));
+          const peak = peakOf(p);
+          const cut = cutFor(peak.best);
+          const profile = depths.map((d) => coverage(p, top, d, cut));
           const first = profile.findIndex((c) => c > 0.1);
           const last = profile.length - 1 - [...profile].reverse().findIndex((c) => c > 0.1);
           let shape: "none" | "block" | "inward" | "outward" = "none";
@@ -713,8 +774,8 @@ export async function sampleTriangleOrientation(
           // inflated F70's gap to 0.31 of a point against the true 0.24. So:
           // take the max dist over a 3-device-px strip centred on the pixel
           // CONTAINING the apex (that pixel always carries the strongest
-          // coverage), find the innermost strongly-painted row (> 45, F30's
-          // threshold), then refine inward against a threshold anchored just
+          // coverage), find the innermost strongly-painted row (past the point's own
+          // cut, F30's threshold), then refine inward against a threshold anchored just
           // above the local felt noise: floor + 18% of (body − floor), both
           // measured beside the tip. Coverage rises linearly from zero at the
           // apex, so the 18% crossing lands within ~1–2 px of the true tip for
@@ -728,11 +789,20 @@ export async function sampleTriangleOrientation(
             const stripX = Math.max(0, Math.min(Math.floor((p.x + p.width / 2) * dpr) - 1, canvas.width - 3));
             if (rowBot > rowTop) {
               const strip = ctx.getImageData(stripX, rowTop, 3, rowBot - rowTop + 1);
+              const feltOfRow = new Map<number, number[]>();
+              const rowFelt = (row: number): number[] => {
+                let f = feltOfRow.get(row);
+                if (!f) {
+                  f = feltAt(p, row / dpr);
+                  feltOfRow.set(row, f);
+                }
+                return f;
+              };
               const rowDist = (row: number): number => {
                 let best = 0;
                 for (let c = 0; c < 3; c++) {
                   const o = ((row - rowTop) * 3 + c) * 4;
-                  const d = dist([strip.data[o], strip.data[o + 1], strip.data[o + 2]], felt);
+                  const d = dist([strip.data[o], strip.data[o + 1], strip.data[o + 2]], rowFelt(row));
                   if (d > best) best = d;
                 }
                 return best;
@@ -741,7 +811,7 @@ export async function sampleTriangleOrientation(
               const step = Math.max(1, Math.round(dpr)); // ~1 CSS px per step
               let strong = -1;
               for (let row = rowTop; row <= rowBot; row++) {
-                if (rowDist(row) > 45) strong = dir > 0 ? row : strong === -1 ? row : Math.min(strong, row);
+                if (rowDist(row) > cut) strong = dir > 0 ? row : strong === -1 ? row : Math.min(strong, row);
               }
               if (strong >= 0) {
                 const clamp = (r: number) => Math.max(rowTop, Math.min(rowBot, r));
@@ -752,7 +822,7 @@ export async function sampleTriangleOrientation(
                 const floorD = [...win].sort((a, b) => a - b)[win.length >> 1];
                 let sat = 0;
                 for (let o = 0; o <= 20 * step; o += step) sat = Math.max(sat, rowDist(clamp(strong - dir * o)));
-                const thresh = sat - floorD >= 10 ? floorD + 0.18 * (sat - floorD) : 45;
+                const thresh = sat - floorD >= 10 ? floorD + 0.18 * (sat - floorD) : cut;
                 let tipRow = strong;
                 for (let o = -2 * step; o <= 10 * step; o++) {
                   const row = clamp(strong + dir * o);
@@ -771,10 +841,13 @@ export async function sampleTriangleOrientation(
             shape,
             colour,
             tipY,
+            peak: peak.best,
+            peakColour: peak.colour,
+            felt: peak.beside,
           };
         });
       },
-      { dataUrl, points },
+      { dataUrl, points, floor: FAINT_WEDGE_FLOOR },
     );
   } finally {
     await hideStyle.evaluate((element) => (element as Element).remove());
@@ -793,17 +866,24 @@ export async function boardGeometryDrawn(page: Page): Promise<boolean> {
   const points = await readPointBoxes(page);
   if (points.length === 0) return false;
   const samples = await sampleTriangleOrientation(page, points);
-  if (samples.some((sample) => sample.shape !== "none")) return true;
+  // Drawn: a point that reads as a triangle, or a block painted in a colour that
+  // stands out from the board (the bar's and tray's rule). A block the felt's own
+  // shading makes — paint read against a point's own contrast reaches down to
+  // the felt's noise — is not a board drawn (test set X-blank-board: a plain
+  // shaded board was judged drawn and its "board comes up blank" never told).
+  const standsOut = (s: TriangleSample) => s.peak > 45 || colourDeltaE(s.peakColour, s.felt) >= STANDS_OUT_FROM;
+  if (samples.some((s) => s.shape === "inward" || s.shape === "outward" || (s.shape === "block" && standsOut(s)))) return true;
   return (await faintWedgesShown(page, points)) >= FAINT_WEDGES_FOR_A_BOARD;
 }
 
 /**
- * A board drawn faint is still drawn. The test above asks for paint 45 from the
- * felt — F30's "stands out" — so triangles drawn plainly visible but faint (a
- * see-through brown wedge on green, 26 from the felt) failed it, the page was
+ * A board drawn faint is still drawn. The test above once asked for paint 45 from
+ * the felt, so triangles drawn plainly visible but faint (a see-through brown
+ * wedge on green, 26 from the felt) failed it, the page was
  * judged never drawn, and the model was told "the board itself never draws —
  * there are no points or triangles" about a board a player could see (step-4
  * sweep, 30 saved builds). Faint triangles are F30's to tell, in its own stage.
+ * It still reads them on a shaded felt, which one felt colour can't.
  *
  * Read against the point's OWN ROW, not one felt colour: at each depth the
  * point's middle is compared with the two edges of its box at the same height,
@@ -1033,6 +1113,8 @@ export function colourDeltaE(a: number[], b: number[]): number {
 
 /** ΔE from which a strip the board's colour all but is still reads as apart. */
 export const FAINT_FROM = 3;
+/** ΔE from which a colour stands out from the board (or an RGB distance over 45). */
+export const STANDS_OUT_FROM = 8;
 
 export async function standsOutFromBoard(
   page: Page,
@@ -1046,7 +1128,7 @@ export async function standsOutFromBoard(
     const buf = await page.screenshot({ type: "png" });
     const dataUrl = "data:image/png;base64," + buf.toString("base64");
     return await page.evaluate(
-      async ({ dataUrl, boxes, board }) => {
+      async ({ dataUrl, boxes, board, standsOut }) => {
         const img = new Image();
         await new Promise<void>((resolve, reject) => {
           img.onload = () => resolve();
@@ -1087,7 +1169,7 @@ export async function standsOutFromBoard(
         const far = (c: number[]) => {
           if (Math.hypot(c[0] - board[0], c[1] - board[1], c[2] - board[2]) > 45) return true;
           const l = lab(c);
-          return Math.hypot(l[0] - boardLab[0], l[1] - boardLab[1], l[2] - boardLab[2]) >= 8;
+          return Math.hypot(l[0] - boardLab[0], l[1] - boardLab[1], l[2] - boardLab[2]) >= standsOut;
         };
         return boxes.map((b) => {
           if (!b) return { fill: false, outline: false, centre: null };
@@ -1111,7 +1193,7 @@ export async function standsOutFromBoard(
           return { fill: far(centre), outline, centre };
         });
       },
-      { dataUrl, boxes, board },
+      { dataUrl, boxes, board, standsOut: STANDS_OUT_FROM },
     );
   } finally {
     await hideStyle.evaluate((el) => (el as HTMLElement).remove()).catch(() => undefined);

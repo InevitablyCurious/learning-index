@@ -296,8 +296,8 @@
       "repeat": "Clicked around on my pieces again and nothing lights up to show me where I'm able to go."
     },
     "F04": {
-      "first": "When I click a piece, the suggested moves don't tell me which die they use — or nothing shows up at all.",
-      "repeat": "The suggestions still don't say which of my numbers each one uses, or they still don't appear."
+      "first": "When I click a piece, the suggested moves don't tell me which die they use.",
+      "repeat": "The suggestions still don't say which of my numbers each one uses."
     },
     "F04.label": {
       "first": "When I click a piece, the suggested moves don't tell me which die they use.",
@@ -348,8 +348,16 @@
       "repeat": "Those pip counters still don't agree with the board."
     },
     "F07": {
-      "first": "After I double, the cube on screen doesn't show the new value, or it doesn't show who owns it.",
-      "repeat": "Doubled again and the cube on screen still doesn't show the new value, or still shows the wrong owner."
+      "first": "After I doubled and the computer took it, the cube on screen didn't change to match.",
+      "repeat": "Doubled again and the cube on screen still didn't change to match."
+    },
+    "F07.value": {
+      "first": "After I doubled and the computer took it, the cube on screen doesn't read 2.",
+      "repeat": "Doubled again, the computer took it, and the cube still doesn't read 2."
+    },
+    "F07.owner": {
+      "first": "After I doubled and the computer took it, the cube doesn't show that it's the computer's now.",
+      "repeat": "Doubled again, the computer took it, and the cube still doesn't show it's the computer's."
     },
     "F08": {
       "first": "When i change the difficulty level nothing actually changes",
@@ -360,7 +368,7 @@
       "repeat": "Hit one of theirs again and never saw the piece travel up to the bar on screen."
     },
     "F10": {
-      "first": "When I re-enter a piece from the bar, it doesn't come back onto the board — it stays on the bar or never shows up on a point.",
+      "first": "When I re-enter a piece from the bar, it doesn't come back onto the board.",
       "repeat": "Re-entered from the bar again and the piece still doesn't come back onto the board."
     },
     "F11": {
@@ -370,6 +378,14 @@
     "F12": {
       "first": "When the game ends, it doesn't tell me I won — there's no win message or victory popup.",
       "repeat": "Finished another game and it still doesn't show me a win message or popup."
+    },
+    "F12.popup": {
+      "first": "The pop-up at the end of the game doesn't say I won.",
+      "repeat": "Finished another game and the end pop-up still doesn't say I won."
+    },
+    "F12.banner": {
+      "first": "Their checks of the page: {measured}. The brief has the win banner say \"You win\" when the player wins.",
+      "repeat": "Their checks again: {measured} — the banner still doesn't say \"You win\"."
     },
     "REQ-STATE/state.points": {
       "first": "They're reading the state your app reports and it doesn't include \"points\" — the 24 board points as a list of numbers, positive for white checkers and negative for black. Without it they can't wire that part of their side up.",
@@ -864,6 +880,10 @@
       "repeat": "I reloaded in the middle of my turn again and it still came back saying it wasn't my turn."
     },
     "F17": {
+      "first": "I refreshed the page between games and the score at the top didn't come back as it was — we'd already played a couple of games.",
+      "repeat": "Played another game, reloaded, and the score at the top still didn't come back as it was."
+    },
+    "F17.zero": {
       "first": "I refreshed the page between games and the score at the top went back to zero-zero even though we'd already played a couple of games.",
       "repeat": "Played another game, reloaded, and the score got wiped to nothing again — the games we'd won were just gone."
     },
@@ -884,8 +904,20 @@
       "repeat": "It happened again — partway through a turn after playing one die, I refreshed and the game put me back to the start of the turn."
     },
     "F22": {
-      "first": "When I start a new game, the board doesn't reset — the pieces are still where the last game left them, or the victory popup is still open.",
-      "repeat": "Started over again and the board still doesn't reset, or the popup is still up."
+      "first": "When I start a new game, the board doesn't reset.",
+      "repeat": "Started over again and the board still doesn't reset."
+    },
+    "F22.pieces": {
+      "first": "When I start a new game, the pieces don't go back to their starting places.",
+      "repeat": "Started another new game and the pieces still don't go back to their starting places."
+    },
+    "F22.popup": {
+      "first": "When I start a new game, the pop-up from the last game is still on screen.",
+      "repeat": "Started another new game and the last game's pop-up is still on screen."
+    },
+    "F22.hiddenclass": {
+      "first": "Their checks of the page: {measured}. The brief has the end pop-up shown and hidden by toggling the hidden class on modalOverlay, and their software reads that class.",
+      "repeat": "Their checks again: {measured} — modalOverlay still doesn't take the hidden class back."
     },
     "F23": {
       "first": "When the game ends i can't start a fresh game unless i reload the page",
@@ -1122,6 +1154,10 @@
     "F10.reentry": {
       "first": "I clicked a re-entry move and the piece didn't come off the bar — it stayed up there.",
       "repeat": "Tried to re-enter again and the piece still didn't come off the bar."
+    },
+    "F10.onbar": {
+      "first": "One of my pieces was on the bar and I couldn't see it there.",
+      "repeat": "A piece of mine on the bar still isn't drawn there."
     },
     "F25.reveal": {
       "first": "I clicked a piece and the game didn't show me any hints for where it could go.",
@@ -1815,6 +1851,10 @@
       "first": "After I move a piece, the die I used looks the same as the one I haven't played yet. I expect it greyed out slightly so I can see it's been played.",
       "repeat": "The die I used still looks the same as the unplayed one after I move."
     },
+    "F78.slight": {
+      "first": "Their measurements of the page: {measured}. The brief has a played die greyed out — visibly fainter than a die not yet played.",
+      "repeat": "Their measurements again: {measured} — the played die still isn't clearly fainter than before."
+    },
     "F79": {
       "first": "The triangles on one side of the board are bigger than on the other — I expect them all to match.",
       "repeat": "The triangles still don't all match."
@@ -1828,8 +1868,8 @@
       "repeat": "Their measurements again: {measured} — the points still aren't all the same length."
     },
     "F80": {
-      "first": "The bar isn't in the middle — one half of the board is wider than the other.",
-      "repeat": "The bar still isn't in the middle; one half of the board is still wider."
+      "first": "Their measurements of the page: {measured}. The brief has the bar run down the middle of the board, so the two halves are the same width.",
+      "repeat": "Their measurements again: {measured} — the two halves still aren't the same width."
     },
     "F80.bargap": {
       "first": "Their measurements of the page: {measured}. The brief has the points run right up to the bar on both sides.",
@@ -1840,8 +1880,8 @@
       "repeat": "There's still an empty gap before the bear-off area."
     },
     "F82": {
-      "first": "The buttons aren't all the same size — I expect them to match.",
-      "repeat": "The buttons still aren't all the same size."
+      "first": "Their measurements of the page: {measured}. The brief has all five buttons the same size as each other.",
+      "repeat": "Their measurements again: {measured} — the buttons still aren't the same size."
     },
     "F83": {
       "first": "The triangles facing each other across the board are the same colour — I expect light to face dark.",
@@ -1908,12 +1948,12 @@
       "repeat": "Changed my window's shape again and the pieces still end up away from their points."
     },
     "F87.uneven": {
-      "first": "When I change the shape of my browser window, the pieces on some points come out smaller than the others.",
-      "repeat": "Changed my window's shape again and some pieces still come out smaller than the others."
+      "first": "Their measurements of the page: {measured}. The brief has the pieces stay the same share of a point's width at any window size.",
+      "repeat": "Their measurements again: {measured} — the pieces still aren't one size after the window changes shape."
     },
     "F87.small": {
-      "first": "When I change the shape of my browser window, the board shrinks far smaller than the window has room for.",
-      "repeat": "Changed my window's shape again and the board still shrinks far smaller than it has room for."
+      "first": "Their measurements of the page: {measured}. The brief sizes the board in proportion to the window, so it fills the room the window gives it.",
+      "repeat": "Their measurements again: {measured} — the board still shrinks well below the room the window gives it."
     },
     "F87.overlap": {
       "first": "When I change the shape of my browser window — shorter, narrower or bigger — pieces from different points run into each other.",
@@ -1932,8 +1972,8 @@
       "repeat": "Their measurements as the window changes size again: {measured} — the checkers still change their share of the point."
     },
     "F87.changed": {
-      "first": "When I change the size of my browser window and then put it back, the game doesn't come back looking the way it did — the pieces come back a different size.",
-      "repeat": "Resized my window and put it back again, and the game still doesn't come back looking the way it did."
+      "first": "Their measurements of the page: {measured}. The brief sizes everything in proportion to the window, so back at full size the game should look as it did.",
+      "repeat": "Their measurements again: {measured} — back at full size, the game still doesn't look as it did."
     },
     "F87.stale": {
       "first": "When I change the size of my browser window, the board is left a mess — old copies of parts of the board stay drawn over the game.",
@@ -1988,8 +2028,8 @@
       "repeat": "After a roll, the game still moves on before I can read the dice."
     },
     "F93.moved": {
-      "first": "After a roll, the game moves on before I can read the dice — I expect the dice to land and stay still for about a second before anything else happens.",
-      "repeat": "After a roll, the game still moves on before I can read the dice."
+      "first": "Right after I rolled, my pieces moved by themselves — I hadn't moved anything. I expect the dice to land and stay still, and my pieces to stay where they are until I move them.",
+      "repeat": "Rolled again, and my pieces still moved by themselves before I'd touched them."
     },
     "F93.still": {
       "first": "Their timing of the page: {measured}. The brief has the dice land after a roll and stay still so they can be read.",
@@ -2039,6 +2079,10 @@
       "first": "Their measurements of the page: {measured}. The brief has the off tray stand out clearly from the board — a fill of its own or a clear edge down the side facing the points.",
       "repeat": "Their measurements again: {measured} — the off tray still barely stands apart from the board."
     },
+    "F30.faint": {
+      "first": "Their measurements of the page: {measured}. The brief has each point drawn as a triangle that stands out from the board.",
+      "repeat": "Their measurements again: {measured} — the triangles still barely stand apart from the board."
+    },
     "F88.between": {
       "first": "Their timing of the page: {measured}. The brief plays the computer's moves about half a second apart, one at a time.",
       "repeat": "Their timing again: {measured} — the computer's opening moves still come too close together."
@@ -2076,8 +2120,12 @@
       "repeat": "Some of the buttons or game info still sit on top of the board."
     },
     "F38.squished": {
-      "first": "Some of the buttons are squished too small to use properly.",
-      "repeat": "Some of the buttons are still squished too small to use properly."
+      "first": "Some of the buttons' labels are cut off — the words don't fit on the button.",
+      "repeat": "Some of the buttons' labels are still cut off."
+    },
+    "F38.small": {
+      "first": "Their measurements of the page: {measured}. The brief has every button at least 60 px wide and 24 px tall.",
+      "repeat": "Their measurements again: {measured} — still under the brief's 60 by 24 px."
     },
     "F38.overlap": {
       "first": "Some of the buttons overlap each other.",

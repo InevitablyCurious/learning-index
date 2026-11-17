@@ -166,19 +166,12 @@ function hintsMovedAway(
   );
 }
 
-function expectOwnerLabelToMatchState(ownerText: string, owner: Player | null): void {
-  const normalized = ownerText.trim().toLowerCase();
-  if (owner === null) {
-    expect(normalized).toMatch(/center|centre|centr/);
-    return;
-  }
-
-  if (owner === "white") {
-    expect(normalized).toMatch(/you|your|yours|white/);
-    return;
-  }
-
-  expect(normalized).toMatch(/ai|black|opponent/);
+// The cube's number as a player reads it, wherever it sits in the element: "2",
+// "×2" and "x2" all read 2 (the brief asks only that the cube value is on screen
+// and matches the API — "just the number" is the pip counters' contract alone).
+// A 12 or a 32 is not a 2.
+function showsNumber(n: number): RegExp {
+  return new RegExp(`(^|[^0-9])${n}([^0-9]|$)`);
 }
 
 async function readInt(locator: Locator): Promise<number> {
@@ -589,7 +582,7 @@ test("[F04] REQ-HINT — legal-move affordance + die attribution", async ({ page
     if (text === "off") continue;
     expect(
       hintWords(text).some((word) => word === "3" || word === "5"),
-      `hint "${text}" names no die it uses`,
+      `[aspect: label] [needs: F03] hint "${text}" names no die it uses`,
     ).toBe(true);
     expect(text === "3" || text === "5", `[aspect: extra] [needs: F03] hint "${text}" says more than its die`).toBe(true);
   }
@@ -2207,7 +2200,7 @@ test("[F34] REQ-CUBEUI — a new game shows the cube at one, centered", async ({
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-  await expect(page.getByTestId("cubeVal"), "[aspect: value] a new game's cube does not read 1").toHaveText("1");
+  await expect(page.getByTestId("cubeVal"), "[aspect: value] a new game's cube does not read 1").toHaveText(showsNumber(1));
   const openingOwnerLabel = await page.getByTestId("cubeOwner").innerText();
   expect(openingOwnerLabel.toLowerCase(), "[aspect: owner] a new game's cube is not shown in the middle").toMatch(/center|centre|centr/);
 });
@@ -2252,14 +2245,20 @@ test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
   expect(doubled.winner ?? null, "[needs: G12] the computer passed an even double").toBeNull();
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await expect(page.getByTestId("cubeVal")).toHaveText("2");
 
+  // What the server holds after the double is the cube check's (G12, the
+  // team's); the page is judged against it, one fault per line: the value on
+  // the cube, then who it shows owning it. One line for both told a build whose
+  // cube read 2 "doesn't show the new value, or doesn't show who owns it".
   const state = await readState(page);
-  expect(state.cube.value).toBe(2);
-  expect(state.cube.owner).not.toBeNull();
-
-  const ownerLabel = await page.getByTestId("cubeOwner").innerText();
-  expectOwnerLabelToMatchState(ownerLabel, state.cube.owner);
+  expect(state.cube.value, "[needs: G12] the server's cube after a taken double").toBe(2);
+  // White doubled and black took: the cube is black's (the computer's).
+  expect(state.cube.owner, "[needs: G12] the server's cube owner after a taken double").toBe("black");
+  await expect(page.getByTestId("cubeVal"), "[aspect: value] after a taken double the cube does not read 2").toHaveText(showsNumber(2));
+  const ownerLabel = (await page.getByTestId("cubeOwner").innerText()).trim().toLowerCase();
+  expect(ownerLabel, `[aspect: owner] after a taken double the cube shows its owner as "${ownerLabel}", not the computer`).toMatch(
+    /ai|black|opponent|computer/,
+  );
 });
 
 test("[F46] REQ-DOUBLE-DECLINE — the decline pop-up says you won", async ({ page }) => {
@@ -2988,9 +2987,23 @@ test("[F17] REQ-RELOAD — match score survives a reload", async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(page.getByTestId("checker"), "[aspect: pieces] [needs: F02] after the reload not all 30 pieces are on the board").toHaveCount(30);
-  const state = await readState(page);
-  expect(state.score.white).toBe(3);
-  expect(state.score.black).toBe(5);
+  // Judged on the screen, where a player reads it: the line is about the score
+  // at the top, and the server's number said nothing about what the page shows.
+  // "Went back to zero-zero" only when it reads 0-0; any other wrong score is
+  // the general line.
+  const read = async (id: string) =>
+    Number(((await page.getByTestId(id).innerText().catch(() => "")).match(/\d+/) ?? ["NaN"])[0]);
+  const shownScore = async () => ({ white: await read("scoreWhite"), black: await read("scoreBlack") });
+  await expect
+    .poll(async () => JSON.stringify(await shownScore()), { timeout: 5_000 })
+    .toBe(JSON.stringify({ white: 3, black: 5 }))
+    .catch(() => undefined);
+  const shown = await shownScore();
+  const wiped = shown.white === 0 && shown.black === 0;
+  expect(shown, `${wiped ? "[aspect: zero] " : ""}after the reload the score on screen reads ${shown.white}-${shown.black}, not 3-5`).toEqual({
+    white: 3,
+    black: 5,
+  });
 });
 
 test("[F18] REQ-RELOAD — dice values survive a reload", async ({ page }) => {
@@ -3523,8 +3536,15 @@ test("[F78] REQ-DICE-USED — a played die stays on screen, greyed", async ({ pa
   const contrastAfter = (await sampleBoxContrast(page, after)) as number[];
   const faintest = Math.min(...contrastAfter);
   const was = Math.min(...contrastBefore);
+  // No change a player could see (under a twentieth) is the player's "looks the
+  // same"; a die dimmed, but by less than the fifth that reads as greyed out, is
+  // a measurement near its limit, told by the team with the numbers.
+  expect(
+    faintest <= 0.95 * was,
+    `[aspect: grey] [needs: F45] after a move the faintest die stands out ${faintest.toFixed(2)} against ${was.toFixed(2)} before it`,
+  ).toBe(true);
   expect(
     faintest <= 0.8 * was,
-    `[aspect: grey] [needs: F45] after a move the faintest die stands out ${faintest.toFixed(2)} against ${was.toFixed(2)} before it`,
+    `[aspect: slight] [needs: F45] after a move the faintest die stands out ${faintest.toFixed(2)} against ${was.toFixed(2)} before it`,
   ).toBe(true);
 });

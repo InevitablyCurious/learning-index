@@ -1,1 +1,1 @@
-The buttons still aren't all the same size.
+Their measurements again: {measured} — the buttons still aren't the same size.
