@@ -780,7 +780,7 @@
     "F89": {
       "name": "Pressing Roll rolls the dice",
       "what": "A press of Roll makes a roll — at the start of a game and on the player's turn later on.",
-      "how": "Starts a new game and presses Roll, then sets a standard position on white's turn in the roll phase and presses Roll again: each press must make a POST /api/roll within 8 s. The roll helper every other gate uses fails with the ROLL DEAD marker (told 'I pressed Roll and nothing happened') when a press makes no roll, and waits on this gate.",
+      "how": "Starts a new game and presses Roll, then sets a standard position on white's turn in the roll phase and presses Roll again: each press must make a POST /api/roll within 8 s. The roll helper every other gate uses fails with the ROLL DEAD marker (told 'I pressed Roll and nothing happened') when a press makes no roll, and waits on this gate. The second press is on a position the check sets up, not one reached by play: a page that will not roll from it is told by the team, with what they set and what they saw ([aspect: seeded]) — the brief has a set-up position play on as if reached by play, but a build whose own game never makes phase \"roll\" rolls fine for anyone playing it (run 1795034166 round 10). The press at the start of a new game is reached by play and stays the player's.",
       "looks": "page"
     },
     "F90": {

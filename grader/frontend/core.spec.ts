@@ -747,7 +747,13 @@ test("[F89] REQ-ROLL — pressing Roll rolls the dice", async ({ page }) => {
   // player meets it: at the start of a game, and on the player's turn later on.
   test.setTimeout(60_000);
   await openApp(page);
-  const pressRoll = async (when: string) => {
+  // `setUp` names a position the check set through /api/debug/state rather than one reached by play. A page
+  // that will not roll from it is the team's to tell, with what they set and what they saw: run 1795034166
+  // round 10's build never makes phase "roll" (it starts the player's turn as phase "move" with no dice left),
+  // so its Roll stayed off on the set-up turn while it rolled on every later turn of a real game — and the
+  // player was told "I pressed Roll and nothing happened", which no one playing it could meet. The press at
+  // the start of a new game is reached by play: still the player's.
+  const pressRoll = async (when: string, setUp = "") => {
     const answered = page
       .waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/api/roll", { timeout: 8_000 })
       .catch(() => null);
@@ -764,7 +770,11 @@ test("[F89] REQ-ROLL — pressing Roll rolls the dice", async ({ page }) => {
       // "I can't find the Roll button", never "I pressed Roll and nothing
       // happened" (run 1793119227 round 4: the board covered the panel and
       // both were told).
-      pressed ? `${when}, pressing Roll made no roll` : `[needs: REQ-TESTID/testid.rollBtn F38] ${when}, Roll could not be pressed`,
+      setUp
+        ? `[aspect: seeded] ${pressed ? "" : "[needs: REQ-TESTID/testid.rollBtn F38] "}${setUp}, ${pressed ? "pressing Roll sent no roll" : "the Roll button could not be pressed"}`
+        : pressed
+          ? `${when}, pressing Roll made no roll`
+          : `[needs: REQ-TESTID/testid.rollBtn F38] ${when}, Roll could not be pressed`,
     ).toBe(true);
   };
   await postJson<ApiState>(page, "/api/new", {});
@@ -784,7 +794,10 @@ test("[F89] REQ-ROLL — pressing Roll rolls the dice", async ({ page }) => {
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await pressRoll("on my turn later in the game");
+  await pressRoll(
+    "on my turn later in the game",
+    'with the game set through /api/debug/state to white\'s turn in phase "roll" and the page reloaded',
+  );
 });
 
 test("[F85] REQ-OPENING — a tied opening never freezes the game", async ({ page }) => {
