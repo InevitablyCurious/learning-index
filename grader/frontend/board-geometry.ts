@@ -277,6 +277,23 @@ export function boardMidY(points: PointBox[]): number {
  * (run 1790345941: a bar touching two points by 1–2 px was told "The bar cuts
  * across some of the points").
  */
+/**
+ * The points something else is drawn over — the bar, or an off tray that paints — by number. A check that
+ * reads a point's own drawing (its triangle's shape, tip or colour) skips these: what it would read there is
+ * the bar or the tray, and the cover is told by its own check (the bar's and the tray's overlap findings, at
+ * the same moment). One rule for every such check: the tip check once lacked it and told a tray drawn over a
+ * point as "the triangles touch" (run 1794996436 round 1).
+ */
+export async function coveredPoints(page: Page, points: PointBox[]): Promise<Set<number>> {
+  const bar = await readBarBox(page);
+  const tray = await readOffTray(page);
+  return new Set(
+    points
+      .filter((p) => (bar !== null && overlaps(bar, p)) || (tray.exists && tray.painted && overlaps(tray, p)))
+      .map((p) => p.num),
+  );
+}
+
 export function overlaps(
   a: { x: number; y: number; width: number; height: number },
   b: { x: number; y: number; width: number; height: number },

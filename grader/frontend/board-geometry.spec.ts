@@ -31,6 +31,7 @@ import {
   colourDeltaE,
   FAINT_FROM,
   STANDS_OUT_FROM,
+  coveredPoints,
 } from "./board-geometry.ts";
 
 // The shared opening: load the app, start a fresh game through the API, reload
@@ -573,12 +574,9 @@ test("[F30] REQ-GEOMETRY — triangles point inward", async ({ page }) => {
   // not read here — the bar check tells that (FIX-3 M46: a bar over points 16
   // and 9 read as two "outward" triangles). Every other point is judged.
   const bar = await readBarBox(page);
-  const tray = await readOffTray(page);
   const covers = (box: { x: number; y: number; width: number; height: number } | null, p: PointBox) =>
     box !== null && overlaps(box, p);
-  const underBar = new Set(
-    points.filter((p) => covers(bar, p) || (tray.exists && tray.painted && covers(tray, p))).map((p) => p.num),
-  );
+  const underBar = await coveredPoints(page, points);
   const samples = await sampleTriangleOrientation(page, points);
 
   expect(samples.length, `[needs: REQ-TESTID/point-column F28] expected 24 triangle samples, found ${samples.length}`).toBe(24);
@@ -765,12 +763,7 @@ test("[F42] REQ-GEOMETRY — the points alternate in colour", async ({ page }) =
   // 4/3 read as one colour, M54's tray made 24/1). Where they sit is the bar
   // and tray checks'.
   const bar = await readBarBox(page);
-  const tray = await readOffTray(page);
-  const covered = new Set(
-    points
-      .filter((p) => (bar !== null && overlaps(bar, p)) || (tray.exists && tray.painted && overlaps(tray, p)))
-      .map((p) => p.num),
-  );
+  const covered = await coveredPoints(page, points);
   const samples = await sampleTriangleOrientation(page, points);
   const colourOf = new Map(samples.map((s) => [s.num, s.colour]));
   const same = (a: number, b: number) => {
@@ -860,7 +853,11 @@ test("[F70] REQ-GEOMETRY — the points' tips stand clear of the middle", async 
   // along its vertical centreline.
   const samples = await sampleTriangleOrientation(page, points);
   const tipOf = new Map(samples.map((s) => [s.num, s.tipY]));
-  const columns = top.map((t, i) => ({ t, b: bottom[i] }));
+  // A column the bar or the tray is drawn over has no tips to read — the cover is told by its own check.
+  const covered = await coveredPoints(page, points);
+  const columns = top
+    .map((t, i) => ({ t, b: bottom[i] }))
+    .filter(({ t, b }) => !covered.has(t.num) && !covered.has(b.num));
   // A point whose tip cannot be read has no triangle to measure: F30's
   // finding (undrawn, or paint the felt cannot be told from), not a gap.
   const unreadable = columns.flatMap(({ t, b }) =>
@@ -992,13 +989,7 @@ test("[F83] REQ-GEOMETRY — facing points differ in colour", async ({ page }) =
   await openFreshBoard(page);
   const points = await readPointBoxes(page);
   expect(points.length, "[needs: REQ-RENDER/point]").toBe(24);
-  const bar = await readBarBox(page);
-  const tray = await readOffTray(page);
-  const covered = new Set(
-    points
-      .filter((p) => (bar !== null && overlaps(bar, p)) || (tray.exists && tray.painted && overlaps(tray, p)))
-      .map((p) => p.num),
-  );
+  const covered = await coveredPoints(page, points);
   const samples = await sampleTriangleOrientation(page, points);
   const colourOf = new Map(samples.map((x) => [x.num, x.colour]));
   const matching: string[] = [];
