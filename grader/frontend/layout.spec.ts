@@ -84,6 +84,7 @@ interface Layout {
   // by the edge they cross (a piece in a corner counts for both), and how many
   // there are on the board.
   piecesPast: { bottom: number; top: number; left: number; right: number };
+  piecesHidden: { count: number; below: number[]; above: number[]; left: number[]; right: number[] };
   pieces: number;
   drawn: Box | null;
   controls: Record<string, Control | null>;
@@ -183,12 +184,19 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
       const pieceEls = [...document.querySelectorAll<HTMLElement>('[data-testid="checker"]')]
         .map((el) => el.getBoundingClientRect())
         .filter((r) => r.width > 0 && r.height > 0);
-      const pastEdge = pieceEls.filter((r) => {
-        const inside =
-          Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) *
-          Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
-        return inside < 0.9 * r.width * r.height;
-      });
+      const inWindow = (r: DOMRect) =>
+        Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)) *
+        Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
+      // Partly in the window: a player sees the piece cut off at the edge. Wholly outside it: no one sees it.
+      const pastEdge = pieceEls.filter((r) => inWindow(r) > 0 && inWindow(r) < 0.9 * r.width * r.height);
+      const hiddenEls = pieceEls.filter((r) => inWindow(r) === 0);
+      const piecesHidden = {
+        count: hiddenEls.length,
+        below: hiddenEls.filter((r) => r.top >= innerHeight).map((r) => Math.round(r.top)),
+        above: hiddenEls.filter((r) => r.bottom <= 0).map((r) => Math.round(r.bottom)),
+        left: hiddenEls.filter((r) => r.right <= 0).map((r) => Math.round(r.right)),
+        right: hiddenEls.filter((r) => r.left >= innerWidth).map((r) => Math.round(r.left)),
+      };
       const piecesPast = {
         bottom: pastEdge.filter((r) => r.bottom > innerHeight).length,
         top: pastEdge.filter((r) => r.top < 0).length,
@@ -197,6 +205,7 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
       };
       return {
         piecesPast,
+        piecesHidden,
         pieces: pieceEls.length,
         size: `${innerWidth}×${innerHeight}`,
         vw: innerWidth,
@@ -318,6 +327,27 @@ test("[F37] REQ-LAYOUT — the game fits the screen", async ({ page }) => {
     // board crammed into a corner or running into the buttons. A board that
     // runs past the window is F30's offscreen finding either way.
     if (process.env.BENCH_LAYER !== "1") {
+      // A piece drawn wholly outside a window that cannot scroll (the scroll check above passed) is one no player
+      // can see: the player says so, and the team says where it is drawn — one finding each, at this moment
+      // (Jerry, 2026-11-18: "user would say 'i can't see the pieces' and the team would respond 'we looked at
+      // your implementation and it seems like your pieces are drawn (where)'"). Run 1795020410 round 4 told the
+      // player "some of the pieces run off the bottom of the screen" about 15 pieces wholly below an 800 px
+      // window nothing could scroll to.
+      const hidden = layout.piecesHidden;
+      if (hidden.count > 0) {
+        const span = (xs: number[]) => (xs.length > 1 ? `from ${Math.min(...xs)} to ${Math.max(...xs)} px` : `at ${xs[0]} px`);
+        const where = [
+          hidden.below.length ? `${hidden.below.length} below its bottom edge (tops ${span(hidden.below)} down, in a window ${layout.vh} px tall)` : "",
+          hidden.above.length ? `${hidden.above.length} above its top edge` : "",
+          hidden.right.length ? `${hidden.right.length} past its right edge (left sides ${span(hidden.right)} across, in a window ${layout.vw} px wide)` : "",
+          hidden.left.length ? `${hidden.left.length} past its left edge` : "",
+        ].filter(Boolean).join("; ");
+        expect.soft(hidden.count, `[aspect: unseen] at ${layout.size}, ${hidden.count} of ${layout.pieces} pieces cannot be seen`).toBe(0);
+        expect(
+          hidden.count,
+          `[aspect: unseenwhere] at ${layout.size}, ${hidden.count} of ${layout.pieces} pieces are drawn wholly outside the window, where the page cannot scroll to them — ${where}`,
+        ).toBe(0);
+      }
       const past = layout.piecesPast;
       const of = `of ${layout.pieces} pieces run past the`;
       expect(past.bottom, `[aspect: offbottom] at ${layout.size} ${past.bottom} ${of} bottom edge of the window`).toBe(0);

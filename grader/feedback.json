@@ -1291,6 +1291,14 @@
       "first": "Some of the pieces run off the right side of the screen — I expect every piece to be fully on the screen.",
       "repeat": "Some of the pieces still run off the right side of the screen — I expect every piece to be fully on the screen."
     },
+    "F37.unseen": {
+      "first": "I can't see some of the pieces — I expect every piece on the board, where I can see it.",
+      "repeat": "I still can't see some of the pieces."
+    },
+    "F37.unseenwhere": {
+      "first": "Their checks of the page: {measured}. The brief has every piece on the board, fully on the screen.",
+      "repeat": "Their checks again: {measured} — the pieces are still drawn where no one can see them."
+    },
     "F38": {
       "first": "Some of the buttons on the right are cut off, overlapping, or too small to use.",
       "repeat": "Some of the buttons on the right are still cut off, overlapping, or too small to use."

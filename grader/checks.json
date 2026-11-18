@@ -480,7 +480,7 @@
     "F37": {
       "name": "The game fits the screen",
       "what": "Everything fits without scrolling and the board fills the screen's height.",
-      "how": "At both sizes the page must not scroll either way, a scrollable board must not scroll sideways, no piece may have more than a tenth of its circle past the window's edge (told by the edge it crosses: bottom, top, left or right), and the drawn board must be at least 70% of the window's height (the reference: 88–89%).",
+      "how": "At both sizes the page must not scroll either way, a scrollable board must not scroll sideways, no piece may have more than a tenth of its circle past the window's edge (told by the edge it crosses: bottom, top, left or right), and the drawn board must be at least 70% of the window's height (the reference: 88–89%). From the pieces layer: a piece drawn wholly outside a window that cannot scroll is one nobody can see — the player says so ([aspect: unseen]) and the team says where it is drawn ([aspect: unseenwhere]), together; a piece partly cut off at an edge is the player's [aspect: offbottom/offtop/offleft/offright].",
       "looks": "page"
     },
     "F38": {

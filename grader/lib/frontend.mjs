@@ -21,28 +21,39 @@ import {
   truncate,
 } from "./parse.mjs";
 
-export function firstFrontendFailureMessage(spec) {
+// What a failed page check found: its first failure, as it always was, and — besides it — every further
+// finding the check raised deliberately (a soft assertion carrying its own [aspect: …]), so one moment can be
+// told by the player and the team together: the player "I can't see some of the pieces", the team where they
+// are drawn (Jerry, 2026-11-18). A check that did not finish keeps its one failure: a timeout's incidental
+// second error is no finding.
+const DID_NOT_FINISH = /Test timeout of \d+ms exceeded|Test timed out in \d+|STACK_TRACE_ERROR/;
+
+export function frontendFailureMessages(spec) {
   for (const testEntry of spec.tests || []) {
     for (const result of testEntry.results || []) {
       if (result.status === "passed" || result.status === "skipped") {
         continue;
       }
-
-      if (result.error?.message) {
-        return result.error.message;
-      }
-      if (Array.isArray(result.errors) && result.errors.length > 0) {
-        if (typeof result.errors[0] === "string") {
-          return result.errors[0];
-        }
-        if (result.errors[0]?.message) {
-          return result.errors[0].message;
-        }
-      }
-      return `status=${result.status || "unknown"}`;
+      // The runner reports the first failure twice (result.error and result.errors[0]), differing only in
+      // formatting: one failure is one finding, keyed by its first line.
+      const all = [];
+      const seen = new Set();
+      const add = (m) => {
+        if (typeof m !== "string" || !m) return;
+        const key = stripAnsi(m).split("\n")[0].trim();
+        if (seen.has(key)) return;
+        seen.add(key);
+        all.push(m);
+      };
+      const errors = Array.isArray(result.errors) ? result.errors : [];
+      for (const e of errors) add(typeof e === "string" ? e : e?.message);
+      if (all.length === 0) add(result.error?.message);
+      if (all.length === 0) return [`status=${result.status || "unknown"}`];
+      if (all.some((m) => DID_NOT_FINISH.test(m))) return [all[0]];
+      return [all[0], ...all.slice(1).filter((m) => m.includes("[aspect:"))];
     }
   }
-  return "";
+  return [];
 }
 
 export function specFailed(spec) {
@@ -80,16 +91,11 @@ export async function runFrontendPhase() {
       }
 
       const check = String(spec.title || "frontend:unknown").trim() || "frontend:unknown";
-      const message = firstFrontendFailureMessage(spec)
-        || extractPlaywrightRunError(report)
-        || "frontend gate failed";
-      problems.push(
-        safeProblem(
-          check,
-          "gate passes",
-          truncate(stripAnsi(message), 400),
-        ),
-      );
+      const found = frontendFailureMessages(spec);
+      const messages = found.length ? found : [extractPlaywrightRunError(report) || "frontend gate failed"];
+      for (const message of messages) {
+        problems.push(safeProblem(check, "gate passes", truncate(stripAnsi(message), 400)));
+      }
       failedGates.push(check);
     }
   }
