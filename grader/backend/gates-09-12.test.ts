@@ -201,9 +201,9 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     expect(res.phase, "[needs: F50] the computer never answered the double").not.toBe("doubleOffered");
 
     expect(res.cube.value, VALUE).toBe(2);
-    expect(res.cube.owner, OWNER).toBe("black");
+    expect(res.cube.owner, `${OWNER} after the player doubled and the computer took it, your server says the cube's owner is ${JSON.stringify(res.cube.owner)}`).toBe("black");
     expect(state.cube.value, VALUE).toBe(2);
-    expect(state.cube.owner, OWNER).toBe("black");
+    expect(state.cube.owner, `${OWNER} after the player doubled and the computer took it, your server says the cube's owner is ${JSON.stringify(state.cube.owner)}`).toBe("black");
   });
 
   it("[G21] REQ-CUBE-STATE — illegal double in move phase must not mutate cube", async () => {

@@ -2260,14 +2260,17 @@ test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 
-  // What the server holds after the double is the cube check's (G12, the
-  // team's); the page is judged against it, one fault per line: the value on
+  // What the server holds after the double is told by what it puts on the
+  // cube: run 1795107958 gave the doubler the cube, and this step told the
+  // vague "the cube on screen didn't change to match" about a page that showed
+  // the server's owner ("Your cube"); the model saw the cube change, checked
+  // the screen twice and changed nothing. The page is judged against it, one fault per line: the value on
   // the cube, then who it shows owning it. One line for both told a build whose
   // cube read 2 "doesn't show the new value, or doesn't show who owns it".
   const state = await readState(page);
-  expect(state.cube.value, "[needs: G12] the server's cube after a taken double").toBe(2);
+  expect(state.cube.value, "[aspect: value] [needs: G12] the server's cube after a taken double").toBe(2);
   // White doubled and black took: the cube is black's (the computer's).
-  expect(state.cube.owner, "[needs: G12] the server's cube owner after a taken double").toBe("black");
+  expect(state.cube.owner, "[aspect: owner] [needs: G12] the server's cube owner after a taken double").toBe("black");
   await expect(page.getByTestId("cubeVal"), "[aspect: value] after a taken double the cube does not read 2").toHaveText(showsNumber(2));
   const ownerLabel = (await page.getByTestId("cubeOwner").innerText()).trim().toLowerCase();
   expect(ownerLabel, `[aspect: owner] after a taken double the cube shows its owner as "${ownerLabel}", not the computer`).toMatch(
