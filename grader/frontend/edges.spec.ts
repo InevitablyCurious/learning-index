@@ -1,7 +1,7 @@
 import { type Page } from "@playwright/test";
 import { expect, pickUpAPiece, playerClick, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
 import { BASE_URL } from "../lib/harness.ts";
-import { isPainted } from "./board-geometry.ts";
+import { isPainted, readPointBoxes } from "./board-geometry.ts";
 
 function emptyPts() {
   return new Array(26).fill(0);
@@ -151,6 +151,31 @@ test("[F10] REQ-BAR — bar re-entry visual", async ({ page }) => {
   // build its bar piece showed no hints.
   await playerClickUntilShown(whiteBarChecker, hints);
   await expect(hints, "[aspect: hints] [needs: F03]").toHaveCount(2);
+  // Where they are drawn, judged as F75 judges a piece on a point: the point
+  // under each hint's centre is one the piece can come in on. Jerry, playing
+  // run 1795117307's build (2026-11-19): "one of the pieces was sent to the
+  // bar. when i clicked to move the piece the hint shows on the bar" — its page
+  // drew every entry hint on the bar itself, and no check looked at where.
+  const entries = new Set<number>(
+    ((await fetchState(page)).legalMoves as { from: number; to: number }[]).filter((m) => m.from === 0).map((m) => m.to),
+  );
+  const boxes = await readPointBoxes(page);
+  const centres = await hints.evaluateAll((els) =>
+    els
+      .filter((el) => (el as HTMLElement).checkVisibility())
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }),
+  );
+  const astray = centres
+    .map((h) => boxes.find((pt) => h.x >= pt.x && h.x <= pt.x + pt.width && h.y >= pt.y && h.y <= pt.y + pt.height)?.num ?? null)
+    .filter((at) => at === null || !entries.has(at))
+    .map((at) => (at === null ? "no point" : `point ${at}`));
+  expect(
+    astray,
+    `[aspect: entryhint] [needs: F03] the bar piece's hints sit on ${astray.join(", ")}, not on the points it can come in on (${[...entries].join(", ")})`,
+  ).toEqual([]);
   await playerClick(hints.first());
 
   await expect(whiteBarChecker, "[aspect: reentry] [needs: F03 F45]").toHaveCount(0);

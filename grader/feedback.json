@@ -1175,6 +1175,10 @@
       "first": "I clicked a re-entry move and the piece didn't come off the bar — it stayed up there.",
       "repeat": "Tried to re-enter again and the piece still didn't come off the bar."
     },
+    "F10.entryhint": {
+      "first": "When I picked up my piece on the bar, its hints didn't show on the points it could come in on.",
+      "repeat": "Picked up my piece on the bar again, and its hints still weren't on the points it could come in on."
+    },
     "F10.onbar": {
       "first": "One of my pieces was on the bar and I couldn't see it there.",
       "repeat": "A piece of mine on the bar still isn't drawn there."
