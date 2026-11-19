@@ -551,6 +551,51 @@ describe("Backgammon backend server-path integrity", () => {
   // only 5->9; B, black on 6, a white pair on 13 and a white blot on 8, a 5 and
   // a 2 — only 6->11 (the 2 would hit, which an evaluator likes). The player
   // owns the cube, so the computer cannot double first.
+  // [G39] The debug seam holds for the computer's roll too (chunk-03: "Enqueue
+  // dice as the next roll; the next dice-roll consumes this queue instead of
+  // Math.random"). Every check that judges the computer's play on dice it set —
+  // G30's higher-die spots, F94's stuck computer — rests on it. Run 1795059842's
+  // build made its computer roll fresh dice and ignore the queue; G30 then told
+  // "on easy … it plays the smaller one" about a computer that never held a 2
+  // and a 4 (it moved 9 pips). One black piece with an open road and a cube the
+  // player owns (so no double comes first): queued 1-2 must move it 3 pips and
+  // 6-5 must move it 11 — sums a random roll seldom makes, both in a row.
+  it("[G39] REQ-DEBUG-ROLL — the computer's roll takes the queued dice", async () => {
+    for (const dice of [[1, 2], [6, 5]] as const) {
+      await api("/api/new", {});
+      const points = emptyPoints();
+      points[7] = -1;
+      points[3] = 2;
+      await debugSetState(
+        makeState({
+          points,
+          bar: { white: 0, black: 0 },
+          off: { white: 13, black: 14 },
+          turn: "white",
+          phase: "move",
+          dice: [6, 5],
+          remainingDice: [],
+          turnOver: true,
+          cube: { value: 2, owner: "white" },
+          difficulty: "easy",
+          winner: null,
+        }),
+      );
+      await debugRoll([...dice]);
+      let state = await api("/api/endturn", {});
+      for (let guard = 0; guard < 12 && state.turn === "black" && !state.winner; guard++) {
+        state = await api("/api/ai", {});
+      }
+      expect(state.turn, "[needs: G25] the computer never finished its turn").toBe("white");
+      const now = (state.points as number[]).findIndex((v, i) => i >= 1 && i <= 24 && v < 0);
+      const moved = now - 7;
+      expect(
+        moved,
+        `they queued ${dice[0]}-${dice[1]} for the computer's roll through /api/debug/roll, and its turn moved ${moved} pips, not ${dice[0] + dice[1]}`,
+      ).toBe(dice[0] + dice[1]);
+    }
+  });
+
   it("[G30] REQ-HIGHER-DIE — the computer obeys the higher-die rule", async () => {
     const spots = [
       { black: 5, white: { 11: 2 }, off: { white: 13, black: 14 }, dice: [2, 4], higher: 4 },
@@ -587,9 +632,9 @@ describe("Backgammon backend server-path integrity", () => {
           for (let guard = 0; guard < 12 && state.turn === "black" && !state.winner; guard++) {
             state = await api("/api/ai", {});
           }
-          expect(state.turn, "[needs: G25] the computer never finished its turn").toBe("white");
+          expect(state.turn, "[needs: G25 G39] the computer never finished its turn").toBe("white");
           const now = (state.points as number[]).findIndex((v, i) => i >= 1 && i <= 24 && v < 0);
-          expect(now, "[aspect: passed] [needs: G25] the computer rolled and passed without moving its piece").not.toBe(spot.black);
+          expect(now, "[aspect: passed] [needs: G25 G39] the computer rolled and passed without moving its piece").not.toBe(spot.black);
           // Told by the setting it broke on (Jerry: name the spot): run
           // 1794900428's easy chooser picked at random among sequences that
           // used either number (about half its turns), while medium and hard
@@ -597,7 +642,7 @@ describe("Backgammon backend server-path integrity", () => {
           // running, its model kept tuning the paths that already obeyed.
           const played = now - spot.black;
           const level = { easy: "[aspect: easy]", medium: "[aspect: medium]", hard: "[aspect: hard]" }[difficulty];
-          expect(played, `${level} the computer played the ${played} when only the ${spot.higher} could be used, on ${difficulty}`).toBe(
+          expect(played, `${level} [needs: G39] the computer played the ${played} when only the ${spot.higher} could be used, on ${difficulty}`).toBe(
             spot.higher,
           );
         }

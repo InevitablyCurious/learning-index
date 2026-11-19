@@ -165,6 +165,12 @@
       "how": "Through the engine: black's one piece on 18, outside its home board, every point from 19 to 24 held by two white pieces, dice 6-5; chooseMoves at easy, medium and hard.",
       "looks": "code"
     },
+    "G39": {
+      "name": "The computer's roll takes the queued dice",
+      "what": "A roll queued through /api/debug/roll is the next roll whoever rolls it — the computer's too, as the brief has it.",
+      "how": "Black's one piece on 7 with an open road, the player's turn finished and the cube the player's (no double first): queued 1-2 then 6-5, each followed by End Turn and the computer's turn, must move the piece 3 and then 11 pips. Told by the team, quoting what was queued and how far the computer moved. G30 and F94, which judge the computer's play on dice they queued, wait on it.",
+      "looks": "code"
+    },
     "G24": {
       "name": "Accepting the computer's double",
       "what": "Accepting the computer's double makes the cube 2 and owned by the player.",
@@ -1204,6 +1210,7 @@
         "REQ-RESPONSIVE/aiturn",
         "G38",
         "G14",
+        "G39",
         "G30",
         "E08"
       ]

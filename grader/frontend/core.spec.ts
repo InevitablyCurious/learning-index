@@ -2039,7 +2039,7 @@ test("[F94] REQ-TURN — when the computer can't move, the turn comes back to ro
 
   // The computer rolls, cannot come in, says so, and hands the turn back.
   const roll = page.getByTestId("rollBtn");
-  await expect(roll, "after the computer's stuck turn Roll never came back to the player").toBeEnabled({ timeout: 10_000 });
+  await expect(roll, "[needs: G39] after the computer's stuck turn Roll never came back to the player").toBeEnabled({ timeout: 10_000 });
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 1] });
   await roll.click();
   await expect
@@ -2048,7 +2048,7 @@ test("[F94] REQ-TURN — when the computer can't move, the turn comes back to ro
         const s = await readState(page);
         return s.turn === "white" && JSON.stringify([...s.remainingDice].sort()) === "[1,2]";
       },
-      { message: "pressing Roll after the computer's stuck turn gave the player no roll of their own", timeout: 5_000 },
+      { message: "[needs: G39] pressing Roll after the computer's stuck turn gave the player no roll of their own", timeout: 5_000 },
     )
     .toBe(true);
 });

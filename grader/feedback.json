@@ -195,6 +195,10 @@
       "first": "Their software asks your computer player for its move on a turn where it has no move to make, and it doesn't answer with no moves.",
       "repeat": "They asked your computer player again for its move on a turn with no move to make, and it still doesn't answer with no moves."
     },
+    "G39": {
+      "first": "Their checks of your server: {measured}. The brief has /api/debug/roll set the next throw for whichever side throws next, never a random one.",
+      "repeat": "Their checks again: {measured} — the throw they set still isn't the one your server plays."
+    },
     "G38.throws": {
       "first": "Their software asks your computer player for its move on a turn where it has no move to make, and it crashes with an error.",
       "repeat": "They asked your computer player again for its move on a turn with no move to make, and it still crashes with an error."
