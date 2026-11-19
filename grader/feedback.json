@@ -1604,8 +1604,8 @@
       "repeat": "Again I couldn't keep up with what the computer did."
     },
     "F77.between": {
-      "first": "Their timing of the page: {measured}. The brief plays the computer's moves about half a second apart, one at a time.",
-      "repeat": "Their timing again: {measured} — the computer's moves still come too close together."
+      "first": "Their timing of the page: {measured}. They time the pieces as the board draws them, not the calls behind it: the brief has the board show the computer's moves one at a time, about half a second apart.",
+      "repeat": "Their timing again: {measured} — on the board itself, the computer's moves still aren't half a second apart."
     },
     "F63": {
       "first": "They roll to see who goes first and can't read the result from your app.",
@@ -2096,8 +2096,8 @@
       "repeat": "Their measurements again: {measured} — the triangles still barely stand apart from the board."
     },
     "F88.between": {
-      "first": "Their timing of the page: {measured}. The brief plays the computer's moves about half a second apart, one at a time.",
-      "repeat": "Their timing again: {measured} — the computer's opening moves still come too close together."
+      "first": "Their timing of the page: {measured}. They time the pieces as the board draws them, not the calls behind it: the brief has the board show the computer's moves one at a time, about half a second apart.",
+      "repeat": "Their timing again: {measured} — on the board itself, the computer's opening moves still aren't half a second apart."
     },
     "G30.easy": {
       "first": "On the easy setting, they let your computer take a turn through your server where either of its two numbers moves its checker but not both, and it plays the smaller one — when only one number can be used, the bigger one is played, on every setting.",
