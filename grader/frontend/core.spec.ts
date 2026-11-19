@@ -2087,7 +2087,8 @@ test("[F95] REQ-BEAROFF — clicking the off tray bears the picked piece off", a
   // the off tray bears it off, the same as its 'off' hint"). Judged from
   // 2026-11-19 (Jerry left where it belongs to judgement; the reference draws
   // it in the tray), as F75 and F10 judge where a move's hint sits. No "off"
-  // hint at all is the hint checks' finding, not this one.
+  // hint at all is the hint checks' finding, not this one; hints drawn too big or
+  // on the wrong points everywhere are F75's (two of three corpus builds it fired on).
   const offHintOnTray = await page.evaluate(() => {
     const trays = ['[data-testid="off-tray"]', '[data-testid="off-you"]']
       .map((sel) => document.querySelector(sel)?.getBoundingClientRect())
@@ -2104,7 +2105,7 @@ test("[F95] REQ-BEAROFF — clicking the off tray bears the picked piece off", a
     });
   });
   if (offHintOnTray !== null) {
-    expect(offHintOnTray, "[aspect: offhint] [needs: REQ-HINT/hint F03] the bear-off hint is drawn off the off tray").toBe(true);
+    expect(offHintOnTray, "[aspect: offhint] [needs: REQ-HINT/hint F03 F75] the bear-off hint is drawn off the off tray").toBe(true);
   }
 
   // A spot in the tray clear of every hint, the player's end first.
