@@ -156,7 +156,8 @@ describe("Backgammon edge gates", () => {
     b.points[13] = 2;
 
     const moves = game.singleMoves(b, "white", 3);
-    expect(moves.length).toBeGreaterThan(0);
+    // No move at all is not "moves for the other pieces too": its own finding.
+    expect(moves.length, "[aspect: noentry] with one white piece on the bar and a 3 to play, your engine offers no move at all — not even the entry on 22, which is open").toBeGreaterThan(0);
     expect(moves.every((m: any) => m.from === 0)).toBe(true);
   });
 
@@ -221,7 +222,8 @@ describe("Backgammon edge gates", () => {
     const keys = new Set(seqs.map((s: any) => boardKey(s.board)));
     expect(keys.size).toBe(seqs.length);
     // Four move-paths exist here; they reach exactly two distinct positions.
-    expect(seqs.length).toBe(2);
+    // No repeats, but the wrong number of plays, is a play missing — not "the same position twice".
+    expect(seqs.length, `[aspect: missing] two white pieces on 10 with a 1-2 to play can finish two different ways (both moved, or one moved three), and your engine lists ${seqs.length}`).toBe(2);
   });
 
   it("[E09] REQ-BOARD-ISOLATION — cloneBoard is a deep copy", () => {

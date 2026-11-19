@@ -32,6 +32,7 @@ import {
   FAINT_FROM,
   STANDS_OUT_FROM,
   coveredPoints,
+  trayOnBoard,
 } from "./board-geometry.ts";
 
 // The shared opening: load the app, start a fresh game through the API, reload
@@ -387,26 +388,9 @@ test("[F32] REQ-GEOMETRY — off tray is visible", async ({ page }) => {
   // 1790359593 stood clear of the points, apart from the board.
   const board = await page.locator('[data-testid="board"]').first().boundingBox();
   expect(board, "[needs: F01] expected the board to read").not.toBeNull();
-  const trayMidX = tray.x + tray.width / 2;
-  const trayMidY = tray.y + tray.height / 2;
-  const inBoardBox =
-    trayMidX >= board!.x &&
-    trayMidX <= board!.x + board!.width &&
-    trayMidY >= board!.y &&
-    trayMidY <= board!.y + board!.height;
-  const endPoints = points.filter((p) => p.num === 1 || p.num === 24);
-  const endWidth = endPoints[0]?.width ?? 0;
-  const gapToEnd = Math.min(
-    ...endPoints.map((p) => Math.max(tray.x - (p.x + p.width), p.x - (tray.x + tray.width), 0)),
-  );
-  const top = Math.min(...points.map((p) => p.y));
-  const bottom = Math.max(...points.map((p) => p.y + p.height));
-  const flushWithPoints =
-    endPoints.length === 2 &&
-    gapToEnd <= endWidth / 4 &&
-    Math.abs(tray.y - top) <= endWidth / 2 &&
-    Math.abs(tray.y + tray.height - bottom) <= endWidth / 2;
-  const onBoard = inBoardBox || flushWithPoints;
+  // One rule for whether the tray is on the board (board-geometry.ts trayOnBoard): the shape checks
+  // measure the board with the same one.
+  const onBoard = trayOnBoard(tray, board, points);
   expect(
     onBoard,
     `[aspect: offboard] the off tray (x ${tray.x.toFixed(0)}..${(tray.x + tray.width).toFixed(0)}, y ${tray.y.toFixed(0)}..${(tray.y + tray.height).toFixed(0)}) lies outside the board (x ${board!.x.toFixed(0)}..${(board!.x + board!.width).toFixed(0)})`,

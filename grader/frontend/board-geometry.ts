@@ -284,6 +284,83 @@ export function boardMidY(points: PointBox[]): number {
  * the same moment). One rule for every such check: the tip check once lacked it and told a tray drawn over a
  * point as "the triangles touch" (run 1794996436 round 1).
  */
+/** A box on the page: left edge, top edge, width, height. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Whether the off tray belongs to the drawn board — ONE rule for every check that judges or measures
+ * the board: F32 tells a tray standing off the board, F37 and F87 measure the board's shape with it.
+ * On the board: its centre inside the board element's box, or drawn flush against the end points
+ * (1 and 24), level with the points' top and bottom. Three rules once disagreed: the history build
+ * sel-4b00580cfef448c5 (corpus sweep 2026-11-19) drew its tray flush beside its board element — F32
+ * passed it, F87 counted it (1.40) and F37 left it out and told the player "the board is 1.30 times as
+ * wide as it is tall", on a picture that measures 1.40.
+ */
+export function trayOnBoard(tray: Rect, frame: Rect | null, points: { num: number; x: number; y: number; width: number; height: number }[]): boolean {
+  const midX = tray.x + tray.width / 2;
+  const midY = tray.y + tray.height / 2;
+  if (frame && midX >= frame.x && midX <= frame.x + frame.width && midY >= frame.y && midY <= frame.y + frame.height) {
+    return true;
+  }
+  const ends = points.filter((p) => p.num === 1 || p.num === 24);
+  if (ends.length !== 2) return false;
+  const endWidth = ends[0].width;
+  const gapToEnd = Math.min(...ends.map((p) => Math.max(tray.x - (p.x + p.width), p.x - (tray.x + tray.width), 0)));
+  const top = Math.min(...points.map((p) => p.y));
+  const bottom = Math.max(...points.map((p) => p.y + p.height));
+  return (
+    gapToEnd <= endWidth / 4 &&
+    Math.abs(tray.y - top) <= endWidth / 2 &&
+    Math.abs(tray.y + tray.height - bottom) <= endWidth / 2
+  );
+}
+
+/** What the drawn board is made of, read once from the page. */
+export interface BoardParts {
+  points: { num: number; x: number; y: number; width: number; height: number }[];
+  bars: Rect[];
+  trays: Rect[];
+  frame: Rect | null;
+}
+
+export async function readBoardParts(page: Page): Promise<BoardParts> {
+  return page.evaluate(() => {
+    const shown = (sel: string) =>
+      [...document.querySelectorAll<HTMLElement>(sel)]
+        .filter((el) => el.checkVisibility())
+        .map((el) => ({ el, r: el.getBoundingClientRect() }))
+        .filter(({ r }) => r.width > 0 && r.height > 0);
+    const rect = (r: DOMRect) => ({ x: r.left, y: r.top, width: r.width, height: r.height });
+    const frame = document.querySelector<HTMLElement>('[data-testid="board"]')?.getBoundingClientRect();
+    return {
+      points: shown('[data-testid="point"]').map(({ el, r }) => ({ num: Number(el.dataset.point), ...rect(r) })),
+      bars: shown('[data-testid="bar"]').map(({ r }) => rect(r)),
+      trays: shown('[data-testid="off-tray"]').map(({ r }) => rect(r)),
+      frame: frame ? rect(frame) : null,
+    };
+  });
+}
+
+/** The drawn board's box: its points and bar, and the off tray when trayOnBoard holds it on the board. */
+export function drawnBoardBox(parts: BoardParts): { x: number; y: number; w: number; h: number } | null {
+  const rects: Rect[] = [
+    ...parts.points,
+    ...parts.bars,
+    ...parts.trays.filter((t) => trayOnBoard(t, parts.frame, parts.points)),
+  ];
+  if (!rects.length) return null;
+  const x0 = Math.min(...rects.map((r) => r.x));
+  const x1 = Math.max(...rects.map((r) => r.x + r.width));
+  const y0 = Math.min(...rects.map((r) => r.y));
+  const y1 = Math.max(...rects.map((r) => r.y + r.height));
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
 export async function coveredPoints(page: Page, points: PointBox[]): Promise<Set<number>> {
   const bar = await readBarBox(page);
   const tray = await readOffTray(page);

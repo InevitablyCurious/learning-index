@@ -105,7 +105,7 @@ describe("Backgammon backend server-path integrity", () => {
     );
     const rolled = await debugRollVerified([1, 2]);
     const winMove = (rolled.legalMoves as Move[]).find((m) => m.from === 1 && m.to === 25);
-    expect(winMove).toBeTruthy();
+    expect(winMove, "[needs: G08]").toBeTruthy();
     await api("/api/move", { from: winMove!.from, to: winMove!.to, die: winMove!.die });
     const state = await getState();
     expect(state.winner).toBe("white");

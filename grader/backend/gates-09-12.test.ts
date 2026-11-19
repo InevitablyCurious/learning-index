@@ -213,8 +213,8 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     await debugRollVerified([3, 1]);
 
     const before = await getState();
-    expect(before.phase).toBe("move");
-    expect(before.canDouble).toBe(false);
+    expect(before.phase, "[needs: G13]").toBe("move");
+    expect(before.canDouble, "[aspect: offered] after the player rolled, your app's state still says canDouble is true").toBe(false);
 
     // Refused with an error status or ignored — either way the cube stays.
     await api("/api/double").catch(() => undefined);
@@ -253,7 +253,9 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     const oppPip = game.pipCount(board, "white");
     const wp = refWp(myPip, oppPip);
 
-    expect({ myPip, oppPip }).toEqual({ myPip: 30, oppPip: 30 });
+    // The test position's pips, read through the engine: a wrong count is the engine's pip count, told
+    // as that, never as a doubling decision (run 1795034166: {myPip: 0} for a 350-pip position).
+    expect({ myPip, oppPip }, `[aspect: pips] [needs: G02] your engine counts their test position as ${myPip} pips for the computer and ${oppPip} for the player, not 30 and 30`).toEqual({ myPip: 30, oppPip: 30 });
     expect(wp).toBe(0.5);
     expect(withinParityBand(ai.winProbability(board, "black"))).toBe(true);
     expect(wp).toBeGreaterThanOrEqual(TAKE_POINT.easy);
@@ -273,7 +275,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     const oppPip = game.pipCount(board, "white");
     const wp = refWp(myPip, oppPip);
 
-    expect({ myPip, oppPip }).toEqual({ myPip: 350, oppPip: 2 });
+    expect({ myPip, oppPip }, `[aspect: pips] [needs: G02] your engine counts their test position as ${myPip} pips for the computer and ${oppPip} for the player, not 350 and 2`).toEqual({ myPip: 350, oppPip: 2 });
     expect(wp).toBe(0.02);
     expect(ai.winProbability(board, "black"), "[needs: G22]").toBeLessThan(TAKE_POINT.hard);
     expect(wp).toBeLessThan(TAKE_POINT.hard);
@@ -298,7 +300,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
 
     const windowMyPip = game.pipCount(windowBoard, "black");
     const windowOppPip = game.pipCount(windowBoard, "white");
-    expect({ windowMyPip, windowOppPip }).toEqual({ windowMyPip: 30, windowOppPip: 61 });
+    expect({ windowMyPip, windowOppPip }, `[aspect: pips] [needs: G02] your engine counts their test position as ${windowMyPip} pips for the computer and ${windowOppPip} for the player, not 30 and 61`).toEqual({ windowMyPip: 30, windowOppPip: 61 });
 
     // REQ-WINPROB is formula-agnostic: on a board near the 0.90 "too good" ceiling, one
     // conforming monotonic model may rate this position INSIDE the offer window (=> double)
@@ -352,7 +354,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     const tooGoodOppPip = game.pipCount(tooGoodBoard, "white");
     const tooGoodWp = refWp(tooGoodMyPip, tooGoodOppPip);
 
-    expect({ tooGoodMyPip, tooGoodOppPip }).toEqual({ tooGoodMyPip: 1, tooGoodOppPip: 350 });
+    expect({ tooGoodMyPip, tooGoodOppPip }, `[aspect: pips] [needs: G02] your engine counts their test position as ${tooGoodMyPip} pips for the computer and ${tooGoodOppPip} for the player, not 1 and 350`).toEqual({ tooGoodMyPip: 1, tooGoodOppPip: 350 });
     expect(tooGoodWp).toBeGreaterThan(DOUBLE_WINDOW.upper);
     expect(ai.winProbability(tooGoodBoard, "black"), "[needs: G22]").toBeGreaterThan(DOUBLE_WINDOW.upper);
     expect(

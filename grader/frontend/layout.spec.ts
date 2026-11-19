@@ -1,5 +1,6 @@
 import { type Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
+import { drawnBoardBox, readBoardParts } from "./board-geometry.ts";
 
 // [F35]–[F38] REQ-LAYOUT — the page the build prompt asks for (chunk-04,
 // Jerry 2026-09-25): "The board should be on the left and fill the screen,
@@ -99,37 +100,8 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
   await page.request.post("/api/new", { data: {} });
   await page.reload();
   await expect(page.locator('[data-testid="board"]'), "[needs: F01]").toBeVisible();
-  return page.evaluate(
+  const layout = (await page.evaluate(
     ({ ids, buttons }) => {
-      // The off tray is part of the drawn board only while it sits on the
-      // board: a tray standing outside the board's frame is the tray check's
-      // complaint (F32 offboard), and counting it stretched "the board" over
-      // the button panel — told as a board not on the left and buttons on top
-      // of it, neither of which the player saw (run 1790359593).
-      const frame = document.querySelector<HTMLElement>('[data-testid="board"]')?.getBoundingClientRect();
-      const onFrame = (r: DOMRect) =>
-        !!frame &&
-        r.left >= frame.left - 2 &&
-        r.top >= frame.top - 2 &&
-        r.right <= frame.right + 2 &&
-        r.bottom <= frame.bottom + 2;
-      const drawnEls = [
-        ...document.querySelectorAll<HTMLElement>('[data-testid="point"],[data-testid="bar"]'),
-        ...[...document.querySelectorAll<HTMLElement>('[data-testid="off-tray"]')].filter((el) =>
-          onFrame(el.getBoundingClientRect()),
-        ),
-      ]
-        .map((el) => el.getBoundingClientRect())
-        .filter((r) => r.width > 0 && r.height > 0);
-      const drawn = drawnEls.length
-        ? (() => {
-            const x0 = Math.min(...drawnEls.map((r) => r.left));
-            const x1 = Math.max(...drawnEls.map((r) => r.right));
-            const y0 = Math.min(...drawnEls.map((r) => r.top));
-            const y1 = Math.max(...drawnEls.map((r) => r.bottom));
-            return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-          })()
-        : null;
       const controls: Record<string, unknown> = {};
       // What is drawn on top at a control decides whether a player sees it: a
       // control the board is drawn over is not showing, however its own style
@@ -231,12 +203,14 @@ async function openAt(page: Page, size: { width: number; height: number }): Prom
               Math.min(tray.bottom, p.bottom) - Math.max(tray.top, p.top) > 3
             );
           }),
-        drawn,
         controls,
       };
     },
     { ids: RIGHT_SIDE, buttons: BUTTONS },
-  ) as Promise<Layout>;
+  )) as Omit<Layout, "drawn">;
+  // The drawn board — points, bar, and the off tray when it is on the board — by the one rule every
+  // check shares (board-geometry.ts trayOnBoard), never a rule of this reader's own.
+  return { ...layout, drawn: drawnBoardBox(await readBoardParts(page)) };
 }
 
 function drawnBoard(layout: Layout): Box {
@@ -249,6 +223,14 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 const overlap = (a: Box, b: Box) =>
   Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) *
   Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+// Drawn over, not touching: more than 3 px each way — the grader's one sliver rule (board-geometry.ts
+// overlaps(), and the tray-over-points read above). Once the off tray counted as the board it touches,
+// 35 history builds whose button panel starts flush against that tray (1-3 px) were told "none of the
+// buttons and game info is right of the board" and "rollBtn sits on top of the board" (corpus sweep
+// 2026-11-19, sel-4b00580cfef448c5: tray ends x=1037, panel flush beside it).
+const SLIVER = 3;
+const drawnOver = (a: Box, b: Box) =>
+  Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > SLIVER && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > SLIVER;
 
 test("[F35] REQ-LAYOUT — board and controls placement", async ({ page }) => {
   for (const size of SIZES) {
@@ -261,7 +243,7 @@ test("[F35] REQ-LAYOUT — board and controls placement", async ({ page }) => {
     // edge). Missing is the testid check's finding; not showing is F38's; an
     // empty box has nothing to place.
     const placed = Object.entries(layout.controls).filter(([, c]) => c && c.shown && !c.empty);
-    const notRight = placed.filter(([, c]) => c!.x < board.x + board.w - 2).map(([id]) => id);
+    const notRight = placed.filter(([, c]) => c!.x < board.x + board.w - SLIVER).map(([id]) => id);
     expect(
       placed.length === 0 || notRight.length < placed.length,
       `at ${layout.size} none of the buttons and game info is right of the board (it ends at x=${Math.round(board.x + board.w)}): ${notRight.join(", ")}`,
@@ -385,7 +367,7 @@ test("[F38] REQ-LAYOUT — the buttons and game info show properly", async ({ pa
         c.x >= -1 && c.y >= -1 && c.x + c.w <= layout.vw + 1 && c.y + c.h <= layout.vh + 1,
         `[aspect: cutoff] at ${layout.size} ${id} is cut off by the edge of the window (${Math.round(c.x)},${Math.round(c.y)} ${Math.round(c.w)}×${Math.round(c.h)})`,
       ).toBeTruthy();
-      expect(overlap(c, board), `[aspect: onboard] at ${layout.size} ${id} sits on top of the board`).toBeLessThanOrEqual(2);
+      expect(drawnOver(c, board), `[aspect: onboard] at ${layout.size} ${id} sits on top of the board`).toBe(false);
     }
     const buttons = present.filter(([id]) => BUTTONS.includes(id));
     // Too small to press is a button's measure. The difficulty <select> is
@@ -536,7 +518,7 @@ async function boardPixels(page: Page): Promise<string> {
 
 /** The drawn board's shape, where the pieces sit, and how big a piece is against a point. */
 async function readWindowFit(page: Page) {
-  return page.evaluate(() => {
+  const fit = await page.evaluate(() => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const boxes = (sel: string) =>
@@ -544,11 +526,6 @@ async function readWindowFit(page: Page) {
         .filter((e) => e.checkVisibility())
         .map((e) => e.getBoundingClientRect())
         .filter((r) => r.width > 0 && r.height > 0);
-    const drawn = boxes('[data-testid="point"],[data-testid="bar"],[data-testid="off-tray"]');
-    const x0 = Math.min(...drawn.map((r) => r.left));
-    const x1 = Math.max(...drawn.map((r) => r.right));
-    const y0 = Math.min(...drawn.map((r) => r.top));
-    const y1 = Math.max(...drawn.map((r) => r.bottom));
     const points = boxes('[data-testid="point"]').map((r) => r.width).sort((p, q) => p - q);
     const pointW = points[Math.floor(points.length / 2)] ?? 0;
     const cs = [...document.querySelectorAll<HTMLElement>('[data-testid="checker"]')]
@@ -631,8 +608,6 @@ async function readWindowFit(page: Page) {
       shownButtons: buttonEls.map(([id]) => id),
       infoPast,
       squashed,
-      shape: drawn.length ? (x1 - x0) / (y1 - y0) : 0,
-      boardPast: drawn.length > 0 && (x0 < -2 || y0 < -2 || x1 > vw + 2 || y1 > vh + 2),
       scrolls: el.scrollWidth > vw + 2 || el.scrollHeight > vh + 2,
       off,
       pieces: cs.length,
@@ -640,11 +615,20 @@ async function readWindowFit(page: Page) {
       piece: pointW ? pieceW / pointW : 0,
       seen: cs.length - piled,
       astray,
-      fills: drawn.length ? Math.max((x1 - x0) / vw, (y1 - y0) / vh) : 0,
       bars: boxes('[data-testid="bar"]').length,
       trays: boxes('[data-testid="off-tray"]').length,
     };
   });
+  // The board's shape, how much of the window it fills and whether it runs past an edge, all from the
+  // drawn board by the one rule every check shares (board-geometry.ts trayOnBoard).
+  const box = drawnBoardBox(await readBoardParts(page));
+  const vp = page.viewportSize() ?? { width: 0, height: 0 };
+  return {
+    ...fit,
+    shape: box ? box.w / box.h : 0,
+    boardPast: !!box && (box.x < -2 || box.y < -2 || box.x + box.w > vp.width + 2 || box.y + box.h > vp.height + 2),
+    fills: box ? Math.max(box.w / vp.width, box.h / vp.height) : 0,
+  };
 }
 
 test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", async ({ page }) => {

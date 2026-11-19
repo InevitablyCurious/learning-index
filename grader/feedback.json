@@ -123,6 +123,10 @@
       "first": "They put your computer's doubling decisions against the thresholds you were given — when it offers, takes and turns down a double — and some of them don't match.",
       "repeat": "Your computer's doubling decisions still don't all match the thresholds you were given."
     },
+    "G12.pips": {
+      "first": "Their checks of your engine: {measured}. The brief counts a side's pips as the distance all its checkers still have to travel to bear off.",
+      "repeat": "Their checks again: {measured} — your engine still counts this position's pips wrong."
+    },
     "G13": {
       "first": "They play turns through your server — spending the dice, handing the turn over, a turn shut out on the bar — and the turn flow doesn't follow the brief.",
       "repeat": "They played turns through your server again and the turn flow still doesn't follow the brief."
@@ -158,6 +162,10 @@
     "G21": {
       "first": "After the player has rolled, in the middle of their turn, your app still accepts their double and changes the cube.",
       "repeat": "Mid-turn, after the roll, your app still accepts the player's double and changes the cube."
+    },
+    "G21.offered": {
+      "first": "Their checks of your server: {measured}. The brief only lets the player double on their own turn before they roll.",
+      "repeat": "Their checks again: {measured} — the state still offers a double after the roll."
     },
     "G22": {
       "first": "Their tools read your computer's win-chance estimate, and it doesn't go up as the computer gets further ahead.",
@@ -271,6 +279,10 @@
       "first": "They ask your engine for the moves while one of their pieces is on the bar, and it offers moves for their other pieces too — a piece on the bar has to come back in before any other piece may move.",
       "repeat": "They asked your engine again with a piece on the bar, and it still offers moves for their other pieces."
     },
+    "E05.noentry": {
+      "first": "Their checks of your engine: {measured}. The brief brings a piece on the bar back in on the open point its number reaches.",
+      "repeat": "Their checks again: {measured} — the piece on the bar still has no way back in."
+    },
     "E06": {
       "first": "They ask your engine for pip counts with checkers on the bar, and the count is wrong — a checker on the bar counts 25 pips.",
       "repeat": "Your engine's pip count still doesn't count a checker on the bar as 25."
@@ -282,6 +294,10 @@
     "E08": {
       "first": "Their tools ask your engine for every way to play a roll, and the same finished position keeps coming back more than once — two orders of the same moves show up as two different plays.",
       "repeat": "They asked your engine for the ways to play a roll again, and the same end position still comes back more than once."
+    },
+    "E08.missing": {
+      "first": "Their checks of your engine: {measured}. The brief lists every different way a roll can be played.",
+      "repeat": "Their checks again: {measured} — a way of playing that roll is still missing."
     },
     "E09": {
       "first": "They copy a board with your engine and change the copy, and the original changes too — a copy has to stand apart from the board it came from.",

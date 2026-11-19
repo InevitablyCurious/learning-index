@@ -1632,7 +1632,7 @@ test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
   const whiteBarChecker = page.locator(
     '[data-testid="checker"][data-color="white"][data-loc="bar"]',
   );
-  await expect(whiteBarChecker).toHaveCount(1);
+  await expect(whiteBarChecker, "[needs: F10]").toHaveCount(1);
   // The bar column div overlays the checker (and it isn't selectable in a stuck
   // state anyway) — force past the pointer-interception to prove no hints appear.
   await whiteBarChecker.first().click({ force: true });
