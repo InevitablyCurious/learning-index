@@ -3257,11 +3257,23 @@ test("[F66] REQ-FASTFORWARD-PAUSE — Pause stops Fast Forward and it carries on
   await button.click();
   await expect(button, "[aspect: label] [needs: F64] after Pause the button never read Fast Forward again").toHaveText(FAST_FORWARD);
 
-  // Nothing moves once paused: whatever was in flight has had 2 s to land.
+  // Nothing of the player's plays by itself once paused. Where the pause lands
+  // is the build's pace, not the check's: the look above takes about 3 s, and
+  // run 1795119387's Fast Forward had played the player's roll and handed the
+  // computer its turn by then. The computer finishing its own turn after Pause
+  // is ordinary play — the reference does it too (runAi completes before its
+  // loop sees the pause) — and that build was told "pieces kept moving after
+  // Pause" three rounds running about its computer finishing a turn at the
+  // normal pace, then waiting on the player's roll (played by hand). Fast
+  // Forward still running shows in the PLAYER's pieces: after whatever was in
+  // flight has had 2 s to land, they never move again by themselves — long
+  // enough for the computer's turn to finish and a still-running loop to roll
+  // and move for the player.
+  const playersOf = (s: ApiState) => JSON.stringify([s.points.map((n) => Math.max(n, 0)), s.bar.white, s.off.white]);
   await page.waitForTimeout(2_000);
-  const held = positionOf(await readState(page));
-  await page.waitForTimeout(3_000);
-  expect(positionOf(await readState(page)), "[aspect: paused] pieces still moved 2-5 s after Pause").toBe(held);
+  const held = playersOf(await readState(page));
+  await page.waitForTimeout(7_000);
+  expect(playersOf(await readState(page)), "[aspect: paused] the player's pieces still moved 2-9 s after Pause").toBe(held);
 
   // Clicked again, it carries on.
   await press(button, "[aspect: again] after Pause, Fast Forward could not be pressed again");

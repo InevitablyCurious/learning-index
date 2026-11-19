@@ -1708,8 +1708,8 @@
       "repeat": "Again, after Pause, the button never went back to Fast Forward."
     },
     "F66.paused": {
-      "first": "I clicked Pause, and pieces were still moving a few seconds later.",
-      "repeat": "Again pieces kept moving a few seconds after I clicked Pause."
+      "first": "I clicked Pause, and my own pieces were still being moved for me a few seconds later.",
+      "repeat": "Again, after I clicked Pause my pieces kept being moved for me."
     },
     "F66.resume": {
       "first": "After pausing, I clicked Fast Forward again and no piece moved.",
