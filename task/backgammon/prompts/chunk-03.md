@@ -30,6 +30,7 @@ pip, legalMoves, canDouble
 - `pip`: `{ white: number, black: number }` — both players' pip counts from the engine.
 - `legalMoves`: `Move[]` — the human's legal moves right now (`[]` unless it is the human's move phase).
 - `canDouble`: boolean — whether the human may offer a double at this moment: only on the human's own turn before they roll (phase `roll`), while the cube is in the middle or theirs and nobody has won — never before the opening move has been played. It is worked out from the game's current fields alone, so a position set through `/api/debug/state` answers the same as one reached by play.
+- `gamesPlayed`: number — how many games have finished: it goes up by one when a game ends, and `/api/new` carries it over to the new game, as it does the score.
 - `history` is NOT serialized.
 - The server MUST hold a complete, initialized game state from startup, so `/api/state` and `/api/debug/state` return a valid serialized game even before any `/api/new` is called.
 
