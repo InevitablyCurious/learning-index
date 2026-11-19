@@ -1216,8 +1216,8 @@
       "repeat": "Your engine still doesn't give two different numbers two moves."
     },
     "G03.doubles": {
-      "first": "They roll a double through your app's API and the dice it sends back never list four numbers.",
-      "repeat": "They roll a double through your API again and the dice it sends back still never list four numbers."
+      "first": "They roll doubles on your turn through your app's API (/api/roll, not the opening roll), and the state it sends back doesn't carry the double as four numbers in both `dice` and `remainingDice`. The brief carries a double as four entries, not two.",
+      "repeat": "They rolled doubles on your turn through your API again: the state still doesn't carry the double as four numbers in both `dice` and `remainingDice`."
     },
     "G03.nomove": {
       "first": "They roll a double through your app's API and it gives them no move to make.",
