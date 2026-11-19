@@ -1179,6 +1179,10 @@
       "first": "One of my pieces was on the bar and I couldn't see it there.",
       "repeat": "A piece of mine on the bar still isn't drawn there."
     },
+    "F09.extra": {
+      "first": "When I hit one of the computer's pieces, more than one of its pieces shows up on the bar.",
+      "repeat": "Hit one of theirs again, and the bar still shows more of their pieces than I hit."
+    },
     "F25.reveal": {
       "first": "I clicked a piece and the game didn't show me any hints for where it could go.",
       "repeat": "Clicked a piece again and still no hints appeared for where it could go."

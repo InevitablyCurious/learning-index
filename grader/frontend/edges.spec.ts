@@ -81,9 +81,23 @@ test("[F09] REQ-HIT — hit -> bar visual", async ({ page }) => {
   });
 
   await page.reload();
-  await expect(page.locator('[data-testid="bar"]')).toBeVisible();
+  // Any element tagged "bar" on screen, as readBarBox reads the bar: run
+  // 1795098772's page drew its bar as two tagged halves, and a strict
+  // one-element check was told "When i hit an opponent piece i don't see it
+  // go up onto the bar" about a piece sitting on the bar.
+  await expect(page.locator('[data-testid="bar"]').filter({ visible: true }).first(), "[needs: REQ-RENDER/bar]").toBeVisible();
   const onBar = page.locator('[data-testid="checker"][data-color="black"][data-loc="bar"]');
-  await expect(onBar).toHaveCount(1);
+  // None drawn is the gate's own line. More than the one on the bar is its own:
+  // history build sel-eebccfa9eeea8b2b drew each bar piece once in every tagged
+  // half, so one hit showed two pieces, and "i don't see it go up onto the bar"
+  // was false.
+  await expect(onBar).not.toHaveCount(0);
+  await expect
+    .poll(() => onBar.count(), {
+      message: "[aspect: extra] the computer had one piece on the bar, and the board drew more than one there",
+      timeout: 3_000,
+    })
+    .toBe(1);
   // Drawn so a player sees it: run 1790661859's page styled its pieces only on
   // the points, and its bar piece, found here by its tag, showed nothing.
   expect(await isPainted(onBar), "the piece on the bar is drawn with nothing a player can see").toBe(true);
