@@ -1695,6 +1695,10 @@
       "first": "I clicked Fast Forward and the whole page froze — nothing on it responded any more.",
       "repeat": "Clicked Fast Forward again and the page froze again."
     },
+    "F66.again": {
+      "first": "After I clicked Pause, I couldn't press Fast Forward again to carry on.",
+      "repeat": "Paused again, and Fast Forward still couldn't be pressed to carry on."
+    },
     "F66.label": {
       "first": "After I clicked Pause, the button never went back to Fast Forward.",
       "repeat": "Again, after Pause, the button never went back to Fast Forward."
@@ -1726,6 +1730,10 @@
     "F67.back": {
       "first": "After I took the double, the Fast Forward button didn't come back.",
       "repeat": "Again, after I took the double, the Fast Forward button didn't come back."
+    },
+    "F67.carry": {
+      "first": "After I took the double, I couldn't press Fast Forward to carry on.",
+      "repeat": "Took the double again and still couldn't press Fast Forward to carry on."
     },
     "F67.label": {
       "first": "After I took the double, nothing was playing any more, but the button still read Pause.",
@@ -1862,6 +1870,30 @@
     "F72": {
       "first": "While the computer's double was waiting for my answer, pressing End Turn just made the computer play again.",
       "repeat": "I still get the computer playing again, not my own turn, when I press End Turn with its double waiting."
+    },
+    "F49.noend": {
+      "first": "My moves were done, and End Turn couldn't be pressed.",
+      "repeat": "My moves were done again, and End Turn still couldn't be pressed."
+    },
+    "F55.noend": {
+      "first": "My moves were done, and End Turn couldn't be pressed.",
+      "repeat": "My moves were done again, and End Turn still couldn't be pressed."
+    },
+    "F56.noend": {
+      "first": "My moves were done, and End Turn couldn't be pressed.",
+      "repeat": "My moves were done again, and End Turn still couldn't be pressed."
+    },
+    "F72.noend": {
+      "first": "My moves were done, and End Turn couldn't be pressed.",
+      "repeat": "My moves were done again, and End Turn still couldn't be pressed."
+    },
+    "F90.noend": {
+      "first": "My moves were done, and End Turn couldn't be pressed.",
+      "repeat": "My moves were done again, and End Turn still couldn't be pressed."
+    },
+    "F94.noend": {
+      "first": "My moves were done, and End Turn couldn't be pressed.",
+      "repeat": "My moves were done again, and End Turn still couldn't be pressed."
     },
     "F72.endturn": {
       "first": "While the computer's double was waiting for my answer, pressing End Turn just made the computer play again.",

@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { expect, pickUpAPiece, playerClick, playerClickUntilShown, PORT, rollAndCheck, seedRolled, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, playerClickUntilShown, PORT, press, rollAndCheck, seedRolled, setupState, test } from "./fixtures.ts";
 import { readColumnBox, readPointBoxes, sampleBoxBrightness, sampleBoxContrast, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
@@ -1325,7 +1325,7 @@ async function watchComputerTurn(page: Page, turnNeeds: string): Promise<{
   await recordFrames(page, "black");
   await page.waitForTimeout(200);
   const { at: clickAt, dice: atClick } = await diceNow(page);
-  await endTurn.click();
+  await press(endTurn, `${turnNeeds} End Turn was not available with nothing left to play`);
 
   // The turn happened, as the state records it: the computer's pieces moved
   // and the turn is the player's again.
@@ -1758,7 +1758,7 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   const beforeEnd = await readState(page);
   const blackAt = (s: ApiState): string =>
     JSON.stringify([s.points.map((n) => Math.min(n, 0)), s.bar.black, s.off.black]);
-  await endTurnBtn.click();
+  await press(endTurnBtn, "[brief] [aspect: endturn] [needs: F45] End Turn was not available once the moves were done");
 
   // The turn hands over: the server shows black (the computer) at some point
   // after End Turn, or the computer's turn has already been played — its pieces
@@ -2035,14 +2035,13 @@ test("[F94] REQ-TURN — when the computer can't move, the turn comes back to ro
   await waitForBoardSettled(page).catch(() => undefined);
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
   const endTurn = page.getByTestId("endTurnBtn");
-  await expect(endTurn, "[needs: F47] End Turn was not available with nothing left to play").toBeEnabled();
-  await endTurn.click();
+  await press(endTurn, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
 
   // The computer rolls, cannot come in, says so, and hands the turn back.
   const roll = page.getByTestId("rollBtn");
   await expect(roll, "[needs: G39] after the computer's stuck turn Roll never came back to the player").toBeEnabled({ timeout: 10_000 });
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 1] });
-  await roll.click();
+  await press(roll, "[needs: G39] after the computer's stuck turn Roll never came back to the player", 10_000);
   await expect
     .poll(
       async () => {
@@ -2433,7 +2432,7 @@ test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", asyn
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await page.getByTestId("endTurnBtn").click();
+  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
 
   await expect
     .poll(async () => /double|offer/i.test(await shownDoubleText(page)), {
@@ -2492,7 +2491,7 @@ test("[F90] REQ-DOUBLE-ACCEPT-PLAYS-ON — taking the computer's double, the gam
     await page.waitForTimeout(600);
   }
   await expect.poll(async () => (await readState(page)).turnOver, { message: "[needs: F25 F45]" }).toBe(true);
-  await page.getByTestId("endTurnBtn").click();
+  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
   await expect
     // An offer that never comes is the computer's doubling window (G12), as in
     // G24: run 1793638605's build raised it to 85%, never doubled here, and was
@@ -2916,13 +2915,13 @@ test("[F55] REQ-RELOAD — the computer finishes its turn after a reload", async
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   const endTurn = page.getByTestId("endTurnBtn");
-  await expect(endTurn, "[needs: F47] End Turn was not available with nothing left to play").toBeEnabled();
+  await expect(endTurn, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play").toBeEnabled();
   await waitForBoardSettled(page).catch(() => undefined);
   const handedOver = page.waitForResponse(
     (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/api/endturn",
     { timeout: 10_000 },
   );
-  await endTurn.click();
+  await press(endTurn, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
   await handedOver.catch(() => undefined);
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
@@ -2962,7 +2961,7 @@ test("[F56] REQ-RELOAD — the pending double offer shows again after a reload",
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await page.getByTestId("endTurnBtn").click();
+  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
   await expect
     .poll(async () => (await readState(page)).phase, {
       message: "[needs: F49] the computer's offer never came",
@@ -3265,7 +3264,7 @@ test("[F66] REQ-FASTFORWARD-PAUSE — Pause stops Fast Forward and it carries on
   expect(positionOf(await readState(page)), "[aspect: paused] pieces still moved 2-5 s after Pause").toBe(held);
 
   // Clicked again, it carries on.
-  await button.click();
+  await press(button, "[aspect: again] after Pause, Fast Forward could not be pressed again");
   await expect(button, "[aspect: running] Fast Forward clicked again never read Pause").toHaveText(PAUSE);
   const carried = await expect
     .poll(async () => positionOf(await readState(page)), { timeout: 15_000 })
@@ -3361,7 +3360,7 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
     }
     const paused = positionOf(await readState(page));
     await expect(button, `after the double was taken${rolledFirst ? " and the player rolled" : ""} no Fast Forward button was there to carry on`).toBeVisible();
-    await button.click();
+    await press(button, `[aspect: carry] after the double was taken${rolledFirst ? " and the player rolled" : ""} Fast Forward could not be pressed to carry on`);
     await expect
       .poll(async () => positionOf(await readState(page)), {
         message: `Fast Forward clicked again after the double${rolledFirst ? " and the roll" : ""} did not start the automatic play`,
@@ -3397,7 +3396,7 @@ test("[F72] REQ-DOUBLE-PENDING — the computer's offer holds the game", async (
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await page.getByTestId("endTurnBtn").click();
+  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
   // An offer that never shows is F49's finding (stage 6, which a stage-2 gate may
   // not wait on): with nothing waiting for an answer there is nothing to press.
   const offerShown = await expect

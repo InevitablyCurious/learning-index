@@ -203,6 +203,30 @@ export async function seedRolled(page: Page, body: Record<string, any>, dice: nu
   return rolled;
 }
 
+// ── PRESS A BUTTON THE CHECK NEEDS: BOUNDED, AND NAMED ──────────────────────
+//
+// `locator.click()` on a button that is on screen but disabled waits for it to
+// come alive until the TEST's own timeout. The check never finishes, a check
+// that never finishes is told to no one (stages.py did_not_finish), and its
+// finding is lost. Run 1795113327's Fast Forward was disabled after the player
+// took the computer's double: F67 timed out every round, and once the rest was
+// fixed the model would have heard only "something is still broken". Across
+// the 264-build corpus ~120 of 132 timed-out checks were a click on a disabled
+// button. A press waits a bounded time for the button to be shown and
+// pressable, and fails with the check's own message — its markers and aspect
+// — when it is not, including when it goes dead between the wait and the click.
+export async function press(button: Locator, message: string, timeout = 5_000): Promise<void> {
+  await expect(button, message).toBeVisible({ timeout });
+  await expect(button, message).toBeEnabled({ timeout });
+  try {
+    await button.click({ timeout });
+  } catch (error) {
+    await expect(button, message).toBeVisible({ timeout: 1_000 });
+    await expect(button, message).toBeEnabled({ timeout: 1_000 });
+    throw error;
+  }
+}
+
 // ── CLICK WHERE A PLAYER CLICKS ─────────────────────────────────────────────
 //
 // `locator.click()` insists that the element ITSELF receives the click, and
