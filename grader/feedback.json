@@ -1936,12 +1936,12 @@
       "repeat": "Changed my window's shape again and some buttons still disappear."
     },
     "F87.offbuttons": {
-      "first": "When I change the shape of my browser window, some of the buttons end up past the edge of the screen.",
-      "repeat": "Changed my window's shape again and some buttons are still past the edge of the screen."
+      "first": "Their measurements of the page: {measured}. The brief lays the board, the buttons and the game-info panels out to fit the window, whatever its shape.",
+      "repeat": "Their measurements again: {measured} — the buttons still don't all fit in the window."
     },
     "F87.info": {
-      "first": "When I change the shape of my browser window, some of the game information ends up past the edge of the screen.",
-      "repeat": "Changed my window's shape again and some of the game information is still past the edge of the screen."
+      "first": "Their measurements of the page: {measured}. The brief lays the board, the buttons and the game-info panels out to fit the window, whatever its shape.",
+      "repeat": "Their measurements again: {measured} — the game information still doesn't all fit in the window."
     },
     "F87.buttons": {
       "first": "When I change the shape of my browser window, the buttons get squashed and their names are cut off.",

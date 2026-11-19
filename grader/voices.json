@@ -63,6 +63,8 @@
     "F12.banner",
     "F22.hiddenclass",
     "F37.unseenwhere",
-    "F89.seeded"
+    "F89.seeded",
+    "F87.offbuttons",
+    "F87.info"
   ]
 }
