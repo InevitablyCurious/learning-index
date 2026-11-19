@@ -462,7 +462,7 @@
     "F33": {
       "name": "A double lets the player make four moves",
       "what": "A double gives the player four moves, not two.",
-      "how": "Sets a doubled dice state through the debug route, reloads, then clicks checker, hint, and move four times, asserting all four dice are consumed; a failure names how many moves the double gave, and one click that plays more than one move is told as that ([aspect: twice]).",
+      "how": "Sets a doubled dice state through the debug route, reloads, then clicks checker, hint, and move four times, asserting all four dice are consumed; a failure names how many moves the double gave, and one click that plays more than one move is told as that ([aspect: twice]). One click, one move: when a click spends more than one die of the double the player says so ([aspect: twice]), and when that click sent more than one move to /api/move the team says that too ([aspect: twicewhere]).",
       "looks": "page"
     },
     "F35": {

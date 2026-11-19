@@ -1,4 +1,4 @@
-import { type Page } from "@playwright/test";
+import { type Page, type Request } from "@playwright/test";
 import { waitForBoardSettled } from "./board-geometry.ts";
 import { expect, pickUpAPiece, playerClick, rollAndCheck, setupState, test } from "./fixtures.ts";
 
@@ -87,10 +87,19 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
   // with the page's own redraw.
   for (let played = 1; played <= 4; played++) {
     const told = played === 1 ? firstMove : movesMade[played - 1];
+    // What the one click sends to the server. A page with two click handlers on a hint sends
+    // the move twice, and on a double the second has a die to use: the player sees two moves
+    // go for one click, and only the team can say why (run 1795065106 rounds 2-5: told three
+    // times, the model patched how used dice are greyed while every click posted twice).
+    let sent = 0;
+    const countMove = (request: Request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname === "/api/move") sent++;
+    };
     try {
       await withinSeconds(20, async () => {
         if (!(await pickUpAPiece(page, hints))) throw new Error("no checker to pick up");
         await expect(hints.first(), "no hint appeared").toBeVisible();
+        page.on("request", countMove);
         // Clicked where it shows: a pulsing hint on top of a stack (fixtures.ts).
         await playerClick(hints.first());
         await expect.poll(() => remainingDiceCount(page), "die not consumed").toBeLessThanOrEqual(4 - played);
@@ -105,13 +114,20 @@ test("[F33] REQ-DOUBLES — a double lets the player make four moves", async ({ 
       // Whichever step stopped this move, what the player saw is how many
       // moves the double gave — so every failure inside the move says so.
       throw new Error(`move ${played} ${told}: ${(err as Error).message}`);
+    } finally {
+      page.off("request", countMove);
     }
     // One click, one move. Run 1794866864's page sent the same move twice for
     // one click and the double had the dice for both: two pieces left 24 at
     // once, and "couldn't make a single move" was told about a move that played.
-    expect(await remainingDiceCount(page), "[aspect: twice] one click played more than one move of the double").toBe(
-      4 - played,
-    );
+    // The player says what they saw; the team, when the click sent more than one
+    // move, says that too. A server that spends two dice on one move sent once
+    // is the player's line alone.
+    const left = await remainingDiceCount(page);
+    if (left < 4 - played && sent > 1) {
+      expect.soft(sent, `[aspect: twicewhere] one click on a hint sent ${sent} moves to /api/move`).toBeLessThanOrEqual(1);
+    }
+    expect(left, "[aspect: twice] one click played more than one move of the double").toBe(4 - played);
   }
 
   // All four dice were played through the UI: the server holds nothing left.
