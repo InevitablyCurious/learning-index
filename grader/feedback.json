@@ -928,8 +928,8 @@
       "repeat": "Stuck again and it still won't finish my turn, or it still shows hints when I click a piece."
     },
     "F25": {
-      "first": "When I click a move, the game doesn't register it — the dice don't get used up.",
-      "repeat": "Clicked a move again and the dice still aren't used up after."
+      "first": "I clicked where my piece could go, and the piece didn't move.",
+      "repeat": "Clicked where my piece could go again, and it still didn't move."
     },
     "F27": {
       "first": "Their monitoring shows your page logging errors in the browser console when it loads.",

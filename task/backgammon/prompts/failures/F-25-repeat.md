@@ -1,1 +1,1 @@
-Clicked a move again and the dice still aren't used up after.
+Clicked where my piece could go again, and it still didn't move.
