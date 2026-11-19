@@ -73,8 +73,26 @@ _UNEVALUATED = "never evaluated"
 _UNTOLD = "[untold]"
 
 
+# WHAT A FINDING SAYS IS ITS OWN MESSAGE. A failed page check's text carries more
+# than the message its assertion wrote: Playwright appends the expect call, the
+# call log and a frame of the test's SOURCE around the failing line, and vitest a
+# stack. Markers read from all of it took them from neighbouring source lines: run
+# 1795065106 round 2's G05 finding "the game played the smaller number" (no
+# aspect) was told as G05's [aspect: offered] line because the code frame showed
+# the next assertion. Every marker — [aspect: …], [needs: …], [untold] — is read
+# from the message alone: the text before the first blank line, stack line or
+# code-frame line.
+_MESSAGE_END_RE = re.compile(r"\n\s*\n|\n\s+at\s|\n\s*>?\s*\d+\s*\|")
+
+
+def finding_message(observed: Any) -> str:
+    text = str(observed or "")
+    m = _MESSAGE_END_RE.search(text)
+    return text[: m.start()] if m else text
+
+
 def is_untold(problem: dict[str, Any]) -> bool:
-    return _UNTOLD in str(problem.get("observed", ""))
+    return _UNTOLD in finding_message(problem.get("observed", ""))
 
 
 # A CHECK THAT DIDN'T FINISH IS NOT A FINDING (Jerry, 2026-11-17 audit, class 3).
@@ -99,7 +117,7 @@ def is_unevaluated(problem: dict[str, Any]) -> bool:
     observed = str(problem.get("observed", "")).strip()
     return (
         observed.startswith(_UNEVALUATED)
-        or _UNTOLD in observed
+        or _UNTOLD in finding_message(observed)
         or did_not_finish(problem)
     )
 
@@ -123,7 +141,7 @@ def needs_of(problem: dict[str, Any]) -> tuple[str, ...]:
     # EVERY marker, not the first: fourteen assertions write two, such as
     # `[needs: F01] [needs: G12]`, and reading only the first dropped the second
     # (2026-09-30) — the line was told even when G12 had already failed.
-    observed = str(problem.get("observed", ""))
+    observed = finding_message(problem.get("observed", ""))
     return tuple(n for m in _NEEDS_RE.finditer(observed) for n in m.group(1).split())
 
 

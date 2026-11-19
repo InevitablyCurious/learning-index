@@ -89,6 +89,7 @@ from .stages import (
     Stage,
     aspect_order,
     check_id,
+    finding_message,
     load_layers,
     load_stages,
     needs_of,
@@ -293,7 +294,7 @@ def _regressed_checks(
         check = str(p.get("check", "")).strip()
         aspect = (
             m.group(1)
-            if (m := _LINE_ASPECT_RE.search(str(p.get("observed", ""))))
+            if (m := _LINE_ASPECT_RE.search(finding_message(p.get("observed", ""))))
             else None
         )
         return (check_id(check) or check, aspect)

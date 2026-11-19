@@ -49,7 +49,15 @@ from .constants import (
     _TEAM_REGRESSION_HEADER,
 )
 from .exceptions import MissingFeedbackOverrideError
-from .stages import Stage, check_id, is_untold, met_failures, needs_unmet, stage_of
+from .stages import (
+    Stage,
+    check_id,
+    finding_message,
+    is_untold,
+    met_failures,
+    needs_unmet,
+    stage_of,
+)
 
 
 def load_feedback_overrides(path: Path) -> dict[str, dict[str, str]]:
@@ -478,14 +486,14 @@ _RESTLESS_REPEAT = "The board still keeps shifting on its own; the pieces never 
 
 def restless_line(observed: str, *, pass_kind: str) -> str | None:
     """The true line for a board whose pieces never hold still, or None."""
-    if BOARD_RESTLESS not in str(observed or ""):
+    if BOARD_RESTLESS not in finding_message(observed):
         return None
     return _RESTLESS_REPEAT if pass_kind == "repeat" else _RESTLESS_FIRST
 
 
 def roll_dead_line(observed: str, *, pass_kind: str) -> str | None:
     """The true line for a press of Roll that rolled nothing, or None."""
-    if ROLL_DEAD not in str(observed or ""):
+    if ROLL_DEAD not in finding_message(observed):
         return None
     return _ROLL_DEAD_REPEAT if pass_kind == "repeat" else _ROLL_DEAD_FIRST
 
@@ -782,7 +790,9 @@ class FeedbackMixin:
         # or whose turn" — the model re-checked the cube and turn six times and
         # never looked at the black layout, the only thing wrong (run
         # 1790196821). Absent the marker, the gate's own line.
-        aspect = m.group(1) if (m := _ASPECT_RE.search(str(observed or ""))) else None
+        aspect = (
+            m.group(1) if (m := _ASPECT_RE.search(finding_message(observed))) else None
+        )
         aspect_key = (
             f"{token_key or conf_key}.{aspect}"
             if (token_key or conf_key) and aspect
@@ -834,7 +844,7 @@ class FeedbackMixin:
         is a NEW complaint, never "I pressed Roll again" (run 1793897465 round
         10 told the repeat beside the first sighting in one message).
         """
-        observed = str(record.get("observed", "") or "")
+        observed = finding_message(record.get("observed", ""))
         if ROLL_DEAD in observed:
             return "rolldead"
         if BOARD_RESTLESS in observed:
