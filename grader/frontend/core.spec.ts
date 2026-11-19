@@ -1647,8 +1647,8 @@ test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
   // never told (Jerry, 2026-11-03, the cube words: what no player sees is
   // [untold]).
   const state = await readState(page);
-  expect(state.turnOver, "[untold] [needs: G06] a stuck turn's state did not say turnOver").toBe(true);
-  expect(state.legalMoves, "[untold] [needs: G06] a stuck turn's state still listed moves").toHaveLength(0);
+  expect(state.turnOver, "[untold] [brief] [needs: G06] a stuck turn's state did not say turnOver").toBe(true);
+  expect(state.legalMoves, "[untold] [brief] [needs: G06] a stuck turn's state still listed moves").toHaveLength(0);
 });
 
 test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
@@ -1699,7 +1699,8 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   // played on, and the model was told "my turn ends by itself" of a turn that
   // held — End Turn waiting, the computer still. Playing the roll out is this
   // check's SETUP, not its subject: when it fails, the turn was never judged,
-  // so it is scored and never told (its brief is handed back, respec/F47.md).
+  // so it is scored and never told, and hands no brief back: F47's excerpt is
+  // how the turn ends, not how a roll is played (stages.py is_brief).
   const hints = page.getByTestId("hint");
   const playedOut = (s: ApiState): boolean => s.turnOver || s.remainingDice.length === 0;
   const playUntilTurnOver = async (told: string): Promise<void> => {
@@ -1735,13 +1736,13 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   // exactly 2 s, pass; a player reading "End your turn" takes longer than that.
   await page.waitForTimeout(4000);
   const held = await readState(page);
-  expect(held.turn, "[needs: F45] the turn ended by itself before End Turn was clicked").toBe("white");
-  expect(held.phase, "[needs: F45] the turn left the move phase by itself").toBe("move");
+  expect(held.turn, "[brief] [needs: F45] the turn ended by itself before End Turn was clicked").toBe("white");
+  expect(held.phase, "[brief] [needs: F45] the turn left the move phase by itself").toBe("move");
 
   // Undo still works while the turn waits: the button is live and clicking it
   // gives a die back.
   const undoBtn = page.getByTestId("undoBtn");
-  await expect(undoBtn, "[aspect: undo] [needs: G23 F45] Undo was not available while the turn waited").toBeEnabled();
+  await expect(undoBtn, "[brief] [aspect: undo] [needs: G23 F45] Undo was not available while the turn waited").toBeEnabled();
   const beforeUndo = (await readState(page)).remainingDice.length;
   await undoBtn.click();
   await expect
@@ -1753,7 +1754,7 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   await playUntilTurnOver("after Undo");
 
   const endTurnBtn = page.getByTestId("endTurnBtn");
-  await expect(endTurnBtn, "[aspect: endturn] [needs: F45] End Turn was not available once the moves were done").toBeEnabled();
+  await expect(endTurnBtn, "[brief] [aspect: endturn] [needs: F45] End Turn was not available once the moves were done").toBeEnabled();
   const beforeEnd = await readState(page);
   const blackAt = (s: ApiState): string =>
     JSON.stringify([s.points.map((n) => Math.min(n, 0)), s.bar.black, s.off.black]);

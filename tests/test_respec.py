@@ -32,7 +32,7 @@ def test_a_told_cube_check_hands_the_brief_back_before_the_constraints() -> None
     told = [
         {
             "check": WINDOW,
-            "observed": "AssertionError: expected 'double' to be 'no-double'",
+            "observed": "AssertionError: [brief]: expected 'double' to be 'no-double'",
         }
     ]
     respec = ChallengeRunner._respec_for(told, told, stages[11], stages)
@@ -50,7 +50,7 @@ def test_untold_cube_words_hand_the_brief_back_only_once_the_cube_is_reached() -
     words = [
         {
             "check": WORDS,
-            "observed": "AssertionError: [untold] a cube answer outside double / no-double",
+            "observed": "AssertionError: [untold] [brief] a cube answer outside double / no-double",
         }
     ]
     cube = next(s for s in stages if s.name == "Playing: the doubling cube")
@@ -95,11 +95,11 @@ def test_a_shared_excerpt_is_handed_back_once() -> None:
     failing = [
         {
             "check": "[E07] REQ-ALLINHOME-BAR — x",
-            "observed": "AssertionError: [untold] a",
+            "observed": "AssertionError: [untold] [brief] a",
         },
         {
             "check": "[G19] REQ-BEAROFF-GATE — x",
-            "observed": "AssertionError: [untold] b",
+            "observed": "AssertionError: [untold] [brief] b",
         },
     ]
     respec = ChallengeRunner._respec_for(failing, [], None, stages)
@@ -113,7 +113,7 @@ def test_an_untold_step_waiting_on_a_failed_check_hands_nothing_back() -> None:
     stages = load_stages(CHECKS)
     stuck = {
         "check": "[F24] REQ-TURN — stuck turn state",
-        "observed": "Error: [untold] [needs: G06] a stuck turn's state did not say turnOver",
+        "observed": "Error: [untold] [brief] [needs: G06] a stuck turn's state did not say turnOver",
     }
     bar = {
         "check": "[G06] REQ-BAR — bar re-entry + blocked pass",
@@ -121,3 +121,63 @@ def test_an_untold_step_waiting_on_a_failed_check_hands_nothing_back() -> None:
     }
     assert ChallengeRunner._respec_for([stuck, bar], [bar], None, stages) == []
     assert ChallengeRunner._respec_for([stuck], [], None, stages)
+
+
+def test_a_finding_its_excerpt_does_not_explain_hands_nothing_back() -> None:
+    # Run 1795104147: G08 caught a 5 bearing off the 3 while a piece sat on 5;
+    # its allInHome assertion had passed, and the model was told "the engine's
+    # all-home check still isn't following the build brief". In the corpus the
+    # scoring excerpt came back for a debug endpoint that refused the position.
+    stages = load_stages(CHECKS)
+    overshoot = {
+        "check": "[G08] REQ-BEAROFF — bear-off incl overshoot",
+        "observed": "AssertionError: expected [ '3-25-5', '5-25-5' ] to not include '3-25-5'",
+    }
+    refused = {
+        "check": "[G10] REQ-WINCLASS — x",
+        "observed": "Error: SETUP REFUSED: /api/debug/state did not take points",
+    }
+    assert (
+        ChallengeRunner._respec_for(
+            [overshoot, refused], [overshoot, refused], None, stages
+        )
+        == []
+    )
+    home = {
+        "check": "[G08] REQ-BEAROFF — bear-off incl overshoot",
+        "observed": "AssertionError: [untold] [brief] the engine says not every piece is home when every one is",
+    }
+    respec = ChallengeRunner._respec_for([home], [], None, stages)
+    assert len(respec) == 1 and "allInHome" in respec[0]
+
+
+_BRIEF_LINE = re.compile(r"\[brief\]")
+
+
+def _brief_gates() -> set[str]:
+    """Every gate with a `[brief]` assertion in its test body."""
+    gates: set[str] = set()
+    for path in [*GRADER.glob("backend/**/*.ts"), *GRADER.glob("frontend/*.ts")]:
+        owner = None
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if match := _UNTOLD_GATE.search(line):
+                owner = match.group(1)
+            code = line.split("//", 1)[0]
+            if owner and _BRIEF_LINE.search(code):
+                gates.add(owner)
+    return gates
+
+
+def test_every_excerpt_has_an_assertion_it_explains_and_no_other() -> None:
+    # An excerpt with no [brief] assertion is never handed back; a [brief]
+    # assertion with no excerpt marks nothing.
+    excerpts = {p.stem for p in (PROMPTS / "respec").glob("*.md")}
+    assert _brief_gates() == excerpts
+
+
+def test_the_brief_marker_never_reaches_a_told_line() -> None:
+    line = ChallengeRunner._fill_measured(
+        "Their checks: {measured}.",
+        "AssertionError: [brief] [aspect: offered] after the player rolled, canDouble is true: expected true to be false",
+    )
+    assert line == "Their checks: after the player rolled, canDouble is true."

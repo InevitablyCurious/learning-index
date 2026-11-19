@@ -199,9 +199,9 @@ describe("Backgammon backend gates 14-30 (the computer's engine)", () => {
         } catch (err) {
           threw = (err as Error).message;
         }
-        expect(threw, `[aspect: throws] chooseMoves threw at ${difficulty} with no legal move: ${threw}`).toBeNull();
-        expect(result?.moves ?? null, `[aspect: moves] chooseMoves returned moves at ${difficulty} with no legal move`).toEqual([]);
-        expect(JSON.stringify(result?.board), `[aspect: moves] chooseMoves changed the board at ${difficulty} with no legal move`).toBe(before);
+        expect(threw, `[brief] [aspect: throws] chooseMoves threw at ${difficulty} with no legal move: ${threw}`).toBeNull();
+        expect(result?.moves ?? null, `[brief] [aspect: moves] chooseMoves returned moves at ${difficulty} with no legal move`).toEqual([]);
+        expect(JSON.stringify(result?.board), `[brief] [aspect: moves] chooseMoves changed the board at ${difficulty} with no legal move`).toBe(before);
       }
     });
 

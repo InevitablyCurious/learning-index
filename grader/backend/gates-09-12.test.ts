@@ -51,7 +51,7 @@ describe("[G09] REQ-BEAROFF-GATE — bear-off blocked while a checker is outside
     // offers (below) are what they meet (run 1794518885: allInHome ignored the
     // bar, the move list did not, and the player was told the game let them
     // bear off). Scored, never told.
-    expect(game.allInHome(board, "white"), "[untold] the engine says every piece is home while one is outside").toBe(false);
+    expect(game.allInHome(board, "white"), "[untold] [brief] the engine says every piece is home while one is outside").toBe(false);
 
     const moves = game.singleMoves(board, "white", 3);
     expect(moves.every((m: { to: number }) => m.to !== 25)).toBe(true);
@@ -62,7 +62,7 @@ describe("[G09] REQ-BEAROFF-GATE — bear-off blocked while a checker is outside
     points[2] = 1;
     const board = bd(points, { white: 1, black: 0 });
 
-    expect(game.allInHome(board, "white"), "[untold] the engine says every piece is home while one is on the bar").toBe(false);
+    expect(game.allInHome(board, "white"), "[untold] [brief] the engine says every piece is home while one is on the bar").toBe(false);
 
     const moves = game.singleMoves(board, "white", 2);
     expect(moves.every((m: { to: number }) => m.to !== 25)).toBe(true);
@@ -75,7 +75,7 @@ describe("[G10] REQ-WINCLASS — win / gammon / backgammon classification", () =
     points[13] = -1;
     const board = bd(points, { white: 0, black: 0 }, { white: 15, black: 2 });
 
-    expect(game.checkWin(board, "white"), "[aspect: single]").toEqual({ won: true, type: "single" });
+    expect(game.checkWin(board, "white"), "[brief] [aspect: single]").toEqual({ won: true, type: "single" });
   });
 
   it("[G10] REQ-WINCLASS — classifies gammon when loser has no off, no bar, and none in winner home", () => {
@@ -83,7 +83,7 @@ describe("[G10] REQ-WINCLASS — win / gammon / backgammon classification", () =
     points[13] = -3;
     const board = bd(points, { white: 0, black: 0 }, { white: 15, black: 0 });
 
-    expect(game.checkWin(board, "white"), "[aspect: gammon]").toEqual({ won: true, type: "gammon" });
+    expect(game.checkWin(board, "white"), "[brief] [aspect: gammon]").toEqual({ won: true, type: "gammon" });
   });
 
   it("[G10] REQ-WINCLASS — classifies backgammon when loser checker is in winner home board", () => {
@@ -91,7 +91,7 @@ describe("[G10] REQ-WINCLASS — win / gammon / backgammon classification", () =
     points[3] = -1;
     const board = bd(points, { white: 0, black: 0 }, { white: 15, black: 0 });
 
-    expect(game.checkWin(board, "white"), "[aspect: backgammon]").toEqual({ won: true, type: "backgammon" });
+    expect(game.checkWin(board, "white"), "[brief] [aspect: backgammon]").toEqual({ won: true, type: "backgammon" });
   });
 
   it("[G10] REQ-WINCLASS — classifies backgammon when loser still has a checker on the bar", () => {
@@ -99,7 +99,7 @@ describe("[G10] REQ-WINCLASS — win / gammon / backgammon classification", () =
     points[13] = -1;
     const board = bd(points, { white: 0, black: 1 }, { white: 15, black: 0 });
 
-    expect(game.checkWin(board, "white"), "[aspect: backgammon]").toEqual({ won: true, type: "backgammon" });
+    expect(game.checkWin(board, "white"), "[brief] [aspect: backgammon]").toEqual({ won: true, type: "backgammon" });
   });
 
   it("[G10] REQ-WINCLASS — reports not-won when off count is below 15", () => {
@@ -107,7 +107,7 @@ describe("[G10] REQ-WINCLASS — win / gammon / backgammon classification", () =
     points[1] = 1;
     const board = bd(points, { white: 0, black: 0 }, { white: 14, black: 0 });
 
-    expect(game.checkWin(board, "white").won, "[aspect: early]").toBe(false);
+    expect(game.checkWin(board, "white").won, "[brief] [aspect: early]").toBe(false);
   });
 });
 
@@ -142,7 +142,7 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
       played = await api("/api/ai", {});
     }
     expect(played.turn, "[needs: G31 F88] the computer's opening turn never came back").toBe("white");
-    expect(played.canDouble, "on the player's first turn after the computer's opening, no double").toBe(true);
+    expect(played.canDouble, "[brief] on the player's first turn after the computer's opening, no double").toBe(true);
   });
 
   // A turn set up through the debug route plays like the same turn in a game:
@@ -162,7 +162,7 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
         points: game.startingPoints(),
       }),
     );
-    expect((await getState()).canDouble, "[needs: G11]").toBe(true);
+    expect((await getState()).canDouble, "[brief] [needs: G11]").toBe(true);
   });
 
   it("[G26] REQ-CUBE-STATE — a new game starts with a centered cube", async () => {
@@ -214,13 +214,13 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
 
     const before = await getState();
     expect(before.phase, "[needs: G13]").toBe("move");
-    expect(before.canDouble, "[aspect: offered] after the player rolled, your app's state still says canDouble is true").toBe(false);
+    expect(before.canDouble, "[brief] [aspect: offered] after the player rolled, your app's state still says canDouble is true").toBe(false);
 
     // Refused with an error status or ignored — either way the cube stays.
     await api("/api/double").catch(() => undefined);
     const after = await getState();
 
-    expect(after.cube).toEqual(before.cube);
+    expect(after.cube, "[brief]").toEqual(before.cube);
   });
 });
 
@@ -256,14 +256,14 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     // The test position's pips, read through the engine: a wrong count is the engine's pip count, told
     // as that, never as a doubling decision (run 1795034166: {myPip: 0} for a 350-pip position).
     expect({ myPip, oppPip }, `[aspect: pips] [needs: G02] your engine counts their test position as ${myPip} pips for the computer and ${oppPip} for the player, not 30 and 30`).toEqual({ myPip: 30, oppPip: 30 });
-    expect(wp).toBe(0.5);
-    expect(withinParityBand(ai.winProbability(board, "black"))).toBe(true);
-    expect(wp).toBeGreaterThanOrEqual(TAKE_POINT.easy);
-    expect(wp).toBeGreaterThanOrEqual(TAKE_POINT.medium);
-    expect(wp).toBeGreaterThanOrEqual(TAKE_POINT.hard);
-    expect(takeAnswer(board, "easy")).toBe("double");
-    expect(takeAnswer(board, "medium")).toBe("double");
-    expect(takeAnswer(board, "hard")).toBe("double");
+    expect(wp, "[brief]").toBe(0.5);
+    expect(withinParityBand(ai.winProbability(board, "black")), "[brief]").toBe(true);
+    expect(wp, "[brief]").toBeGreaterThanOrEqual(TAKE_POINT.easy);
+    expect(wp, "[brief]").toBeGreaterThanOrEqual(TAKE_POINT.medium);
+    expect(wp, "[brief]").toBeGreaterThanOrEqual(TAKE_POINT.hard);
+    expect(takeAnswer(board, "easy"), "[brief]").toBe("double");
+    expect(takeAnswer(board, "medium"), "[brief]").toBe("double");
+    expect(takeAnswer(board, "hard"), "[brief]").toBe("double");
   });
 
   it("[G12] REQ-CUBE-AI — declines when black win chance is below hard take point", () => {
@@ -276,10 +276,10 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     const wp = refWp(myPip, oppPip);
 
     expect({ myPip, oppPip }, `[aspect: pips] [needs: G02] your engine counts their test position as ${myPip} pips for the computer and ${oppPip} for the player, not 350 and 2`).toEqual({ myPip: 350, oppPip: 2 });
-    expect(wp).toBe(0.02);
-    expect(ai.winProbability(board, "black"), "[needs: G22]").toBeLessThan(TAKE_POINT.hard);
-    expect(wp).toBeLessThan(TAKE_POINT.hard);
-    expect(takeAnswer(board, "hard")).toBe("no-double");
+    expect(wp, "[brief]").toBe(0.02);
+    expect(ai.winProbability(board, "black"), "[brief] [needs: G22]").toBeLessThan(TAKE_POINT.hard);
+    expect(wp, "[brief]").toBeLessThan(TAKE_POINT.hard);
+    expect(takeAnswer(board, "hard"), "[brief]").toBe("no-double");
   });
 
   it("[G12] REQ-CUBE-AI — offers only inside hard window, never when blocked/easy/too-good", () => {
@@ -289,7 +289,8 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     const anyBoard = bd(anyPoints, { white: 0, black: 0 }, { white: 14, black: 14 });
     expect(
       ai.shouldAiDouble(anyBoard, "black", { value: 2, owner: "white" }, "hard")
-        .action
+        .action,
+      "[brief]",
     ).toBe("no-double");
 
     const windowPoints = emptyPoints();
@@ -310,11 +311,13 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     // forcing the reference formula's decision on this ambiguous board.
     const windowWpCand = ai.winProbability(windowBoard, "black");
     expect(
-      ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "hard").action
+      ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "hard").action,
+      "[brief]",
     ).toBe(expectedOfferAction(windowWpCand, "hard", true));
     // easy never offers a double, regardless of win probability
     expect(
-      ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "easy").action
+      ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "easy").action,
+      "[brief]",
     ).toBe(expectedOfferAction(windowWpCand, "easy", true));
 
     // The same judgement across the races the offer checks play (offerRace in
@@ -342,7 +345,7 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
       const wp = ai.winProbability(race, "black");
       expect(
         ai.shouldAiDouble(race, "black", { value: 1, owner: null }, "hard").action,
-        `black 30 pips, white ${game.pipCount(race, "white")} with ${race.off.white} off, win chance ${wp}`,
+        `[brief] black 30 pips, white ${game.pipCount(race, "white")} with ${race.off.white} off, win chance ${wp}`,
       ).toBe(expectedOfferAction(wp, "hard", true));
     }
 
@@ -355,11 +358,12 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     const tooGoodWp = refWp(tooGoodMyPip, tooGoodOppPip);
 
     expect({ tooGoodMyPip, tooGoodOppPip }, `[aspect: pips] [needs: G02] your engine counts their test position as ${tooGoodMyPip} pips for the computer and ${tooGoodOppPip} for the player, not 1 and 350`).toEqual({ tooGoodMyPip: 1, tooGoodOppPip: 350 });
-    expect(tooGoodWp).toBeGreaterThan(DOUBLE_WINDOW.upper);
-    expect(ai.winProbability(tooGoodBoard, "black"), "[needs: G22]").toBeGreaterThan(DOUBLE_WINDOW.upper);
+    expect(tooGoodWp, "[brief]").toBeGreaterThan(DOUBLE_WINDOW.upper);
+    expect(ai.winProbability(tooGoodBoard, "black"), "[brief] [needs: G22]").toBeGreaterThan(DOUBLE_WINDOW.upper);
     expect(
       ai.shouldAiDouble(tooGoodBoard, "black", { value: 1, owner: null }, "hard")
-        .action
+        .action,
+      "[brief]",
     ).toBe("no-double");
   });
 
@@ -374,11 +378,11 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     points[6] = 5;
     points[19] = -5;
     const board = bd(points, { white: 0, black: 0 }, { white: 10, black: 10 });
-    expect(ai.shouldAiAccept.length, "[untold] the take function does not take (board, player, difficulty)").toBe(3);
+    expect(ai.shouldAiAccept.length, "[untold] [brief] the take function does not take (board, player, difficulty)").toBe(3);
     const words = ["double", "no-double"];
     for (const difficulty of ["easy", "medium", "hard"] as const) {
-      expect(words, "[untold] a cube answer outside double / no-double").toContain(ai.shouldAiAccept(board, "black", difficulty).action);
-      expect(words, "[untold] a cube answer outside double / no-double").toContain(
+      expect(words, "[untold] [brief] a cube answer outside double / no-double").toContain(ai.shouldAiAccept(board, "black", difficulty).action);
+      expect(words, "[untold] [brief] a cube answer outside double / no-double").toContain(
         ai.shouldAiDouble(board, "black", { value: 1, owner: null }, difficulty).action,
       );
     }

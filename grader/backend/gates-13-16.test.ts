@@ -163,7 +163,8 @@ describe("Backgammon backend gates 13-16", () => {
       // refused, and "the computer never takes its turn" was told before the
       // computer was ever reached). Playing the player's roll is this check's
       // SETUP: when it fails the computer was never judged — scored, never
-      // told (respec/G25.md hands back the brief).
+      // told, and no brief handed back: G25's excerpt is the computer's turn,
+      // never the player's roll (stages.py is_brief).
       const refused = "[untold] [needs: F25] the game refused every move it listed";
       const playedOut = (s: any): boolean => Boolean(s.turnOver) || (s.remainingDice ?? []).length === 0;
       let moveSteps = 0;
@@ -211,7 +212,7 @@ describe("Backgammon backend gates 13-16", () => {
       }
 
       expect(state.turn).toBe("white");
-      expect(blackOf(state), "[aspect: skipped] the roll came back to white and black never moved").not.toBe(blackBefore);
+      expect(blackOf(state), "[brief] [aspect: skipped] the roll came back to white and black never moved").not.toBe(blackBefore);
     });
 
     it("[G13] REQ-TURN — auto-pass when stuck on bar", async () => {
@@ -248,7 +249,7 @@ describe("Backgammon backend gates 13-16", () => {
       // page passes the turn on its own, F48): scored, never told — run
       // 1794516809 was told "a die gets used twice, the turn doesn't come back"
       // for a missing turnOver alone.
-      const entry = "[untold] [needs: G06]";
+      const entry = "[untold] [brief] [needs: G06]";
       const notice = "[needs: F05]";
       expect(state.turnOver, entry).toBe(true);
       expect(Array.isArray(state.legalMoves), entry).toBe(true);

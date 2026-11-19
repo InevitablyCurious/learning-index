@@ -95,6 +95,22 @@ def is_untold(problem: dict[str, Any]) -> bool:
     return _UNTOLD in finding_message(problem.get("observed", ""))
 
 
+# A BRIEF EXCERPT IS HANDED BACK ONLY FOR WHAT IT EXPLAINS (2026-11-19). An
+# excerpt (`prompts/respec/<gate>.md`) says "<this part> still isn't following
+# the build brief"; that is true only when the failing assertion judges that
+# part. Handed back for any finding of its gate, it was false: run 1795104147's
+# G08 caught a 5 bearing off the 3 while a piece sat on 5, its allInHome
+# assertion had PASSED, and the model was told "the engine's all-home check
+# still isn't following the build brief"; across the 264-build corpus the
+# scoring excerpt came back for "your debug endpoint refused the position".
+# An assertion that judges its gate's excerpt says so: `[brief]`.
+_BRIEF = "[brief]"
+
+
+def is_brief(problem: dict[str, Any]) -> bool:
+    return _BRIEF in finding_message(problem.get("observed", ""))
+
+
 # A CHECK THAT DIDN'T FINISH IS NOT A FINDING (Jerry, 2026-11-17 audit, class 3).
 # A test that ran out of time — Playwright's "Test timeout of …ms exceeded",
 # vitest's own timer ("Test timed out in …", or its STACK_TRACE_ERROR when the

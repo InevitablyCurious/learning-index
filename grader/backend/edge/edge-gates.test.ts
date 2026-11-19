@@ -198,7 +198,7 @@ describe("Backgammon edge gates", () => {
     // lets a player bear off while still on the bar.
     const b = emptyBoard();
     b.points[3] = 1;
-    expect(game.allInHome(b, "white"), "[untold] the engine says not every piece is home when every one is").toBe(true);
+    expect(game.allInHome(b, "white"), "[untold] [brief] the engine says not every piece is home when every one is").toBe(true);
 
     // A player meets this only if a piece on the bar can bear off, and a game
     // that makes the bar piece come in first never lets it (G06 tells the
@@ -206,7 +206,7 @@ describe("Backgammon edge gates", () => {
     // its move generator forced entry first, and the player was told "i'm able
     // to take pieces off the board": scored, never told.
     b.bar.white = 1;
-    expect(game.allInHome(b, "white"), "[untold] the engine says every piece is home while one is on the bar").toBe(false);
+    expect(game.allInHome(b, "white"), "[untold] [brief] the engine says every piece is home while one is on the bar").toBe(false);
   });
 
   // ── move generation ───────────────────────────────────────────────────────

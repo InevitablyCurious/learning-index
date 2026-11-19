@@ -53,6 +53,7 @@ from .stages import (
     Stage,
     check_id,
     finding_message,
+    is_brief,
     is_untold,
     met_failures,
     needs_unmet,
@@ -674,11 +675,13 @@ class FeedbackMixin:
         stages: list[Stage],
     ) -> list[str]:
         """The brief excerpts to hand back: a gate's, once, when one of its
-        checks is told this round, or fails untold at or before the stage
-        being told (its words are the brief's too). An untold step waiting on
-        a check that failed never had its situation, so it hands nothing back:
-        run 1794861030's pieces came in off the bar at the wrong end, so no
-        turn was stuck, and the stuck-turn brief came back as "still isn't
+        `[brief]` assertions — the ones that judge that excerpt (stages.py
+        is_brief) — is told this round, or fails untold at or before the stage
+        being told (its words are the brief's too). Any other finding of the
+        gate hands nothing back. An untold step waiting on a check that failed
+        never had its situation, so it hands nothing back either: run
+        1794861030's pieces came in off the bar at the wrong end, so no turn
+        was stuck, and the stuck-turn brief came back as "still isn't
         following" (F24, G13 `[needs: G06]`)."""
         told = {str(p.get("check", "")).strip() for p in visible}
         failed = met_failures(problems)
@@ -687,6 +690,8 @@ class FeedbackMixin:
             check = str(p.get("check", "")).strip()
             gate = check_id(check)
             if not gate or gate in gates or cls._respec_text(gate) is None:
+                continue
+            if not is_brief(p):
                 continue
             if check in told or (
                 is_untold(p)
@@ -740,7 +745,7 @@ class FeedbackMixin:
         first = str(observed or "").strip().split("\n", 1)[0]
         first = re.sub(r"^\w*Error:\s*", "", first)
         first = re.sub(
-            r"\[(?:aspect|needs):[^\]]*\]\s*|\[untold\]\s*", "", first
+            r"\[(?:aspect|needs):[^\]]*\]\s*|\[(?:untold|brief)\]\s*", "", first
         ).strip()
         first = re.split(r":\s*expected\b", first, maxsplit=1)[0].strip().rstrip(".")
         return line.replace("{measured}", first or "what their check measured")
