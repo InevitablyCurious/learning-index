@@ -2111,6 +2111,10 @@
       "first": "The computer's piece was on the bar and it rolled numbers that couldn't bring it in. The turn should have come back to me, but it didn't — the game froze and I couldn't roll.",
       "repeat": "Again the computer couldn't bring its piece in off the bar, and the game froze instead of giving me my roll."
     },
+    "F95.offhint": {
+      "first": "When I picked up a piece that could bear off, the hint to take it off wasn't on the off tray.",
+      "repeat": "Picked up a piece to bear off again, and the hint to take it off still wasn't on the off tray."
+    },
     "F95": {
       "first": "When I pick up a piece to bear it off, clicking the off tray doesn't take it off — I have to click its hint. I expect the piece to come off when I click anywhere for it to go, such as the off tray itself (the rectangle that holds the borne-off pieces) or its hint.",
       "repeat": "Clicking the off tray still doesn't bear my piece off — only its hint does."

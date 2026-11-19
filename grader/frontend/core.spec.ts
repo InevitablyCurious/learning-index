@@ -2082,6 +2082,31 @@ test("[F95] REQ-BEAROFF — clicking the off tray bears the picked piece off", a
   await playerClickUntilShown(piece.last(), hints);
   await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 F60 G08 E03]").toBeGreaterThan(0);
 
+  // Where the "off" hint is drawn: on the off tray, where the piece goes and
+  // where a click anywhere bears it off (chunk-04-l3: "clicking any[where] in
+  // the off tray bears it off, the same as its 'off' hint"). Judged from
+  // 2026-11-19 (Jerry left where it belongs to judgement; the reference draws
+  // it in the tray), as F75 and F10 judge where a move's hint sits. No "off"
+  // hint at all is the hint checks' finding, not this one.
+  const offHintOnTray = await page.evaluate(() => {
+    const trays = ['[data-testid="off-tray"]', '[data-testid="off-you"]']
+      .map((sel) => document.querySelector(sel)?.getBoundingClientRect())
+      .filter((r): r is DOMRect => !!r && r.width >= 2 && r.height >= 2);
+    const off = [...document.querySelectorAll<HTMLElement>('[data-testid="hint"]')].filter(
+      (el) => el.checkVisibility() && /\boff\b/i.test(el.innerText),
+    );
+    if (trays.length === 0 || off.length === 0) return null;
+    return off.every((el) => {
+      const r = el.getBoundingClientRect();
+      const x = r.left + r.width / 2;
+      const y = r.top + r.height / 2;
+      return trays.some((t) => x >= t.left - 4 && x <= t.right + 4 && y >= t.top - 4 && y <= t.bottom + 4);
+    });
+  });
+  if (offHintOnTray !== null) {
+    expect(offHintOnTray, "[aspect: offhint] [needs: REQ-HINT/hint F03] the bear-off hint is drawn off the off tray").toBe(true);
+  }
+
   // A spot in the tray clear of every hint, the player's end first.
   const spot = await page.evaluate(() => {
     const tray = document.querySelector('[data-testid="off-tray"]')?.getBoundingClientRect();
