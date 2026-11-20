@@ -1457,6 +1457,25 @@ test("[G05] REQ-HIGHER-DIE — use higher die", async ({ page }) => {
   expect(smaller === undefined, "[aspect: offered] the game showed a hint for the smaller number").toBe(true);
 });
 
+test("[G05] REQ-HIGHER-DIE — the server lists only the bigger number when one can be played", async ({ page }) => {
+  // The same spot as the screen check above, read from the server. When the
+  // page plays the smaller number, the fault is usually the server's move list,
+  // and the team says so at the same stage (Jerry, 2026-11-19: a server fault
+  // is told by the team too). Run 1795167020's model put a filter on its page,
+  // broke the hints for an ordinary roll, took it out, and played the 3 again —
+  // its server listed 13→10 all along.
+  await openApp(page);
+  const points = emptyPoints();
+  points[13] = 1;
+  points[6] = -3;
+  const rolled = await seedRolled(page, { points, bar: { white: 0, black: 0 }, off: { white: 14, black: 12 }, message: "" }, [3, 4]);
+  const smaller = ((rolled?.legalMoves ?? []) as { from: number; to: number; die: number }[]).filter((m) => m.die === 3);
+  expect(
+    smaller.map((m) => `${m.from}→${m.to}`),
+    `[aspect: listed] with a 4 and a 3 where only one number can be played, your server's legalMoves list the 3's move ${smaller.map((m) => `${m.from}→${m.to}`).join(", ")}`,
+  ).toEqual([]);
+});
+
 test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ page }) => {
   // Every hint a player meets after picking up a piece is a move of THAT piece.
   // Jerry, run 1792221909 round 2: "i click on piece on top right. it shows hints
@@ -3009,9 +3028,9 @@ test("[F55] REQ-RELOAD — the computer finishes its turn after a reload", async
   const handedOver = page.waitForResponse(
     (r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/api/endturn",
     { timeout: 10_000 },
-  );
+  ).catch(() => undefined); // a check that fails before End Turn leaves no stray error behind
   await press(endTurn, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
-  await handedOver.catch(() => undefined);
+  await handedOver;
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
 

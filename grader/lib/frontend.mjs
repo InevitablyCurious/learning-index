@@ -28,6 +28,10 @@ import {
 // second error is no finding.
 const DID_NOT_FINISH = /Test timeout of \d+ms exceeded|Test timed out in \d+|STACK_TRACE_ERROR/;
 
+// An error's own message: what comes before the first blank line, stack line or code-frame line (the harness's
+// finding_message, stages.py).
+const ownMessage = (m) => stripAnsi(m).split(/\n\s*\n|\n\s+at\s|\n\s*>?\s*\d+\s*\|/)[0];
+
 export function frontendFailureMessages(spec) {
   for (const testEntry of spec.tests || []) {
     for (const result of testEntry.results || []) {
@@ -50,7 +54,11 @@ export function frontendFailureMessages(spec) {
       if (all.length === 0) add(result.error?.message);
       if (all.length === 0) return [`status=${result.status || "unknown"}`];
       if (all.some((m) => DID_NOT_FINISH.test(m))) return [all[0]];
-      return [all[0], ...all.slice(1).filter((m) => m.includes("[aspect:"))];
+      // A further finding is deliberate only when its OWN message names an aspect — never the runner's code
+      // frame around it: run 1795167020's F55 ended on its End Turn guard, its pending waitForResponse then
+      // rejected "Test ended", that error's code frame showed the guard's "[aspect: noend]" line, and it was
+      // told as F55's "the game stalls after a reload" about a turn that never reached the computer.
+      return [all[0], ...all.slice(1).filter((m) => ownMessage(m).includes("[aspect:"))];
     }
   }
   return [];
