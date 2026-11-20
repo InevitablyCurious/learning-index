@@ -335,12 +335,15 @@ describe("Backgammon backend server-path integrity", () => {
 
   // The debug route takes turnOver and gamesPlayed like any other state field.
   it("[G28] REQ-DEBUG-STATE — the debug route honours turnOver and gamesPlayed", async () => {
+    // Each field its own line: the check stops at the first that fails, and one
+    // line for both told run 1795130836 "both are ignored" of a build that kept
+    // gamesPlayed and recomputed only turnOver.
     const res = await api("/api/debug/state", { turnOver: true, gamesPlayed: 5 });
-    expect(res.turnOver).toBe(true);
-    expect(res.gamesPlayed).toBe(5);
+    expect(res.turnOver, "[aspect: turnover]").toBe(true);
+    expect(res.gamesPlayed, "[aspect: games]").toBe(5);
     const state = await getState();
-    expect(state.turnOver).toBe(true);
-    expect(state.gamesPlayed).toBe(5);
+    expect(state.turnOver, "[aspect: turnover]").toBe(true);
+    expect(state.gamesPlayed, "[aspect: games]").toBe(5);
   });
 
   // Deep links must not 404: every non-/api path serves the page.
