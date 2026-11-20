@@ -346,13 +346,23 @@ export async function readBoardParts(page: Page): Promise<BoardParts> {
   });
 }
 
-/** The drawn board's box: its points and bar, and the off tray when trayOnBoard holds it on the board. */
+/**
+ * The drawn board's box: its points and bar, and the off tray when trayOnBoard holds it on the board.
+ * A board whose 24 points are not all drawn has no drawn extent to measure, so its own element's box —
+ * the area a player sees as the board — is part of it. Run 1795196230 (a1) drew a board-coloured
+ * rectangle from x=10 with no triangle and no bar: the box shrank to the off tray at x=950, and the
+ * player-facing stages were told "the board starts at x=950", "0.09 times as wide as it is tall" and
+ * "5% of the width" of a board in its place. The missing triangles are the drawing's own finding.
+ */
 export function drawnBoardBox(parts: BoardParts): { x: number; y: number; w: number; h: number } | null {
   const rects: Rect[] = [
     ...parts.points,
     ...parts.bars,
     ...parts.trays.filter((t) => trayOnBoard(t, parts.frame, parts.points)),
   ];
+  if (parts.frame && parts.frame.width > 0 && parts.frame.height > 0 && new Set(parts.points.map((p) => p.num)).size < 24) {
+    rects.push(parts.frame);
+  }
   if (!rects.length) return null;
   const x0 = Math.min(...rects.map((r) => r.x));
   const x1 = Math.max(...rects.map((r) => r.x + r.width));

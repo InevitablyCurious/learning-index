@@ -1003,6 +1003,10 @@
       "first": "The bar doesn't run the full height of the board.",
       "repeat": "The bar still doesn't run the full height of the board."
     },
+    "F29.undrawn": {
+      "first": "I can't see a bar down the middle of the board — I expect a bar splitting the board into two halves.",
+      "repeat": "There's still no bar down the middle of the board."
+    },
     "F30": {
       "first": "The triangles point outward, away from the middle of the board — I expect each triangle's wide end at the edge and its tip pointing toward the middle.",
       "repeat": "Looked at the triangles again and they still point outward, away from the middle — I expect each triangle's wide end at the edge and its tip pointing toward the middle."

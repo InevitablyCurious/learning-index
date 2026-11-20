@@ -86,8 +86,12 @@ test("[F29] REQ-GEOMETRY — bar between the halves", async ({ page }) => {
   await openFreshBoard(page);
 
   const bar = await readBarBox(page);
-  // No bar at all is the bar render check's complaint.
-  expect(bar, '[needs: REQ-RENDER/bar] expected a [data-testid="bar"] element on the board, found none').not.toBeNull();
+  // No bar element at all is the bar render check's complaint (it counts the
+  // tagged elements). One that is there but drawn with no size is this check's:
+  // run 1795196230 (a1) had a zero-size bar, the render check passed, and the
+  // player was told "the bar sits out at the edge of the board" of a board with
+  // no bar on it.
+  expect(bar, "[aspect: undrawn] [needs: REQ-RENDER/bar] a bar element is on the page but no bar is drawn on the board").not.toBeNull();
 
   const points = await readPointBoxes(page);
   const LEFT_HALF = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
@@ -895,27 +899,34 @@ test("[F79] REQ-GEOMETRY — every point is the same size", async ({ page }) => 
   await openFreshBoard(page);
   const points = await readPointBoxes(page);
   expect(points.length, "[needs: REQ-RENDER/point]").toBe(24);
-  const widths = points.map((p) => p.width);
-  const lengths = points.map((p) => p.height);
-  const spread = (xs: number[]) => Math.max(...xs) / Math.min(...xs);
-  const widest = points.reduce((a, b) => (b.width > a.width ? b : a));
-  const narrowest = points.reduce((a, b) => (b.width < a.width ? b : a));
+  // Sizes are compared among the points drawn with one: a point collapsed to
+  // nothing is the triangle check's complaint (F30 undrawn), not a size that
+  // differs. Run 1795196230 (a1) drew every point 0 px long and was told
+  // "point 13 is 0 px long and point 13 0 px" — 0/0 compared as uneven.
+  const compare = (size: (p: (typeof points)[number]) => number) => {
+    const drawn = points.filter((p) => size(p) > 1);
+    if (drawn.length < 2) return { even: true, big: null, small: null };
+    const big = drawn.reduce((a, b) => (size(b) > size(a) ? b : a));
+    const small = drawn.reduce((a, b) => (size(b) < size(a) ? b : a));
+    return { even: size(big) / size(small) <= EVEN, big, small };
+  };
+  const wide = compare((p) => p.width);
   expect(
-    spread(widths) <= EVEN,
-    `[aspect: width] [needs: F28 F40] point ${widest.num} is ${widest.width.toFixed(0)} px wide and point ${narrowest.num} ${narrowest.width.toFixed(0)} px`,
+    wide.even,
+    `[aspect: width] [needs: F28 F40] point ${wide.big?.num} is ${wide.big?.width.toFixed(0)} px wide and point ${wide.small?.num} ${wide.small?.width.toFixed(0)} px`,
   ).toBeTruthy();
-  const longest = points.reduce((a, b) => (b.height > a.height ? b : a));
-  const shortest = points.reduce((a, b) => (b.height < a.height ? b : a));
+  const long = compare((p) => p.height);
   expect(
-    spread(lengths) <= EVEN,
-    `[aspect: length] [needs: F28 F40] point ${longest.num} is ${longest.height.toFixed(0)} px long and point ${shortest.num} ${shortest.height.toFixed(0)} px`,
+    long.even,
+    `[aspect: length] [needs: F28 F40] point ${long.big?.num} is ${long.big?.height.toFixed(0)} px long and point ${long.small?.num} ${long.small?.height.toFixed(0)} px`,
   ).toBeTruthy();
 });
 
 test("[F80] REQ-GEOMETRY — the bar is in the middle", async ({ page }) => {
   await openFreshBoard(page);
   const bar = await readBarBox(page);
-  expect(bar, "[needs: REQ-RENDER/bar]").not.toBeNull();
+  // A bar not drawn at all is F29's (undrawn), at this same stage.
+  expect(bar, "[needs: REQ-RENDER/bar F29]").not.toBeNull();
   const points = await readPointBoxes(page);
   expect(points.length, "[needs: REQ-RENDER/point]").toBe(24);
   // Points that stop short of the bar leave empty board beside it: the bar sits
