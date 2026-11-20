@@ -1717,6 +1717,19 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
     )
     .toBeGreaterThan(0);
 
+  // The turn is not over while moves are left to play. Run 1795164653's server
+  // said turnOver right after this roll (6-5, four moves listed); the play-out
+  // below stopped where the server said, played nothing, and the player was told
+  // "the Undo button is greyed out for the full duration of the turn" of a turn
+  // with no move in it — its Undo worked once a move was made (played by hand).
+  // The team says what the server said, at this stage (Jerry, 2026-11-19: a
+  // server fault is told by the team too).
+  const rolled = await readState(page);
+  expect(
+    rolled.turnOver,
+    `[aspect: overearly] [needs: F03 F25 F45] right after a ${rolled.remainingDice.join("-")} roll with ${rolled.legalMoves.length} moves to play, your server's state already says turnOver is true`,
+  ).toBe(false);
+
   // Play the plies the way a player does — pick up a movable checker, click a
   // hint — until the dice are used up (or the server says the turn is over): a
   // player stops when there is nothing left to play, not on a flag. Run
@@ -1727,7 +1740,9 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   // so it is scored and never told, and hands no brief back: F47's excerpt is
   // how the turn ends, not how a roll is played (stages.py is_brief).
   const hints = page.getByTestId("hint");
-  const playedOut = (s: ApiState): boolean => s.turnOver || s.remainingDice.length === 0;
+  // Played out when nothing is left to play — no die, or no move listed — as a
+  // player stops; a turnOver flag with moves still listed does not stop a player.
+  const playedOut = (s: ApiState): boolean => s.remainingDice.length === 0 || s.legalMoves.length === 0;
   // Whether Undo was live after each move of the first play-out: greyed out
   // the whole turn and greyed out only once the turn waits are different
   // faults, told apart below (Jerry, 2026-11-20).
@@ -1784,7 +1799,7 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
       () => true,
       () => false,
     );
-  if (!undoLive) {
+  if (!undoLive && undoAfterMove.length > 0) {
     expect(
       undoAfterMove.some(Boolean),
       "[brief] [aspect: undonever] [needs: G23 F45] the Undo button was greyed out after every move of the turn and while it waited",
