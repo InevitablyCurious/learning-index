@@ -1743,10 +1743,12 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   // with no move in it — its Undo worked once a move was made (played by hand).
   // The team says what the server said, at this stage (Jerry, 2026-11-19: a
   // server fault is told by the team too).
+  // One rule, both halves told by one line (the late half is below): turnOver is
+  // false while a move is left to play and true once none is.
   const rolled = await readState(page);
   expect(
     rolled.turnOver,
-    `[aspect: overearly] [needs: F03 F25 F45] right after a ${rolled.remainingDice.join("-")} roll with ${rolled.legalMoves.length} moves to play, your server's state already says turnOver is true`,
+    "[aspect: turnover] [needs: F03 F25 F45] right after the roll, with moves still to play, your server's state already says turnOver is true",
   ).toBe(false);
 
   // Play the plies the way a player does — pick up a movable checker, click a
@@ -1805,6 +1807,21 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   const held = await readState(page);
   expect(held.turn, "[brief] [needs: F45] the turn ended by itself before End Turn was clicked").toBe("white");
   expect(held.phase, "[brief] [needs: F45] the turn left the move phase by itself").toBe("move");
+
+  // The other half of the turnOver rule: once nothing is left to play, the turn
+  // waits with turnOver true. That is the state every later check LOADS for a
+  // finished turn instead of playing to it (F55, F62, F77, F94, the cube's
+  // checks), and each of their End Turn steps [needs: F47] — so this is where a
+  // build proves its own play reaches that state. Run 1795174621's server kept
+  // turnOver false with every die used, and its page ended the turn whenever
+  // turnOver was true: in play the two cancelled and End Turn worked, but the
+  // loaded state stuck, and the player was told "End Turn couldn't be pressed"
+  // and "the computer's turn never went through" of a build a player could play.
+  // After the held checks, so a turn that ends by itself is told as that.
+  expect(
+    held.turnOver,
+    "[aspect: turnover] [needs: F03 F25 F45] after the last move is played, with nothing left to play, your server's state still says turnOver is false",
+  ).toBe(true);
 
   // Undo still works while the turn waits: the button is live and clicking it
   // gives a die back. Greyed out after every move and while the turn waits is

@@ -1775,9 +1775,9 @@
       "first": "Undo is not working. When I roll and play my moves, the Undo button is physically greyed out for the full duration of the turn. I cannot ever undo my turns.",
       "repeat": "Undo still isn't working — the button stays greyed out the whole turn, and I can never undo a move."
     },
-    "F47.overearly": {
-      "first": "Their checks of your server: {measured}. The brief has turnOver say the turn is over only when no move is left to play.",
-      "repeat": "Their checks again: {measured} — the turn still reads as over while moves are left to play."
+    "F47.turnover": {
+      "first": "Their checks of your server: {measured}. The rule for turnOver: false while the player still has a move to play — straight after the roll and between moves — and true once none is left, whether every die is used or the rest can't move. End Turn ends the turn only then.",
+      "repeat": "Their checks again: {measured}. The rule again: turnOver is false while a move is left to play, and true once none is."
     },
     "F47.undoclick": {
       "first": "I clicked Undo while my turn waited for End Turn, and my last move wasn't taken back.",
