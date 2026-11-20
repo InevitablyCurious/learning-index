@@ -348,8 +348,8 @@
       "repeat": "The move hints still aren't the size of a piece."
     },
     "F75.backwards": {
-      "first": "Their checks of the page: {measured}. A hint is drawn over the point its move goes to, ahead of the piece in the direction it travels.",
-      "repeat": "Their checks again: {measured} — the hints are still drawn over points the pieces have already passed, not over the points their moves go to."
+      "first": "When I pick up a piece, its hints go the wrong way round — clockwise, when my pieces move anticlockwise.",
+      "repeat": "Picked up a piece again, and its hints still go clockwise, the opposite way to how my pieces move."
     },
     "F75.astray": {
       "first": "When I pick up a piece, some hints sit on points it can't move to.",
