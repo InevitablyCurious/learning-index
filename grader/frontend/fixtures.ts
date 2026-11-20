@@ -145,6 +145,12 @@ export async function setupState(page: Page, body: Record<string, any>): Promise
  * judge; an answer with no dice, or none at all, can't be checked and isn't.
  */
 export async function rollAndCheck(page: Page, dice: number[], click: () => Promise<unknown>): Promise<any> {
+  // Where the computer's checkers stood before the press: a computer that moves
+  // inside the roll's own call answers with its own dice (lib/harness.ts assertRollTook).
+  const before = await page.request
+    .post("/api/state", { data: {} })
+    .then((r) => r.json())
+    .catch(() => null);
   const answered = page
     .waitForResponse((r) => r.request().method() === "POST" && new URL(r.url()).pathname === "/api/roll", {
       timeout: 15_000,
@@ -177,7 +183,7 @@ export async function rollAndCheck(page: Page, dice: number[], click: () => Prom
     throw new Error(`${ROLL_DEAD} [needs: F89]: ${pressed ? "pressing Roll made no roll" : "Roll could not be pressed"}`);
   }
   const body = await response.json().catch(() => null);
-  assertRollTook(dice, body);
+  assertRollTook(dice, body, before);
   return body;
 }
 
@@ -195,11 +201,15 @@ export async function rollAndCheck(page: Page, dice: number[], click: () => Prom
 export async function seedRolled(page: Page, body: Record<string, any>, dice: number[]): Promise<any> {
   await setupState(page, { ...body, turn: "white", phase: "roll", dice: [], remainingDice: [] });
   await page.request.post("/api/debug/roll", { data: { dice } });
+  const before = await page.request
+    .post("/api/state", { data: {} })
+    .then((r) => r.json())
+    .catch(() => null);
   const rolled = await page.request
     .post("/api/roll", { data: {} })
     .then((r) => r.json())
     .catch(() => null);
-  assertRollTook(dice, rolled);
+  assertRollTook(dice, rolled, before);
   return rolled;
 }
 

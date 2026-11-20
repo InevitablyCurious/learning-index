@@ -421,17 +421,20 @@ describe("Backgammon backend server-path integrity", () => {
       [[5, 6], [1, 1]],
     ] as const) {
       await api("/api/new", { difficulty: "easy" });
+      // Counted from before the roll: a build may play the computer's whole turn
+      // inside /api/roll and hand back (run 1795203830 a14) — counted after it,
+      // the move it made reads as none, and "first" read off the answer's turn
+      // told "the first move isn't the computer's" of a computer that had moved.
+      const pipsBefore = blackPips(await getState());
       state = await debugRollVerified([...opening]);
-      expect(state.turn, "[aspect: first]").toBe("black");
-      const pipsBefore = blackPips(state);
+      expect(state.turn === "black" || blackPips(state) !== pipsBefore, "[aspect: first]").toBe(true);
       await debugRoll([...decoy]);
       // /api/ai advances ONE AI step (chunk-03): a build may play the whole turn
       // in one call or one move per call. Step it until the turn comes back, as
       // G33 does (run 1793568361 round 5: shown dice, move 1, move 2 — 3 and 11
       // pips — and a single call was told "doesn't use the two numbers").
-      for (let guard = 0; guard < 12; guard++) {
+      for (let guard = 0; guard < 12 && state.turn === "black"; guard++) {
         state = await api("/api/ai", {});
-        if (state.turn !== "black") break;
       }
       state = await getState();
       expect(pipsBefore - blackPips(state), "[aspect: numbers]").toBe(opening[0] + opening[1]);

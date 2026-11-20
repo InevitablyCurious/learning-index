@@ -32,6 +32,23 @@ describe("assertRollTook", () => {
     expect(() => assertRollTook([1, 2], { turn: "black", phase: "move", dice: [1, 2] })).not.toThrow();
   });
 
+  it("does not refuse an answer after the computer moved inside the same call", () => {
+    // run 1795203830 (a14): queued 1-2, the computer won, re-rolled 5-2, played its
+    // whole turn and handed back inside /api/roll — the answer showed white to roll.
+    const points = new Array(26).fill(0);
+    points[1] = -2;
+    points[12] = -5;
+    const before = { points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 } };
+    const moved = [...points];
+    moved[1] = -1;
+    moved[6] = -1;
+    const after = { turn: "white", phase: "roll", dice: [5, 2], points: moved, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 } };
+    expect(() => assertRollTook([1, 2], after, before)).not.toThrow();
+    // Black where it was: other dice are still the queue ignored.
+    const still = { ...after, points };
+    expect(() => assertRollTook([1, 2], still, before)).toThrow(/SETUP REFUSED/);
+  });
+
   it("refuses dice that are not a flat list of numbers (the queued entry taken as one die)", () => {
     // run 1791304274: the page answered [[6,5],6] and every check riding on the roll
     // told the player their pieces showed no moves.

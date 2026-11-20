@@ -448,8 +448,9 @@ export async function debugRoll(dice: number[]): Promise<any> {
 export async function seedRolled(partial: Record<string, any>, dice: number[]): Promise<any> {
   await debugSetState({ ...partial, turn: "white", phase: "roll", dice: [], remainingDice: [] });
   await debugRoll(dice);
+  const before = await getState().catch(() => null);
   const rolled = await api("/api/roll", {});
-  assertRollTook(dice, rolled);
+  assertRollTook(dice, rolled, before);
   return rolled;
 }
 
@@ -469,16 +470,28 @@ function sortedNumbers(xs: unknown): number[] | null {
 // them fails with the SETUP REFUSED marker, which feedback.py tells in the team's
 // voice. Compared as sorted lists: normal rolls come back sorted, opening rolls as
 // [player, computer]; who won is the check's own question.
-export function assertRollTook(sent: number[], answer: unknown): void {
-  // An answer that shows the computer to move has handed the roll on, and a build
-  // may play the computer's turn inside that same call: its dice are then the
-  // computer's, not the roll's. They are no evidence about the queue either way,
-  // like an answer that carries none (below); what the roll should have led to is
-  // the check's own question. Run 1795181750 (a11) queued an opening of 1-2: the
-  // computer won it and rolled fresh dice inside /api/roll, and G31 and F88 told
-  // "your debug endpoint didn't take the dice" of a queue it had used — the fault,
-  // the computer not moving by its opening numbers, is G31.numbers and F88.numbers.
+/** Where black's checkers stand — points, bar, off — as one comparable string. */
+function blackCheckers(state: unknown): string | null {
+  const s = state as { points?: unknown; bar?: { black?: unknown }; off?: { black?: unknown } } | null | undefined;
+  if (!s || !Array.isArray(s.points)) return null;
+  return JSON.stringify([s.points.map((v) => (typeof v === "number" && v < 0 ? v : 0)), s.bar?.black ?? null, s.off?.black ?? null]);
+}
+
+export function assertRollTook(sent: number[], answer: unknown, before?: unknown): void {
+  // Once the computer has played any part of a turn inside the roll's own call,
+  // the answer's dice are the computer's, not the roll's: no evidence about the
+  // queue either way, like an answer that carries none (below). What the roll
+  // should have led to is the check's own question. Two ways to see it:
+  // - the answer shows the computer to move (run 1795181750 a11: it won a queued
+  //   1-2 opening and rolled fresh dice inside /api/roll);
+  // - its checkers moved since just before the roll (run 1795203830 a14: it won
+  //   the 1-2 opening, re-rolled, played its whole turn and handed back inside
+  //   the same call — the answer showed the player's turn and the computer's 5-2).
+  // Both were told "your debug endpoint didn't take the dice" of a queue the build
+  // had used; the fault is the computer's opening move (G31.numbers, F88.numbers).
   if ((answer as { turn?: unknown } | null | undefined)?.turn === "black") return;
+  const blackBefore = blackCheckers(before);
+  if (blackBefore !== null && blackBefore !== blackCheckers(answer)) return;
   const rolled = (answer as { dice?: unknown } | null | undefined)?.dice;
   const want = sortedNumbers(sent);
   const got = sortedNumbers(rolled);
@@ -510,8 +523,9 @@ export function assertRollTook(sent: number[], answer: unknown): void {
 /** Queue `dice`, roll through the API, and prove that roll used them; returns the roll's answer. */
 export async function debugRollVerified(dice: number[]): Promise<any> {
   await debugRoll(dice);
+  const before = await getState().catch(() => null);
   const state = await api("/api/roll", {});
-  assertRollTook(dice, state);
+  assertRollTook(dice, state, before);
   return state;
 }
 
