@@ -1472,7 +1472,7 @@ test("[G05] REQ-HIGHER-DIE — the server lists only the bigger number when one 
   const smaller = ((rolled?.legalMoves ?? []) as { from: number; to: number; die: number }[]).filter((m) => m.die === 3);
   expect(
     smaller.map((m) => `${m.from}→${m.to}`),
-    `[aspect: listed] with a 4 and a 3 where only one number can be played, your server's legalMoves list the 3's move ${smaller.map((m) => `${m.from}→${m.to}`).join(", ")}`,
+    `[aspect: listed] with one piece on 13 and a 4 and a 3 — either number alone can be played, but not both — your server's legalMoves list the 3's move ${smaller.map((m) => `${m.from}→${m.to}`).join(", ")}`,
   ).toEqual([]);
 });
 
