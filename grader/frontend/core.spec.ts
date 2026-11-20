@@ -1502,7 +1502,7 @@ test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ p
     !oversized,
     `[aspect: size] [needs: REQ-HINT/hint F03 F84] a hint is ${Math.round(widestSeen)} px across and a point ${Math.round(pointWidest)} px`,
   ).toBe(true);
-  expect(behind, `[aspect: backwards] [needs: REQ-HINT/hint F03 F84] hints drawn behind the picked piece: ${behind.join(", ")}`).toEqual([]);
+  expect(behind, `[aspect: backwards] [needs: REQ-HINT/hint F03 F84] hints drawn over points the picked piece has already passed (picked from → drawn over): ${behind.join(", ")}`).toEqual([]);
   expect(astray, `[aspect: astray] [needs: REQ-HINT/hint F03 F84] hints on points the picked piece can't reach: ${astray.join(", ")}`).toEqual([]);
 
 });

@@ -348,8 +348,8 @@
       "repeat": "The move hints still aren't the size of a piece."
     },
     "F75.backwards": {
-      "first": "When I pick up a piece, the hints show up behind it, as if it could move backwards.",
-      "repeat": "I picked up a piece again and the hints still show up behind it."
+      "first": "Their checks of the page: {measured}. A hint is drawn over the point its move goes to, ahead of the piece in the direction it travels.",
+      "repeat": "Their checks again: {measured} — the hints are still drawn over points the pieces have already passed, not over the points their moves go to."
     },
     "F75.astray": {
       "first": "When I pick up a piece, some hints sit on points it can't move to.",
