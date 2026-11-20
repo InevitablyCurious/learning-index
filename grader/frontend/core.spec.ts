@@ -420,7 +420,24 @@ test("[F25] REQ-HINT — a played move consumes a die", async ({ page }) => {
   // move not registering — never as a die left over from a move that never
   // happened (FIX-2 mutation M13: the hint's click did nothing).
   const boardOf = (s: ApiState) => JSON.stringify([s.points, s.bar, s.off]);
-  await expect.poll(async () => boardOf(await readState(page))).not.toBe(boardOf(before));
+  const moved = await expect
+    .poll(async () => boardOf(await readState(page)))
+    .not.toBe(boardOf(before))
+    .then(
+      () => true,
+      () => false,
+    );
+  if (!moved) {
+    // The number spent and the piece left where it was is told as that, which a
+    // player sees: run 1795158914's server applied the move to a copy of the
+    // board and still took the die, and three rounds of "the piece didn't move"
+    // sent its model to rework the page.
+    const after = await readState(page);
+    expect(after.remainingDice.length, "[aspect: spent] the hint's die was used up, but the board did not change").toBe(
+      before.remainingDice.length,
+    );
+    expect(moved, "the board did not change after the hint was clicked").toBe(true);
+  }
 
   const expectedRemaining = before.remainingDice.length - 1;
   await expect

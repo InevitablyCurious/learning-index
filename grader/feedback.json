@@ -179,6 +179,10 @@
       "first": "They play a move through your server and undo it, and the points, the bar and the borne-off counts don't all come back exactly as they were before the move.",
       "repeat": "Undo through your server still doesn't put the board back exactly."
     },
+    "G23.moved": {
+      "first": "Their checks of your server: {measured}. A legal move sent to /api/move moves the piece on the board it sends back.",
+      "repeat": "Their checks again: {measured} — the move still doesn't reach the board."
+    },
     "G23.nomove": {
       "first": "They roll through your server and it offers white no move to play.",
       "repeat": "They rolled through your server again and it still offers white no move."
@@ -1186,6 +1190,10 @@
     "F09.extra": {
       "first": "When I hit one of the computer's pieces, more than one of its pieces shows up on the bar.",
       "repeat": "Hit one of theirs again, and the bar still shows more of their pieces than I hit."
+    },
+    "F25.spent": {
+      "first": "I clicked where my piece could go: the number got used up, but my piece stayed where it was.",
+      "repeat": "Clicked where my piece could go again: the number was used up, and my piece still didn't move."
     },
     "F25.reveal": {
       "first": "I clicked a piece and the game didn't show me any hints for where it could go.",

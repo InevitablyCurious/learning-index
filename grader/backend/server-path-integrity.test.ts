@@ -133,7 +133,18 @@ describe("Backgammon backend server-path integrity", () => {
       bar: { ...before.bar },
       off: { ...before.off },
     };
-    await api("/api/move", { from: move!.from, to: move!.to, die: move!.die });
+    const afterMove = await api("/api/move", { from: move!.from, to: move!.to, die: move!.die });
+    // The move landed before it is undone. Run 1795158914's server applied a
+    // move to a copy of the board and still took its die; with nothing to take
+    // back, "undo restores the board" passed while the player's piece never
+    // moved, and only the page check (F25) said so — the server's first word on
+    // it was the hitting stage's (G07), three stages later (Jerry: "if its a
+    // server problem the problem statement belongs in both").
+    const usedDie = (afterMove.remainingDice as number[]).length < (before.remainingDice as number[]).length;
+    expect(
+      JSON.stringify([afterMove.points, afterMove.bar, afterMove.off]),
+      `[aspect: moved] a legal move ${move!.from}→${move!.to} sent to /api/move came back with the board unchanged${usedDie ? ", and its die used up" : ""}`,
+    ).not.toBe(JSON.stringify([beforeBoard.points, beforeBoard.bar, beforeBoard.off]));
     const afterUndo = await api("/api/undo", {});
     expect(afterUndo.points).toEqual(beforeBoard.points);
     expect(afterUndo.bar).toEqual(beforeBoard.bar);
