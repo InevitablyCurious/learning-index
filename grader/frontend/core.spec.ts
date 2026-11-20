@@ -1478,9 +1478,17 @@ test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ p
     const points = await readPointBoxes(page);
     const under = (h: { x: number; y: number }) =>
       points.find((pt) => h.x >= pt.x && h.x <= pt.x + pt.width && h.y >= pt.y && h.y <= pt.y + pt.height)?.num ?? null;
+    // Where each backward hint sits AND where the piece's moves go: run
+    // 1795152917's model read "13→17" alone as a move and reasoned in circles
+    // for two rounds; the destinations make the misplacement plain.
+    const over: number[] = [];
     for (const at of (await hintPositions(page)).map(under)) {
-      if (at !== null && at > from) behind.push(`${from}→${at}`);
+      if (at !== null && at > from) over.push(at);
       else if (at === null || !legalTo.has(at)) astray.push(`${from}→${at ?? "no point"}`);
+    }
+    if (over.length > 0) {
+      const goes = [...legalTo].map((to) => (to === 25 ? "off" : String(to)));
+      behind.push(`the piece on ${from}: drawn over ${over.join(", ")}, where its moves go to ${goes.join(", ")}`);
     }
     const widest = await page
       .locator('[data-testid="hint"]')
@@ -1502,7 +1510,7 @@ test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ p
     !oversized,
     `[aspect: size] [needs: REQ-HINT/hint F03 F84] a hint is ${Math.round(widestSeen)} px across and a point ${Math.round(pointWidest)} px`,
   ).toBe(true);
-  expect(behind, `[aspect: backwards] [needs: REQ-HINT/hint F03 F84] hints drawn over points the picked piece has already passed (picked from → drawn over): ${behind.join(", ")}`).toEqual([]);
+  expect(behind, `[aspect: backwards] [needs: REQ-HINT/hint F03 F84] hints drawn over points the picked piece has already passed — ${behind.join("; ")}`).toEqual([]);
   expect(astray, `[aspect: astray] [needs: REQ-HINT/hint F03 F84] hints on points the picked piece can't reach: ${astray.join(", ")}`).toEqual([]);
 
 });
