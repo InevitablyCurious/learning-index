@@ -65,6 +65,39 @@ def main() -> int:
         )
         return 2
 
+    try:
+        return _build_prove_promote()
+    finally:
+        _clean_up()
+
+
+def _clean_up() -> None:
+    """Leave no image behind but the one the tag points at.
+
+    The candidate tag is dropped on every path (on success it is only a second
+    name; on failure it is the whole image), and every grader image the tag has
+    moved off is deleted. Docker keeps an untagged image forever: 163 of them,
+    2.35 GB each, filled the disk on 2026-11-20 and froze the machine. The
+    prune touches only untagged images carrying the grader's label, and docker
+    itself skips any a container still uses; another rebuild's candidate is
+    tagged, so it is safe too.
+    """
+    subprocess.run(["docker", "rmi", CANDIDATE], check=False, capture_output=True)  # noqa: S603, S607
+    subprocess.run(
+        [
+            "docker",
+            "image",
+            "prune",
+            "-f",
+            "--filter",
+            "label=okp.grader.source_digest",
+        ],
+        check=False,
+        capture_output=True,
+    )
+
+
+def _build_prove_promote() -> int:
     digest = source_digest(GATES, DOCKERFILE)
     argv = build_argv(GATES, DOCKERFILE, image=CANDIDATE)
     print(f"building {CANDIDATE}")
@@ -111,7 +144,6 @@ def main() -> int:
     if code != 0:
         print(f"\ndocker tag exited {code} — {IMAGE} was NOT replaced", file=sys.stderr)
         return code
-    subprocess.run(["docker", "rmi", CANDIDATE], check=False, capture_output=True)  # noqa: S603, S607
     print(
         f"\n{IMAGE} built and proven — the reference solution passes every check — source digest {digest}"
     )
