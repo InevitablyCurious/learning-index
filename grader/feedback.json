@@ -1767,9 +1767,17 @@
       "first": "With Fast Forward running, I took the computer's double and the game froze — the computer never finished its turn.",
       "repeat": "Took the computer's double during Fast Forward again, and the game froze again."
     },
+    "F47.undonever": {
+      "first": "Undo is not working. When I roll and play my moves, the Undo button is physically greyed out for the full duration of the turn. I cannot ever undo my turns.",
+      "repeat": "Undo still isn't working — the button stays greyed out the whole turn, and I can never undo a move."
+    },
+    "F47.undoclick": {
+      "first": "I clicked Undo while my turn waited for End Turn, and my last move wasn't taken back.",
+      "repeat": "Clicked Undo again while the turn waited, and my move still wasn't taken back."
+    },
     "F47.undo": {
-      "first": "While my finished turn waits for End Turn, Undo doesn't take my last move back.",
-      "repeat": "Undo still doesn't take my last move back while my turn waits for End Turn."
+      "first": "Undo works while I'm playing my moves, but once they're all played and the turn waits for End Turn, the Undo button greys out.",
+      "repeat": "Played my moves out again, and Undo still greys out as soon as the turn waits for End Turn."
     },
     "F47.endturn": {
       "first": "When I've finished my moves, End Turn doesn't hand the turn to the computer.",

@@ -1728,7 +1728,12 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   // how the turn ends, not how a roll is played (stages.py is_brief).
   const hints = page.getByTestId("hint");
   const playedOut = (s: ApiState): boolean => s.turnOver || s.remainingDice.length === 0;
-  const playUntilTurnOver = async (told: string): Promise<void> => {
+  // Whether Undo was live after each move of the first play-out: greyed out
+  // the whole turn and greyed out only once the turn waits are different
+  // faults, told apart below (Jerry, 2026-11-20).
+  const undoBtn = page.getByTestId("undoBtn");
+  const undoAfterMove: boolean[] = [];
+  const playUntilTurnOver = async (told: string, watchUndo = false): Promise<void> => {
     for (let i = 0; i < 4; i++) {
       const s = await readState(page);
       if (playedOut(s)) return;
@@ -1748,12 +1753,15 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
           `[untold] [needs: F25 F45] ${told}: a move did not consume a die`,
         )
         .toBeLessThan(s.remainingDice.length);
+      if (watchUndo) {
+        undoAfterMove.push(await expect(undoBtn).toBeEnabled({ timeout: 1_500 }).then(() => true, () => false));
+      }
     }
     await expect
       .poll(async () => playedOut(await readState(page)), `[untold] [needs: F25 F45] ${told}: white could not finish the roll's moves`)
       .toBe(true);
   };
-  await playUntilTurnOver("playing the roll");
+  await playUntilTurnOver("playing the roll", true);
 
   // The heart of the gate: wait as long as a player takes to find the button and
   // the turn must still be white's, still in the move phase — it ends only at End
@@ -1765,13 +1773,28 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
   expect(held.phase, "[brief] [needs: F45] the turn left the move phase by itself").toBe("move");
 
   // Undo still works while the turn waits: the button is live and clicking it
-  // gives a die back.
-  const undoBtn = page.getByTestId("undoBtn");
-  await expect(undoBtn, "[brief] [aspect: undo] [needs: G23 F45] Undo was not available while the turn waited").toBeEnabled();
+  // gives a die back. Greyed out after every move and while the turn waits is
+  // told as that — Jerry, 2026-11-20, playing run 1795161793's build: "the undo
+  // button is physically greyed out for the full duration of the turn. I cannot
+  // ever undo my turns". Live after a move but greyed once the turn waits is a
+  // partial fault with its own line, so neither is told of the other.
+  const undoLive = await expect(undoBtn)
+    .toBeEnabled()
+    .then(
+      () => true,
+      () => false,
+    );
+  if (!undoLive) {
+    expect(
+      undoAfterMove.some(Boolean),
+      "[brief] [aspect: undonever] [needs: G23 F45] the Undo button was greyed out after every move of the turn and while it waited",
+    ).toBe(true);
+    expect(undoLive, "[brief] [aspect: undo] [needs: G23 F45] Undo was live after a move, but greyed out once the turn waited").toBe(true);
+  }
   const beforeUndo = (await readState(page)).remainingDice.length;
   await undoBtn.click();
   await expect
-    .poll(async () => (await readState(page)).remainingDice.length, "[aspect: undo] [needs: G23 F45] Undo did not give a die back")
+    .poll(async () => (await readState(page)).remainingDice.length, "[aspect: undoclick] [needs: G23 F45] Undo did not give a die back")
     .toBeGreaterThan(beforeUndo);
 
   // Undo cleared turnOver, so play the die back to finish the turn again — then
