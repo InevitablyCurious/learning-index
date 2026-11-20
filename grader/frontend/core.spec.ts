@@ -914,7 +914,7 @@ test("[F88] REQ-OPENING — the computer plays when it wins the opening", async 
   // player answers it, as a player would, and the turn goes on. Whether it may
   // double at all is the cube stage's finding.
   let answered = false;
-  await expect
+  const cameBack = await expect
     .poll(
       async () => {
         const state = await readState(page);
@@ -927,12 +927,24 @@ test("[F88] REQ-OPENING — the computer plays when it wins the opening", async 
         }
         return state.turn === "white" && state.phase !== "openingRoll";
       },
-      {
-        message: "[needs: F89] after three ties and a 3-5 opening the computer's first turn never ended — the turn never came back",
-        timeout: 20_000,
-      },
+      { timeout: 20_000 },
     )
-    .toBe(true);
+    .toBe(true)
+    .then(
+      () => true,
+      () => false,
+    );
+  // A turn that never came back is told as the player saw it: a computer that
+  // moved and then stuck is not one that "never made its move". Run 1795181750
+  // (a11): the computer re-rolled, moved, and hung on "AI is thinking…" with a
+  // die left — a player watched its pieces move.
+  if (!cameBack) {
+    expect(
+      blackOf(await readState(page)) === blackOf(before),
+      "[aspect: stuck] [needs: F89] after three ties and a 3-5 opening the computer moved, then its turn never ended — the turn never came back",
+    ).toBe(true);
+    throw new Error("[needs: F89] after three ties and a 3-5 opening the computer's first turn never ended — the turn never came back");
+  }
   // Back, but played or not: run 1794902330's server answered the 3-5 with
   // "black rolled 3, 5 — No moves available" and handed the turn straight back,
   // Roll live, and the player was told the game "just sat there and I couldn't

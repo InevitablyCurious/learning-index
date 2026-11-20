@@ -449,7 +449,7 @@ export async function seedRolled(partial: Record<string, any>, dice: number[]): 
   await debugSetState({ ...partial, turn: "white", phase: "roll", dice: [], remainingDice: [] });
   await debugRoll(dice);
   const rolled = await api("/api/roll", {});
-  assertRollTook(dice, rolled?.dice);
+  assertRollTook(dice, rolled);
   return rolled;
 }
 
@@ -469,7 +469,17 @@ function sortedNumbers(xs: unknown): number[] | null {
 // them fails with the SETUP REFUSED marker, which feedback.py tells in the team's
 // voice. Compared as sorted lists: normal rolls come back sorted, opening rolls as
 // [player, computer]; who won is the check's own question.
-export function assertRollTook(sent: number[], rolled: unknown): void {
+export function assertRollTook(sent: number[], answer: unknown): void {
+  // An answer that shows the computer to move has handed the roll on, and a build
+  // may play the computer's turn inside that same call: its dice are then the
+  // computer's, not the roll's. They are no evidence about the queue either way,
+  // like an answer that carries none (below); what the roll should have led to is
+  // the check's own question. Run 1795181750 (a11) queued an opening of 1-2: the
+  // computer won it and rolled fresh dice inside /api/roll, and G31 and F88 told
+  // "your debug endpoint didn't take the dice" of a queue it had used — the fault,
+  // the computer not moving by its opening numbers, is G31.numbers and F88.numbers.
+  if ((answer as { turn?: unknown } | null | undefined)?.turn === "black") return;
+  const rolled = (answer as { dice?: unknown } | null | undefined)?.dice;
   const want = sortedNumbers(sent);
   const got = sortedNumbers(rolled);
   // An answer that carries no dice can't be checked: a build that hands a no-move
@@ -501,7 +511,7 @@ export function assertRollTook(sent: number[], rolled: unknown): void {
 export async function debugRollVerified(dice: number[]): Promise<any> {
   await debugRoll(dice);
   const state = await api("/api/roll", {});
-  assertRollTook(dice, (state as any)?.dice);
+  assertRollTook(dice, state);
   return state;
 }
 

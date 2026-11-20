@@ -177,7 +177,7 @@ export async function rollAndCheck(page: Page, dice: number[], click: () => Prom
     throw new Error(`${ROLL_DEAD} [needs: F89]: ${pressed ? "pressing Roll made no roll" : "Roll could not be pressed"}`);
   }
   const body = await response.json().catch(() => null);
-  assertRollTook(dice, body?.dice);
+  assertRollTook(dice, body);
   return body;
 }
 
@@ -199,7 +199,7 @@ export async function seedRolled(page: Page, body: Record<string, any>, dice: nu
     .post("/api/roll", { data: {} })
     .then((r) => r.json())
     .catch(() => null);
-  assertRollTook(dice, rolled?.dice);
+  assertRollTook(dice, rolled);
   return rolled;
 }
 

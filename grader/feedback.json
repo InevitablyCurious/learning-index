@@ -2107,6 +2107,10 @@
       "first": "After I played both my numbers, clicking a piece again locked the game up.",
       "repeat": "After both my numbers, clicking a piece again still locks the game up."
     },
+    "F88.stuck": {
+      "first": "When the computer won the opening roll, it started moving its pieces but never finished its turn — the turn never came back to me, and I couldn't do anything.",
+      "repeat": "The computer won the opening roll again, started moving, and its turn still never came back to me."
+    },
     "F88.tie": {
       "first": "When we tied on the opening roll, the game froze — I pressed Roll like it told me and nothing happened.",
       "repeat": "We tied on the opening roll again and the game froze again; pressing Roll still did nothing."
