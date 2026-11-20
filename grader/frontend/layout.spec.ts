@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, test } from "./fixtures.ts";
+import { expect, pictureChange, test } from "./fixtures.ts";
 import { drawnBoardBox, readBoardParts } from "./board-geometry.ts";
 
 // [F35]–[F38] REQ-LAYOUT — the page the build prompt asks for (chunk-04,
@@ -661,36 +661,7 @@ test("[F87] REQ-LAYOUT — the board keeps its shape as the window changes", asy
   // The stale copies a redraw leaves are near the board's own colour (run
   // 1792491065's bar: about a sixth darker), so the picture is compared at a
   // twelfth of brightness: the share of pixels that moved by more than that.
-  const changed = await page.evaluate(
-    async ({ a, b }) => {
-      const load = (src: string) =>
-        new Promise<HTMLImageElement>((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
-          img.src = `data:image/png;base64,${src}`;
-        });
-      const [ia, ib] = await Promise.all([load(a), load(b)]);
-      const lum = (img: HTMLImageElement) => {
-        const c = document.createElement("canvas");
-        c.width = img.naturalWidth;
-        c.height = img.naturalHeight;
-        const ctx = c.getContext("2d")!;
-        ctx.drawImage(img, 0, 0);
-        const d = ctx.getImageData(0, 0, c.width, c.height).data;
-        const out = new Float32Array(c.width * c.height);
-        for (let i = 0; i < out.length; i++) out[i] = (0.2126 * d[i * 4] + 0.7152 * d[i * 4 + 1] + 0.0722 * d[i * 4 + 2]) / 255;
-        return out;
-      };
-      const la = lum(ia);
-      const lb = lum(ib);
-      if (la.length !== lb.length) return 1;
-      let n = 0;
-      for (let i = 0; i < la.length; i += 4) if (Math.abs(la[i] - lb[i]) > 0.08) n++;
-      return n / (la.length / 4);
-    },
-    { a: before, b: after },
-  );
+  const changed = await pictureChange(page, Buffer.from(before, "base64"), Buffer.from(after, "base64"));
 
   // A copy left behind is MORE bars or trays than the page drew at the start:
   // run 1793897465 tags its bar as two halves from the first frame, and "2 bars"

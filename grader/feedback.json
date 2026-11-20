@@ -2083,6 +2083,10 @@
       "first": "When I change the size of my browser window, the board is left a mess — old copies of parts of the board stay drawn over the game.",
       "repeat": "Resized my window again, and old copies of the board are still left drawn over the game."
     },
+    "F03.stale": {
+      "first": "When I click one of my pieces it lights up, but the hints stay where they were — they don't move to show where that piece can go.",
+      "repeat": "My piece still lights up when I click it, but the hints still don't move to show where it can go."
+    },
     "F03.nochange": {
       "first": "When I click one of my pieces, the hints don't change to show that piece's moves — it doesn't seem to get picked up.",
       "repeat": "Clicked my pieces again and the hints still don't change — the piece still doesn't get picked up."

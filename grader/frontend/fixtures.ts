@@ -392,3 +392,45 @@ export async function playerClickUntilShown(target: Locator, shown: Locator, tri
   }
 }
 
+
+/**
+ * The share of a picture that looks different in a second one (0..1): two PNG
+ * screenshots of the same region, decoded in the page and reduced to luminance,
+ * every fourth pixel, and a pixel counts when it moved by more than a twelfth of
+ * full brightness (a stale copy a redraw leaves is about a sixth darker — run
+ * 1792491065's bar). Pictures of different sizes are wholly different (1).
+ * ONE rule for every check that compares what a player sees before and after:
+ * F87 (back at full size after the window changed) and F03 (a clicked piece).
+ */
+export async function pictureChange(page: Page, a: Buffer, b: Buffer): Promise<number> {
+  return page.evaluate(
+    async ({ a, b }) => {
+      const load = (src: string) =>
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error("screenshot PNG failed to decode in-browser"));
+          img.src = `data:image/png;base64,${src}`;
+        });
+      const [ia, ib] = await Promise.all([load(a), load(b)]);
+      const lum = (img: HTMLImageElement) => {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext("2d")!;
+        ctx.drawImage(img, 0, 0);
+        const d = ctx.getImageData(0, 0, c.width, c.height).data;
+        const out = new Float32Array(c.width * c.height);
+        for (let i = 0; i < out.length; i++) out[i] = (0.2126 * d[i * 4] + 0.7152 * d[i * 4 + 1] + 0.0722 * d[i * 4 + 2]) / 255;
+        return out;
+      };
+      const la = lum(ia);
+      const lb = lum(ib);
+      if (la.length !== lb.length) return 1;
+      let n = 0;
+      for (let i = 0; i < la.length; i += 4) if (Math.abs(la[i] - lb[i]) > 0.08) n++;
+      return n / (la.length / 4);
+    },
+    { a: a.toString("base64"), b: b.toString("base64") },
+  );
+}

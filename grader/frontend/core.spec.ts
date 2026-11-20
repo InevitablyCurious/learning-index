@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { expect, pickUpAPiece, playerClick, playerClickUntilShown, PORT, press, rollAndCheck, seedRolled, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, pictureChange, playerClick, playerClickUntilShown, PORT, press, rollAndCheck, seedRolled, setupState, test } from "./fixtures.ts";
 import { readColumnBox, readPointBoxes, sampleBoxBrightness, sampleBoxContrast, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
@@ -328,6 +328,16 @@ test("[F03] REQ-HINT — clicking a piece shows its moves", async ({ page }) => 
   await waitForEarlyHintsStable(page);
   const before = await where();
   const beforeCount = (await hints.count()) > 0;
+  // The piece about to be clicked, as it looks before: a click that leaves the
+  // hints where they were may still visibly pick the piece up (run 1795215909
+  // a3: a yellow ring round it), and that is not "nothing was picked up".
+  const firstFrom = state.legalMoves[0]?.from;
+  const firstPiece = page.locator(`[data-testid="checker"][data-color="white"][data-loc="${locAttr(firstFrom ?? -1)}"]`).last();
+  const pieceBox = firstFrom === undefined ? null : await firstPiece.boundingBox().catch(() => null);
+  const pieceClip = pieceBox
+    ? { x: Math.max(0, pieceBox.x - pieceBox.width / 4), y: Math.max(0, pieceBox.y - pieceBox.height / 4), width: pieceBox.width * 1.5, height: pieceBox.height * 1.5 }
+    : null;
+  const pieceBefore = pieceClip ? await page.screenshot({ clip: pieceClip }).catch(() => null) : null;
   try {
     await revealHints(page, state.legalMoves, state.legalMoves[0]?.from);
   } catch {
@@ -354,10 +364,22 @@ test("[F03] REQ-HINT — clicking a piece shows its moves", async ({ page }) => 
       return false;
     };
     let changed = await changedWithin(1_500);
+    // Judged on the first piece before a second is tried (a second click may move
+    // the highlight away). The mouse leaves first, so a hover look is not a pick-up.
+    let litUp = false;
+    if (!changed && pieceClip && pieceBefore) {
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(300);
+      const pieceAfter = await page.screenshot({ clip: pieceClip }).catch(() => null);
+      litUp = pieceAfter !== null && (await pictureChange(page, pieceBefore, pieceAfter)) > 0.02;
+    }
     if (!changed) {
       const froms = [...new Set(state.legalMoves.map((m) => m.from))];
       const other = froms.find((f) => f !== (state.legalMoves[0]?.from ?? -1));
       if (other !== undefined && (await clickTopWhiteChecker(page, other))) changed = await changedWithin(1_500);
+    }
+    if (!changed) {
+      expect(!litUp, "[aspect: stale] clicking a piece lit it up, but left the hints exactly as they were before the click").toBe(true);
     }
     expect(changed, "[aspect: nochange] clicking a piece left the hints exactly as they were before the click").toBe(true);
   }
