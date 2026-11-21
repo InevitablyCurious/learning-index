@@ -1329,16 +1329,20 @@ function readableDice(
 // hand it over by itself: run 1795290402 (a2) did within a second, F67's first
 // Fast Forward click timed out on a page already showing the computer's turn,
 // and the player was told the double during Fast Forward went wrong.
-async function playOutTheRoll(page: Page): Promise<ApiState> {
+async function rollPlayedOut(page: Page): Promise<ApiState> {
   let state = await readState(page);
   for (let guard = 0; guard < 4 && state.turn === "white" && state.phase === "move" && (state.legalMoves?.length ?? 0) > 0; guard++) {
     const move = state.legalMoves[0]!;
     state = await postJson<ApiState>(page, "/api/move", { from: move.from, to: move.to, die: move.die });
   }
-  expect(
-    state.turn === "white" && state.phase === "move" && state.remainingDice.length === 0,
-    "[needs: F25 G23 F47] the roll played through the server did not finish the turn",
-  ).toBe(true);
+  return state;
+}
+const turnStillPlayers = (state: ApiState) =>
+  state.turn === "white" && state.phase === "move" && state.remainingDice.length === 0 && !state.winner;
+
+async function playOutTheRoll(page: Page): Promise<ApiState> {
+  const state = await rollPlayedOut(page);
+  expect(turnStillPlayers(state), "[needs: F25 G23 F47] the roll played through the server did not finish the turn").toBe(true);
   return state;
 }
 
@@ -2623,7 +2627,11 @@ async function offerRace(
   for (const race of ladder) {
     await postJson(page, "/api/new", {});
     if (played) {
-      await playRolledTurn(page, { ...race, bar: { white: 0, black: 0 }, cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "" }, played);
+      // A rung the played roll finishes (the last checkers borne off: the 2026-11-21
+      // sweep's builds that never offered walked the whole ladder into it) is no
+      // race for the check — skipped, never a finding.
+      await seedRolled(page, { ...race, bar: { white: 0, black: 0 }, cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "" }, played);
+      if (!turnStillPlayers(await rollPlayedOut(page))) continue;
     } else {
       await setupState(page, {
         ...race, bar: { white: 0, black: 0 }, turn: "white", phase: "move", dice: [6, 5], remainingDice: [],
