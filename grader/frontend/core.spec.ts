@@ -2210,11 +2210,14 @@ test("[F94] REQ-TURN — when the computer can't move, the turn comes back to ro
     winner: null,
     message: "",
   });
+  // The computer's dice are queued before the page loads: a page may hand the
+  // loaded turn over by itself (endLoadedTurn) and the computer roll before a
+  // queue made after the reload lands — then the player's Roll takes the
+  // computer's 6-5 and reads as "no roll of their own" (run 1795240920 a6).
+  await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await waitForBoardSettled(page).catch(() => undefined);
-  await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
-  const endTurn = page.getByTestId("endTurnBtn");
   await endLoadedTurn(page, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
 
   // The computer rolls, cannot come in, says so, and hands the turn back.
@@ -2697,7 +2700,7 @@ test("[F90] REQ-DOUBLE-ACCEPT-PLAYS-ON — taking the computer's double, the gam
     await page.waitForTimeout(600);
   }
   await expect.poll(async () => (await readState(page)).turnOver, { message: "[needs: F25 F45]" }).toBe(true);
-  await endLoadedTurn(page, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
+  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
   await expect
     // An offer that never comes is the computer's doubling window (G12), as in
     // G24: run 1793638605's build raised it to 85%, never doubled here, and was

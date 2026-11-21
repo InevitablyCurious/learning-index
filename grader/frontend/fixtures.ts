@@ -481,12 +481,19 @@ export async function settledHintPositions(page: Page): Promise<{ x: number; y: 
  */
 export async function endLoadedTurn(page: Page, message: string): Promise<"pressed" | "passed"> {
   const endTurn = page.getByTestId("endTurnBtn");
+  // Handed over: the loaded turn — white to move, waiting for End Turn — is no
+  // longer the game's state. The computer may be moving or offering a double, or
+  // its whole turn may already be played, as a server that plays it in one
+  // request does, and the game on to the player's next roll. Run 1795240920
+  // (a6), F94: the computer, shut out on the bar, played its turn within a second
+  // of the page's own hand-over and was never seen as black; ae54c5e's first form
+  // of this helper read that as "End Turn couldn't be pressed".
   const handedOver = async () => {
     const s = await page.request
       .post("/api/state", { data: {} })
       .then((r) => r.json())
       .catch(() => null);
-    return !!s && (s.turn === "black" || s.phase === "doubleOffered");
+    return !!s && !(s.turn === "white" && s.phase === "move");
   };
   for (const end = Date.now() + 5_000; Date.now() < end; ) {
     if (await endTurn.isEnabled().catch(() => false)) break;
