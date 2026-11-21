@@ -364,6 +364,10 @@ _STATIC_TESTIDS = (
     "modalBtns",
 )
 _HELPER_MARKERS = {
+    # playOwnFinishedTurn (core.spec.ts): a 3-1 played through the server that does
+    # not finish the turn waits on the move and turn-end checks (2026-11-20). Its
+    # users: the computer's-turn watcher (F62, F77) and F55.
+    ("frontend/core.spec.ts", "[needs: F25 G23 F47]"): ("F55", "F62", "F77"),
     # choose (gates-14-30.test.ts): a chooser that throws waits on G38, the
     # check that asks it a turn with no move (2026-11-16).
     ("backend/gates-14-30.test.ts", "[needs: G38]"): ("G14",),

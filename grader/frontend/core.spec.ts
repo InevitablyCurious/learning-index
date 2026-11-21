@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { expect, hintPositions, pickUpAPiece, pictureChange, playerClick, playerClickUntilShown, PORT, press, rollAndCheck, seedRolled, settledHintPositions, setupState, test } from "./fixtures.ts";
+import { endLoadedTurn, expect, hintPositions, pickUpAPiece, pictureChange, playerClick, playerClickUntilShown, PORT, press, rollAndCheck, seedRolled, settledHintPositions, setupState, test } from "./fixtures.ts";
 import { readColumnBox, readPointBoxes, sampleBoxBrightness, sampleBoxContrast, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
@@ -1315,6 +1315,34 @@ function readableDice(
   return { shown, readable };
 }
 
+// A finished turn reached the way the build's own game reaches one: the standard
+// opening, a 3-1 rolled through the server and played there (8/5, 6/5). A finished
+// turn LOADED through the debug route carries no moves, and a page may read it as
+// a roll with no move and hand the turn over by itself: run 1795234131 (a2) did,
+// and F55 and F62 told "End Turn couldn't be pressed" and "the computer's turn
+// never went through" of a build whose End Turn worked in play.
+async function playOwnFinishedTurn(page: Page): Promise<void> {
+  await setupState(page, {
+    points: startingPoints(),
+    bar: { white: 0, black: 0 },
+    off: { white: 0, black: 0 },
+    turn: "white",
+    phase: "roll",
+    dice: [],
+    remainingDice: [],
+    cube: { value: 1, owner: null },
+    difficulty: "easy",
+    winner: null,
+    message: "",
+  });
+  await postJson(page, "/api/debug/roll", { dice: [3, 1] });
+  await postJson(page, "/api/roll", {});
+  await postJson(page, "/api/move", { from: 8, to: 5, die: 3 });
+  await postJson(page, "/api/move", { from: 6, to: 5, die: 1 });
+  const played = await readState(page);
+  expect(played.points[5] === 2 && played.remainingDice.length === 0, "[needs: F25 G23 F47] the 3-1 played through the server did not finish the turn").toBe(true);
+}
+
 // The computer's turn as the player watches it, from End Turn: the opening
 // position with the player's roll used up, easy (never doubles), the
 // computer's roll fixed to 6-5 (two moves, always open, no hit). Shared by F62
@@ -1333,20 +1361,7 @@ async function watchComputerTurn(page: Page, turnNeeds: string): Promise<{
   frames: PaceFrame[];
 }> {
   await openApp(page);
-  await setupState(page, {
-    points: startingPoints(),
-    bar: { white: 0, black: 0 },
-    off: { white: 0, black: 0 },
-    turn: "white",
-    phase: "move",
-    dice: [3, 1],
-    remainingDice: [],
-    turnOver: true,
-    cube: { value: 1, owner: null },
-    difficulty: "easy",
-    winner: null,
-    message: "",
-  });
+  await playOwnFinishedTurn(page);
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   const before = await readState(page);
@@ -2049,6 +2064,26 @@ test("[F48] REQ-TURN — a no-move roll passes by itself", async ({ page }) => {
       { message: "[needs: F03 F45] the no-move turn never passed to the computer by itself", timeout: 6000 },
     )
     .toBe(true);
+
+  // And the computer's turn that follows finishes: the turn comes back to white
+  // for a new roll, the computer offers a double, or the game ends. "Black shows"
+  // above is the hand-over, not the turn: run 1795234131 (a2) passed its no-move
+  // roll and the computer then sat on "rolling…" for good — a freeze a player
+  // meets — while this check passed and stage 12 told End Turn faults instead.
+  const finished = await expect
+    .poll(
+      async () => {
+        const s = await readState(page);
+        return (s.turn === "white" && s.phase === "roll") || s.phase === "doubleOffered" || !!s.winner;
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true)
+    .then(
+      () => true,
+      () => false,
+    );
+  expect(finished, "[aspect: stuck] [needs: F03 F45] after the no-move roll passed, the computer's turn never finished").toBe(true);
 });
 
 // [F93] REQ-PACING — the dice land and stay still after a roll. Jerry,
@@ -2180,7 +2215,7 @@ test("[F94] REQ-TURN — when the computer can't move, the turn comes back to ro
   await waitForBoardSettled(page).catch(() => undefined);
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
   const endTurn = page.getByTestId("endTurnBtn");
-  await press(endTurn, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
+  await endLoadedTurn(page, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
 
   // The computer rolls, cannot come in, says so, and hands the turn back.
   const roll = page.getByTestId("rollBtn");
@@ -2603,7 +2638,7 @@ test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", asyn
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
+  await endLoadedTurn(page, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
 
   await expect
     .poll(async () => /double|offer/i.test(await shownDoubleText(page)), {
@@ -2662,7 +2697,7 @@ test("[F90] REQ-DOUBLE-ACCEPT-PLAYS-ON — taking the computer's double, the gam
     await page.waitForTimeout(600);
   }
   await expect.poll(async () => (await readState(page)).turnOver, { message: "[needs: F25 F45]" }).toBe(true);
-  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
+  await endLoadedTurn(page, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
   await expect
     // An offer that never comes is the computer's doubling window (G12), as in
     // G24: run 1793638605's build raised it to 85%, never doubled here, and was
@@ -3060,29 +3095,7 @@ test("[F55] REQ-RELOAD — the computer finishes its turn after a reload", async
   // player the turn "still never came back". "easy" never offers a double, so
   // the computer's turn completes.
   await openApp(page);
-  const points = emptyPoints();
-  points[24] = 2;
-  points[13] = 5;
-  points[8] = 3;
-  points[6] = 5;
-  points[1] = -2;
-  points[12] = -5;
-  points[17] = -3;
-  points[19] = -5;
-  await setupState(page, {
-    points,
-    bar: { white: 0, black: 0 },
-    off: { white: 0, black: 0 },
-    turn: "white",
-    phase: "move",
-    dice: [3, 1],
-    remainingDice: [],
-    turnOver: true,
-    cube: { value: 1, owner: null },
-    difficulty: "easy",
-    winner: null,
-    message: "",
-  });
+  await playOwnFinishedTurn(page);
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   const endTurn = page.getByTestId("endTurnBtn");
@@ -3132,7 +3145,7 @@ test("[F56] REQ-RELOAD — the pending double offer shows again after a reload",
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
+  await endLoadedTurn(page, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
   await expect
     .poll(async () => (await readState(page)).phase, {
       message: "[needs: F49] the computer's offer never came",
@@ -3579,7 +3592,7 @@ test("[F72] REQ-DOUBLE-PENDING — the computer's offer holds the game", async (
   });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
+  await endLoadedTurn(page, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
   // An offer that never shows is F49's finding (stage 6, which a stage-2 gate may
   // not wait on): with nothing waiting for an answer there is nothing to press.
   const offerShown = await expect

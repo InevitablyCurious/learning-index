@@ -1559,6 +1559,10 @@
       "first": "After I play my moves, my turn ends by itself before I click End Turn.",
       "repeat": "My turn still ends by itself after my moves, before I click End Turn."
     },
+    "F48.stuck": {
+      "first": "When I roll and can't move, the turn goes over to the computer, but its turn never finishes — the game just sits there.",
+      "repeat": "After a roll I can't move with, the computer's turn still never finishes."
+    },
     "F48": {
       "first": "When I roll and can't move, the turn doesn't pass to the computer on its own.",
       "repeat": "Rolled with no move again, and the turn still doesn't pass to the computer on its own."
