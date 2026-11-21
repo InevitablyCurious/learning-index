@@ -284,6 +284,20 @@ describe("Backgammon backend server-path integrity", () => {
     }
     return play;
   };
+  // Races where the build's own cube function says double with the cube in the
+  // middle: its engine has decided, so a turn with no offer lost it between the
+  // decision and the board. Run 1795273094 (a3, a4): told only "it never offers a
+  // double", the model retuned its win-probability formula twice while its
+  // engine already doubled in races [8, 6] and [6, 4] and the server's turn
+  // handed the move back without the offer.
+  const engineDoubles = () =>
+    raceLadder().filter((race) => {
+      try {
+        return ai.shouldAiDouble({ ...race, bar: { white: 0, black: 0 } }, "black", { value: 1, owner: null }, "hard")?.action === "double";
+      } catch {
+        return false;
+      }
+    });
   const offeredRace = async () => {
     const offering = [];
     let last: any;
@@ -332,7 +346,11 @@ describe("Backgammon backend server-path integrity", () => {
     // below it for others (run 1793743564 round 4 rated black 0.77 here, held
     // by its own rule, and the check read that as a lost offer).
     const play = await offeredRace();
-    expect(play.phase, "[aspect: never] [needs: G12] the computer never offered a double").toBe("doubleOffered");
+    const noOffer =
+      engineDoubles().length > 0
+        ? "[aspect: lost] [needs: G12] the computer's own cube function said double, and its turn never offered it"
+        : "[aspect: never] [needs: G12] the computer never offered a double";
+    expect(play.phase, noOffer).toBe("doubleOffered");
     const res = await api("/api/double/respond", { accept: true });
     expect(res.cube.value).toBe(2);
     const OWNER = "[aspect: owner] the taken cube was not the player's";
@@ -383,7 +401,7 @@ describe("Backgammon backend server-path integrity", () => {
     // finding (run 1793736621 round 2 let the computer double only in a phase
     // its turn never has, and the player heard only "it doubles at the wrong
     // moments").
-    expect(wouldDouble, "[aspect: never] the computer, far ahead, never offered a double").toEqual([]);
+    expect(wouldDouble, "[aspect: lost] the computer's own cube function said double, and its turn never offered it").toEqual([]);
   });
 
   // A finished game is not the end of the count: /api/new carries gamesPlayed forward.

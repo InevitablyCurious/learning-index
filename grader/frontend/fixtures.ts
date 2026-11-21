@@ -402,6 +402,16 @@ export async function playerClickUntilShown(target: Locator, shown: Locator, tri
  * ONE rule for every check that compares what a player sees before and after:
  * F87 (back at full size after the window changed) and F03 (a clicked piece).
  */
+/** A pop-up's words are read only once a player can see the pop-up: its
+ *  presence and its words are two lines. Run 1795273094 (a4): after the
+ *  computer declined, no pop-up ever came up (the page's game-over modal stayed
+ *  hidden), and F46 read the hidden #modalTitle as "the pop-up's title doesn't
+ *  say I won"; F53 told "the win pop-up never appears" of any title without
+ *  "win", shown or not. */
+export async function expectPopupShown(page: Page, message: string, timeout = 5_000): Promise<void> {
+  await expect(page.getByTestId("modalOverlay"), message).toBeVisible({ timeout });
+}
+
 export async function pictureChange(page: Page, a: Buffer, b: Buffer): Promise<number> {
   return page.evaluate(
     async ({ a, b }) => {

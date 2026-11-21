@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { endLoadedTurn, expect, hintPositions, pickUpAPiece, pictureChange, playerClick, playerClickUntilShown, PORT, press, rollAndCheck, seedRolled, settledHintPositions, setupState, test } from "./fixtures.ts";
+import { endLoadedTurn, expect, expectPopupShown, hintPositions, pickUpAPiece, pictureChange, playerClick, playerClickUntilShown, PORT, press, rollAndCheck, seedRolled, settledHintPositions, setupState, test } from "./fixtures.ts";
 import { readColumnBox, readPointBoxes, sampleBoxBrightness, sampleBoxContrast, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
@@ -2522,6 +2522,7 @@ test("[F46] REQ-DOUBLE-DECLINE — the decline pop-up says you won", async ({ pa
   await expect
     .poll(async () => (await readState(page)).winner, { message: "[needs: G12 G22]", timeout: 5_000 })
     .toBe("white");
+  await expectPopupShown(page, "[aspect: nopopup] [needs: F01] the computer passed the double and no pop-up came up");
   await expect(page.getByTestId("modalTitle"), "[needs: F01] [needs: F07]").toContainText(/win/i);
 });
 
@@ -2899,9 +2900,8 @@ test("[F53] REQ-ENDGAME — bearing off the last piece opens the win pop-up", as
   // handler must open the end-of-game pop-up on the spot — a build that shows
   // it only after End Turn, or never, fails here.
   await bearOffTheLastPiece(page);
-  await expect(page.getByTestId("modalTitle"), "[needs: F01] [needs: F12] [needs: G10]").toContainText(/win/i, {
-    timeout: 10_000,
-  });
+  await expectPopupShown(page, "[needs: F01] [needs: F12] [needs: G10] no pop-up came up after the last bear-off", 10_000);
+  await expect(page.getByTestId("modalTitle"), "[aspect: title] [needs: F01] [needs: F12] [needs: G10]").toContainText(/win/i);
 });
 
 test("[F52] REQ-BUTTONS — greyed-out buttons look clearly different", async ({ page }) => {

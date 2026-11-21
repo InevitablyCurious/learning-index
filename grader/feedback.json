@@ -1515,6 +1515,10 @@
       "first": "Their checks of your server: with the cube in the player's hands, your computer still offers a double. The computer may offer a double only when the cube is in the middle or its own; while the player holds it, it never offers.",
       "repeat": "Their checks again: with the cube in the player's hands, your computer still offers a double."
     },
+    "G24.lost": {
+      "first": "Their checks of your server: in races where your computer's own cube decision says double, its turn goes by without offering it. The rule for the computer's turn: once it decides to double, the turn stops on the offer — phase doubleOffered, before it rolls — until the player answers; then it rolls and plays.",
+      "repeat": "Their checks again: in those races your computer still decides to double, and its turn still goes by without offering it."
+    },
     "G31": {
       "first": "They start a new game through your app's API and the opening roll doesn't work right.",
       "repeat": "They start another new game through your API and the opening roll still doesn't work right."
@@ -1567,6 +1571,10 @@
       "first": "When the computer turns down my double, the pop-up's title doesn't say I won.",
       "repeat": "The computer turned down my double again and the pop-up's title still doesn't say I won."
     },
+    "F46.nopopup": {
+      "first": "When the computer turns down my double, no pop-up comes up to say I won.",
+      "repeat": "The computer turned down my double again, and still no pop-up comes up to say I won."
+    },
     "F47": {
       "first": "After I play my moves, my turn ends by itself before I click End Turn.",
       "repeat": "My turn still ends by itself after my moves, before I click End Turn."
@@ -1598,6 +1606,10 @@
     "F53": {
       "first": "I bear off my last piece and the win pop-up never appears.",
       "repeat": "I bore off my last piece again and the win pop-up still never appears."
+    },
+    "F53.title": {
+      "first": "I bear off my last piece and a pop-up comes up, but it doesn't say I won.",
+      "repeat": "I bore off my last piece again and the pop-up still doesn't say I won."
     },
     "F54": {
       "first": "I set the difficulty to Hard, and after a reload the difficulty box no longer shows Hard.",
