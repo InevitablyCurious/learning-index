@@ -368,6 +368,11 @@ _HELPER_MARKERS = {
     # not finish the turn waits on the move and turn-end checks (2026-11-20). Its
     # users: the computer's-turn watcher (F62, F77) and F55.
     ("frontend/core.spec.ts", "[needs: F25 G23 F47]"): ("F55", "F62", "F77"),
+    # playParkedCubeTurn (server-path-integrity.test.ts): a computer turn run with
+    # the cube parked in the player's hands, told as the cube when the computer
+    # doubles anyway and the turn goes unplayed (2026-11-21). Its users: G30, G39.
+    ("backend/server-path-integrity.test.ts", "[aspect: cubeheld]"): ("G30", "G39"),
+    ("backend/server-path-integrity.test.ts", "[needs: G25]"): ("G30", "G39"),
     # choose (gates-14-30.test.ts): a chooser that throws waits on G38, the
     # check that asks it a turn with no move (2026-11-16).
     ("backend/gates-14-30.test.ts", "[needs: G38]"): ("G14",),

@@ -283,16 +283,6 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
   });
 
   it("[G12] REQ-CUBE-AI — offers only inside hard window, never when blocked/easy/too-good", () => {
-    const anyPoints = emptyPoints();
-    anyPoints[6] = 1;
-    anyPoints[19] = -1;
-    const anyBoard = bd(anyPoints, { white: 0, black: 0 }, { white: 14, black: 14 });
-    expect(
-      ai.shouldAiDouble(anyBoard, "black", { value: 2, owner: "white" }, "hard")
-        .action,
-      "[brief]",
-    ).toBe("no-double");
-
     const windowPoints = emptyPoints();
     windowPoints[19] = -5; // black pip 30
     windowPoints[6] = 10; // white pip 60
@@ -347,6 +337,21 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
         ai.shouldAiDouble(race, "black", { value: 1, owner: null }, "hard").action,
         `[brief] black 30 pips, white ${game.pipCount(race, "white")} with ${race.off.white} off, win chance ${wp}`,
       ).toBe(expectedOfferAction(wp, "hard", true));
+    }
+
+    // The cube in the player's hands: no offer, judged on the races where this
+    // engine offers with the cube in the middle, so the hold is the cube's doing.
+    // The board this used to use (win chance 0.5, outside every window) held
+    // whoever had the cube: run 1795248400's engine, which held back only on its
+    // own cube and doubled on the player's, passed it.
+    const offersCentred = races.filter(
+      (race) => ai.shouldAiDouble(race, "black", { value: 1, owner: null }, "hard").action === "double",
+    );
+    for (const race of offersCentred) {
+      expect(
+        ai.shouldAiDouble(race, "black", { value: 2, owner: "white" }, "hard").action,
+        "[aspect: cubeheld] with the cube in the player's hands, the computer offers a double",
+      ).toBe("no-double");
     }
 
     const tooGoodPoints = emptyPoints();

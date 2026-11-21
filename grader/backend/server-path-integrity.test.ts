@@ -44,6 +44,56 @@ describe("Backgammon backend server-path integrity", () => {
     await stopServer(server);
   });
 
+  // A CHECK THAT PARKS THE CUBE WITH THE PLAYER (G30, G39) does it so no double
+  // comes before the computer's move. When the computer doubles anyway, the turn
+  // it then fails to play is not the finding: the cube is. Run 1795248400's
+  // computer tested ownership backwards (it held back only on its own cube), so
+  // with the cube in the player's hands it doubled; its server crashed in that
+  // turn (a2), then skipped it (a3, a4). G30 told only "passes without moving",
+  // and the model tuned its move chooser twice and never looked at the cube
+  // (Jerry, 2026-11-21: "an integration team prose issue"). Told when the turn
+  // went unplayed (a crash, a turn that never came back, no piece moved) and
+  // either the build's own shouldAiDouble doubles on this board with the
+  // player's cube or its server showed a double during the turn. A turn played
+  // with the wrong number stays the check's own finding.
+  async function playParkedCubeTurn(board: Board, difficulty: string): Promise<any> {
+    let decides = false;
+    try {
+      decides = ai.shouldAiDouble(board, "black", { value: 2, owner: "white" }, difficulty)?.action === "double";
+    } catch {
+      decides = false;
+    }
+    const blackAt = (s: any) =>
+      JSON.stringify([(s?.points ?? []).map((v: number) => (v < 0 ? v : 0)), s?.bar?.black, s?.off?.black]);
+    const seen: any[] = [];
+    let state: any = null;
+    let crash: unknown = null;
+    try {
+      state = await api("/api/endturn", {});
+      seen.push(state);
+      for (let guard = 0; guard < 12 && state.turn === "black" && !state.winner; guard++) {
+        state = await api("/api/ai", {});
+        seen.push(state);
+      }
+    } catch (error) {
+      crash = error;
+    }
+    const doubled = seen.some(
+      (s) =>
+        s?.phase === "doubleOffered" ||
+        s?.doubleOfferedBy === "black" ||
+        s?.cube?.owner !== "white" ||
+        s?.cube?.value !== 2,
+    );
+    const unplayed = crash !== null || state?.turn !== "white" || blackAt(state) === blackAt(board);
+    expect(
+      unplayed && (decides || doubled),
+      "[aspect: cubeheld] [needs: G25] with the cube in the player's hands the computer decided to double, and its turn went unplayed",
+    ).toBe(false);
+    if (crash !== null) throw crash;
+    return state;
+  }
+
   // M09: a real doubles roll through /api/roll yields four dice, not two.
   it("[G03] REQ-DICE — a real doubles roll through /api/roll yields four dice", async () => {
     // The OPENING roll is one die per side and can never be four (G31), so
@@ -599,10 +649,7 @@ describe("Backgammon backend server-path integrity", () => {
         }),
       );
       await debugRoll([...dice]);
-      let state = await api("/api/endturn", {});
-      for (let guard = 0; guard < 12 && state.turn === "black" && !state.winner; guard++) {
-        state = await api("/api/ai", {});
-      }
+      const state = await playParkedCubeTurn({ points, bar: { white: 0, black: 0 }, off: { white: 13, black: 14 } }, "easy");
       expect(state.turn, "[needs: G25] the computer never finished its turn").toBe("white");
       const now = (state.points as number[]).findIndex((v, i) => i >= 1 && i <= 24 && v < 0);
       const moved = now - 7;
@@ -645,10 +692,7 @@ describe("Backgammon backend server-path integrity", () => {
             }),
           );
           await debugRoll(spot.dice);
-          let state = await api("/api/endturn", {});
-          for (let guard = 0; guard < 12 && state.turn === "black" && !state.winner; guard++) {
-            state = await api("/api/ai", {});
-          }
+          const state = await playParkedCubeTurn({ points, bar: { white: 0, black: 0 }, off: spot.off }, difficulty);
           expect(state.turn, "[needs: G25 G39] the computer never finished its turn").toBe("white");
           const now = (state.points as number[]).findIndex((v, i) => i >= 1 && i <= 24 && v < 0);
           expect(now, "[aspect: passed] [needs: G25 G39] the computer rolled and passed without moving its piece").not.toBe(spot.black);

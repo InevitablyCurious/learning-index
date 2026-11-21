@@ -1503,6 +1503,18 @@
       "first": "They let your computer take a turn through your server where one of its numbers can be played, and it passes without moving.",
       "repeat": "Your computer still passes its turn without moving when one of its numbers can be played."
     },
+    "G30.cubeheld": {
+      "first": "They let your computer take a turn through your server with the cube in the player's hands, and it still decides to offer a double — its turn then doesn't get played. The computer may offer a double only when the cube is in the middle or its own; while the player holds it, it never offers and just plays its turn.",
+      "repeat": "With the cube in the player's hands, your computer still decides to offer a double, and its turn still doesn't get played."
+    },
+    "G39.cubeheld": {
+      "first": "They let your computer take a turn through your server with the cube in the player's hands, and it still decides to offer a double — its turn then doesn't get played. The computer may offer a double only when the cube is in the middle or its own; while the player holds it, it never offers and just plays its turn.",
+      "repeat": "With the cube in the player's hands, your computer still decides to offer a double, and its turn still doesn't get played."
+    },
+    "G12.cubeheld": {
+      "first": "Their checks of your computer's doubling: with the cube in the player's hands, it still offers a double. The computer may offer a double only when the cube is in the middle or its own; while the player holds it, it never offers.",
+      "repeat": "Their checks again: with the cube in the player's hands, your computer still offers a double."
+    },
     "G31": {
       "first": "They start a new game through your app's API and the opening roll doesn't work right.",
       "repeat": "They start another new game through your API and the opening roll still doesn't work right."

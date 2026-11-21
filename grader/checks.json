@@ -84,7 +84,7 @@
     "G12": {
       "name": "The computer's cube decisions",
       "what": "The computer accepts, declines and offers the cube at its published win-chance thresholds.",
-      "how": "Even position (30 pips each): win chance 0.5 and every difficulty accepts. Black hopelessly behind (350 against 2): win chance under 0.24 and hard declines. Hard never offers when white owns the cube, offers or holds on a 30-against-61 position exactly as its thresholds say, easy never offers, and hard holds when far too far ahead.",
+      "how": "Even position (30 pips each): win chance 0.5 and every difficulty accepts. Black hopelessly behind (350 against 2): win chance under 0.24 and hard declines. Hard never offers when white owns the cube, judged on the races where it offers with the cube in the middle; it offers or holds on a 30-against-61 position exactly as its thresholds say, easy never offers, and hard holds when far too far ahead.",
       "looks": "code"
     },
     "G13": {
