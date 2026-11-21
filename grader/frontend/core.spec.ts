@@ -2669,7 +2669,7 @@ test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", asyn
   // no offer for the screen to show. Run 1794873096's computer never doubled
   // until a game had been finished on the server, so a player's first game
   // never saw one — and was told the offer "never shows up on screen".
-  expect(anyOffer, "[aspect: never] [needs: G12] far behind in a race, the computer never offered to double").toBe(true);
+  expect(anyOffer, "[aspect: never] [needs: G12 G35] far behind in a race, the computer never offered to double").toBe(true);
   await setupState(page, {
     points,
     bar: { white: 0, black: 0 },

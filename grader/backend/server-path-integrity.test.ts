@@ -290,6 +290,10 @@ describe("Backgammon backend server-path integrity", () => {
   // double", the model retuned its win-probability formula twice while its
   // engine already doubled in races [8, 6] and [6, 4] and the server's turn
   // handed the move back without the offer.
+  // Every race here is SEEDED through the debug route, so a missing offer waits
+  // on G35 (a seeded turn doubles like a played one): run 1795300047 (a2) kept
+  // an `openingMovePlayed` flag the route can't set, its computer never offered
+  // from a seeded race, and "never offers" was told of a game that offers in play.
   const engineDoubles = () =>
     raceLadder().filter((race) => {
       try {
@@ -348,8 +352,8 @@ describe("Backgammon backend server-path integrity", () => {
     const play = await offeredRace();
     const noOffer =
       engineDoubles().length > 0
-        ? "[aspect: lost] [needs: G12] the computer's own cube function said double, and its turn never offered it"
-        : "[aspect: never] [needs: G12] the computer never offered a double";
+        ? "[aspect: lost] [needs: G12 G35] the computer's own cube function said double, and its turn never offered it"
+        : "[aspect: never] [needs: G12 G35] the computer never offered a double";
     expect(play.phase, noOffer).toBe("doubleOffered");
     const res = await api("/api/double/respond", { accept: true });
     expect(res.cube.value).toBe(2);
@@ -401,7 +405,7 @@ describe("Backgammon backend server-path integrity", () => {
     // finding (run 1793736621 round 2 let the computer double only in a phase
     // its turn never has, and the player heard only "it doubles at the wrong
     // moments").
-    expect(wouldDouble, "[aspect: lost] the computer's own cube function said double, and its turn never offered it").toEqual([]);
+    expect(wouldDouble, "[aspect: lost] [needs: G35] the computer's own cube function said double, and its turn never offered it").toEqual([]);
   });
 
   // A finished game is not the end of the count: /api/new carries gamesPlayed forward.
