@@ -434,3 +434,37 @@ export async function pictureChange(page: Page, a: Buffer, b: Buffer): Promise<n
     { a: a.toString("base64"), b: b.toString("base64") },
   );
 }
+
+// Where the visible move hints sit on screen, as a list of their centres.
+// Two selections with different destinations place their hints in different
+// spots, so a change of piece is a change of these — read from the page, not
+// from any server-side source.
+export async function hintPositions(page: Page): Promise<{ x: number; y: number }[]> {
+  return page.getByTestId("hint").evaluateAll((els) =>
+    els
+      .filter((el) => (el as HTMLElement).checkVisibility())
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }),
+  );
+}
+
+// The visible hints once they hold still: two reads 250 ms apart the same (at
+// most 3 s). A page that shows hints before a pick redraws them when a piece is
+// picked up; read in between, an old hint stands where the new ones are going.
+// Run 1795223874 (a2): F73 chose "the hint nearest point 10" mid-redraw, clicked
+// the 5's, and told "the game made me play the bigger one first" of a build that
+// played the 3 first when a player did it (2 of 6 runs alone). For any check that
+// decides from where the hints are; never for one that times how fast they move.
+export async function settledHintPositions(page: Page): Promise<{ x: number; y: number }[]> {
+  const key = (hs: { x: number; y: number }[]) => JSON.stringify(hs.map((h) => [Math.round(h.x), Math.round(h.y)]));
+  let last = await hintPositions(page);
+  for (const end = Date.now() + 3_000; Date.now() < end; ) {
+    await page.waitForTimeout(250);
+    const now = await hintPositions(page);
+    if (key(now) === key(last)) return now;
+    last = now;
+  }
+  return last;
+}

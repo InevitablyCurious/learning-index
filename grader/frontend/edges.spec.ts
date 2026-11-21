@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { expect, pickUpAPiece, playerClick, playerClickUntilShown, rollAndCheck, setupState, test } from "./fixtures.ts";
+import { expect, pickUpAPiece, playerClick, playerClickUntilShown, rollAndCheck, settledHintPositions, setupState, test } from "./fixtures.ts";
 import { BASE_URL } from "../lib/harness.ts";
 import { isPainted, readPointBoxes } from "./board-geometry.ts";
 
@@ -471,7 +471,11 @@ test("[F86] REQ-HINT — a move hint looks like a faint green piece", async ({ p
   await page.reload();
   const pickedUp = await pickUpAPiece(page, page.locator('[data-testid="hint"]'));
   expect(pickedUp, "[needs: REQ-HINT/hint F03 F60]").toBeTruthy();
-  const hint = page.locator('[data-testid="hint"]').first();
+  // Measured once the hints hold still, on one a player can see: run 1795223874
+  // (a2) redraws its hints after a pick, and the first hint element, visible a
+  // moment before, read "a hint is 0 px across" in 1 of 3 grades.
+  await settledHintPositions(page);
+  const hint = page.locator('[data-testid="hint"]').filter({ visible: true }).first();
   await expect(hint, "[needs: REQ-HINT/hint F03 F25]").toBeVisible();
 
   const look = await hint.evaluate((el) => {

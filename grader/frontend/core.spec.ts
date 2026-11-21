@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { expect, pickUpAPiece, pictureChange, playerClick, playerClickUntilShown, PORT, press, rollAndCheck, seedRolled, setupState, test } from "./fixtures.ts";
+import { expect, hintPositions, pickUpAPiece, pictureChange, playerClick, playerClickUntilShown, PORT, press, rollAndCheck, seedRolled, settledHintPositions, setupState, test } from "./fixtures.ts";
 import { readColumnBox, readPointBoxes, sampleBoxBrightness, sampleBoxContrast, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
@@ -133,19 +133,6 @@ async function waitForEarlyHintsStable(page: Page): Promise<number> {
     await page.waitForTimeout(100);
   }
   return last;
-}
-
-// Where the visible move hints sit on screen, as a list of their centres.
-// Two selections with different destinations place their hints in different
-// spots, so a change of piece is a change of these — read from the page, not
-// from any server-side source.
-async function hintPositions(page: Page): Promise<{ x: number; y: number }[]> {
-  return page.getByTestId("hint").evaluateAll((els) =>
-    els.map((el) => {
-      const r = el.getBoundingClientRect();
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    }),
-  );
 }
 
 // True when the hints on screen have genuinely relocated to a DIFFERENT set of
@@ -1555,7 +1542,7 @@ test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ p
     // 1795152917's model read "13→17" alone as a move and reasoned in circles
     // for two rounds; the destinations make the misplacement plain.
     const over: number[] = [];
-    const spots = (await hintPositions(page)).map(under);
+    const spots = (await settledHintPositions(page)).map(under);
     seen.push({ from, at: JSON.stringify([...new Set(spots)].sort((a, b) => (a ?? 0) - (b ?? 0))) });
     for (const at of spots) {
       if (at !== null && at > from) over.push(at);
@@ -3655,21 +3642,15 @@ test("[F73] REQ-DIE-ORDER — the smaller number can be played first", async ({ 
   await playerClickUntilShown(back.last(), hints);
   await expect.poll(async () => hints.count(), "[needs: REQ-HINT/hint F03 F60]").toBeGreaterThan(1);
 
-  // The hint that shows the 3: the one drawn nearest point 10's column.
-  const dest = await readColumnBox(page, 10);
-  expect(dest, "[needs: REQ-TESTID/point REQ-TESTID/checker]").not.toBeNull();
-  const nearest = await hints.evaluateAll((els, cx) => {
-    const centres = els.map((el) => {
-      const r = el.getBoundingClientRect();
-      return r.x + r.width / 2;
-    });
-    let best = 0;
-    centres.forEach((c, i) => {
-      if (Math.abs(c - (cx as number)) < Math.abs(centres[best] - (cx as number))) best = i;
-    });
-    return best;
-  }, dest!.centerX);
-  await playerClick(hints.nth(nearest));
+  // The 3's move is the hint drawn over point 10, read once the hints hold still
+  // and judged by the point under its centre (F75's rule), then clicked where a
+  // player sees it. A hint drawn anywhere else is the placement check's (F75).
+  const boxes = await readPointBoxes(page);
+  const over10 = (await settledHintPositions(page)).find((h) =>
+    boxes.some((pt) => pt.num === 10 && h.x >= pt.x && h.x <= pt.x + pt.width && h.y >= pt.y && h.y <= pt.y + pt.height),
+  );
+  expect(over10, "[needs: F75 F04] no hint was drawn over point 10 for the 3").toBeTruthy();
+  await page.mouse.click(over10!.x, over10!.y);
 
   await expect
     .poll(async () => (await readState(page)).points[10], {
