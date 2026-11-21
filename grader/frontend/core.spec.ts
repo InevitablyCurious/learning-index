@@ -1532,6 +1532,9 @@ test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ p
   const sources = [...new Set(state.legalMoves.map((m) => m.from))].filter((f) => typeof f === "number") as number[];
   const behind: string[] = [];
   const astray: string[] = [];
+  // Where each picked piece's hints sat, by point, to tell hints that follow the
+  // piece from hints that never move.
+  const seen: { from: number; at: string }[] = [];
   let oversized = false;
   let widestSeen = 0;
   let pointWidest = 0;
@@ -1552,7 +1555,9 @@ test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ p
     // 1795152917's model read "13→17" alone as a move and reasoned in circles
     // for two rounds; the destinations make the misplacement plain.
     const over: number[] = [];
-    for (const at of (await hintPositions(page)).map(under)) {
+    const spots = (await hintPositions(page)).map(under);
+    seen.push({ from, at: JSON.stringify([...new Set(spots)].sort((a, b) => (a ?? 0) - (b ?? 0))) });
+    for (const at of spots) {
       if (at !== null && at > from) over.push(at);
       else if (at === null || !legalTo.has(at)) astray.push(`${from}→${at ?? "no point"}`);
     }
@@ -1579,6 +1584,16 @@ test("[F75] REQ-HINT — the hints are the picked piece's own moves", async ({ p
   expect(
     !oversized,
     `[aspect: size] [needs: REQ-HINT/hint F03 F84] a hint is ${Math.round(widestSeen)} px across and a point ${Math.round(pointWidest)} px`,
+  ).toBe(true);
+  // Hints that sit in one place whichever piece is picked up don't go "the wrong
+  // way round" — they never follow the piece at all. Run 1795220321 (a2): the
+  // pieces on 13, 8, 6 and 24 all drew their hints over point 13, and the pieces
+  // below 13 were told "its hints go clockwise". Told as what it is, first.
+  const placed = seen.filter((s) => s.at !== "[]");
+  const fixedAt = new Set(placed.map((s) => s.at));
+  expect(
+    !(placed.length >= 2 && placed.length === seen.length && fixedAt.size === 1),
+    `[aspect: fixed] [needs: REQ-HINT/hint F03 F84] whichever piece was picked up, its hints sat over the same points ${[...fixedAt][0] ?? ""} — the pieces on ${placed.map((s) => s.from).join(", ")}`,
   ).toBe(true);
   expect(behind, `[aspect: backwards] [needs: REQ-HINT/hint F03 F84] hints drawn over points the picked piece has already passed — ${behind.join("; ")}`).toEqual([]);
   expect(astray, `[aspect: astray] [needs: REQ-HINT/hint F03 F84] hints on points the picked piece can't reach: ${astray.join(", ")}`).toEqual([]);

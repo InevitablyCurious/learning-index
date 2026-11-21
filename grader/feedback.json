@@ -355,6 +355,10 @@
       "first": "The move hints aren't the size of a piece — I expect each one as big as a piece.",
       "repeat": "The move hints still aren't the size of a piece."
     },
+    "F75.fixed": {
+      "first": "Whichever piece I pick up, its hints show up in the same place — they don't move to the points that piece can go to.",
+      "repeat": "The hints still sit in the same place whichever piece I pick up."
+    },
     "F75.backwards": {
       "first": "When I pick up a piece, its hints go the wrong way round — clockwise, when my pieces move anticlockwise.",
       "repeat": "Picked up a piece again, and its hints still go clockwise, the opposite way to how my pieces move."
