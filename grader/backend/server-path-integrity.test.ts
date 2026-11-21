@@ -52,10 +52,12 @@ describe("Backgammon backend server-path integrity", () => {
   // turn (a2), then skipped it (a3, a4). G30 told only "passes without moving",
   // and the model tuned its move chooser twice and never looked at the cube
   // (Jerry, 2026-11-21: "an integration team prose issue"). Told when the turn
-  // went unplayed (a crash, a turn that never came back, no piece moved) and
-  // either the build's own shouldAiDouble doubles on this board with the
-  // player's cube or its server showed a double during the turn. A turn played
-  // with the wrong number stays the check's own finding.
+  // went unplayed (a crash, a turn that never came back, no piece moved) and its
+  // server showed a double during the turn, or the turn crashed and the build's
+  // own shouldAiDouble doubles on this board with the player's cube (a crash
+  // shows nothing; the engine alone is not enough otherwise: 10 of 108 corpus
+  // builds' cube functions ignore the owner while their servers guard it). A turn
+  // played with the wrong number stays the check's own finding.
   async function playParkedCubeTurn(board: Board, difficulty: string): Promise<any> {
     let decides = false;
     try {
@@ -87,7 +89,7 @@ describe("Backgammon backend server-path integrity", () => {
     );
     const unplayed = crash !== null || state?.turn !== "white" || blackAt(state) === blackAt(board);
     expect(
-      unplayed && (decides || doubled),
+      unplayed && (doubled || (crash !== null && decides)),
       "[aspect: cubeheld] [needs: G25] with the cube in the player's hands the computer decided to double, and its turn went unplayed",
     ).toBe(false);
     if (crash !== null) throw crash;
@@ -257,7 +259,10 @@ describe("Backgammon backend server-path integrity", () => {
     }
     return races;
   };
-  const toComputersTurn = async (race: { points: number[]; off: { white: number; black: number } }) => {
+  const toComputersTurn = async (
+    race: { points: number[]; off: { white: number; black: number } },
+    cube: { value: number; owner: "white" | "black" | null } = { value: 1, owner: null },
+  ) => {
     await api("/api/new", {});
     await debugSetState(
       makeState({
@@ -268,7 +273,7 @@ describe("Backgammon backend server-path integrity", () => {
         dice: [6, 5],
         remainingDice: [],
         turnOver: true,
-        cube: { value: 1, owner: null },
+        cube,
         difficulty: "hard",
         winner: null,
       }),
@@ -289,6 +294,31 @@ describe("Backgammon backend server-path integrity", () => {
     if (offering.length === 0) return last;
     return toComputersTurn(offering[Math.floor((offering.length - 1) / 2)]!);
   };
+
+  // The cube in the player's hands: no offer. Judged on the races where this
+  // server offers with the cube in the middle, so the hold is the cube's doing.
+  // The 2026-11-21 corpus sweep: 5 of 108 servers offered on the player's cube
+  // (two had passed every check), while 10 whose cube function ignored the owner
+  // guarded it in the server and played right, so the server is what is judged
+  // (G12's own ownership case is untold).
+  it("[G24] REQ-CUBE-ACCEPT — the computer never doubles on the player's cube", async () => {
+    const offeredOnPlayers: number[] = [];
+    for (const race of raceLadder()) {
+      const centred = await toComputersTurn(race);
+      if (centred.phase !== "doubleOffered") continue;
+      const held = await toComputersTurn(race, { value: 2, owner: "white" });
+      const offered =
+        held.phase === "doubleOffered" ||
+        held.doubleOfferedBy === "black" ||
+        held.cube?.value !== 2 ||
+        held.cube?.owner !== "white";
+      if (offered) offeredOnPlayers.push(race.off.white);
+    }
+    expect(
+      offeredOnPlayers,
+      "[aspect: cubeheld] with the cube in the player's hands, the computer offered a double",
+    ).toEqual([]);
+  });
 
   // M24: accepting the computer's double makes the cube 2, owned by the player.
   it("[G24] REQ-CUBE-ACCEPT — accepting the computer's double makes the cube 2", async () => {

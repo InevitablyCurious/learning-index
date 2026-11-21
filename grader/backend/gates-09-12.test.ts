@@ -343,14 +343,17 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     // engine offers with the cube in the middle, so the hold is the cube's doing.
     // The board this used to use (win chance 0.5, outside every window) held
     // whoever had the cube: run 1795248400's engine, which held back only on its
-    // own cube and doubled on the player's, passed it.
+    // own cube and doubled on the player's, passed it. Scored, never told: 10 of
+    // 108 corpus builds' functions ignore the owner while their servers guard it,
+    // and no player sees that; a server that doubles on the player's cube is told
+    // by G24's server check.
     const offersCentred = races.filter(
       (race) => ai.shouldAiDouble(race, "black", { value: 1, owner: null }, "hard").action === "double",
     );
     for (const race of offersCentred) {
       expect(
         ai.shouldAiDouble(race, "black", { value: 2, owner: "white" }, "hard").action,
-        "[aspect: cubeheld] with the cube in the player's hands, the computer offers a double",
+        "[untold] with the cube in the player's hands, the cube function answers double",
       ).toBe("no-double");
     }
 
