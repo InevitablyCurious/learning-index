@@ -1474,6 +1474,16 @@ test("[G05] REQ-HIGHER-DIE — use higher die", async ({ page }) => {
         () => false,
       );
     expect(played, "the game played the smaller number").toBe(false);
+    // The hint is the page's own when the server lists no move for the smaller
+    // number: said by the team, which sees the list. Run 1795229136 (a4-a6): the
+    // server listed only 13>9/4, the page drew 9(4) and 10(3), and the model,
+    // told only "the game still shows me a move for the smaller one", rewrote its
+    // server's (already right) move list three rounds running.
+    const listed = ((await readState(page)).legalMoves ?? []).some((m) => m.die === 3);
+    expect(
+      listed,
+      "[aspect: pagehint] with only the bigger number playable, your server's legalMoves list no move for the smaller one, but the page draws a hint for it",
+    ).toBe(true);
   }
   expect(smaller === undefined, "[aspect: offered] the game showed a hint for the smaller number").toBe(true);
 });
