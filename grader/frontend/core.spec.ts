@@ -1321,6 +1321,34 @@ function readableDice(
 // a roll with no move and hand the turn over by itself: run 1795234131 (a2) did,
 // and F55 and F62 told "End Turn couldn't be pressed" and "the computer's turn
 // never went through" of a build whose End Turn worked in play.
+// The player's roll played out through the server, the first listed move each
+// time, until none is left: a finished turn reached the way the build's own game
+// reaches one, with its moves in the history. Shared by every check that needs
+// the player's finished turn to stay theirs. A finished turn LOADED through the
+// debug route carries no moves, and a page may read it as a roll with no move and
+// hand it over by itself: run 1795290402 (a2) did within a second, F67's first
+// Fast Forward click timed out on a page already showing the computer's turn,
+// and the player was told the double during Fast Forward went wrong.
+async function playOutTheRoll(page: Page): Promise<ApiState> {
+  let state = await readState(page);
+  for (let guard = 0; guard < 4 && state.turn === "white" && state.phase === "move" && (state.legalMoves?.length ?? 0) > 0; guard++) {
+    const move = state.legalMoves[0]!;
+    state = await postJson<ApiState>(page, "/api/move", { from: move.from, to: move.to, die: move.die });
+  }
+  expect(
+    state.turn === "white" && state.phase === "move" && state.remainingDice.length === 0,
+    "[needs: F25 G23 F47] the roll played through the server did not finish the turn",
+  ).toBe(true);
+  return state;
+}
+
+// A finished turn in a given position: the player's dice queued and rolled there
+// (seedRolled), then played out.
+async function playRolledTurn(page: Page, body: Record<string, any>, dice: number[]): Promise<ApiState> {
+  await seedRolled(page, body, dice);
+  return playOutTheRoll(page);
+}
+
 async function playOwnFinishedTurn(page: Page): Promise<void> {
   await setupState(page, {
     points: startingPoints(),
@@ -2562,9 +2590,12 @@ function answerButton(page: Page, name: RegExp): Locator {
 // first rung is the race these checks always used.
 // With "middle" the race is the middle of the rungs the build offers on: a check
 // that plays a turn of white's before the offer needs room either side of it.
+// With `played` dice the player's turn on each rung is played (playRolledTurn),
+// not loaded: for a check that needs that finished turn to stay the player's.
 async function offerRace(
   page: Page,
   pick: "first" | "middle" = "first",
+  played?: number[],
 ): Promise<{ points: number[]; off: { white: number; black: number }; offered: boolean }> {
   const ladder: { points: number[]; off: { white: number; black: number } }[] = [];
   let six = 10, one = 1, whiteOff = 4;
@@ -2591,10 +2622,14 @@ async function offerRace(
   const offering: typeof ladder = [];
   for (const race of ladder) {
     await postJson(page, "/api/new", {});
-    await setupState(page, {
-      ...race, bar: { white: 0, black: 0 }, turn: "white", phase: "move", dice: [6, 5], remainingDice: [],
-      turnOver: true, cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "",
-    });
+    if (played) {
+      await playRolledTurn(page, { ...race, bar: { white: 0, black: 0 }, cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "" }, played);
+    } else {
+      await setupState(page, {
+        ...race, bar: { white: 0, black: 0 }, turn: "white", phase: "move", dice: [6, 5], remainingDice: [],
+        turnOver: true, cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "",
+      });
+    }
     let state: any = await postJson(page, "/api/endturn", {});
     for (let guard = 0; guard < 12 && state?.turn === "black" && state?.phase !== "doubleOffered" && !state?.winner; guard++) {
       state = await postJson(page, "/api/ai", {});
@@ -2711,6 +2746,14 @@ test("[F90] REQ-DOUBLE-ACCEPT-PLAYS-ON — taking the computer's double, the gam
   const take = answerButton(page, TAKE);
   await expect(take, "[needs: G12 F49]").toBeVisible();
   await playerClick(take);
+  // Answered, the offer's pop-up goes. Run 1795290402 (a2): its Accept sent the
+  // answer and left the pop-up over the game (closed only by New Game or a click
+  // on the backdrop); no check looked, and F67 met it as a Fast Forward button it
+  // could not reach.
+  await expect(
+    page.getByTestId("modalOverlay"),
+    "[aspect: stays] after the computer's double was taken its pop-up stayed on screen",
+  ).toBeHidden({ timeout: 3_000 });
   // The computer, having been taken, plays its turn and hands it back.
   await expect
     .poll(
@@ -3342,11 +3385,7 @@ test("[F64] REQ-FASTFORWARD-SHOW — the Fast Forward button appears only in a r
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [2, 1] });
   await rollAndCheck(page, [2, 1], () => page.getByTestId("rollBtn").click());
   await expect(button, "[aspect: shown] no Fast Forward button showed in a race once the player had rolled").toBeVisible();
-  await setupState(page, {
-    points, bar: { white: 0, black: 0 }, off: { white: 0, black: 0 },
-    turn: "white", phase: "move", dice: [2, 1], remainingDice: [], turnOver: true,
-    cube: { value: 1, owner: null }, difficulty: "easy", winner: null, message: "",
-  });
+  await playOutTheRoll(page);
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await expect(button, "[aspect: shown] no Fast Forward button showed in a race once the player's moves were played").toBeVisible();
@@ -3494,12 +3533,8 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
   // twice: carrying on before the player rolls, then after.
   for (const rolledFirst of [false, true]) {
     await openApp(page);
-    const { points, off } = await offerRace(page);
-    await setupState(page, {
-      points, bar: { white: 0, black: 0 }, off,
-      turn: "white", phase: "move", dice: [6, 5], remainingDice: [], turnOver: true,
-      cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "",
-    });
+    const { points, off } = await offerRace(page, "first", [2, 1]);
+    await playRolledTurn(page, { points, bar: { white: 0, black: 0 }, off, cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "" }, [2, 1]);
     await page.reload();
     await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
     const button = page.getByTestId("fastForwardBtn");
@@ -3534,6 +3569,7 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
     const take = answerButton(page, TAKE);
     await expect(take, "[aspect: answer] [needs: F49 F56] no button to take the computer's double showed").toBeVisible();
     await playerClick(take);
+    await expect(page.getByTestId("modalOverlay"), "[needs: F90] after the double was taken its pop-up stayed on screen").toBeHidden({ timeout: 3_000 });
     await expect
       .poll(async () => (await readState(page)).turn, {
         message: "[aspect: frozen] [needs: G20] after the double was taken the turn never came back to the player",

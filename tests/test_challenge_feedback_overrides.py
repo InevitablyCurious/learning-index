@@ -90,7 +90,9 @@ _APPROVED_PRESCRIPTIVE = frozenset({"G36", "F94"})
 #: F94, 2026-11-13: "…The turn should have come back to me, but it didn't — the game froze and I couldn't roll."
 #: F67, 2026-11-13: "After being offered a double while my game was in Fast Forward, the behavior was wrong. I expect: …"
 #: G11, G33, 2026-11-13: the doubling cube's logic told by the software team (Jerry's split).
-_APPROVED_TITLE_OVERLAP = frozenset({"F67", "F73", "F93", "F94", "G11", "G33"})
+#: G12, 2026-11-21, Jerry: "the model is compacted, either reference the build spec directly or
+#: give the values in that statement" — the line quotes the measured decision and every house number.
+_APPROVED_TITLE_OVERLAP = frozenset({"F67", "F73", "F93", "F94", "G11", "G12", "G33"})
 
 _PRESCRIPTIVE_PHRASES = (
     "should be",

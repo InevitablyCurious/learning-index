@@ -367,7 +367,16 @@ _HELPER_MARKERS = {
     # playOwnFinishedTurn (core.spec.ts): a 3-1 played through the server that does
     # not finish the turn waits on the move and turn-end checks (2026-11-20). Its
     # users: the computer's-turn watcher (F62, F77) and F55.
-    ("frontend/core.spec.ts", "[needs: F25 G23 F47]"): ("F55", "F62", "F77"),
+    # playOutTheRoll / playRolledTurn (core.spec.ts): the player's roll played out
+    # through the server, for checks that need the finished turn to stay theirs
+    # (2026-11-21): F64's "after your moves", F67's race before the offer.
+    ("frontend/core.spec.ts", "[needs: F25 G23 F47]"): (
+        "F55",
+        "F62",
+        "F64",
+        "F67",
+        "F77",
+    ),
     # playParkedCubeTurn (server-path-integrity.test.ts): a computer turn run with
     # the cube parked in the player's hands, told as the cube when the computer
     # doubles anyway and the turn goes unplayed (2026-11-21). Its users: G30, G39.

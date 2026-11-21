@@ -128,8 +128,8 @@
       "repeat": "On the player's turn with the cube in the middle, your app still won't let them double."
     },
     "G12": {
-      "first": "They put your computer's doubling decisions against the thresholds you were given — when it offers, takes and turns down a double — and some of them don't match.",
-      "repeat": "Your computer's doubling decisions still don't all match the thresholds you were given."
+      "first": "Their checks of your computer's cube decisions: {measured}. The house numbers in the build brief: the computer's win chance is 0.5 (within 0.01) when both sides have the same pip count, under 0.24 when it is hopelessly behind and over 0.90 when its win is nearly certain; it takes the player's double at a win chance of 0.32 or more on easy, 0.27 on medium and 0.24 on hard, and turns it down below that; it offers a double only inside its window — 0.72 to 0.90 on medium, 0.68 to 0.90 on hard — holds above 0.90, and never offers on easy.",
+      "repeat": "Their checks again: {measured}. The house numbers again: a win chance of 0.5 (within 0.01) at equal pips; it takes at 0.32 / 0.27 / 0.24 (easy / medium / hard); it offers only inside 0.72–0.90 (medium) or 0.68–0.90 (hard), never on easy, and holds above 0.90."
     },
     "G12.pips": {
       "first": "Their checks of your engine: {measured}. The brief counts a side's pips as the distance all its checkers still have to travel to bear off.",
@@ -2134,6 +2134,10 @@
     "F90": {
       "first": "If the AI doubles and I accept, the game is left in a broken frozen state.",
       "repeat": "Accepted the AI's double again and the game froze again."
+    },
+    "F90.stays": {
+      "first": "When I take the computer's double, its pop-up stays up over the game after I've answered it.",
+      "repeat": "I took the computer's double again and its pop-up still stays up over the game."
     },
     "F91": {
       "first": "I see pieces on the board already — I asked for just the board and the buttons first, with no pieces yet.",

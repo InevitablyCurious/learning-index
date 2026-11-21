@@ -239,6 +239,12 @@ function takeAnswer(board: unknown, difficulty: "easy" | "medium" | "hard"): str
   return TAKE_WORDS.has(action) ? "double" : PASS_WORDS.has(action) ? "no-double" : action;
 }
 
+// A win chance as the team quotes it. G12's lines carry the grader's own numbers
+// (Jerry, 2026-11-21: the model is compacted — "either reference the build spec
+// directly or give the values"); "some of them don't match the thresholds you
+// were given" named neither the decision nor the number.
+const chance = (x: unknown): string => (typeof x === "number" ? String(Math.round(x * 1000) / 1000) : String(x));
+
 describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window thresholds", () => {
   it("[G12] REQ-CUBE-AI — accepts near-even cube offers across all difficulties", () => {
     const points = emptyPoints();
@@ -257,13 +263,14 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     // as that, never as a doubling decision (run 1795034166: {myPip: 0} for a 350-pip position).
     expect({ myPip, oppPip }, `[aspect: pips] [needs: G02] your engine counts their test position as ${myPip} pips for the computer and ${oppPip} for the player, not 30 and 30`).toEqual({ myPip: 30, oppPip: 30 });
     expect(wp, "[brief]").toBe(0.5);
-    expect(withinParityBand(ai.winProbability(board, "black")), "[brief]").toBe(true);
+    const evenWp = ai.winProbability(board, "black");
+    expect(withinParityBand(evenWp), `[brief] with both sides on 30 pips, your computer's win chance comes out ${chance(evenWp)}, not 0.5`).toBe(true);
     expect(wp, "[brief]").toBeGreaterThanOrEqual(TAKE_POINT.easy);
     expect(wp, "[brief]").toBeGreaterThanOrEqual(TAKE_POINT.medium);
     expect(wp, "[brief]").toBeGreaterThanOrEqual(TAKE_POINT.hard);
-    expect(takeAnswer(board, "easy"), "[brief]").toBe("double");
-    expect(takeAnswer(board, "medium"), "[brief]").toBe("double");
-    expect(takeAnswer(board, "hard"), "[brief]").toBe("double");
+    for (const difficulty of ["easy", "medium", "hard"] as const) {
+      expect(takeAnswer(board, difficulty), `[brief] with both sides on 30 pips (win chance 0.5), your computer turns down the player's double on ${difficulty}`).toBe("double");
+    }
   });
 
   it("[G12] REQ-CUBE-AI — declines when black win chance is below hard take point", () => {
@@ -277,9 +284,10 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
 
     expect({ myPip, oppPip }, `[aspect: pips] [needs: G02] your engine counts their test position as ${myPip} pips for the computer and ${oppPip} for the player, not 350 and 2`).toEqual({ myPip: 350, oppPip: 2 });
     expect(wp, "[brief]").toBe(0.02);
-    expect(ai.winProbability(board, "black"), "[brief] [needs: G22]").toBeLessThan(TAKE_POINT.hard);
+    const lostWp = ai.winProbability(board, "black");
+    expect(lostWp, `[brief] [needs: G22] at 350 pips against 2, your computer's win chance comes out ${chance(lostWp)}, not under 0.24`).toBeLessThan(TAKE_POINT.hard);
     expect(wp, "[brief]").toBeLessThan(TAKE_POINT.hard);
-    expect(takeAnswer(board, "hard"), "[brief]").toBe("no-double");
+    expect(takeAnswer(board, "hard"), "[brief] at 350 pips against 2 (win chance under 0.24), your computer takes the player's double on hard").toBe("no-double");
   });
 
   it("[G12] REQ-CUBE-AI — offers only inside hard window, never when blocked/easy/too-good", () => {
@@ -300,14 +308,15 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     // with its OWN win-probability estimate under the published REQ-CUBE-AI policy, rather than
     // forcing the reference formula's decision on this ambiguous board.
     const windowWpCand = ai.winProbability(windowBoard, "black");
+    const windowHard = ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "hard").action;
     expect(
-      ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "hard").action,
-      "[brief]",
+      windowHard,
+      `[brief] black 30 pips, white 61 with 4 off: at its own win chance of ${chance(windowWpCand)}, your computer ${windowHard === "double" ? "offers" : "holds"} on hard`,
     ).toBe(expectedOfferAction(windowWpCand, "hard", true));
     // easy never offers a double, regardless of win probability
     expect(
       ai.shouldAiDouble(windowBoard, "black", { value: 1, owner: null }, "easy").action,
-      "[brief]",
+      `[brief] black 30 pips, white 61 with 4 off: at its own win chance of ${chance(windowWpCand)}, your computer offers on easy`,
     ).toBe(expectedOfferAction(windowWpCand, "easy", true));
 
     // The same judgement across the races the offer checks play (offerRace in
@@ -333,9 +342,10 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     }
     for (const race of races) {
       const wp = ai.winProbability(race, "black");
+      const got = ai.shouldAiDouble(race, "black", { value: 1, owner: null }, "hard").action;
       expect(
-        ai.shouldAiDouble(race, "black", { value: 1, owner: null }, "hard").action,
-        `[brief] black 30 pips, white ${game.pipCount(race, "white")} with ${race.off.white} off, win chance ${wp}`,
+        got,
+        `[brief] black 30 pips, white ${game.pipCount(race, "white")} with ${race.off.white} off: at its own win chance of ${chance(wp)}, your computer ${got === "double" ? "offers" : "holds"} on hard`,
       ).toBe(expectedOfferAction(wp, "hard", true));
     }
 
@@ -367,11 +377,11 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
 
     expect({ tooGoodMyPip, tooGoodOppPip }, `[aspect: pips] [needs: G02] your engine counts their test position as ${tooGoodMyPip} pips for the computer and ${tooGoodOppPip} for the player, not 1 and 350`).toEqual({ tooGoodMyPip: 1, tooGoodOppPip: 350 });
     expect(tooGoodWp, "[brief]").toBeGreaterThan(DOUBLE_WINDOW.upper);
-    expect(ai.winProbability(tooGoodBoard, "black"), "[brief] [needs: G22]").toBeGreaterThan(DOUBLE_WINDOW.upper);
+    const sureWp = ai.winProbability(tooGoodBoard, "black");
+    expect(sureWp, `[brief] [needs: G22] at 1 pip against 350, your computer's win chance comes out ${chance(sureWp)}, not over 0.90`).toBeGreaterThan(DOUBLE_WINDOW.upper);
     expect(
-      ai.shouldAiDouble(tooGoodBoard, "black", { value: 1, owner: null }, "hard")
-        .action,
-      "[brief]",
+      ai.shouldAiDouble(tooGoodBoard, "black", { value: 1, owner: null }, "hard").action,
+      "[brief] at 1 pip against 350 (win chance over 0.90), your computer offers on hard",
     ).toBe("no-double");
   });
 

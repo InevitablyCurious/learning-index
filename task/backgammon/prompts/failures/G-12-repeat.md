@@ -1,1 +1,1 @@
-Your computer's doubling decisions still don't all match the thresholds you were given.
+Their checks again: {measured}. The house numbers again: a win chance of 0.5 (within 0.01) at equal pips; it takes at 0.32 / 0.27 / 0.24 (easy / medium / hard); it offers only inside 0.72–0.90 (medium) or 0.68–0.90 (hard), never on easy, and holds above 0.90.
