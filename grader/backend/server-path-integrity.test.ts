@@ -615,7 +615,19 @@ describe("Backgammon backend server-path integrity", () => {
         state = await api("/api/ai", {});
       }
       state = await getState();
-      expect(pipsBefore - blackPips(state), "[aspect: numbers]").toBe(opening[0] + opening[1]);
+      // The decoy queued for the NEXT roll is the measuring stick: run 1795316238
+      // (a3) took it in a turn that throws no dice (its queue came before the
+      // opening's dice) and was told only "doesn't move by the two numbers" —
+      // true here, never in play (no queue), and its page passed F88.
+      const moved = pipsBefore - blackPips(state);
+      // A decoy double played as four or as two dice is the decoy either way.
+      const decoyPips = new Set([decoy[0] + decoy[1], (decoy[0] + decoy[1]) * (decoy[0] === decoy[1] ? 2 : 1)]);
+      expect(
+        moved,
+        decoyPips.has(moved)
+          ? `[aspect: queue] with ${decoy.join("-")} queued through /api/debug/roll for the next roll, the computer's opening turn after a ${opening.join("-")} opening played the queued numbers (${moved} pips)`
+          : `[aspect: numbers] after a ${opening.join("-")} opening the computer's first turn moved ${moved} pips, not ${opening[0] + opening[1]}`,
+      ).toBe(opening[0] + opening[1]);
       expect(state.turn, "[aspect: handback]").toBe("white");
       await api("/api/roll", {});
     }

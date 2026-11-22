@@ -1540,8 +1540,12 @@
       "repeat": "They throw lower than the computer in the opening roll through your API again, and the first move still isn't the computer's."
     },
     "G31.numbers": {
-      "first": "The computer wins the opening throw through your app's API, but its first turn doesn't move by exactly the two numbers thrown — no more, no less.",
-      "repeat": "The computer wins the opening throw through your app's API, and its first turn still doesn't move by exactly the two numbers thrown — no more, no less."
+      "first": "Their checks of your server: {measured}. When the computer wins the opening throw, its first turn plays exactly those two numbers — no more, no less.",
+      "repeat": "Their checks again: {measured} — the computer's first turn still doesn't play exactly the opening's two numbers."
+    },
+    "G31.queue": {
+      "first": "Their checks of your server: {measured}. A roll queued through /api/debug/roll belongs to the next roll that is thrown; the computer's opening turn throws no dice — it plays the opening numbers and leaves the queue for the next roll.",
+      "repeat": "Their checks again: {measured} — a turn that throws no dice still takes the queued roll."
     },
     "G31.handback": {
       "first": "The computer makes its first move after winning the opening throw through your app's API, and the turn never comes back to them.",
