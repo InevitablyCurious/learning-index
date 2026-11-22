@@ -244,8 +244,8 @@
       "repeat": "Far ahead in a race again, your computer still never offers a double."
     },
     "G24.before": {
-      "first": "Your computer rolls first and only then offers its double.",
-      "repeat": "Your computer still rolls first and only then offers its double."
+      "first": "Their checks of your server: {measured}. The rule for the computer's turn: its double comes first. When its turn begins it decides whether to double before any dice are rolled for it; if it offers, the turn waits on the offer with no dice rolled; once the player takes, it rolls and plays its moves. Neither its roll nor its moves come before that decision.",
+      "repeat": "Their checks again: {measured}. The computer's double still has to come first in its turn — decided before any dice are rolled for it."
     },
     "G24": {
       "first": "The player takes your computer's double, but your app's state doesn't make the cube worth two and owned by the player.",

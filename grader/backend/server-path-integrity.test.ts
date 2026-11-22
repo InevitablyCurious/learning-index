@@ -461,7 +461,19 @@ describe("Backgammon backend server-path integrity", () => {
         } catch {}
         continue;
       }
-      expect(play.remainingDice ?? [], "[aspect: before] the computer rolled before it offered its double").toEqual([]);
+      // Measured as the player would meet it: the dice already rolled for the
+      // offer and whether a move of its own came first. Run 1795309746 (a4–a7):
+      // told only "rolls first and only then offers", the model moved the
+      // decision after its moves (a7: "shouldn't double before playing moves").
+      // Rolled AND moved first is caught too: with every die used the offer
+      // carries no remaining dice, and a7's grade passed on exactly that.
+      const rolled = (play.remainingDice ?? []) as number[];
+      const blackOf = (points: number[]) => JSON.stringify(points.map((v) => (v < 0 ? v : 0)));
+      const movedFirst = blackOf(play.points as number[]) !== blackOf(race.points);
+      const when = movedFirst
+        ? `after it had already rolled and moved${rolled.length ? ` (${rolled.join("-")} still to play)` : ""}`
+        : `with its dice already rolled (${rolled.join("-")} still to play)`;
+      expect(rolled.length === 0 && !movedFirst, `[aspect: before] the computer's offer came ${when}`).toBe(true);
       return;
     }
     // No race drew an offer. When the build's own cube judgement said double in
