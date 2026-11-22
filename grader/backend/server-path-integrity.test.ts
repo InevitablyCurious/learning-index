@@ -313,6 +313,70 @@ describe("Backgammon backend server-path integrity", () => {
     return toComputersTurn(offering[Math.floor((offering.length - 1) / 2)]!);
   };
 
+  // [G35] THE COMPUTER'S SIDE OF THE DEBUG ROUTE: a race set up through it draws
+  // the computer's offer exactly as the same race reached by play. Run 1795304165
+  // (a4) kept `openingMovePlayed`, set only by moves, in front of its computer's
+  // cube decision: no seeded race ever drew an offer, while a race reached by one
+  // played move did — and "far behind in a race, the computer never once offered"
+  // was told of a game that offers in play (G35's first test covers only the
+  // player's double). The race is played first (a 2-1 rolled and played through
+  // the server, then End Turn); only a race whose play draws the offer is judged —
+  // one that draws none in play is G24's.
+  it("[G35] REQ-DEBUG-STATE — a seeded race draws the computer's offer like a played one", async () => {
+    const toOffer = async (state: any) => {
+      for (let guard = 0; guard < 12 && state.turn === "black" && state.phase !== "doubleOffered" && !state.winner; guard++) {
+        state = await api("/api/ai", {});
+      }
+      return state;
+    };
+    for (const race of engineDoubles()) {
+      await api("/api/new", {});
+      await debugSetState(
+        makeState({
+          ...race,
+          bar: { white: 0, black: 0 },
+          turn: "white",
+          phase: "roll",
+          dice: [],
+          remainingDice: [],
+          cube: { value: 1, owner: null },
+          difficulty: "hard",
+          winner: null,
+        }),
+      );
+      await debugRoll([2, 1]);
+      let state = await api("/api/roll", {});
+      for (let guard = 0; guard < 4 && state.turn === "white" && state.phase === "move" && (state.legalMoves?.length ?? 0) > 0; guard++) {
+        const move = state.legalMoves[0];
+        state = await api("/api/move", { from: move.from, to: move.to, die: move.die });
+      }
+      if (!(state.turn === "white" && state.phase === "move" && state.remainingDice.length === 0 && !state.winner)) continue;
+      const position = { points: state.points, bar: state.bar, off: state.off };
+      if ((await toOffer(await api("/api/endturn", {}))).phase !== "doubleOffered") continue;
+
+      await api("/api/new", {});
+      await debugSetState(
+        makeState({
+          ...position,
+          turn: "white",
+          phase: "move",
+          dice: [2, 1],
+          remainingDice: [],
+          turnOver: true,
+          cube: { value: 1, owner: null },
+          difficulty: "hard",
+          winner: null,
+        }),
+      );
+      const seeded = await toOffer(await api("/api/endturn", {}));
+      expect(
+        seeded.phase,
+        "[aspect: computer] [brief] the same race set up through the debug route drew no offer from the computer, though reached by play it did",
+      ).toBe("doubleOffered");
+      return;
+    }
+  });
+
   // The cube in the player's hands: no offer. Judged on the races where this
   // server offers with the cube in the middle, so the hold is the cube's doing.
   // The 2026-11-21 corpus sweep: 5 of 108 servers offered on the player's cube
