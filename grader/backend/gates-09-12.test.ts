@@ -349,23 +349,13 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
       ).toBe(expectedOfferAction(wp, "hard", true));
     }
 
-    // The cube in the player's hands: no offer, judged on the races where this
-    // engine offers with the cube in the middle, so the hold is the cube's doing.
-    // The board this used to use (win chance 0.5, outside every window) held
-    // whoever had the cube: run 1795248400's engine, which held back only on its
-    // own cube and doubled on the player's, passed it. Scored, never told: 10 of
-    // 108 corpus builds' functions ignore the owner while their servers guard it,
-    // and no player sees that; a server that doubles on the player's cube is told
-    // by G24's server check.
-    const offersCentred = races.filter(
-      (race) => ai.shouldAiDouble(race, "black", { value: 1, owner: null }, "hard").action === "double",
-    );
-    for (const race of offersCentred) {
-      expect(
-        ai.shouldAiDouble(race, "black", { value: 2, owner: "white" }, "hard").action,
-        "[untold] with the cube in the player's hands, the cube function answers double",
-      ).toBe("no-double");
-    }
+    // Who holds the cube is judged where a player meets it — G24's server check
+    // ("the computer never doubles on the player's cube"). A function-level
+    // ownership case here (added 2026-11-21, untold) was cut the same week: no
+    // player sees a cube function the server never trusts, the brief states no
+    // ownership rule for the function (Jerry 11-21: the model knows the rule; the
+    // game is held to it), and an untold failure can never be fixed — run
+    // 1795435505 (a2) failed only it and heard "something is still broken".
 
     const tooGoodPoints = emptyPoints();
     tooGoodPoints[24] = -1; // black pip 1
