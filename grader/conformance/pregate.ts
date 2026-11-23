@@ -904,16 +904,21 @@ export async function runPreGate(): Promise<PreGateResult> {
       }
 
       await page.close();
+      // The gameplay checks (the dice, the dice after a reload, the hints) are
+      // marked checked only where they were measured — inside `gameplayScoped`.
+      // At layers 1–2 they stay unresolved, read "never evaluated", and the
+      // layer-scoped report sets them aside as not graded (report.mjs --layer).
+      // They used to be resolved here unconditionally, so a layer 1–2 record
+      // said "passed" for checks nobody ran (2026-11-21 audit; Jerry 11-23).
       resolve(
         ...REQUIRED_STATIC_TESTIDS.map((testId) => `REQ-TESTID/testid.${testId}`),
         ...REQUIRED_STATIC_TESTIDS.map((id) => `REQ-TESTID/id.${id}`),
-        ...COUNTED_ELEMENT_LABELS.flatMap((label) => [
+        ...COUNTED_ELEMENT_LABELS.filter((label) => gameplayScoped || label !== "die").flatMap((label) => [
           `REQ-RENDER/${label}`,
           `REQ-TESTID/${label}`,
         ]),
         "REQ-TESTID/point-column",
-        "REQ-RENDER/die-reload",
-        "REQ-HINT/hint",
+        ...(gameplayScoped ? ["REQ-RENDER/die-reload", "REQ-HINT/hint"] : []),
       );
     } catch (error) {
       add("REQ-TESTID/dom — page DOM exposes the required testids and hint flow", "DOM testids and hint flow are present", errorLine(error));

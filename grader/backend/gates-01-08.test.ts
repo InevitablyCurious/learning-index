@@ -132,6 +132,9 @@ describe("Backgammon backend gates 01-08", () => {
     const fromValues = [...new Set(dieSixMoves.map((m) => m.from))].sort((a, b) => a - b);
 
     expect(fromValues).toEqual([8, 13, 24]);
+    // Every 6 lands on the board — lost by accident in 62b6bbe (2026-09-24) while
+    // checks.json and G18's line still promised it (2026-11-21 audit; Jerry 11-23).
+    expect(dieSixMoves.every((m) => m.to >= 1 && m.to <= 24)).toBe(true);
   });
 
   it("[G06] REQ-BAR — bar re-entry + blocked pass", () => {

@@ -1,5 +1,5 @@
 import { type Locator, type Page } from "@playwright/test";
-import { endLoadedTurn, expect, expectPopupShown, hintPositions, pickUpAPiece, pictureChange, playerClick, playerClickUntilShown, PORT, press, rollAndCheck, seedRolled, settledHintPositions, setupState, test } from "./fixtures.ts";
+import { expect, expectPopupShown, hintPositions, pickUpAPiece, pictureChange, playerClick, playerClickUntilShown, PORT, press, rollAndCheck, seedRolled, settledHintPositions, setupState, test } from "./fixtures.ts";
 import { readColumnBox, readPointBoxes, sampleBoxBrightness, sampleBoxContrast, waitForBoardSettled } from "./board-geometry.ts";
 
 type Player = "white" | "black";
@@ -1329,10 +1329,10 @@ function readableDice(
 // hand it over by itself: run 1795290402 (a2) did within a second, F67's first
 // Fast Forward click timed out on a page already showing the computer's turn,
 // and the player was told the double during Fast Forward went wrong.
-async function rollPlayedOut(page: Page): Promise<ApiState> {
+async function rollPlayedOut(page: Page, prefer?: (move: Move) => boolean): Promise<ApiState> {
   let state = await readState(page);
   for (let guard = 0; guard < 4 && state.turn === "white" && state.phase === "move" && (state.legalMoves?.length ?? 0) > 0; guard++) {
-    const move = state.legalMoves[0]!;
+    const move = (prefer && state.legalMoves.find(prefer)) || state.legalMoves[0]!;
     state = await postJson<ApiState>(page, "/api/move", { from: move.from, to: move.to, die: move.die });
   }
   return state;
@@ -1340,17 +1340,22 @@ async function rollPlayedOut(page: Page): Promise<ApiState> {
 const turnStillPlayers = (state: ApiState) =>
   state.turn === "white" && state.phase === "move" && state.remainingDice.length === 0 && !state.winner;
 
-async function playOutTheRoll(page: Page): Promise<ApiState> {
-  const state = await rollPlayedOut(page);
+async function playOutTheRoll(page: Page, prefer?: (move: Move) => boolean): Promise<ApiState> {
+  const state = await rollPlayedOut(page, prefer);
   expect(turnStillPlayers(state), "[needs: F25 G23 F47] the roll played through the server did not finish the turn").toBe(true);
   return state;
 }
 
 // A finished turn in a given position: the player's dice queued and rolled there
 // (seedRolled), then played out.
-async function playRolledTurn(page: Page, body: Record<string, any>, dice: number[]): Promise<ApiState> {
+async function playRolledTurn(
+  page: Page,
+  body: Record<string, any>,
+  dice: number[],
+  prefer?: (move: Move) => boolean,
+): Promise<ApiState> {
   await seedRolled(page, body, dice);
-  return playOutTheRoll(page);
+  return playOutTheRoll(page, prefer);
 }
 
 async function playOwnFinishedTurn(page: Page): Promise<void> {
@@ -2228,29 +2233,22 @@ test("[F94] REQ-TURN — when the computer can't move, the turn comes back to ro
   points[12] = -5;
   points[17] = -3;
   points[19] = -6; // 14 black on the board, the 15th on the bar
-  await setupState(page, {
-    points,
-    bar: { white: 0, black: 1 },
-    off: { white: 0, black: 0 },
-    turn: "white",
-    phase: "move",
-    dice: [3, 1],
-    remainingDice: [],
-    turnOver: true,
-    cube: { value: 1, owner: null },
-    difficulty: "easy",
-    winner: null,
-    message: "",
-  });
-  // The computer's dice are queued before the page loads: a page may hand the
-  // loaded turn over by itself (endLoadedTurn) and the computer roll before a
-  // queue made after the reload lands — then the player's Roll takes the
-  // computer's 6-5 and reads as "no roll of their own" (run 1795240920 a6).
+  // The player's turn PLAYED, not loaded: a 2-1 rolled and played through the
+  // server from the 13 (13→11→10), so the closed home board stays closed and the
+  // page sees a turn with its moves in the history (a loaded finished turn with
+  // none could be passed by the page itself). The computer's 6-5 is queued after
+  // the player's roll has taken its own dice.
+  await playRolledTurn(
+    page,
+    { points, bar: { white: 0, black: 1 }, off: { white: 0, black: 0 }, cube: { value: 1, owner: null }, difficulty: "easy", winner: null, message: "" },
+    [2, 1],
+    (move) => move.from > 6,
+  );
   await postJson<ApiState>(page, "/api/debug/roll", { dice: [6, 5] });
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
   await waitForBoardSettled(page).catch(() => undefined);
-  await endLoadedTurn(page, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
+  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
 
   // The computer rolls, cannot come in, says so, and hands the turn back.
   const roll = page.getByTestId("rollBtn");
@@ -2664,28 +2662,16 @@ test("[F49] REQ-DOUBLE-OFFER — the doubling message reads like a person", asyn
   // pips, so the AI's decision is the same as the bare points give.
   test.setTimeout(90_000);
   await openApp(page);
-  const { points, off, offered: anyOffer } = await offerRace(page);
+  const { points, off, offered: anyOffer } = await offerRace(page, "first", [2, 1]);
   // No rung of the ladder drew an offer from the build's own server: there is
   // no offer for the screen to show. Run 1794873096's computer never doubled
   // until a game had been finished on the server, so a player's first game
   // never saw one — and was told the offer "never shows up on screen".
   expect(anyOffer, "[aspect: never] [needs: G12 G35] far behind in a race, the computer never offered to double").toBe(true);
-  await setupState(page, {
-    points,
-    bar: { white: 0, black: 0 },
-    off,
-    turn: "white",
-    phase: "move",
-    dice: [6, 5],
-    remainingDice: [],
-    turnOver: true,
-    cube: { value: 1, owner: null },
-    difficulty: "hard",
-    message: "",
-  });
+  await playRolledTurn(page, { points, bar: { white: 0, black: 0 }, off, cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "" }, [2, 1]);
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await endLoadedTurn(page, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
+  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
 
   await expect
     .poll(async () => /double|offer/i.test(await shownDoubleText(page)), {
@@ -3182,24 +3168,11 @@ test("[F56] REQ-RELOAD — the pending double offer shows again after a reload",
   // during its real offer — who still had both buttons — was told they had none.
   test.setTimeout(90_000);
   await openApp(page);
-  const { points, off } = await offerRace(page);
-  await setupState(page, {
-    points,
-    bar: { white: 0, black: 0 },
-    off,
-    turn: "white",
-    phase: "move",
-    dice: [6, 5],
-    remainingDice: [],
-    turnOver: true,
-    cube: { value: 1, owner: null },
-    difficulty: "hard",
-    winner: null,
-    message: "",
-  });
+  const { points, off } = await offerRace(page, "first", [2, 1]);
+  await playRolledTurn(page, { points, bar: { white: 0, black: 0 }, off, cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "" }, [2, 1]);
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await endLoadedTurn(page, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
+  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
   await expect
     .poll(async () => (await readState(page)).phase, {
       message: "[needs: F49] the computer's offer never came",
@@ -3447,7 +3420,12 @@ test("[F65] REQ-FASTFORWARD-PLAYOUT — Fast Forward plays the race out to a win
   // about half a second apart. A page that never drew the player's pieces
   // moving is not judged here.
   const { starts, first } = moveStarts(frames, clickAt);
-  if (!Number.isFinite(first)) return;
+  // No move of the player's in the frames although the race played out — never a
+  // pass with nothing tested (it used to `return` here: 2026-11-21 audit, Jerry
+  // approved 11-23). F77 proves the recorder reads this page's moves (the
+  // computer's, drawn one at a time); past it, a playout with none of the
+  // player's moves drawn is what a player watching saw: the board jumping on.
+  expect(Number.isFinite(first), "[aspect: unseen] [needs: F77] none of the player's moves were drawn while Fast Forward played the race out").toBe(true);
   const { shown, readable } = readableDice(frames, clickAt, first, atClick);
   expect(shown, "[aspect: dice] the player's dice never showed before Fast Forward's first move").toBe(true);
   expect(readable, `[aspect: first] the player's roll was up ${readable.toFixed(0)} ms before Fast Forward's first move`).toBeGreaterThanOrEqual(800);
@@ -3623,30 +3601,19 @@ test("[F67] REQ-FASTFORWARD-DOUBLE — a computer double stops Fast Forward unti
 test("[F72] REQ-DOUBLE-PENDING — the computer's offer holds the game", async ({ page }) => {
   test.setTimeout(90_000);
   await openApp(page);
-  const { points, off } = await offerRace(page);
-  await setupState(page, {
-    points,
-    bar: { white: 0, black: 0 },
-    off,
-    turn: "white",
-    phase: "move",
-    dice: [6, 5],
-    remainingDice: [],
-    turnOver: true,
-    cube: { value: 1, owner: null },
-    difficulty: "hard",
-    message: "",
-  });
+  const { points, off } = await offerRace(page, "first", [2, 1]);
+  await playRolledTurn(page, { points, bar: { white: 0, black: 0 }, off, cube: { value: 1, owner: null }, difficulty: "hard", winner: null, message: "" }, [2, 1]);
   await page.reload();
   await expect(page.getByTestId("board"), "[needs: F01]").toBeVisible();
-  await endLoadedTurn(page, "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
-  // An offer that never shows is F49's finding (stage 6, which a stage-2 gate may
-  // not wait on): with nothing waiting for an answer there is nothing to press.
+  await press(page.getByTestId("endTurnBtn"), "[aspect: noend] [needs: F47] End Turn was not available with nothing left to play");
+  // An offer that never shows is F49's finding (both stage 17 now): this check
+  // waits on it, never passes on it. It used to `return` here and record a PASS
+  // with nothing tested (2026-11-21 grader audit, Jerry approved the fix 11-23).
   const offerShown = await expect
     .poll(async () => /double|offer/i.test(await shownDoubleText(page)), { timeout: 10_000 })
     .toBe(true)
     .then(() => true, () => false);
-  if (!offerShown) return;
+  expect(offerShown, "[needs: F49] the computer's offer never showed, so nothing held the game").toBe(true);
 
   // Let the computer finish whatever it is doing, then press End Turn the way a
   // player does, if the button can be pressed at all.
