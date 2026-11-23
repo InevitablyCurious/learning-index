@@ -180,11 +180,11 @@
       "repeat": "They checked more positions, and the computer's win-chance estimate still doesn't rise as it pulls ahead."
     },
     "G35": {
-      "first": "They set up a turn through your app's debug setup — the player's turn, before the roll, the cube in the middle — and it won't let them double, though the same turn in a real game can.",
-      "repeat": "They set up that turn through your debug setup again — the player's turn, before the roll — and it still won't let them double the way a real game does."
+      "first": "They set up a turn through your app's debug setup — the player's turn, before the roll, the cube in the middle — and it won't let them double, though the same turn in a real game can. Whether the opening move has happened is already in the game's fields: the only turn before it is the opening roll (phase `openingRoll`), and every turn in phase `roll` comes after it — nothing kept outside them is needed to tell.",
+      "repeat": "They set up that turn through your debug setup again — the player's turn, before the roll — and it still won't let them double the way a real game does. A turn in phase `roll` always comes after the opening move; the game's own fields say so."
     },
     "G35.computer": {
-      "first": "They set up a race through your app's debug setup where your computer is far enough ahead to double — the same race reached by play gets its offer — and from the set-up race it never offers. A position set through /api/debug/state plays on exactly as if it had been reached by play: nothing your server keeps outside that state may change what happens next.",
+      "first": "They set up a race through your app's debug setup where your computer is far enough ahead to double — the same race reached by play gets its offer — and from the set-up race it never offers. A position set through /api/debug/state plays on exactly as if it had been reached by play: nothing your server keeps outside that state may change what happens next. Whether the opening move has happened is already in the game's fields: the only turn before it is the opening roll (phase `openingRoll`), and every turn in phase `roll` comes after it — nothing kept outside them is needed to tell.",
       "repeat": "Their checks again: from a race set up through the debug setup your computer still never offers, though the same race reached by play gets the offer."
     },
     "G23": {
