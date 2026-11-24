@@ -144,8 +144,10 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
   // 1793713472's server kept a flag only play sets, so a seeded turn could
   // never double while every played one could. The debug route is the team's.
   it("[G35] REQ-DEBUG-STATE — a seeded turn can double like a played one", async () => {
-    // From a fresh game, as the seeding checks start (a played turn before it
-    // would leave the build's flag set and hide the finding).
+    // THE SEAM, MEASURED ON BOTH SIDES (2026-11-24: the debug route is
+    // conformance, told at the first moment). The seeded turn first, from a fresh
+    // game, as the seeding checks start: a played turn before it would leave the
+    // build's flag set and hide the finding.
     await api("/api/new", {});
     await debugSetState(
       makeState({
@@ -156,7 +158,27 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
         points: game.startingPoints(),
       }),
     );
-    expect((await getState()).canDouble, "[brief] [needs: G11]").toBe(true);
+    const seeded = (await getState()).canDouble;
+    // Then the same turn reached by play, exactly as G11 reaches it: the computer
+    // wins the opening (3 against 5), plays, and hands the turn over. Reaching it —
+    // a crash or a refused roll on the way included (run 1795248400 a2: /api/ai
+    // answered HTTP 500, and G35 was told "a seeded turn can't double") — and that
+    // turn's double are G11's to tell: one setup step here.
+    let played: any = null;
+    try {
+      await api("/api/new", {});
+      played = await debugRollVerified([3, 5]);
+      for (let guard = 0; guard < 12 && played.turn === "black"; guard++) {
+        played = await api("/api/ai", {});
+      }
+    } catch {
+      played = null;
+    }
+    expect(
+      played?.turn === "white" && played?.canDouble === true,
+      "[setup] [needs: G11] the same turn reached by play (G11's) never came back to the player or could not double",
+    ).toBe(true);
+    expect(seeded, "[brief] the turn set up through the debug route could not double").toBe(true);
   });
 
   it("[G26] REQ-CUBE-STATE — a new game starts with a centered cube", async () => {

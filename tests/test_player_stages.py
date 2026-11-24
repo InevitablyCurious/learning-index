@@ -561,9 +561,14 @@ def _suite_markers() -> list[tuple[str, str, str, str]]:
                 assert gates, (
                     f"{rel}: {mark.group(0)} sits in no gate's test — list it in _HELPER_MARKERS"
                 )
-                found.extend(
-                    (rel, gate, mark.group(1), mark.group(2)) for gate in gates
-                )
+                # A `[setup]` step's needs (stages.py is_setup) are read apart:
+                # the step is never told, so the stage order below does not bind it.
+                line_start = code.rfind("\n", 0, mark.start()) + 1
+                line_end = code.find("\n", mark.start())
+                kind = mark.group(1)
+                if kind == "needs" and "[setup]" in code[line_start:line_end]:
+                    kind = "setupneeds"
+                found.extend((rel, gate, kind, mark.group(2)) for gate in gates)
     return found
 
 
@@ -607,7 +612,7 @@ def test_a_needed_check_exists_in_the_same_or_an_earlier_stage_and_never_in_a_cy
     known = set(load_feedback_overrides_from_failures(_PACK.dir))
     graph: dict[str, set[str]] = {}
     for rel, owner, kind, value in _suite_markers():
-        if kind != "needs":
+        if kind not in ("needs", "setupneeds"):
             continue
         own_stage = stage_of(f"[{owner}] x", STAGES).number
         for ident in value.split():
@@ -618,7 +623,10 @@ def test_a_needed_check_exists_in_the_same_or_an_earlier_stage_and_never_in_a_cy
             needed = stage_of(
                 ident if ident.startswith("REQ-") else f"[{ident}] x", STAGES
             ).number
-            assert needed <= own_stage, (
+            # A setup step is never told: when its owner fails, the owner is told
+            # at its own moment, so a conformance check at the first moment may
+            # wait on a gameplay check (G35's played turn waits on G11).
+            assert kind == "setupneeds" or needed <= own_stage, (
                 f"{rel}: {owner} (stage {own_stage}) needs {ident} (stage {needed})"
             )
             if (owner, ident) in _EXCLUSIVE_NEEDS:

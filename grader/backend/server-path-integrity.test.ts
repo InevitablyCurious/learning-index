@@ -329,6 +329,17 @@ describe("Backgammon backend server-path integrity", () => {
       }
       return state;
     };
+    // End the turn and follow the computer's to its offer. A crash in the
+    // computer's turn (run 1795248400 a2: /api/ai answered HTTP 500 on the
+    // player's cube) is the computer's turn to tell (G25, G30.cubeheld), never
+    // this seam's: null, and the race draws no offer.
+    const endTurnToOffer = async () => {
+      try {
+        return await toOffer(await api("/api/endturn", {}));
+      } catch {
+        return null;
+      }
+    };
     for (const race of engineDoubles()) {
       await api("/api/new", {});
       await debugSetState(
@@ -352,7 +363,7 @@ describe("Backgammon backend server-path integrity", () => {
       }
       if (!(state.turn === "white" && state.phase === "move" && state.remainingDice.length === 0 && !state.winner)) continue;
       const position = { points: state.points, bar: state.bar, off: state.off };
-      if ((await toOffer(await api("/api/endturn", {}))).phase !== "doubleOffered") continue;
+      if ((await endTurnToOffer())?.phase !== "doubleOffered") continue;
 
       await api("/api/new", {});
       await debugSetState(
@@ -368,9 +379,9 @@ describe("Backgammon backend server-path integrity", () => {
           winner: null,
         }),
       );
-      const seeded = await toOffer(await api("/api/endturn", {}));
+      const seeded = await endTurnToOffer();
       expect(
-        seeded.phase,
+        seeded?.phase,
         "[aspect: computer] [brief] the same race set up through the debug route drew no offer from the computer, though reached by play it did",
       ).toBe("doubleOffered");
       return;

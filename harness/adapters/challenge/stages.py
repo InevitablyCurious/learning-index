@@ -102,6 +102,35 @@ def is_setup(problem: dict[str, Any]) -> bool:
     return _SETUP in finding_message(problem.get("observed", ""))
 
 
+# A DEBUG ROUTE THAT REFUSED A SETUP IS CONFORMANCE (Jerry, 2026-11-23: the
+# debug route "should be validated before anything else, above all else, and
+# should come from the team integrating the app"). A gate whose setup through the
+# route did not take (grader/lib/harness.ts SETUP_REFUSED) never reached its
+# subject; its finding is the team's line about the route (feedback.py
+# setup_refusal_line). Staged at its gate's own moment, it sat behind whatever
+# symptom an earlier moment told: 0 of the 35 corpus builds whose route refused a
+# setup were ever told so, while one refusal broke 23 checks on average
+# (WO-LI-SEAM-CHART, 2026-11-24). It is told at the first moment, with the rest
+# of the route's conformance.
+_SETUP_REFUSED = "SETUP REFUSED"
+
+
+def is_refused(problem: dict[str, Any]) -> bool:
+    return _SETUP_REFUSED in finding_message(problem.get("observed", ""))
+
+
+_REFUSAL_KIND_RE = re.compile(r"SETUP REFUSED:\s*(.*?)(?:\s+\(sent\b|\s+\[rolled\b|$)")
+
+
+def refusal_kind(problem: dict[str, Any]) -> str:
+    """What the route refused, without the values: "/api/debug/roll did not take
+    dice", "/api/debug/state did not take difficulty". One cause, told once a
+    round: a dice queue the route ignores refused 23 rolls in one build, and the
+    model read 23 lines saying so (WO-LI-SEAM-PROOF, 2026-11-24)."""
+    m = _REFUSAL_KIND_RE.search(finding_message(problem.get("observed", "")))
+    return m.group(1).strip() if m else ""
+
+
 # A BRIEF EXCERPT IS HANDED BACK ONLY FOR WHAT IT EXPLAINS (2026-11-19). An
 # excerpt (`prompts/respec/<gate>.md`) says "<this part> still isn't following
 # the build brief"; that is true only when the failing assertion judges that
@@ -392,7 +421,34 @@ def player_view(
         if is_setup(problem):
             alarms.append(check)
             continue
-        staged.append((stage_of(check, stages), problem))
+        staged.append(
+            (
+                min(stages, key=lambda s: s.number)
+                if is_refused(problem)
+                else stage_of(check, stages),
+                problem,
+            )
+        )
+    # One refusal of each kind is told — the first a player meets; the rest wait
+    # on it (refusal_kind).
+    first_refusal: dict[str, tuple[tuple[int, int], int]] = {}
+    for at, (_, problem) in enumerate(staged):
+        if is_refused(problem):
+            order = player_order(str(problem.get("check", "")).strip(), stages)
+            kind = refusal_kind(problem)
+            if kind not in first_refusal or order < first_refusal[kind][0]:
+                first_refusal[kind] = (order, at)
+    kept = {at for _, at in first_refusal.values()}
+    unevaluated += [
+        str(p.get("check", "")).strip()
+        for at, (_, p) in enumerate(staged)
+        if is_refused(p) and at not in kept
+    ]
+    staged = [
+        entry
+        for at, entry in enumerate(staged)
+        if not is_refused(entry[1]) or at in kept
+    ]
     if not staged:
         return PlayerView(stage=None, unevaluated=unevaluated, alarms=alarms)
     first = min(s.number for s, _ in staged)
