@@ -27,6 +27,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from harness.adapters.challenge import ChallengeRunner as R
 from harness.adapters.challenge.constants import _CONSTRAINTS, _GRADER_DIR
 from harness.adapters.challenge.stages import load_stages, player_view
@@ -137,12 +139,11 @@ def test_the_block_ends_the_tester_silent_message() -> None:
     assert "Also, my software team" not in msg, "the team opens alone, without 'Also'"
 
 
-def test_the_block_ends_the_could_not_pin_it_down_message() -> None:
-    """(e) No itemised problems at all: both channels are empty and the tester
-    says the only honest thing left."""
-    _, msg = _feedback([])
-    _ends_with_the_block(msg)
-    assert "1) Something is still broken but I couldn't pin down what it was." in msg
+def test_a_round_with_nothing_to_tell_is_never_built() -> None:
+    """(e) No itemised problems at all: nothing true can be said, so no message
+    is built — the runner stops the cell with a grader alarm first."""
+    with pytest.raises(ValueError, match="no told finding"):
+        _feedback([])
 
 
 # ── GROUP 2 — BIDIRECTIONAL DRIFT GUARD ─────────────────────────────────────

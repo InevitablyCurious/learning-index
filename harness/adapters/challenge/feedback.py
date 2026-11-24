@@ -50,14 +50,9 @@ from .constants import (
 )
 from .exceptions import MissingFeedbackOverrideError
 from .stages import (
-    Stage,
     check_id,
     finding_message,
     is_brief,
-    is_untold,
-    met_failures,
-    needs_unmet,
-    stage_of,
 )
 
 
@@ -667,40 +662,20 @@ class FeedbackMixin:
         return cache[gate]
 
     @classmethod
-    def _respec_for(
-        cls,
-        problems: Sequence[dict[str, Any]],
-        visible: Sequence[dict[str, Any]],
-        stage: Stage | None,
-        stages: list[Stage],
-    ) -> list[str]:
+    def _respec_for(cls, visible: Sequence[dict[str, Any]]) -> list[str]:
         """The brief excerpts to hand back: a gate's, once, when one of its
         `[brief]` assertions — the ones that judge that excerpt (stages.py
-        is_brief) — is told this round, or fails untold at or before the stage
-        being told (its words are the brief's too). Any other finding of the
-        gate hands nothing back. An untold step waiting on a check that failed
-        never had its situation, so it hands nothing back either: run
-        1794861030's pieces came in off the bar at the wrong end, so no turn
-        was stuck, and the stuck-turn brief came back as "still isn't
-        following" (F24, G13 `[needs: G06]`)."""
-        told = {str(p.get("check", "")).strip() for p in visible}
-        failed = met_failures(problems)
+        is_brief) — is told this round. Any other finding of the gate hands
+        nothing back."""
         gates: list[str] = []
-        for p in problems:
-            check = str(p.get("check", "")).strip()
-            gate = check_id(check)
+        for p in visible:
+            gate = check_id(str(p.get("check", "")).strip())
             if not gate or gate in gates or cls._respec_text(gate) is None:
                 continue
-            if not is_brief(p):
-                continue
-            if check in told or (
-                is_untold(p)
-                and not needs_unmet(p, failed)
-                and (stage is None or stage_of(check, stages).number <= stage.number)
-            ):
+            if is_brief(p):
                 gates.append(gate)
-        # Gates that share one part of the brief (E07/G08/G09/G19 all judge
-        # allInHome) hand it back once.
+        # Gates that share one part of the brief (F24/G13 the stuck turn;
+        # G11/G21/G35 when a double may be offered) hand it back once.
         texts = [text for g in gates if (text := cls._respec_text(g))]
         return list(dict.fromkeys(texts))
 
@@ -745,7 +720,7 @@ class FeedbackMixin:
         first = str(observed or "").strip().split("\n", 1)[0]
         first = re.sub(r"^\w*Error:\s*", "", first)
         first = re.sub(
-            r"\[(?:aspect|needs):[^\]]*\]\s*|\[(?:untold|brief)\]\s*", "", first
+            r"\[(?:aspect|needs):[^\]]*\]\s*|\[(?:setup|brief)\]\s*", "", first
         ).strip()
         first = re.split(r":\s*expected\b", first, maxsplit=1)[0].strip().rstrip(".")
         return line.replace("{measured}", first or "what their check measured")
@@ -1226,6 +1201,16 @@ class FeedbackMixin:
             if channel == "tester" and not is_regression:
                 tester_ordinary_kinds.append(pass_kind)
 
+        # NOTHING TO TELL NEVER REACHES THE MODEL (Jerry, 2026-11-23: no untold
+        # checks). The runner stops the cell with a GRADER ALARM before a round
+        # with no told finding; the old filler "Something is still broken but I
+        # couldn't pin down what it was" sent a model hunting with no lead.
+        if not by_channel["tester"] and not by_channel["team"]:
+            raise ValueError(
+                "a feedback round with no told finding — the runner raises a "
+                "GRADER ALARM before building one"
+            )
+
         # "I'm still seeing these problems" only over problems they are still
         # seeing: a stage that just unlocked lists new ones, and heading them
         # "still" told the model it had heard them before (run 1790349319).
@@ -1294,15 +1279,13 @@ class FeedbackMixin:
                 for n, label in enumerate(ordinary_tester, start=1):
                     lines.append(f"{n}) {label}")
 
-            # The tester always speaks when they have anything to stand on, even
-            # with nothing to report: the opener has already promised a list,
-            # and an opener with no list under it reads as a truncated message
-            # rather than a clean run.
+            # The tester always speaks when the team has something, even with
+            # nothing of their own to report: the opener has already promised a
+            # list, and an opener with no list under it reads as a truncated
+            # message rather than a clean run.
             if not by_channel["tester"]:
                 lines.append(
-                    "1) Something is still broken but I couldn't pin down what it was."
-                    if not by_channel["team"]
-                    else "1) Nothing jumped out at me this time while I was playing."
+                    "1) Nothing jumped out at me this time while I was playing."
                 )
 
         # The team section appears ONLY when the team has something to say.

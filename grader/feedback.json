@@ -139,6 +139,10 @@
       "first": "They play turns through your server — spending the dice, handing the turn over, a turn shut out on the bar — and the turn flow doesn't follow the brief.",
       "repeat": "They played turns through your server again and the turn flow still doesn't follow the brief."
     },
+    "G13.stuckstate": {
+      "first": "Their checks of your server: {measured}. On a turn with no move left the state says so: turnOver true and an empty legalMoves.",
+      "repeat": "Their checks again: {measured} — a stuck turn's state still doesn't say turnOver true with an empty legalMoves."
+    },
     "G14": {
       "first": "They ask your computer's move-chooser for its moves in hundreds of positions and rolls, at every setting, and some of the moves it picks aren't legal.",
       "repeat": "They asked your computer's move-chooser again, and some of the moves it picks still aren't legal."
@@ -223,6 +227,22 @@
       "first": "Their checks of your server: {measured}. The brief has /api/debug/roll set the next throw for whichever side throws next, never a random one.",
       "repeat": "Their checks again: {measured} — the throw they set still isn't the one your server plays."
     },
+    "G40": {
+      "first": "Their checks of your code: {measured}. Each function the build spec declares is called by the team's software exactly as declared.",
+      "repeat": "Their checks again: {measured}."
+    },
+    "G40.words": {
+      "first": "Their checks of your AI: {measured}. Both cube functions answer with the build spec's two words only: \"double\" to offer or take, \"no-double\" to hold or pass.",
+      "repeat": "Their checks again: {measured} — the cube functions answer only \"double\" or \"no-double\"."
+    },
+    "G40.arity": {
+      "first": "Their checks of your AI: {measured}. The build spec declares shouldAiAccept(b, player, difficulty) — three parameters, no cube.",
+      "repeat": "Their checks again: {measured}; the build spec declares three — (b, player, difficulty)."
+    },
+    "G40.allinhome": {
+      "first": "Their checks of your engine: {measured}. allInHome(board, player) is true only when all 15 of that side's pieces are in its home board or already borne off — false with any piece outside it or on the bar.",
+      "repeat": "Their checks again: {measured} — allInHome still answers wrong on that board."
+    },
     "G38.throws": {
       "first": "Their software asks your computer player for its move on a turn where it has no move to make, and it crashes with an error.",
       "repeat": "They asked your computer player again for its move on a turn with no move to make, and it still crashes with an error."
@@ -302,10 +322,6 @@
     "E06": {
       "first": "They ask your engine for pip counts with checkers on the bar, and the count is wrong — a checker on the bar counts 25 pips.",
       "repeat": "Your engine's pip count still doesn't count a checker on the bar as 25."
-    },
-    "E07": {
-      "first": "They ask your engine whether all of white's checkers are home while one is on the bar, and it says yes — a checker on the bar isn't home.",
-      "repeat": "Your engine still counts a checker on the bar as home."
     },
     "E08": {
       "first": "Their tools ask your engine for every way to play a roll, and the same finished position keeps coming back more than once — two orders of the same moves show up as two different plays.",
@@ -966,6 +982,10 @@
     "F24": {
       "first": "When I have no moves, the game doesn't finish my turn — it keeps me stuck or still shows me places to click.",
       "repeat": "Stuck again and it still won't finish my turn, or it still shows hints when I click a piece."
+    },
+    "F24.stuckstate": {
+      "first": "Their checks of your server: {measured}. On a turn with no move left the state says so: turnOver true and an empty legalMoves.",
+      "repeat": "Their checks again: {measured} — a stuck turn's state still doesn't say turnOver true with an empty legalMoves."
     },
     "F25": {
       "first": "I clicked where my piece could go, and the piece didn't move.",

@@ -171,6 +171,12 @@
       "how": "Black's one piece on 7 with an open road, the player's turn finished and the cube the player's (no double first): queued 1-2 then 6-5, each followed by End Turn and the computer's turn, must move the piece 3 and then 11 pips. Told by the team, quoting what was queued and how far the computer moved. G30 and F94, which judge the computer's play on dice they queued, wait on it.",
       "looks": "code"
     },
+    "G40": {
+      "name": "The brief's named functions answer as it writes them",
+      "what": "The engine and AI functions the brief names are the contract the team's software calls: allInHome, and the two cube functions' parameters and answer words.",
+      "how": "allInHome on three reachable boards (all 15 home; one piece on 8; one on the bar); shouldAiAccept declared with (board, player, difficulty); shouldAiAccept and shouldAiDouble answer only \"double\" or \"no-double\" at every difficulty. Told by the team with the function's name and the brief's rule (Jerry 2026-11-23: no untold checks — the contract is conformance).",
+      "looks": "code"
+    },
     "G24": {
       "name": "Accepting the computer's double",
       "what": "Accepting the computer's double makes the cube 2 and owned by the player.",
@@ -253,12 +259,6 @@
       "name": "Bar counts 25 pips",
       "what": "A checker on the bar counts as 25 pips, and borne-off checkers count nothing.",
       "how": "One white checker on the bar → 25. Add one on 6 → 31. Add three borne off → still 31. White on the bar and on 4 → 29. Black with two on the bar and one on 20 → 55.",
-      "looks": "code"
-    },
-    "E07": {
-      "name": "On the bar means not all home",
-      "what": "A checker on the bar means not all checkers are home.",
-      "how": "White with one checker on 3 is all home; add one on the bar and it must no longer be.",
       "looks": "code"
     },
     "E08": {
@@ -1042,6 +1042,7 @@
       "name": "First look: the game opens",
       "checks": [
         "G16",
+        "G40",
         "REQ-BIND/",
         "REQ-API/",
         "REQ-STATE/",
@@ -1238,7 +1239,6 @@
         "E05",
         "E06",
         "E04",
-        "E07",
         "F94"
       ]
     },

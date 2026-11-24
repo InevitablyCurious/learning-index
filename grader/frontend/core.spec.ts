@@ -1782,15 +1782,15 @@ test("[F24] REQ-TURN — stuck turn state", async ({ page }) => {
   // 1790633807's entered at the wrong end and showed hints there.
   await expect(page.getByTestId("hint"), "[needs: G06]").toHaveCount(0);
 
-  // The server's own fields for a stuck turn are API shape no player sees:
-  // run 1794516809's page showed no hints and passed the turn by itself a
-  // second later (F48), while its /api/state never set turnOver, and the player
-  // was told "it keeps me stuck or still shows me places to click". Scored,
-  // never told (Jerry, 2026-11-03, the cube words: what no player sees is
-  // [untold]).
+  // The server's own fields for a stuck turn are its contract: told by the team as
+  // exactly that (Jerry 2026-11-23: no untold checks). Run 1794516809's page passed
+  // the turn by itself (F48) while /api/state never set turnOver, and the player
+  // was told "it keeps me stuck or still shows me places to click" — the wrong
+  // voice and the wrong fault.
   const state = await readState(page);
-  expect(state.turnOver, "[untold] [brief] [needs: G06] a stuck turn's state did not say turnOver").toBe(true);
-  expect(state.legalMoves, "[untold] [brief] [needs: G06] a stuck turn's state still listed moves").toHaveLength(0);
+  const stuck = `[aspect: stuckstate] [brief] [needs: G06] a turn stuck on the bar answered turnOver ${state.turnOver} with ${Array.isArray(state.legalMoves) ? `${state.legalMoves.length} legal moves` : "no legalMoves list"}`;
+  expect(state.turnOver, stuck).toBe(true);
+  expect(state.legalMoves, stuck).toHaveLength(0);
 });
 
 test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
@@ -1878,13 +1878,13 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
       // (6 of 6, then 16 of 16 passes run alone).
       await waitForBoardSettled(page).catch(() => undefined);
       const picked = await pickUpAPiece(page, hints);
-      expect(picked, `[untold] [needs: F03] [needs: F25] [needs: F45] ${told}: no checker could be picked up`).toBe(true);
-      await expect(hints.first(), "[untold] [needs: F03]").toBeVisible();
+      expect(picked, `[setup] [needs: F03] [needs: F25] [needs: F45] ${told}: no checker could be picked up`).toBe(true);
+      await expect(hints.first(), "[setup] [needs: F03]").toBeVisible();
       await playerClick(hints.first());
       await expect
         .poll(
           async () => (await readState(page)).remainingDice.length,
-          `[untold] [needs: F25 F45] ${told}: a move did not consume a die`,
+          `[setup] [needs: F25 F45] ${told}: a move did not consume a die`,
         )
         .toBeLessThan(s.remainingDice.length);
       if (watchUndo) {
@@ -1892,7 +1892,7 @@ test("[F47] REQ-TURN — the turn waits for End Turn", async ({ page }) => {
       }
     }
     await expect
-      .poll(async () => playedOut(await readState(page)), `[untold] [needs: F25 F45] ${told}: white could not finish the roll's moves`)
+      .poll(async () => playedOut(await readState(page)), `[setup] [needs: F25 F45] ${told}: white could not finish the roll's moves`)
       .toBe(true);
   };
   await playUntilTurnOver("playing the roll", true);

@@ -182,16 +182,8 @@ def test_build_feedback_prompt_openers_and_invariants() -> None:
         *_CONSTRAINTS.splitlines(),
     ]
 
-    empty = ChallengeRunner._build_feedback_prompt(checks=[])
-    assert empty == (
-        f"{_EXCUSE_ELIMINATOR}\n"
-        "\n"
-        f"{FIRST}\n"
-        "\n"
-        "1) Something is still broken but I couldn't pin down what it was.\n"
-        "\n"
-        f"{_CONSTRAINTS}"
-    )
+    with pytest.raises(ValueError, match="no told finding"):
+        ChallengeRunner._build_feedback_prompt(checks=[])
 
 
 def test_a_line_told_before_is_told_once_as_a_repeat() -> None:

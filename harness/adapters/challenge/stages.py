@@ -53,6 +53,9 @@ class PlayerView:
     # step another failing check already reports (`[needs: …]`). Scored as not
     # passing; never told to the model, because nobody observed them fail.
     unevaluated: list[str] = field(default_factory=list)
+    # GRADER ALARMS: a `[setup]` step that failed while every check it names
+    # passed. The grader's own setup is wrong; never told, and the cell stops.
+    alarms: list[str] = field(default_factory=list)
 
 
 # The pre-gate's wording for a check an earlier failure skipped
@@ -64,13 +67,17 @@ class PlayerView:
 _UNEVALUATED = "never evaluated"
 
 
-# SCORED, NEVER TOLD (Jerry, 2026-11-03: "leave G12 words untold"). The words a
-# build's cube functions answer in are the build prompt's, and a build that
-# answers in its own words fails for it; but a player never meets those words,
-# and telling them as G12's "the computer takes, refuses, or offers at the wrong
-# moments" sent run 1793744527 round 5 re-tuning a cube that played right. Like
-# a check never reached, it excuses no other check from being told.
-_UNTOLD = "[untold]"
+# A SETUP STEP IS NEVER A FINDING (Jerry, 2026-11-23: "an untold check should
+# never be untold"). A check reaches its subject through steps the build brief
+# already makes other checks judge — the game accepting a listed move, a roll
+# played out through the server. Such a step is marked `[setup]` and names its
+# owners with `[needs: …]`. Its owner failed: the owner's line is the true one,
+# so this check is unevaluated like any other waiting on it. Its owners passed
+# and the step still failed: the grader's setup is wrong, not the build — that is
+# a GRADER ALARM, told to no model, and the cell stops loudly (runner.py). The
+# contract items the old `[untold]` marker hid (the brief's named functions and
+# answer words) are conformance now, told by the team (G40).
+_SETUP = "[setup]"
 
 
 # WHAT A FINDING SAYS IS ITS OWN MESSAGE. A failed page check's text carries more
@@ -79,7 +86,7 @@ _UNTOLD = "[untold]"
 # stack. Markers read from all of it took them from neighbouring source lines: run
 # 1795065106 round 2's G05 finding "the game played the smaller number" (no
 # aspect) was told as G05's [aspect: offered] line because the code frame showed
-# the next assertion. Every marker — [aspect: …], [needs: …], [untold] — is read
+# the next assertion. Every marker — [aspect: …], [needs: …], [setup] — is read
 # from the message alone: the text before the first blank line, stack line or
 # code-frame line.
 _MESSAGE_END_RE = re.compile(r"\n\s*\n|\n\s+at\s|\n\s*>?\s*\d+\s*\|")
@@ -91,8 +98,8 @@ def finding_message(observed: Any) -> str:
     return text[: m.start()] if m else text
 
 
-def is_untold(problem: dict[str, Any]) -> bool:
-    return _UNTOLD in finding_message(problem.get("observed", ""))
+def is_setup(problem: dict[str, Any]) -> bool:
+    return _SETUP in finding_message(problem.get("observed", ""))
 
 
 # A BRIEF EXCERPT IS HANDED BACK ONLY FOR WHAT IT EXPLAINS (2026-11-19). An
@@ -131,11 +138,7 @@ def did_not_finish(problem: dict[str, Any]) -> bool:
 
 def is_unevaluated(problem: dict[str, Any]) -> bool:
     observed = str(problem.get("observed", "")).strip()
-    return (
-        observed.startswith(_UNEVALUATED)
-        or _UNTOLD in finding_message(observed)
-        or did_not_finish(problem)
-    )
+    return observed.startswith(_UNEVALUATED) or did_not_finish(problem)
 
 
 # A CHECK THAT CANNOT GET STARTED IS NOT TOLD (Jerry, 2026-09-24). A gate that
@@ -163,13 +166,14 @@ def needs_of(problem: dict[str, Any]) -> tuple[str, ...]:
 
 def met_failures(problems: Iterable[dict[str, Any]]) -> set[str]:
     """The checks that failed on a step the grader reached. A check never
-    reached, or failing only untold, is not a failure a player met, so it cannot
-    excuse another check from being told: both would reach no one."""
+    reached, or failing only on a setup step, is not a failure a player met, so it
+    cannot excuse another check from being told: both would reach no one."""
     return {
         ident
         for p in problems
         if isinstance(p, dict)
         and not is_unevaluated(p)
+        and not is_setup(p)
         and (ident := check_id(str(p.get("check", "")).strip()))
     }
 
@@ -371,6 +375,7 @@ def player_view(
     failed = met_failures(records)
     staged: list[tuple[Stage, dict[str, Any]]] = []
     unevaluated: list[str] = []
+    alarms: list[str] = []
     for problem in records:
         check = str(problem.get("check", "")).strip()
         if not check or is_infra(check):
@@ -384,9 +389,12 @@ def player_view(
         if is_unevaluated(problem) or needs_unmet(problem, failed):
             unevaluated.append(check)
             continue
+        if is_setup(problem):
+            alarms.append(check)
+            continue
         staged.append((stage_of(check, stages), problem))
     if not staged:
-        return PlayerView(stage=None, unevaluated=unevaluated)
+        return PlayerView(stage=None, unevaluated=unevaluated, alarms=alarms)
     first = min(s.number for s, _ in staged)
     stage = next(s for s, _ in staged if s.number == first)
     visible = sorted(
@@ -395,7 +403,11 @@ def player_view(
     )
     withheld = [str(p.get("check", "")).strip() for s, p in staged if s.number != first]
     return PlayerView(
-        stage=stage, visible=visible, withheld=withheld, unevaluated=unevaluated
+        stage=stage,
+        visible=visible,
+        withheld=withheld,
+        unevaluated=unevaluated,
+        alarms=alarms,
     )
 
 

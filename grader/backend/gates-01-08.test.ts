@@ -179,6 +179,49 @@ describe("Backgammon backend gates 01-08", () => {
     expect(board.points[8]).toBe(0);
   });
 
+  // [G40] THE CONTRACT'S NAMED FUNCTIONS, judged first (stage 1) and told by the
+  // team with each function's name and the brief's rule (Jerry, 2026-11-23: "an
+  // untold check should never be untold … these checks should fall under
+  // conformance"). They were [untold] — scored, never told — and an untold
+  // failure left alone blocked sign-off behind "something is still broken" (run
+  // 1795435505 a2). Told as gameplay faults they misled (2026-11-03: G12's "takes
+  // and refuses at the wrong moments"); told as the contract, they name exactly
+  // what to change.
+  it("[G40] REQ-CONTRACT — the brief's named engine and AI functions answer as it writes them", () => {
+    // allInHome: true only when all 15 of the side's pieces are home or off.
+    const allHomePts = emptyPoints();
+    allHomePts[3] = 2;
+    allHomePts[22] = -1;
+    const allHome = bd(allHomePts, { white: 0, black: 0 }, { white: 13, black: 14 });
+    expect(game.allInHome(allHome, "white"), "[aspect: allinhome] allInHome(board, \"white\") answers false with all 15 white pieces home (2 on point 3, 13 off)").toBe(true);
+    const outsidePts = emptyPoints();
+    outsidePts[3] = 1;
+    outsidePts[8] = 1;
+    outsidePts[22] = -1;
+    const outside = bd(outsidePts, { white: 0, black: 0 }, { white: 13, black: 14 });
+    expect(game.allInHome(outside, "white"), "[aspect: allinhome] allInHome(board, \"white\") answers true with a white piece on point 8, outside its home board").toBe(false);
+    const barPts = emptyPoints();
+    barPts[2] = 1;
+    barPts[22] = -1;
+    const onBar = bd(barPts, { white: 1, black: 0 }, { white: 13, black: 14 });
+    expect(game.allInHome(onBar, "white"), "[aspect: allinhome] allInHome(board, \"white\") answers true with a white piece on the bar").toBe(false);
+
+    // The cube functions: the take is (board, player, difficulty), and both answer
+    // in the brief's two words.
+    expect(ai.shouldAiAccept.length, `[aspect: arity] shouldAiAccept is declared with ${ai.shouldAiAccept.length} parameters`).toBe(3);
+    const evenPts = emptyPoints();
+    evenPts[6] = 5;
+    evenPts[19] = -5;
+    const even = bd(evenPts, { white: 0, black: 0 }, { white: 10, black: 10 });
+    const words = ["double", "no-double"];
+    for (const difficulty of ["easy", "medium", "hard"] as const) {
+      const take = String(ai.shouldAiAccept(even, "black", difficulty)?.action);
+      expect(words, `[aspect: words] shouldAiAccept answered "${take}" on ${difficulty}`).toContain(take);
+      const offer = String(ai.shouldAiDouble(even, "black", { value: 1, owner: null }, difficulty)?.action);
+      expect(words, `[aspect: words] shouldAiDouble answered "${offer}" on ${difficulty}`).toContain(offer);
+    }
+  });
+
   it("[G08] REQ-BEAROFF — bear-off incl overshoot", () => {
     const overshootAllowedPts = emptyPoints();
     overshootAllowedPts[3] = 2;
@@ -192,9 +235,8 @@ describe("Backgammon backend gates 01-08", () => {
     // at all) was told "the game still lets me bear off from a point closer to
     // the edge" — the opposite.
     const OVERSHOOT = "[aspect: overshoot]";
-    // The engine's own all-home answer is untold: the moves it offers (below)
-    // are what a player meets.
-    expect(game.allInHome(overshootAllowedBoard, "white"), "[untold] [brief] the engine says not every piece is home when every one is").toBe(true);
+    // The engine's own all-home answer is the contract's (G40, told by the team);
+    // the moves it offers (below) are what a player meets.
     // The moves on offer, each once: a list naming 3 -> off once per checker on
     // 3 offers the same move (run 1793579748's engine did; the player saw one
     // "5" hint and it bore off — and was told the game "won't let me").

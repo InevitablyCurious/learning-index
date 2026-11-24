@@ -162,10 +162,10 @@ describe("Backgammon backend gates 13-16", () => {
       // turnOver false with no dice, the loop tried moves the game rightly
       // refused, and "the computer never takes its turn" was told before the
       // computer was ever reached). Playing the player's roll is this check's
-      // SETUP: when it fails the computer was never judged — scored, never
-      // told, and no brief handed back: G25's excerpt is the computer's turn,
-      // never the player's roll (stages.py is_brief).
-      const refused = "[untold] [needs: F25] the game refused every move it listed";
+      // SETUP: when it fails the computer was never judged. [setup]: it waits on
+      // the check that owns the step; if that check passed, the grader's own
+      // equipment failed and the run stops with a GRADER ALARM (stages.py).
+      const refused = "[setup] [needs: F25] the game refused every move it listed";
       const playedOut = (s: any): boolean => Boolean(s.turnOver) || (s.remainingDice ?? []).length === 0;
       let moveSteps = 0;
       while (!playedOut(state) && moveSteps < 16) {
@@ -185,7 +185,7 @@ describe("Backgammon backend gates 13-16", () => {
         moveSteps++;
       }
 
-      expect(playedOut(state), "[untold] [needs: F25 F47] the player's roll could not be played out").toBe(true);
+      expect(playedOut(state), "[setup] [needs: F25 F47] the player's roll could not be played out").toBe(true);
 
       // The computer's turn, however the app runs it: step by step through
       // /api/ai, or whole inside /api/endturn. Run 1790608868's server played
@@ -245,11 +245,12 @@ describe("Backgammon backend gates 13-16", () => {
       // A stuck player exists only once pieces come in off the bar where they
       // should (G06: run 1790633807's entered at the wrong end and were never
       // stuck); a turn that ends with no word of it is the notice gate's (F05).
-      // turnOver and the empty move list are API shape a player never sees (the
-      // page passes the turn on its own, F48): scored, never told — run
+      // turnOver and the empty move list are the server's contract: told by the
+      // team as exactly that (Jerry 2026-11-23: no untold checks) — run
       // 1794516809 was told "a die gets used twice, the turn doesn't come back"
-      // for a missing turnOver alone.
-      const entry = "[untold] [brief] [needs: G06]";
+      // for a missing turnOver alone, the wrong voice and the wrong fault.
+      const legal = Array.isArray(state.legalMoves) ? `${state.legalMoves.length} legal moves` : "no legalMoves list";
+      const entry = `[aspect: stuckstate] [brief] [needs: G06] a turn stuck on the bar answered turnOver ${state.turnOver} with ${legal}`;
       const notice = "[needs: F05]";
       expect(state.turnOver, entry).toBe(true);
       expect(Array.isArray(state.legalMoves), entry).toBe(true);

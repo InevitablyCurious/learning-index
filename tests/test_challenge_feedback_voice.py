@@ -262,10 +262,10 @@ def test_repeat_matching_is_keyed_on_the_raw_gate_id() -> None:
 
 
 def test_empty_checks_never_claims_a_clean_run() -> None:
-    text = ChallengeRunner._build_feedback_prompt(problems=[], repeat_complaints=set())
-    assert "1) Something is still broken" in text, (
-        "a FAIL verdict with no itemised checks is still a failure"
-    )
+    # A FAIL with no itemised checks is no clean run and has nothing true to
+    # say: no message is built (the runner raises a grader alarm first).
+    with pytest.raises(ValueError, match="no told finding"):
+        ChallengeRunner._build_feedback_prompt(problems=[], repeat_complaints=set())
 
 
 def test_legacy_checks_kwarg_still_works() -> None:

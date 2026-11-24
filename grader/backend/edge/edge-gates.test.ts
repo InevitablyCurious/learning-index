@@ -193,21 +193,9 @@ describe("Backgammon edge gates", () => {
     expect(game.pipCount(k, "black"), "[needs: F45]").toBe(55);
   });
 
-  it("[E07] REQ-ALLINHOME-BAR — a checker on the bar means NOT all in home", () => {
-    // The precondition for bearing off. An engine that ignores the bar here
-    // lets a player bear off while still on the bar.
-    const b = emptyBoard();
-    b.points[3] = 1;
-    expect(game.allInHome(b, "white"), "[untold] [brief] the engine says not every piece is home when every one is").toBe(true);
-
-    // A player meets this only if a piece on the bar can bear off, and a game
-    // that makes the bar piece come in first never lets it (G06 tells the
-    // player when it doesn't). Run 1794516809's allInHome ignored the bar while
-    // its move generator forced entry first, and the player was told "i'm able
-    // to take pieces off the board": scored, never told.
-    b.bar.white = 1;
-    expect(game.allInHome(b, "white"), "[untold] [brief] the engine says every piece is home while one is on the bar").toBe(false);
-  });
+  // E07 (allInHome with a checker on the bar) was cut 2026-11-23: its two
+  // assertions were [untold], on a one-checker board no game reaches; the
+  // function is the contract's now (G40, told by the team, reachable boards).
 
   // ── move generation ───────────────────────────────────────────────────────
 

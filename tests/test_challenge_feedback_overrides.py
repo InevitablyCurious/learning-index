@@ -68,6 +68,12 @@ _IMPLEMENTATION_IDENTIFIERS = (
     "DEBUG_API",
 )
 
+#: THE CONTRACT CHECK NAMES WHAT IT CHECKS (Jerry, 2026-11-23: no untold checks —
+#: the brief's named functions are conformance, told by the team). G40's subject
+#: IS the published function surface: the team calls allInHome and the two cube
+#: functions by name, so its lines name them. Every other line still may not.
+_CONTRACT_GATES = frozenset({"G40"})
+
 
 # PRESCRIPTIVE VOICE. A player reports what happened; they do not state what
 # ought to happen. "I only get two moves" is an observation. "...and not four,
@@ -125,6 +131,14 @@ def _channel(key: str) -> str:
     """
     from harness.adapters.challenge import ChallengeRunner
 
+    # A line's key is a gate token with an optional aspect ("G40.arity") or a
+    # conformance key; the harness routes the finding's CHECK, so ask with the
+    # check's own form ("[G40]", aspect "arity"). Asked with the bare key, every
+    # gate line read as the player's and the team's lines were held to the
+    # player's bar (2026-11-23, G40).
+    gate, _, aspect = key.partition(".")
+    if re.fullmatch(r"[A-Z]+[0-9]*", gate):
+        return ChallengeRunner.feedback_channel(f"[{gate}]", aspect or None)
     return ChallengeRunner.feedback_channel(key)
 
 
@@ -314,6 +328,8 @@ def test_no_override_is_written_in_grader_voice(key: str, kind: str, text: str) 
         f"{key}/{kind}: names a requirement id — that is the grader talking"
     )
 
+    if key.split(".", 1)[0] in _CONTRACT_GATES:
+        return
     leaked = [name for name in _IMPLEMENTATION_IDENTIFIERS if name in text]
     assert not leaked, (
         f"{key}/{kind}: names {leaked}. A person playing the game does not know "

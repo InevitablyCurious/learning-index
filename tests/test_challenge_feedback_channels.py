@@ -217,17 +217,11 @@ def test_no_failing_tester_check_keeps_the_tester_claiming_a_clean_look() -> Non
     assert "Also, my software team" in msg
 
 
-def test_nothing_at_all_still_says_something_is_broken() -> None:
-    """A FAIL with no itemised checks is still a failure, never a clean run."""
-    view, msg = _feedback([])
-    assert (
-        view.stage is None
-        and view.visible == []
-        and view.withheld == []
-        and view.unevaluated == []
-    )
-    assert "1) Something is still broken but I couldn't pin down what it was." in msg
-    assert "Nothing jumped out" not in msg
+def test_nothing_at_all_is_never_told() -> None:
+    """A FAIL with no itemised checks has nothing true to say: no message is
+    built, and the runner stops the cell with a grader alarm first."""
+    with pytest.raises(ValueError, match="no told finding"):
+        _feedback([])
 
 
 def test_the_team_alone_is_not_the_graders_vocabulary() -> None:

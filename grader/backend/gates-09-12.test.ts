@@ -47,12 +47,8 @@ describe("[G09] REQ-BEAROFF-GATE — bear-off blocked while a checker is outside
     points[22] = -1;
     const board = bd(points, { white: 0, black: 0 }, { white: 13, black: 14 });
 
-    // The engine's own answer is detail a player never sees; the moves it
-    // offers (below) are what they meet (run 1794518885: allInHome ignored the
-    // bar, the move list did not, and the player was told the game let them
-    // bear off). Scored, never told.
-    expect(game.allInHome(board, "white"), "[untold] [brief] the engine says every piece is home while one is outside").toBe(false);
-
+    // The engine's own all-home answer is the contract's (G40, told by the team);
+    // the moves it offers are what a player meets.
     const moves = game.singleMoves(board, "white", 3);
     expect(moves.every((m: { to: number }) => m.to !== 25)).toBe(true);
   });
@@ -61,8 +57,6 @@ describe("[G09] REQ-BEAROFF-GATE — bear-off blocked while a checker is outside
     const points = emptyPoints();
     points[2] = 1;
     const board = bd(points, { white: 1, black: 0 });
-
-    expect(game.allInHome(board, "white"), "[untold] [brief] the engine says every piece is home while one is on the bar").toBe(false);
 
     const moves = game.singleMoves(board, "white", 2);
     expect(moves.every((m: { to: number }) => m.to !== 25)).toBe(true);
@@ -375,26 +369,9 @@ describe("[G12] REQ-CUBE-AI — cube AI accept/decline and offer window threshol
     ).toBe("no-double");
   });
 
-  // The cube functions answer as the build prompt writes them: (b, player,
-  // difficulty) for a take, "double" for take/offer and "no-double" for
-  // pass/hold. Run 1793683721's engine answered "accept" and took a cube
-  // argument; every game still played right through its own server, and G12's
-  // player line was told for words no player sees. Scored, never told (Jerry,
-  // 2026-11-03: "leave G12 words untold").
-  it("[G12] REQ-CUBE-AI — the cube functions answer in the build prompt's words", () => {
-    const points = emptyPoints();
-    points[6] = 5;
-    points[19] = -5;
-    const board = bd(points, { white: 0, black: 0 }, { white: 10, black: 10 });
-    expect(ai.shouldAiAccept.length, "[untold] [brief] the take function does not take (board, player, difficulty)").toBe(3);
-    const words = ["double", "no-double"];
-    for (const difficulty of ["easy", "medium", "hard"] as const) {
-      expect(words, "[untold] [brief] a cube answer outside double / no-double").toContain(ai.shouldAiAccept(board, "black", difficulty).action);
-      expect(words, "[untold] [brief] a cube answer outside double / no-double").toContain(
-        ai.shouldAiDouble(board, "black", { value: 1, owner: null }, difficulty).action,
-      );
-    }
-  });
+  // The cube functions' shape and words are the contract's (G40, stage 1, told by
+  // the team with the function's name) — they were scored-never-told here until
+  // Jerry, 2026-11-23: "an untold check should never be untold".
 
   it("[G22] REQ-WINPROB — winProbability is monotonically non-decreasing in the player's pip lead", () => {
     const fbPoints = emptyPoints();

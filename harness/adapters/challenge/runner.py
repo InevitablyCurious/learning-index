@@ -1852,6 +1852,23 @@ class ChallengeRunner(
                             layer=phase.layer,
                             layer_map=self._player_layers(),
                         )
+                        # A GRADER ALARM STOPS THE CELL (Jerry, 2026-11-23: no
+                        # untold checks). A `[setup]` step failed while every check
+                        # it names passed: the grader's setup is wrong, and no line
+                        # about it is true for the model. One way only — dev or
+                        # measurement, the cell aborts loudly with the findings.
+                        if stage_view.alarms:
+                            raise RuntimeError(
+                                "GRADER ALARM: a setup step failed while the checks it "
+                                "needs passed — fix the grader, nothing was told: "
+                                + "; ".join(
+                                    f"{p.get('check')}: {str(p.get('observed', ''))[:300]}"
+                                    for p in problems
+                                    if isinstance(p, dict)
+                                    and str(p.get("check", "")).strip()
+                                    in stage_view.alarms
+                                )
+                            )
                         context_peak = (
                             prev_run_stats.context_peak_tokens
                             if prev_run_stats is not None
@@ -2105,6 +2122,18 @@ class ChallengeRunner(
                         # Never pass tool_choice="required" via worker config/CLI for these
                         # runs; provider path rejects it and the harness guard test enforces this.
 
+                        # NOTHING TRUE TO TELL IS A GRADER ALARM (Jerry, 2026-11-23:
+                        # no untold checks). A failing grade whose every finding is
+                        # unevaluated (never reached, did not finish, waiting on a
+                        # step) or harness infra leaves the player nothing true to
+                        # say. One way only: the cell stops loudly with what failed.
+                        if not stage_view.visible:
+                            raise RuntimeError(
+                                "GRADER ALARM: the build failed, but no finding can be "
+                                f"told — unevaluated={stage_view.unevaluated} "
+                                f"failed={[str(g) for g in failed_gates]}"
+                            )
+
                         # PLAYER ORDER: only what the player reported last round can be
                         # reported fixed — a check the model never heard about passing
                         # is not news to it.
@@ -2296,12 +2325,7 @@ class ChallengeRunner(
                             phase_index=phase.index,
                             broke_earlier=broke_earlier,
                             phase_work=phase.work,
-                            respec=self._respec_for(
-                                [p for p in problems if isinstance(p, dict)],
-                                stage_view.visible,
-                                stage_view.stage,
-                                self._player_stages(),
-                            ),
+                            respec=self._respec_for(stage_view.visible),
                         )
                         # WO-FEEDBACK-ONEPHASE: fold the pass verdict into the single
                         # round message — the player acknowledges what is fixed, then
