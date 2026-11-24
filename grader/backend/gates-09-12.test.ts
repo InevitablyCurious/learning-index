@@ -11,6 +11,7 @@ import {
   makeState,
   openingPoints,
   ordinaryTurn,
+  SETUP_REFUSED,
 } from "../lib/harness.ts";
 import {
   DOUBLE_WINDOW,
@@ -163,7 +164,10 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
     // wins the opening (3 against 5), plays, and hands the turn over. Reaching it —
     // a crash or a refused roll on the way included (run 1795248400 a2: /api/ai
     // answered HTTP 500, and G35 was told "a seeded turn can't double") — and that
-    // turn's double are G11's to tell: one setup step here.
+    // turn's double are G11's to tell, and the opening and the computer's turn on
+    // the way are G31/F88's and G25's — a build whose computer sometimes skips its
+    // turn passed G11 by chance and set off a grader alarm here (sweep 2026-11-24
+    // sel-c3ffc4d1). One setup step; a refused roll is not one (below).
     let played: any = null;
     try {
       await api("/api/new", {});
@@ -171,12 +175,16 @@ describe("[G11] REQ-CUBE-STATE — doubling-cube STATE machine (via server)", ()
       for (let guard = 0; guard < 12 && played.turn === "black"; guard++) {
         played = await api("/api/ai", {});
       }
-    } catch {
+    } catch (err) {
+      // A route that refused the queued roll is the route's own finding, told
+      // first by the team — never a setup step (sweep 2026-11-24
+      // sel-c3ffc4d1: a queue that took G11's roll and refused this one).
+      if (String((err as Error)?.message ?? err).includes(SETUP_REFUSED)) throw err;
       played = null;
     }
     expect(
       played?.turn === "white" && played?.canDouble === true,
-      "[setup] [needs: G11] the same turn reached by play (G11's) never came back to the player or could not double",
+      "[setup] [needs: G11 G25 G31 F88] the same turn reached by play (G11's) never came back to the player or could not double",
     ).toBe(true);
     expect(seeded, "[brief] the turn set up through the debug route could not double").toBe(true);
   });
