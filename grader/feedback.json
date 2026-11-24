@@ -240,8 +240,8 @@
       "repeat": "Their checks again: {measured} — allInHome still answers wrong on that board."
     },
     "G38.throws": {
-      "first": "Their software asks your computer player for its move on a turn where it has no move to make, and it crashes with an error.",
-      "repeat": "They asked your computer player again for its move on a turn with no move to make, and it still crashes with an error."
+      "first": "Their software asks your computer player for its move on a turn where it has no move to make, and it crashes: {measured}.",
+      "repeat": "It still crashes when asked for a move on a turn with none to make: {measured}."
     },
     "G38.moves": {
       "first": "Their software asks your computer player for its move on a turn where it has no move to make, and it answers with moves anyway.",
@@ -1516,8 +1516,8 @@
       "repeat": "They tried the /game address again and it still comes back 'Not found' — no page."
     },
     "G30": {
-      "first": "They let your computer take a turn through your server where either of its two numbers moves its checker but not both, and it plays the smaller one — when only one number can be used, the bigger one is played.",
-      "repeat": "Through your server, your computer still plays the smaller number when only one of its two can be used."
+      "first": "Their checks of your server: {measured}. They let your computer take a turn where either of its two numbers moves its checker but not both — when only one number can be used, the bigger one is played.",
+      "repeat": "Their checks again: {measured} — in a turn where only one of the computer's two numbers can be used, the bigger one is played."
     },
     "G30.passed": {
       "first": "They let your computer take a turn through your server where one of its numbers can be played, and it passes without moving.",
@@ -2296,8 +2296,8 @@
       "repeat": "The computer won the opening roll again and still handed the turn back without moving a piece."
     },
     "G14.strength": {
-      "first": "They play your computer against itself — hard against easy, with the same seeded dice — and hard doesn't win more games than easy.",
-      "repeat": "They played hard against easy again, and hard still doesn't win more games."
+      "first": "They play your computer against itself — hard against easy, with the same seeded dice — and {measured}. Hard doesn't win more games than easy.",
+      "repeat": "They played hard against easy again: {measured}."
     },
     "G14.unfinished": {
       "first": "They play your computer against itself — hard against easy — and none of the games ever comes to an end.",

@@ -1,1 +1,1 @@
-Through your server, your computer still plays the smaller number when only one of its two can be used.
+Their checks again: {measured} — in a turn where only one of the computer's two numbers can be used, the bigger one is played.
