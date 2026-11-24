@@ -2510,7 +2510,15 @@ test("[F07] REQ-CUBEUI — cube UI", async ({ page }) => {
   // White doubled and black took: the cube is black's (the computer's).
   expect(state.cube.owner, "[aspect: owner] [needs: G12] the server's cube owner after a taken double").toBe("black");
   await expect(page.getByTestId("cubeVal"), "[aspect: value] after a taken double the cube does not read 2").toHaveText(showsNumber(2));
-  const ownerLabel = (await page.getByTestId("cubeOwner").innerText()).trim().toLowerCase();
+  // The owner is read once it has had the moment the value had to settle (step 4
+  // meter audit, 2026-11-24: read once, right after the value, a build that
+  // draws the owner a frame later would be told its owner is wrong).
+  const owner = async () => (await page.getByTestId("cubeOwner").innerText().catch(() => "")).trim().toLowerCase();
+  let ownerLabel = await owner();
+  for (let i = 0; i < 15 && !/ai|black|opponent|computer/.test(ownerLabel); i++) {
+    await page.waitForTimeout(200);
+    ownerLabel = await owner();
+  }
   expect(ownerLabel, `[aspect: owner] after a taken double the cube shows its owner as "${ownerLabel}", not the computer`).toMatch(
     /ai|black|opponent|computer/,
   );
