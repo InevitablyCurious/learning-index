@@ -162,20 +162,12 @@ _DEVELOPER_NOUNS = (
 
 
 def _tokens_in_the_suite() -> set[str]:
-    """Every `[XXX]` gate token declared by a graded gate file.
+    """Every told gate token in the graded suite — the harness's own scan
+    (feedback.py gate_tokens_in_suite), the one preflight runs, so this test and
+    a launch can never disagree about which gates need a line."""
+    from harness.adapters.challenge.feedback import gate_tokens_in_suite
 
-    Scanned from the files rather than from a roster so this needs no `npx`
-    and cannot go stale against a roster captured for some other run.
-    """
-    found: set[str] = set()
-    pattern = re.compile(r'["\'`]\s*\[([A-Z]+[0-9]*)\]')
-    for directory in ("backend", "conformance", "frontend"):
-        root = GATES / directory
-        if not root.is_dir():
-            continue
-        for path in root.rglob("*.ts"):
-            found.update(pattern.findall(path.read_text(encoding="utf-8")))
-    return found
+    return gate_tokens_in_suite(GATES)
 
 
 def _overrides() -> dict[str, dict[str, str]]:

@@ -63,10 +63,6 @@
     "dev/priv/dev-bench-prompts.md."
   ],
   "gates": {
-    "CONF": {
-      "first": "Something about the app isn't behaving, but I couldn't pin down what.",
-      "repeat": "I went through it again after your fix and something still isn't behaving."
-    },
     "G01": {
       "first": "They start a new game through your engine and its starting state doesn't match a standard backgammon opening.",
       "repeat": "They started a new game through your engine again and its starting state still doesn't match a standard opening."

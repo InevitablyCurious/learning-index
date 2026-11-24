@@ -33,17 +33,11 @@ def _infra(check: str) -> bool:
 
 def test_every_gate_token_in_the_suite_has_a_stage() -> None:
     for token in sorted(gate_tokens_in_suite(_GRADER_DIR)):
-        if token == "CONF":
-            continue
         stage_of(f"[{token}] x", STAGES)
 
 
 def test_every_complaint_key_and_every_drawn_or_tagged_element_has_a_stage() -> None:
-    keys = [
-        k
-        for k in json.loads((_GRADER_DIR / "feedback.json").read_text())["gates"]
-        if k != "CONF"
-    ]
+    keys = list(json.loads((_GRADER_DIR / "feedback.json").read_text())["gates"])
     for label in ("point", "checker", "bar", "off-tray", "die"):
         keys += [f"REQ-RENDER/{label}", f"REQ-TESTID/{label}"]
     keys += ["REQ-TESTID/testid.anything", "REQ-STATE/state.anything"]

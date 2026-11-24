@@ -128,14 +128,12 @@ def _key_from_base(base: str) -> str:
     `.md` per line: `/` in a key became `-` in the filename, so `REQ-STATE/
     state.pip` emitted as `REQ-STATE-state.pip.md`. The `REQ-<PHASE>` prefix
     is the only place a real `-` precedes the key's own `/`, so the first
-    `-` after it is the one to undo. `CONF` has no sub-check, and bracket
-    tokens (`G-01` → `G01`) simply drop their separator.
+    `-` after it is the one to undo. Bracket tokens (`G-01` → `G01`) simply
+    drop their separator.
     """
     m = re.match(r"^(REQ-[A-Z]+)-(.*)$", base)
     if m:
         return f"{m.group(1)}/{m.group(2)}"
-    if base == "CONF":
-        return "CONF"
     return base.replace("-", "", 1)
 
 
@@ -227,6 +225,10 @@ def gate_tokens_in_suite(gates_dir: Path) -> set[str]:
             continue
         for path in root.rglob("*.ts"):
             found.update(pattern.findall(path.read_text(encoding="utf-8")))
+    # The pre-gate's test titles carry `[CONF]`, but its findings are named by
+    # their REQ key (`conformance:REQ-…/…`) and told by those keys' own lines;
+    # `[CONF]` itself is never told (no catch-all since 2026-11-24).
+    found.discard("CONF")
     return found
 
 
@@ -759,9 +761,11 @@ class FeedbackMixin:
         overrides = cls._feedback_overrides()
         line = "repeat" if pass_kind == "repeat" else "first"
 
-        # Lookup order: exact check text, then bracket token, then a specific
-        # conformance sub-check key (a narrower message may override the broad
-        # CONF line), then the broad CONF token for any conformance check.
+        # Lookup order: the aspect's line, the exact check text, the bracket
+        # token, then the conformance sub-check key. There is no catch-all
+        # (Jerry, 2026-11-24: no vague lines): "Something about the app isn't
+        # behaving, but I couldn't pin down what." is gone, and a conformance
+        # check with no line of its own raises like any gate.
         token_key = m.group(1) if (m := cls._GATE_TOKEN_KEY_RE.match(raw)) else None
         conf_key = m.group(1) if (m := cls._CONF_KEY_RE.match(raw)) else None
         # ONE TEST, SEVERAL SITUATIONS: a gate whose assertions carry an
@@ -778,12 +782,9 @@ class FeedbackMixin:
             if (token_key or conf_key) and aspect
             else None
         )
-        for key in (aspect_key, raw, token_key, conf_key, "CONF"):
+        for key in (aspect_key, raw, token_key, conf_key):
             if key and key in overrides:
-                # "CONF" must only resolve conformance checks, never a stray use
-                # of the literal token in a backend/frontend context.
-                if key != "CONF" or conf_key is not None:
-                    return cls._fill_seconds(overrides[key][line], observed)
+                return cls._fill_seconds(overrides[key][line], observed)
 
         if cls._HARNESS_INFRA_CHECK_RE.match(raw):
             raise MissingFeedbackOverrideError(

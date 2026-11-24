@@ -62,7 +62,6 @@ def test_grader_identity_is_stripped_from_delivered_text() -> None:
         'conformance:REQ-TESTID/checker — board renders 30 data-testid "checker" elements'
     )
     assert conf == overrides["REQ-TESTID/checker"]["first"]
-    assert conf != overrides["CONF"]["first"], "a specific line must beat the catch-all"
 
     # THE INVARIANT THIS TEST IS NAMED FOR, unchanged and now checked on both
     # channels: whatever resolves, no grader identity reaches the model.
@@ -79,13 +78,14 @@ def test_grader_identity_is_stripped_from_delivered_text() -> None:
             and "data-testid" not in text
         )
 
-    # The broad CONF override survives as the CATCH-ALL for a conformance check
-    # with no line of its own, and no longer claims a boot failure — REQ-BIND/boot
-    # owns that, and CONF claiming it was the original defect.
-    unknown = ChallengeRunner._humanize_check(
-        "conformance:REQ-FUTURE/something.new — a check added later"
-    )
-    assert unknown == overrides["CONF"]["first"]
+    # There is no catch-all (2026-11-24): a conformance check with no line of
+    # its own raises, like a gate token — a vague line is worse than none.
+    from harness.adapters.challenge import MissingFeedbackOverrideError
+
+    with pytest.raises(MissingFeedbackOverrideError):
+        ChallengeRunner._humanize_check(
+            "conformance:REQ-FUTURE/something.new — a check added later"
+        )
 
 
 def test_humanize_hard_fails_on_an_uncovered_gate() -> None:

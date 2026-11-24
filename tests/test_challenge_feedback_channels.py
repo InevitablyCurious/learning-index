@@ -288,9 +288,8 @@ def test_the_teams_opener_is_not_the_graders_vocabulary() -> None:
 def test_every_conformance_check_the_pregate_can_emit_has_a_line() -> None:
     """No conformance check may fall through to the catch-all unnoticed.
 
-    The catch-all still exists for a check added later, but every key the
-    pre-gate can emit today must have its own sentence — otherwise the collapse
-    this whole change removes creeps back one check at a time.
+    There is no catch-all (2026-11-24): every key the pre-gate can emit must
+    have its own sentence, or the finding raises mid-run.
     """
     src = (GATES / "conformance" / "pregate.ts").read_text(encoding="utf-8")
     overrides = json.loads((GATES / "feedback.json").read_text(encoding="utf-8"))[
@@ -315,7 +314,14 @@ def test_every_conformance_check_the_pregate_can_emit_has_a_line() -> None:
         expected.append(f"REQ-TESTID/{label}")
         expected.append(f"REQ-RENDER/{label}")
 
-    missing = [k for k in expected if k not in overrides]
+    # Every literal key the pre-gate writes, too: with no catch-all left, a key
+    # without a line raises mid-run (2026-11-24).
+    expected += [
+        k
+        for k in re.findall(r"REQ-[A-Z]+/[A-Za-z0-9._\-]+(?![A-Za-z0-9._\-]*\$\{)", src)
+        if "${" not in k
+    ]
+    missing = sorted({k for k in expected if k not in overrides})
     assert not missing, f"conformance checks with no feedback line: {missing}"
 
 
