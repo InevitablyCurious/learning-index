@@ -3498,7 +3498,10 @@ test("[F66] REQ-FASTFORWARD-PAUSE — Pause stops Fast Forward and it carries on
   // not by a click that waits out the test (run 1794523863: Fast Forward ended
   // the turn, the button vanished, and the click waited 120 s).
   await page.waitForTimeout(250);
-  await expect(button, "the Fast Forward button had gone from the screen while it ran").toBeVisible({ timeout: 5_000 });
+  // Named (run 1795608058 L3, 2026-11-25): aspect-less, this step was told the
+  // general line, then "Again I couldn't pause Fast Forward the way I wanted"
+  // three rounds running — never that the button itself was gone.
+  await expect(button, "[aspect: gone] the Fast Forward button had gone from the screen while it ran").toBeVisible({ timeout: 5_000 });
   await button.click();
   await expect(button, "[aspect: label] [needs: F64] after Pause the button never read Fast Forward again").toHaveText(FAST_FORWARD);
 

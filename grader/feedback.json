@@ -1787,6 +1787,10 @@
       "first": "I couldn't pause Fast Forward the way I wanted.",
       "repeat": "Again I couldn't pause Fast Forward the way I wanted."
     },
+    "F66.gone": {
+      "first": "I clicked Fast Forward, and while the game played itself the button disappeared — there was no Pause button on screen to stop it.",
+      "repeat": "Again the Fast Forward button disappeared once it started — there's still no Pause button on screen to stop it."
+    },
     "F66.running": {
       "first": "While Fast Forward was running, its button never read Pause.",
       "repeat": "Again, while Fast Forward ran, its button never read Pause."
