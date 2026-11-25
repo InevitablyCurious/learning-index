@@ -1639,6 +1639,14 @@
       "first": "I set the difficulty to Hard, and after a reload the difficulty box no longer shows Hard.",
       "repeat": "I set it to Hard again, and after reloading the difficulty box still doesn't show Hard."
     },
+    "F54.control": {
+      "first": "I tried to set the difficulty to Hard, and the difficulty box wouldn't let me pick it.",
+      "repeat": "The difficulty box still won't let me pick Hard."
+    },
+    "F54.newgame": {
+      "first": "At the start of a game I picked Hard and pressed New Game, and New Game wouldn't respond — I couldn't start a game at the level I picked.",
+      "repeat": "New Game still won't respond at the start of a game after I pick Hard."
+    },
     "F55": {
       "first": "I reload while it's the computer's turn, and the game stalls — the turn never comes back to me.",
       "repeat": "I reloaded again during the computer's turn, and the turn still never came back to me."

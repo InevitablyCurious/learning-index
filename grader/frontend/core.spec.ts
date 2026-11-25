@@ -3105,14 +3105,19 @@ test("[F54] REQ-RELOAD — the difficulty control shows the level you're playing
   // F38's "isn't showing" (and New Game's own is F08's); it timed out here with
   // no message and was told as a level lost on reload, a reload this check
   // never got to (run 1793119227 round 4).
-  let chose = true;
-  try {
-    await (await control()).selectOption("hard", { timeout: 5_000 });
-    await page.getByTestId("newGameBtn").click({ timeout: 5_000 });
-  } catch {
-    chose = false;
-  }
-  expect(chose, "[needs: F38 F08] the difficulty control or New Game could not be used").toBe(true);
+  // Each step names itself (run 1795547274 L3, 2026-11-25): a page that shuts New
+  // Game on a fresh game failed the click, and the step's one aspect-less line
+  // told the player "after a reload the difficulty box no longer shows Hard" —
+  // of a reload this check never got to.
+  const picked = await (await control())
+    .selectOption("hard", { timeout: 5_000 })
+    .then(() => true, () => false);
+  expect(picked, "[aspect: control] [needs: F38] the difficulty control could not be set to Hard").toBe(true);
+  const started = await page
+    .getByTestId("newGameBtn")
+    .click({ timeout: 5_000 })
+    .then(() => true, () => false);
+  expect(started, "[aspect: newgame] [needs: F38 F08] with Hard picked on a fresh game, New Game could not be clicked").toBe(true);
   await expect
     .poll(async () => (await readState(page)).difficulty, { message: "[needs: F08] New Game did not start a Hard game", timeout: 5_000 })
     .toBe("hard");
