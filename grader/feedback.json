@@ -267,6 +267,14 @@
       "first": "The player takes your computer's double, but your app's state doesn't make the cube worth two and owned by the player.",
       "repeat": "The player takes your computer's double and your app's state still doesn't make the cube worth two and owned by the player."
     },
+    "G24.ignored": {
+      "first": "Their checks of your server: {measured}. The brief has /api/double/respond answer a double the computer offered: {accept: true} takes it — the cube becomes worth two and the player's — and {accept: false} passes, which ends the game.",
+      "repeat": "Their checks again: {measured} — the player's answer to the computer's double still changes nothing."
+    },
+    "G24.value": {
+      "first": "Their checks of your server: {measured}. A taken double makes the cube worth twice what it was, and the taker owns it.",
+      "repeat": "Their checks again: {measured} — a taken double still doesn't make the cube worth two."
+    },
     "G25": {
       "first": "They end white's turn through your server and step the computer's turn, and the computer never takes it — the turn doesn't come back to white.",
       "repeat": "Through your server, the computer still doesn't take its turn."

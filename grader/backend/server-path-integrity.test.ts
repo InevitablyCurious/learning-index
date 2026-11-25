@@ -431,11 +431,20 @@ describe("Backgammon backend server-path integrity", () => {
         : "[aspect: never] [needs: G12 G35] the computer never offered a double";
     expect(play.phase, noOffer).toBe("doubleOffered");
     const res = await api("/api/double/respond", { accept: true });
-    expect(res.cube.value).toBe(2);
+    // Measured (run 1795616677 L3, 2026-11-25): told three rounds "the state
+    // doesn't make the cube worth two", the model never learnt its server had
+    // ignored the answer — still in doubleOffered, the cube untouched — because
+    // the handler took answers only on the player's own turn.
+    const answered = res.phase !== "doubleOffered" && res.doubleOfferedBy == null;
+    expect(
+      answered || res.cube.value === 2,
+      `[aspect: ignored] the player answered the computer's double through /api/double/respond with {accept: true}, and your server changed nothing: still phase "${res.phase}" with the offer from "${res.doubleOfferedBy}", the cube at ${res.cube.value}, turn "${res.turn}"`,
+    ).toBe(true);
+    expect(res.cube.value, `[aspect: value] after the player took the computer's double, your server's cube is worth ${res.cube.value}`).toBe(2);
     const OWNER = "[aspect: owner] the taken cube was not the player's";
     expect(res.cube.owner, OWNER).toBe("white");
     const state = await getState();
-    expect(state.cube.value).toBe(2);
+    expect(state.cube.value, `[aspect: value] after the player took the computer's double, your server's cube reads back as worth ${state.cube.value}`).toBe(2);
     expect(state.cube.owner, OWNER).toBe("white");
 
     // The doubler still plays the turn it doubled on: the computer moves before
