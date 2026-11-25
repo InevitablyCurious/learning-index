@@ -2990,12 +2990,32 @@ test("[F52] REQ-BUTTONS — greyed-out buttons look clearly different", async ({
   // Roll counts as usable only when it can be clicked: a page that keeps Roll
   // shut at the start of a game has a different fault, F61's, and comparing
   // against it told run 1790769627 its greyed buttons were not greyed.
-  const rollClickable = await page
-    .getByTestId("rollBtn")
-    .click({ trial: true, timeout: 1_500 })
-    .then(() => true, () => false);
-  const usable = Math.min(await clarity("newGameBtn"), ...(rollClickable ? [await clarity("rollBtn")] : []));
-  const unusable = Math.max(await clarity("undoBtn"), await clarity("endTurnBtn"));
+  const clickable = (id: string) =>
+    page
+      .getByTestId(id)
+      .click({ trial: true, timeout: 1_500 })
+      .then(() => true, () => false);
+  const rollClickable = await clickable("rollBtn");
+  // WHICH BUTTONS CAN BE USED IS THE PAGE'S OWN ANSWER (run 1795547274 L3 a5,
+  // 2026-11-25): New Game was taken as usable at the start of every game, but
+  // the brief only has a button the player can't use greyed out — run
+  // 1795547274's page shut New Game on a fresh game and greyed it with Undo and
+  // End Turn, and was told twice its greyed buttons were no fainter than "the
+  // least clear usable one": New Game itself. A New Game that can't be clicked
+  // is judged with the buttons that can't be used.
+  const newGameClickable = await clickable("newGameBtn");
+  const usableIds = [...(newGameClickable ? ["newGameBtn"] : []), ...(rollClickable ? ["rollBtn"] : [])];
+  if (usableIds.length === 0) return; // nothing usable to compare against: Roll shut at the start is F61's
+  const unusableIds = ["undoBtn", "endTurnBtn", ...(newGameClickable ? [] : ["newGameBtn"])];
+  const usableEach: number[] = [];
+  for (const id of usableIds) usableEach.push(await clarity(id));
+  const unusableEach: number[] = [];
+  for (const id of unusableIds) unusableEach.push(await clarity(id));
+  const usable = Math.min(...usableEach);
+  const unusable = Math.max(...unusableEach);
+  const label = (id: string) => ({ rollBtn: "Roll", newGameBtn: "New Game", undoBtn: "Undo", endTurnBtn: "End Turn" })[id] ?? id;
+  const clearestUnusable = label(unusableIds[unusableEach.indexOf(unusable)]);
+  const leastUsable = label(usableIds[usableEach.indexOf(usable)]);
   // Judged at the start of a game only: run 1793695155's page rolled the
   // opening by itself a second after loading, the computer won it, and End Turn
   // turned into a bright "play the computer's moves" button — measured as a
@@ -3008,7 +3028,7 @@ test("[F52] REQ-BUTTONS — greyed-out buttons look clearly different", async ({
   // greyed buttons at 230 against 140 for the usable ones).
   expect(
     unusable,
-    `[needs: F38] buttons that cannot be used yet are drawn at ${unusable.toFixed(0)} against ${usable.toFixed(0)} for the least clear usable one`,
+    `[needs: F38] the clearest button that cannot be used yet (${clearestUnusable}) stands out from its own background by ${unusable.toFixed(0)} levels of brightness, against ${usable.toFixed(0)} for the least clear usable one (${leastUsable})`,
   ).toBeLessThanOrEqual(0.6 * usable);
 });
 
