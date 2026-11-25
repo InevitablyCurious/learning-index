@@ -2557,9 +2557,14 @@ test("[F46] REQ-DOUBLE-DECLINE — the decline pop-up says you won", async ({ pa
   // double it should pass is G12's finding (on G22's estimate), not the
   // drop's wording (run 1793628483: it took when hopeless, and was told the
   // drop pop-up and the drop message were wrong).
+  // Who won is its own finding (run 1795614488 L3, 2026-11-25): a computer that
+  // passed and then gave the game to itself ("AI wins.") was told F46's title
+  // line and F50's "the message goes into its working" — neither what happened.
+  let winner: string | null = null;
   await expect
-    .poll(async () => (await readState(page)).winner, { message: "[needs: G12 G22]", timeout: 5_000 })
-    .toBe("white");
+    .poll(async () => (winner = (await readState(page)).winner ?? null), { message: "[needs: G12 G22]", timeout: 5_000 })
+    .not.toBeNull();
+  expect(winner, "[aspect: winner] the computer turned down the player's double and the game gave the win to the computer").toBe("white");
   await expectPopupShown(page, "[aspect: nopopup] [needs: F01] the computer passed the double and no pop-up came up");
   await expect(page.getByTestId("modalTitle"), "[needs: F01] [needs: F07]").toContainText(/win/i);
 });
@@ -2856,9 +2861,14 @@ test("[F50] REQ-DOUBLE-ANSWER — the computer's answer to a double is plain", a
   // double it should pass is G12's finding (on G22's estimate), not the
   // drop's wording (run 1793628483: it took when hopeless, and was told the
   // drop pop-up and the drop message were wrong).
+  // Who won is its own finding (run 1795614488 L3, 2026-11-25): a computer that
+  // passed and then gave the game to itself ("AI wins.") was told F46's title
+  // line and F50's "the message goes into its working" — neither what happened.
+  let winner: string | null = null;
   await expect
-    .poll(async () => (await readState(page)).winner, { message: "[needs: G12 G22]", timeout: 5_000 })
-    .toBe("white");
+    .poll(async () => (winner = (await readState(page)).winner ?? null), { message: "[needs: G12 G22]", timeout: 5_000 })
+    .not.toBeNull();
+  expect(winner, "[aspect: winner] the computer turned down the player's double and the game gave the win to the computer").toBe("white");
   await expect
     .poll(async () => PASS.test(await shownDoubleText(page)), {
       message: "[aspect: shown] [needs: F01] [needs: F07] nothing on screen said the computer passed the double",

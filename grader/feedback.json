@@ -1595,6 +1595,10 @@
       "first": "When the computer turns down my double, the pop-up's title doesn't say I won.",
       "repeat": "The computer turned down my double again and the pop-up's title still doesn't say I won."
     },
+    "F46.winner": {
+      "first": "When the computer turned down my double, the game declared the computer the winner.",
+      "repeat": "Again, when the computer turns down my double, the game declares the computer the winner."
+    },
     "F46.nopopup": {
       "first": "When the computer turns down my double, no pop-up comes up to say I won.",
       "repeat": "The computer turned down my double again, and still no pop-up comes up to say I won."
@@ -1618,6 +1622,10 @@
     "F50": {
       "first": "When the computer answers my double, the message goes into its working — odds, pip counts, its reasoning. I just want to know whether it took the double.",
       "repeat": "I doubled again and the computer's answer still goes into its working — odds, pip counts, its reasoning."
+    },
+    "F50.winner": {
+      "first": "When the computer turned down my double, the game declared the computer the winner.",
+      "repeat": "Again, when the computer turns down my double, the game declares the computer the winner."
     },
     "F51": {
       "first": "The pop-up at the end shows a 'Match score' line — I just want who won and the points.",
