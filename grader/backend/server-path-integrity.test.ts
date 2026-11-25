@@ -678,18 +678,25 @@ describe("Backgammon backend server-path integrity", () => {
     points[12] = -5;
     points[17] = -5;
     points[19] = -4; // black = 14 on board, +1 on bar = 15
-    // phase "move" makes /api/ai play these dice directly — no cube decision.
+    // PLAYED, NOT LOADED (2026-11-25): the computer rolls its stuck 6-5 itself,
+    // queued through /api/debug/roll, as in a game. Seeded already holding the
+    // dice (phase "move"), run 1795608058's server passed the turn with an empty
+    // message — a state its own play never rests in: played, it rolls and says
+    // "No moves available" in one step — and was told twice its message lacked
+    // the words. A double offered on the way is taken below.
     await debugSetState(
       makeState({
         points,
         bar: { white: 0, black: 1 },
         off: { white: 0, black: 0 },
         turn: "black",
-        phase: "move",
-        dice: [6, 5],
+        phase: "roll",
+        dice: [],
+        remainingDice: [],
         message: "",
       }),
     );
+    await debugRoll([6, 5]);
     // One AI step per call (chunk-03): step until the turn comes back, and read
     // what the game said along the way.
     let state = await getState();
