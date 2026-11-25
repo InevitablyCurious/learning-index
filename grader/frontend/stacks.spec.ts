@@ -479,13 +479,13 @@ test("[F71] REQ-GEOMETRY — a point keeps an even pitch", async ({ page }) => {
   const sixRow = rowOf(sixYs);
   expect(
     sixExtent,
-    `${sixRow === "top" ? "[aspect: spreadtop]" : "[aspect: spreadbottom]"} [needs: F02] point 13 (${sixRow} row) holds six checkers, drawn at steps of ${sixExtent.toFixed(2)} checker-widths — spread apart along the point, where a player needs six pieces kept tight enough to fit the point`,
+    `${sixRow === "top" ? "[aspect: spreadtop]" : "[aspect: spreadbottom]"} [needs: F02] point 13 (${sixRow} row) holds six checkers, drawn at steps of ${sixExtent.toFixed(2)} checker-widths — spread apart along the point`,
   ).toBeLessThan(1.1);
   const evenPitch = evenPitches.reduce((sum, p) => sum + p, 0) / evenPitches.length;
   const tighter = sixPitch / evenPitch;
   expect(
     tighter,
-    `[aspect: six] [needs: F02] point 13 holds six checkers, drawn at an average step of ${sixPitch.toFixed(1)} px against the ${evenPitch.toFixed(1)} px the two-to-five stacks keep — ${Math.round(tighter * 100)}% of it, where six pieces need a tighter pitch to fit the point`,
+    `[aspect: six] [needs: F02] point 13 holds six checkers, drawn at an average step of ${sixPitch.toFixed(1)} px against the ${evenPitch.toFixed(1)} px the two-to-five stacks keep — ${Math.round(tighter * 100)}% of it`,
   ).toBeLessThanOrEqual(0.97);
 
   // CASCADE — even pitch says nothing about the horizontal: a stack can step
