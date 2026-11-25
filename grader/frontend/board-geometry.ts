@@ -476,24 +476,57 @@ export async function readOffTray(page: Page): Promise<OffTrayState> {
   if ((await tray.count()) === 0) {
     return { exists: false, visible: false, painted: false, x: 0, y: 0, width: 0, height: 0 };
   }
-  const box = await tray.first().evaluate((element) => {
-    const rect = element.getBoundingClientRect();
-    const style = getComputedStyle(element);
-    return {
-      exists: true,
-      visible:
-        rect.width > 0 &&
-        rect.height > 0 &&
-        style.display !== "none" &&
-        style.visibility !== "hidden" &&
-        Number(style.opacity) > 0.05,
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-    };
-  });
-  return { ...box, painted: await isPainted(tray.first()) };
+  const boxes = await tray.evaluateAll((elements) =>
+    elements.map((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        visible:
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          Number(style.opacity) > 0.05,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      };
+    }),
+  );
+  // THE TRAY A PLAYER SEES (run 1795547274 L1 a1, 2026-11-24). A build may draw
+  // the tray as pieces stacked at one end — one per row, each tagged off-tray —
+  // that a player sees as one strip; read as its first piece alone, it was told
+  // "The off tray doesn't run the full height of the board" (320 of 640 px).
+  // The first piece takes in every other shown piece standing in its column
+  // (x-ranges overlapping by half the narrower) with no real gap between them
+  // (at most a tenth of the taller). A tagged piece at the board's other end
+  // (run 1790459992) is no part of it.
+  const merged = { ...boxes[0] };
+  const parts = [0];
+  if (merged.visible) {
+    let grew = true;
+    while (grew) {
+      grew = false;
+      boxes.forEach((b, i) => {
+        if (parts.includes(i) || !b.visible) return;
+        const overlapX = Math.min(merged.x + merged.width, b.x + b.width) - Math.max(merged.x, b.x);
+        const gapY = Math.max(b.y - (merged.y + merged.height), merged.y - (b.y + b.height));
+        if (overlapX < 0.5 * Math.min(merged.width, b.width) || gapY > 0.1 * Math.max(merged.height, b.height)) return;
+        const right = Math.max(merged.x + merged.width, b.x + b.width);
+        const bottom = Math.max(merged.y + merged.height, b.y + b.height);
+        merged.x = Math.min(merged.x, b.x);
+        merged.y = Math.min(merged.y, b.y);
+        merged.width = right - merged.x;
+        merged.height = bottom - merged.y;
+        parts.push(i);
+        grew = true;
+      });
+    }
+  }
+  let painted = false;
+  for (const i of parts) painted = painted || (await isPainted(tray.nth(i)));
+  return { exists: true, ...merged, painted };
 }
 
 /**
